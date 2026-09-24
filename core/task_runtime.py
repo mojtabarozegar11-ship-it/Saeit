@@ -1,6 +1,8 @@
 from django.db import transaction
 
-from .models import AgentTask, AuditLog
+from .agent_registry import AgentRegistry
+from .models import AgentTask, ApprovalRequest, AuditLog
+from .services import requires_owner_approval
 
 
 TERMINAL_STATUSES = frozenset({"completed", "failed", "cancelled"})
@@ -11,7 +13,7 @@ class TaskExecutionError(ValueError):
 
 
 class TaskRuntime:
-    """Controlled AgentTask lifecycle; execution is never allowed from blocked state."""
+    """Controlled AgentTask lifecycle with a final capability and approval gate."""
 
     @transaction.atomic
     def claim(self, task_id):
@@ -20,9 +22,27 @@ class TaskRuntime:
             raise TaskExecutionError(f"Task is not executable from status: {task.status}")
         if not task.agent.active:
             raise TaskExecutionError("Task agent is inactive")
+
+        registry = AgentRegistry()
+        capability = registry.capability_for(task.agent, task.action_type)
+        if not capability:
+            raise TaskExecutionError("Task agent no longer has an active capability for this action")
+
+        effective_risk = registry.effective_risk(capability, "low")
+        if requires_owner_approval(task.action_type, effective_risk):
+            approved = ApprovalRequest.objects.filter(
+                target_type="AgentTask", target_id=str(task.pk), status="approved"
+            ).exists()
+            if not approved:
+                raise TaskExecutionError("Owner approval is required before execution")
+
         task.status = "running"
         task.save(update_fields=["status", "updated_at"])
-        self._audit(task, "task_claimed", {"status": "running"})
+        self._audit(
+            task,
+            "task_claimed",
+            {"status": "running", "action_type": task.action_type, "risk": effective_risk},
+        )
         return task
 
     @transaction.atomic
