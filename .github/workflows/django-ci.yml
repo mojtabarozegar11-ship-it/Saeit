@@ -29,7 +29,13 @@ jobs:
           DEBUG: "False"
           ALLOWED_HOSTS: localhost,127.0.0.1
         run: pytest -q
-      - name: Production readiness gate
+      - name: Apply migrations to CI database
+        env:
+          SECRET_KEY: ci-secret-key
+          DEBUG: "False"
+          ALLOWED_HOSTS: localhost,127.0.0.1
+        run: python manage.py migrate --noinput
+      - name: Verify production readiness
         env:
           SECRET_KEY: ci-secret-key
           DEBUG: "False"
