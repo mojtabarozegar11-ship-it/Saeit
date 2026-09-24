@@ -73,6 +73,8 @@ class AgentTaskViewSet(viewsets.ReadOnlyModelViewSet):
     def claim(self, request, pk=None):
         try:
             task = TaskRuntime().claim(pk)
+        except AgentTask.DoesNotExist:
+            return Response({"detail": "Task not found."}, status=status.HTTP_404_NOT_FOUND)
         except TaskExecutionError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
         return Response(AgentTaskSerializer(task).data)
