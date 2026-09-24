@@ -24,6 +24,8 @@ class TaskRuntime:
     def claim(self, task_id):
         task = AgentTask.objects.select_for_update().select_related("agent").get(pk=task_id)
         if task.status != "queued":
+            if task.status == "failed" and task.attempt_count >= task.max_attempts:
+                raise TaskExecutionError("Task retry budget exhausted")
             raise TaskExecutionError(f"Task is not executable from status: {task.status}")
         if not task.agent.active:
             raise TaskExecutionError("Task agent is inactive")
@@ -41,7 +43,7 @@ class TaskRuntime:
             raise TaskExecutionError("Task risk snapshot is invalid") from exc
         effective_risk = registry.effective_risk(capability, snapshot_risk)
         if effective_risk != snapshot_risk:
-            raise TaskExecutionError("Task risk policy has changed since planning")
+            raise TaskExecutionError("Task risk policy has changed since planning; owner approval is required before execution")
         if requires_owner_approval(task.action_type, effective_risk):
             approved = ApprovalRequest.objects.filter(
                 target_type="AgentTask", target_id=str(task.pk), status="approved"

@@ -1,8 +1,6 @@
 from dataclasses import dataclass
 from typing import Any, Callable, Dict
 
-from django.db import transaction
-
 from .models import AgentTask, ApprovalRequest, AuditLog
 from .services import normalize_action, normalize_risk, requires_owner_approval
 
@@ -75,7 +73,6 @@ class ToolGateway:
 
         return task
 
-    @transaction.atomic
     def invoke(self, tool_code, payload=None, *, task_id=None, execution_id=None):
         code = normalize_action(tool_code)
         spec = self._tools.get(code)

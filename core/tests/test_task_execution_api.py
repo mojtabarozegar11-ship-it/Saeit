@@ -40,7 +40,7 @@ def test_complete_endpoint_finishes_running_task():
 
     response = client.post(
         f"/api/tasks/{task.pk}/complete/",
-        {"output_data": {"ok": True}, "cost": "1.25"},
+        {"output_data": {"ok": True}, "cost": "1.25", "execution_id": task.execution_id},
         format="json",
     )
 
@@ -61,7 +61,7 @@ def test_fail_endpoint_requeues_running_task():
 
     response = client.post(
         f"/api/tasks/{task.pk}/fail/",
-        {"error": "temporary"},
+        {"error": "temporary", "execution_id": task.execution_id},
         format="json",
     )
 

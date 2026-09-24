@@ -51,16 +51,58 @@ def vs(model, serializer, permission=StaffWritePermission):
     )
 
 
-ResearchProjectViewSet = vs(ResearchProject, ResearchProjectSerializer, InternalStaffWritePermission)
-ResearchSourceViewSet = vs(ResearchSource, ResearchSourceSerializer, InternalStaffWritePermission)
-EvidenceViewSet = vs(Evidence, EvidenceSerializer, InternalStaffWritePermission)
-FindingViewSet = vs(Finding, FindingSerializer, InternalStaffWritePermission)
-ReportViewSet = vs(Report, ReportSerializer, InternalStaffWritePermission)
+class OwnerScopedMixin:
+    """Keep private research and commerce records visible only to their owner or staff."""
+
+    owner_field = None
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        user = self.request.user
+        if user.is_staff:
+            return queryset
+        return queryset.filter(**{self.owner_field: user})
+
+
+class ProjectOwnerScopedMixin:
+    """Scope project-linked research records to the owning user."""
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        user = self.request.user
+        if user.is_staff:
+            return queryset
+        return queryset.filter(project__owner=user)
+
+
+class ResearchProjectViewSet(OwnerScopedMixin, vs(ResearchProject, ResearchProjectSerializer, InternalStaffWritePermission)):
+    owner_field = "owner"
+
+
+class ResearchSourceViewSet(ProjectOwnerScopedMixin, vs(ResearchSource, ResearchSourceSerializer, InternalStaffWritePermission)):
+    pass
+
+
+class EvidenceViewSet(ProjectOwnerScopedMixin, vs(Evidence, EvidenceSerializer, InternalStaffWritePermission)):
+    pass
+
+
+class FindingViewSet(ProjectOwnerScopedMixin, vs(Finding, FindingSerializer, InternalStaffWritePermission)):
+    pass
+
+
+class ReportViewSet(ProjectOwnerScopedMixin, vs(Report, ReportSerializer, InternalStaffWritePermission)):
+    pass
+
+
 AgentViewSet = vs(Agent, AgentSerializer, InternalStaffWritePermission)
 AgentCapabilityViewSet = vs(AgentCapability, AgentCapabilitySerializer, InternalStaffWritePermission)
 KnowledgeArticleViewSet = vs(KnowledgeArticle, KnowledgeArticleSerializer)
 ProductViewSet = vs(Product, ProductSerializer)
-OrderViewSet = vs(Order, OrderSerializer, InternalStaffWritePermission)
+
+
+class OrderViewSet(OwnerScopedMixin, vs(Order, OrderSerializer, InternalStaffWritePermission)):
+    owner_field = "customer"
 
 
 class AgentTaskViewSet(viewsets.ReadOnlyModelViewSet):

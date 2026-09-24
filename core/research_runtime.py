@@ -1,3 +1,5 @@
+from decimal import Decimal, InvalidOperation
+
 from django.core.exceptions import ValidationError
 from django.db import transaction
 
@@ -24,11 +26,15 @@ class ResearchRuntime:
     def add_evidence(self, project, source, passage, confidence=0.0):
         if source.project_id != project.id:
             raise ValidationError("Evidence source must belong to the same research project.")
+        try:
+            normalized_confidence = Decimal(str(confidence)) if confidence is not None else None
+        except (InvalidOperation, TypeError, ValueError) as exc:
+            raise ValidationError({"confidence": "Confidence must be numeric."}) from exc
         evidence = Evidence(
             project=project,
             source=source,
             passage=passage,
-            confidence=confidence,
+            confidence=normalized_confidence,
         )
         evidence.full_clean()
         evidence.save()
@@ -42,11 +48,15 @@ class ResearchRuntime:
             raise ValidationError(
                 f"Finding evidence must belong to the same research project: {invalid}"
             )
+        try:
+            normalized_confidence = Decimal(str(confidence)) if confidence is not None else None
+        except (InvalidOperation, TypeError, ValueError) as exc:
+            raise ValidationError({"confidence": "Confidence must be numeric."}) from exc
         finding = Finding(
             project=project,
             title=title,
             statement=statement,
-            confidence=confidence,
+            confidence=normalized_confidence,
             limitation=limitation,
         )
         finding.full_clean()
