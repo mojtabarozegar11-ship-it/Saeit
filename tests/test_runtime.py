@@ -28,3 +28,24 @@ def test_research_runtime_registers_evidence():
     source = runtime.register_source(project, "Source")
     evidence = runtime.add_evidence(project, source, "passage", 0.9)
     assert evidence.project_id == project.id
+
+
+def test_evidence_cannot_cross_projects():
+    from django.core.exceptions import ValidationError
+    from core.models import ResearchSource, Evidence
+
+    user = get_user_model().objects.create_user(username="owner-2")
+    other = ResearchProject.objects.create(title="Other", objective="Test", owner=user)
+    project, _ = setup_project()
+    source = ResearchSource.objects.create(project=project, title="Source")
+    evidence = Evidence(project=other, source=source, passage="cross-project")
+    with pytest.raises(ValidationError):
+        evidence.full_clean()
+
+
+def test_report_versions_are_unique_per_project():
+    from core.models import Report
+    project, _ = setup_project()
+    Report.objects.create(project=project, title="R1", version=1)
+    with pytest.raises(Exception):
+        Report.objects.create(project=project, title="R1 duplicate", version=1)
