@@ -54,6 +54,8 @@ def test_completed_task_cannot_be_claimed_again():
 
 def test_running_task_can_fail_and_records_error():
     task = setup_task()
+    task.max_attempts = 1
+    task.save(update_fields=["max_attempts", "updated_at"])
     runtime = TaskRuntime()
     running = runtime.claim(task.pk)
     failed = runtime.fail(task.pk, "provider timeout", execution_id=running.execution_id)
