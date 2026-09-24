@@ -1,4 +1,5 @@
 from .models import Agent, AgentCapability
+from .services import normalize_risk
 
 
 RISK_ORDER = {"low": 0, "medium": 1, "high": 2, "critical": 3}
@@ -32,12 +33,8 @@ class AgentRegistry:
         return self.capability_for(agent, action) is not None
 
     def effective_risk(self, capability, requested_risk="low"):
-        capability_risk = str(capability.risk_level or "low").lower()
-        requested = str(requested_risk or "low").strip().lower()
-        if requested not in RISK_ORDER:
-            requested = "low"
-        if capability_risk not in RISK_ORDER:
-            capability_risk = "low"
+        capability_risk = normalize_risk(capability.risk_level or "low")
+        requested = normalize_risk(requested_risk)
         return capability_risk if RISK_ORDER[capability_risk] >= RISK_ORDER[requested] else requested
 
     @staticmethod
