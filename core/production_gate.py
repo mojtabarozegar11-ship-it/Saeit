@@ -1,17 +1,9 @@
-from dataclasses import dataclass
-
 from django.conf import settings
 from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
+from django.db.utils import OperationalError
 
 from .health_gate import RuntimeHealthGate
-
-
-@dataclass(frozen=True)
-class ProductionGateResult:
-    ready: bool
-    checks: dict
-    reasons: tuple
 
 
 class ProductionGate:
@@ -39,16 +31,23 @@ class ProductionGate:
         try:
             connection.ensure_connection()
             checks["database"] = True
-        except Exception:
+        except OperationalError:
             checks["database"] = False
             reasons.append("database connection failed")
 
-        try:
-            executor = MigrationExecutor(connection)
-            checks["migrations_current"] = not bool(executor.migration_plan(executor.loader.graph.leaf_nodes()))
-        except Exception:
+        if checks["database"]:
+            try:
+                executor = MigrationExecutor(connection)
+                plan = executor.migration_plan(executor.loader.graph.leaf_nodes())
+                checks["migrations_current"] = not bool(plan)
+                if not checks["migrations_current"]:
+                    reasons.append("pending migrations detected")
+            except Exception:
+                checks["migrations_current"] = False
+                reasons.append("migration state could not be verified")
+        else:
             checks["migrations_current"] = False
-            reasons.append("migration state could not be verified")
+            reasons.append("migration state unavailable because database is unavailable")
 
         runtime = self.health_gate.evaluate(
             stale_after_seconds=stale_after_seconds,
@@ -58,8 +57,8 @@ class ProductionGate:
         checks["runtime_health"] = runtime.healthy
         reasons.extend(runtime.reasons)
 
-        return ProductionGateResult(
-            ready=not reasons,
-            checks=checks,
-            reasons=tuple(reasons),
-        )
+        return type("ProductionGateResult", (), {
+            "ready": not reasons,
+            "checks": checks,
+            "reasons": tuple(reasons),
+        })()
