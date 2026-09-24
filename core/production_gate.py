@@ -31,7 +31,7 @@ class ProductionGate:
         try:
             connection.ensure_connection()
             checks["database"] = True
-        except OperationalError:
+        except Exception:
             checks["database"] = False
             reasons.append("database connection failed")
 
