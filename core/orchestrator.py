@@ -1,6 +1,7 @@
 from django.db import transaction
 
 from core.models import Agent, AgentTask, ApprovalRequest
+from core.agent_registry import AgentRegistry
 from core.services import normalize_action, requires_owner_approval
 
 
@@ -9,6 +10,9 @@ class MasterAgent:
 
     def _select_agent(self, action):
         normalized_action = normalize_action(action)
+        registered = AgentRegistry().resolve(normalized_action)
+        if registered:
+            return registered
         agents = Agent.objects.filter(active=True).order_by("risk_level", "id")
         if normalized_action:
             preferred = agents.filter(mission__icontains=normalized_action).first()
