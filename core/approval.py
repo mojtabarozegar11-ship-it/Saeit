@@ -7,22 +7,26 @@ class ApprovalService:
     """Owner approval lifecycle. Approval never executes an action by itself."""
 
     @transaction.atomic
-    def decide(self, approval_id, approved, actor_id=None, note=""):
+    def decide(self, approval_id, approved, actor_id=None, note="", actor_type="owner"):
         approval = ApprovalRequest.objects.select_for_update().get(pk=approval_id)
         if approval.status != "pending":
             raise ValueError("Approval is no longer pending")
+        if not isinstance(approved, bool):
+            raise ValueError("Approval decision must be a boolean")
 
         approval.status = "approved" if approved else "rejected"
-        approval.decision_note = note[:5000] if note else ""
+        approval.decision_note = str(note or "")[:5000]
         approval.save(update_fields=["status", "decision_note", "updated_at"])
 
-        task = AgentTask.objects.filter(pk=approval.target_id).first()
-        if task:
-            task.status = "queued" if approved else "cancelled"
-            task.save(update_fields=["status", "updated_at"])
+        task = None
+        if approval.target_type == "AgentTask":
+            task = AgentTask.objects.filter(pk=approval.target_id).first()
+            if task:
+                task.status = "queued" if approved else "cancelled"
+                task.save(update_fields=["status", "updated_at"])
 
         AuditLog.objects.create(
-            actor_type="owner",
+            actor_type=str(actor_type or "owner")[:30],
             actor_id=str(actor_id or ""),
             action="approval_decision",
             target_type="ApprovalRequest",
