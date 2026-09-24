@@ -30,18 +30,18 @@ def test_claim_creates_execution_identity_and_attempt():
 def test_failure_requeues_until_retry_budget_is_exhausted():
     task = setup_retry_task(max_attempts=2)
     runtime = TaskRuntime()
-    runtime.claim(task.pk)
-    failed = runtime.fail(task.pk, "temporary error", execution_id=task.execution_id)
+    running = runtime.claim(task.pk)
+    failed = runtime.fail(task.pk, "temporary error", execution_id=running.execution_id)
     assert failed.status == "queued"
-    runtime.claim(task.pk)
-    failed = runtime.fail(task.pk, "final error", execution_id=task.execution_id)
+    running = runtime.claim(task.pk)
+    failed = runtime.fail(task.pk, "final error", execution_id=running.execution_id)
     assert failed.status == "failed"
 
 
 def test_exhausted_retry_budget_cannot_be_claimed():
     task = setup_retry_task(max_attempts=1)
     runtime = TaskRuntime()
-    runtime.claim(task.pk)
-    runtime.fail(task.pk, "final error")
+    running = runtime.claim(task.pk)
+    runtime.fail(task.pk, "final error", execution_id=running.execution_id)
     with pytest.raises(TaskExecutionError, match="retry budget"):
         runtime.claim(task.pk)
