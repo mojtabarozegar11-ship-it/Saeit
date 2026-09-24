@@ -1,10 +1,13 @@
 import pytest
 from django.contrib.auth import get_user_model
-from core.models import Agent, ResearchProject
+from django.db import IntegrityError
+from core.models import Agent, ApprovalRequest, ResearchProject
+from core.approval import ApprovalService
 from core.orchestrator import MasterAgent
 from core.research_runtime import ResearchRuntime
 
 pytestmark = pytest.mark.django_db
+
 
 def setup_project():
     user = get_user_model().objects.create_user(username="owner")
@@ -12,15 +15,18 @@ def setup_project():
     agent = Agent.objects.create(code="master", name="Master", mission="orchestration", active=True)
     return project, agent
 
+
 def test_sensitive_action_is_blocked():
     project, _ = setup_project()
     task = MasterAgent().plan(project, "publish", {"x": 1})
     assert task.status == "blocked"
 
+
 def test_low_risk_action_is_queued():
     project, _ = setup_project()
     task = MasterAgent().plan(project, "collect_source", {"x": 1})
     assert task.status == "queued"
+
 
 def test_research_runtime_registers_evidence():
     project, _ = setup_project()
@@ -32,7 +38,7 @@ def test_research_runtime_registers_evidence():
 
 def test_evidence_cannot_cross_projects():
     from django.core.exceptions import ValidationError
-    from core.models import ResearchSource, Evidence
+    from core.models import Evidence, ResearchSource
 
     user = get_user_model().objects.create_user(username="owner-2")
     other = ResearchProject.objects.create(title="Other", objective="Test", owner=user)
@@ -45,15 +51,17 @@ def test_evidence_cannot_cross_projects():
 
 def test_report_versions_are_unique_per_project():
     from core.models import Report
+
     project, _ = setup_project()
     Report.objects.create(project=project, title="R1", version=1)
-    with pytest.raises(Exception):
+    with pytest.raises(IntegrityError):
         Report.objects.create(project=project, title="R1 duplicate", version=1)
 
 
 def test_runtime_rejects_cross_project_evidence():
     from django.core.exceptions import ValidationError
     from core.models import ResearchSource
+
     project, _ = setup_project()
     other_user = get_user_model().objects.create_user(username="other")
     other = ResearchProject.objects.create(title="Other", objective="Other", owner=other_user)
@@ -64,7 +72,8 @@ def test_runtime_rejects_cross_project_evidence():
 
 def test_runtime_rejects_cross_project_finding_evidence():
     from django.core.exceptions import ValidationError
-    from core.models import ResearchSource, Evidence
+    from core.models import Evidence, ResearchSource
+
     project, _ = setup_project()
     other_user = get_user_model().objects.create_user(username="other-2")
     other = ResearchProject.objects.create(title="Other", objective="Other", owner=other_user)
@@ -74,10 +83,7 @@ def test_runtime_rejects_cross_project_finding_evidence():
         ResearchRuntime().add_finding(project, "Finding", "statement", [evidence], 0.9)
 
 
-def test_approval_decision_preserves_reason():
-    from core.models import ApprovalRequest
-    from core.approval import ApprovalService
-
+def test_approval_decision_preserves_reason_and_audits_actor_type():
     project, _ = setup_project()
     approval = ApprovalRequest.objects.create(
         action_type="publish",
@@ -91,7 +97,25 @@ def test_approval_decision_preserves_reason():
         approved=True,
         actor_id=project.owner.pk,
         note="Approved after review.",
+        actor_type="owner",
     )
     assert result.reason == "Original reason"
     assert result.decision_note == "Approved after review."
     assert result.status == "approved"
+    from core.models import AuditLog
+    audit = AuditLog.objects.get(target_id=str(approval.pk), action="approval_decision")
+    assert audit.actor_type == "owner"
+
+
+def test_approval_cannot_be_decided_twice():
+    project, _ = setup_project()
+    approval = ApprovalRequest.objects.create(
+        action_type="publish",
+        target_type="AgentTask",
+        target_id="999999",
+        reason="One-time approval",
+        requested_by=project.owner,
+    )
+    ApprovalService().decide(approval.pk, approved=False, actor_id=project.owner.pk)
+    with pytest.raises(ValueError, match="no longer pending"):
+        ApprovalService().decide(approval.pk, approved=True, actor_id=project.owner.pk)
