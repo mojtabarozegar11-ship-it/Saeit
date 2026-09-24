@@ -47,9 +47,8 @@ class StubRunner:
         if isinstance(outcome, Exception):
             raise outcome
         task = AgentTask.objects.get(pk=task_id)
-        if outcome == "completed":
-            task.status = "completed"
-            task.save(update_fields=["status", "updated_at"])
+        task.status = outcome
+        task.save(update_fields=["status", "updated_at"])
         return task
 
 
@@ -88,14 +87,12 @@ def test_dispatch_classifies_completed_and_retried(task_factory):
 
 def test_dispatch_classifies_failed(task_factory):
     failed = task_factory()
-    failed.status = "failed"
-    failed.save(update_fields=["status", "updated_at"])
-    runner = StubRunner({failed.pk: RuntimeError("permanent")})
+    runner = StubRunner({failed.pk: "failed"})
 
     summary = QueueDispatcher(runner).dispatch()
 
-    assert summary.failed == 0
-    assert summary.retried == 1
+    assert summary.failed == 1
+    assert summary.retried == 0
 
 
 def test_dispatch_skips_claim_errors(task_factory):
