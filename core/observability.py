@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 from datetime import timedelta
+from decimal import Decimal
 
+from django.db.models import Sum
 from django.utils import timezone
 
 from .models import AgentTask, AuditLog
@@ -14,7 +16,7 @@ class RuntimeMetrics:
     failed: int
     cancelled: int
     stale_running: int
-    total_cost: object
+    total_cost: Decimal
 
 
 class RuntimeObservability:
@@ -33,7 +35,9 @@ class RuntimeObservability:
             status: AgentTask.objects.filter(status=status).count()
             for status in ("queued", "running", "completed", "failed", "cancelled")
         }
-        total_cost = AgentTask.objects.aggregate_total_cost()
+        total_cost = AgentTask.objects.aggregate(
+            total=Sum("cost")
+        )["total"] or Decimal("0")
         stale_running = AgentTask.objects.filter(
             status="running", updated_at__lte=cutoff
         ).count()
