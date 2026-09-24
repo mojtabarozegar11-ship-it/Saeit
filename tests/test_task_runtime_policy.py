@@ -13,7 +13,7 @@ def setup_task(risk="low"):
     capability = AgentCapability.objects.create(code="run_task", name="Run task", risk_level=risk)
     capability.agents.add(agent)
     task = AgentTask.objects.create(
-        agent=agent, project=project, action_type="run_task", status="queued"
+        agent=agent, project=project, action_type="run_task", capability_code="run_task", risk_snapshot=risk, status="queued"
     )
     return owner, task
 
