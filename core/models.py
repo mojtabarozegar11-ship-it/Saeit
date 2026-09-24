@@ -124,6 +124,8 @@ class AgentTask(T):
         related_name="agent_tasks",
     )
     action_type = models.CharField(max_length=100, default="")
+    capability_code = models.CharField(max_length=100, default="")
+    risk_snapshot = models.CharField(max_length=10, default="low")
     input_data = models.JSONField(default=dict)
     output_data = models.JSONField(default=dict)
     status = models.CharField(max_length=20, default="queued")
