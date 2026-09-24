@@ -96,8 +96,13 @@ class TaskRuntime:
         if not str(error or "").strip():
             raise TaskExecutionError("Task failure reason is required")
         task.output_data = {"error": str(error)[:5000]}
-        task.status = "failed" if task.attempt_count >= task.max_attempts else "queued"
-        task.save(update_fields=["output_data", "status", "updated_at"])
+        if task.attempt_count >= task.max_attempts:
+            task.status = "failed"
+        else:
+            # Invalidate the previous worker identity before the retry is claimable.
+            task.execution_id = ""
+            task.status = "queued"
+        task.save(update_fields=["output_data", "execution_id", "status", "updated_at"])
         self._audit(task, "task_failed", {
             "status": task.status,
             "error": str(error)[:5000],
