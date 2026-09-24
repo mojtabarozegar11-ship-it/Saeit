@@ -72,6 +72,7 @@ USE_TZ = True
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+APP_VERSION = env("APP_VERSION", default="0.1.0")
 
 REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": [
