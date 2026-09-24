@@ -2,7 +2,7 @@ from django.db import transaction
 
 from core.models import Agent, AgentTask, ApprovalRequest
 from core.agent_registry import AgentRegistry
-from core.services import normalize_action, requires_owner_approval
+from core.services import normalize_action, normalize_risk, requires_owner_approval
 
 
 class MasterAgent:
@@ -29,6 +29,7 @@ class MasterAgent:
     @transaction.atomic
     def plan(self, project, action, payload, risk="low"):
         normalized_action = normalize_action(action)
+        normalized_risk = normalize_risk(risk)
         agent = self._select_agent(normalized_action)
         if not agent:
             raise RuntimeError("No active agent")
@@ -36,7 +37,7 @@ class MasterAgent:
         capability = AgentRegistry().capability_for(agent, normalized_action)
         if not capability:
             raise RuntimeError("Selected agent lacks an active capability for this action")
-        effective_risk = AgentRegistry().effective_risk(capability, risk)
+        effective_risk = AgentRegistry().effective_risk(capability, normalized_risk)
         requires_approval = requires_owner_approval(normalized_action, effective_risk)
         task = AgentTask.objects.create(
             agent=agent,
