@@ -3,7 +3,7 @@ import json
 import pytest
 from django.core.management import call_command
 
-from core.models import Agent, AgentCapability, AgentTask, ResearchProject
+from django.contrib.auth import get_user_model\n\nfrom core.models import Agent, AgentCapability, AgentTask, ResearchProject
 from core.task_runtime import TaskRuntime
 
 
