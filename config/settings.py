@@ -13,6 +13,9 @@ if not DEBUG and SECRET_KEY == "change-me":
     raise RuntimeError("SECRET_KEY must be configured when DEBUG=False")
 
 ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=["localhost", "127.0.0.1"])
+
+if not DEBUG and not ALLOWED_HOSTS:
+    raise RuntimeError("ALLOWED_HOSTS must contain at least one host when DEBUG=False")
 CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[])
 
 INSTALLED_APPS = [
