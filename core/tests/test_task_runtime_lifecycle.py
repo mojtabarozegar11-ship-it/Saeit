@@ -64,3 +64,20 @@ def test_failed_task_requeues_until_retry_budget_then_fails():
     second = TaskRuntime().fail(task.pk, "final failure")
     assert second.status == "failed"
     assert second.attempt_count == 2
+
+
+@pytest.mark.django_db
+def test_invalid_risk_snapshot_cannot_claim():
+    owner = get_user_model().objects.create_user(
+        username="invalid-risk-owner", password="pass", is_staff=True
+    )
+    task, _ = make_task(owner=owner, risk="low")
+    task.risk_snapshot = "unsafe"
+    task.save(update_fields=["risk_snapshot"])
+
+    with pytest.raises(TaskExecutionError, match="risk snapshot is invalid"):
+        TaskRuntime().claim(task.pk)
+
+    task.refresh_from_db()
+    assert task.status == "queued"
+    assert task.attempt_count == 0
