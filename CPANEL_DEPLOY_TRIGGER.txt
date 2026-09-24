@@ -1,0 +1,5 @@
+Saeit cPanel deployment trigger
+
+This file is intentionally non-destructive. Its purpose is to create a new commit on main so an existing GitHub -> cPanel deployment hook can pull the latest Saeit revision.
+
+No database, secrets, production settings, or application data are changed by this file.
