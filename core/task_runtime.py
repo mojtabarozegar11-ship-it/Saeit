@@ -1,4 +1,5 @@
 from django.db import transaction
+import uuid
 
 from .agent_registry import AgentRegistry
 from .models import AgentTask, ApprovalRequest, AuditLog
@@ -13,7 +14,7 @@ class TaskExecutionError(ValueError):
 
 
 class TaskRuntime:
-    """Controlled AgentTask lifecycle with a final capability and approval gate."""
+    """Controlled AgentTask lifecycle with final policy, identity, and retry gates."""
 
     @transaction.atomic
     def claim(self, task_id):
@@ -40,13 +41,19 @@ class TaskRuntime:
             if not approved:
                 raise TaskExecutionError("Owner approval is required before execution")
 
+        if task.attempt_count >= task.max_attempts:
+            raise TaskExecutionError("Task retry budget exhausted")
+        task.execution_id = uuid.uuid4().hex
+        task.attempt_count += 1
         task.status = "running"
-        task.save(update_fields=["status", "updated_at"])
-        self._audit(
-            task,
-            "task_claimed",
-            {"status": "running", "action_type": task.action_type, "risk": effective_risk},
-        )
+        task.save(update_fields=["execution_id", "attempt_count", "status", "updated_at"])
+        self._audit(task, "task_claimed", {
+            "status": "running",
+            "action_type": task.action_type,
+            "risk": effective_risk,
+            "execution_id": task.execution_id,
+            "attempt": task.attempt_count,
+        })
         return task
 
     @transaction.atomic
@@ -58,7 +65,7 @@ class TaskRuntime:
         task.cost = cost or 0
         task.status = "completed"
         task.save(update_fields=["output_data", "cost", "status", "updated_at"])
-        self._audit(task, "task_completed", {"status": "completed"})
+        self._audit(task, "task_completed", {"status": "completed", "execution_id": task.execution_id})
         return task
 
     @transaction.atomic
@@ -67,9 +74,14 @@ class TaskRuntime:
         if task.status != "running":
             raise TaskExecutionError(f"Task is not running: {task.status}")
         task.output_data = {"error": str(error)[:5000]}
-        task.status = "failed"
+        task.status = "failed" if task.attempt_count >= task.max_attempts else "queued"
         task.save(update_fields=["output_data", "status", "updated_at"])
-        self._audit(task, "task_failed", {"status": "failed", "error": str(error)[:5000]})
+        self._audit(task, "task_failed", {
+            "status": task.status,
+            "error": str(error)[:5000],
+            "execution_id": task.execution_id,
+            "attempt": task.attempt_count,
+        })
         return task
 
     def _audit(self, task, action, state):
@@ -80,5 +92,5 @@ class TaskRuntime:
             target_type="AgentTask",
             target_id=str(task.pk),
             after_state=state,
-            trace_id=f"task-{task.pk}",
+            trace_id=f"task-{task.pk}-{task.execution_id or 'none'}",
         )
