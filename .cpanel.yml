@@ -1,4 +1,4 @@
 ---
 deployment:
   tasks:
-    - /bin/echo "Saeit cPanel deployment smoke check"
+    - /bin/bash /home/zomorodm/repositories/Saeit/deploy/cpanel_deploy.sh
