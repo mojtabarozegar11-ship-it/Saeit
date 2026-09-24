@@ -86,7 +86,7 @@ class AgentTaskViewSet(viewsets.ReadOnlyModelViewSet):
             return Response({"detail": "output_data must be an object."}, status=status.HTTP_400_BAD_REQUEST)
         cost = request.data.get("cost", 0)
         try:
-            task = TaskRuntime().complete(pk, output_data=output_data, cost=cost)
+            task = TaskRuntime().complete(pk, output_data=output_data, cost=cost, execution_id=str(request.data.get("execution_id", "")).strip())
         except AgentTask.DoesNotExist:
             return Response({"detail": "Task not found."}, status=status.HTTP_404_NOT_FOUND)
         except (TaskExecutionError, ValueError, TypeError) as exc:
@@ -99,7 +99,7 @@ class AgentTaskViewSet(viewsets.ReadOnlyModelViewSet):
         if not error:
             return Response({"detail": "error is required."}, status=status.HTTP_400_BAD_REQUEST)
         try:
-            task = TaskRuntime().fail(pk, error)
+            task = TaskRuntime().fail(pk, error, execution_id=str(request.data.get("execution_id", "")).strip())
         except AgentTask.DoesNotExist:
             return Response({"detail": "Task not found."}, status=status.HTTP_404_NOT_FOUND)
         except TaskExecutionError as exc:
