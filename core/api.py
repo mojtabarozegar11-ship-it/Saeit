@@ -92,6 +92,7 @@ class ApprovalRequestViewSet(viewsets.ReadOnlyModelViewSet):
                 approval_id=approval.pk,
                 approved=approved,
                 actor_id=request.user.pk,
+                actor_type="staff" if request.user.is_staff else "owner",
                 note=note,
             )
         except ValueError as exc:
