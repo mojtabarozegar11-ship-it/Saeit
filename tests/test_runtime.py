@@ -119,3 +119,12 @@ def test_approval_cannot_be_decided_twice():
     ApprovalService().decide(approval.pk, approved=False, actor_id=project.owner.pk)
     with pytest.raises(ValueError, match="no longer pending"):
         ApprovalService().decide(approval.pk, approved=True, actor_id=project.owner.pk)
+
+
+def test_sensitive_action_normalizes_before_persisting():
+    project, _ = setup_project()
+    task = MasterAgent().plan(project, " production-change ", {"x": 1}, risk="low")
+    assert task.status == "blocked"
+    approval = ApprovalRequest.objects.get(target_id=str(task.pk))
+    assert approval.action_type == "production_change"
+    assert approval.risk == "low"
