@@ -29,3 +29,9 @@ jobs:
           DEBUG: "False"
           ALLOWED_HOSTS: localhost,127.0.0.1
         run: pytest -q
+      - name: Production readiness gate
+        env:
+          SECRET_KEY: ci-secret-key
+          DEBUG: "False"
+          ALLOWED_HOSTS: localhost,127.0.0.1
+        run: python manage.py production_gate
