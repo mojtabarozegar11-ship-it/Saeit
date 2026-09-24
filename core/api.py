@@ -63,7 +63,12 @@ ProductViewSet = vs(Product, ProductSerializer)
 OrderViewSet = vs(Order, OrderSerializer, InternalStaffWritePermission)
 
 
-class AgentTaskViewSet(vs(AgentTask, AgentTaskSerializer, InternalStaffWritePermission)):
+class AgentTaskViewSet(viewsets.ReadOnlyModelViewSet):
+    """Tasks are created only through Master Agent planning, never by direct CRUD."""
+    queryset = AgentTask.objects.all()
+    serializer_class = AgentTaskSerializer
+    permission_classes = [InternalStaffWritePermission]
+
     @action(detail=True, methods=["post"], url_path="claim")
     def claim(self, request, pk=None):
         try:
@@ -71,7 +76,6 @@ class AgentTaskViewSet(vs(AgentTask, AgentTaskSerializer, InternalStaffWritePerm
         except TaskExecutionError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
         return Response(AgentTaskSerializer(task).data)
-
 
 class ApprovalRequestViewSet(viewsets.ReadOnlyModelViewSet):
     """Owner approvals are read-only except for the controlled decision action."""
