@@ -3,7 +3,7 @@ import uuid
 
 from .agent_registry import AgentRegistry
 from .models import AgentTask, ApprovalRequest, AuditLog
-from .services import requires_owner_approval
+from .services import normalize_risk, requires_owner_approval
 
 
 TERMINAL_STATUSES = frozenset({"completed", "failed", "cancelled"})
@@ -31,8 +31,12 @@ class TaskRuntime:
         if task.capability_code and capability.code != task.capability_code:
             raise TaskExecutionError("Task capability policy no longer matches its execution snapshot")
 
-        effective_risk = registry.effective_risk(capability, task.risk_snapshot or "low")
-        if effective_risk != (task.risk_snapshot or "low"):
+        try:
+            snapshot_risk = normalize_risk(task.risk_snapshot)
+        except ValueError as exc:
+            raise TaskExecutionError("Task risk snapshot is invalid") from exc
+        effective_risk = registry.effective_risk(capability, snapshot_risk)
+        if effective_risk != snapshot_risk:
             raise TaskExecutionError("Task risk policy has changed since planning")
         if requires_owner_approval(task.action_type, effective_risk):
             approved = ApprovalRequest.objects.filter(
