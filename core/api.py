@@ -6,11 +6,11 @@ from rest_framework.response import Response
 from .approval import ApprovalService
 from .task_runtime import TaskExecutionError, TaskRuntime
 from .models import (
-    Agent, AgentTask, ApprovalRequest, Evidence, Finding,
+    Agent, AgentCapability, AgentTask, ApprovalRequest, Evidence, Finding,
     KnowledgeArticle, Order, Product, Report, ResearchProject, ResearchSource,
 )
 from .serializers import (
-    AgentSerializer, AgentTaskSerializer, ApprovalRequestSerializer,
+    AgentCapabilitySerializer, AgentSerializer, AgentTaskSerializer, ApprovalRequestSerializer,
     EvidenceSerializer, FindingSerializer, KnowledgeArticleSerializer,
     OrderSerializer, ProductSerializer, ReportSerializer,
     ResearchProjectSerializer, ResearchSourceSerializer,
@@ -53,6 +53,7 @@ EvidenceViewSet = vs(Evidence, EvidenceSerializer, InternalStaffWritePermission)
 FindingViewSet = vs(Finding, FindingSerializer, InternalStaffWritePermission)
 ReportViewSet = vs(Report, ReportSerializer, InternalStaffWritePermission)
 AgentViewSet = vs(Agent, AgentSerializer, InternalStaffWritePermission)
+AgentCapabilityViewSet = vs(AgentCapability, AgentCapabilitySerializer, InternalStaffWritePermission)
 KnowledgeArticleViewSet = vs(KnowledgeArticle, KnowledgeArticleSerializer)
 ProductViewSet = vs(Product, ProductSerializer)
 OrderViewSet = vs(Order, OrderSerializer, InternalStaffWritePermission)
