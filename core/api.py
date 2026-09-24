@@ -24,22 +24,14 @@ class StaffWritePermission(BasePermission):
         return bool(request.user and request.user.is_authenticated and request.user.is_staff)
 
 
-class ProjectOwnerWritePermission(BasePermission):
-    """Project owners may mutate their own research records; staff may mutate all."""
+class InternalStaffWritePermission(BasePermission):
+    """Internal records require authentication; mutations are staff-controlled."""
     def has_permission(self, request, view):
+        if not request.user or not request.user.is_authenticated:
+            return False
         if request.method in ("GET", "HEAD", "OPTIONS"):
             return True
-        return bool(request.user and request.user.is_authenticated)
-
-    def has_object_permission(self, request, view, obj):
-        if request.method in ("GET", "HEAD", "OPTIONS"):
-            return True
-        if request.user.is_staff:
-            return True
-        owner = getattr(getattr(obj, "project", None), "owner", None)
-        if owner is None:
-            owner = getattr(obj, "owner", None)
-        return owner is not None and owner.pk == request.user.pk
+        return bool(request.user.is_staff)
 
 
 def vs(model, serializer, permission=StaffWritePermission):
@@ -54,16 +46,16 @@ def vs(model, serializer, permission=StaffWritePermission):
     )
 
 
-ResearchProjectViewSet = vs(ResearchProject, ResearchProjectSerializer)
-ResearchSourceViewSet = vs(ResearchSource, ResearchSourceSerializer, ProjectOwnerWritePermission)
-EvidenceViewSet = vs(Evidence, EvidenceSerializer, ProjectOwnerWritePermission)
-FindingViewSet = vs(Finding, FindingSerializer, ProjectOwnerWritePermission)
-ReportViewSet = vs(Report, ReportSerializer, ProjectOwnerWritePermission)
+ResearchProjectViewSet = vs(ResearchProject, ResearchProjectSerializer, InternalStaffWritePermission)
+ResearchSourceViewSet = vs(ResearchSource, ResearchSourceSerializer, InternalStaffWritePermission)
+EvidenceViewSet = vs(Evidence, EvidenceSerializer, InternalStaffWritePermission)
+FindingViewSet = vs(Finding, FindingSerializer, InternalStaffWritePermission)
+ReportViewSet = vs(Report, ReportSerializer, InternalStaffWritePermission)
 AgentViewSet = vs(Agent, AgentSerializer)
-AgentTaskViewSet = vs(AgentTask, AgentTaskSerializer, ProjectOwnerWritePermission)
+AgentTaskViewSet = vs(AgentTask, AgentTaskSerializer, InternalStaffWritePermission)
 KnowledgeArticleViewSet = vs(KnowledgeArticle, KnowledgeArticleSerializer)
 ProductViewSet = vs(Product, ProductSerializer)
-OrderViewSet = vs(Order, OrderSerializer)
+OrderViewSet = vs(Order, OrderSerializer, InternalStaffWritePermission)
 
 
 class ApprovalRequestViewSet(viewsets.ReadOnlyModelViewSet):
