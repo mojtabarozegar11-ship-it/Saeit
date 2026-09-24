@@ -42,9 +42,10 @@ def test_sensitive_flow_approval_claim_complete_and_audit():
     claimed = client.post(f"/api/tasks/{task_id}/claim/", {}, format="json")
     assert claimed.status_code == 200
     assert claimed.json()["status"] == "running"
+    execution_id = claimed.json()["execution_id"]
 
     from core.task_runtime import TaskRuntime
-    completed = TaskRuntime().complete(task_id, {"result": "controlled-success"})
+    completed = TaskRuntime().complete(task_id, {"result": "controlled-success"}, execution_id=execution_id)
     assert completed.status == "completed"
 
     from core.models import AgentTask, AuditLog
