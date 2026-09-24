@@ -49,3 +49,26 @@ def test_report_versions_are_unique_per_project():
     Report.objects.create(project=project, title="R1", version=1)
     with pytest.raises(Exception):
         Report.objects.create(project=project, title="R1 duplicate", version=1)
+
+
+def test_runtime_rejects_cross_project_evidence():
+    from django.core.exceptions import ValidationError
+    from core.models import ResearchSource
+    project, _ = setup_project()
+    other_user = get_user_model().objects.create_user(username="other")
+    other = ResearchProject.objects.create(title="Other", objective="Other", owner=other_user)
+    source = ResearchSource.objects.create(project=other, title="Other source")
+    with pytest.raises(ValidationError):
+        ResearchRuntime().add_evidence(project, source, "wrong project", 0.9)
+
+
+def test_runtime_rejects_cross_project_finding_evidence():
+    from django.core.exceptions import ValidationError
+    from core.models import ResearchSource, Evidence
+    project, _ = setup_project()
+    other_user = get_user_model().objects.create_user(username="other-2")
+    other = ResearchProject.objects.create(title="Other", objective="Other", owner=other_user)
+    source = ResearchSource.objects.create(project=other, title="Other source")
+    evidence = Evidence.objects.create(project=other, source=source, passage="other")
+    with pytest.raises(ValidationError):
+        ResearchRuntime().add_finding(project, "Finding", "statement", [evidence], 0.9)
