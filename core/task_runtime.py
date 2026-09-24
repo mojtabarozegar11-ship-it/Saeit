@@ -2,6 +2,8 @@ from decimal import Decimal, InvalidOperation
 import uuid
 
 from django.db import transaction
+from django.utils import timezone
+from datetime import timedelta
 
 from .agent_registry import AgentRegistry
 from .models import AgentTask, ApprovalRequest, AuditLog
@@ -59,6 +61,59 @@ class TaskRuntime:
             "risk": effective_risk,
             "execution_id": task.execution_id,
             "attempt": task.attempt_count,
+        })
+        return task
+
+    @transaction.atomic
+    def heartbeat(self, task_id, execution_id=None):
+        task = AgentTask.objects.select_for_update().get(pk=task_id)
+        if task.status != "running":
+            raise TaskExecutionError(f"Task is not running: {task.status}")
+        if not execution_id or execution_id != task.execution_id:
+            raise TaskExecutionError(
+                "Execution identity does not match the active task execution"
+            )
+        task.save(update_fields=["updated_at"])
+        return task
+
+    @transaction.atomic
+    def recover_stale(self, task_id, stale_after_seconds=900):
+        try:
+            seconds = int(stale_after_seconds)
+        except (TypeError, ValueError) as exc:
+            raise TaskExecutionError("stale_after_seconds must be an integer") from exc
+        if seconds <= 0:
+            raise TaskExecutionError("stale_after_seconds must be positive")
+
+        task = AgentTask.objects.select_for_update().select_related("agent").get(pk=task_id)
+        if task.status != "running":
+            raise TaskExecutionError(f"Task is not running: {task.status}")
+
+        cutoff = timezone.now() - timedelta(seconds=seconds)
+        if task.updated_at > cutoff:
+            raise TaskExecutionError("Task execution is not stale")
+
+        previous_execution_id = task.execution_id
+        if task.attempt_count >= task.max_attempts:
+            task.status = "failed"
+            task.output_data = {
+                "error": "Execution became stale and retry budget was exhausted"
+            }
+        else:
+            task.status = "queued"
+            task.execution_id = ""
+            task.output_data = {
+                "error": "Execution became stale and was re-queued for recovery"
+            }
+
+        task.save(
+            update_fields=["status", "execution_id", "output_data", "updated_at"]
+        )
+        self._audit(task, "task_recovered_stale", {
+            "status": task.status,
+            "previous_execution_id": previous_execution_id,
+            "attempt": task.attempt_count,
+            "stale_after_seconds": seconds,
         })
         return task
 
