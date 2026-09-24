@@ -21,6 +21,7 @@ echo "Using Python: $PYTHON"
 "$PYTHON" --version
 
 "$PYTHON" manage.py check --deploy
+"$PYTHON" manage.py migrate --noinput
 "$PYTHON" manage.py collectstatic --noinput
 
 # Passenger reload: touching the WSGI entrypoint requests a graceful reload.
