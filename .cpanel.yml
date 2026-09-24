@@ -1,0 +1,8 @@
+---
+deployment:
+  tasks:
+    - export APPROOT=/home/zomorodm/repositories/Saeit
+    - /bin/test -f $APPROOT/passenger_wsgi.py
+    - /bin/test -f $APPROOT/manage.py
+    - /bin/test -f $APPROOT/requirements.txt
+    - /usr/bin/touch $APPROOT/passenger_wsgi.py
