@@ -2,6 +2,7 @@ from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
 from .api import (
+    AgentCapabilityViewSet,
     AgentTaskViewSet,
     AgentViewSet,
     ApprovalRequestViewSet,
@@ -23,6 +24,7 @@ router.register("evidence", EvidenceViewSet, basename="evidence")
 router.register("findings", FindingViewSet, basename="finding")
 router.register("reports", ReportViewSet, basename="report")
 router.register("agents", AgentViewSet, basename="agent")
+router.register("agent-capabilities", AgentCapabilityViewSet, basename="agent-capability")
 router.register("tasks", AgentTaskViewSet, basename="agent-task")
 router.register("approvals", ApprovalRequestViewSet, basename="approval-request")
 router.register("knowledge", KnowledgeArticleViewSet, basename="knowledge-article")
