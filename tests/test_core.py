@@ -57,3 +57,17 @@ def test_staff_can_create_project():
         format="json",
     )
     assert response.status_code == 201
+
+
+@pytest.mark.django_db
+def test_task_claim_api_rejects_blocked_task():
+    from rest_framework.test import APIClient
+    from core.models import Agent, AgentTask
+
+    user = get_user_model().objects.create_user(username="claim-owner", is_staff=True)
+    agent = Agent.objects.create(code="claim-worker", name="Worker", mission="research", active=True)
+    task = AgentTask.objects.create(agent=agent, status="blocked")
+    client = APIClient()
+    client.force_authenticate(user=user)
+    response = client.post(f"/api/tasks/{task.pk}/claim/", {}, format="json")
+    assert response.status_code == 409
