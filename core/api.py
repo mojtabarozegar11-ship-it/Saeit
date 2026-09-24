@@ -1,55 +1,66 @@
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import BasePermission, IsAuthenticated, IsAuthenticatedOrReadOnly
 from rest_framework.response import Response
 
 from .approval import ApprovalService
 from .models import (
-    Agent,
-    AgentTask,
-    ApprovalRequest,
-    Evidence,
-    Finding,
-    KnowledgeArticle,
-    Order,
-    Product,
-    Report,
-    ResearchProject,
-    ResearchSource,
+    Agent, AgentTask, ApprovalRequest, Evidence, Finding,
+    KnowledgeArticle, Order, Product, Report, ResearchProject, ResearchSource,
 )
 from .serializers import (
-    AgentSerializer,
-    AgentTaskSerializer,
-    ApprovalRequestSerializer,
-    EvidenceSerializer,
-    FindingSerializer,
-    KnowledgeArticleSerializer,
-    OrderSerializer,
-    ProductSerializer,
-    ReportSerializer,
-    ResearchProjectSerializer,
-    ResearchSourceSerializer,
+    AgentSerializer, AgentTaskSerializer, ApprovalRequestSerializer,
+    EvidenceSerializer, FindingSerializer, KnowledgeArticleSerializer,
+    OrderSerializer, ProductSerializer, ReportSerializer,
+    ResearchProjectSerializer, ResearchSourceSerializer,
 )
 
 
-def vs(model, serializer):
+class StaffWritePermission(BasePermission):
+    """Authenticated users may read; only staff may mutate operational data."""
+    def has_permission(self, request, view):
+        if request.method in ("GET", "HEAD", "OPTIONS"):
+            return True
+        return bool(request.user and request.user.is_authenticated and request.user.is_staff)
+
+
+class ProjectOwnerWritePermission(BasePermission):
+    """Project owners may mutate their own research records; staff may mutate all."""
+    def has_permission(self, request, view):
+        if request.method in ("GET", "HEAD", "OPTIONS"):
+            return True
+        return bool(request.user and request.user.is_authenticated)
+
+    def has_object_permission(self, request, view, obj):
+        if request.method in ("GET", "HEAD", "OPTIONS"):
+            return True
+        if request.user.is_staff:
+            return True
+        owner = getattr(getattr(obj, "project", None), "owner", None)
+        if owner is None:
+            owner = getattr(obj, "owner", None)
+        return owner is not None and owner.pk == request.user.pk
+
+
+def vs(model, serializer, permission=StaffWritePermission):
     return type(
         model.__name__ + "ViewSet",
         (viewsets.ModelViewSet,),
         {
             "queryset": model.objects.all(),
             "serializer_class": serializer,
+            "permission_classes": [permission],
         },
     )
 
 
 ResearchProjectViewSet = vs(ResearchProject, ResearchProjectSerializer)
-ResearchSourceViewSet = vs(ResearchSource, ResearchSourceSerializer)
-EvidenceViewSet = vs(Evidence, EvidenceSerializer)
-FindingViewSet = vs(Finding, FindingSerializer)
-ReportViewSet = vs(Report, ReportSerializer)
+ResearchSourceViewSet = vs(ResearchSource, ResearchSourceSerializer, ProjectOwnerWritePermission)
+EvidenceViewSet = vs(Evidence, EvidenceSerializer, ProjectOwnerWritePermission)
+FindingViewSet = vs(Finding, FindingSerializer, ProjectOwnerWritePermission)
+ReportViewSet = vs(Report, ReportSerializer, ProjectOwnerWritePermission)
 AgentViewSet = vs(Agent, AgentSerializer)
-AgentTaskViewSet = vs(AgentTask, AgentTaskSerializer)
+AgentTaskViewSet = vs(AgentTask, AgentTaskSerializer, ProjectOwnerWritePermission)
 KnowledgeArticleViewSet = vs(KnowledgeArticle, KnowledgeArticleSerializer)
 ProductViewSet = vs(Product, ProductSerializer)
 OrderViewSet = vs(Order, OrderSerializer)
@@ -57,7 +68,6 @@ OrderViewSet = vs(Order, OrderSerializer)
 
 class ApprovalRequestViewSet(viewsets.ReadOnlyModelViewSet):
     """Owner approvals are read-only except for the controlled decision action."""
-
     queryset = ApprovalRequest.objects.select_related("requested_by").all()
     serializer_class = ApprovalRequestSerializer
     permission_classes = [IsAuthenticated]
@@ -85,10 +95,13 @@ class ApprovalRequestViewSet(viewsets.ReadOnlyModelViewSet):
             )
 
         note = str(request.data.get("note", ""))[:5000]
-        approval = ApprovalService().decide(
-            approval_id=approval.pk,
-            approved=approved,
-            actor_id=request.user.pk,
-            note=note,
-        )
+        try:
+            approval = ApprovalService().decide(
+                approval_id=approval.pk,
+                approved=approved,
+                actor_id=request.user.pk,
+                note=note,
+            )
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
         return Response(self.get_serializer(approval).data)
