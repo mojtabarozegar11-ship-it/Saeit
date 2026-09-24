@@ -125,6 +125,7 @@ class ApprovalRequest(T):
     target_type = models.CharField(max_length=100)
     target_id = models.CharField(max_length=100)
     reason = models.TextField()
+    decision_note = models.TextField(blank=True)
     risk = models.CharField(max_length=10, default="high")
     status = models.CharField(max_length=20, default="pending")
     requested_by = models.ForeignKey(
