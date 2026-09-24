@@ -138,7 +138,7 @@ class MasterAgentChatViewSet(viewsets.ModelViewSet):
                 reply = MasterAgentChat().respond(session, message)
             except Exception as exc:
                 return Response(
-                    {"detail": "Master Agent chat is temporarily unavailable.", "error": str(exc)[:500]},
+                    {"detail": "Master Agent chat is temporarily unavailable."},
                     status=status.HTTP_503_SERVICE_UNAVAILABLE,
                 )
             return Response({
