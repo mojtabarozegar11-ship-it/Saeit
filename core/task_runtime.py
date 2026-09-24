@@ -41,7 +41,7 @@ class TaskRuntime:
             raise TaskExecutionError("Task risk snapshot is invalid") from exc
         effective_risk = registry.effective_risk(capability, snapshot_risk)
         if effective_risk != snapshot_risk:
-            raise TaskExecutionError("Task risk policy has changed since planning")
+            raise TaskExecutionError("Task risk policy has changed since planning; owner approval is required before execution")
         if requires_owner_approval(task.action_type, effective_risk):
             approved = ApprovalRequest.objects.filter(
                 target_type="AgentTask", target_id=str(task.pk), status="approved"
