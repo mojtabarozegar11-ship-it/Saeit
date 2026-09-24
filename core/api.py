@@ -93,6 +93,30 @@ class AgentTaskViewSet(viewsets.ReadOnlyModelViewSet):
             return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
         return Response(AgentTaskSerializer(task).data)
 
+    @action(detail=True, methods=["post"], url_path="heartbeat")
+    def heartbeat(self, request, pk=None):
+        execution_id = str(request.data.get("execution_id", "")).strip()
+        if not execution_id:
+            return Response({"detail": "execution_id is required."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            task = TaskRuntime().heartbeat(pk, execution_id=execution_id)
+        except AgentTask.DoesNotExist:
+            return Response({"detail": "Task not found."}, status=status.HTTP_404_NOT_FOUND)
+        except TaskExecutionError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
+        return Response(AgentTaskSerializer(task).data)
+
+    @action(detail=True, methods=["post"], url_path="recover-stale")
+    def recover_stale(self, request, pk=None):
+        stale_after = request.data.get("stale_after_seconds", 900)
+        try:
+            task = TaskRuntime().recover_stale(pk, stale_after_seconds=stale_after)
+        except AgentTask.DoesNotExist:
+            return Response({"detail": "Task not found."}, status=status.HTTP_404_NOT_FOUND)
+        except TaskExecutionError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
+        return Response(AgentTaskSerializer(task).data)
+
     @action(detail=True, methods=["post"], url_path="fail")
     def fail(self, request, pk=None):
         error = str(request.data.get("error", "")).strip()
