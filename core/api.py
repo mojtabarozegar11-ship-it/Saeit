@@ -4,13 +4,14 @@ from rest_framework.permissions import BasePermission, IsAuthenticated, IsAuthen
 from rest_framework.response import Response
 
 from .approval import ApprovalService
+from .chat_runtime import MasterAgentChat
 from .task_runtime import TaskExecutionError, TaskRuntime
 from .models import (
-    Agent, AgentCapability, AgentTask, ApprovalRequest, Evidence, Finding,
+    Agent, AgentCapability, AgentTask, ApprovalRequest, ChatMessage, ChatSession, Evidence, Finding,
     KnowledgeArticle, Order, Product, Report, ResearchProject, ResearchSource,
 )
 from .serializers import (
-    AgentCapabilitySerializer, AgentSerializer, AgentTaskSerializer, ApprovalRequestSerializer,
+    AgentCapabilitySerializer, AgentSerializer, AgentTaskSerializer, ApprovalRequestSerializer, ChatMessageSerializer, ChatSessionSerializer,
     EvidenceSerializer, FindingSerializer, KnowledgeArticleSerializer,
     OrderSerializer, ProductSerializer, ReportSerializer,
     ResearchProjectSerializer, ResearchSourceSerializer,
@@ -109,3 +110,55 @@ class ApprovalRequestViewSet(viewsets.ReadOnlyModelViewSet):
         except ValueError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
         return Response(self.get_serializer(approval).data)
+
+
+class MasterAgentChatViewSet(viewsets.ModelViewSet):
+    queryset = ChatSession.objects.all()
+    serializer_class = ChatSessionSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return self.queryset.filter(user=self.request.user)
+
+    def create(self, request, *args, **kwargs):
+        session = ChatSession.objects.create(
+            user=request.user,
+            title=str(request.data.get("title", ""))[:300],
+        )
+        message = str(request.data.get("message", "")).strip()
+        if message:
+            try:
+                reply = MasterAgentChat().respond(session, message)
+            except Exception as exc:
+                return Response(
+                    {"detail": "Master Agent chat is temporarily unavailable.", "error": str(exc)[:500]},
+                    status=status.HTTP_503_SERVICE_UNAVAILABLE,
+                )
+            return Response({
+                "session": ChatSessionSerializer(session).data,
+                "reply": reply,
+                "messages": ChatMessageSerializer(
+                    session.messages.order_by("created_at"), many=True
+                ).data,
+            }, status=status.HTTP_201_CREATED)
+        return Response({"session": ChatSessionSerializer(session).data}, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["post"], url_path="messages")
+    def message(self, request, pk=None):
+        session = self.get_object()
+        text = str(request.data.get("message", "")).strip()
+        if not text:
+            return Response({"detail": "message is required."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            reply = MasterAgentChat().respond(session, text)
+        except Exception as exc:
+            return Response(
+                {"detail": "Master Agent chat is temporarily unavailable.", "error": str(exc)[:500]},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        return Response({
+            "reply": reply,
+            "messages": ChatMessageSerializer(
+                session.messages.order_by("created_at"), many=True
+            ).data,
+        })
