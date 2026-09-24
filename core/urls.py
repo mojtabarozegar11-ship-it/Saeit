@@ -34,6 +34,6 @@ router.register("products", ProductViewSet, basename="product")
 router.register("orders", OrderViewSet, basename="order")
 
 urlpatterns = [
-    path("health/", HealthView.as_view()),
+    path("health/", HealthView.as_view(), name="health"),
     path("", include(router.urls)),
 ]
