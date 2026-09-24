@@ -24,6 +24,8 @@ class TaskRuntime:
     def claim(self, task_id):
         task = AgentTask.objects.select_for_update().select_related("agent").get(pk=task_id)
         if task.status != "queued":
+            if task.status == "failed" and task.attempt_count >= task.max_attempts:
+                raise TaskExecutionError("Task retry budget exhausted")
             raise TaskExecutionError(f"Task is not executable from status: {task.status}")
         if not task.agent.active:
             raise TaskExecutionError("Task agent is inactive")
