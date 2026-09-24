@@ -27,5 +27,40 @@ class Migration(migrations.Migration):
             ("created_at",models.DateTimeField(auto_now_add=True)),("updated_at",models.DateTimeField(auto_now=True)),
             ("title",models.CharField(max_length=300)),("objective",models.TextField()),("status",models.CharField(default="draft",max_length=30)),
             ("owner",models.ForeignKey(on_delete=django.db.models.deletion.PROTECT,related_name="research_projects",to=settings.AUTH_USER_MODEL))]),
-        migrations.AddField(model_name="researchsource",name="project",field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE,related_name="sources",to="core.researchproject")),
+        migrations.CreateModel(name="ResearchSource",fields=[
+            ("id",models.BigAutoField(auto_created=True,primary_key=True,serialize=False,verbose_name="ID")),
+            ("created_at",models.DateTimeField(auto_now_add=True)),("updated_at",models.DateTimeField(auto_now=True)),
+            ("title",models.CharField(max_length=500)),("url",models.URLField(blank=True)),("publisher",models.CharField(max_length=300,blank=True)),("content_hash",models.CharField(max_length=128,blank=True)),
+            ("project",models.ForeignKey(on_delete=django.db.models.deletion.CASCADE,related_name="sources",to="core.researchproject"))]),
+        migrations.CreateModel(name="Evidence",fields=[
+            ("id",models.BigAutoField(auto_created=True,primary_key=True,serialize=False,verbose_name="ID")),
+            ("created_at",models.DateTimeField(auto_now_add=True)),("updated_at",models.DateTimeField(auto_now=True)),("passage",models.TextField()),
+            ("confidence",models.DecimalField(blank=True,decimal_places=2,max_digits=5,null=True)),
+            ("project",models.ForeignKey(on_delete=django.db.models.deletion.CASCADE,related_name="evidence",to="core.researchproject")),
+            ("source",models.ForeignKey(on_delete=django.db.models.deletion.CASCADE,related_name="evidence",to="core.researchsource"))]),
+        migrations.CreateModel(name="Finding",fields=[
+            ("id",models.BigAutoField(auto_created=True,primary_key=True,serialize=False,verbose_name="ID")),
+            ("created_at",models.DateTimeField(auto_now_add=True)),("updated_at",models.DateTimeField(auto_now=True)),("title",models.CharField(max_length=300)),("statement",models.TextField()),
+            ("confidence",models.DecimalField(blank=True,decimal_places=2,max_digits=5,null=True)),("limitation",models.TextField(blank=True)),
+            ("project",models.ForeignKey(on_delete=django.db.models.deletion.CASCADE,related_name="findings",to="core.researchproject"))]),
+        migrations.AddField(model_name="finding",name="evidence",field=models.ManyToManyField(blank=True,related_name="findings",to="core.evidence")),
+        migrations.CreateModel(name="Report",fields=[
+            ("id",models.BigAutoField(auto_created=True,primary_key=True,serialize=False,verbose_name="ID")),
+            ("created_at",models.DateTimeField(auto_now_add=True)),("updated_at",models.DateTimeField(auto_now=True)),("title",models.CharField(max_length=300)),("version",models.PositiveIntegerField(default=1)),("status",models.CharField(default="draft",max_length=30)),("content",models.JSONField(default=dict)),
+            ("project",models.ForeignKey(on_delete=django.db.models.deletion.CASCADE,related_name="reports",to="core.researchproject"))]),
+        migrations.CreateModel(name="AgentTask",fields=[
+            ("id",models.BigAutoField(auto_created=True,primary_key=True,serialize=False,verbose_name="ID")),
+            ("created_at",models.DateTimeField(auto_now_add=True)),("updated_at",models.DateTimeField(auto_now=True)),("input_data",models.JSONField(default=dict)),("output_data",models.JSONField(default=dict)),("status",models.CharField(default="queued",max_length=20)),("cost",models.DecimalField(decimal_places=4,default=0,max_digits=12)),
+            ("agent",models.ForeignKey(on_delete=django.db.models.deletion.PROTECT,related_name="tasks",to="core.agent")),("project",models.ForeignKey(blank=True,null=True,on_delete=django.db.models.deletion.CASCADE,related_name="agent_tasks",to="core.researchproject"))]),
+        migrations.CreateModel(name="ApprovalRequest",fields=[
+            ("id",models.BigAutoField(auto_created=True,primary_key=True,serialize=False,verbose_name="ID")),
+            ("created_at",models.DateTimeField(auto_now_add=True)),("updated_at",models.DateTimeField(auto_now=True)),("action_type",models.CharField(max_length=100)),("target_type",models.CharField(max_length=100)),("target_id",models.CharField(max_length=100)),("reason",models.TextField()),("risk",models.CharField(default="high",max_length=10)),("status",models.CharField(default="pending",max_length=20)),
+            ("requested_by",models.ForeignKey(on_delete=django.db.models.deletion.PROTECT,related_name="approval_requests",to=settings.AUTH_USER_MODEL))]),
+        migrations.CreateModel(name="AuditLog",fields=[
+            ("id",models.BigAutoField(auto_created=True,primary_key=True,serialize=False,verbose_name="ID")),
+            ("created_at",models.DateTimeField(auto_now_add=True)),("updated_at",models.DateTimeField(auto_now=True)),("actor_type",models.CharField(max_length=30)),("actor_id",models.CharField(blank=True,max_length=100)),("action",models.CharField(max_length=200)),("target_type",models.CharField(blank=True,max_length=100)),("target_id",models.CharField(blank=True,max_length=100)),("before_state",models.JSONField(default=dict)),("after_state",models.JSONField(default=dict)),("trace_id",models.CharField(db_index=True,max_length=100))]),
+        migrations.CreateModel(name="Order",fields=[
+            ("id",models.BigAutoField(auto_created=True,primary_key=True,serialize=False,verbose_name="ID")),
+            ("created_at",models.DateTimeField(auto_now_add=True)),("updated_at",models.DateTimeField(auto_now=True)),("status",models.CharField(default="pending",max_length=30)),("total",models.DecimalField(decimal_places=2,default=0,max_digits=14)),("currency",models.CharField(default="IRR",max_length=10)),
+            ("customer",models.ForeignKey(on_delete=django.db.models.deletion.PROTECT,related_name="orders",to=settings.AUTH_USER_MODEL))]),
     ]
