@@ -13,6 +13,8 @@ class ApprovalService:
             raise ValueError("Approval is no longer pending")
         if not isinstance(approved, bool):
             raise ValueError("Approval decision must be a boolean")
+        if actor_type == "owner" and actor_id is not None and approval.requested_by_id != actor_id:
+            raise ValueError("Only the designated owner can make this approval decision")
 
         approval.status = "approved" if approved else "rejected"
         approval.decision_note = str(note or "")[:5000]
@@ -20,8 +22,12 @@ class ApprovalService:
 
         task = None
         if approval.target_type == "AgentTask":
-            task = AgentTask.objects.filter(pk=approval.target_id).first()
+            task = AgentTask.objects.select_for_update().filter(pk=approval.target_id).first()
             if task:
+                if approved and task.status != "blocked":
+                    raise ValueError("Only a blocked task can be released by approval")
+                if not approved and task.status not in {"blocked", "queued"}:
+                    raise ValueError("Rejected approval cannot alter an executing or terminal task")
                 task.status = "queued" if approved else "cancelled"
                 task.save(update_fields=["status", "updated_at"])
 
