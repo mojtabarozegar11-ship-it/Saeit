@@ -16,8 +16,19 @@ def normalize_action(action):
     return str(action or "").strip().lower().replace("-", "_").replace(" ", "_")
 
 
+VALID_RISKS = frozenset({"low", "medium", "high", "critical"})
+
+
+def normalize_risk(risk="low"):
+    """Return a validated risk level; never silently downgrade invalid input."""
+    normalized = str(risk or "low").strip().lower()
+    if normalized not in VALID_RISKS:
+        raise ValueError(f"Invalid risk level: {normalized}")
+    return normalized
+
+
 def requires_owner_approval(action, risk="low"):
     """Return True when an action must stop for explicit owner approval."""
     normalized_action = normalize_action(action)
-    normalized_risk = str(risk or "low").strip().lower()
+    normalized_risk = normalize_risk(risk)
     return normalized_risk in {"high", "critical"} or normalized_action in SENSITIVE_ACTIONS
