@@ -123,6 +123,7 @@ class AgentTask(T):
         blank=True,
         related_name="agent_tasks",
     )
+    action_type = models.CharField(max_length=100, default="")
     input_data = models.JSONField(default=dict)
     output_data = models.JSONField(default=dict)
     status = models.CharField(max_length=20, default="queued")
