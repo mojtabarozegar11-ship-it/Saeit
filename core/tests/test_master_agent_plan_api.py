@@ -48,6 +48,16 @@ def test_master_agent_plan_requires_owner_approval_for_sensitive_action():
 
 
 @pytest.mark.django_db
+def test_master_agent_plan_requires_staff_write_access():
+    user = get_user_model().objects.create_user(username="regular", password="pass", is_staff=False)
+    project = ResearchProject.objects.create(title="Runtime test", objective="Access boundary", owner=user)
+    client = APIClient()
+    client.force_authenticate(user=user)
+    response = client.post("/api/master-chat/plan/", {"project_id": project.pk, "action_type": "research"}, format="json")
+    assert response.status_code == 403
+
+
+@pytest.mark.django_db
 def test_master_agent_plan_rejects_unknown_capability():
     user = get_user_model().objects.create_user(username="owner2", password="pass", is_staff=True)
     project = ResearchProject.objects.create(
