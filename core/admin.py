@@ -25,6 +25,7 @@ from .models import (
 
 
 class ChatSessionAdmin(ModelAdmin):
+    change_list_template = "admin/core/chatsession/change_list.html"
     list_display = ("id", "user", "title", "status", "created_at", "updated_at")
     search_fields = ("title", "user__username")
     readonly_fields = ("created_at", "updated_at")
@@ -77,6 +78,8 @@ class ChatSessionAdmin(ModelAdmin):
         )
 
 
+admin.site.register(ChatSession, ChatSessionAdmin)
+
 admin.site.register([
     ResearchProject,
     ResearchSource,
@@ -86,7 +89,6 @@ admin.site.register([
     Agent,
     AgentCapability,
     AgentTask,
-    ChatSession,
     ChatMessage,
     ApprovalRequest,
     AuditLog,
