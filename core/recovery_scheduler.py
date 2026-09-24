@@ -1,5 +1,8 @@
 from dataclasses import dataclass, field
+from datetime import timedelta
 from typing import List
+
+from django.utils import timezone
 
 from .models import AgentTask
 from .task_runtime import TaskRuntime
@@ -18,7 +21,8 @@ class RecoveryScheduler:
     """Bounded stale-task recovery pass.
 
     TaskRuntime owns the actual state transition and retry policy. This service
-    only selects stale running tasks and records the outcome of each attempt.
+    selects only tasks that are old enough to be candidates, then re-validates
+    staleness under a row lock inside TaskRuntime.
     """
 
     def __init__(self, runtime=None):
@@ -28,8 +32,11 @@ class RecoveryScheduler:
         self._validate_limit(limit)
         self._validate_stale_after(stale_after_seconds)
 
+        cutoff = timezone.now() - timedelta(seconds=stale_after_seconds)
         task_ids = list(
-            AgentTask.objects.filter(status="running")
+            AgentTask.objects.filter(
+                status="running", updated_at__lte=cutoff
+            )
             .order_by("updated_at", "id")
             .values_list("id", flat=True)[:limit]
         )
