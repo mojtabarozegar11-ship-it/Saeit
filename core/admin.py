@@ -4,6 +4,8 @@ from .models import (
     Agent,
     AgentCapability,
     AgentTask,
+    ChatSession,
+    ChatMessage,
     ApprovalRequest,
     AuditLog,
     Evidence,
