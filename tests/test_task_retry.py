@@ -31,10 +31,10 @@ def test_failure_requeues_until_retry_budget_is_exhausted():
     task = setup_retry_task(max_attempts=2)
     runtime = TaskRuntime()
     runtime.claim(task.pk)
-    failed = runtime.fail(task.pk, "temporary error")
+    failed = runtime.fail(task.pk, "temporary error", execution_id=task.execution_id)
     assert failed.status == "queued"
     runtime.claim(task.pk)
-    failed = runtime.fail(task.pk, "final error")
+    failed = runtime.fail(task.pk, "final error", execution_id=task.execution_id)
     assert failed.status == "failed"
 
 
