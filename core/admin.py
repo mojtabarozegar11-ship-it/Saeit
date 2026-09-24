@@ -30,6 +30,9 @@ class ChatSessionAdmin(ModelAdmin):
     search_fields = ("title", "user__username")
     readonly_fields = ("created_at", "updated_at")
 
+    def get_queryset(self, request):
+        return super().get_queryset(request).filter(user=request.user)
+
     def get_urls(self):
         urls = super().get_urls()
         custom = [
@@ -45,7 +48,7 @@ class ChatSessionAdmin(ModelAdmin):
         session_id = request.GET.get("session")
         session = None
         if session_id:
-            session = ChatSession.objects.filter(pk=session_id).first()
+            session = ChatSession.objects.filter(pk=session_id, user=request.user).first()
 
         if session is None:
             session = ChatSession.objects.create(
@@ -62,7 +65,7 @@ class ChatSessionAdmin(ModelAdmin):
             )
 
         messages = session.messages.order_by("created_at")
-        sessions = ChatSession.objects.order_by("-updated_at")[:30]
+        sessions = ChatSession.objects.filter(user=request.user).order_by("-updated_at")[:30]
         context = {
             **self.admin_site.each_context(request),
             "title": "چت با Master Agent",
