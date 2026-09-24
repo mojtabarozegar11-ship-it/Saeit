@@ -32,7 +32,7 @@ def test_claim_complete_creates_execution_and_finishes():
     assert claimed.execution_id
     assert claimed.attempt_count == 1
 
-    completed = TaskRuntime().complete(task.pk, {"result": "ok"}, cost=1.25)
+    completed = TaskRuntime().complete(task.pk, {"result": "ok"}, cost=1.25, execution_id=claimed.execution_id)
     assert completed.status == "completed"
     assert completed.output_data == {"result": "ok"}
 
@@ -56,12 +56,12 @@ def test_failed_task_requeues_until_retry_budget_then_fails():
     task, _ = make_task(owner=owner, max_attempts=2)
 
     TaskRuntime().claim(task.pk)
-    first = TaskRuntime().fail(task.pk, "temporary failure")
+    first = TaskRuntime().fail(task.pk, "temporary failure", execution_id=TaskRuntime().claim(task.pk).execution_id)
     assert first.status == "queued"
     assert first.attempt_count == 1
 
     TaskRuntime().claim(task.pk)
-    second = TaskRuntime().fail(task.pk, "final failure")
+    second = TaskRuntime().fail(task.pk, "final failure", execution_id=TaskRuntime().claim(task.pk).execution_id)
     assert second.status == "failed"
     assert second.attempt_count == 2
 
