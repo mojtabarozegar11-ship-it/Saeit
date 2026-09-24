@@ -1,16 +1,23 @@
 import pytest
 from django.contrib.auth import get_user_model
 from core.models import ResearchProject
-from core.services import requires_owner_approval
+from core.services import normalize_action, requires_owner_approval
+
+
 @pytest.mark.django_db
 def test_approval_policy():
- assert requires_owner_approval("deploy","high")
- assert not requires_owner_approval("research","low")
+    assert requires_owner_approval("deploy", "high")
+    assert requires_owner_approval(" production-change ", "low")
+    assert requires_owner_approval("database migration", "low")
+    assert not requires_owner_approval("research", "low")
+    assert normalize_action(" production-change ") == "production_change"
+
+
 @pytest.mark.django_db
 def test_project():
- u=get_user_model().objects.create_user(username="owner")
- p=ResearchProject.objects.create(owner=u,title="Test",objective="Test")
- assert p.pk
+    u = get_user_model().objects.create_user(username="owner")
+    p = ResearchProject.objects.create(owner=u, title="Test", objective="Test")
+    assert p.pk
 
 
 @pytest.mark.django_db
