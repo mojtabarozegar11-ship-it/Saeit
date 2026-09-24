@@ -72,3 +72,26 @@ def test_runtime_rejects_cross_project_finding_evidence():
     evidence = Evidence.objects.create(project=other, source=source, passage="other")
     with pytest.raises(ValidationError):
         ResearchRuntime().add_finding(project, "Finding", "statement", [evidence], 0.9)
+
+
+def test_approval_decision_preserves_reason():
+    from core.models import ApprovalRequest
+    from core.approval import ApprovalService
+
+    project, _ = setup_project()
+    approval = ApprovalRequest.objects.create(
+        action_type="publish",
+        target_type="AgentTask",
+        target_id="999999",
+        reason="Original reason",
+        requested_by=project.owner,
+    )
+    result = ApprovalService().decide(
+        approval_id=approval.pk,
+        approved=True,
+        actor_id=project.owner.pk,
+        note="Approved after review.",
+    )
+    assert result.reason == "Original reason"
+    assert result.decision_note == "Approved after review."
+    assert result.status == "approved"
