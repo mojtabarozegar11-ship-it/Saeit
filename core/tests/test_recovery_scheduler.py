@@ -1,5 +1,8 @@
 import pytest
 
+from django.utils import timezone
+from datetime import timedelta
+
 from core.models import Agent, AgentTask
 from core.recovery_scheduler import RecoveryScheduler
 
@@ -13,7 +16,7 @@ def running_task(db):
         active=True,
         risk_level="low",
     )
-    return AgentTask.objects.create(
+    task = AgentTask.objects.create(
         agent=agent,
         action_type="research",
         capability_code="research",
@@ -22,6 +25,8 @@ def running_task(db):
         execution_id="exec-1",
         max_attempts=2,
     )
+    AgentTask.objects.filter(pk=task.pk).update(updated_at=timezone.now() - timedelta(hours=1))
+    return task
 
 
 class StubRuntime:
@@ -50,6 +55,7 @@ def test_recovery_scheduler_is_bounded_and_delegates(running_task):
         status="running",
         execution_id="exec-2",
     )
+    AgentTask.objects.filter(pk=second.pk).update(updated_at=timezone.now() - timedelta(hours=1))
     runtime = StubRuntime({running_task.pk: "queued", second.pk: "failed"})
 
     summary = RecoveryScheduler(runtime).recover(
