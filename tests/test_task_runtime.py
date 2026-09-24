@@ -46,8 +46,8 @@ def test_inactive_agent_cannot_run_task():
 def test_completed_task_cannot_be_claimed_again():
     task = setup_task()
     runtime = TaskRuntime()
-    runtime.claim(task.pk)
-    runtime.complete(task.pk, {"done": True}, execution_id=runtime.claim(task.pk).execution_id)
+    running = runtime.claim(task.pk)
+    runtime.complete(task.pk, {"done": True}, execution_id=running.execution_id)
     with pytest.raises(TaskExecutionError, match="completed"):
         runtime.claim(task.pk)
 
