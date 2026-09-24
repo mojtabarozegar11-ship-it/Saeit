@@ -41,5 +41,6 @@ class ApprovalService:
                 "approved": approved,
                 "task_status": getattr(task, "status", None),
             },
+            trace_id=f"approval-{approval.pk}",
         )
         return approval
