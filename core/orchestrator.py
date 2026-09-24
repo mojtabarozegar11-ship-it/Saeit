@@ -33,10 +33,15 @@ class MasterAgent:
         if not agent:
             raise RuntimeError("No active agent")
 
-        requires_approval = requires_owner_approval(normalized_action, risk)
+        capability = AgentRegistry().capability_for(agent, normalized_action)
+        if not capability:
+            raise RuntimeError("Selected agent lacks an active capability for this action")
+        effective_risk = AgentRegistry().effective_risk(capability, risk)
+        requires_approval = requires_owner_approval(normalized_action, effective_risk)
         task = AgentTask.objects.create(
             agent=agent,
             project=project,
+            action_type=normalized_action,
             input_data=payload or {},
             status="blocked" if requires_approval else "queued",
         )
@@ -47,7 +52,7 @@ class MasterAgent:
                 target_type="AgentTask",
                 target_id=str(task.pk),
                 reason="Owner approval required before execution.",
-                risk=str(risk or "low").strip().lower(),
+                risk=effective_risk,
                 requested_by=project.owner,
             )
 
