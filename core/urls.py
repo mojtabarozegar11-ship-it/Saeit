@@ -3,6 +3,7 @@ from rest_framework.routers import DefaultRouter
 
 from .api import (
     AgentCapabilityViewSet,
+    MasterAgentChatViewSet,
     AgentTaskViewSet,
     AgentViewSet,
     ApprovalRequestViewSet,
@@ -27,6 +28,7 @@ router.register("agents", AgentViewSet, basename="agent")
 router.register("agent-capabilities", AgentCapabilityViewSet, basename="agent-capability")
 router.register("tasks", AgentTaskViewSet, basename="agent-task")
 router.register("approvals", ApprovalRequestViewSet, basename="approval-request")
+router.register("master-chat", MasterAgentChatViewSet, basename="master-agent-chat")
 router.register("knowledge", KnowledgeArticleViewSet, basename="knowledge-article")
 router.register("products", ProductViewSet, basename="product")
 router.register("orders", OrderViewSet, basename="order")
