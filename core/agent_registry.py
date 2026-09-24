@@ -1,27 +1,49 @@
-from .models import Agent
+from .models import Agent, AgentCapability
+
+
+RISK_ORDER = {"low": 0, "medium": 1, "high": 2, "critical": 3}
 
 
 class AgentRegistry:
-    """Capability-aware agent registry used by the Master Agent."""
+    """Capability-aware registry and execution-policy boundary."""
 
     def resolve(self, action):
-        normalized = str(action or "").strip().lower().replace("-", "_").replace(" ", "_")
+        normalized = self._normalize(action)
         if not normalized:
             return None
-        exact = Agent.objects.filter(active=True, capabilities__code=normalized).order_by("risk_level", "id").first()
-        if exact:
-            return exact
-        for token in normalized.split("_"):
-            if len(token) >= 3:
-                agent = Agent.objects.filter(active=True, capabilities__code=token).order_by("risk_level", "id").first()
-                if agent:
-                    return agent
-        return None
+        capability = self._capability(normalized)
+        if not capability:
+            for token in normalized.split("_"):
+                if len(token) >= 3:
+                    capability = self._capability(token)
+                    if capability:
+                        break
+        if not capability:
+            return None
+        return capability.agents.filter(active=True).order_by("risk_level", "id").first()
+
+    def capability_for(self, agent, action):
+        normalized = self._normalize(action)
+        if not agent or not normalized:
+            return None
+        return agent.capabilities.filter(active=True, code=normalized).first()
 
     def can_execute(self, agent, action):
-        normalized = str(action or "").strip().lower().replace("-", "_").replace(" ", "_")
-        return bool(
-            agent
-            and agent.active
-            and agent.capabilities.filter(active=True, code=normalized).exists()
-        )
+        return self.capability_for(agent, action) is not None
+
+    def effective_risk(self, capability, requested_risk="low"):
+        capability_risk = str(capability.risk_level or "low").lower()
+        requested = str(requested_risk or "low").strip().lower()
+        if requested not in RISK_ORDER:
+            requested = "low"
+        if capability_risk not in RISK_ORDER:
+            capability_risk = "low"
+        return capability_risk if RISK_ORDER[capability_risk] >= RISK_ORDER[requested] else requested
+
+    @staticmethod
+    def _normalize(action):
+        return str(action or "").strip().lower().replace("-", "_").replace(" ", "_")
+
+    @staticmethod
+    def _capability(code):
+        return AgentCapability.objects.filter(active=True, code=code).first()
