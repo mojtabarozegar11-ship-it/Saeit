@@ -55,13 +55,13 @@ def test_failed_task_requeues_until_retry_budget_then_fails():
     owner = get_user_model().objects.create_user(username="retry-owner", password="pass", is_staff=True)
     task, _ = make_task(owner=owner, max_attempts=2)
 
-    TaskRuntime().claim(task.pk)
-    first = TaskRuntime().fail(task.pk, "temporary failure", execution_id=TaskRuntime().claim(task.pk).execution_id)
+    first_claim = TaskRuntime().claim(task.pk)
+    first = TaskRuntime().fail(task.pk, "temporary failure", execution_id=first_claim.execution_id)
     assert first.status == "queued"
     assert first.attempt_count == 1
 
-    TaskRuntime().claim(task.pk)
-    second = TaskRuntime().fail(task.pk, "final failure", execution_id=TaskRuntime().claim(task.pk).execution_id)
+    second_claim = TaskRuntime().claim(task.pk)
+    second = TaskRuntime().fail(task.pk, "final failure", execution_id=second_claim.execution_id)
     assert second.status == "failed"
     assert second.attempt_count == 2
 
