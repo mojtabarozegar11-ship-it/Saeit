@@ -109,12 +109,17 @@ class TaskRuntime:
         task.save(
             update_fields=["status", "execution_id", "output_data", "updated_at"]
         )
-        self._audit(task, "task_recovered_stale", {
-            "status": task.status,
-            "previous_execution_id": previous_execution_id,
-            "attempt": task.attempt_count,
-            "stale_after_seconds": seconds,
-        })
+        self._audit(
+            task,
+            "task_recovered_stale",
+            {
+                "status": task.status,
+                "previous_execution_id": previous_execution_id,
+                "attempt": task.attempt_count,
+                "stale_after_seconds": seconds,
+            },
+            trace_execution_id=previous_execution_id,
+        )
         return task
 
     @transaction.atomic
@@ -150,6 +155,7 @@ class TaskRuntime:
             raise TaskExecutionError("Execution identity does not match the active task execution")
         if not str(error or "").strip():
             raise TaskExecutionError("Task failure reason is required")
+        previous_execution_id = task.execution_id
         task.output_data = {"error": str(error)[:5000]}
         if task.attempt_count >= task.max_attempts:
             task.status = "failed"
@@ -158,15 +164,22 @@ class TaskRuntime:
             task.execution_id = ""
             task.status = "queued"
         task.save(update_fields=["output_data", "execution_id", "status", "updated_at"])
-        self._audit(task, "task_failed", {
-            "status": task.status,
-            "error": str(error)[:5000],
-            "execution_id": task.execution_id,
-            "attempt": task.attempt_count,
-        })
+        self._audit(
+            task,
+            "task_failed",
+            {
+                "status": task.status,
+                "error": str(error)[:5000],
+                "execution_id": task.execution_id,
+                "previous_execution_id": previous_execution_id,
+                "attempt": task.attempt_count,
+            },
+            trace_execution_id=previous_execution_id,
+        )
         return task
 
-    def _audit(self, task, action, state):
+    def _audit(self, task, action, state, trace_execution_id=None):
+        trace_execution_id = trace_execution_id or task.execution_id or "none"
         AuditLog.objects.create(
             actor_type="agent",
             actor_id=str(task.agent_id),
@@ -174,5 +187,5 @@ class TaskRuntime:
             target_type="AgentTask",
             target_id=str(task.pk),
             after_state=state,
-            trace_id=f"task-{task.pk}-{task.execution_id or 'none'}",
+            trace_id=f"task-{task.pk}-{trace_execution_id}",
         )
