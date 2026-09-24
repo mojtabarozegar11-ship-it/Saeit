@@ -23,11 +23,11 @@ class QueueDispatcher:
     re-validates each task before execution.
     """
 
-    def __init__(self, worker_runner=None, runtime=None):
+    def __init__(self, worker_runner, runtime=None):
+        if worker_runner is None:
+            raise ValueError("worker_runner is required")
         self.runtime = runtime or TaskRuntime()
-        self.worker_runner = worker_runner or WorkerRunner(
-            gateway=None, runtime=self.runtime
-        )
+        self.worker_runner = worker_runner
 
     def dispatch(self, limit=10):
         try:
