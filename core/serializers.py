@@ -1,7 +1,7 @@
 from rest_framework import serializers
 
 from .models import (
-    Agent, AgentCapability, AgentTask, ApprovalRequest, Evidence, Finding,
+    Agent, AgentCapability, AgentTask, ApprovalRequest, ChatMessage, ChatSession, Evidence, Finding,
     KnowledgeArticle, Order, Product, Report, ResearchProject, ResearchSource,
 )
 
@@ -79,3 +79,7 @@ class ReportSerializer(serializers.ModelSerializer):
                 {"version": "This report version already exists for the project."}
             )
         return attrs
+
+
+ChatSessionSerializer = make(ChatSession)
+ChatMessageSerializer = make(ChatMessage)
