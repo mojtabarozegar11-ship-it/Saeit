@@ -185,3 +185,22 @@ class Order(T):
     status = models.CharField(max_length=30, default="pending")
     total = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     currency = models.CharField(max_length=10, default="IRR")
+
+
+class ChatSession(T):
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="master_agent_chat_sessions",
+    )
+    title = models.CharField(max_length=300, blank=True)
+    status = models.CharField(max_length=20, default="active")
+
+
+class ChatMessage(T):
+    session = models.ForeignKey(
+        ChatSession, on_delete=models.CASCADE, related_name="messages"
+    )
+    role = models.CharField(max_length=20)
+    content = models.TextField()
+    metadata = models.JSONField(default=dict)
