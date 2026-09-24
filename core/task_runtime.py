@@ -61,22 +61,36 @@ class TaskRuntime:
         return task
 
     @transaction.atomic
-    def complete(self, task_id, output_data=None, cost=0):
+    def complete(self, task_id, output_data=None, cost=0, execution_id=None):
         task = AgentTask.objects.select_for_update().get(pk=task_id)
         if task.status != "running":
             raise TaskExecutionError(f"Task is not running: {task.status}")
+        if not execution_id or execution_id != task.execution_id:
+            raise TaskExecutionError("Execution identity does not match the active task execution")
+        if not isinstance(output_data or {}, dict):
+            raise TaskExecutionError("Task output must be an object")
+        try:
+            normalized_cost = float(cost or 0)
+        except (TypeError, ValueError) as exc:
+            raise TaskExecutionError("Task cost is invalid") from exc
+        if normalized_cost < 0:
+            raise TaskExecutionError("Task cost cannot be negative")
         task.output_data = output_data or {}
-        task.cost = cost or 0
+        task.cost = normalized_cost
         task.status = "completed"
         task.save(update_fields=["output_data", "cost", "status", "updated_at"])
         self._audit(task, "task_completed", {"status": "completed", "execution_id": task.execution_id})
         return task
 
     @transaction.atomic
-    def fail(self, task_id, error):
+    def fail(self, task_id, error, execution_id=None):
         task = AgentTask.objects.select_for_update().get(pk=task_id)
         if task.status != "running":
             raise TaskExecutionError(f"Task is not running: {task.status}")
+        if not execution_id or execution_id != task.execution_id:
+            raise TaskExecutionError("Execution identity does not match the active task execution")
+        if not str(error or "").strip():
+            raise TaskExecutionError("Task failure reason is required")
         task.output_data = {"error": str(error)[:5000]}
         task.status = "failed" if task.attempt_count >= task.max_attempts else "queued"
         task.save(update_fields=["output_data", "status", "updated_at"])
