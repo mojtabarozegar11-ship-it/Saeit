@@ -1,7 +1,7 @@
 from rest_framework import serializers
 
 from .models import (
-    Agent, AgentTask, ApprovalRequest, Evidence, Finding,
+    Agent, AgentCapability, AgentTask, ApprovalRequest, Evidence, Finding,
     KnowledgeArticle, Order, Product, Report, ResearchProject, ResearchSource,
 )
 
@@ -25,6 +25,7 @@ EvidenceSerializer = make(Evidence)
 FindingSerializer = make(Finding)
 ReportSerializer = make(Report)
 AgentSerializer = make(Agent)
+AgentCapabilitySerializer = make(AgentCapability)
 AgentTaskSerializer = make(AgentTask)
 ApprovalRequestSerializer = make(ApprovalRequest)
 KnowledgeArticleSerializer = make(KnowledgeArticle)
