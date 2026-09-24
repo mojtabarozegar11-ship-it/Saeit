@@ -1,0 +1,60 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block extrastyle %}
+{{ block.super }}
+<style>
+.chat-layout{display:grid;grid-template-columns:260px 1fr;gap:20px;max-width:1200px}
+.chat-sessions,.chat-box{background:var(--body-bg,#fff);border:1px solid var(--hairline-color,#ddd);border-radius:10px}
+.chat-sessions{padding:12px}
+.chat-sessions a{display:block;padding:10px;border-radius:7px;text-decoration:none}
+.chat-sessions a:hover{background:var(--darkened-bg,#f5f5f5)}
+.chat-box{min-height:620px;display:flex;flex-direction:column}
+.chat-head{padding:14px 18px;border-bottom:1px solid var(--hairline-color,#ddd)}
+.chat-messages{flex:1;padding:18px;overflow:auto}
+.msg{max-width:80%;padding:10px 14px;margin:10px 0;border-radius:12px;white-space:pre-wrap}
+.msg.user{margin-left:auto;background:#417690;color:#fff}
+.msg.assistant{margin-right:auto;background:var(--darkened-bg,#f5f5f5)}
+.chat-form{display:flex;gap:10px;padding:14px;border-top:1px solid var(--hairline-color,#ddd)}
+.chat-form textarea{flex:1;min-height:60px}
+</style>
+{% endblock %}
+
+{% block content %}
+<h1>🤖 چت با Master Agent</h1>
+<p>فرمان‌ها و درخواست‌های مدیریتی را از اینجا با Master Agent مطرح کنید. عملیات حساس همچنان از دروازه تأیید مالک عبور می‌کند.</p>
+
+<div class="chat-layout">
+  <aside class="chat-sessions">
+    <strong>گفتگوها</strong>
+    <p><a href="{% url 'admin:core_chatsession_master_agent_chat' %}">＋ گفتگوی جدید</a></p>
+    {% for item in sessions %}
+      <a href="?session={{ item.pk }}">{{ item.title|default:"گفتگو" }}<br><small>#{{ item.pk }} · {{ item.updated_at }}</small></a>
+    {% endfor %}
+  </aside>
+
+  <section class="chat-box">
+    <div class="chat-head">
+      <strong>{{ session.title|default:"Master Agent" }}</strong>
+      <span> · Session #{{ session.pk }}</span>
+    </div>
+
+    <div class="chat-messages">
+      {% for message in messages %}
+        <div class="msg {% if message.role == 'user' %}user{% else %}assistant{% endif %}">
+          <strong>{% if message.role == 'user' %}شما{% else %}Master Agent{% endif %}</strong><br>
+          {{ message.content }}
+        </div>
+      {% empty %}
+        <p>گفتگو را شروع کنید.</p>
+      {% endfor %}
+    </div>
+
+    <form method="post" class="chat-form">
+      {% csrf_token %}
+      <textarea name="message" placeholder="پیام خود را برای Master Agent بنویسید..." required></textarea>
+      <button type="submit" class="default">ارسال</button>
+    </form>
+  </section>
+</div>
+{% endblock %}
