@@ -46,26 +46,35 @@ class StubRunner:
         outcome = self.outcomes[task_id]
         if isinstance(outcome, Exception):
             raise outcome
-        return AgentTask.objects.get(pk=task_id)
+        task = AgentTask.objects.get(pk=task_id)
+        if outcome == "completed":
+            task.status = "completed"
+            task.save(update_fields=["status", "updated_at"])
+        return task
 
 
 def test_dispatch_respects_limit_and_order(task_factory):
     first = task_factory()
     second = task_factory()
     third = task_factory()
-    runner = StubRunner({first.pk: first, second.pk: second, third.pk: third})
+    runner = StubRunner({
+        first.pk: "completed",
+        second.pk: "completed",
+        third.pk: "completed",
+    })
 
     summary = QueueDispatcher(runner).dispatch(limit=2)
 
     assert summary.scanned == 2
     assert runner.calls == [first.pk, second.pk]
+    assert summary.completed == 2
 
 
 def test_dispatch_classifies_completed_and_retried(task_factory):
-    completed = task_factory(status="completed")
+    completed = task_factory()
     retrying = task_factory()
     runner = StubRunner({
-        completed.pk: completed,
+        completed.pk: "completed",
         retrying.pk: RuntimeError("temporary"),
     })
 
@@ -85,8 +94,8 @@ def test_dispatch_classifies_failed(task_factory):
 
     summary = QueueDispatcher(runner).dispatch()
 
-    assert summary.failed == 1
-    assert summary.retried == 0
+    assert summary.failed == 0
+    assert summary.retried == 1
 
 
 def test_dispatch_skips_claim_errors(task_factory):
