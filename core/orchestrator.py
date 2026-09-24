@@ -42,6 +42,8 @@ class MasterAgent:
             agent=agent,
             project=project,
             action_type=normalized_action,
+            capability_code=capability.code,
+            risk_snapshot=effective_risk,
             input_data=payload or {},
             status="blocked" if requires_approval else "queued",
         )
