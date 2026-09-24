@@ -6,6 +6,9 @@ from rest_framework.response import Response
 from .approval import ApprovalService
 from .chat_runtime import MasterAgentChat
 from .task_runtime import TaskExecutionError, TaskRuntime
+
+
+from .orchestrator import MasterAgent
 from .models import (
     Agent, AgentCapability, AgentTask, ApprovalRequest, ChatMessage, ChatSession, Evidence, Finding,
     KnowledgeArticle, Order, Product, Report, ResearchProject, ResearchSource,
@@ -142,6 +145,23 @@ class MasterAgentChatViewSet(viewsets.ModelViewSet):
                 ).data,
             }, status=status.HTTP_201_CREATED)
         return Response({"session": ChatSessionSerializer(session).data}, status=status.HTTP_201_CREATED)
+
+    @action(detail=False, methods=["post"], url_path="plan", permission_classes=[InternalStaffWritePermission])
+    def plan(self, request, *args, **kwargs):
+        project_id = request.data.get("project_id")
+        action_type = str(request.data.get("action_type", "")).strip()
+        payload = request.data.get("payload") or {}
+        risk = str(request.data.get("risk", "low")).strip() or "low"
+        if not project_id or not action_type:
+            return Response({"detail": "project_id and action_type are required."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            project = ResearchProject.objects.get(pk=project_id)
+            task = MasterAgent().plan(project, action_type, payload, risk=risk)
+        except ResearchProject.DoesNotExist:
+            return Response({"detail": "Research project not found."}, status=status.HTTP_404_NOT_FOUND)
+        except (RuntimeError, ValueError) as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
+        return Response(AgentTaskSerializer(task).data, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=["post"], url_path="messages")
     def message(self, request, pk=None):
