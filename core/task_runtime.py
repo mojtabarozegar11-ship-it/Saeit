@@ -1,5 +1,7 @@
-from django.db import transaction
+from decimal import Decimal, InvalidOperation
 import uuid
+
+from django.db import transaction
 
 from .agent_registry import AgentRegistry
 from .models import AgentTask, ApprovalRequest, AuditLog
@@ -70,9 +72,11 @@ class TaskRuntime:
         if not isinstance(output_data or {}, dict):
             raise TaskExecutionError("Task output must be an object")
         try:
-            normalized_cost = float(cost or 0)
-        except (TypeError, ValueError) as exc:
+            normalized_cost = Decimal(str(cost if cost is not None else "0"))
+        except (InvalidOperation, TypeError, ValueError) as exc:
             raise TaskExecutionError("Task cost is invalid") from exc
+        if not normalized_cost.is_finite():
+            raise TaskExecutionError("Task cost must be finite")
         if normalized_cost < 0:
             raise TaskExecutionError("Task cost cannot be negative")
         task.output_data = output_data or {}
