@@ -27,8 +27,12 @@ class TaskRuntime:
         capability = registry.capability_for(task.agent, task.action_type)
         if not capability:
             raise TaskExecutionError("Task agent no longer has an active capability for this action")
+        if task.capability_code and capability.code != task.capability_code:
+            raise TaskExecutionError("Task capability policy no longer matches its execution snapshot")
 
-        effective_risk = registry.effective_risk(capability, "low")
+        effective_risk = registry.effective_risk(capability, task.risk_snapshot or "low")
+        if effective_risk != (task.risk_snapshot or "low"):
+            raise TaskExecutionError("Task risk policy has changed since planning")
         if requires_owner_approval(task.action_type, effective_risk):
             approved = ApprovalRequest.objects.filter(
                 target_type="AgentTask", target_id=str(task.pk), status="approved"
