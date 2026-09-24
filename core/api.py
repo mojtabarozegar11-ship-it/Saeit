@@ -4,6 +4,7 @@ from rest_framework.permissions import BasePermission, IsAuthenticated, IsAuthen
 from rest_framework.response import Response
 
 from .approval import ApprovalService
+from .task_runtime import TaskExecutionError, TaskRuntime
 from .models import (
     Agent, AgentTask, ApprovalRequest, Evidence, Finding,
     KnowledgeArticle, Order, Product, Report, ResearchProject, ResearchSource,
@@ -52,10 +53,19 @@ EvidenceViewSet = vs(Evidence, EvidenceSerializer, InternalStaffWritePermission)
 FindingViewSet = vs(Finding, FindingSerializer, InternalStaffWritePermission)
 ReportViewSet = vs(Report, ReportSerializer, InternalStaffWritePermission)
 AgentViewSet = vs(Agent, AgentSerializer, InternalStaffWritePermission)
-AgentTaskViewSet = vs(AgentTask, AgentTaskSerializer, InternalStaffWritePermission)
 KnowledgeArticleViewSet = vs(KnowledgeArticle, KnowledgeArticleSerializer)
 ProductViewSet = vs(Product, ProductSerializer)
 OrderViewSet = vs(Order, OrderSerializer, InternalStaffWritePermission)
+
+
+class AgentTaskViewSet(vs(AgentTask, AgentTaskSerializer, InternalStaffWritePermission)):
+    @action(detail=True, methods=["post"], url_path="claim")
+    def claim(self, request, pk=None):
+        try:
+            task = TaskRuntime().claim(pk)
+        except TaskExecutionError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
+        return Response(AgentTaskSerializer(task).data)
 
 
 class ApprovalRequestViewSet(viewsets.ReadOnlyModelViewSet):
