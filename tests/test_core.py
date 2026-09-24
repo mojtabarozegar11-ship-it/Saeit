@@ -11,3 +11,42 @@ def test_project():
  u=get_user_model().objects.create_user(username="owner")
  p=ResearchProject.objects.create(owner=u,title="Test",objective="Test")
  assert p.pk
+
+
+@pytest.mark.django_db
+def test_internal_api_requires_authentication():
+    from rest_framework.test import APIClient
+
+    client = APIClient()
+    response = client.get("/api/projects/")
+    assert response.status_code == 401
+
+
+@pytest.mark.django_db
+def test_internal_api_write_requires_staff():
+    from rest_framework.test import APIClient
+
+    user = get_user_model().objects.create_user(username="regular")
+    client = APIClient()
+    client.force_authenticate(user=user)
+    response = client.post(
+        "/api/projects/",
+        {"title": "Blocked", "objective": "Test", "owner": user.pk},
+        format="json",
+    )
+    assert response.status_code == 403
+
+
+@pytest.mark.django_db
+def test_staff_can_create_project():
+    from rest_framework.test import APIClient
+
+    user = get_user_model().objects.create_user(username="staff", is_staff=True)
+    client = APIClient()
+    client.force_authenticate(user=user)
+    response = client.post(
+        "/api/projects/",
+        {"title": "Allowed", "objective": "Test", "owner": user.pk},
+        format="json",
+    )
+    assert response.status_code == 201
