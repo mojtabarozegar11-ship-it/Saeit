@@ -83,9 +83,9 @@ class ApprovalRequestViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=True, methods=["post"], url_path="decide")
     def decide(self, request, pk=None):
         approval = self.get_object()
-        if approval.requested_by_id != request.user.pk and not request.user.is_staff:
+        if approval.requested_by_id != request.user.pk:
             return Response(
-                {"detail": "Only the owner or an authorized staff user can decide this approval."},
+                {"detail": "Only the designated owner can decide this approval."},
                 status=status.HTTP_403_FORBIDDEN,
             )
 
@@ -102,7 +102,7 @@ class ApprovalRequestViewSet(viewsets.ReadOnlyModelViewSet):
                 approval_id=approval.pk,
                 approved=approved,
                 actor_id=request.user.pk,
-                actor_type="staff" if request.user.is_staff else "owner",
+                actor_type="owner",
                 note=note,
             )
         except ValueError as exc:
