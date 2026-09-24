@@ -79,6 +79,33 @@ class AgentTaskViewSet(viewsets.ReadOnlyModelViewSet):
             return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
         return Response(AgentTaskSerializer(task).data)
 
+    @action(detail=True, methods=["post"], url_path="complete")
+    def complete(self, request, pk=None):
+        output_data = request.data.get("output_data") or {}
+        if not isinstance(output_data, dict):
+            return Response({"detail": "output_data must be an object."}, status=status.HTTP_400_BAD_REQUEST)
+        cost = request.data.get("cost", 0)
+        try:
+            task = TaskRuntime().complete(pk, output_data=output_data, cost=cost)
+        except AgentTask.DoesNotExist:
+            return Response({"detail": "Task not found."}, status=status.HTTP_404_NOT_FOUND)
+        except (TaskExecutionError, ValueError, TypeError) as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
+        return Response(AgentTaskSerializer(task).data)
+
+    @action(detail=True, methods=["post"], url_path="fail")
+    def fail(self, request, pk=None):
+        error = str(request.data.get("error", "")).strip()
+        if not error:
+            return Response({"detail": "error is required."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            task = TaskRuntime().fail(pk, error)
+        except AgentTask.DoesNotExist:
+            return Response({"detail": "Task not found."}, status=status.HTTP_404_NOT_FOUND)
+        except TaskExecutionError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
+        return Response(AgentTaskSerializer(task).data)
+
 class ApprovalRequestViewSet(viewsets.ReadOnlyModelViewSet):
     """Owner approvals are read-only except for the controlled decision action."""
     queryset = ApprovalRequest.objects.select_related("requested_by").all()
