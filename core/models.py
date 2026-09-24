@@ -105,6 +105,15 @@ class Agent(T):
     active = models.BooleanField(default=False)
 
 
+class AgentCapability(T):
+    code = models.SlugField(unique=True)
+    name = models.CharField(max_length=200)
+    description = models.TextField(blank=True)
+    risk_level = models.CharField(max_length=10, default="low")
+    active = models.BooleanField(default=True)
+    agents = models.ManyToManyField(Agent, blank=True, related_name="capabilities")
+
+
 class AgentTask(T):
     agent = models.ForeignKey(Agent, on_delete=models.PROTECT, related_name="tasks")
     project = models.ForeignKey(
