@@ -3,7 +3,6 @@ from typing import List
 
 from .models import AgentTask
 from .task_runtime import TaskExecutionError, TaskRuntime
-from .worker_runner import WorkerRunner
 
 
 @dataclass
@@ -17,33 +16,30 @@ class DispatchSummary:
 
 
 class QueueDispatcher:
-    """Small, deterministic dispatcher for the controlled task queue.
+    """Deterministic bounded dispatcher for the controlled task queue.
 
-    Concurrency safety is delegated to TaskRuntime.claim(), which locks and
-    re-validates each task before execution.
+    TaskRuntime.claim() remains the authority for locking, identity,
+    approval, risk, and retry policy.
     """
 
     def __init__(self, worker_runner, runtime=None):
         if worker_runner is None:
             raise ValueError("worker_runner is required")
-        self.runtime = runtime or TaskRuntime()
+        self.runtime = runtime or getattr(worker_runner, "runtime", None) or TaskRuntime()
         self.worker_runner = worker_runner
 
     def dispatch(self, limit=10):
-        try:
-            limit = int(limit)
-        except (TypeError, ValueError) as exc:
-            raise ValueError("limit must be an integer") from exc
+        if isinstance(limit, bool) or not isinstance(limit, int):
+            raise ValueError("limit must be an integer")
         if limit <= 0:
             raise ValueError("limit must be positive")
 
-        summary = DispatchSummary()
         task_ids = list(
             AgentTask.objects.filter(status="queued")
-            .order_by("id")
+            .order_by("created_at", "id")
             .values_list("id", flat=True)[:limit]
         )
-        summary.scanned = len(task_ids)
+        summary = DispatchSummary(scanned=len(task_ids))
 
         for task_id in task_ids:
             try:
@@ -53,12 +49,11 @@ class QueueDispatcher:
                 summary.errors.append(f"{task_id}: {exc}")
                 continue
             except Exception as exc:
-                current = AgentTask.objects.get(pk=task_id)
-                if current.status == "completed":
-                    summary.completed += 1
-                elif current.status == "failed":
+                current = AgentTask.objects.filter(pk=task_id).only("status").first()
+                status = getattr(current, "status", None)
+                if status == "failed":
                     summary.failed += 1
-                elif current.status == "queued":
+                elif status == "queued":
                     summary.retried += 1
                 else:
                     summary.skipped += 1
