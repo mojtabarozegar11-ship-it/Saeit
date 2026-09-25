@@ -73,7 +73,7 @@ def platform_page(request, section):
         "knowledge": {
             "kicker":"KNOWLEDGE · ENCYCLOPEDIA","title":"دانش‌نامه Zomorodmelal","lead":"دانش قابل استفاده، با منشأ روشن و اتصال مستقیم به پژوهش.",
             "badge":"KNOWLEDGE","heading":"پایگاه دانش","body":"مقالات دانش از گزارش‌های پژوهشی ایجاد می‌شوند و قبل از انتشار عمومی، مسیر تأیید مالک را طی می‌کنند. این معماری امکان ساخت Topic Cluster و Pillar Page را فراهم می‌کند.",
-            "items":[{"title":"Pillar Pages","text":"صفحات مرجع برای موضوعات اصلی."},{"title":"Topic Clusters","text":"خوشه‌بندی دانش پیرامون موضوعات تخصصی."},{"title":"Provenance","text":"ردپای گزارش پژوهشی منبع هر مقاله."}],
+            "items":[{"title":"Pillar Pages","text":"صفحات مرجع برای موضوعات اصلی."},{"title":"Topic Clusters","text":"خوشه‌بندی دانش پیرامون موضوعات تخصصی."},{"title":"Provenance","text":"ردپای گزارش پژوهشی منبع هر مقاله."},{"title":"Glossary","text":"واژه‌نامه استاندارد برای مفاهیم و اصطلاحات کلیدی."},{"title":"Research Notes","text":"یادداشت‌های پژوهشی برای اتصال شواهد به دانش."},{"title":"Knowledge Graph","text":"رابطه‌دادن موضوعات، منابع، محصولات و یافته‌ها."}],
             "links":[{"title":"گزارش‌ها","text":"منبع دانش","url":"/api/reports/"},{"title":"محصولات","text":"اتصال دانش به محصول","url":"/market/"},{"title":"پژوهش","text":"هسته پژوهشی","url":"/research/"}],
             "cta_title":"دانش را به محصول متصل کنید","cta_text":"مقاله، محصول و بازار را در یک معماری منسجم قرار دهید.","cta_label":"مشاهده محصولات","cta_url":"/market/"
         },
