@@ -30,7 +30,8 @@ AgentTaskSerializer = make(AgentTask)
 ApprovalRequestSerializer = make(ApprovalRequest)
 KnowledgeArticleSerializer = make(KnowledgeArticle)
 ProductSerializer = make(Product)
-OrderSerializer = make(Order)\nOrderItemSerializer = make(OrderItem)
+OrderSerializer = make(Order)
+OrderItemSerializer = make(OrderItem)
 
 
 class EvidenceSerializer(serializers.ModelSerializer):
