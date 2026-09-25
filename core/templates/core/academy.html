@@ -1,0 +1,12 @@
+
+{% extends 'base.html' %}
+{% block title %}آکادمی — Zomorodmelal{% endblock %}
+{% block body_class %}page-academy{% endblock %}
+{% block content %}
+<section class="academy-hero">
+  <div class="academy-index">ACADEMY<br><b>10</b></div>
+  <div><span class="academy-kicker">KNOWLEDGE · PRACTICE · FUTURE</span><h1>دانش، وقتی ارزش دارد که اجرا شود.</h1><p>آکادمی برای آموزش کاربردی، پژوهش‌محور و مهارت‌های موردنیاز زنجیره‌های واقعی کسب‌وکار.</p></div>
+</section>
+<section class="academy-manifesto"><aside><span>LEARNING SYSTEM</span><strong>01</strong><small>مسیر یادگیری از مبانی تا اجرای پروژه.</small></aside><article><span>ACADEMY PROGRAMS</span><h2>مسیرهای یادگیری منتخب</h2><p>دوره‌ها بر پایه مسئله واقعی، دانش تخصصی و خروجی قابل استفاده طراحی می‌شوند.</p><div class="academy-courses">{% for course in courses %}<article><span>{{ course.meta }}</span><h3>{{ course.title }}</h3><p>{{ course.text }}</p><b>مشاهده مسیر →</b></article>{% endfor %}</div></article></section>
+<section class="academy-footer"><span>FROM KNOWLEDGE TO EXECUTION</span><h2>یادگیری را به یک مسیر عملی تبدیل کنید.</h2><p>آموزش، پژوهش و اجرای پروژه در یک تجربه یکپارچه.</p></section>
+{% endblock %}
