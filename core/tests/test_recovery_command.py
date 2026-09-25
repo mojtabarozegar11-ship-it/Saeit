@@ -2,8 +2,9 @@ import json
 
 import pytest
 from django.core.management import call_command
+from django.contrib.auth import get_user_model
 
-from django.contrib.auth import get_user_model\n\nfrom core.models import Agent, AgentCapability, AgentTask, ResearchProject
+from core.models import Agent, AgentCapability, AgentTask, ResearchProject
 from core.task_runtime import TaskRuntime
 
 
@@ -11,10 +12,12 @@ pytestmark = pytest.mark.django_db
 
 
 def test_recover_stale_tasks_command_reports_summary(capsys):
+    User = get_user_model()
+    owner = User.objects.create_user(username="recovery-owner")
     project = ResearchProject.objects.create(
         title="Recovery command",
         objective="Validate scheduled recovery",
-        owner_id=None,
+        owner=owner,
     )
     agent = Agent.objects.create(
         code="recovery-worker",
@@ -38,7 +41,7 @@ def test_recover_stale_tasks_command_reports_summary(capsys):
         risk_snapshot="low",
         status="queued",
     )
-    running = TaskRuntime().claim(task.pk)
+    TaskRuntime().claim(task.pk)
     AgentTask.objects.filter(pk=task.pk).update(
         updated_at=task.updated_at.replace(year=2000)
     )
