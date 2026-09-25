@@ -217,6 +217,11 @@ def platform_page(request, section):
                         {"title": "بازار هدف", "text": f"{steps[6] if len(steps) > 6 else 'برند و فروش'} → {steps[7] if len(steps) > 7 else 'بازار تخصصی'}"},
                         {"title": "پرونده محصول", "text": f"شناسنامه {title}، سوابق تولید، کنترل کیفیت، بسته‌بندی و مستندات زنجیره."},
                     ]
+                    # Product-chain evidence layer: every chain page exposes the full lifecycle without claiming current commercial execution.
+                    item["chain_scope"] = " → ".join(steps) if steps else "پژوهش → طراحی → ارزیابی → توسعه"
+                    item["current_state_note"] = "این زنجیره در معماری شرکت به‌عنوان حوزه مطالعه و طراحی توسعه ثبت شده است؛ اجرای تجاری فقط پس از احراز شرایط فنی، اقتصادی، قانونی و تصویب مربوطه قابل طرح است."
+                    item["research_inputs"] = ["داده و منابع علمی", "مواد اولیه و مشخصات فنی", "الزامات کیفیت و ردیابی", "مجوزها و الزامات قانونی"]
+                    item["decision_gates"] = ["کفایت شواهد", "امکان‌سنجی فنی", "توجیه اقتصادی", "ریسک و انطباق قانونی", "نتیجه پایلوت"]
                 elif kind == "genetics":
                     subs = item.get("subitems", [])
                     data_scope = "، ".join(subs[:3]) if subs else "نمونه و داده تخصصی"
@@ -266,11 +271,6 @@ def platform_page(request, section):
                         {"title": "خروجی", "text": "خدمت یا عملیات مجاز همراه با سوابق، اسناد و شواهد اجرایی."},
                         {"title": "مسیر همکاری", "text": "تعریف پروژه یا قرارداد در چارچوب دقیق موضوع فعالیت و مقررات جاری."},
                     ]
-                    # Product-chain evidence layer: every chain page exposes the full lifecycle without claiming current commercial execution.
-                    item["chain_scope"] = " → ".join(steps) if steps else "پژوهش → طراحی → ارزیابی → توسعه"
-                    item["current_state_note"] = "این زنجیره در معماری شرکت به‌عنوان حوزه مطالعه و طراحی توسعه ثبت شده است؛ اجرای تجاری فقط پس از احراز شرایط فنی، اقتصادی، قانونی و تصویب مربوطه قابل طرح است."
-                    item["research_inputs"] = ["داده و منابع علمی", "مواد اولیه و مشخصات فنی", "الزامات کیفیت و ردیابی", "مجوزها و الزامات قانونی"]
-                    item["decision_gates"] = ["کفایت شواهد", "امکان‌سنجی فنی", "توجیه اقتصادی", "ریسک و انطباق قانونی", "نتیجه پایلوت"]
                 elif kind == "craft":
                     ops = [
                         {"title": "هویت و اصالت", "text": text},
