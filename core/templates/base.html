@@ -1,4 +1,4 @@
-[Reading 50 lines from start (total: 50 lines, 0 remaining)]
+
 
 {% load static %}<!doctype html>
 <html lang="fa" dir="rtl">
@@ -30,6 +30,7 @@
 <a class="{% if request.path|slice:":8" == "/agents/" %}active{% endif %}" href="/agents/">عامل‌ها</a>
 <a class="{% if request.path|slice:":7" == "/about/" %}active{% endif %}" href="/about/">درباره ما</a>
 <a class="{% if request.path|slice:":9" == "/weather/" %}active{% endif %}" href="/weather/">آب‌وهوا</a>
+<a class="{% if request.path|slice:":9" == "/academy/" %}active{% endif %}" href="/academy/">آکادمی</a>
 </nav>
 <div class="header-actions"><a class="icon-btn" href="/api/health/" title="وضعیت سامانه">●</a><a class="header-cta" href="/contact/">همکاری</a></div>
 </header>
@@ -50,5 +51,3 @@ n.querySelectorAll('a').forEach(a=>a.addEventListener('click',()=>{n.classList.r
 window.addEventListener('keydown',e=>{if(e.key==='Escape'){n.classList.remove('open');b.setAttribute('aria-expanded','false');}});
 </script>
 </body></html>
-
-[executed on device: zohal.pws-dns.net (457d9cac-c176-4c0a-a847-08fb0f2007dc)]
