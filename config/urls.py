@@ -6,6 +6,7 @@ from django.urls import include, path
 from core.views import home, platform_page
 from core.weather_views import weather
 from core.academy_views import academy
+from core.services_views import services
 
 urlpatterns = [
     path("", home, name="home"),
@@ -19,6 +20,7 @@ urlpatterns = [
     path("contact/", lambda request: platform_page(request, "contact"), name="contact"),
     path("weather/", weather, name="weather"),
     path("academy/", academy, name="academy"),
+    path("services/", services, name="services"),
     path("admin/", admin.site.urls),
     path("api/", include("core.urls")),
 ]
