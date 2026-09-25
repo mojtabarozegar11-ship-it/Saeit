@@ -313,7 +313,37 @@ def platform_page(request, section):
                     "social": [("این صفحه برای چیست؟", f"پرونده کاربردی {title} برای طراحی، مشارکت، اجرا، مستندسازی و سنجش اثر اجتماعی."),("چه چیزی تحویل می‌دهد؟", "برنامه مستند، گزارش اجرا و ارزیابی اثر؛ بدون ادعای رویداد یا فعالیتی که سند آن ثبت نشده باشد."),("چه زمانی کاربرد دارد؟", "برای تعریف برنامه اجتماعی، مشارکت با نهادها و گزارش‌دهی شفاف اثر."),("داده موردنیاز برای به‌روزرسانی", "طرح، جامعه هدف، مجوز/هماهنگی، مستند اجرا، شاخص اثر و گزارش نهایی.")],
                     "future": [("این صفحه برای چیست؟", f"پرونده مطالعاتی {title} برای سنجش امکان تبدیل ایده به یک مسیر اجرایی در آینده."),("چه چیزی تحویل می‌دهد؟", "مطالعه امکان‌سنجی، مدل پیشنهادی، پایلوت و تصمیم توسعه؛ نه ادعای فعالیت فعلی."),("چه زمانی کاربرد دارد؟", "برای اولویت‌بندی سرمایه‌گذاری، طراحی پایلوت و بررسی مسیر توسعه آینده."),("داده موردنیاز برای به‌روزرسانی", "مطالعه بازار، برآورد اقتصادی، ریسک، الزامات قانونی، نتایج پایلوت و تصمیم مالک.")],
                 }
-                detail_context = {"title": title, "text": text, "meta": meta, "back": back, "item": item, "kind": kind, "index": index + 1, "count": count, "ops": ops, "chain_targets": chain_targets.get(kind, []), "value_blocks": value_blocks.get(kind, value_blocks["unit"]), "company_content_links": CompanyContentLink.objects.filter(target_path=request.path).select_related("newsletter_story", "knowledge_article")}
+                # Curated internal relationship graph: only Company records with a concrete structural relationship are linked.
+                company_graph = {
+                    "department": {"unit": [(i + 1, u["title"]) for i, u in enumerate(pages["company"]["units"])], "project": [(i + 1, x["title"]) for i, x in enumerate(pages["company"]["projects"])]},
+                    "unit": {"department": [(i + 1, x["title"]) for i, x in enumerate(pages["company"]["departments"])]},
+                    "project": {"department": [(1, pages["company"]["departments"][0]["title"]), (7, pages["company"]["departments"][6]["title"])]},
+                    "genetics": {"unit": [(4, pages["company"]["units"][3]["title"]), (3, pages["company"]["units"][2]["title"])]},
+                    "craft": {"unit": [(8, pages["company"]["units"][7]["title"])], "department": [(8, pages["company"]["departments"][7]["title"])]},
+                    "social": {"unit": [(9, pages["company"]["units"][8]["title"])], "department": [(9, pages["company"]["departments"][8]["title"])]},
+                    "future": {"project": [(3, pages["company"]["projects"][2]["title"]), (5, pages["company"]["projects"][4]["title"])]},
+                    "channel": {"unit": [(7, pages["company"]["units"][6]["title"])]},
+                    "statutory": {"department": [(7, pages["company"]["departments"][6]["title"])]},
+                }
+                if kind == "product":
+                    t = title + " " + item.get("category", "")
+                    if any(k in t for k in ("دام", "گاو", "شتر", "گوسفند", "بز")):
+                        unit_id, dep_id, gen_ids, proj_id = 1, 3, [3], 1
+                    elif any(k in t for k in ("مرغ", "بوقلمون", "طیور", "پرنده")):
+                        unit_id, dep_id, gen_ids, proj_id = 1, 3, [6], 1
+                    elif any(k in t for k in ("ماهی", "آبزی", "خاویار")):
+                        unit_id, dep_id, gen_ids, proj_id = 1, 3, [8], 1
+                    elif any(k in t for k in ("صنایع غذایی", "غذا", "داروهای گیاهی", "فراسومند", "لبنیات", "پروتئین")):
+                        unit_id, dep_id, gen_ids, proj_id = 2, 4, [9, 11], 2
+                    else:
+                        unit_id, dep_id, gen_ids, proj_id = 1, 3, [9], 1
+                    company_graph["product"] = {"unit": [(unit_id, pages["company"]["units"][unit_id-1]["title"])], "department": [(dep_id, pages["company"]["departments"][dep_id-1]["title"])], "genetics": [(g, pages["company"]["genetics_scopes"][g-1]["title"]) for g in gen_ids], "project": [(proj_id, pages["company"]["projects"][proj_id-1]["title"])]}
+                related_nodes=[]
+                for rel_kind, rel_items in company_graph.get(kind, {}).items():
+                    rel_prefix = {"department":"department","unit":"unit","project":"project","genetics":"genetics","product":"product","statutory":"statutory","craft":"craft","channel":"channel","social":"social","future":"future"}[rel_kind]
+                    for rid, rtitle in rel_items:
+                        related_nodes.append({"kind": rel_kind, "title": rtitle, "url": f"/company/{rel_prefix}-{rid}/"})
+                detail_context = {"title": title, "text": text, "meta": meta, "back": back, "item": item, "kind": kind, "index": index + 1, "count": count, "ops": ops, "chain_targets": chain_targets.get(kind, []), "value_blocks": value_blocks.get(kind, value_blocks["unit"]), "company_content_links": CompanyContentLink.objects.filter(target_path=request.path).select_related("newsletter_story", "knowledge_article"), "related_nodes": related_nodes}
                 if index > 0:
                     detail_context["prev_url"] = f"/company/{prefix}-{index}/"
                     detail_context["prev_label"] = records[index - 1].get("title", "مورد قبلی") if isinstance(records[index - 1], dict) else str(records[index - 1])
