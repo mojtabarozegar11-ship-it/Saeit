@@ -18,7 +18,7 @@
 </a>
 <button class="menu-toggle" type="button" aria-label="باز کردن منو" aria-expanded="false">☰</button>
 <nav class="nav" aria-label="ناوبری اصلی">
-<a href="/">خانه</a><a href="/agriculture/">کشاورزی</a><a href="/industry/">صنعت</a><a href="/market/">بازار</a><a href="/research/">پژوهش</a><a href="/knowledge/">دانش</a><a href="/agents/">عامل‌ها</a><a href="/about/">درباره ما</a>
+<a class="{% if request.path == "/" %}active{% endif %}" href="/">خانه</a><a class="{% if request.path|slice:":13" == "/agriculture/" %}active{% endif %}" href="/agriculture/">کشاورزی</a><a class="{% if request.path|slice:":10" == "/industry/" %}active{% endif %}" href="/industry/">صنعت</a><a class="{% if request.path|slice:":8" == "/market/" %}active{% endif %}" href="/market/">بازار</a><a class="{% if request.path|slice:":9" == "/research/" %}active{% endif %}" href="/research/">پژوهش</a><a class="{% if request.path|slice:":10" == "/knowledge/" %}active{% endif %}" href="/knowledge/">دانش</a><a class="{% if request.path|slice:":8" == "/agents/" %}active{% endif %}" href="/agents/">عامل‌ها</a><a class="{% if request.path|slice:":7" == "/about/" %}active{% endif %}" href="/about/">درباره ما</a>
 </nav>
 <div class="header-actions"><a class="icon-btn" href="/api/health/" title="وضعیت سامانه">●</a><a class="header-cta" href="/contact/">همکاری</a></div>
 </header>
@@ -35,5 +35,7 @@
 <script>
 const b=document.querySelector('.menu-toggle'),n=document.querySelector('.nav');
 if(b){b.addEventListener('click',()=>{n.classList.toggle('open');b.setAttribute('aria-expanded',n.classList.contains('open'));});}
+n.querySelectorAll('a').forEach(a=>a.addEventListener('click',()=>{n.classList.remove('open');b.setAttribute('aria-expanded','false');}));
+window.addEventListener('keydown',e=>{if(e.key==='Escape'){n.classList.remove('open');b.setAttribute('aria-expanded','false');}});
 </script>
 </body></html>
