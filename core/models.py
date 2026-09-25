@@ -222,6 +222,18 @@ class Order(T):
     currency = models.CharField(max_length=10, default="IRR")
 
 
+class OrderItem(T):
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name="items")
+    product = models.ForeignKey(Product, on_delete=models.PROTECT, related_name="order_items")
+    quantity = models.PositiveIntegerField()
+    unit_price = models.DecimalField(max_digits=14, decimal_places=2)
+    currency = models.CharField(max_length=10)
+
+    @property
+    def line_total(self):
+        return self.unit_price * self.quantity
+
+
 class ChatSession(T):
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
