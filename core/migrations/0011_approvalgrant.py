@@ -22,8 +22,8 @@ class Migration(migrations.Migration):
             ],
             options={
                 "indexes": [
-                    models.Index(fields=["approval", "expires_at"], name="core_approv_approva_4f7e7b_idx"),
-                    models.Index(fields=["actor", "expires_at"], name="core_approv_actor_i_6e1c0b_idx"),
+                    models.Index(fields=["approval", "expires_at"], name="core_approv_approva_9212c5_idx"),
+                    models.Index(fields=["actor", "expires_at"], name="core_approv_actor_i_03483c_idx"),
                 ],
             },
         ),
