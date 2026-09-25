@@ -2,6 +2,7 @@
 {% load static %}
 {% block title %}{{ detail.title }} — شرکت و همکاری{% endblock %}
 {% block extra_css %}<link rel="stylesheet" href="{% static 'site/luxury-pages.css' %}">{% endblock %}
+{% block page_head %}{% if detail.profile_jsonld %}<script type="application/ld+json">{{ detail.profile_jsonld|safe }}</script>{% endif %}{% endblock %}
 {% block content %}
 <main class="company-detail company-detail-{{ detail.kind }}">
   <div class="company-detail-grid"></div>

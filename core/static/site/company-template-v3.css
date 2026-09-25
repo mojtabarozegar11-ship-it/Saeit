@@ -1,0 +1,46 @@
+/* COMPANY TEMPLATE V3 — premium responsive system */
+.company-page-shell{position:relative}
+.company-hero{min-height:clamp(680px,92vh,980px)!important;display:grid!important;grid-template-columns:1.15fr .55fr!important;align-items:end!important;padding:clamp(70px,9vw,130px) clamp(28px,7vw,110px)!important;isolation:isolate!important}
+.company-hero-media{position:absolute!important;inset:0!important;z-index:-3!important;overflow:hidden!important}
+.company-hero-photo{width:100%!important;height:100%!important;object-fit:cover!important;object-position:center!important;filter:saturate(.82) contrast(1.08)!important}
+.company-hero-vignette{position:absolute!important;inset:0!important;background:linear-gradient(90deg,rgba(6,13,10,.94),rgba(6,13,10,.55) 55%,rgba(6,13,10,.25)),linear-gradient(0deg,rgba(6,13,10,.82),transparent 48%)!important}
+.company-hero-grid{position:absolute!important;inset:0!important;z-index:-1!important;background:linear-gradient(rgba(214,183,102,.07) 1px,transparent 1px),linear-gradient(90deg,rgba(214,183,102,.07) 1px,transparent 1px)!important;background-size:80px 80px!important;mask-image:linear-gradient(to bottom,transparent,#000 25%,#000 75%,transparent)!important}
+.company-hero-copy{max-width:900px!important;position:relative!important;z-index:2!important}
+.company-kicker{display:inline-block!important;padding:9px 14px!important;border:1px solid rgba(218,190,115,.4)!important;background:rgba(8,16,12,.4)!important;backdrop-filter:blur(10px)!important;color:#e1c783!important;letter-spacing:.2em!important;font-size:.66rem!important}
+.company-hero-copy h1{font-size:clamp(3.5rem,8vw,8.5rem)!important;line-height:.96!important;letter-spacing:-.045em!important;text-shadow:0 18px 60px rgba(0,0,0,.45)!important;margin:25px 0!important}
+.company-hero-copy>p{max-width:720px!important;font-size:clamp(1rem,1.5vw,1.25rem)!important;line-height:2!important;color:#e4dfd3!important}
+.company-signature{margin-top:35px!important;color:#cdb36f!important;font:600 .62rem/2 monospace!important;letter-spacing:.16em!important}
+.company-signature i{font-style:normal;margin:0 8px;color:#7c956d}
+.company-seal{align-self:start!important;justify-self:end!important;margin-top:20px!important;width:190px!important;height:190px!important;border:1px solid rgba(218,190,115,.55)!important;border-radius:50%!important;background:rgba(8,15,11,.6)!important;backdrop-filter:blur(14px)!important;display:grid!important;place-items:center!important;box-shadow:0 30px 80px rgba(0,0,0,.35)!important}
+.company-seal img{width:105px!important;height:105px!important;object-fit:contain!important;opacity:.96!important}
+.company-seal span,.company-seal small{position:absolute!important}.company-seal span{font:700 .5rem monospace!important;color:#ead08b!important;transform:translateY(78px)!important;letter-spacing:.25em!important}.company-seal small{transform:translateY(108px)!important;color:#a8a294!important;font-size:.48rem!important;letter-spacing:.12em!important;white-space:nowrap!important}
+.company-hero-ceo{align-self:end!important;justify-self:end!important;width:min(34vw,430px)!important;max-height:72vh!important;overflow:hidden!important;filter:drop-shadow(0 30px 50px rgba(0,0,0,.45))!important}
+.company-hero-ceo img{display:block!important;width:100%!important;height:auto!important;max-height:72vh!important;object-fit:contain!important;object-position:bottom center!important}
+.company-legal-profile,.company-ceo-profile,.company-command-index,.company-statement,.company-engineering-profile,.company-corporate-dossier,.company-organization-map,.company-structure,.company-units,.company-statutory,.company-genetics,.company-products,.company-crafts,.company-projects,.company-atlas,.company-network,.company-future-chains,.company-channels,.company-collaboration,.company-social-responsibility{scroll-margin-top:80px}
+.company-local-nav{position:sticky!important;top:0!important;z-index:50!important;background:rgba(11,17,14,.88)!important;backdrop-filter:blur(18px)!important;border-block:1px solid rgba(213,180,93,.18)!important;box-shadow:0 10px 30px rgba(0,0,0,.12)!important;display:flex!important;gap:0!important;overflow:auto!important;white-space:nowrap!important;scrollbar-width:none!important;padding:0!important}
+.company-local-nav::-webkit-scrollbar{display:none}
+.company-local-nav a{padding:16px 19px!important;color:#d9d4c9!important;text-decoration:none!important;font-size:.68rem!important;border-inline-start:1px solid rgba(213,180,93,.08)!important;transition:.25s!important}
+.company-local-nav a:hover{background:#d5b45d!important;color:#101713!important}
+.company-command-grid a:nth-child(1),.company-command-grid a:nth-child(4){background:linear-gradient(135deg,#fffdf5,#f0e5c8)!important}
+.company-command-grid a:nth-child(3){background:linear-gradient(135deg,#f8fff3,#e3efd8)!important}
+.company-command-grid a:nth-child(7){background:linear-gradient(135deg,#f7fbfa,#dfeee7)!important}
+.company-command-grid a:nth-child(9){background:linear-gradient(135deg,#fff8ef,#f0dfca)!important}
+.company-engineering-body,.company-corporate-grid,.company-organization-map,.company-structure-grid,.company-units-grid,.company-statutory-grid,.company-genetics-grid,.company-product-grid,.company-project-grid,.company-craft-grid{position:relative}
+@media(max-width:900px){
+ .company-hero{min-height:820px!important;grid-template-columns:1fr!important;padding:70px 6vw 45px!important}
+ .company-seal{width:125px!important;height:125px!important;margin:0!important;justify-self:start!important;order:-1!important}
+ .company-seal img{width:72px!important;height:72px!important}.company-seal span{transform:translateY(54px)!important}.company-seal small{transform:translateY(76px)!important}
+ .company-hero-ceo{position:absolute!important;right:3vw!important;bottom:0!important;width:min(47vw,340px)!important;max-height:58vh!important;z-index:1!important}
+ .company-hero-copy{z-index:3!important;margin-top:100px!important}
+ .company-hero-copy h1{font-size:clamp(3rem,12vw,5rem)!important}
+ .company-hero-vignette{background:linear-gradient(180deg,rgba(6,13,10,.9),rgba(6,13,10,.5) 45%,rgba(6,13,10,.9))!important}
+ .company-local-nav a{padding:14px 15px!important;font-size:.63rem!important}
+}
+@media(max-width:560px){
+ .company-hero{min-height:760px!important;padding:35px 22px 28px!important}
+ .company-hero-copy{margin-top:70px!important}.company-hero-copy h1{font-size:clamp(2.7rem,13vw,4rem)!important;margin:18px 0!important}.company-hero-copy>p{font-size:.92rem!important;line-height:1.9!important}
+ .company-hero-ceo{right:-2vw!important;width:54vw!important;max-height:47vh!important;opacity:.9!important}
+ .company-signature{font-size:.5rem!important;letter-spacing:.09em!important}.company-signature i{margin:0 3px!important}
+ .company-legal-grid,.company-command-detail{grid-template-columns:1fr!important}
+ .company-command-grid a{min-height:135px!important}
+}

@@ -125,7 +125,6 @@ def platform_page(request, section):
     }
     page = pages.get(section)
     if page is None:
-        from django.http import Http404
         raise Http404
     if section == "company" and request.path.rstrip("/") != "/company":
         parts = request.path.strip("/").split("/")
@@ -146,6 +145,7 @@ def platform_page(request, section):
                     {"title": "توسعه آینده", "text": "هدایت مطالعات تبدیل ظرفیت‌های پژوهشی به پروژه‌ها و واحدهای توسعه‌ای پس از احراز شرایط لازم."},
                 ],
                 "chain_targets": [("معرفی شرکت", "/company/"), ("پژوهش", "/research/"), ("ساختار سازمانی", "/company/#company-structure"), ("پروژه‌ها", "/company/#company-projects")],
+                "profile_jsonld": __import__("json").dumps({"@context":"https://schema.org","@type":"ProfilePage","mainEntity":{"@type":"Person","name":"مجتبی روزگار","jobTitle":"محقق و پژوهشگر / مدیرعامل شرکت کشت و صنعت زمرد ملل","worksFor":{"@type":"Organization","name":"شرکت کشت و صنعت زمرد ملل","url":"https://zomorodmelal.ir/"}}}, ensure_ascii=False),
             }
             return render(request, "core/company_detail.html", {"page": page, "detail": detail_context})
         detail_map = {
@@ -318,7 +318,6 @@ def platform_page(request, section):
         raise Http404
     page = pages.get(section)
     if page is None:
-        from django.http import Http404
         raise Http404
     if section == "company":
         page["organization_matrix"] = [

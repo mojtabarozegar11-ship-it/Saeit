@@ -1,5 +1,5 @@
-from django.http import Http404
 import json
+from django.http import Http404
 from django.shortcuts import render
 
 from .models import NewsletterPublication, NewsletterSchedule, NewsletterSource, NewsletterStory
@@ -56,6 +56,7 @@ def newsletter_detail(request, slug):
         "dateModified": story.updated_at.isoformat(),
         "author": {"@type": "Person", "name": "مجتبی روزگار", "jobTitle": "محقق و پژوهشگر / مدیرعامل شرکت کشت و صنعت زمرد ملل", "url": "https://zomorodmelal.ir/company/executive/"},
         "publisher": {"@type": "Organization", "name": "شرکت کشت و صنعت زمرد ملل", "url": "https://zomorodmelal.ir/"},
+        "image": [request.build_absolute_uri(story.image.url)] if story.image else [],
         "mainEntityOfPage": {"@type": "WebPage", "@id": f"https://zomorodmelal.ir/newsletter/{story.slug}/"}
     }, ensure_ascii=False)
     return render(request, "core/newsletter_detail.html", {"story": story, "related": related, "publications": publications, "article_jsonld": article_jsonld})
