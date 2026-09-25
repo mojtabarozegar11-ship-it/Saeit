@@ -19,7 +19,15 @@
 </a>
 <button class="menu-toggle" type="button" aria-label="باز کردن منو" aria-expanded="false">☰</button>
 <nav class="nav" aria-label="ناوبری اصلی">
-<a class="{% if request.path == "/" %}active{% endif %}" href="/">خانه</a><a class="{% if request.path|slice:":13" == "/agriculture/" %}active{% endif %}" href="/agriculture/">کشاورزی</a><a class="{% if request.path|slice:":10" == "/industry/" %}active{% endif %}" href="/industry/">صنعت</a><a class="{% if request.path|slice:":8" == "/market/" %}active{% endif %}" href="/market/">بازار</a><a class="{% if request.path|slice:":9" == "/research/" %}active{% endif %}" href="/research/">پژوهش</a><a class="{% if request.path|slice:":10" == "/knowledge/" %}active{% endif %}" href="/knowledge/">دانش</a><a class="{% if request.path|slice:":8" == "/agents/" %}active{% endif %}" href="/agents/">عامل‌ها</a><a class="{% if request.path|slice:":7" == "/about/" %}active{% endif %}" href="/about/">درباره ما</a>
+<a class="{% if request.path == "/" %}active{% endif %}" href="/">خانه</a>
+<a class="{% if request.path|slice:":13" == "/agriculture/" %}active{% endif %}" href="/agriculture/">کشاورزی</a>
+<a class="{% if request.path|slice:":10" == "/industry/" %}active{% endif %}" href="/industry/">صنعت</a>
+<a class="{% if request.path|slice:":8" == "/market/" %}active{% endif %}" href="/market/">بازار</a>
+<a class="{% if request.path|slice:":9" == "/research/" %}active{% endif %}" href="/research/">پژوهش</a>
+<a class="{% if request.path|slice:":10" == "/knowledge/" %}active{% endif %}" href="/knowledge/">دانش</a>
+<a class="{% if request.path|slice:":8" == "/agents/" %}active{% endif %}" href="/agents/">عامل‌ها</a>
+<a class="{% if request.path|slice:":7" == "/about/" %}active{% endif %}" href="/about/">درباره ما</a>
+<a class="{% if request.path|slice:":9" == "/weather/" %}active{% endif %}" href="/weather/">آب‌وهوا</a>
 </nav>
 <div class="header-actions"><a class="icon-btn" href="/api/health/" title="وضعیت سامانه">●</a><a class="header-cta" href="/contact/">همکاری</a></div>
 </header>
@@ -28,8 +36,8 @@
 <div class="footer-grid">
 <div><div class="footer-brand"><img class="footer-logo" src="{% static 'site/logo.svg' %}" alt=""> <span>Zomorodmelal</span></div><p>پلتفرم یکپارچه پژوهش، دانش، کشاورزی، صنعت، محصول و عامل‌های هوشمند.</p></div>
 <div><strong>پلتفرم</strong><a href="/research/">پژوهش</a><a href="/knowledge/">دانش</a><a href="/agents/">عامل‌های هوش مصنوعی</a><a href="/market/">بازار</a></div>
-<div><strong>کسب‌وکار</strong><a href="/agriculture/">کشاورزی</a><a href="/industry/">صنعت</a><a href="/about/">درباره ما</a><a href="/contact/">همکاری</a></div>
-<div><strong>دسترسی</strong><a href="/api/">API</a><a href="/api/health/">وضعیت سامانه</a><a href="/admin/">مدیریت</a></div>
+<div><strong>خدمات</strong><a href="/weather/">آب‌وهوا</a><a href="/agriculture/">کشاورزی</a><a href="/industry/">صنعت</a></div>
+<div><strong>دسترسی</strong><a href="/about/">درباره ما</a><a href="/contact/">همکاری</a><a href="/api/health/">وضعیت سامانه</a></div>
 </div>
 <div class="footer-bottom"><span>© Zomorodmelal</span><span>ساخته‌شده برای رشد پایدار و تصمیم‌گیری مبتنی بر دانش</span></div>
 </footer>
