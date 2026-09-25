@@ -27,7 +27,10 @@ class AgentRegistry:
         normalized = self._normalize(action)
         if not agent or not normalized:
             return None
-        return agent.capabilities.filter(active=True, code=normalized).first()
+        capability = agent.capabilities.filter(active=True, code=normalized).first()
+        if capability:
+            return capability
+        return agent.capabilities.filter(active=True, code=f"core_{normalized}").first()
 
     def can_execute(self, agent, action):
         return self.capability_for(agent, action) is not None
