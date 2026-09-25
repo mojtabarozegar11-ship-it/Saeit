@@ -1,11 +1,13 @@
 from django.conf import settings
 from django.db import connection
 from django.shortcuts import render
+from django.views.decorators.cache import never_cache
 from rest_framework.response import Response
 from rest_framework.status import HTTP_503_SERVICE_UNAVAILABLE
 from rest_framework.views import APIView
 
 
+@never_cache
 def home(request):
     return render(
         request,
