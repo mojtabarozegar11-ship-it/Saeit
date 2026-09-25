@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}{{ story.title }} — خبرنامه شرکت{% endblock %}
+{% block meta_description %}{{ story.summary }}{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'site/newsletter.css' %}">{% endblock %}
+{% block page_head %}<script type="application/ld+json">{{ article_jsonld|safe }}</script>{% endblock %}
+{% block content %}
+<main class="newsletter-story-page">
+  <header class="newsletter-story-hero"><a href="/newsletter/">← بازگشت به خبرنامه</a><small>{{ story.get_story_type_display }} · {{ story.published_at|date:"Y/m/d H:i" }}</small><h1>{{ story.title }}</h1><p>{{ story.summary }}</p><div><b>نویسنده: {{ story.author_name }}</b>{% if story.source %}<span>منبع: {{ story.source.publisher }}</span>{% endif %}</div></header>
+  <article class="newsletter-story-body"><div class="newsletter-story-content">{{ story.body|linebreaks }}</div><aside><span>TRACEABILITY</span><strong>منبع و منشأ</strong>{% if story.source %}<a href="{{ story.source.url }}" target="_blank" rel="nofollow noopener">{{ story.source.title }} ↗</a>{% else %}<p>گزارش داخلی شرکت</p>{% endif %}<small>Fingerprint ثبت‌شده برای کنترل تکرار</small></aside></article>
+  <section class="newsletter-publications"><span>DISTRIBUTION STATUS</span><h2>وضعیت انتشار کانال‌ها</h2><div>{% for item in publications %}<article><b>{{ item.get_channel_display }}</b><span>{{ item.get_status_display }}</span></article>{% empty %}<p>کانال‌های انتشار پس از تأیید خبر در صف توزیع قرار می‌گیرند.</p>{% endfor %}</div></section>
+  <section class="newsletter-related"><span>RELATED</span><h2>مطالب مرتبط</h2><div>{% for item in related %}<a href="/newsletter/{{ item.slug }}/"><strong>{{ item.title }}</strong><small>{{ item.summary }}</small></a>{% empty %}<p>مطالب مرتبطی ثبت نشده است.</p>{% endfor %}</div></section>
+</main>
+{% endblock %}

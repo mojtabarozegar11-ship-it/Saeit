@@ -1,36 +1,18 @@
 {% extends 'base.html' %}
 {% load static %}
 {% block title %}Zomorodmelal — پلتفرم یکپارچه پژوهش، کشاورزی، صنعت و هوش مصنوعی{% endblock %}
+{% block body_class %}home-luxury{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'site/home-luxury.css' %}">{% endblock %}
 {% block content %}
-<section class="hero hero-home">
-<div class="hero-orbit"></div><div class="hero-content">
-<span class="eyebrow">ZOMORODMELAL · INTEGRATED PLATFORM</span>
-<h1>از ایده و پژوهش تا تولید، بازار و رشد.</h1>
-<p>یک زیرساخت یکپارچه برای پژوهش و دانش، زنجیره‌های کشاورزی و صنعت، محصولات و خدمات، و عامل‌های هوشمند؛ با طراحی حرفه‌ای و حاکمیت قابل حسابرسی.</p>
-<div class="hero-actions"><a class="btn btn-gold" href="/research/">شروع از پژوهش</a><a class="btn btn-light" href="/market/">ورود به بازار</a></div>
-<div class="hero-trust"><span>✓ دانش‌محور</span><span>✓ زنجیره ارزش</span><span>✓ تأیید مالک</span><span>✓ قابل توسعه</span></div>
-</div>
-<div class="hero-card"><img src="{% static 'site/logo.svg' %}" alt="نشان Zomorodmelal"><span>RESEARCH</span><b>KNOWLEDGE</b><small>AI · INDUSTRY · AGRICULTURE</small></div>
+<section class="home-hero-lux">
+<div class="home-hero-copy"><span>THE INTEGRATED HOUSE · 01</span><h1>از دانش،<br><em>ارزش می‌سازیم.</em></h1><p>یک خانه دیجیتال برای پژوهش، زنجیره‌های تخصصی، بازار و عامل‌های هوشمند؛ با هویتی مستقل برای هر بخش.</p><div class="home-hero-actions"><a href="/research/">ورود به پژوهش</a><a href="/market/">مشاهده بازار</a></div></div>
+<div class="home-hero-mark"><div class="home-ring"><img src="{% static 'site/logo.svg' %}" alt="نشان Zomorodmelal"></div><small>RESEARCH · VALUE · AI</small></div><div class="home-hero-index">EST.<br><b>01</b><br>PLATFORM</div>
 </section>
-
-<section class="section intro-strip"><div><span class="eyebrow dark">ONE PLATFORM</span><h2>یک تجربه واحد، چند زنجیره تخصصی</h2></div><p>ساختار سایت طوری طراحی شده که هر حوزه مستقل باشد اما در یک هسته مشترک به پژوهش، دانش، محصول و بازار متصل بماند.</p></section>
-
-<section class="section"><div class="section-title"><div><span class="eyebrow dark">ECOSYSTEM</span><h2>بخش‌های اصلی</h2></div><a class="text-link" href="/about/">معماری پلتفرم ←</a></div>
-<div class="feature-grid">
-<a class="feature-card featured" href="/agriculture/"><span class="feature-no">01</span><div><h3>کشاورزی</h3><p>زنجیره هوشمند از مطالعه و کشت تا فرآوری، بسته‌بندی و فروش.</p></div><strong>→</strong></a>
-<a class="feature-card" href="/industry/"><span class="feature-no">02</span><div><h3>صنعت</h3><p>تولید، فرآوری، بسته‌بندی، طراحی محصول و توسعه بازار.</p></div><strong>→</strong></a>
-<a class="feature-card" href="/research/"><span class="feature-no">03</span><div><h3>پژوهش و توسعه</h3><p>منبع، شواهد، یافته و گزارش با منشأ روشن.</p></div><strong>→</strong></a>
-<a class="feature-card" href="/knowledge/"><span class="feature-no">04</span><div><h3>دانش‌نامه</h3><p>تبدیل پژوهش معتبر به دانش قابل استفاده و قابل انتشار.</p></div><strong>→</strong></a>
-<a class="feature-card" href="/market/"><span class="feature-no">05</span><div><h3>بازار و محصولات</h3><p>اتصال محصول و خدمت به سفارش و مسیر تجاری کنترل‌شده.</p></div><strong>→</strong></a>
-<a class="feature-card" href="/agents/"><span class="feature-no">06</span><div><h3>عامل‌های هوشمند</h3><p>عامل، وظیفه، قابلیت و اجرای کنترل‌شده با تأیید مالک.</p></div><strong>→</strong></a>
+<section class="home-manifesto"><div><span>01 / MANIFESTO</span><h2>یک پلتفرم،<br>چند جهان تخصصی.</h2></div><p>از نخستین پرسش پژوهشی تا محصول، خدمت و بازار، هر مسیر جایگاه و تجربه مستقل خود را دارد؛ اما همه در یک معماری منسجم به هم متصل‌اند.</p><div class="home-manifesto-note">OWNER CONTROL · AUDIT · KNOWLEDGE</div></section>
+<section class="home-ecosystem"><header><span>02 / ECOSYSTEM</span><h2>دوازده دروازه به یک اکوسیستم</h2><a href="/about/">معماری پلتفرم ←</a></header><div class="home-gates">
+<a href="/agriculture/"><b>01</b><h3>کشاورزی</h3><p>از مزرعه تا زنجیره ارزش.</p></a><a href="/industry/"><b>02</b><h3>صنعت</h3><p>تولید، فرآوری و توسعه.</p></a><a href="/research/"><b>03</b><h3>پژوهش</h3><p>شواهد، یافته و تصمیم.</p></a><a href="/knowledge/"><b>04</b><h3>دانش‌نامه</h3><p>دانش قابل استفاده.</p></a><a href="/market/"><b>05</b><h3>بازار</h3><p>محصول، سفارش و تجارت.</p></a><a href="/agents/"><b>06</b><h3>عامل‌ها</h3><p>هوش مصنوعی تحت کنترل.</p></a><a href="/academy/"><b>07</b><h3>آکادمی</h3><p>یادگیری و مهارت.</p></a><a href="/services/"><b>08</b><h3>خدمات</h3><p>راهکارهای یکپارچه.</p></a><a href="/weather/"><b>09</b><h3>آب‌وهوا</h3><p>داده برای تصمیم بهتر.</p></a><a href="/about/"><b>10</b><h3>درباره ما</h3><p>پورتال سازمانی.</p></a><a href="/contact/"><b>11</b><h3>همکاری</h3><p>ورود به شبکه همکاری.</p></a><a href="/"><b>12</b><h3>هسته پلتفرم</h3><p>اتصال همه مسیرها.</p></a>
 </div></section>
-
-<section class="section visual-band"><div class="visual-copy"><span class="eyebrow">VALUE CHAIN</span><h2>یک زنجیره، از دانش تا ارزش اقتصادی</h2><p>هر خروجی پژوهشی می‌تواند به دانش تبدیل شود؛ دانش می‌تواند به محصول یا خدمت متصل شود؛ و محصول پس از کنترل‌های لازم وارد مسیر سفارش و بازار شود.</p><a class="btn btn-light" href="/knowledge/">مشاهده زنجیره دانش</a></div><div class="chain"><span>پژوهش</span><i>→</i><span>گزارش</span><i>→</i><span>دانش</span><i>→</i><span>محصول</span><i>→</i><span>بازار</span></div></section>
-
-<section class="section"><div class="section-title"><div><span class="eyebrow dark">MASTER AGENT</span><h2>هوش مصنوعی با حاکمیت انسانی</h2></div></div>
-<div class="agent-panel"><div><div class="agent-status"><span></span> CORE ONLINE</div><h2>عامل هوشمند، اما نه بدون اجازه.</h2><p>عملیات حساس مانند انتشار، پرداخت، تغییر تولید و اقدامات خارجی در نقطه تأیید مالک متوقف می‌شوند و اجرای تأییدشده قابل حسابرسی است.</p></div><div class="agent-stats"><div><b>Approval</b><span>کنترل عملیات حساس</span></div><div><b>Audit</b><span>ثبت رویدادها</span></div><div><b>Recovery</b><span>بازیابی وظایف</span></div><div><b>API</b><span>اتصال‌پذیری</span></div></div></div></section>
-
-<section class="section stats-row"><div><b>Research</b><span>پژوهش و توسعه</span></div><div><b>Knowledge</b><span>دانش‌نامه و محتوا</span></div><div><b>Product</b><span>محصول و خدمت</span></div><div><b>Market</b><span>بازار و سفارش</span></div></section>
-
-<section class="section cta"><div><span class="eyebrow dark">COLLABORATION</span><h2>برای ساخت یک زنجیره واقعی آماده‌اید؟</h2><p>همکاری پژوهشی، تولیدی، صنعتی، فناوری و تجاری را از یک نقطه شروع کنید.</p><a class="btn btn-dark" href="/contact/">شروع همکاری</a></div></section>
+<section class="home-chain"><div class="home-chain-title"><span>03 / VALUE CHAIN</span><h2>از پرسش تا ارزش اقتصادی</h2></div><div class="home-chain-flow"><span>پژوهش</span><i>01</i><span>دانش</span><i>02</i><span>محصول</span><i>03</i><span>بازار</span></div></section>
+<section class="home-agent"><div><span>04 / MASTER AGENT</span><h2>هوش مصنوعی،<br>با اجازه انسان.</h2><p>عامل‌ها می‌توانند تحلیل، تحقیق و آماده‌سازی انجام دهند؛ اقدام حساس پیش از اجرا به تأیید مالک می‌رسد.</p><a href="/agents/">مشاهده مرکز عامل‌ها</a></div><div class="home-agent-console"><b>CORE</b><strong>ONLINE</strong><span>APPROVAL REQUIRED</span><span>AUDIT READY</span></div></section>
+<section class="home-final"><span>05 / COLLABORATION</span><h2>صفحه بعدی این داستان را با هم بسازیم.</h2><a href="/contact/">شروع همکاری</a></section>
 {% endblock %}

@@ -296,3 +296,7 @@ class ChatMessage(T):
     role = models.CharField(max_length=20)
     content = models.TextField()
     metadata = models.JSONField(default=dict)
+
+from .newsletter_models import NewsletterAgentLink, NewsletterPublication, NewsletterSchedule, NewsletterSource, NewsletterStory
+
+from .blog_models import BlogDistributionPlan, BlogPage, BlogPublication, BlogTranslation, ExternalBlogTarget

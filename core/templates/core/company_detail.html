@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}{{ detail.title }} — شرکت و همکاری{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'site/luxury-pages.css' %}">{% endblock %}
+{% block content %}
+<main class="company-detail company-detail-{{ detail.kind }}">
+  <div class="company-detail-grid"></div>
+  <header class="company-detail-hero">
+    <div class="company-detail-topline"><span>{{ detail.meta }}</span><b>{{ detail.index|stringformat:"02d" }} / {{ detail.count|stringformat:"02d" }}</b></div>
+    <a class="company-detail-back" href="/company/">← بازگشت به پورتال شرکت</a>
+    <h1>{{ detail.title }}</h1>
+    <p>{{ detail.text }}</p>
+  </header>
+
+  <section class="company-detail-body">
+    <div class="company-detail-kicker">COMPANY / INTERNAL UNIT</div>
+    <div class="company-detail-intro">
+      <div><h2>معماری و مسیر فعالیت</h2><p>این صفحه یک واحد مستقل از پورتال شرکت است. اطلاعات این بخش در ادامه به ساختار مدیریتی، عملیات، زنجیره ارزش، خروجی و مسیر همکاری متصل می‌شود.</p></div>
+      <div class="company-detail-index"><strong>{{ detail.index|stringformat:"02d" }}</strong><span>OF {{ detail.count|stringformat:"02d" }}</span></div>
+    </div>
+
+    {% if detail.kind == "product" %}
+      <div class="company-detail-kicker">01 / COMPLETE VALUE CHAIN</div>
+      <h2>زنجیره کامل {{ detail.title }}</h2>
+      <p>از تحقیق و نهاده تا تولید یا کشت، برداشت، فرآوری، کنترل کیفیت، بسته‌بندی، برند، فروش و بازار؛ مراحل این زنجیره به‌صورت پیوسته تعریف شده‌اند.</p>
+      <div class="company-detail-chain">{% for step in detail.item.steps %}<article><small>{{ forloop.counter|stringformat:"02d" }}</small><strong>{{ step }}</strong><span>VALUE CHAIN / STEP</span></article>{% endfor %}</div>
+      <div class="company-detail-pillars"><article><b>R&D</b><span>تحقیق و توسعه</span></article><article><b>QC</b><span>کنترل کیفیت</span></article><article><b>BRAND</b><span>برند و بسته‌بندی</span></article><article><b>MARKET</b><span>فروش و بازار</span></article></div>
+    {% elif detail.kind == "future" %}
+      <div class="company-detail-kicker">01 / STUDY & FUTURE DEVELOPMENT</div>
+      <h2>پرونده مطالعاتی {{ detail.title }}</h2>
+      <p>{{ detail.text }}</p>
+      <div class="company-detail-chain">{% for step in detail.item.steps %}<article><small>{{ forloop.counter|stringformat:"02d" }}</small><strong>{{ step }}</strong><span>STUDY ROADMAP / STEP</span></article>{% endfor %}</div>
+      <div class="company-detail-pillars"><article><b>STATUS</b><span>{{ detail.item.status }}</span></article><article><b>STUDY</b><span>مطالعه و امکان‌سنجی</span></article><article><b>PILOT</b><span>نمونه‌سازی و ارزیابی</span></article><article><b>FUTURE</b><span>توسعه پس از تأیید و ارزیابی</span></article></div>
+    {% elif detail.kind == "social" %}
+      <div class="company-detail-kicker">01 / SOCIAL IMPACT DOMAIN</div>
+      <h2>پرونده {{ detail.title }}</h2>
+      <p>{{ detail.text }}</p>
+      {% if detail.item.focus %}<div class="company-detail-list">{% for item in detail.item.focus %}<div><span>{{ forloop.counter|stringformat:"02d" }}</span>{{ item }}</div>{% endfor %}</div>{% endif %}
+      <div class="company-detail-pillars"><article><b>PLAN</b><span>تعریف مسئله و جامعه هدف</span></article><article><b>ACT</b><span>اجرا و مشارکت مستند</span></article><article><b>IMPACT</b><span>ارزیابی اثر اجتماعی</span></article><article><b>REPORT</b><span>گزارش قابل استناد</span></article></div>
+    {% elif detail.kind == "genetics" %}
+      <div class="company-detail-kicker">01 / RESEARCH SCOPE</div>
+      <h2>دامنه تخصصی {{ detail.title }}</h2>
+      <p>{{ detail.text }}</p>
+      {% if detail.item.subitems %}<div class="company-detail-list">{% for item in detail.item.subitems %}<div><span>{{ forloop.counter|stringformat:"02d" }}</span>{{ item }}</div>{% endfor %}</div>{% endif %}
+      <div class="company-detail-pillars"><article><b>01</b><span>شناسایی و مستندسازی</span></article><article><b>02</b><span>ارزیابی و انتخاب</span></article><article><b>03</b><span>پژوهش و توسعه</span></article><article><b>04</b><span>کاربرد و انتقال دانش</span></article></div>
+    {% else %}
+      <div class="company-detail-kicker">01 / {{ detail.meta }}</div>
+      <h2>ماموریت {{ detail.title }}</h2>
+      <p>{{ detail.text }}</p>
+      <div class="company-detail-pillars"><article><b>01</b><span>ماموریت و دامنه فعالیت</span></article><article><b>02</b><span>برنامه و عملیات</span></article><article><b>03</b><span>خروجی و ارزش ایجادشده</span></article><article><b>04</b><span>مسیر همکاری و توسعه</span></article></div>
+    {% endif %}
+
+    <section class="company-detail-value">
+      <div class="company-ops-head"><span>UTILITY / CONTENT VALUE</span><h3>این صفحه چه ارزشی ایجاد می‌کند؟</h3><p>این بخش برای استفاده واقعی در شناخت، پژوهش، همکاری، تصمیم‌گیری و مستندسازی طراحی شده است؛ وضعیت هر فعالیت فقط با داده و سند معتبر به‌روزرسانی می‌شود.</p></div>
+      <div class="company-value-grid">{% for block in detail.value_blocks %}<article><small>{{ forloop.counter|stringformat:"02d" }}</small><h4>{{ block.0 }}</h4><p>{{ block.1 }}</p></article>{% endfor %}</div>
+    </section>
+
+    <section class="company-detail-network"><span>COMPANY NETWORK / NEXT LAYER</span><h3>این صفحه در کجای شرکت قرار دارد؟</h3><div>{% for target in detail.chain_targets %}<a href="{{ target.1 }}">{{ target.0 }} ↗</a>{% endfor %}</div></section>
+    <section class="company-detail-process"><div><span>PROCESS / 01—05</span><h3>مسیر زنجیره این بخش</h3><p>هر مرحله خروجی مرحله قبل را دریافت می‌کند و به مرحله بعد تحویل می‌دهد.</p></div><div class="company-process-steps">{% for target in detail.chain_targets %}<article><b>{{ forloop.counter|stringformat:"02d" }}</b><strong>{{ target.0 }}</strong><a href="{{ target.1 }}">ورود به مرحله ↗</a></article>{% endfor %}</div></section>
+    <section class="company-detail-operations"><div class="company-ops-head"><span>OPERATIONAL LAYER / 06</span><h3>اطلاعات عملیاتی اختصاصی</h3><p>این لایه مستقیماً از داده همین بخش ساخته می‌شود؛ بنابراین مسیر اجرا برای هر محصول، معاونت، واحد، ژنتیک، پروژه و سایر بخش‌ها اختصاصی است.</p></div><div class="company-ops-grid">{% for op in detail.ops %}<article><b>{{ forloop.counter|stringformat:"02d" }}</b><strong>{{ op.title }}</strong><span>{{ op.text }}</span></article>{% endfor %}</div></section>
+    <section class="company-detail-action"><div><span>COLLABORATION / NEXT ACTION</span><h3>مسیر این بخش را به یک همکاری واقعی تبدیل کنید.</h3><p>برای همکاری پژوهشی، صنعتی، فناوری یا تجاری، از پورتال شرکت وارد مسیر همکاری شوید.</p></div><a href="/company/#company-collaboration">شروع مسیر همکاری ↗</a></section>
+    <section class="company-detail-next">
+      <div><span>CONTINUITY / {{ detail.index|stringformat:"02d" }}</span><h3>ادامه زنجیره</h3><p>این صفحه بخشی از معماری پیوسته شرکت است؛ از اینجا می‌توانید به مورد قبل، مورد بعد یا بخش مادر برگردید.</p></div>
+      <div class="company-detail-nav">
+        {% if detail.prev_url %}<a href="{{ detail.prev_url }}"><small>← قبلی</small><strong>{{ detail.prev_label }}</strong></a>{% endif %}
+        {% if detail.next_url %}<a href="{{ detail.next_url }}"><small>بعدی →</small><strong>{{ detail.next_label }}</strong></a>{% endif %}
+      </div>
+    </section>
+  </section>
+
+  <footer class="company-detail-footer">
+    <a href="/company/">← پورتال اصلی شرکت</a>
+    <a href="{{ detail.back }}">مشاهده فهرست بخش ↗</a>
+  </footer>
+</main>
+{% endblock %}

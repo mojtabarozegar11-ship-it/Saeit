@@ -99,3 +99,46 @@ admin.site.register([
     Product,
     Order,
 ])
+
+from .newsletter_models import NewsletterAgentLink, NewsletterOccasion, NewsletterPublication, NewsletterSchedule, NewsletterSource, NewsletterStory, NewsletterSubmission
+
+
+@admin.register(NewsletterSubmission)
+class NewsletterSubmissionAdmin(ModelAdmin):
+    list_display = ("subject", "status", "created_by", "created_at", "generated_story")
+    list_filter = ("status", "created_at")
+    search_fields = ("subject", "body")
+    readonly_fields = ("status", "processed_at", "generated_story", "created_at")
+    fields = ("subject", "body", "image", "video", "requested_publish_at", "occasion_code", "status", "created_by", "generated_story", "created_at", "processed_at")
+
+    def save_model(self, request, obj, form, change):
+        if not change:
+            obj.created_by = request.user
+        super().save_model(request, obj, form, change)
+        if obj.status == "queued":
+            from .newsletter_engine import process_submission
+            process_submission(obj)
+
+
+@admin.register(NewsletterStory)
+class NewsletterStoryAdmin(ModelAdmin):
+    list_display = ("title", "story_type", "status", "published_at", "author_name")
+    list_filter = ("status", "story_type", "published_at")
+    search_fields = ("title", "summary", "body", "author_name")
+    date_hierarchy = "published_at"
+    fieldsets = (
+        ("محتوا", {"fields": ("agent", "story_type", "title", "summary", "body", "seo_keywords", "image", "video")}),
+        ("زمان‌بندی و هویت", {"fields": ("author_name", "event_date", "company_activity_kind", "manager_action", "published_at", "status")}),
+        ("منبع و کنترل تکرار", {"fields": ("source", "fingerprint", "source_fingerprint")}),
+    )
+    readonly_fields = ("fingerprint", "source_fingerprint")
+
+    def save_model(self, request, obj, form, change):
+        obj.author_name = "مجتبی روزگار"
+        super().save_model(request, obj, form, change)
+
+
+admin.site.register([NewsletterAgentLink, NewsletterOccasion, NewsletterPublication, NewsletterSchedule, NewsletterSource])
+
+from .blog_models import BlogDistributionPlan, BlogPage, BlogPublication, BlogTranslation, ExternalBlogTarget
+admin.site.register([BlogDistributionPlan, BlogPage, BlogPublication, BlogTranslation, ExternalBlogTarget])

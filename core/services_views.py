@@ -1,0 +1,12 @@
+from django.shortcuts import render
+
+def services(request):
+    items = [
+        {"no": "01", "title": "پژوهش و توسعه", "meta": "R&D · INTELLIGENCE", "text": "از مسئله و داده تا مطالعه، طراحی راهکار و گزارش قابل استفاده."},
+        {"no": "02", "title": "زنجیره ارزش", "meta": "VALUE · OPERATIONS", "text": "طراحی مسیر محصول از تولید و فرآوری تا بسته‌بندی، بازار و فروش."},
+        {"no": "03", "title": "هوش مصنوعی و عامل‌ها", "meta": "AI · AGENTS", "text": "عامل‌های تخصصی، گردش‌کارهای قابل حسابرسی و اتوماسیون تصمیم‌یار."},
+        {"no": "04", "title": "آموزش و آکادمی", "meta": "ACADEMY · SKILLS", "text": "مسیرهای آموزشی کاربردی برای دانش، کسب‌وکار، فناوری و عملیات."},
+        {"no": "05", "title": "بازار و محصولات", "meta": "MARKET · COMMERCE", "text": "معرفی، عرضه و اتصال خدمات و محصولات به مسیرهای بازار."},
+        {"no": "06", "title": "دانش و محتوا", "meta": "KNOWLEDGE · MEDIA", "text": "تبدیل دانش تخصصی به مقاله، مرجع، محتوای آموزشی و رسانه."},
+    ]
+    return render(request, "core/services.html", {"items": items})

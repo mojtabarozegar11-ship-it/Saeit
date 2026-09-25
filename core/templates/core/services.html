@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}خدمات — Zomorodmelal{% endblock %}
+{% block body_class %}services-page{% endblock %}
+{% block content %}
+<section class="services-hero">
+  <div class="services-index">SERVICES<br><strong>06</strong></div>
+  <div class="services-copy"><span>VALUE · KNOWLEDGE · EXECUTION</span><h1>خدماتی برای ساختن<br><em>زنجیره‌ای کامل</em></h1><p>از پژوهش و داده تا آموزش، فناوری، محصول و بازار؛ هر خدمت یک مسیر مستقل با خروجی روشن است.</p></div>
+</section>
+<section class="services-grid">
+  {% for item in items %}<article><div class="services-no">{{ item.no }}</div><span>{{ item.meta }}</span><h2>{{ item.title }}</h2><p>{{ item.text }}</p><a href="/contact/">شروع همکاری ↗</a></article>{% endfor %}
+</section>
+<section class="services-cta"><span>ONE PLATFORM · MANY CAPABILITIES</span><h2>مسئله را تعریف کنید؛ مسیر اجرا را طراحی می‌کنیم.</h2><a href="/contact/">درخواست همکاری</a></section>
+{% endblock %}
