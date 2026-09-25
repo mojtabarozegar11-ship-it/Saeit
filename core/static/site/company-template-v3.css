@@ -53,3 +53,6 @@
 /* Accessibility hardening for the Company portal */
 .company-template-v3 a:focus-visible,.company-template-v3 button:focus-visible,.company-local-nav a:focus-visible,.company-org-targets a:focus-visible{outline:3px solid #d8b968;outline-offset:3px}
 @media (prefers-reduced-motion: reduce){.company-template-v3 *,.company-template-v3 *::before,.company-template-v3 *::after,.company-local-nav a,.company-related-graph-grid a{scroll-behavior:auto!important;transition:none!important;animation:none!important;transform:none!important}}
+
+/* Final mobile navigation ergonomics */
+.company-local-nav{overscroll-behavior-inline:contain;-webkit-overflow-scrolling:touch}.company-local-nav a{min-height:48px;display:inline-flex;align-items:center}.company-inquiry-form input,.company-inquiry-form select,.company-inquiry-form textarea,.company-inquiry-form button{font:inherit}.company-inquiry-form input,.company-inquiry-form select,.company-inquiry-form textarea{min-height:48px}@media(max-width:560px){.company-local-nav{scroll-snap-type:x proximity}.company-local-nav a{scroll-snap-align:start;padding-inline:14px!important}.company-inquiry-form button{min-height:52px;width:100%}}
