@@ -162,6 +162,9 @@ class AuditLog(T):
 
 
 class KnowledgeArticle(T):
+    source_report = models.ForeignKey(
+        "Report", on_delete=models.PROTECT, null=True, blank=True, related_name="knowledge_articles"
+    )
     title = models.CharField(max_length=300)
     slug = models.SlugField(unique=True)
     content = models.TextField()
