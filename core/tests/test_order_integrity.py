@@ -43,10 +43,10 @@ def test_order_uses_active_product_price_and_server_total(django_user_model):
     order = Order.objects.get(pk=response.data["order"]["id"])
     assert order.customer_id == user.pk
     assert order.status == "pending"
-    assert order.total == "376.50"
+    assert str(order.total) == "376.50"
     item = order.items.get()
     assert item.quantity == 3
-    assert item.unit_price == "125.50"
+    assert str(item.unit_price) == "125.50"
     assert item.currency == "IRR"
 
 
