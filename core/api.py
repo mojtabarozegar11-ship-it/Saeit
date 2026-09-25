@@ -9,6 +9,8 @@ from .task_runtime import TaskExecutionError, TaskRuntime
 
 
 from .orchestrator import MasterAgent
+from django.db import models
+
 from .models import (
     Agent, AgentCapability, AgentTask, ApprovalRequest, ChatMessage, ChatSession, Evidence, Finding,
     KnowledgeArticle, Order, Product, Report, ResearchProject, ResearchSource,
@@ -96,8 +98,89 @@ class ReportViewSet(ProjectOwnerScopedMixin, vs(Report, ReportSerializer, Intern
 
 
 AgentViewSet = vs(Agent, AgentSerializer, InternalStaffWritePermission)
-AgentCapabilityViewSet = vs(AgentCapability, AgentCapabilitySerializer, InternalStaffWritePermission)
-KnowledgeArticleViewSet = vs(KnowledgeArticle, KnowledgeArticleSerializer)
+AgentCapabilityViewSet = vs(AgentCapability, AgentSerializer if False else AgentCapabilitySerializer, InternalStaffWritePermission)
+
+
+class KnowledgeArticleViewSet(viewsets.ModelViewSet):
+    """Published knowledge is public; publishing itself always requires owner approval."""
+
+    queryset = KnowledgeArticle.objects.select_related("source_report__project").all()
+    serializer_class = KnowledgeArticleSerializer
+    permission_classes = [IsAuthenticatedOrReadOnly]
+
+    def get_queryset(self):
+        user = self.request.user
+        if user.is_staff:
+            return self.queryset
+        if user.is_authenticated:
+            return self.queryset.filter(
+                models.Q(published=True) | models.Q(source_report__project__owner=user)
+            ).distinct()
+        return self.queryset.filter(published=True)
+
+    def perform_create(self, serializer):
+        serializer.save(published=False)
+
+    def update(self, request, *args, **kwargs):
+        article = self.get_object()
+        if article.published:
+            return Response(
+                {"detail": "Published knowledge cannot be edited directly; create a new version."},
+                status=status.HTTP_409_CONFLICT,
+            )
+        if "published" in request.data:
+            return Response(
+                {"detail": "Use the publish action; published is controlled by owner approval."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return super().update(request, *args, **kwargs)
+
+    @action(detail=True, methods=["post"], url_path="publish")
+    def publish(self, request, pk=None):
+        article = self.get_object()
+        if article.published:
+            return Response(
+                {"detail": "Knowledge article is already published."},
+                status=status.HTTP_409_CONFLICT,
+            )
+        report = article.source_report
+        if report is None or report.project is None:
+            return Response(
+                {"detail": "Knowledge article has no publishable research provenance."},
+                status=status.HTTP_409_CONFLICT,
+            )
+        owner = report.project.owner
+        if not owner:
+            return Response(
+                {"detail": "Knowledge article has no designated owner."},
+                status=status.HTTP_409_CONFLICT,
+            )
+        pending = ApprovalRequest.objects.filter(
+            action_type="publish",
+            target_type="KnowledgeArticle",
+            target_id=str(article.pk),
+            status="pending",
+            requested_by=owner,
+        ).order_by("-created_at").first()
+        if pending is None:
+            pending = ApprovalRequest.objects.create(
+                action_type="publish",
+                target_type="KnowledgeArticle",
+                target_id=str(article.pk),
+                reason="Owner approval required before publishing knowledge.",
+                risk="high",
+                requested_by=owner,
+            )
+        return Response(
+            {
+                "status": "approval_required",
+                "article": self.get_serializer(article).data,
+                "approval": ApprovalRequestSerializer(pending).data,
+            },
+            status=status.HTTP_202_ACCEPTED,
+        )
+
+
 ProductViewSet = vs(Product, ProductSerializer)
 
 
