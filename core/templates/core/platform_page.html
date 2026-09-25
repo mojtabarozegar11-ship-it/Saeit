@@ -22,6 +22,7 @@
 <section class="lux-hero know-hero"><div class="know-glow"></div><span class="lux-kicker">{{ page.kicker }}</span><h1>{{ page.title }}</h1><p>{{ page.lead }}</p><div class="know-shelf">ENCYCLOPEDIA · 04</div></section>
 <section class="know-library"><aside><span>INDEX</span><strong>A—Z</strong><small>Provenance<br>Clusters<br>Pillars</small></aside><article><span class="know-label">KNOWLEDGE ARCHITECTURE</span><h2>{{ page.heading }}</h2><p>{{ page.body }}</p></article></section>
 <div class="know-books">{% for item in page.items %}<article><span>VOLUME 0{{ forloop.counter }}</span><h3>{{ item.title }}</h3><p>{{ item.text }}</p><a href="/research/">Explore ↗</a></article>{% endfor %}</div>
+<section class="know-glossary"><div><span>ENCYCLOPEDIA LAYERS</span><h2>مرجع، خوشه، واژه‌نامه و گراف دانش</h2></div><p>هر موضوع می‌تواند یک صفحه مرجع داشته باشد، به خوشه‌های تخصصی متصل شود و از طریق واژه‌نامه و ارتباطات دانش به پژوهش و محصول برسد.</p></section>
 <section class="know-links">{% for link in page.links %}<a href="{{ link.url }}"><small>{{ link.title }}</small><b>{{ link.text }}</b></a>{% endfor %}</section>
 <section class="know-cta"><div><span>BUILD THE LIBRARY</span><h2>{{ page.cta_title }}</h2><p>{{ page.cta_text }}</p></div><a href="{{ page.cta_url }}">{{ page.cta_label }} ↗</a></section>
 {% elif request.path == "/market/" %}
