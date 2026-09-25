@@ -2,7 +2,7 @@ from django.db import transaction
 from django.utils import timezone
 from datetime import timedelta
 
-from .models import ApprovalRequest, AgentTask, ApprovalGrant, AuditLog
+from .models import ApprovalRequest, AgentTask, ApprovalGrant, AuditLog, KnowledgeArticle
 
 
 class ApprovalService:
@@ -23,6 +23,7 @@ class ApprovalService:
         approval.save(update_fields=["status", "decision_note", "updated_at"])
 
         task = None
+        article = None
         if approval.target_type == "AgentTask":
             task = AgentTask.objects.select_for_update().filter(pk=approval.target_id).first()
             if task:
@@ -32,6 +33,15 @@ class ApprovalService:
                     raise ValueError("Rejected approval cannot alter an executing or terminal task")
                 task.status = "queued" if approved else "cancelled"
                 task.save(update_fields=["status", "updated_at"])
+        elif approval.target_type == "KnowledgeArticle":
+            article = KnowledgeArticle.objects.select_for_update().filter(pk=approval.target_id).first()
+            if article is None:
+                raise ValueError("Knowledge article no longer exists")
+            if approved and article.published:
+                raise ValueError("Knowledge article is already published")
+            if approved:
+                article.published = True
+                article.save(update_fields=["published", "updated_at"])
 
         AuditLog.objects.create(
             actor_type=str(actor_type or "owner")[:30],
@@ -42,6 +52,7 @@ class ApprovalService:
             after_state={
                 "approved": approved,
                 "task_status": getattr(task, "status", None),
+                "article_published": getattr(article, "published", None),
             },
             trace_id=f"approval-{approval.pk}",
         )
