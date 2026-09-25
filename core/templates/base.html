@@ -1,1 +1,39 @@
-{% load static %}<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#123529"><meta name="description" content="{% block meta_description %}Zomorodmelal؛ پلتفرم پژوهش، دانش، عامل‌های هوش مصنوعی و حاکمیت اجرایی{% endblock %}"><title>{% block title %}Zomorodmelal — پژوهش، دانش و هوش مصنوعی{% endblock %}</title><link rel="icon" type="image/svg+xml" href="{% static 'site/logo.svg' %}"><link rel="stylesheet" href="{% static 'site/main.css' %}">{% block page_head %}{% endblock %}</head><body class="{% block body_class %}page-default{% endblock %}"><header class="site-header"><a class="brand" href="/" aria-label="Zomorodmelal"><img class="brand-logo" src="{% static 'site/logo.svg' %}" alt="نشان Zomorodmelal"><span class="brand-copy"><b>Zomorodmelal</b><small>Research · Knowledge · AI</small></span></a><nav class="nav" aria-label="ناوبری اصلی"><a href="/">خانه</a><a href="/api/knowledge/">دانش</a><a href="/api/products/">محصولات</a><a href="/api/">API</a><a href="/admin/">مدیریت</a></nav></header><main>{% block content %}{% endblock %}</main><footer class="site-footer"><div class="footer-brand"><img class="footer-logo" src="{% static 'site/logo.svg' %}" alt="" aria-hidden="true"><span>Zomorodmelal</span></div><span>پلتفرم یکپارچه پژوهش، دانش، عامل و حاکمیت</span></footer></body></html>
+{% load static %}<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#103b2d">
+<meta name="description" content="{% block meta_description %}Zomorodmelal؛ پژوهش، دانش، کشاورزی، صنعت و هوش مصنوعی{% endblock %}">
+<title>{% block title %}Zomorodmelal — پژوهش، دانش و هوش مصنوعی{% endblock %}</title>
+<link rel="icon" type="image/svg+xml" href="{% static 'site/logo.svg' %}">
+<link rel="stylesheet" href="{% static 'site/main.css' %}">
+{% block page_head %}{% endblock %}
+</head>
+<body class="{% block body_class %}page-default{% endblock %}">
+<div class="topbar"><div>زنجیره ارزش از پژوهش تا بازار</div><div class="toplinks"><a href="/about/">درباره ما</a><a href="/contact/">تماس</a><span>FA · EN · AR</span></div></div>
+<header class="site-header">
+<a class="brand" href="/" aria-label="Zomorodmelal">
+<img class="brand-logo" src="{% static 'site/logo.svg' %}" alt="نشان کامل Zomorodmelal">
+<span class="brand-copy"><b>Zomorodmelal</b><small>Research · Knowledge · AI</small></span>
+</a>
+<button class="menu-toggle" type="button" aria-label="باز کردن منو" aria-expanded="false">☰</button>
+<nav class="nav" aria-label="ناوبری اصلی">
+<a href="/">خانه</a><a href="/agriculture/">کشاورزی</a><a href="/industry/">صنعت</a><a href="/market/">بازار</a><a href="/research/">پژوهش</a><a href="/knowledge/">دانش</a><a href="/agents/">عامل‌ها</a><a href="/about/">درباره ما</a>
+</nav>
+<div class="header-actions"><a class="icon-btn" href="/api/health/" title="وضعیت سامانه">●</a><a class="header-cta" href="/contact/">همکاری</a></div>
+</header>
+<main>{% block content %}{% endblock %}</main>
+<footer class="site-footer">
+<div class="footer-grid">
+<div><div class="footer-brand"><img class="footer-logo" src="{% static 'site/logo.svg' %}" alt=""> <span>Zomorodmelal</span></div><p>پلتفرم یکپارچه پژوهش، دانش، کشاورزی، صنعت، محصول و عامل‌های هوشمند.</p></div>
+<div><strong>پلتفرم</strong><a href="/research/">پژوهش</a><a href="/knowledge/">دانش</a><a href="/agents/">عامل‌های هوش مصنوعی</a><a href="/market/">بازار</a></div>
+<div><strong>کسب‌وکار</strong><a href="/agriculture/">کشاورزی</a><a href="/industry/">صنعت</a><a href="/about/">درباره ما</a><a href="/contact/">همکاری</a></div>
+<div><strong>دسترسی</strong><a href="/api/">API</a><a href="/api/health/">وضعیت سامانه</a><a href="/admin/">مدیریت</a></div>
+</div>
+<div class="footer-bottom"><span>© Zomorodmelal</span><span>ساخته‌شده برای رشد پایدار و تصمیم‌گیری مبتنی بر دانش</span></div>
+</footer>
+<script>
+const b=document.querySelector('.menu-toggle'),n=document.querySelector('.nav');
+if(b){b.addEventListener('click',()=>{n.classList.toggle('open');b.setAttribute('aria-expanded',n.classList.contains('open'));});}
+</script>
+</body></html>
