@@ -1,0 +1,22 @@
+[Reading 18 lines from start (total: 18 lines, 0 remaining)]
+
+{% extends 'base.html' %}
+{% block title %}آب‌وهوا — Zomorodmelal{% endblock %}
+{% block body_class %}page-weather weather-page{% endblock %}
+{% block content %}
+<section class="weather-hero">
+  <div class="weather-orbit"><span>LIVE</span><b>WEATHER</b></div>
+  <div><span class="weather-kicker">CLIMATE INTELLIGENCE · 09</span><h1>آب‌وهوا، برای تصمیم بهتر</h1><p>داده زنده هواشناسی با تمرکز بر کشاورزی، عملیات و برنامه‌ریزی زنجیره ارزش.</p></div>
+</section>
+<section class="weather-console">
+  <div><span>FORECAST ENGINE</span><h2>پیش‌بینی پنج‌روزه</h2><p>مکان را با مختصات انتخاب کنید؛ سامانه داده را از سرویس هواشناسی دریافت می‌کند.</p></div>
+  <form id="weather-form"><label>Latitude<input id="lat" value="35.6892" inputmode="decimal"></label><label>Longitude<input id="lon" value="51.3890" inputmode="decimal"></label><button>دریافت داده</button></form>
+</section>
+<section class="weather-result" id="weather-result" aria-live="polite"><div class="weather-loading">برای دریافت داده، دکمه را بزنید.</div></section>
+<script>
+const form=document.getElementById('weather-form'), result=document.getElementById('weather-result');
+form.addEventListener('submit',async(e)=>{e.preventDefault(); result.innerHTML='<div class="weather-loading">در حال دریافت داده…</div>'; const q=new URLSearchParams({lat:document.getElementById('lat').value,lon:document.getElementById('lon').value}); try{const r=await fetch('/api/weather/?'+q); const j=await r.json(); if(!r.ok) throw new Error(j.message||'خطا'); const c=j.data.current; const d=j.data.daily; result.innerHTML='<article><span>NOW</span><strong>'+c.temperature_2m+'°</strong><p>رطوبت '+c.relative_humidity_2m+'٪ · باد '+c.wind_speed_10m+'</p></article>'+d.time.map((day,i)=>'<article><span>'+day+'</span><b>'+d.temperature_2m_max[i]+'° / '+d.temperature_2m_min[i]+'°</b><p>احتمال بارش '+d.precipitation_probability_max[i]+'٪</p></article>').join('');}catch(err){result.innerHTML='<div class="weather-error">داده در دسترس نیست: '+err.message+'</div>';}});
+</script>
+{% endblock %}
+
+[executed on device: zohal.pws-dns.net (457d9cac-c176-4c0a-a847-08fb0f2007dc)]
