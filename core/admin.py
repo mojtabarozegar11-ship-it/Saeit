@@ -5,6 +5,7 @@ from django.template.response import TemplateResponse
 from django.urls import path, reverse
 
 from .chat_runtime import MasterAgentChat
+from .daily_content_models import DailyContentPlan, DailyContentDraft
 from .models import (
     Agent,
     AgentCapability,
@@ -82,6 +83,20 @@ class ChatSessionAdmin(ModelAdmin):
 
 
 admin.site.register(ChatSession, ChatSessionAdmin)
+
+@admin.register(DailyContentPlan)
+class DailyContentPlanAdmin(admin.ModelAdmin):
+    list_display = ("run_date", "project", "status", "company_title", "ceo_title")
+    list_filter = ("status", "run_date")
+    search_fields = ("company_topic", "ceo_topic", "company_title", "ceo_title")
+
+
+@admin.register(DailyContentDraft)
+class DailyContentDraftAdmin(admin.ModelAdmin):
+    list_display = ("title", "kind", "status", "plan", "knowledge_article")
+    list_filter = ("kind", "status")
+    search_fields = ("title", "slug")
+
 
 admin.site.register([
     ResearchProject,
