@@ -13,12 +13,12 @@ from django.db import models
 
 from .models import (
     Agent, AgentCapability, AgentTask, ApprovalRequest, ChatMessage, ChatSession, Evidence, Finding,
-    KnowledgeArticle, Order, OrderItem, Product, Report, ResearchProject, ResearchSource,
+    KnowledgeArticle, LedgerEntry, Order, OrderItem, PaymentIntent, Product, Report, ResearchProject, ResearchSource,
 )
 from .serializers import (
     AgentCapabilitySerializer, AgentSerializer, AgentTaskSerializer, ApprovalRequestSerializer, ChatMessageSerializer, ChatSessionSerializer,
     EvidenceSerializer, FindingSerializer, KnowledgeArticleSerializer,
-    OrderSerializer, OrderItemSerializer, ProductSerializer, ReportSerializer,
+    LedgerEntrySerializer, OrderSerializer, OrderItemSerializer, PaymentIntentSerializer, ProductSerializer, ReportSerializer,
     ResearchProjectSerializer, ResearchSourceSerializer,
 )
 
@@ -295,6 +295,62 @@ class OrderViewSet(OwnerScopedMixin, viewsets.ModelViewSet):
         return Response(
             {"detail": "Orders are immutable through direct update; use controlled lifecycle actions."},
             status=status.HTTP_405_METHOD_NOT_ALLOWED,
+        )
+
+
+class PaymentIntentViewSet(OwnerScopedMixin, viewsets.ReadOnlyModelViewSet):
+    queryset = PaymentIntent.objects.select_related("order__customer").all()
+    serializer_class = PaymentIntentSerializer
+    permission_classes = [InternalStaffWritePermission]
+    owner_field = "order__customer"
+
+    @action(detail=False, methods=["post"], url_path="create")
+    def create_intent(self, request):
+        order_id = request.data.get("order_id")
+        key = str(request.data.get("idempotency_key", "")).strip()
+        if not order_id or not key:
+            return Response(
+                {"detail": "order_id and idempotency_key are required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        order = Order.objects.filter(pk=order_id, customer=request.user).first()
+        if order is None:
+            return Response({"detail": "Order not found."}, status=status.HTTP_404_NOT_FOUND)
+        if order.status != "pending":
+            return Response({"detail": "Only pending orders can start payment."}, status=status.HTTP_409_CONFLICT)
+
+        existing = PaymentIntent.objects.filter(idempotency_key=key).first()
+        if existing:
+            if existing.order_id != order.pk:
+                return Response({"detail": "Idempotency key is already bound to another order."}, status=status.HTTP_409_CONFLICT)
+            return Response(
+                {"status": "existing", "payment_intent": self.get_serializer(existing).data},
+                status=status.HTTP_200_OK,
+            )
+
+        intent = PaymentIntent.objects.create(
+            order=order,
+            amount=order.total,
+            currency=order.currency,
+            idempotency_key=key,
+            status="awaiting_approval",
+            provider="not_configured",
+        )
+        approval = ApprovalRequest.objects.create(
+            action_type="payment",
+            target_type="PaymentIntent",
+            target_id=str(intent.pk),
+            reason="Owner approval required before initiating an external payment.",
+            risk="critical",
+            requested_by=request.user,
+        )
+        return Response(
+            {
+                "status": "approval_required",
+                "payment_intent": self.get_serializer(intent).data,
+                "approval": ApprovalRequestSerializer(approval).data,
+            },
+            status=status.HTTP_202_ACCEPTED,
         )
 
 

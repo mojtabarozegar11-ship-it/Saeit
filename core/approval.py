@@ -2,7 +2,7 @@ from django.db import transaction
 from django.utils import timezone
 from datetime import timedelta
 
-from .models import ApprovalRequest, AgentTask, ApprovalGrant, AuditLog, KnowledgeArticle, Product
+from .models import ApprovalRequest, AgentTask, ApprovalGrant, AuditLog, KnowledgeArticle, PaymentIntent, Product
 
 
 class ApprovalService:
@@ -42,6 +42,18 @@ class ApprovalService:
             if approved:
                 article.published = True
                 article.save(update_fields=["published", "updated_at"])
+        elif approval.target_type == "PaymentIntent":
+            intent = PaymentIntent.objects.select_for_update().filter(pk=approval.target_id).first()
+            if intent is None:
+                raise ValueError("Payment intent no longer exists")
+            if approved:
+                if intent.status != "awaiting_approval":
+                    raise ValueError("Payment intent is no longer awaiting approval")
+                intent.status = "ready_for_gateway"
+                intent.save(update_fields=["status", "updated_at"])
+            elif intent.status == "awaiting_approval":
+                intent.status = "rejected"
+                intent.save(update_fields=["status", "updated_at"])
         elif approval.target_type == "Product":
             product = Product.objects.select_for_update().select_related("knowledge_article").filter(pk=approval.target_id).first()
             if product is None:
@@ -65,6 +77,7 @@ class ApprovalService:
                 "task_status": getattr(task, "status", None),
                 "article_published": getattr(article, "published", None),
                 "product_active": getattr(locals().get("product"), "active", None),
+                "payment_status": getattr(locals().get("intent"), "status", None),
             },
             trace_id=f"approval-{approval.pk}",
         )
