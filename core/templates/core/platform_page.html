@@ -1,0 +1,10 @@
+{% extends 'base.html' %}
+{% block title %}{{ page.title }} — Zomorodmelal{% endblock %}
+{% block content %}
+<section class="page-hero"><span class="eyebrow">{{ page.kicker }}</span><h1>{{ page.title }}</h1><p>{{ page.lead }}</p></section>
+<section class="section content-grid">
+<div class="surface"><span class="badge">{{ page.badge }}</span><h2>{{ page.heading }}</h2><p>{{ page.body }}</p><ul class="list">{% for item in page.items %}<li><strong>{{ item.title }}</strong><br><span class="muted">{{ item.text }}</span></li>{% endfor %}</ul></div>
+<aside class="surface"><span class="eyebrow dark">QUICK ACCESS</span><h3>مسیرهای مرتبط</h3><ul class="list">{% for link in page.links %}<li><a href="{{ link.url }}"><strong>{{ link.title }}</strong><br><span class="muted">{{ link.text }}</span></a></li>{% endfor %}</ul></aside>
+</section>
+<section class="section cta"><span class="eyebrow dark">ZOMORODMELAL</span><h2>{{ page.cta_title }}</h2><p>{{ page.cta_text }}</p><a class="btn btn-dark" href="{{ page.cta_url }}">{{ page.cta_label }}</a></section>
+{% endblock %}
