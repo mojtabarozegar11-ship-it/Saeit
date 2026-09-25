@@ -1,4 +1,3 @@
-[Reading 34 lines from start (total: 34 lines, 0 remaining)]
 
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
@@ -34,5 +33,3 @@ urlpatterns = [
     path("weather/", weather_api, name="weather"),
     path("", include(router.urls)),
 ]
-
-[executed on device: zohal.pws-dns.net (457d9cac-c176-4c0a-a847-08fb0f2007dc)]
