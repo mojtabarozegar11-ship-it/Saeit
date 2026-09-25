@@ -11,6 +11,7 @@ from .api import (
     FindingViewSet,
     KnowledgeArticleViewSet,
     OrderViewSet,
+    PaymentIntentViewSet,
     ProductViewSet,
     ReportViewSet,
     ResearchProjectViewSet,
@@ -32,6 +33,7 @@ router.register("master-chat", MasterAgentChatViewSet, basename="master-agent-ch
 router.register("knowledge", KnowledgeArticleViewSet, basename="knowledge-article")
 router.register("products", ProductViewSet, basename="product")
 router.register("orders", OrderViewSet, basename="order")
+router.register("payments", PaymentIntentViewSet, basename="payment-intent")
 
 urlpatterns = [
     path("health/", HealthView.as_view(), name="health"),
