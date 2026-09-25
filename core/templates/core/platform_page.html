@@ -2,6 +2,7 @@
 {% load static %}
 {% block extra_css %}{% if request.path == "/company/" %}<link rel="stylesheet" href="{% static 'site/company-profile.css' %}"><link rel="stylesheet" href="{% static 'site/company-template-v3.css' %}">{% endif %}{% endblock %}
 {% block title %}{{ page.title }} — Zomorodmelal{% endblock %}
+{% block page_head %}<script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","@id":"https://zomorodmelal.ir/#organization","name":"شرکت کشت و صنعت زمرد ملل","legalName":"شرکت کشت و صنعت زمرد ملل","url":"https://zomorodmelal.ir/","logo":"https://zomorodmelal.ir/static/site/company/company-logo.png","telephone":"+989022048691","foundingDate":"2019-11-07","description":"شرکت کشت و صنعت زمرد ملل؛ پژوهش، دانش، کشاورزی، صنعت و توسعه فناوری.","employee":{"@type":"Person","name":"مجتبی روزگار","jobTitle":"محقق و پژوهشگر / مدیرعامل شرکت کشت و صنعت زمرد ملل"}}</script>{% if request.path == "/company/" %}<script type="application/ld+json">{{ company_page_jsonld|safe }}</script><script type="application/ld+json">{{ company_breadcrumb_jsonld|safe }}</script>{% endif %}{% endblock %}
 {% block body_class %}page-{{ request.path|cut:"/" }} luxury-page{% endblock %}
 {% block content %}
 {% if request.path == "/agriculture/" %}

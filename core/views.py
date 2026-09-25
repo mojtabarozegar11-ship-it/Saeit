@@ -148,6 +148,7 @@ def platform_page(request, section):
                 "chain_targets": [("معرفی شرکت", "/company/"), ("پژوهش", "/research/"), ("ساختار سازمانی", "/company/#company-structure"), ("پروژه‌ها", "/company/#company-projects")],
                 "profile_jsonld": __import__("json").dumps({"@context":"https://schema.org","@type":"ProfilePage","mainEntity":{"@type":"Person","name":"مجتبی روزگار","jobTitle":"محقق و پژوهشگر / مدیرعامل شرکت کشت و صنعت زمرد ملل","worksFor":{"@type":"Organization","name":"شرکت کشت و صنعت زمرد ملل","url":"https://zomorodmelal.ir/"}}}, ensure_ascii=False),
             }
+            detail_context["breadcrumb_jsonld"] = __import__("json").dumps({"@context":"https://schema.org","@type":"BreadcrumbList","@id":"https://zomorodmelal.ir/company/executive/#breadcrumb","itemListElement":[{"@type":"ListItem","position":1,"name":"شرکت","item":"https://zomorodmelal.ir/company/"},{"@type":"ListItem","position":2,"name":"پروفایل مدیرعامل","item":"https://zomorodmelal.ir/company/executive/"}]}, ensure_ascii=False)
             return render(request, "core/company_detail.html", {"page": page, "detail": detail_context})
         detail_map = {
             "department": ("departments", "ساختار سازمانی"), "unit": ("units", "واحد تخصصی"),
@@ -343,7 +344,7 @@ def platform_page(request, section):
                     rel_prefix = {"department":"department","unit":"unit","project":"project","genetics":"genetics","product":"product","statutory":"statutory","craft":"craft","channel":"channel","social":"social","future":"future"}[rel_kind]
                     for rid, rtitle in rel_items:
                         related_nodes.append({"kind": rel_kind, "title": rtitle, "url": f"/company/{rel_prefix}-{rid}/"})
-                detail_context = {"title": title, "text": text, "meta": meta, "back": back, "item": item, "kind": kind, "index": index + 1, "count": count, "ops": ops, "chain_targets": chain_targets.get(kind, []), "value_blocks": value_blocks.get(kind, value_blocks["unit"]), "company_content_links": CompanyContentLink.objects.filter(target_path=request.path).select_related("newsletter_story", "knowledge_article"), "related_nodes": related_nodes}
+                detail_context = {"title": title, "text": text, "meta": meta, "back": back, "item": item, "kind": kind, "index": index + 1, "count": count, "ops": ops, "chain_targets": chain_targets.get(kind, []), "value_blocks": value_blocks.get(kind, value_blocks["unit"]), "company_content_links": CompanyContentLink.objects.filter(target_path=request.path).select_related("newsletter_story", "knowledge_article"), "related_nodes": related_nodes, "breadcrumb_jsonld": __import__("json").dumps({"@context":"https://schema.org","@type":"BreadcrumbList","@id":f"https://zomorodmelal.ir{request.path}#breadcrumb","itemListElement":[{"@type":"ListItem","position":1,"name":"شرکت","item":"https://zomorodmelal.ir/company/"},{"@type":"ListItem","position":2,"name":title,"item":f"https://zomorodmelal.ir{request.path}"}]}, ensure_ascii=False)}
                 if index > 0:
                     detail_context["prev_url"] = f"/company/{prefix}-{index}/"
                     detail_context["prev_label"] = records[index - 1].get("title", "مورد قبلی") if isinstance(records[index - 1], dict) else str(records[index - 1])
@@ -356,6 +357,7 @@ def platform_page(request, section):
     if page is None:
         raise Http404
     if section == "company":
+        import json as _json
         page["organization_matrix"] = [
             {"department":"معاونت پژوهش و فناوری","unit":"واحد پژوهش و توسعه","outputs":"مطالعه، گزارش، دانش و فناوری","targets":[("پژوهش","/research/"),("دانش","/knowledge/"),("پروژه‌ها","/company/#company-projects")]},
             {"department":"معاونت ژنتیک، اصلاح نژاد و زیست‌فناوری","unit":"واحد ژنتیک، اصلاح نژاد و زیست‌فناوری","outputs":"پرونده ژنتیکی، داده و مطالعات تخصصی","targets":[("ژنتیک","/company/#company-genetics"),("پژوهش","/research/"),("دانش","/knowledge/")]},
@@ -369,6 +371,17 @@ def platform_page(request, section):
         ]
     if section == "company":
         page["company_content_links"] = CompanyContentLink.objects.filter(target_path="/company/").select_related("newsletter_story", "knowledge_article")
+        page["company_page_jsonld"] = _json.dumps({
+            "@context": "https://schema.org",
+            "@type": "WebPage",
+            "@id": "https://zomorodmelal.ir/company/#webpage",
+            "url": "https://zomorodmelal.ir/company/",
+            "name": "معرفی شرکت کشت و صنعت زمرد ملل",
+            "description": page["lead"],
+            "isPartOf": {"@id": "https://zomorodmelal.ir/#organization"},
+            "about": {"@id": "https://zomorodmelal.ir/#organization"},
+            "breadcrumb": {"@id": "https://zomorodmelal.ir/company/#breadcrumb"}
+        }, ensure_ascii=False)
         page["research_governance"] = [
             {"code":"01 / PROBLEM", "title":"تعریف مسئله", "text":"موضوع، پرسش پژوهشی، دامنه، فرضیات و معیار موفقیت مشخص می‌شود.", "output":"خروجی: شناسنامه مسئله"},
             {"code":"02 / STUDY", "title":"طراحی مطالعه", "text":"روش تحقیق، منابع، داده‌های موردنیاز، نمونه‌گیری و روش تحلیل تعیین می‌شود.", "output":"خروجی: طرح مطالعه"},
@@ -380,4 +393,17 @@ def platform_page(request, section):
             {"code":"08 / SCALE", "title":"توسعه مرحله‌ای", "text":"تنها پس از احراز شرایط، مسیر توسعه مقیاس‌پذیر، اقتصادی و قانونی طراحی می‌شود.", "output":"خروجی: نقشه راه توسعه"},
         ]
 
-    return render(request, "core/platform_page.html", {"page": page})
+    if section == "company":
+        page["company_page_jsonld"] = _json.dumps({
+            "@context":"https://schema.org",
+            "@type":"WebPage",
+            "@id":"https://zomorodmelal.ir/company/#webpage",
+            "url":"https://zomorodmelal.ir/company/",
+            "name":page["title"],
+            "description":page["lead"],
+            "isPartOf":{"@id":"https://zomorodmelal.ir/#organization"},
+            "about":{"@id":"https://zomorodmelal.ir/#organization"},
+            "breadcrumb":{"@id":"https://zomorodmelal.ir/company/#breadcrumb"}
+        }, ensure_ascii=False)
+        page["company_breadcrumb_jsonld"] = _json.dumps({"@context":"https://schema.org","@type":"BreadcrumbList","@id":"https://zomorodmelal.ir/company/#breadcrumb","itemListElement":[{"@type":"ListItem","position":1,"name":"شرکت","item":"https://zomorodmelal.ir/company/"}]}, ensure_ascii=False)
+    return render(request, "core/platform_page.html", {"page": page, "company_page_jsonld": page.get("company_page_jsonld", ""), "company_breadcrumb_jsonld": page.get("company_breadcrumb_jsonld", "")})
