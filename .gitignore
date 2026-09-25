@@ -7,3 +7,5 @@ media/
 staticfiles/
 .pytest_cache/
 .coverage
+stderr.log
+tmp/
