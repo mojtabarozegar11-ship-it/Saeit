@@ -234,6 +234,29 @@ class OrderItem(T):
         return self.unit_price * self.quantity
 
 
+class PaymentIntent(T):
+    order = models.OneToOneField(Order, on_delete=models.PROTECT, related_name="payment_intent")
+    amount = models.DecimalField(max_digits=14, decimal_places=2)
+    currency = models.CharField(max_length=10)
+    idempotency_key = models.CharField(max_length=128, unique=True)
+    status = models.CharField(max_length=30, default="awaiting_approval")
+    provider = models.CharField(max_length=50, default="not_configured")
+    provider_reference = models.CharField(max_length=200, blank=True, default="")
+
+
+class LedgerEntry(T):
+    order = models.ForeignKey(Order, on_delete=models.PROTECT, related_name="ledger_entries")
+    payment_intent = models.ForeignKey(
+        PaymentIntent, on_delete=models.PROTECT, related_name="ledger_entries",
+        null=True, blank=True
+    )
+    entry_type = models.CharField(max_length=30)
+    amount = models.DecimalField(max_digits=14, decimal_places=2)
+    currency = models.CharField(max_length=10)
+    reference = models.CharField(max_length=200, unique=True)
+    metadata = models.JSONField(default=dict)
+
+
 class ChatSession(T):
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
