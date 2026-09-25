@@ -1,10 +1,52 @@
 {% extends 'base.html' %}
 {% block title %}{{ page.title }} — Zomorodmelal{% endblock %}
+{% block body_class %}page-{{ request.path|cut:"/" }} luxury-page{% endblock %}
 {% block content %}
-<section class="page-hero"><span class="eyebrow">{{ page.kicker }}</span><h1>{{ page.title }}</h1><p>{{ page.lead }}</p></section>
-<section class="section content-grid">
-<div class="surface"><span class="badge">{{ page.badge }}</span><h2>{{ page.heading }}</h2><p>{{ page.body }}</p><ul class="list">{% for item in page.items %}<li><strong>{{ item.title }}</strong><br><span class="muted">{{ item.text }}</span></li>{% endfor %}</ul></div>
-<aside class="surface"><span class="eyebrow dark">QUICK ACCESS</span><h3>مسیرهای مرتبط</h3><ul class="list">{% for link in page.links %}<li><a href="{{ link.url }}"><strong>{{ link.title }}</strong><br><span class="muted">{{ link.text }}</span></a></li>{% endfor %}</ul></aside>
-</section>
-<section class="section cta"><span class="eyebrow dark">ZOMORODMELAL</span><h2>{{ page.cta_title }}</h2><p>{{ page.cta_text }}</p><a class="btn btn-dark" href="{{ page.cta_url }}">{{ page.cta_label }}</a></section>
+{% if request.path == "/agriculture/" %}
+<section class="lux-hero ag-hero"><div class="ag-index">01</div><div><span class="lux-kicker">{{ page.kicker }}</span><h1>{{ page.title }}</h1><p>{{ page.lead }}</p></div><div class="ag-orbit">VALUE<br>CHAIN</div></section>
+<section class="ag-split"><div class="ag-manifesto"><span>FIELD TO FORTUNE</span><h2>{{ page.heading }}</h2><p>{{ page.body }}</p></div><div class="ag-cards">{% for item in page.items %}<article><b>0{{ forloop.counter }}</b><h3>{{ item.title }}</h3><p>{{ item.text }}</p></article>{% endfor %}</div></section>
+<section class="ag-ribbon"><span>CONNECTED</span>{% for link in page.links %}<a href="{{ link.url }}">{{ link.title }} <small>{{ link.text }}</small></a>{% endfor %}</section>
+<section class="ag-cta"><span>01 / PARTNERSHIP</span><h2>{{ page.cta_title }}</h2><p>{{ page.cta_text }}</p><a href="{{ page.cta_url }}">{{ page.cta_label }} ↗</a></section>
+{% elif request.path == "/industry/" %}
+<section class="lux-hero ind-hero"><div class="ind-grid"></div><span class="lux-kicker">{{ page.kicker }}</span><h1>{{ page.title }}</h1><p>{{ page.lead }}</p><div class="ind-stamp">IND<br><strong>02</strong></div></section>
+<section class="ind-command"><div class="ind-title"><span>PRODUCTION SYSTEM</span><h2>{{ page.heading }}</h2></div><div class="ind-body"><p>{{ page.body }}</p><div class="ind-metrics"><b>DESIGN</b><b>MAKE</b><b>SCALE</b></div></div></section>
+<section class="ind-machines">{% for item in page.items %}<article><span>MODULE 0{{ forloop.counter }}</span><h3>{{ item.title }}</h3><p>{{ item.text }}</p><i>↗</i></article>{% endfor %}</section>
+<section class="ind-footer">{% for link in page.links %}<a href="{{ link.url }}"><b>{{ link.title }}</b><span>{{ link.text }}</span></a>{% endfor %}<div><span>03 / NEXT MOVE</span><h2>{{ page.cta_title }}</h2><a href="{{ page.cta_url }}">{{ page.cta_label }} →</a></div></section>
+{% elif request.path == "/research/" %}
+<section class="lux-hero res-hero"><div class="res-index">R&D<br><strong>03</strong></div><div><span class="lux-kicker">{{ page.kicker }}</span><h1>{{ page.title }}</h1><p>{{ page.lead }}</p></div><div class="res-line"></div></section>
+<section class="res-editorial"><aside><span>METHOD</span><b>01—03</b><p>Source → Evidence → Finding → Report</p></aside><article><span class="res-label">THE RESEARCH CORE</span><h2>{{ page.heading }}</h2><p>{{ page.body }}</p></article></section>
+<section class="res-evidence">{% for item in page.items %}<article><span>0{{ forloop.counter }}</span><h3>{{ item.title }}</h3><p>{{ item.text }}</p></article>{% endfor %}</section>
+<section class="res-nav">{% for link in page.links %}<a href="{{ link.url }}"><span>{{ link.title }}</span><b>{{ link.text }}</b> ↗</a>{% endfor %}</section>
+<section class="res-cta"><span>RESEARCH TO VALUE</span><h2>{{ page.cta_title }}</h2><p>{{ page.cta_text }}</p><a href="{{ page.cta_url }}">{{ page.cta_label }}</a></section>
+{% elif request.path == "/knowledge/" %}
+<section class="lux-hero know-hero"><div class="know-glow"></div><span class="lux-kicker">{{ page.kicker }}</span><h1>{{ page.title }}</h1><p>{{ page.lead }}</p><div class="know-shelf">ENCYCLOPEDIA · 04</div></section>
+<section class="know-library"><aside><span>INDEX</span><strong>A—Z</strong><small>Provenance<br>Clusters<br>Pillars</small></aside><article><span class="know-label">KNOWLEDGE ARCHITECTURE</span><h2>{{ page.heading }}</h2><p>{{ page.body }}</p></article></section>
+<div class="know-books">{% for item in page.items %}<article><span>VOLUME 0{{ forloop.counter }}</span><h3>{{ item.title }}</h3><p>{{ item.text }}</p><a href="/research/">Explore ↗</a></article>{% endfor %}</div>
+<section class="know-links">{% for link in page.links %}<a href="{{ link.url }}"><small>{{ link.title }}</small><b>{{ link.text }}</b></a>{% endfor %}</section>
+<section class="know-cta"><div><span>BUILD THE LIBRARY</span><h2>{{ page.cta_title }}</h2><p>{{ page.cta_text }}</p></div><a href="{{ page.cta_url }}">{{ page.cta_label }} ↗</a></section>
+{% elif request.path == "/market/" %}
+<section class="lux-hero market-hero"><div class="market-glass"><span>LUXURY MARKET</span><strong>05</strong></div><div><span class="lux-kicker">{{ page.kicker }}</span><h1>{{ page.title }}</h1><p>{{ page.lead }}</p></div><div class="market-price">VALUE<br><b>∞</b></div></section>
+<section class="market-intro"><span>CURATED COMMERCE</span><h2>{{ page.heading }}</h2><p>{{ page.body }}</p></section>
+<section class="market-cards">{% for item in page.items %}<article><div class="market-num">0{{ forloop.counter }}</div><span>CURATED</span><h3>{{ item.title }}</h3><p>{{ item.text }}</p><a href="/contact/">Discover →</a></article>{% endfor %}</section>
+<section class="market-links">{% for link in page.links %}<a href="{{ link.url }}"><span>{{ link.title }}</span><small>{{ link.text }}</small><b>↗</b></a>{% endfor %}</section>
+<section class="market-cta"><span>PRIVATE ACCESS</span><h2>{{ page.cta_title }}</h2><p>{{ page.cta_text }}</p><a href="{{ page.cta_url }}">{{ page.cta_label }}</a></section>
+{% elif request.path == "/agents/" %}
+<section class="lux-hero agent-hero"><div class="agent-core"><i></i><i></i><i></i><b>AI</b></div><div><span class="lux-kicker">{{ page.kicker }}</span><h1>{{ page.title }}</h1><p>{{ page.lead }}</p></div><span class="agent-code">06 / CORE</span></section>
+<section class="agent-console"><div class="agent-aside"><span>MASTER AGENT</span><strong>ONLINE</strong><small>Governed execution<br>Owner approval<br>Audit trail</small></div><article><span>CONTROLLED INTELLIGENCE</span><h2>{{ page.heading }}</h2><p>{{ page.body }}</p></article></section>
+<section class="agent-modules">{% for item in page.items %}<article><span>CAPABILITY 0{{ forloop.counter }}</span><h3>{{ item.title }}</h3><p>{{ item.text }}</p><div class="agent-bar"></div></article>{% endfor %}</section>
+<section class="agent-links">{% for link in page.links %}<a href="{{ link.url }}"><b>{{ link.title }}</b><span>{{ link.text }}</span><em>→</em></a>{% endfor %}</section>
+<section class="agent-cta"><div><span>HUMAN IN THE LOOP</span><h2>{{ page.cta_title }}</h2><p>{{ page.cta_text }}</p></div><a href="{{ page.cta_url }}">{{ page.cta_label }} ↗</a></section>
+{% elif request.path == "/about/" %}
+<section class="lux-hero about-hero"><div class="about-number">07</div><div><span class="lux-kicker">{{ page.kicker }}</span><h1>{{ page.title }}</h1><p>{{ page.lead }}</p></div><div class="about-seal">Z<br>M</div></section>
+<section class="about-portal"><aside><span>COMPANY PORTAL</span><a href="/agriculture/">Agriculture</a><a href="/industry/">Industry</a><a href="/research/">Research</a><a href="/agents/">AI & Agents</a></aside><article><span>THE ECOSYSTEM</span><h2>{{ page.heading }}</h2><p>{{ page.body }}</p></article></section>
+<section class="about-pillars">{% for item in page.items %}<article><span>0{{ forloop.counter }}</span><h3>{{ item.title }}</h3><p>{{ item.text }}</p></article>{% endfor %}</section>
+<section class="about-links">{% for link in page.links %}<a href="{{ link.url }}"><small>{{ link.title }}</small><b>{{ link.text }}</b></a>{% endfor %}</section>
+<section class="about-cta"><span>PRIVATE COLLABORATION</span><h2>{{ page.cta_title }}</h2><p>{{ page.cta_text }}</p><a href="{{ page.cta_url }}">{{ page.cta_label }} →</a></section>
+{% else %}
+<section class="lux-hero contact-hero"><div class="contact-orbit"></div><span class="lux-kicker">{{ page.kicker }}</span><h1>{{ page.title }}</h1><p>{{ page.lead }}</p><div class="contact-tag">08 · OPEN</div></section>
+<section class="contact-intro"><span>OPEN CHANNEL</span><h2>{{ page.heading }}</h2><p>{{ page.body }}</p></section>
+<section class="contact-cards">{% for item in page.items %}<article><span>0{{ forloop.counter }}</span><h3>{{ item.title }}</h3><p>{{ item.text }}</p></article>{% endfor %}</section>
+<section class="contact-actions">{% for link in page.links %}<a href="{{ link.url }}"><small>{{ link.title }}</small><b>{{ link.text }}</b><span>↗</span></a>{% endfor %}</section>
+<section class="contact-cta"><span>LET'S BUILD</span><h2>{{ page.cta_title }}</h2><p>{{ page.cta_text }}</p><a href="{{ page.cta_url }}">{{ page.cta_label }} ↗</a></section>
+{% endif %}
 {% endblock %}
