@@ -7,6 +7,7 @@
 <meta name="description" content="{% block meta_description %}Zomorodmelal؛ پژوهش، دانش، کشاورزی، صنعت و هوش مصنوعی{% endblock %}">
 <title>{% block title %}Zomorodmelal — پژوهش، دانش و هوش مصنوعی{% endblock %}</title>
 <link rel="icon" type="image/svg+xml" href="{% static 'site/logo.svg' %}">
+{% if request.path == "/company/" or request.path|slice:":9" == "/company/" %}<link rel="canonical" href="https://zomorodmelal.ir{{ request.path }}">{% endif %}
 <link rel="stylesheet" href="{% static 'site/main.css' %}">
 <link rel="stylesheet" href="{% static 'site/luxury-pages.css' %}">
 {% block extra_css %}{% endblock %}
