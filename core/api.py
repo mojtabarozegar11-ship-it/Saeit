@@ -13,12 +13,12 @@ from django.db import models
 
 from .models import (
     Agent, AgentCapability, AgentTask, ApprovalRequest, ChatMessage, ChatSession, Evidence, Finding,
-    KnowledgeArticle, Order, Product, Report, ResearchProject, ResearchSource,
+    KnowledgeArticle, Order, OrderItem, Product, Report, ResearchProject, ResearchSource,
 )
 from .serializers import (
     AgentCapabilitySerializer, AgentSerializer, AgentTaskSerializer, ApprovalRequestSerializer, ChatMessageSerializer, ChatSessionSerializer,
     EvidenceSerializer, FindingSerializer, KnowledgeArticleSerializer,
-    OrderSerializer, ProductSerializer, ReportSerializer,
+    OrderSerializer, OrderItemSerializer, ProductSerializer, ReportSerializer,
     ResearchProjectSerializer, ResearchSourceSerializer,
 )
 
@@ -247,8 +247,55 @@ class ProductViewSet(viewsets.ModelViewSet):
         )
 
 
-class OrderViewSet(OwnerScopedMixin, vs(Order, OrderSerializer, InternalStaffWritePermission)):
+class OrderViewSet(OwnerScopedMixin, viewsets.ModelViewSet):
+    queryset = Order.objects.prefetch_related("items__product").all()
+    serializer_class = OrderSerializer
+    permission_classes = [InternalStaffWritePermission]
     owner_field = "customer"
+
+    def create(self, request, *args, **kwargs):
+        product_id = request.data.get("product_id")
+        quantity = request.data.get("quantity", 1)
+        try:
+            quantity = int(quantity)
+        except (TypeError, ValueError):
+            return Response({"detail": "quantity must be a positive integer."}, status=status.HTTP_400_BAD_REQUEST)
+        if quantity < 1:
+            return Response({"detail": "quantity must be a positive integer."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            product = Product.objects.select_for_update().get(pk=product_id, active=True, knowledge_article__published=True)
+        except (Product.DoesNotExist, TypeError, ValueError):
+            return Response({"detail": "Active, published-knowledge-backed product not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        from django.db import transaction
+        with transaction.atomic():
+            order = Order.objects.create(
+                customer=request.user,
+                status="pending",
+                total=product.price * quantity,
+                currency=product.currency,
+            )
+            item = OrderItem.objects.create(
+                order=order,
+                product=product,
+                quantity=quantity,
+                unit_price=product.price,
+                currency=product.currency,
+            )
+        return Response(
+            {
+                "order": OrderSerializer(order).data,
+                "item": OrderItemSerializer(item).data,
+                "status": "created",
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+    def update(self, request, *args, **kwargs):
+        return Response(
+            {"detail": "Orders are immutable through direct update; use controlled lifecycle actions."},
+            status=status.HTTP_405_METHOD_NOT_ALLOWED,
+        )
 
 
 class AgentTaskViewSet(viewsets.ReadOnlyModelViewSet):
