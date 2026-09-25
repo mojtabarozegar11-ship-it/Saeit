@@ -150,6 +150,24 @@ class ApprovalRequest(T):
     )
 
 
+class ApprovalGrant(T):
+    """Short-lived, scoped, one-time execution grant derived from an approved request."""
+    approval = models.ForeignKey(
+        ApprovalRequest, on_delete=models.CASCADE, related_name="grants"
+    )
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="approval_grants"
+    )
+    scope = models.JSONField(default=dict)
+    expires_at = models.DateTimeField()
+    used_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["approval", "expires_at"]),
+            models.Index(fields=["actor", "expires_at"]),
+        ]
+
 class AuditLog(T):
     actor_type = models.CharField(max_length=30)
     actor_id = models.CharField(max_length=100, blank=True)
