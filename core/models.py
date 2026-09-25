@@ -257,6 +257,28 @@ class LedgerEntry(T):
     metadata = models.JSONField(default=dict)
 
 
+class PaymentWebhookEvent(T):
+    provider = models.CharField(max_length=50)
+    event_id = models.CharField(max_length=200)
+    event_type = models.CharField(max_length=50)
+    payment_intent = models.ForeignKey(
+        PaymentIntent, on_delete=models.PROTECT,
+        related_name="webhook_events", null=True, blank=True
+    )
+    payload_hash = models.CharField(max_length=128)
+    status = models.CharField(max_length=30, default="received")
+    processed_at = models.DateTimeField(null=True, blank=True)
+    error = models.TextField(blank=True, default="")
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["provider", "event_id"],
+                name="unique_payment_webhook_event",
+            )
+        ]
+
+
 class ChatSession(T):
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,

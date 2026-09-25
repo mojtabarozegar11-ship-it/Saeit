@@ -1,6 +1,6 @@
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
-from rest_framework.permissions import BasePermission, IsAuthenticated, IsAuthenticatedOrReadOnly
+from rest_framework.permissions import AllowAny, BasePermission, IsAuthenticated, IsAuthenticatedOrReadOnly
 from rest_framework.response import Response
 
 from .approval import ApprovalService
@@ -9,11 +9,16 @@ from .task_runtime import TaskExecutionError, TaskRuntime
 
 
 from .orchestrator import MasterAgent
-from django.db import models
+from django.db import models, transaction
+from django.conf import settings
+from django.utils import timezone
+import hashlib
+import hmac
+import json
 
 from .models import (
-    Agent, AgentCapability, AgentTask, ApprovalRequest, ChatMessage, ChatSession, Evidence, Finding,
-    KnowledgeArticle, LedgerEntry, Order, OrderItem, PaymentIntent, Product, Report, ResearchProject, ResearchSource,
+    Agent, AgentCapability, AgentTask, ApprovalRequest, AuditLog, ChatMessage, ChatSession, Evidence, Finding,
+    KnowledgeArticle, LedgerEntry, Order, OrderItem, PaymentIntent, PaymentWebhookEvent, Product, Report, ResearchProject, ResearchSource,
 )
 from .serializers import (
     AgentCapabilitySerializer, AgentSerializer, AgentTaskSerializer, ApprovalRequestSerializer, ChatMessageSerializer, ChatSessionSerializer,
@@ -352,6 +357,119 @@ class PaymentIntentViewSet(OwnerScopedMixin, viewsets.ReadOnlyModelViewSet):
             },
             status=status.HTTP_202_ACCEPTED,
         )
+
+
+class PaymentWebhookViewSet(viewsets.ViewSet):
+    permission_classes = [AllowAny]
+
+    def create(self, request):
+        provider = str(request.headers.get("X-Payment-Provider", "")).strip()
+        event_id = str(request.headers.get("X-Payment-Event-Id", "")).strip()
+        signature = str(request.headers.get("X-Payment-Signature", "")).strip()
+        secret = str(getattr(settings, "PAYMENT_WEBHOOK_SECRET", "") or "")
+        if not provider or not event_id or not signature or not secret:
+            return Response({"detail": "Webhook authentication headers are required."}, status=status.HTTP_401_UNAUTHORIZED)
+
+        raw = request.body
+        expected = hmac.new(secret.encode("utf-8"), raw, hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(signature, expected):
+            return Response({"detail": "Invalid webhook signature."}, status=status.HTTP_401_UNAUTHORIZED)
+
+        try:
+            payload = json.loads(raw.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            return Response({"detail": "Webhook payload must be valid JSON."}, status=status.HTTP_400_BAD_REQUEST)
+
+        event_type = str(payload.get("event_type", "")).strip()
+        intent_id = payload.get("payment_intent_id")
+        provider_reference = str(payload.get("provider_reference", "")).strip()
+        if not event_type or not intent_id:
+            return Response({"detail": "event_type and payment_intent_id are required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        payload_hash = hashlib.sha256(raw).hexdigest()
+        with transaction.atomic():
+            existing = PaymentWebhookEvent.objects.select_for_update().filter(
+                provider=provider, event_id=event_id
+            ).first()
+            if existing:
+                return Response(
+                    {"status": existing.status, "event_id": event_id},
+                    status=status.HTTP_200_OK,
+                )
+
+            intent = PaymentIntent.objects.select_for_update().select_related("order").filter(
+                pk=intent_id, provider=provider
+            ).first()
+            if intent is None:
+                return Response({"detail": "Payment intent not found for provider."}, status=status.HTTP_404_NOT_FOUND)
+
+            event = PaymentWebhookEvent.objects.create(
+                provider=provider,
+                event_id=event_id,
+                event_type=event_type,
+                payment_intent=intent,
+                payload_hash=payload_hash,
+                status="received",
+            )
+
+            if event_type == "payment.succeeded":
+                amount = str(payload.get("amount", ""))
+                currency = str(payload.get("currency", "")).strip()
+                if amount != str(intent.amount) or currency != intent.currency:
+                    event.status = "rejected"
+                    event.error = "Amount or currency mismatch."
+                    event.processed_at = timezone.now()
+                    event.save(update_fields=["status", "error", "processed_at", "updated_at"])
+                    return Response({"detail": event.error}, status=status.HTTP_409_CONFLICT)
+
+                if intent.status not in {"ready_for_gateway", "gateway_pending"}:
+                    event.status = "rejected"
+                    event.error = "Payment intent is not in a settleable state."
+                    event.processed_at = timezone.now()
+                    event.save(update_fields=["status", "error", "processed_at", "updated_at"])
+                    return Response({"detail": event.error}, status=status.HTTP_409_CONFLICT)
+
+                intent.status = "succeeded"
+                intent.provider_reference = provider_reference
+                intent.save(update_fields=["status", "provider_reference", "updated_at"])
+
+                order = intent.order
+                order.status = "paid"
+                order.save(update_fields=["status", "updated_at"])
+
+                LedgerEntry.objects.get_or_create(
+                    reference=f"payment:{provider}:{event_id}",
+                    defaults={
+                        "order": order,
+                        "payment_intent": intent,
+                        "entry_type": "payment",
+                        "amount": intent.amount,
+                        "currency": intent.currency,
+                        "metadata": {"provider": provider, "event_id": event_id},
+                    },
+                )
+                event.status = "processed"
+            elif event_type == "payment.failed":
+                intent.status = "failed"
+                intent.provider_reference = provider_reference
+                intent.save(update_fields=["status", "provider_reference", "updated_at"])
+                event.status = "processed"
+            else:
+                event.status = "ignored"
+
+            event.processed_at = timezone.now()
+            event.save(update_fields=["status", "processed_at", "updated_at"])
+            AuditLog.objects.create(
+                actor_type="payment_provider",
+                actor_id=provider,
+                action="payment_webhook_processed",
+                target_type="PaymentIntent",
+                target_id=str(intent.pk),
+                after_state={"event_id": event_id, "event_type": event_type, "status": event.status},
+                trace_id=f"payment-webhook-{provider}-{event_id}",
+            )
+
+        return Response({"status": event.status, "event_id": event_id}, status=status.HTTP_200_OK)
 
 
 class AgentTaskViewSet(viewsets.ReadOnlyModelViewSet):
