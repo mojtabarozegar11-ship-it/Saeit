@@ -12,6 +12,7 @@ from .api import (
     KnowledgeArticleViewSet,
     OrderViewSet,
     PaymentIntentViewSet,
+    PaymentWebhookViewSet,
     ProductViewSet,
     ReportViewSet,
     ResearchProjectViewSet,
@@ -34,6 +35,7 @@ router.register("knowledge", KnowledgeArticleViewSet, basename="knowledge-articl
 router.register("products", ProductViewSet, basename="product")
 router.register("orders", OrderViewSet, basename="order")
 router.register("payments", PaymentIntentViewSet, basename="payment-intent")
+router.register("payment-webhooks", PaymentWebhookViewSet, basename="payment-webhook")
 
 urlpatterns = [
     path("health/", HealthView.as_view(), name="health"),
