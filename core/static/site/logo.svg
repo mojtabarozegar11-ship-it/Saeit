@@ -1,1 +1,46 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#fffdf8"/><stop offset=".55" stop-color="#efe4c8"/><stop offset="1" stop-color="#d9c083"/></linearGradient><linearGradient id="gold" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#f7df8a"/><stop offset=".5" stop-color="#c9a34e"/><stop offset="1" stop-color="#fff0a9"/></linearGradient></defs><circle cx="256" cy="256" r="238" fill="url(#g)" stroke="#c9a34e" stroke-width="12"/><circle cx="256" cy="256" r="207" fill="none" stroke="#e0c47b" stroke-width="3"/><path d="M119 175l-18-30 34-14 4-35 37 5 20-29 29 22 31-18 19 32 37-3 4 36 34 12-16 33-23-12-20-28-42-12-48 16-38 35z" fill="none" stroke="#b89449" stroke-width="10"/><path d="M183 260c40-34 82-55 132-65-17 32-48 59-83 71-20 7-36 5-49-6z" fill="#59652f" stroke="#c9a34e" stroke-width="7"/><path d="M282 420c29-71 59-127 105-184" fill="none" stroke="url(#gold)" stroke-width="13" stroke-linecap="round"/><path d="M281 420c55-11 105-6 146 16" fill="none" stroke="url(#gold)" stroke-width="12" stroke-linecap="round"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+<title id="title">نشان کامل Zomorodmelal</title>
+<desc id="desc">نشان دایره‌ای طلایی با چرخ‌دنده، برگ سبز و خوشه گندم طلایی</desc>
+<defs>
+ <radialGradient id="ivory" cx="42%" cy="35%" r="70%"><stop stop-color="#fffdf8"/><stop offset=".58" stop-color="#f0e8d6"/><stop offset="1" stop-color="#d8c79f"/></radialGradient>
+ <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#fff3ae"/><stop offset=".22" stop-color="#e7bd55"/><stop offset=".5" stop-color="#a87822"/><stop offset=".72" stop-color="#f7d978"/><stop offset="1" stop-color="#b8892f"/></linearGradient>
+ <linearGradient id="goldHi" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#fff9ce"/><stop offset=".5" stop-color="#d9a83e"/><stop offset="1" stop-color="#8d5e18"/></linearGradient>
+ <linearGradient id="green" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#7b8750"/><stop offset=".55" stop-color="#58622d"/><stop offset="1" stop-color="#343b1d"/></linearGradient>
+ <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="12" stdDeviation="12" flood-color="#6d5420" flood-opacity=".25"/></filter>
+ <path id="grain" d="M0 0 C-34 -32 -43 -76 -8 -108 C24 -76 35 -34 0 0Z"/>
+</defs>
+<circle cx="512" cy="512" r="476" fill="url(#ivory)" stroke="url(#gold)" stroke-width="22" filter="url(#shadow)"/>
+<circle cx="512" cy="512" r="438" fill="none" stroke="#fff4bc" stroke-width="7"/>
+<circle cx="512" cy="512" r="420" fill="none" stroke="#b78a31" stroke-width="4"/>
+<!-- gear -->
+<path d="M512 128h54l10 61c24 5 47 12 69 23l45-42 42 30-28 55c19 15 37 32 52 52l55-28 30 42-42 45c11 22 18 45 23 69l61 10v54l-61 10c-5 24-12 47-23 69l42 45-30 42-55-28c-15 19-33 37-52 52l28 55-42 30-45-42c-22 11-45 18-69 23l-10 61h-54l-10-61c-24-5-47-12-69-23l-45 42-42-30 28-55c-19-15-37-33-52-52l-55 28-30-42 42-45c-11-22-18-45-23-69l-61-10v-54l61-10c5-24 12-47 23-69l-42-45 30-42 55 28c15-19 33-37 52-52l-28-55 42-30 45 42c22-11 45-18 69-23l10-61z" fill="none" stroke="url(#goldHi)" stroke-width="13" stroke-linejoin="round"/>
+<circle cx="512" cy="512" r="184" fill="none" stroke="#a77b29" stroke-width="8"/>
+<!-- green leaf -->
+<path d="M290 474 C330 388 438 350 570 378 C618 388 666 414 704 451 C620 474 562 522 510 592 C435 583 354 548 290 474Z" fill="url(#green)" stroke="url(#gold)" stroke-width="12"/>
+<path d="M309 476 C405 466 499 451 616 414" fill="none" stroke="#e8d58a" stroke-width="10" stroke-linecap="round"/>
+<path d="M383 522 C446 486 510 458 588 430" fill="none" stroke="#d1c17a" stroke-width="6" opacity=".75"/>
+<!-- stems -->
+<path d="M492 858 C528 726 583 598 658 470" fill="none" stroke="url(#gold)" stroke-width="20" stroke-linecap="round"/>
+<path d="M512 852 C586 827 671 831 766 867" fill="none" stroke="url(#gold)" stroke-width="18" stroke-linecap="round"/>
+<path d="M506 846 C450 774 404 716 351 674" fill="none" stroke="url(#gold)" stroke-width="15" stroke-linecap="round"/>
+<!-- wheat head -->
+<g transform="translate(682 493) rotate(8)" fill="url(#gold)" stroke="#9b6c1f" stroke-width="7">
+ <use href="#grain" transform="translate(0 0) rotate(-5)"/>
+ <use href="#grain" transform="translate(28 -72) rotate(18)"/>
+ <use href="#grain" transform="translate(-2 -145) rotate(-12)"/>
+ <use href="#grain" transform="translate(28 -218) rotate(16)"/>
+ <use href="#grain" transform="translate(4 -290) rotate(-8)"/>
+ <use href="#grain" transform="translate(39 -362) rotate(15)"/>
+ <use href="#grain" transform="translate(-42 -55) rotate(-42)"/>
+ <use href="#grain" transform="translate(-43 -128) rotate(-46)"/>
+ <use href="#grain" transform="translate(-37 -202) rotate(-44)"/>
+ <use href="#grain" transform="translate(-24 -276) rotate(-38)"/>
+ <use href="#grain" transform="translate(70 -35) rotate(44)"/>
+ <use href="#grain" transform="translate(78 -108) rotate(46)"/>
+ <use href="#grain" transform="translate(80 -182) rotate(43)"/>
+ <use href="#grain" transform="translate(77 -256) rotate(39)"/>
+</g>
+<!-- foreground leaves -->
+<path d="M505 852 C489 788 494 731 526 680 C558 735 557 792 505 852Z" fill="url(#green)" stroke="url(#gold)" stroke-width="9"/>
+<path d="M545 827 C585 760 635 719 699 696 C686 764 630 814 545 827Z" fill="url(#green)" stroke="url(#gold)" stroke-width="9"/>
+</svg>
