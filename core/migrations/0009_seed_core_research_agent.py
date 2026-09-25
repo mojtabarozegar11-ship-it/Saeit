@@ -2,7 +2,7 @@ from django.db import migrations
 
 
 AGENT_CODE = "core_research"
-CAPABILITY_CODE = "research"
+CAPABILITY_CODE = "core_research"
 
 
 def seed_core_research_agent(apps, schema_editor):
@@ -12,8 +12,8 @@ def seed_core_research_agent(apps, schema_editor):
     capability, _ = AgentCapability.objects.get_or_create(
         code=CAPABILITY_CODE,
         defaults={
-            "name": "Research",
-            "description": "Controlled research and analysis capability.",
+            "name": "Core Research",
+            "description": "Controlled research and analysis capability for the core research agent.",
             "risk_level": "low",
             "active": True,
         },
