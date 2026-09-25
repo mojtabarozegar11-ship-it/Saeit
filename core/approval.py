@@ -1,6 +1,8 @@
 from django.db import transaction
+from django.utils import timezone
+from datetime import timedelta
 
-from .models import ApprovalRequest, AgentTask, AuditLog
+from .models import ApprovalRequest, AgentTask, ApprovalGrant, AuditLog
 
 
 class ApprovalService:
@@ -44,3 +46,58 @@ class ApprovalService:
             trace_id=f"approval-{approval.pk}",
         )
         return approval
+
+
+    @transaction.atomic
+    def issue_grant(self, approval_id, actor_id, scope=None, ttl_seconds=300):
+        """Convert an approved request into a short-lived, one-time scoped grant."""
+        approval = ApprovalRequest.objects.select_for_update().get(pk=approval_id)
+        if approval.status != "approved":
+            raise ValueError("Only an approved request can issue an execution grant")
+        if approval.requested_by_id != actor_id:
+            raise ValueError("Only the designated owner can issue an execution grant")
+        try:
+            ttl = max(30, min(int(ttl_seconds), 900))
+        except (TypeError, ValueError):
+            raise ValueError("ttl_seconds must be an integer")
+        now = timezone.now()
+        grant = ApprovalGrant.objects.create(
+            approval=approval,
+            actor_id=actor_id,
+            scope=dict(scope or {}),
+            expires_at=now + timedelta(seconds=ttl),
+        )
+        AuditLog.objects.create(
+            actor_type="owner",
+            actor_id=str(actor_id),
+            action="approval_grant_issued",
+            target_type="ApprovalGrant",
+            target_id=str(grant.pk),
+            after_state={"approval_id": approval_id, "scope": grant.scope, "expires_at": grant.expires_at.isoformat()},
+            trace_id=f"grant-{grant.pk}",
+        )
+        return grant
+
+    @transaction.atomic
+    def authorize_grant(self, grant_id, required_scope=None):
+        """Atomically consume a valid grant exactly once."""
+        grant = ApprovalGrant.objects.select_for_update().select_related("approval", "actor").get(pk=grant_id)
+        if grant.used_at is not None:
+            raise ValueError("Execution grant has already been used")
+        if grant.expires_at <= timezone.now():
+            raise ValueError("Execution grant has expired")
+        required = dict(required_scope or {})
+        if any(grant.scope.get(key) != value for key, value in required.items()):
+            raise ValueError("Execution grant scope mismatch")
+        grant.used_at = timezone.now()
+        grant.save(update_fields=["used_at", "updated_at"])
+        AuditLog.objects.create(
+            actor_type="owner",
+            actor_id=str(grant.actor_id),
+            action="approval_grant_consumed",
+            target_type="ApprovalGrant",
+            target_id=str(grant.pk),
+            after_state={"scope": grant.scope},
+            trace_id=f"grant-{grant.pk}",
+        )
+        return grant
