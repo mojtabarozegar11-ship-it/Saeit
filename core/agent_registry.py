@@ -4,6 +4,8 @@ from .services import normalize_risk
 
 RISK_ORDER = {"low": 0, "medium": 1, "high": 2, "critical": 3}
 
+DAILY_CONTENT_ACTION = "daily_content_generate"
+
 
 class AgentRegistry:
     """Capability-aware registry and execution-policy boundary."""
