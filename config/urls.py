@@ -9,7 +9,7 @@ from core.seo_views import site_search, robots_txt, sitemap_xml
 from core.weather_views import weather
 from core.academy_views import academy
 from core.services_views import services
-from core.company_content_views import company_gallery, company_content_feed
+from core.company_content_views import company_gallery, company_content_feed, company_portal_home
 
 urlpatterns = [
     path("", home, name="home"),
@@ -26,7 +26,7 @@ urlpatterns = [
     path("auctions/", auctions_home, name="auctions"),
     path("company-gallery/", company_gallery, name="company_gallery"),
     path("company-content/<slug:slug>/", company_content_feed, name="company_content_feed"),
-    path("company/", lambda request: platform_page(request, "company"), name="company"),
+    path("company/", lambda request: company_portal_home(request) if request.method == "POST" else platform_page(request, "company"), name="company"),
     path("company/<slug:slug>/", lambda request, slug: platform_page(request, "company"), name="company_detail"),
     path("about/", RedirectView.as_view(pattern_name="company", permanent=True), name="about"),
     path("contact/", RedirectView.as_view(pattern_name="company", permanent=True), name="contact"),

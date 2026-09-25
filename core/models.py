@@ -302,3 +302,5 @@ from .newsletter_models import NewsletterAgentLink, NewsletterPublication, Newsl
 from .blog_models import BlogDistributionPlan, BlogPage, BlogPublication, BlogTranslation, ExternalBlogTarget
 
 from .company_content_models import CompanyContentLink, CompanyGalleryMedia
+
+from .company_inquiry_models import CompanyInquiry

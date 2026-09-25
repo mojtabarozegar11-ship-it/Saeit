@@ -3,6 +3,7 @@ from django.shortcuts import render
 from django.utils import timezone
 from .company_content_models import CompanyContentLink, CompanyGalleryMedia
 from .newsletter_models import NewsletterStory
+from .company_inquiry_models import CompanyInquiry
 
 
 def company_gallery(request):
@@ -23,3 +24,22 @@ def company_content_feed(request, slug):
     if not links:
         raise Http404("Company content feed not found")
     return render(request, "core/company_content_feed.html", {"target": target, "links": links})
+
+
+def company_portal_home(request):
+    from django.shortcuts import redirect
+    from django.contrib import messages
+    if request.method == "POST":
+        required = ["kind", "name", "email", "subject", "message"]
+        if all(request.POST.get(x, "").strip() for x in required):
+            CompanyInquiry.objects.create(
+                kind=request.POST["kind"].strip(), name=request.POST["name"].strip(),
+                organization=request.POST.get("organization", "").strip(), email=request.POST["email"].strip(),
+                phone=request.POST.get("phone", "").strip(), subject=request.POST["subject"].strip(),
+                message=request.POST["message"].strip(),
+            )
+            messages.success(request, "درخواست شما با موفقیت ثبت شد و برای بررسی کارشناسی ارسال گردید.")
+        else:
+            messages.error(request, "لطفاً تمام فیلدهای الزامی را تکمیل کنید.")
+        return redirect("company")
+    return None

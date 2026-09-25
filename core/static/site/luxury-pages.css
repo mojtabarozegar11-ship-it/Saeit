@@ -370,3 +370,5 @@
 .company-detail .company-detail-operations{border-inline-start:2px solid var(--detail-accent)}
 .company-detail .company-detail-pillars article b{color:var(--detail-accent)}
 @media(max-width:700px){.company-value-grid{grid-template-columns:1fr}}
+
+.company-inquiry-form{display:grid;gap:1.2rem;margin-top:2rem}.company-inquiry-form>div{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem}.company-inquiry-form label{display:grid;gap:.45rem;color:#dce6e0;font-size:.8rem}.company-inquiry-form input,.company-inquiry-form select,.company-inquiry-form textarea{width:100%;box-sizing:border-box;padding:13px 14px;background:#0f2119;border:1px solid #315343;color:#fff;border-radius:8px;font:inherit}.company-inquiry-form button{justify-self:start;padding:14px 24px;border:1px solid #c8aa62;background:#c8aa62;color:#15241d;font-weight:800;border-radius:8px;cursor:pointer}.company-inquiry-form button:hover{filter:brightness(1.08)}@media(max-width:700px){.company-inquiry-form>div{grid-template-columns:1fr}.company-inquiry-form button{width:100%}}
