@@ -181,7 +181,70 @@ class KnowledgeArticleViewSet(viewsets.ModelViewSet):
         )
 
 
-ProductViewSet = vs(Product, ProductSerializer)
+class ProductViewSet(viewsets.ModelViewSet):
+    queryset = Product.objects.select_related("knowledge_article", "owner").all()
+    serializer_class = ProductSerializer
+    permission_classes = [StaffWritePermission]
+
+    def get_queryset(self):
+        user = self.request.user
+        if user.is_staff:
+            return self.queryset
+        return self.queryset.filter(active=True, knowledge_article__published=True)
+
+    def perform_create(self, serializer):
+        serializer.save(owner=self.request.user, active=False)
+
+    def update(self, request, *args, **kwargs):
+        product = self.get_object()
+        if "active" in request.data:
+            return Response(
+                {"detail": "Use the activate action; activation requires owner approval."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return super().update(request, *args, **kwargs)
+
+    @action(detail=True, methods=["post"], url_path="activate")
+    def activate(self, request, pk=None):
+        product = self.get_object()
+        if product.active:
+            return Response({"detail": "Product is already active."}, status=status.HTTP_409_CONFLICT)
+        if product.owner_id != request.user.pk:
+            return Response(
+                {"detail": "Only the designated product owner can request activation."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        if product.knowledge_article_id is None:
+            return Response(
+                {"detail": "Product must be mapped to a knowledge article before activation."},
+                status=status.HTTP_409_CONFLICT,
+            )
+        if not product.knowledge_article.published:
+            return Response(
+                {"detail": "Mapped knowledge article must be published before activation."},
+                status=status.HTTP_409_CONFLICT,
+            )
+        pending = ApprovalRequest.objects.filter(
+            action_type="activate_product",
+            target_type="Product",
+            target_id=str(product.pk),
+            status="pending",
+            requested_by=product.owner,
+        ).order_by("-created_at").first()
+        if pending is None:
+            pending = ApprovalRequest.objects.create(
+                action_type="activate_product",
+                target_type="Product",
+                target_id=str(product.pk),
+                reason="Owner approval required before activating a public product.",
+                risk="high",
+                requested_by=product.owner,
+            )
+        return Response(
+            {"status": "approval_required", "product": self.get_serializer(product).data,
+             "approval": ApprovalRequestSerializer(pending).data},
+            status=status.HTTP_202_ACCEPTED,
+        )
 
 
 class OrderViewSet(OwnerScopedMixin, vs(Order, OrderSerializer, InternalStaffWritePermission)):

@@ -196,6 +196,20 @@ class Product(T):
     price = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     currency = models.CharField(max_length=10, default="IRR")
     active = models.BooleanField(default=False)
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="products",
+        null=True,
+        blank=True,
+    )
+    knowledge_article = models.ForeignKey(
+        "KnowledgeArticle",
+        on_delete=models.PROTECT,
+        related_name="products",
+        null=True,
+        blank=True,
+    )
     metadata = models.JSONField(default=dict)
 
 

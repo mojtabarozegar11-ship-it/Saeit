@@ -2,7 +2,7 @@ from django.db import transaction
 from django.utils import timezone
 from datetime import timedelta
 
-from .models import ApprovalRequest, AgentTask, ApprovalGrant, AuditLog, KnowledgeArticle
+from .models import ApprovalRequest, AgentTask, ApprovalGrant, AuditLog, KnowledgeArticle, Product
 
 
 class ApprovalService:
@@ -42,6 +42,17 @@ class ApprovalService:
             if approved:
                 article.published = True
                 article.save(update_fields=["published", "updated_at"])
+        elif approval.target_type == "Product":
+            product = Product.objects.select_for_update().select_related("knowledge_article").filter(pk=approval.target_id).first()
+            if product is None:
+                raise ValueError("Product no longer exists")
+            if approved and product.active:
+                raise ValueError("Product is already active")
+            if approved:
+                if product.knowledge_article_id is None or not product.knowledge_article.published:
+                    raise ValueError("Product requires published knowledge before activation")
+                product.active = True
+                product.save(update_fields=["active", "updated_at"])
 
         AuditLog.objects.create(
             actor_type=str(actor_type or "owner")[:30],
@@ -53,6 +64,7 @@ class ApprovalService:
                 "approved": approved,
                 "task_status": getattr(task, "status", None),
                 "article_published": getattr(article, "published", None),
+                "product_active": getattr(locals().get("product"), "active", None),
             },
             trace_id=f"approval-{approval.pk}",
         )
