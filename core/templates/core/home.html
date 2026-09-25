@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>SAEIT — پلتفرم پژوهش و هوش مصنوعی</title>
+  <style>
+    :root{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#172018;background:#f5f7f3}
+    body{margin:0}.wrap{max-width:1080px;margin:auto;padding:28px 18px}
+    header{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:14px 0}
+    .brand{font-size:1.35rem;font-weight:800}.badge{padding:7px 11px;border-radius:999px;background:#e7efe3;font-size:.85rem}
+    .hero{margin-top:34px;padding:42px 28px;border-radius:24px;background:#fff;box-shadow:0 10px 30px #0000000d}
+    h1{font-size:clamp(2rem,6vw,4rem);line-height:1.08;margin:0 0 18px}
+    p{font-size:1.08rem;line-height:1.9;color:#4b554c}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px;margin-top:26px}
+    .card{background:#fff;border:1px solid #e3e8e1;border-radius:16px;padding:20px}
+    .card strong{display:block;margin-bottom:8px}.links{display:flex;flex-wrap:wrap;gap:10px;margin-top:28px}
+    a{color:inherit;text-decoration:none}.button{padding:11px 16px;border-radius:12px;background:#172018;color:#fff}
+    footer{padding:28px 0;color:#6b746c;font-size:.9rem}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="brand">SAEIT</div>
+      <div class="badge">نسخه {{ app_version }}</div>
+    </header>
+    <main>
+      <section class="hero">
+        <h1>پلتفرم پژوهش، دانش و عامل‌های هوش مصنوعی</h1>
+        <p>هسته تولیدی SAEIT برای مدیریت پژوهش، شواهد، دانش، گزارش‌ها، عامل‌ها، وظایف و فرایندهای تأیید طراحی شده است.</p>
+        <div class="links">
+          <a class="button" href="/api/health/">وضعیت سامانه</a>
+          <a class="button" href="/admin/">مدیریت</a>
+          <a class="button" href="/api/">API</a>
+        </div>
+      </section>
+      <section class="grid">
+        <div class="card"><strong>پژوهش</strong><span>پروژه، منبع، شواهد و یافته‌ها</span></div>
+        <div class="card"><strong>عامل‌ها</strong><span>مدیریت Agent و اجرای وظایف</span></div>
+        <div class="card"><strong>حاکمیت</strong><span>تأیید، ریسک و ثبت Audit</span></div>
+        <div class="card"><strong>دانش و محصول</strong><span>Knowledge، محصول و سفارش</span></div>
+      </section>
+    </main>
+    <footer>SAEIT Production Runtime</footer>
+  </div>
+</body>
+</html>
