@@ -38,7 +38,7 @@ def unseed_core_research_agent(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
-    dependencies = [("core", "0008_approval_and_runtime_hardening")]
+    dependencies = [("core", "0008_master_agent_chat")]
 
     operations = [
         migrations.RunPython(seed_core_research_agent, unseed_core_research_agent),
