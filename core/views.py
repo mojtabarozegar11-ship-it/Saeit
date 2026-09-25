@@ -1,4 +1,5 @@
 from django.conf import settings
+from .company_content_models import CompanyContentLink
 from django.db import connection
 from django.http import Http404
 from django.shortcuts import render
@@ -307,7 +308,7 @@ def platform_page(request, section):
                     "social": [("این صفحه برای چیست؟", f"پرونده کاربردی {title} برای طراحی، مشارکت، اجرا، مستندسازی و سنجش اثر اجتماعی."),("چه چیزی تحویل می‌دهد؟", "برنامه مستند، گزارش اجرا و ارزیابی اثر؛ بدون ادعای رویداد یا فعالیتی که سند آن ثبت نشده باشد."),("چه زمانی کاربرد دارد؟", "برای تعریف برنامه اجتماعی، مشارکت با نهادها و گزارش‌دهی شفاف اثر."),("داده موردنیاز برای به‌روزرسانی", "طرح، جامعه هدف، مجوز/هماهنگی، مستند اجرا، شاخص اثر و گزارش نهایی.")],
                     "future": [("این صفحه برای چیست؟", f"پرونده مطالعاتی {title} برای سنجش امکان تبدیل ایده به یک مسیر اجرایی در آینده."),("چه چیزی تحویل می‌دهد؟", "مطالعه امکان‌سنجی، مدل پیشنهادی، پایلوت و تصمیم توسعه؛ نه ادعای فعالیت فعلی."),("چه زمانی کاربرد دارد؟", "برای اولویت‌بندی سرمایه‌گذاری، طراحی پایلوت و بررسی مسیر توسعه آینده."),("داده موردنیاز برای به‌روزرسانی", "مطالعه بازار، برآورد اقتصادی، ریسک، الزامات قانونی، نتایج پایلوت و تصمیم مالک.")],
                 }
-                detail_context = {"title": title, "text": text, "meta": meta, "back": back, "item": item, "kind": kind, "index": index + 1, "count": count, "ops": ops, "chain_targets": chain_targets.get(kind, []), "value_blocks": value_blocks.get(kind, value_blocks["unit"])}
+                detail_context = {"title": title, "text": text, "meta": meta, "back": back, "item": item, "kind": kind, "index": index + 1, "count": count, "ops": ops, "chain_targets": chain_targets.get(kind, []), "value_blocks": value_blocks.get(kind, value_blocks["unit"]), "company_content_links": CompanyContentLink.objects.filter(target_path=request.path).select_related("newsletter_story", "knowledge_article")}
                 if index > 0:
                     detail_context["prev_url"] = f"/company/{prefix}-{index}/"
                     detail_context["prev_label"] = records[index - 1].get("title", "مورد قبلی") if isinstance(records[index - 1], dict) else str(records[index - 1])
@@ -331,4 +332,6 @@ def platform_page(request, section):
             {"department":"معاونت صنایع دستی و هنرهای سنتی","unit":"واحد صنایع دستی","outputs":"فرش، گوهرسنگ، جواهر و پرونده‌های اصالت","targets":[("صنایع دستی","/company/#company-crafts"),("محصولات","/company/#company-products"),("بازار","/market/")]},
             {"department":"معاونت مسئولیت اجتماعی و فرهنگی","unit":"واحد مسئولیت اجتماعی","outputs":"برنامه‌های مذهبی، فرهنگی و ورزشی و گزارش اثر اجتماعی","targets":[("مسئولیت اجتماعی","/company/#company-social-responsibility"),("پروژه‌ها","/company/#company-projects"),("همکاری","/company/#company-collaboration")]},
         ]
+    if section == "company":
+        page["company_content_links"] = CompanyContentLink.objects.filter(target_path="/company/").select_related("newsletter_story", "knowledge_article")
     return render(request, "core/platform_page.html", {"page": page})

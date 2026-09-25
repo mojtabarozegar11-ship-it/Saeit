@@ -57,6 +57,7 @@ class NewsletterSubmission(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     requested_publish_at = models.DateTimeField(null=True, blank=True)
     occasion_code = models.CharField(max_length=80, blank=True)
+    company_target_paths = models.TextField(blank=True, help_text="One or more Company Portal paths, one per line, e.g. /company/product-1/")
     processed_at = models.DateTimeField(null=True, blank=True)
     generated_story = models.OneToOneField("NewsletterStory", on_delete=models.SET_NULL, null=True, blank=True, related_name="source_submission")
 

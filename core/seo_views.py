@@ -61,7 +61,7 @@ def robots_txt(request):
 
 @require_GET
 def sitemap_xml(request):
-    urls = ["/", "/company/", "/company/executive/", "/research/", "/knowledge/", "/market/", "/agriculture/", "/industry/", "/agents/", "/newsletter/", "/newsletter/archive/", "/store/", "/auctions/"]
+    urls = ["/", "/company/", "/company/executive/", "/research/", "/knowledge/", "/market/", "/agriculture/", "/industry/", "/agents/", "/newsletter/", "/newsletter/archive/", "/store/", "/auctions/", "/company-gallery/"]
     company_ranges = {"department": 9, "unit": 9, "genetics": 12, "product": 29, "statutory": 18, "craft": 2, "project": 5, "channel": 4, "social": 3, "future": 4}
     for kind, count in company_ranges.items():
         urls.extend(f"/company/{kind}-{i}/" for i in range(1, count + 1))

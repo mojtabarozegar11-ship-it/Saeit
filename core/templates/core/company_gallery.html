@@ -1,0 +1,7 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}گالری شرکت | تصاویر و ویدئوها{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'site/company-gallery.css' %}">{% endblock %}
+{% block content %}
+<main class="company-gallery"><header><span>COMPANY / MEDIA ARCHIVE</span><h1>گالری شرکت</h1><p>آرشیو تصویری و ویدئویی مستند شرکت؛ رسانه‌ها می‌توانند به پرونده‌های پژوهشی، پروژه‌ها و زنجیره‌های تخصصی شرکت متصل شوند.</p><nav><a href="/company-gallery/">همه</a><a href="?type=image">تصاویر</a><a href="?type=video">ویدئوها</a></nav></header><section class="gallery-grid">{% for item in media %}<article>{% if item.media_type == 'image' and item.image %}<img src="{{ item.image.url }}" alt="{{ item.title }}" loading="lazy">{% elif item.media_type == 'video' and item.video %}<video controls preload="metadata"><source src="{{ item.video.url }}"></video>{% endif %}<div><small>{{ item.research_domain|default:'COMPANY MEDIA' }}</small><h2>{{ item.title }}</h2>{% if item.description %}<p>{{ item.description }}</p>{% endif %}{% if item.target_path %}<a href="{{ item.target_path }}">پرونده مرتبط ↗</a>{% endif %}</div></article>{% empty %}<div class="gallery-empty"><h2>آرشیو رسانه‌ای آماده توسعه است</h2><p>هنوز رسانه‌ای برای انتشار عمومی ثبت نشده است. پس از ثبت و تأیید مالک، تصاویر و ویدئوها در این آرشیو و پرونده‌های مرتبط نمایش داده می‌شوند.</p></div>{% endfor %}</section></main>
+{% endblock %}

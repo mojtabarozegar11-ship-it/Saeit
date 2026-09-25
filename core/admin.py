@@ -142,3 +142,18 @@ admin.site.register([NewsletterAgentLink, NewsletterOccasion, NewsletterPublicat
 
 from .blog_models import BlogDistributionPlan, BlogPage, BlogPublication, BlogTranslation, ExternalBlogTarget
 admin.site.register([BlogDistributionPlan, BlogPage, BlogPublication, BlogTranslation, ExternalBlogTarget])
+
+from .company_content_models import CompanyContentLink, CompanyGalleryMedia
+
+@admin.register(CompanyContentLink)
+class CompanyContentLinkAdmin(admin.ModelAdmin):
+    list_display = ("content_type", "relation", "target_path", "newsletter_story", "knowledge_article", "created_at")
+    list_filter = ("content_type", "relation")
+    search_fields = ("target_path", "note")
+
+@admin.register(CompanyGalleryMedia)
+class CompanyGalleryMediaAdmin(admin.ModelAdmin):
+    list_display = ("title", "media_type", "research_domain", "target_path", "published", "published_at")
+    list_filter = ("media_type", "published", "research_domain")
+    search_fields = ("title", "description", "target_path", "research_domain", "project_label")
+    fields = ("media_type", "title", "description", "image", "video", "target_path", "newsletter_story", "project_label", "research_domain", "tags", "published", "published_at")

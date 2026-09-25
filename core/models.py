@@ -300,3 +300,5 @@ class ChatMessage(T):
 from .newsletter_models import NewsletterAgentLink, NewsletterPublication, NewsletterSchedule, NewsletterSource, NewsletterStory
 
 from .blog_models import BlogDistributionPlan, BlogPage, BlogPublication, BlogTranslation, ExternalBlogTarget
+
+from .company_content_models import CompanyContentLink, CompanyGalleryMedia

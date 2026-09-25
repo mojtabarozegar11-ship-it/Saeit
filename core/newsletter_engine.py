@@ -71,6 +71,15 @@ def process_submission(submission):
         story.video.name = submission.video.name
     story.save(update_fields=["image", "video", "updated_at"])
 
+    from .company_content_models import CompanyContentLink
+    target_paths = [p.strip() for p in re.split(r"[\n,]+", submission.company_target_paths or "") if p.strip()]
+    target_paths = [p for p in target_paths if p.startswith("/company/")]
+    for target_path in dict.fromkeys(target_paths):
+        CompanyContentLink.objects.get_or_create(
+            content_type="newsletter", newsletter_story=story, target_path=target_path,
+            defaults={"relation": "primary" if target_path == target_paths[0] else "related"},
+        )
+
     submission.status = "drafted"
     submission.processed_at = timezone.now()
     submission.generated_story = story
