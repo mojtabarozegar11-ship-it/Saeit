@@ -2,7 +2,7 @@ from rest_framework import serializers
 
 from .models import (
     Agent, AgentCapability, AgentTask, ApprovalRequest, ChatMessage, ChatSession, Evidence, Finding,
-    KnowledgeArticle, LedgerEntry, Order, OrderItem, PaymentIntent, Product, Report, ResearchProject, ResearchSource,
+    KnowledgeArticle, LedgerEntry, Order, OrderItem, PaymentIntent, PaymentWebhookEvent, Product, Report, ResearchProject, ResearchSource,
 )
 
 
@@ -34,6 +34,7 @@ OrderSerializer = make(Order)
 OrderItemSerializer = make(OrderItem)
 PaymentIntentSerializer = make(PaymentIntent)
 LedgerEntrySerializer = make(LedgerEntry)
+PaymentWebhookEventSerializer = make(PaymentWebhookEvent)
 
 
 class EvidenceSerializer(serializers.ModelSerializer):
