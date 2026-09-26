@@ -1,7 +1,6 @@
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.test import TestCase
-from django.contrib.auth import get_user_model
 
 from core.education_quality import audit_course, publication_ready
 from core.models import (
@@ -162,4 +161,35 @@ class EducationPlatformTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "دوره رایگان دوم")
         self.assertNotContains(response, "دوره آزمایشی")
+
+    def test_quality_content_seed_keeps_courses_unpublished(self):
+        school_track = EducationTrack.objects.create(key="school", title="مدرسه", description="مسیر مدرسه", level="test")
+        self.course.track = school_track
+        self.course.active = False
+        self.course.approved = False
+        self.course.quality_status = "draft"
+        self.course.save(update_fields=["track", "active", "approved", "quality_status"])
+        call_command("education_seed_quality_content")
+        self.course.refresh_from_db()
+        self.assertFalse(self.course.active)
+        self.assertFalse(self.course.approved)
+        self.assertEqual(self.course.quality_status, "draft")
+        self.assertTrue(self.course.lessons.filter(active=True).exists())
+        self.assertTrue(self.course.resources.filter(active=True, approved=True).exists())
+        self.assertTrue(self.course.presentations.filter(active=True, approved=True).exists())
+
+    def test_quality_content_seed_is_idempotent(self):
+        call_command("education_seed_quality_content")
+        first = (
+            self.course.lessons.count(),
+            self.course.resources.count(),
+            self.course.presentations.count(),
+        )
+        call_command("education_seed_quality_content")
+        second = (
+            self.course.lessons.count(),
+            self.course.resources.count(),
+            self.course.presentations.count(),
+        )
+        self.assertEqual(first, second)
 
