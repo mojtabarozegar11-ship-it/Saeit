@@ -1,14 +1,25 @@
 {% extends "base.html" %}
 {% load static %}
-{% block title %}خدمات — Zomorodmelal{% endblock %}
+{% block title %}Zomorodmelal — خدمات و اکوسیستم یکپارچه{% endblock %}
 {% block body_class %}services-page{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'site/home-luxury.css' %}">{% endblock %}
 {% block content %}
 <section class="services-hero">
-  <div class="services-index">SERVICES<br><strong>06</strong></div>
-  <div class="services-copy"><span>VALUE · KNOWLEDGE · EXECUTION</span><h1>خدماتی برای ساختن<br><em>زنجیره‌ای کامل</em></h1><p>از پژوهش و داده تا آموزش، فناوری، محصول و بازار؛ هر خدمت یک مسیر مستقل با خروجی روشن است.</p></div>
+  <div class="services-index">SERVICES<br><strong>11</strong></div>
+  <div class="services-copy"><span>SUPER PLATFORM · SERVICES</span><h1>یک درگاه برای<br><em>همه خدمات</em></h1><p>صفحه اصلی، هاب خدماتی پلتفرم است؛ از زنجیره‌های کشاورزی، صنعت و بازار تا آب‌وهوا، اقتصاد و استودیو.</p></div>
 </section>
 <section class="services-grid">
-  {% for item in items %}<article><div class="services-no">{{ item.no }}</div><span>{{ item.meta }}</span><h2>{{ item.title }}</h2><p>{{ item.text }}</p><a href="/contact/">شروع همکاری ↗</a></article>{% endfor %}
+  {% for item in items %}<article class="services-core-card"><div class="services-no">{{ item.no }}</div><span>{{ item.meta }}</span><h2>{{ item.title }}</h2><p>{{ item.text }}</p><a href="{{ item.url }}">ورود به خدمت ↗</a></article>{% endfor %}
+  <article class="services-domain services-domain-agriculture"><div class="services-no">06</div><span>AGRICULTURE · VALUE CHAIN</span><h2>کشاورزی</h2><p>از پژوهش و نهاده تا کشت، تولید، فرآوری، بسته‌بندی و زنجیره ارزش.</p><a href="/agriculture/">ورود به کشاورزی ↗</a></article>
+  <article class="services-domain services-domain-industry"><div class="services-no">07</div><span>INDUSTRY · PRODUCTION</span><h2>صنعت</h2><p>تولید، فرآوری، فناوری، زیرساخت و توسعه صنعتی در مسیرهای تخصصی.</p><a href="/industry/">ورود به صنعت ↗</a></article>
+  <article class="services-domain services-domain-market"><div class="services-no">08</div><span>MARKET · COMMERCE</span><h2>بازار</h2><p>محصول، سفارش، فروش، مزایده و اتصال زنجیره‌های شرکت به بازار.</p><a href="/market/">ورود به بازار ↗</a></article>
+  <article class="services-domain"><div class="services-no">09</div><span>WEATHER · DATA</span><h2>آب‌وهوا</h2><p>داده و اطلاعات آب‌وهوایی برای تصمیم‌گیری و خدمات کاربردی.</p><a href="/weather/">ورود به آب‌وهوا ↗</a></article>
+  <article class="services-domain"><div class="services-no">10</div><span>ECONOMY · INSIGHT</span><h2>اقتصاد</h2><p>اطلاعات، تحلیل و ابزارهای اقتصادی در یک مسیر مستقل خدماتی.</p><a href="/economy/">ورود به اقتصاد ↗</a></article>
+  <article class="services-domain"><div class="services-no">11</div><span>STUDIO · GAMES & ANIMATION</span><h2>استودیو</h2><p>بازی، انیمیشن و محصولات سرگرمی دیجیتال در یک فضای تخصصی.</p><a href="/studio/">ورود به استودیو ↗</a></article>
+  <article class="services-domain services-domain-platform"><div class="services-no">12</div><span>ACADEMY · LEARNING</span><h2>آکادمی</h2><p>آموزش و مهارت برای ورود، رشد و استفاده حرفه‌ای از اکوسیستم خدماتی.</p><a href="/academy/">ورود به آکادمی ↗</a></article>
+  <article class="services-domain services-domain-platform"><div class="services-no">13</div><span>AI · INTELLIGENCE</span><h2>هوش مصنوعی</h2><p>ابزارها و عامل‌های هوشمند برای پژوهش، تحلیل و اجرای کنترل‌شده.</p><a href="/agents/">ورود به هوش مصنوعی ↗</a></article>
+  <article class="services-domain services-domain-platform"><div class="services-no">14</div><span>KNOWLEDGE · ENCYCLOPEDIA</span><h2>دانشنامه</h2><p>مرجع ساختاریافته دانش، مفاهیم و محتوای قابل استفاده پلتفرم.</p><a href="/knowledge/">ورود به دانشنامه ↗</a></article>
 </section>
-<section class="services-cta"><span>ONE PLATFORM · MANY CAPABILITIES</span><h2>مسئله را تعریف کنید؛ مسیر اجرا را طراحی می‌کنیم.</h2><a href="/contact/">درخواست همکاری</a></section>
+<section class="services-map" aria-label="معماری خدمات"><div><span>PLATFORM MAP</span><h2>یک هاب، چند مسیر مستقل</h2><p>کاربر از صفحه اصلی وارد خدمات می‌شود و بدون خروج از معماری پلتفرم، به حوزه تخصصی موردنیاز خود می‌رسد.</p></div><div class="services-map-flow"><b>خدمات</b><i>→</i><span>کشاورزی</span><span>صنعت</span><span>بازار</span><i>→</i><span>آب‌وهوا</span><span>اقتصاد</span><span>استودیو</span></div></section>
+<section class="services-cta"><span>ONE PLATFORM · MANY CAPABILITIES</span><h2>صفحه اصلی؛ یک درگاه برای همه خدمات و زنجیره‌ها.</h2><p>کشاورزی، صنعت و بازار در خدمات یکپارچه شده‌اند و آب‌وهوا، اقتصاد و استودیو نیز به‌عنوان مسیرهای مستقل این پلتفرم از همین درگاه قابل دسترسی‌اند.</p><a href="/company/">شرکت ↗</a></section>
 {% endblock %}

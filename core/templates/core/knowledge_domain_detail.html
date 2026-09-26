@@ -1,0 +1,10 @@
+{% extends 'base.html' %}
+{% block title %}{{ domain.title }} — حوزه دانش{% endblock %}
+{% block meta_description %}{{ meta }}{% endblock %}
+{% block page_head %}<script type="application/ld+json">{"@context":"https://schema.org","@type":"CollectionPage","name":"{{ domain.title|escapejs }}","description":"{{ meta|escapejs }}","url":"https://zomorodmelal.ir/knowledge/domain/{{ domain.code }}/","inLanguage":"fa","isAccessibleForFree":true}</script>{% endblock %}
+{% block content %}
+<main class="knowledge-internal knowledge-domain-page">
+<section class="knowledge-internal-hero"><div><span>ENCYCLOPEDIA / DOMAIN</span><h1>{{ domain.title }}</h1><p>{{ domain.scientific_scope }}</p></div><aside><small>DOMAIN CODE</small><strong>{{ domain.code }}</strong><small>PRIORITY</small><strong>{{ domain.priority }}</strong><small>ACCESS</small><strong>رایگان</strong></aside></section>
+<section class="knowledge-internal-body"><div class="knowledge-internal-main"><span>DOMAIN MAP</span><h2>نقشه این حوزه</h2><p>این صفحه نقطه ورود حوزه تخصصی است و کتاب‌ها و مقالات منتشرشده مرتبط را در یک معماری واحد جمع می‌کند.</p><div class="knowledge-card-grid">{% for book in books %}<a href="/knowledge/book/{{ book.code }}/"><small>BOOK / {{ book.get_status_display }}</small><strong>{{ book.title }}</strong><span>{{ book.generated_sections }} / {{ book.target_sections }} بخش</span></a>{% empty %}<div class="knowledge-empty">هنوز کتابی مستقیماً به این حوزه متصل نشده است.</div>{% endfor %}</div><h3 class="knowledge-subheading">مقالات منتشرشده مرتبط</h3><div class="knowledge-card-grid">{% for article in articles %}<a href="/knowledge/article/{{ article.slug }}/"><small>ARTICLE / V{{ article.version }}</small><strong>{{ article.title }}</strong><span>مشاهده مقاله ↗</span></a>{% empty %}<div class="knowledge-empty">هنوز مقاله منتشرشده‌ای برای این حوزه ثبت نشده است.</div>{% endfor %}</div></div><aside class="knowledge-internal-side"><a href="/knowledge/">← بازگشت به دانشنامه</a><a href="/research/">مرکز پژوهش ↗</a><a href="/company/">پورتال شرکت ↗</a><h3>چارچوب مطالعه</h3><p>تعریف → منابع → شواهد → تحلیل → بازبینی → انتشار</p></aside></section>
+</main>
+{% endblock %}

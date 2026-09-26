@@ -1,0 +1,10 @@
+{% extends 'base.html' %}
+{% block title %}{{ article.title }} — دانشنامه{% endblock %}
+{% block meta_description %}{{ meta }}{% endblock %}
+{% block page_head %}<script type="application/ld+json">{"@context":"https://schema.org","@type":"Article","headline":"{{ article.title|escapejs }}","description":"{{ meta|escapejs }}","url":"https://zomorodmelal.ir/knowledge/article/{{ article.slug }}/","inLanguage":"fa","isAccessibleForFree":true}</script>{% endblock %}
+{% block content %}
+<main class="knowledge-internal knowledge-article-page">
+<section class="knowledge-internal-hero"><div><span>KNOWLEDGE / PUBLISHED ARTICLE</span><h1>{{ article.title }}</h1><p>نسخه {{ article.version }} · محتوای منتشرشده دانشنامه</p></div><aside><small>UPDATED</small><strong>{{ article.updated_at|date:"Y/m/d" }}</strong><small>ACCESS</small><strong>رایگان</strong><small>PROVENANCE</small><strong>{% if article.source_report %}گزارش پژوهشی{% else %}منشأ ثبت نشده{% endif %}</strong></aside></section>
+<section class="knowledge-internal-body"><article class="knowledge-article-content">{{ article.content|linebreaks }}</article><aside class="knowledge-internal-side"><a href="/knowledge/">← بازگشت به دانشنامه</a>{% if article.source_report %}<a href="/research/">مشاهده مسیر پژوهش ↗</a>{% endif %}<h3>مقالات مرتبط</h3>{% for item in related %}<a href="/knowledge/article/{{ item.slug }}/"><strong>{{ item.title }}</strong><small>نسخه {{ item.version }}</small></a>{% empty %}<p>مقاله مرتبط منتشرشده‌ای وجود ندارد.</p>{% endfor %}</aside></section>
+</main>
+{% endblock %}

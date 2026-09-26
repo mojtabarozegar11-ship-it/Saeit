@@ -10,14 +10,20 @@ from core.weather_views import weather
 from core.academy_views import academy
 from core.services_views import services
 from core.company_content_views import company_gallery, company_content_feed, company_portal_home
+from core.knowledge_views import knowledge_article_detail, knowledge_book_detail, knowledge_domain_detail
 
 urlpatterns = [
-    path("", home, name="home"),
+    path("", services, name="home"),
     path("agriculture/", lambda request: platform_page(request, "agriculture"), name="agriculture"),
     path("industry/", lambda request: platform_page(request, "industry"), name="industry"),
     path("research/", lambda request: platform_page(request, "research"), name="research"),
     path("knowledge/", lambda request: platform_page(request, "knowledge"), name="knowledge"),
+    path("knowledge/article/<slug:slug>/", knowledge_article_detail, name="knowledge_article_detail"),
+    path("knowledge/book/<slug:slug>/", knowledge_book_detail, name="knowledge_book_detail"),
+    path("knowledge/domain/<slug:slug>/", knowledge_domain_detail, name="knowledge_domain_detail"),
     path("market/", lambda request: platform_page(request, "market"), name="market"),
+    path("economy/", lambda request: platform_page(request, "economy"), name="economy"),
+    path("studio/", lambda request: platform_page(request, "studio"), name="studio"),
     path("agents/", lambda request: platform_page(request, "agents"), name="agents"),
     path("search/", site_search, name="site_search"),
     path("robots.txt", robots_txt, name="robots_txt"),
@@ -41,4 +47,4 @@ from core.newsletter_views import newsletter_home, newsletter_archive, newslette
 urlpatterns += [path("newsletter/", newsletter_home, name="newsletter"), path("newsletter/archive/", newsletter_archive, name="newsletter_archive"), path("newsletter/<slug:slug>/", newsletter_detail, name="newsletter_detail")]
 
 from core.blog_views import blog_home, blog_page
-urlpatterns += [path("blog/", blog_home, name="blog"), path("blog/<slug:slug>/", blog_page, name="blog_page")]
+urlpatterns += [path("blog/", blog_home, name="blog"), path("blog/<path:slug>/", blog_page, name="blog_page")]

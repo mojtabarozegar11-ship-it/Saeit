@@ -6,7 +6,9 @@ from django.utils import timezone
 from django.views.decorators.http import require_GET
 
 from .models import KnowledgeArticle, Product
+from .knowledge_agent_models import KnowledgeBook, KnowledgeDomain
 from .newsletter_models import NewsletterStory
+from .blog_models import BlogPage
 
 
 def _norm(value):
@@ -42,7 +44,13 @@ def site_search(request):
             results.append((_score(q, x.title, x.summary, x.body), {"type": "خبر", "title": x.title, "summary": x.summary, "url": f"/newsletter/{x.slug}/"}))
         articles = KnowledgeArticle.objects.filter(published=True).filter(Q(title__icontains=q) | Q(content__icontains=q))[:50]
         for x in articles:
-            results.append((_score(q, x.title, x.content), {"type": "دانش", "title": x.title, "summary": x.content[:280], "url": "/knowledge/"}))
+            results.append((_score(q, x.title, x.content), {"type": "دانش", "title": x.title, "summary": x.content[:280], "url": f"/knowledge/article/{x.slug}/"}))
+        books = KnowledgeBook.objects.filter(Q(title__icontains=q) | Q(domain__icontains=q) | Q(objective__icontains=q))[:50]
+        for x in books:
+            results.append((_score(q, x.title, x.domain, x.objective), {"type": "کتاب", "title": x.title, "summary": x.objective[:280], "url": f"/knowledge/book/{x.code}/"}))
+        domains = KnowledgeDomain.objects.filter(active=True).filter(Q(title__icontains=q) | Q(scientific_scope__icontains=q))[:50]
+        for x in domains:
+            results.append((_score(q, x.title, x.scientific_scope), {"type": "حوزه دانش", "title": x.title, "summary": x.scientific_scope[:280], "url": f"/knowledge/domain/{x.code}/"}))
         products = Product.objects.filter(active=True).filter(Q(title__icontains=q) | Q(product_type__icontains=q))[:50]
         for x in products:
             results.append((_score(q, x.title, x.product_type), {"type": "فروشگاه", "title": x.title, "summary": f"{x.product_type} · {x.price} {x.currency}", "url": "/store/"}))
@@ -61,12 +69,19 @@ def robots_txt(request):
 
 @require_GET
 def sitemap_xml(request):
-    urls = ["/", "/company/", "/company/executive/", "/research/", "/knowledge/", "/market/", "/agriculture/", "/industry/", "/agents/", "/newsletter/", "/newsletter/archive/", "/store/", "/auctions/", "/company-gallery/"]
-    company_ranges = {"department": 9, "unit": 9, "genetics": 12, "product": 29, "statutory": 18, "craft": 2, "project": 5, "channel": 4, "social": 3, "future": 4}
+    urls = ["/", "/company/", "/company/executive/", "/research/", "/knowledge/", "/market/", "/agriculture/", "/industry/", "/agents/", "/newsletter/", "/newsletter/archive/", "/blog/", "/store/", "/auctions/", "/company-gallery/"]
+    urls += [f"/blog/{code}/" for code in BlogPage.objects.filter(active=True).values_list("code", flat=True)]
+    company_ranges = {"department": 9, "unit": 9, "genetics": 12, "product": 55, "statutory": 18, "craft": 2, "project": 5, "channel": 4, "social": 3, "future": 4}
     for kind, count in company_ranges.items():
         urls.extend(f"/company/{kind}-{i}/" for i in range(1, count + 1))
     stories = NewsletterStory.objects.filter(status="published", published_at__lte=timezone.now()).values_list("slug", flat=True)
     urls += [f"/newsletter/{slug}/" for slug in stories]
+    articles = KnowledgeArticle.objects.filter(published=True).values_list("slug", flat=True)
+    urls += [f"/knowledge/article/{slug}/" for slug in articles]
+    books = KnowledgeBook.objects.values_list("code", flat=True)
+    urls += [f"/knowledge/book/{code}/" for code in books]
+    domains = KnowledgeDomain.objects.filter(active=True).values_list("code", flat=True)
+    urls += [f"/knowledge/domain/{code}/" for code in domains]
     items = "".join(f"<url><loc>https://zomorodmelal.ir{u}</loc></url>" for u in urls)
     return HttpResponse(f'<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{items}</urlset>', content_type="application/xml")
 

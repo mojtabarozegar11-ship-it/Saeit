@@ -106,10 +106,10 @@ from .newsletter_models import NewsletterAgentLink, NewsletterOccasion, Newslett
 @admin.register(NewsletterSubmission)
 class NewsletterSubmissionAdmin(ModelAdmin):
     list_display = ("subject", "status", "created_by", "created_at", "generated_story")
+    fieldsets = (("ارسال به ایجنت اصلی محتوا", {"fields": ("subject", "body", "image", "video", "company_unit_title", "company_unit_slug", "company_activity_status", "company_project_title", "company_target_paths", "requested_publish_at")}), ("وضعیت پردازش", {"fields": ("status", "created_by", "generated_story", "created_at", "processed_at")}))
     list_filter = ("status", "created_at")
     search_fields = ("subject", "body")
     readonly_fields = ("status", "processed_at", "generated_story", "created_at")
-    fields = ("subject", "body", "image", "video", "requested_publish_at", "occasion_code", "status", "created_by", "generated_story", "created_at", "processed_at")
 
     def save_model(self, request, obj, form, change):
         if not change:
@@ -128,7 +128,7 @@ class NewsletterStoryAdmin(ModelAdmin):
     date_hierarchy = "published_at"
     fieldsets = (
         ("محتوا", {"fields": ("agent", "story_type", "title", "summary", "body", "seo_keywords", "image", "video")}),
-        ("زمان‌بندی و هویت", {"fields": ("author_name", "event_date", "company_activity_kind", "manager_action", "published_at", "status")}),
+        ("زمان‌بندی و هویت", {"fields": ("author_name", "event_date", "company_activity_kind", "manager_action", "company_unit_title", "company_unit_slug", "company_activity_status", "company_project_title", "company_activity_content", "published_at", "status")}),
         ("منبع و کنترل تکرار", {"fields": ("source", "fingerprint", "source_fingerprint")}),
     )
     readonly_fields = ("fingerprint", "source_fingerprint")
@@ -139,6 +139,26 @@ class NewsletterStoryAdmin(ModelAdmin):
 
 
 admin.site.register([NewsletterAgentLink, NewsletterOccasion, NewsletterPublication, NewsletterSchedule, NewsletterSource])
+
+from .knowledge_agent_models import KnowledgeAgentPlan, KnowledgeBook, KnowledgeAgentRun
+
+@admin.register(KnowledgeAgentPlan)
+class KnowledgeAgentPlanAdmin(admin.ModelAdmin):
+    list_display = ("title", "start_date", "cadence_hours", "active", "require_owner_approval", "next_run_at")
+    list_filter = ("active", "require_owner_approval")
+    search_fields = ("code", "title", "mission", "goal")
+
+@admin.register(KnowledgeBook)
+class KnowledgeBookAdmin(admin.ModelAdmin):
+    list_display = ("title", "domain", "status", "generated_sections", "target_sections")
+    list_filter = ("status", "domain")
+    search_fields = ("title", "domain", "objective")
+
+@admin.register(KnowledgeAgentRun)
+class KnowledgeAgentRunAdmin(admin.ModelAdmin):
+    list_display = ("plan", "book", "status", "approval_required", "created_at", "finished_at")
+    list_filter = ("status", "approval_required")
+    search_fields = ("objective", "output_summary")
 
 from .blog_models import BlogDistributionPlan, BlogPage, BlogPublication, BlogTranslation, ExternalBlogTarget
 admin.site.register([BlogDistributionPlan, BlogPage, BlogPublication, BlogTranslation, ExternalBlogTarget])

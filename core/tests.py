@@ -144,7 +144,7 @@ class FoundationTests(TestCase):
 
     def test_health_endpoint_reports_database(self):
         client = APIClient()
-        response = client.get("/api/health/")
+        response = client.get("/api/health/", secure=True)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["status"], "ok")
 

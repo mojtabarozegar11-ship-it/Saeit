@@ -1,0 +1,24 @@
+/* SITE STANDARD V1 — shared UX, accessibility, responsive and content presentation rules */
+.skip-link{position:fixed;top:10px;right:10px;z-index:9999;transform:translateY(-180%);padding:10px 16px;border-radius:12px;background:var(--forest,#103b2d);color:#fff;font-weight:800;box-shadow:0 10px 30px rgba(0,0,0,.2)}.skip-link:focus{transform:translateY(0);outline:var(--std-focus)}
+main:focus{outline:none}
+:root{--std-content:1280px;--std-gutter:clamp(18px,5vw,72px);--std-space-1:8px;--std-space-2:12px;--std-space-3:18px;--std-space-4:24px;--std-space-5:32px;--std-space-6:48px;--std-radius:20px;--std-border:1px solid var(--line,#e4dccb);--std-focus:3px solid rgba(201,166,79,.65)}
+html{font-size:16px;text-rendering:optimizeLegibility;-webkit-text-size-adjust:100%}body{min-width:320px;overflow-x:hidden}img,svg,video{max-width:100%;height:auto}img{vertical-align:middle}button,input,select,textarea{max-width:100%}button,a,input,select,textarea{touch-action:manipulation}
+:where(a,button,input,select,textarea):focus-visible{outline:var(--std-focus);outline-offset:3px}:where(a,button){-webkit-tap-highlight-color:transparent}
+::selection{background:rgba(201,166,79,.28);color:var(--ink,#17251f)}
+main{width:100%}main>section,main>div{scroll-margin-top:92px}
+.std-container{width:min(100% - 2*var(--std-gutter),var(--std-content));margin-inline:auto}.std-section{padding-block:clamp(42px,6vw,82px)}
+.std-kicker{display:block;font-size:.68rem;letter-spacing:.14em;font-weight:800;color:var(--gold,#c9a64f)}.std-title{margin:.55rem 0 1rem;line-height:1.25;color:var(--forest,#103b2d)}.std-lead{max-width:850px;color:var(--muted,#718078);line-height:2}
+.std-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--std-space-3)}.std-card{min-width:0;padding:var(--std-space-5);border:var(--std-border);border-radius:var(--std-radius);background:var(--paper,#fffdf8)}.std-card h2,.std-card h3{line-height:1.45;color:var(--forest,#103b2d)}.std-card p{color:var(--muted,#718078);line-height:1.95}
+.std-table-wrap{width:100%;overflow:auto;border:var(--std-border);border-radius:var(--std-radius);background:var(--paper,#fffdf8)}.std-table{width:100%;min-width:620px;border-collapse:collapse}.std-table th,.std-table td{padding:13px 16px;border-bottom:var(--std-border);text-align:right}.std-table th{color:var(--forest,#103b2d);background:#f1eadc;font-weight:800}.std-table tr:last-child td{border-bottom:0}
+.std-form{display:grid;gap:var(--std-space-3)}.std-form label{display:grid;gap:7px;font-weight:700;color:var(--forest,#103b2d)}.std-form input,.std-form select,.std-form textarea{width:100%;padding:12px 14px;border:var(--std-border);border-radius:14px;background:var(--paper,#fffdf8);color:var(--ink,#17251f);font:inherit}.std-form textarea{resize:vertical;min-height:130px}.std-form input:focus,.std-form select:focus,.std-form textarea:focus{border-color:var(--gold,#c9a64f);box-shadow:0 0 0 3px rgba(201,166,79,.12);outline:none}
+.std-link{display:inline-flex;align-items:center;gap:7px;color:var(--forest,#103b2d);font-weight:800}.std-link:hover{text-decoration:underline;text-underline-offset:4px}.std-badge{display:inline-flex;align-items:center;padding:5px 10px;border-radius:999px;background:#e8efe7;color:var(--forest,#103b2d);font-size:.7rem;font-weight:800}
+/* Public-content rule: internal implementation metadata must never be presented as content. */
+[data-internal-only],.internal-only{display:none!important}
+/* Consistent readable prose without forcing a single page design. */
+:where(.content,.article,.prose,.rich-text) p{max-width:78ch;line-height:2}:where(.content,.article,.prose,.rich-text) li{line-height:1.95}
+/* Media and embeds */
+:where(iframe,embed,object){max-width:100%}figure{margin:0}figcaption{margin-top:8px;color:var(--muted,#718078);font-size:.75rem}
+/* Motion respects user preferences. */
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}
+@media(max-width:900px){.std-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:640px){:root{--std-gutter:16px}.std-grid{grid-template-columns:1fr}.std-card{padding:22px}.std-section{padding-block:42px}.std-table-wrap{border-radius:14px}}

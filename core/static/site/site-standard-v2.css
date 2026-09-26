@@ -1,0 +1,67 @@
+/* SITE STANDARD V2 — layout contract, visual rhythm and future-page guardrails */
+:root{--site-max:1280px;--site-gutter:clamp(16px,5vw,72px);--site-section-y:clamp(52px,6vw,82px);--site-hero-min:clamp(420px,62vh,720px);--site-radius:clamp(18px,3vw,32px);--site-border:1px solid rgba(80,70,48,.16)}
+body.site-standard-v2{overflow-x:hidden}body.site-standard-v2 main{margin:0;padding:0}body.site-standard-v2 main>section{box-sizing:border-box;margin-block:0;scroll-margin-top:96px}body.site-standard-v2 main>section+section{margin-top:0}
+/* Every page gets one predictable content rhythm. Page-specific themes may change color, shape and composition, not basic spacing discipline. */
+body.site-standard-v2 main>section:not(.lux-hero):not(.company-hero):not([class*="hero"]){scroll-margin-top:96px}
+/* Hero contract: no accidental full-viewport whitespace, no arbitrary multi-screen gaps. */
+body.site-standard-v2 .lux-hero{min-height:var(--site-hero-min)!important;max-height:none;margin:0 auto!important;box-sizing:border-box}
+body.site-standard-v2 .company-hero{min-height:clamp(560px,72vh,820px)!important;box-sizing:border-box}
+body.site-standard-v2 .company-detail-shared-hero{min-height:clamp(430px,62vh,720px)!important}
+body.site-standard-v2 .know-hero{min-height:clamp(460px,64vh,700px)!important}
+body.site-standard-v2 .academy-hero,body.site-standard-v2 .weather-hero,body.site-standard-v2 .newsletter-hero,body.site-standard-v2 .blog-v2-hero{min-height:clamp(420px,62vh,680px)!important;box-sizing:border-box}
+body.site-standard-v2 .page-knowledge .know-hero{margin:0 auto!important}
+/* Section contract for the recurring encyclopedia/editorial families. */
+body.site-standard-v2 .know-subjects,body.site-standard-v2 .know-library-catalog,body.site-standard-v2 .know-library-domains,body.site-standard-v2 .know-public-mission,body.site-standard-v2 .know-glossary,body.site-standard-v2 .know-cta{box-sizing:border-box;padding-block:clamp(48px,6vw,76px)}
+body.site-standard-v2 .know-subjects header,body.site-standard-v2 .know-library-catalog header,body.site-standard-v2 .know-library-domains header{margin-bottom:clamp(24px,3vw,38px)}
+body.site-standard-v2 .know-library-catalog-grid,body.site-standard-v2 .know-domain-grid,body.site-standard-v2 .know-subject-grid{align-items:stretch}
+body.site-standard-v2 .know-library-catalog-grid article,body.site-standard-v2 .know-domain-grid article{min-height:0!important}
+/* Prevent decorative transforms from changing document rhythm or creating apparent blank space. */
+body.site-standard-v2 .know-books article:nth-child(even){transform:none}
+/* Shared shell */
+body.site-standard-v2 .site-header{min-height:70px;box-sizing:border-box}body.site-standard-v2 .site-header .brand-logo{width:46px;height:46px}body.site-standard-v2 .site-header .nav{min-width:0}body.site-standard-v2 .site-header .nav a{line-height:1.5}body.site-standard-v2 .site-footer{box-sizing:border-box;width:min(100% - 32px,var(--site-max));margin-inline:auto}
+/* Cards never create arbitrary vertical holes. */
+body.site-standard-v2 article,body.site-standard-v2 .std-card{box-sizing:border-box}body.site-standard-v2 article p:last-child{margin-bottom:0}
+/* Long Persian headings wrap safely instead of forcing horizontal overflow. */
+body.site-standard-v2 h1,body.site-standard-v2 h2,body.site-standard-v2 h3,body.site-standard-v2 p,body.site-standard-v2 a,body.site-standard-v2 strong{overflow-wrap:anywhere}
+/* Future pages: use these utility classes rather than inventing new spacing values. */
+.site-page-shell{width:min(100% - 2*var(--site-gutter),var(--site-max));margin-inline:auto}.site-page-section{padding-block:var(--site-section-y)}.site-page-hero{min-height:var(--site-hero-min);padding:clamp(42px,6vw,90px) var(--site-gutter);box-sizing:border-box}.site-page-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:clamp(12px,1.5vw,20px)}
+@media(max-width:900px){body.site-standard-v2 .company-hero{min-height:620px!important;max-height:none!important}.site-page-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:700px){body.site-standard-v2 .lux-hero{min-height:460px!important}.site-page-grid{grid-template-columns:1fr}.site-page-section{padding-block:48px}body.site-standard-v2 .know-subjects,body.site-standard-v2 .know-library-catalog,body.site-standard-v2 .know-library-domains,body.site-standard-v2 .know-public-mission,body.site-standard-v2 .know-glossary,body.site-standard-v2 .know-cta{padding-block:48px}}
+@media(max-width:480px){body.site-standard-v2 .lux-hero{min-height:430px!important}body.site-standard-v2 .know-hero{min-height:430px!important}body.site-standard-v2 .company-hero{min-height:540px!important}}
+@media(prefers-reduced-motion:reduce){body.site-standard-v2 *{scroll-behavior:auto!important}}
+
+/* PUBLIC DISPLAY FIREWALL — INTERNAL ARCHITECTURE NEVER RENDERED */
+/* These selectors are reserved for internal dashboards, planning, governance and runtime details. */
+.eco-status,
+.eco-command-grid a:nth-child(n+3),
+.eco-agent,
+.eco-governance,
+.know-command,
+.know-agent-control,
+.know-architecture,
+.know-graph,
+.know-content-standard,
+.agent-status,
+.agent-console,
+.company-system-map,
+.company-engineering-profile,
+.company-corporate-dossier,
+.company-projects,
+.company-research-governance,
+.company-atlas,
+.company-future-chains,
+.company-activity-agent,
+.company-social-governance,
+.company-local-nav,.internal-public-dashboard,.company-ceo-model{display:none!important}
+
+/* SITEWIDE RTL / PERSIAN TYPOGRAPHY STANDARD — RED LINE */
+html[dir="rtl"],html[lang="fa"]{direction:rtl}
+body.site-standard-v2{direction:rtl;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;font-family:Vazirmatn,Tahoma,Arial,sans-serif}
+body.site-standard-v2 :where(h1,h2,h3,h4,h5,h6,p,li,a,button,label,input,textarea,select,small,strong,span,summary,dt,dd){font-family:Vazirmatn,Tahoma,Arial,sans-serif!important;font-variant-ligatures:common-ligatures;letter-spacing:normal!important}
+body.site-standard-v2 :where(h1,h2,h3,h4,h5,h6,p,li,article,section,header,footer,nav){unicode-bidi:isolate}
+body.site-standard-v2 :where(p,li,article,section){word-break:normal;overflow-wrap:break-word;hyphens:none}
+body.site-standard-v2 :where(h1,h2,h3,h4,h5,h6){word-break:normal;overflow-wrap:anywhere;line-height:1.35}
+body.site-standard-v2 :where(p,li){line-height:2;text-justify:none}
+body.site-standard-v2 :where([dir="ltr"],.ltr){direction:ltr;unicode-bidi:isolate}
+body.site-standard-v2 :where(code,pre,kbd,samp){direction:ltr;unicode-bidi:isolate;letter-spacing:normal!important}
+@media(max-width:560px){body.site-standard-v2 .eco-copy h1{font-family:Vazirmatn,Tahoma,Arial,sans-serif!important;font-size:clamp(2.55rem,12vw,3.4rem);line-height:1.18;letter-spacing:normal!important}}

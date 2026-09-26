@@ -43,7 +43,7 @@ def process_submission(submission):
     submission.status = "processing"
     submission.save(update_fields=["status"])
 
-    agent = Agent.objects.filter(code="newsletter-specialist", active=True).first()
+    agent = Agent.objects.filter(code="content-director", active=True).first()
     if not agent:
         submission.status = "rejected"
         submission.processed_at = timezone.now()
@@ -51,7 +51,7 @@ def process_submission(submission):
         return None
 
     story, reason = create_draft(
-        agent_code="newsletter-specialist",
+        agent_code="content-director",
         story_type="company",
         title=submission.subject,
         summary=submission.body[:500],
@@ -59,6 +59,18 @@ def process_submission(submission):
         keywords=[submission.subject, "شرکت کشت و صنعت زمرد ملل", "مجتبی روزگار", "محقق و پژوهشگر"],
         publish_at=submission.requested_publish_at,
     )
+    if story:
+        unit_title = submission.company_unit_title.strip() or f"واحد تحقیق و توسعه · {submission.subject.strip()}"
+        unit_slug = submission.company_unit_slug.strip() or slugify(unit_title, allow_unicode=True)[:170]
+        story.author_name = "مجتبی روزگار"
+        story.company_activity_kind = "activity"
+        story.company_unit_title = unit_title
+        story.company_unit_slug = unit_slug
+        story.company_activity_status = submission.company_activity_status.strip() or "پژوهش"
+        story.company_project_title = submission.company_project_title.strip()
+        story.company_activity_content = submission.body.strip()
+        story.manager_action = "محتوای ورودی از پنل مدیریت؛ محدود به فعالیت‌های واقعی شرکت. پرونده فعالیت شرکت نیز از همین خبر ساخته می‌شود."
+        story.save(update_fields=["author_name", "company_activity_kind", "company_unit_title", "company_unit_slug", "company_activity_status", "company_project_title", "company_activity_content", "manager_action", "updated_at"])
     if story is None:
         submission.status = "rejected"
         submission.processed_at = timezone.now()
@@ -72,7 +84,9 @@ def process_submission(submission):
     story.save(update_fields=["image", "video", "updated_at"])
 
     from .company_content_models import CompanyContentLink
-    target_paths = [p.strip() for p in re.split(r"[\n,]+", submission.company_target_paths or "") if p.strip()]
+    activity_path = f"/company/activity-{story.pk}/"
+    target_paths = [activity_path]
+    target_paths.extend([p.strip() for p in re.split(r"[\n,]+", submission.company_target_paths or "") if p.strip()])
     target_paths = [p for p in target_paths if p.startswith("/company/")]
     for target_path in dict.fromkeys(target_paths):
         CompanyContentLink.objects.get_or_create(

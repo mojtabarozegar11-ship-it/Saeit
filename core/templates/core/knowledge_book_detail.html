@@ -1,0 +1,10 @@
+{% extends 'base.html' %}
+{% block title %}{{ book.title }} — دانشنامه{% endblock %}
+{% block meta_description %}{{ meta }}{% endblock %}
+{% block page_head %}<script type="application/ld+json">{"@context":"https://schema.org","@type":"Book","name":"{{ book.title|escapejs }}","description":"{{ meta|escapejs }}","inLanguage":"fa","isAccessibleForFree":{{ free|yesno:"true,false" }}}</script>{% endblock %}
+{% block content %}
+<main class="knowledge-internal knowledge-book-page">
+<section class="knowledge-internal-hero"><div><span>KNOWLEDGE LIBRARY / BOOK</span><h1>{{ book.title }}</h1><p>{{ book.objective }}</p></div><aside><small>STATUS</small><strong>{{ book.get_status_display }}</strong><small>DOMAIN</small><strong>{{ book.domain }}</strong><small>VOLUMES</small><strong>{{ book.volume_count }}</strong></aside></section>
+<section class="knowledge-internal-body"><div class="knowledge-internal-main"><span>REFERENCE RECORD</span><h2>پرونده کتاب و مسیر توسعه</h2><p>این صفحه، پرونده معماری کتابخانه است. وضعیت انتشار و میزان تکمیل، همان وضعیت ثبت‌شده در سامانه را نشان می‌دهد و هیچ محتوای منتشرنشده‌ای به‌عنوان اثر نهایی معرفی نمی‌شود.</p>{% if book.content %}<article class="knowledge-source-content">{{ book.content|linebreaks }}</article>{% else %}<div class="knowledge-empty">محتوای این عنوان هنوز تولید یا تأیید نشده است. ساختار، هدف و وضعیت آن از همین صفحه قابل پیگیری است.</div>{% endif %}<div class="knowledge-progress"><b>پیشرفت</b><strong>{{ book.generated_sections }} / {{ book.target_sections }}</strong></div><div class="knowledge-source-policy"><b>سیاست منبع</b><p>{{ book.source_policy }}</p></div></div><aside class="knowledge-internal-side"><a href="/knowledge/">← بازگشت به دانشنامه</a>{% if book.domain_ref %}<a href="/knowledge/domain/{{ book.domain_ref.code }}/">پرونده حوزه ↗</a>{% endif %}<h3>کتاب‌های مرتبط</h3>{% for item in related %}<a href="/knowledge/book/{{ item.code }}/"><small>{{ item.domain }}</small><strong>{{ item.title }}</strong></a>{% empty %}<p>عنوان مرتبط دیگری ثبت نشده است.</p>{% endfor %}</aside></section>
+</main>
+{% endblock %}

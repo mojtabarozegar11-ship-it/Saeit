@@ -1,17 +1,15 @@
 {% extends "base.html" %}
 {% load static %}
-{% block title %}{{ detail.title }} — شرکت و همکاری{% endblock %}
-{% block extra_css %}<link rel="stylesheet" href="{% static 'site/luxury-pages.css' %}"><link rel="stylesheet" href="{% static 'site/company-detail-v3.css' %}">{% endblock %}
-{% block page_head %}<script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","@id":"https://zomorodmelal.ir/#organization","name":"شرکت کشت و صنعت زمرد ملل","legalName":"شرکت کشت و صنعت زمرد ملل","url":"https://zomorodmelal.ir/","logo":"https://zomorodmelal.ir/static/site/company/company-logo.png","telephone":"+989022048691","foundingDate":"2019-11-07","description":"شرکت کشت و صنعت زمرد ملل؛ پژوهش، دانش، کشاورزی، صنعت و توسعه فناوری.","employee":{"@type":"Person","name":"مجتبی روزگار","jobTitle":"محقق و پژوهشگر / مدیرعامل شرکت کشت و صنعت زمرد ملل"}}</script>{% if detail.profile_jsonld %}<script type="application/ld+json">{{ detail.profile_jsonld|safe }}</script>{% endif %}{% if detail.breadcrumb_jsonld %}<script type="application/ld+json">{{ detail.breadcrumb_jsonld|safe }}</script>{% endif %}{% endblock %}
+{% block title %}{{ detail.title }} — شرکت{% endblock %}
+{% block meta_description %}{{ detail.title }}؛ پرونده رسمی و تخصصی از پورتال شرکت کشت و صنعت زمرد ملل، شامل مسیر فعالیت، ساختار، ارزش، مستندات و ارتباطات مرتبط.{% endblock %}
+{% block extra_css %}<link rel="preload" as="image" href="{% static 'site/company/company-hero.webp' %}" fetchpriority="high"><link rel="stylesheet" href="{% static 'site/company-template-v3.css' %}"><link rel="stylesheet" href="{% static 'site/company-detail-v3.css' %}">{% if detail.kind == "executive" %}<link rel="preload" as="image" href="{% static 'site/company/ceo-mojtaba-rozegar.png' %}" fetchpriority="high">{% endif %}{% endblock %}
+{% block page_head %}<script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","@id":"https://zomorodmelal.ir/#organization","name":"شرکت کشت و صنعت زمرد ملل","legalName":"شرکت کشت و صنعت زمرد ملل","url":"https://zomorodmelal.ir/","logo":"https://zomorodmelal.ir/static/site/company/company-logo.png","telephone":"+989022048691","foundingDate":"2019-11-07","description":"شرکت کشت و صنعت زمرد ملل؛ ساختار پژوهش‌محور، دانش، فناوری و توسعه زنجیره‌های تخصصی.","employee":{"@type":"Person","name":"مجتبی روزگار","jobTitle":"محقق و پژوهشگر / مدیرعامل شرکت کشت و صنعت زمرد ملل"}}</script>{% if detail.profile_jsonld %}<script type="application/ld+json">{{ detail.profile_jsonld|safe }}</script>{% endif %}{% if detail.breadcrumb_jsonld %}<script type="application/ld+json">{{ detail.breadcrumb_jsonld|safe }}</script>{% endif %}{% endblock %}
 {% block content %}
-<main class="company-detail company-detail-{{ detail.kind }}">
+<div class="company-detail company-detail-{{ detail.kind }}">
+  <section class="company-hero company-detail-shared-hero"><div class="company-hero-media" aria-hidden="true"><img class="company-hero-photo" src="{% static 'site/company/company-hero.webp' %}" alt="" width="1672" height="941" loading="eager" fetchpriority="high" decoding="async"><div class="company-hero-vignette"></div></div><div class="company-hero-grid"></div><div class="company-rail">ZOMORODMELAL / COMPANY / {{ detail.index|stringformat:"02d" }}</div><div class="company-hero-copy"><span class="company-kicker">{{ detail.meta }}</span><h1>{{ detail.title }}</h1><p>{{ detail.text }}</p><div class="company-signature">RESEARCH <i>×</i> KNOWLEDGE <i>×</i> AI <i>×</i> VALUE</div></div><div class="company-seal"><img src="{% static 'site/company/company-logo.png' %}" alt="لوگوی شرکت کشت و صنعت زمرد ملل" width="180" height="180" loading="eager" decoding="async"><span>ZM</span><small>COMPANY / INTERNAL</small></div></section>
   <div class="company-detail-grid"></div>
-  <header class="company-detail-hero">
-    <div class="company-detail-topline"><span>{{ detail.meta }}</span><b>{{ detail.index|stringformat:"02d" }} / {{ detail.count|stringformat:"02d" }}</b></div>
-    <a class="company-detail-back" href="/company/">← بازگشت به پورتال شرکت</a>
-    <h1>{{ detail.title }}</h1>
-    <p>{{ detail.text }}</p>
-  </header>
+  {% if detail.kind == "executive" %}<section class="company-executive-portrait"><div><span>EXECUTIVE / OFFICIAL PROFILE</span><h2>مدیرعامل و پژوهشگر</h2><p>پرونده اختصاصی مجتبی روزگار، مدیرعامل شرکت کشت و صنعت زمرد ملل.</p></div><figure><img src="{% static 'site/company/ceo-mojtaba-rozegar.png' %}" alt="مجتبی روزگار، مدیرعامل شرکت کشت و صنعت زمرد ملل" width="1024" height="1536" loading="eager" decoding="async"></figure></section><section class="company-executive-profile" aria-labelledby="executive-profile-title"><div class="company-detail-kicker">EXECUTIVE / FORMAL BIOGRAPHY</div><h2 id="executive-profile-title">معرفی رسمی مدیرعامل</h2><p>مجتبی روزگار، محقق و پژوهشگر و مدیرعامل شرکت کشت و صنعت زمرد ملل است. وی متولد ۲ خرداد ۱۳۶۳ در شهرستان مرودشت، استان فارس است. دارای تحصیلات دانشگاهی بوده و در حال ادامه تحصیل است.</p><p>رویکرد حرفه‌ای او بر پژوهش، مطالعه، داده و شواهد، تحلیل، طراحی، ارزیابی و توسعه مرحله‌ای استوار است و این چارچوب در مسیر راهبری پژوهش‌محور شرکت به‌کار گرفته می‌شود.</p><div class="company-executive-facts"><article><small>نام</small><strong>مجتبی روزگار</strong></article><article><small>سمت</small><strong>مدیرعامل شرکت</strong></article><article><small>تولد</small><strong>۲ خرداد ۱۳۶۳</strong></article><article><small>محل تولد</small><strong>شهرستان مرودشت، استان فارس</strong></article><article><small>تحصیلات</small><strong>تحصیلات دانشگاهی؛ در حال ادامه تحصیل</strong></article><article><small>حوزه فعالیت</small><strong>محقق و پژوهشگر</strong></article></div><div class="company-executive-framework"><span>PROFESSIONAL FRAMEWORK</span><strong>پژوهش → مطالعه → داده و شواهد → تحلیل → دانش → طراحی → ارزیابی → توسعه</strong></div></section>{% endif %}
+  <div class="company-detail-return"><a class="company-detail-back" href="/company/">← بازگشت به پورتال شرکت</a><span>{{ detail.index|stringformat:"02d" }} / {{ detail.count|stringformat:"02d" }}</span></div>
 
   <section class="company-detail-body">
     <div class="company-detail-kicker">COMPANY / INTERNAL UNIT</div>
@@ -20,7 +18,14 @@
       <div class="company-detail-index"><strong>{{ detail.index|stringformat:"02d" }}</strong><span>OF {{ detail.count|stringformat:"02d" }}</span></div>
     </div>
 
-    {% if detail.kind == "product" %}
+    {% if detail.kind == "activity" %}
+      <div class="company-detail-kicker">01 / PUBLISHED COMPANY ACTIVITY</div>
+      <h2>پرونده فعالیت · {{ detail.title }}</h2>
+      <p>{{ detail.text }}</p>
+      <div class="company-activity-detail-meta"><article><small>خبر اصلی</small><strong>{{ detail.activity_story.title }}</strong></article><article><small>وضعیت</small><strong>{{ detail.activity_story.company_activity_status|default:"ثبت‌شده" }}</strong></article><article><small>پروژه مادر</small><strong>{{ detail.activity_story.company_project_title|default:"در پرونده مشخص نشده" }}</strong></article><article><small>واحد تخصصی</small><strong>{{ detail.activity_story.company_unit_title|default:"واحد تحقیق و توسعه" }}</strong></article></div>
+      <div class="company-activity-detail-body"><h3>محتوای پرونده</h3>{{ detail.activity_story.company_activity_content|linebreaks }}</div>
+      <div class="company-detail-action"><div><span>NEWSLETTER → COMPANY</span><h3>خبر فقط یک خبر نیست؛ ورودی پرونده شرکت است.</h3><p>خبر اصلی، پرونده واحد تخصصی و ارتباط آن با پژوهش، پروژه و دانش در یک مسیر به هم متصل شده‌اند.</p></div><a href="/newsletter/{{ detail.activity_story.slug }}/">مشاهده خبر اصلی ↗</a></div>
+    {% elif detail.kind == "product" %}
       <div class="company-detail-kicker">01 / COMPLETE VALUE CHAIN</div>
       <h2>زنجیره کامل {{ detail.title }}</h2>
       <p>از تحقیق و نهاده تا تولید یا کشت، برداشت، فرآوری، کنترل کیفیت، بسته‌بندی، برند، فروش و بازار؛ مراحل این زنجیره به‌صورت پیوسته تعریف شده‌اند.</p>
@@ -75,5 +80,5 @@
     <a href="/company/">← پورتال اصلی شرکت</a>
     <a href="{{ detail.back }}">مشاهده فهرست بخش ↗</a>
   </footer>
-</main>
+</div>
 {% endblock %}

@@ -57,7 +57,7 @@ class BlogPublication(models.Model):
     error = models.TextField(blank=True)
 
     class Meta:
-        constraints = [models.CheckConstraint(check=models.Q(internal_page__isnull=False) | models.Q(external_target__isnull=False), name="blog_publication_has_target")]
+        constraints = [models.CheckConstraint(condition=models.Q(internal_page__isnull=False) | models.Q(external_target__isnull=False), name="blog_publication_has_target")]
         indexes = [models.Index(fields=("status", "language"))]
 
 

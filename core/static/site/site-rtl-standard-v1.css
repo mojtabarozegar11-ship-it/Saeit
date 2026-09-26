@@ -1,0 +1,24 @@
+/* SITEWIDE RTL / PERSIAN TYPOGRAPHY STANDARD — RED LINE
+   Applies to the entire public site. Page themes may change visual identity,
+   but may not override Persian direction, shaping, spacing or readability.
+*/
+html[dir="rtl"],html[lang="fa"]{direction:rtl}
+body.site-standard-v2{direction:rtl;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;font-family:Vazirmatn,Tahoma,Arial,sans-serif}
+body.site-standard-v2 :where(h1,h2,h3,h4,h5,h6,p,li,a,button,label,input,textarea,select,small,strong,span,summary,dt,dd){font-family:Vazirmatn,Tahoma,Arial,sans-serif!important;font-variant-ligatures:common-ligatures}
+/* Persian text must never inherit Latin decorative letter spacing. This is a sitewide hard rule. */
+body.site-standard-v2 :where(h1,h2,h3,h4,h5,h6,p,li,a,button,label,input,textarea,select,small,strong,span,summary,dt,dd){letter-spacing:normal!important}
+/* Keep mixed Persian/English blocks isolated while inheriting the site RTL direction. */
+body.site-standard-v2 :where(h1,h2,h3,h4,h5,h6,p,li,article,section,header,footer,nav){unicode-bidi:isolate}
+body.site-standard-v2 :where(p,li,article,section){word-break:normal;overflow-wrap:break-word;hyphens:none}
+body.site-standard-v2 :where(h1,h2,h3,h4,h5,h6){word-break:normal;overflow-wrap:anywhere;line-height:1.35}
+body.site-standard-v2 :where(p,li){line-height:2}
+/* Preserve intended centered compositions while keeping RTL semantics. */
+body.site-standard-v2 :where([dir="ltr"],.ltr){direction:ltr;unicode-bidi:isolate}
+body.site-standard-v2 :where(code,pre,kbd,samp){direction:ltr;unicode-bidi:isolate;letter-spacing:normal}
+/* Never justify Persian: it creates stretched word/letter spacing on narrow screens. */
+body.site-standard-v2 :where(p,li){text-align:inherit;text-justify:none}
+/* Mobile Persian headings: readable scale and controlled line measure. */
+@media(max-width:560px){
+ body.site-standard-v2 :where(h1,h2,h3){max-width:100%;line-break:auto}
+ body.site-standard-v2 .eco-copy h1{font-family:Vazirmatn,Tahoma,Arial,sans-serif;font-size:clamp(2.55rem,12vw,3.4rem);line-height:1.18;letter-spacing:normal}
+}

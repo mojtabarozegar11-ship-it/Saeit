@@ -2,7 +2,7 @@
 {% block title %}{% if q %}جستجو: {{ q }}{% else %}جستجوی سایت{% endif %} — Zomorodmelal{% endblock %}
 {% block meta_description %}موتور جستجوی محتوای شرکت کشت و صنعت زمرد ملل؛ خبرنامه، دانش، محصولات و صفحات رسمی.{% endblock %}
 {% block content %}
-<main style="padding:70px 6vw;min-height:70vh;background:#f4efe3">
+<div style="padding:70px 6vw;min-height:70vh;background:#f4efe3">
   <span style="letter-spacing:.16em;color:#96783d">SITE SEARCH / CONTENT INDEX</span>
   <h1 style="font-size:clamp(2.4rem,6vw,5rem);margin:.5rem 0">جستجوی دقیق محتوای سایت</h1>
   <form method="get" role="search" style="display:flex;gap:10px;max-width:900px;margin:30px 0">
@@ -15,5 +15,5 @@
   {% for item in results %}<a href="{{ item.url }}" style="padding:24px;background:#fff;border:1px solid #ddd4c4;text-decoration:none;color:inherit"><small>{{ item.type }}</small><h2>{{ item.title }}</h2><p style="line-height:1.9">{{ item.summary }}</p></a>
   {% empty %}{% if q %}<div style="padding:28px;border:1px dashed #b9ad98">نتیجه‌ای پیدا نشد. عبارت را با نام شرکت، موضوع پژوهش یا عنوان خبر دوباره جستجو کنید.</div>{% else %}<div style="padding:28px">عبارت جستجو را وارد کنید.</div>{% endif %}{% endfor %}
   </section>
-</main>
+</div>
 {% endblock %}

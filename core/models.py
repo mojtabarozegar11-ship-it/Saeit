@@ -304,3 +304,8 @@ from .blog_models import BlogDistributionPlan, BlogPage, BlogPublication, BlogTr
 from .company_content_models import CompanyContentLink, CompanyGalleryMedia
 
 from .company_inquiry_models import CompanyInquiry
+
+
+# Company Activity Intelligence Agent models are kept in a focused module.
+from .company_activity_models import CompanyActivityAgentPlan, CompanyActivityReport
+from .economic_trade_models import TradeMailbox, TradeEmailOutbox, TradeEmailAudit
