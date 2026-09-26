@@ -2,13 +2,19 @@
 <!doctype html>
 <html lang="fa" dir="rtl">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#10251c">
 <meta name="description" content="{% block meta_description %}زمرد ملل؛ پلتفرم پژوهش، کشاورزی، آموزش، دانش، هوش مصنوعی و توسعه کسب‌وکار.{% endblock %}">
 <title>{% block title %}زمرد ملل | پژوهش، دانش، فناوری و توسعه{% endblock %}</title>
 <link rel="icon" type="image/png" href="{% static 'site/company/company-logo.png' %}">
 <link rel="canonical" href="https://zomorodmelal.ir{{ request.path }}">
+<link rel="stylesheet" href="{% static 'site/main.css' %}">
+<link rel="stylesheet" href="{% static 'site/site-standard-v1.css' %}">
+<link rel="stylesheet" href="{% static 'site/luxury-pages.css' %}">
+<link rel="stylesheet" href="{% static 'site/page-themes.css' %}">
+<link rel="stylesheet" href="{% static 'site/site-standard-v2.css' %}">
+<link rel="stylesheet" href="{% static 'site/site-rtl-standard-v1.css' %}">
+<link rel="stylesheet" href="{% static 'site/site-polish-v3.css' %}">
 <link rel="stylesheet" href="{% static 'site/redesign-v1.css' %}">
 {% block extra_css %}{% endblock %}{% block page_head %}{% endblock %}
 </head>
@@ -22,11 +28,6 @@
 <div class="zr-actions"><a href="/search/" aria-label="جستجو">⌕</a><a class="zr-action-primary" href="/services/">خدمات</a></div>
 </header>
 <main id="main-content" tabindex="-1">{% block content %}{% endblock %}</main>
-<footer class="zr-footer"><div class="zr-footer-main">
-<div class="zr-footer-brand"><img src="{% static 'site/company/company-logo.png' %}" alt=""><h2>زمرد ملل</h2><p>یک هسته پژوهشی و فناوری برای تبدیل دانش به پروژه، محصول، آموزش و ارزش اقتصادی.</p></div>
-<div><b>دانش و فناوری</b><a href="/research/">پژوهش</a><a href="/knowledge/">دانشنامه</a><a href="/agents/">هوش مصنوعی</a><a href="/education/">آموزش</a></div>
-<div><b>زنجیره توسعه</b><a href="/agriculture/">کشاورزی</a><a href="/industry/">صنعت</a><a href="/market/">بازار</a><a href="/studio/">استودیو</a></div>
-<div><b>ارتباط</b><a href="/company/">شرکت</a><a href="/contact/">همکاری</a><a href="/weather/">آب‌وهوا</a><a href="/blog/">مجله</a></div>
-</div><div class="zr-footer-bottom"><span>© شرکت کشت و صنعت زمرد ملل</span><span>از پژوهش تا ارزش</span></div></footer>
+<footer class="zr-footer"><div class="zr-footer-main"><div class="zr-footer-brand"><img src="{% static 'site/company/company-logo.png' %}" alt=""><h2>زمرد ملل</h2><p>یک هسته پژوهشی و فناوری برای تبدیل دانش به پروژه، محصول، آموزش و ارزش اقتصادی.</p></div><div><b>دانش و فناوری</b><a href="/research/">پژوهش</a><a href="/knowledge/">دانشنامه</a><a href="/agents/">هوش مصنوعی</a><a href="/education/">آموزش</a></div><div><b>زنجیره توسعه</b><a href="/agriculture/">کشاورزی</a><a href="/industry/">صنعت</a><a href="/market/">بازار</a><a href="/studio/">استودیو</a></div><div><b>ارتباط</b><a href="/company/">شرکت</a><a href="/contact/">همکاری</a><a href="/weather/">آب‌وهوا</a><a href="/blog/">مجله</a></div></div><div class="zr-footer-bottom"><span>© شرکت کشت و صنعت زمرد ملل</span><span>از پژوهش تا ارزش</span></div></footer>
 <script>(function(){const b=document.querySelector('.zr-menu'),n=document.querySelector('.zr-nav');if(!b||!n)return;b.addEventListener('click',function(){const open=n.classList.toggle('is-open');b.setAttribute('aria-expanded',open?'true':'false')});n.querySelectorAll('a').forEach(a=>a.addEventListener('click',()=>{n.classList.remove('is-open');b.setAttribute('aria-expanded','false')}));})();</script>
 </body></html>
