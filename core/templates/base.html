@@ -1,58 +1,32 @@
-
-{% load static %}<!doctype html>
+{% load static %}
+<!doctype html>
 <html lang="fa" dir="rtl">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="theme-color" content="#103b2d">
-<meta name="description" content="{% block meta_description %}Zomorodmelal؛ پلتفرم خدماتی یکپارچه با خدمات، آموزش، هوش مصنوعی، آب‌وهوا، اقتصاد، استودیو، دانشنامه و شرکت{% endblock %}">
-<title>{% block title %}Zomorodmelal — پلتفرم خدماتی یکپارچه{% endblock %}</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#10251c">
+<meta name="description" content="{% block meta_description %}زمرد ملل؛ پلتفرم پژوهش، کشاورزی، آموزش، دانش، هوش مصنوعی و توسعه کسب‌وکار.{% endblock %}">
+<title>{% block title %}زمرد ملل | پژوهش، دانش، فناوری و توسعه{% endblock %}</title>
 <link rel="icon" type="image/png" href="{% static 'site/company/company-logo.png' %}">
 <link rel="canonical" href="https://zomorodmelal.ir{{ request.path }}">
-<link rel="stylesheet" href="{% static 'site/main.css' %}">
-<link rel="stylesheet" href="{% static 'site/site-standard-v1.css' %}">
-<link rel="stylesheet" href="{% static 'site/luxury-pages.css' %}">
-<link rel="stylesheet" href="{% static 'site/page-themes.css' %}">
-{% block extra_css %}{% endblock %}
-<link rel="stylesheet" href="{% static 'site/site-standard-v2.css' %}">
-<link rel="stylesheet" href="{% static 'site/site-rtl-standard-v1.css' %}">
-<link rel="stylesheet" href="{% static 'site/site-polish-v3.css' %}">
-{% block page_head %}<script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","@id":"https://zomorodmelal.ir/#organization","name":"شرکت کشت و صنعت زمرد ملل","legalName":"شرکت کشت و صنعت زمرد ملل","url":"https://zomorodmelal.ir/","logo":"https://zomorodmelal.ir/static/site/company/company-logo.png","telephone":"+989022048691","foundingDate":"2019-11-07","description":"شرکت کشت و صنعت زمرد ملل؛ ساختار پژوهش‌محور، دانش، فناوری و توسعه زنجیره‌های تخصصی.","employee":{"@type":"Person","name":"مجتبی روزگار","jobTitle":"محقق و پژوهشگر / مدیرعامل شرکت کشت و صنعت زمرد ملل"}}</script>{% endblock %}
+<link rel="stylesheet" href="{% static 'site/redesign-v1.css' %}">
+{% block extra_css %}{% endblock %}{% block page_head %}{% endblock %}
 </head>
-<body class="site-standard-v2 {% block body_class %}page-default{% endblock %}">
-<a class="skip-link" href="#main-content">پرش به محتوای اصلی</a>
-<div class="topbar"><div>زنجیره ارزش از پژوهش تا بازار</div><div class="toplinks"><a href="/company/">شرکت</a><span>FA · EN · AR</span></div></div>
-<header class="site-header">
-<a class="brand" href="/" aria-label="Zomorodmelal">
-<img class="brand-logo" src="{% static 'site/company/company-logo.png' %}" alt="نشان کامل Zomorodmelal">
-<span class="brand-copy"><b>Zomorodmelal</b><small>Services · Knowledge · AI</small></span>
-</a>
-<button class="menu-toggle" type="button" aria-label="باز کردن منو" aria-expanded="false">☰</button>
-<nav class="nav" aria-label="ناوبری اصلی">
-<a class="{% if request.path == "/" or request.path|slice:":9" == "/services/" %}active{% endif %}" href="/">خدمات</a>
-<a class="{% if request.path|slice:":11" == "/education/" %}active{% endif %}" href="/education/">آموزش</a>
-<a class="{% if request.path|slice:":8" == "/agents/" %}active{% endif %}" href="/agents/">هوش مصنوعی</a>
-<a class="{% if request.path|slice:":9" == "/weather/" %}active{% endif %}" href="/weather/">آب‌وهوا</a>
-<a class="{% if request.path|slice:":9" == "/economy/" %}active{% endif %}" href="/economy/">اقتصاد</a>
-<a class="{% if request.path|slice:":8" == "/studio/" %}active{% endif %}" href="/studio/">استودیو</a>
-<a class="{% if request.path|slice:":10" == "/knowledge/" %}active{% endif %}" href="/knowledge/">دانشنامه</a>
-<a class="{% if request.path|slice:":9" == "/company/" or request.path|slice:":7" == "/about/" or request.path|slice:":9" == "/contact/" %}active{% endif %}" href="/company/">شرکت</a>
-</nav>
-<div class="header-actions"><a class="icon-btn" href="/search/" title="جستجوی سایت" aria-label="جستجوی سایت">⌕</a>{% if user.is_authenticated %}<a class="header-cta" href="/education/dashboard/">یادگیری من</a>{% endif %}<a class="header-cta" href="/company/">شرکت</a></div>
+<body class="{% block body_class %}zr-page{% endblock %}">
+<a class="zr-skip" href="#main-content">پرش به محتوای اصلی</a>
+<div class="zr-top"><div>شرکت کشت و صنعت زمرد ملل</div><div class="zr-top-links"><a href="/company/">درباره مجموعه</a><span>پژوهش‌محور · فناوری‌محور · توسعه‌محور</span></div></div>
+<header class="zr-header">
+<a class="zr-brand" href="/" aria-label="زمرد ملل"><img src="{% static 'site/company/company-logo.png' %}" alt="نشان شرکت کشت و صنعت زمرد ملل"><span><strong>زمرد ملل</strong><small>پژوهش · دانش · فناوری · توسعه</small></span></a>
+<button class="zr-menu" type="button" aria-label="باز کردن منو" aria-expanded="false">☰</button>
+<nav class="zr-nav" aria-label="ناوبری اصلی"><a href="/research/">پژوهش</a><a href="/knowledge/">دانشنامه</a><a href="/agriculture/">کشاورزی</a><a href="/education/">آموزش</a><a href="/agents/">هوش مصنوعی</a><a href="/studio/">استودیو</a><a href="/market/">بازار</a><a href="/company/">شرکت</a></nav>
+<div class="zr-actions"><a href="/search/" aria-label="جستجو">⌕</a><a class="zr-action-primary" href="/services/">خدمات</a></div>
 </header>
 <main id="main-content" tabindex="-1">{% block content %}{% endblock %}</main>
-<footer class="site-footer">
-<div class="footer-grid">
-<div><div class="footer-brand"><img class="footer-logo" src="{% static 'site/company/company-logo.png' %}" alt=""> <span>Zomorodmelal</span></div><p>پلتفرم خدماتی یکپارچه؛ خدمات، آموزش، هوش مصنوعی، آب‌وهوا، اقتصاد، استودیو، دانشنامه و شرکت.</p></div>
-<div><strong>پلتفرم</strong><a href="/">خدمات</a><a href="/education/">آموزش</a><a href="/agents/">هوش مصنوعی</a><a href="/weather/">آب‌وهوا</a><a href="/economy/">اقتصاد</a><a href="/studio/">استودیو</a><a href="/knowledge/">دانشنامه</a><a href="/company/">شرکت</a></div>
-<div><strong>درون خدمات</strong><a href="/agriculture/">کشاورزی</a><a href="/industry/">صنعت</a><a href="/market/">بازار</a><a href="/services/">همه خدمات</a></div>
-<div><strong>دسترسی</strong><a href="/company/#company-content-ecosystem">رسانه و وبلاگ شرکت</a><a href="/company/">شرکت</a><a href="/contact/">تماس و همکاری</a></div>
-</div>
-<div class="footer-legal"><strong>تمامی حقوق مادی و معنوی سایت برای شرکت کشت و صنعت زمرد ملل و مجتبی روزگار محفوظ است.</strong><span>آبان ۱۳۹۸</span></div><div class="footer-bottom"><span>© شرکت کشت و صنعت زمرد ملل</span><span>تمامی حقوق محفوظ است.</span></div>
-</footer>
-<script>
-const b=document.querySelector('.menu-toggle'),n=document.querySelector('.nav');
-if(b){b.addEventListener('click',()=>{n.classList.toggle('open');b.setAttribute('aria-expanded',n.classList.contains('open'));});}
-n.querySelectorAll('a').forEach(a=>a.addEventListener('click',()=>{n.classList.remove('open');b.setAttribute('aria-expanded','false');}));
-window.addEventListener('keydown',e=>{if(e.key==='Escape'){n.classList.remove('open');b.setAttribute('aria-expanded','false');}});
-</script>
+<footer class="zr-footer"><div class="zr-footer-main">
+<div class="zr-footer-brand"><img src="{% static 'site/company/company-logo.png' %}" alt=""><h2>زمرد ملل</h2><p>یک هسته پژوهشی و فناوری برای تبدیل دانش به پروژه، محصول، آموزش و ارزش اقتصادی.</p></div>
+<div><b>دانش و فناوری</b><a href="/research/">پژوهش</a><a href="/knowledge/">دانشنامه</a><a href="/agents/">هوش مصنوعی</a><a href="/education/">آموزش</a></div>
+<div><b>زنجیره توسعه</b><a href="/agriculture/">کشاورزی</a><a href="/industry/">صنعت</a><a href="/market/">بازار</a><a href="/studio/">استودیو</a></div>
+<div><b>ارتباط</b><a href="/company/">شرکت</a><a href="/contact/">همکاری</a><a href="/weather/">آب‌وهوا</a><a href="/blog/">مجله</a></div>
+</div><div class="zr-footer-bottom"><span>© شرکت کشت و صنعت زمرد ملل</span><span>از پژوهش تا ارزش</span></div></footer>
+<script>(function(){const b=document.querySelector('.zr-menu'),n=document.querySelector('.zr-nav');if(!b||!n)return;b.addEventListener('click',function(){const open=n.classList.toggle('is-open');b.setAttribute('aria-expanded',open?'true':'false')});n.querySelectorAll('a').forEach(a=>a.addEventListener('click',()=>{n.classList.remove('is-open');b.setAttribute('aria-expanded','false')}));})();</script>
 </body></html>
