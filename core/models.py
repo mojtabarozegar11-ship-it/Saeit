@@ -309,3 +309,162 @@ from .company_inquiry_models import CompanyInquiry
 # Company Activity Intelligence Agent models are kept in a focused module.
 from .company_activity_models import CompanyActivityAgentPlan, CompanyActivityReport
 from .economic_trade_models import TradeMailbox, TradeEmailOutbox, TradeEmailAudit
+
+
+class EducationTrack(T):
+    key = models.SlugField(max_length=80, unique=True)
+    title = models.CharField(max_length=200)
+    meta = models.CharField(max_length=200, blank=True)
+    description = models.TextField()
+    level = models.CharField(max_length=80, blank=True)
+    active = models.BooleanField(default=True)
+    sort_order = models.PositiveIntegerField(default=0)
+    class Meta:
+        ordering = ["sort_order", "id"]
+
+class EducationCourse(T):
+    track = models.ForeignKey(EducationTrack, on_delete=models.CASCADE, related_name="courses")
+    title = models.CharField(max_length=300)
+    slug = models.SlugField(max_length=180, unique=True)
+    summary = models.TextField()
+    syllabus = models.JSONField(default=list)
+    prerequisites = models.TextField(blank=True)
+    outcome = models.TextField(blank=True)
+    price = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    currency = models.CharField(max_length=10, default="IRR")
+    is_free = models.BooleanField(default=False)
+    active = models.BooleanField(default=False)
+    approved = models.BooleanField(default=False)
+    version = models.PositiveIntegerField(default=1)
+    product = models.OneToOneField("Product", on_delete=models.PROTECT, null=True, blank=True, related_name="education_course")
+    quality_status = models.CharField(max_length=20, default="draft", choices=[
+        ("draft", "Draft"), ("review", "Review"), ("approved", "Approved"),
+        ("published", "Published"), ("archived", "Archived"),
+    ])
+    quality_note = models.TextField(blank=True)
+    quality_checked_at = models.DateTimeField(null=True, blank=True)
+    class Meta:
+        ordering = ["track__sort_order", "id"]
+
+class EducationResource(T):
+    course = models.ForeignKey(EducationCourse, on_delete=models.CASCADE, related_name="resources", null=True, blank=True)
+    kind = models.CharField(max_length=40)
+    title = models.CharField(max_length=300)
+    content = models.TextField(blank=True)
+    file_url = models.URLField(blank=True)
+    is_free = models.BooleanField(default=False)
+    active = models.BooleanField(default=False)
+    approved = models.BooleanField(default=False)
+    sort_order = models.PositiveIntegerField(default=0)
+    class Meta:
+        ordering = ["sort_order", "id"]
+
+class EducationLesson(T):
+    course = models.ForeignKey(EducationCourse, on_delete=models.CASCADE, related_name="lessons")
+    title = models.CharField(max_length=300)
+    summary = models.TextField(blank=True)
+    lesson_type = models.CharField(max_length=40, default="lesson")
+    duration_minutes = models.PositiveIntegerField(default=0)
+    content = models.TextField(blank=True)
+    sort_order = models.PositiveIntegerField(default=0)
+    is_free_preview = models.BooleanField(default=False)
+    active = models.BooleanField(default=False)
+    class Meta:
+        ordering = ["sort_order", "id"]
+
+
+class EducationPresentation(T):
+    course = models.ForeignKey(EducationCourse, on_delete=models.CASCADE, related_name="presentations")
+    title = models.CharField(max_length=300)
+    audience = models.CharField(max_length=40, default="teacher", choices=[
+        ("teacher", "Teacher"), ("professor", "Professor"), ("coach", "Coach"),
+    ])
+    description = models.TextField(blank=True)
+    slide_count = models.PositiveIntegerField(default=0)
+    file_url = models.URLField(blank=True)
+    source_file = models.CharField(max_length=500, blank=True)
+    presenter_notes = models.TextField(blank=True)
+    lesson_plan = models.JSONField(default=list)
+    classroom_activities = models.JSONField(default=list)
+    assessment_notes = models.TextField(blank=True)
+    version = models.PositiveIntegerField(default=1)
+    is_free = models.BooleanField(default=False)
+    active = models.BooleanField(default=False)
+    approved = models.BooleanField(default=False)
+    quality_status = models.CharField(max_length=20, default="draft", choices=[
+        ("draft", "Draft"), ("review", "Review"), ("approved", "Approved"),
+        ("published", "Published"), ("archived", "Archived"),
+    ])
+    class Meta:
+        ordering = ["course__id", "id"]
+
+
+class EducationEnrollment(T):
+    course = models.ForeignKey(EducationCourse, on_delete=models.CASCADE, related_name="enrollments")
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="education_enrollments")
+    status = models.CharField(max_length=20, default="active", choices=[
+        ("active", "Active"), ("completed", "Completed"), ("cancelled", "Cancelled"),
+    ])
+    source = models.CharField(max_length=30, default="direct")
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["course", "user"], name="unique_education_enrollment")]
+        indexes = [models.Index(fields=["user", "status"])]
+
+
+class EducationProgress(T):
+    enrollment = models.ForeignKey(EducationEnrollment, on_delete=models.CASCADE, related_name="progress")
+    lesson = models.ForeignKey(EducationLesson, on_delete=models.CASCADE, related_name="progress")
+    completed = models.BooleanField(default=False)
+    progress_percent = models.PositiveSmallIntegerField(default=0)
+    last_position = models.PositiveIntegerField(default=0)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["enrollment", "lesson"], name="unique_education_progress")]
+        indexes = [models.Index(fields=["enrollment", "completed"])]
+
+
+class EducationBookmark(T):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="education_bookmarks")
+    lesson = models.ForeignKey(EducationLesson, on_delete=models.CASCADE, related_name="bookmarks")
+    note = models.TextField(blank=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["user", "lesson"], name="unique_education_bookmark")]
+
+
+class EducationAssessment(T):
+    course = models.ForeignKey(EducationCourse, on_delete=models.CASCADE, related_name="assessments")
+    title = models.CharField(max_length=300)
+    description = models.TextField(blank=True)
+    passing_score = models.PositiveSmallIntegerField(default=70)
+    active = models.BooleanField(default=False)
+    approved = models.BooleanField(default=False)
+
+
+class EducationQuestion(T):
+    assessment = models.ForeignKey(EducationAssessment, on_delete=models.CASCADE, related_name="questions")
+    prompt = models.TextField()
+    choices = models.JSONField(default=list)
+    correct_index = models.PositiveIntegerField(default=0)
+    explanation = models.TextField(blank=True)
+    sort_order = models.PositiveIntegerField(default=0)
+
+
+class EducationAttempt(T):
+    assessment = models.ForeignKey(EducationAssessment, on_delete=models.CASCADE, related_name="attempts")
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="education_attempts")
+    answers = models.JSONField(default=dict)
+    score = models.PositiveSmallIntegerField(default=0)
+    passed = models.BooleanField(default=False)
+    submitted_at = models.DateTimeField(auto_now_add=True)
+
+
+class EducationCertificate(T):
+    enrollment = models.OneToOneField(EducationEnrollment, on_delete=models.CASCADE, related_name="certificate")
+    code = models.CharField(max_length=40, unique=True)
+    title = models.CharField(max_length=300)
+    verification_note = models.TextField(blank=True)
+    issued_at = models.DateTimeField(auto_now_add=True)

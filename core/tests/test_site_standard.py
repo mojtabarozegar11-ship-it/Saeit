@@ -5,6 +5,7 @@ class SiteStandardRegressionTests(TestCase):
     public_routes = (
         "/",
         "/academy/",
+        "/education/",
         "/agents/",
         "/weather/",
         "/economy/",

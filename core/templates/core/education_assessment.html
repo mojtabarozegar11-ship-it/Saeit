@@ -1,0 +1,7 @@
+{% extends 'base.html' %}
+{% block title %}{{ assessment.title }} — {{ course.title }}{% endblock %}
+{% block body_class %}page-academy education-page{% endblock %}
+{% block content %}
+<section class="education-course-hero"><span>ASSESSMENT · {{ course.title }}</span><h1>{{ assessment.title }}</h1><p>{{ assessment.description }}</p></section>
+<section class="education-course-list"><form method="post" action="{% url 'education_assessment_submit' course.slug assessment.id %}">{% csrf_token %}{% for q in questions %}<article><b>{{ forloop.counter }}</b><div><h3>{{ q.prompt }}</h3>{% for choice in q.choices %}<label style="display:block;margin:8px 0"><input type="radio" name="q_{{ q.id }}" value="{{ forloop.counter0 }}" required> {{ choice }}</label>{% endfor %}</div></article>{% empty %}<p>هنوز پرسشی برای این آزمون منتشر نشده است.</p>{% endfor %}{% if questions %}<button class="education-primary" type="submit">ثبت پاسخ‌ها</button>{% endif %}</form></section>
+{% endblock %}

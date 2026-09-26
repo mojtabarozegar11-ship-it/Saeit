@@ -1,0 +1,7 @@
+<form class="education-catalog-filters" method="get" action="{% url 'education' %}">
+<label>جستجوی دوره <input type="search" name="q" value="{{ course_q }}" placeholder="عنوان یا موضوع دوره"></label>
+<label>مسیر <select name="track"><option value="">همه مسیرها</option>{% for track in tracks %}<option value="{{ track.key }}" {% if track.key == track_key %}selected{% endif %}>{{ track.title }}</option>{% endfor %}</select></label>
+<label>دسترسی <select name="access"><option value="">همه</option><option value="free" {% if access == 'free' %}selected{% endif %}>رایگان</option><option value="paid" {% if access == 'paid' %}selected{% endif %}>پولی</option></select></label>
+<button type="submit">اعمال فیلتر</button>
+{% if course_q or track_key or access %}<a href="{% url 'education' %}">پاک‌کردن</a>{% endif %}
+</form>

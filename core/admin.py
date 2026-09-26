@@ -21,6 +21,9 @@ from .models import (
     Report,
     ResearchProject,
     ResearchSource,
+    EducationTrack, EducationCourse, EducationResource, EducationLesson, EducationPresentation,
+    EducationEnrollment, EducationProgress, EducationBookmark, EducationAssessment,
+    EducationQuestion, EducationAttempt, EducationCertificate,
 )
 
 
@@ -99,6 +102,91 @@ admin.site.register([
     Product,
     Order,
 ])
+
+@admin.register(EducationTrack)
+class EducationTrackAdmin(ModelAdmin):
+    list_display = ("title", "key", "level", "active", "sort_order")
+    list_filter = ("active", "level")
+    search_fields = ("title", "key", "description")
+    ordering = ("sort_order", "id")
+
+@admin.register(EducationCourse)
+class EducationCourseAdmin(ModelAdmin):
+    list_display = ("title", "track", "is_free", "price", "active", "approved", "quality_status", "version")
+    list_filter = ("active", "approved", "is_free", "quality_status", "track")
+    search_fields = ("title", "slug", "summary", "outcome")
+    prepopulated_fields = {"slug": ("title",)}
+    list_select_related = ("track", "product")
+
+@admin.register(EducationResource)
+class EducationResourceAdmin(ModelAdmin):
+    list_display = ("title", "kind", "course", "is_free", "active", "approved", "sort_order")
+    list_filter = ("kind", "active", "approved", "is_free")
+    search_fields = ("title", "content")
+    ordering = ("sort_order", "id")
+
+@admin.register(EducationLesson)
+class EducationLessonAdmin(ModelAdmin):
+    list_display = ("title", "course", "lesson_type", "duration_minutes", "is_free_preview", "active", "sort_order")
+    list_filter = ("lesson_type", "active", "is_free_preview")
+    search_fields = ("title", "summary", "content")
+    ordering = ("course", "sort_order", "id")
+
+
+@admin.register(EducationPresentation)
+class EducationPresentationAdmin(ModelAdmin):
+    list_display = ("title", "course", "audience", "slide_count", "is_free", "active", "approved", "quality_status", "version")
+    list_filter = ("audience", "is_free", "active", "approved", "quality_status")
+    search_fields = ("title", "description", "presenter_notes", "assessment_notes")
+    list_select_related = ("course",)
+
+
+@admin.register(EducationEnrollment)
+class EducationEnrollmentAdmin(ModelAdmin):
+    list_display = ("user", "course", "status", "source", "completed_at", "updated_at")
+    list_filter = ("status", "source")
+    search_fields = ("user__username", "course__title")
+
+
+@admin.register(EducationProgress)
+class EducationProgressAdmin(ModelAdmin):
+    list_display = ("enrollment", "lesson", "completed", "progress_percent", "completed_at")
+    list_filter = ("completed",)
+    search_fields = ("enrollment__user__username", "lesson__title")
+
+
+@admin.register(EducationBookmark)
+class EducationBookmarkAdmin(ModelAdmin):
+    list_display = ("user", "lesson", "created_at")
+    search_fields = ("user__username", "lesson__title")
+
+
+@admin.register(EducationAssessment)
+class EducationAssessmentAdmin(ModelAdmin):
+    list_display = ("title", "course", "passing_score", "active", "approved")
+    list_filter = ("active", "approved")
+    search_fields = ("title", "course__title")
+
+
+@admin.register(EducationQuestion)
+class EducationQuestionAdmin(ModelAdmin):
+    list_display = ("assessment", "prompt", "correct_index", "sort_order")
+    search_fields = ("prompt",)
+
+
+@admin.register(EducationAttempt)
+class EducationAttemptAdmin(ModelAdmin):
+    list_display = ("user", "assessment", "score", "passed", "submitted_at")
+    list_filter = ("passed",)
+    search_fields = ("user__username", "assessment__title")
+
+
+@admin.register(EducationCertificate)
+class EducationCertificateAdmin(ModelAdmin):
+    list_display = ("code", "title", "enrollment", "issued_at")
+    search_fields = ("code", "title", "enrollment__user__username")
+
+
 
 from .newsletter_models import NewsletterAgentLink, NewsletterOccasion, NewsletterPublication, NewsletterSchedule, NewsletterSource, NewsletterStory, NewsletterSubmission
 

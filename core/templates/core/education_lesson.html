@@ -1,0 +1,10 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}{{ lesson.title }} — {{ course.title }}{% endblock %}
+{% block body_class %}page-academy education-page education-lesson-page{% endblock %}
+{% block content %}
+<section class="education-course-hero"><span>{{ course.track.title }} · درس {{ lesson_position }} از {{ lesson_total }}</span><h1>{{ lesson.title }}</h1><p>{{ lesson.summary }}</p>{% if progress %}<p>وضعیت: {% if progress.completed %}تکمیل‌شده{% else %}در حال یادگیری{% endif %} · {{ progress.progress_percent }}٪</p>{% endif %}</section>
+<section class="education-course-body"><article><span>LESSON</span><h2>محتوای درس</h2><div class="education-lesson-content">{{ lesson.content|linebreaks }}</div>
+{% if enrollment %}<form method="post" action="{% url 'education_lesson_complete' course.slug lesson.id %}">{% csrf_token %}<button class="education-primary" type="submit">تکمیل این درس</button></form><form method="post" action="{% url 'education_bookmark' course.slug lesson.id %}" style="margin-top:10px">{% csrf_token %}<button type="submit">{% if bookmarked %}حذف نشانک{% else %}ذخیره نشانک{% endif %}</button></form>{% endif %}
+</article><aside><span>COURSE</span><h3>{{ course.title }}</h3><p>زمان: {{ lesson.duration_minutes }} دقیقه</p>{% if progress %}<p>پیشرفت: {{ progress.progress_percent }}٪</p>{% endif %}<nav aria-label="ناوبری درس">{% if previous_lesson %}<a href="{% url 'education_lesson' course.slug previous_lesson.id %}">← درس قبلی</a>{% endif %}{% if next_lesson %}<a href="{% url 'education_lesson' course.slug next_lesson.id %}">درس بعدی →</a>{% endif %}</nav><a href="{% url 'education_course_detail' course.slug %}">بازگشت به دوره</a></aside></section>
+{% endblock %}

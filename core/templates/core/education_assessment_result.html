@@ -1,0 +1,10 @@
+{% extends 'base.html' %}
+{% block title %}نتیجه آزمون — {{ assessment.title }}{% endblock %}
+{% block body_class %}page-academy education-page{% endblock %}
+{% block content %}
+<section class="education-course-hero"><span>ASSESSMENT RESULT · {{ course.title }}</span><h1>نتیجه آزمون</h1><p>{{ assessment.title }}</p></section>
+<section class="education-course-list">
+<article><b>{{ attempt.score }}٪</b><div><h2>{% if attempt.passed %}آزمون با موفقیت گذرانده شد{% else %}آزمون نیاز به تلاش دوباره دارد{% endif %}</h2><p>{{ correct }} پاسخ درست از {{ total }} پرسش · حدنصاب {{ assessment.passing_score }}٪</p></div></article>
+<p><a class="education-primary" href="{% url 'education_assessment' course.slug assessment.id %}">تلاش دوباره</a> <a href="{% url 'education_course_detail' course.slug %}">بازگشت به دوره</a></p>
+</section>
+{% endblock %}

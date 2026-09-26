@@ -1,0 +1,8 @@
+{% extends 'base.html' %}
+{% block title %}{{ certificate.title }} — آموزش{% endblock %}
+{% block meta_description %}اعتبارسنجی گواهی آموزشی {{ certificate.code }}{% endblock %}
+{% block body_class %}page-academy education-page{% endblock %}
+{% block content %}
+<section class="academy-hero"><div><span class="academy-kicker">CERTIFICATE VERIFICATION</span><h1>{{ certificate.title }}</h1><p>این گواهی برای دوره «{{ certificate.enrollment.course.title }}» صادر شده است.</p><div class="education-course-meta"><b>کد: {{ certificate.code }}</b><span>تاریخ صدور: {{ certificate.issued_at|date:"Y-m-d" }}</span></div></div></section>
+<section class="education-quality"><div><span>VERIFIED</span><h2>گواهی در سامانه آموزش ثبت شده است.</h2><p>{{ certificate.verification_note }}</p></div></section>
+{% endblock %}

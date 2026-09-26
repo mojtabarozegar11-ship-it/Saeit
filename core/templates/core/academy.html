@@ -1,11 +1,94 @@
 {% extends 'base.html' %}
-{% block title %}آکادمی — Zomorodmelal{% endblock %}
-{% block body_class %}page-academy{% endblock %}
+{% block title %}آموزش — Zomorodmelal{% endblock %}
+{% block meta_description %}مرکز آموزش Zomorodmelal؛ از ابتدایی تا کنکور و دانشگاه، دوره‌های فنی و مهارتی و آموزش‌های تخصصی کشاورزی، صنعت، هوش مصنوعی و کسب‌وکار.{% endblock %}
+{% block body_class %}page-academy education-page{% endblock %}
 {% block content %}
-<section class="academy-hero">
-  <div class="academy-index">ACADEMY<br><b>10</b></div>
-  <div><span class="academy-kicker">KNOWLEDGE · PRACTICE · FUTURE</span><h1>دانش، وقتی ارزش دارد که اجرا شود.</h1><p>آکادمی برای آموزش کاربردی، پژوهش‌محور و مهارت‌های موردنیاز زنجیره‌های واقعی کسب‌وکار.</p></div>
+<section class="education-hero">
+  <div class="education-hero-copy">
+    <span class="education-kicker">EDUCATION · KNOWLEDGE · SKILLS · CAREER</span>
+    <h1>آموزش؛ از اولین درس تا مهارت حرفه‌ای.</h1>
+    <p>یک مسیر یکپارچه برای یادگیری مدرسه، کنکور، دانشگاه، فنی‌وحرفه‌ای و دانش تخصصی زنجیره‌های واقعی تولید و کسب‌وکار.</p>
+    <div class="education-actions"><a class="education-primary" href="#tracks">شروع مسیر یادگیری</a><a class="education-secondary" href="#catalog">مشاهده جزوه و دوره</a></div>
+  </div>
+  <div class="education-command-card">
+    <span>INTELLIGENT EDUCATION ENGINE</span>
+    <strong>24/7</strong>
+    <p>محتوا، مسیرها، تمرین‌ها و پیشنهادهای آموزشی به‌صورت داده‌محور مدیریت و تکمیل می‌شوند؛ انتشار اقدامات مدیریتی طبق سیاست مجوز مالک انجام می‌شود.</p>
+    <b>مدیریت هوشمند · بهبود مستمر</b>
+  </div>
 </section>
-<section class="academy-manifesto"><aside><span>LEARNING SYSTEM</span><strong>01</strong><small>مسیر یادگیری از مبانی تا اجرای پروژه.</small></aside><article><span>ACADEMY PROGRAMS</span><h2>مسیرهای یادگیری منتخب</h2><p>دوره‌ها بر پایه مسئله واقعی، دانش تخصصی و خروجی قابل استفاده طراحی می‌شوند.</p><div class="academy-courses">{% for course in courses %}<article><span>{{ course.meta }}</span><h3>{{ course.title }}</h3><p>{{ course.text }}</p><b>مشاهده مسیر →</b></article>{% endfor %}</div></article></section>
-<section class="academy-footer"><span>FROM KNOWLEDGE TO EXECUTION</span><h2>یادگیری را به یک مسیر عملی تبدیل کنید.</h2><p>آموزش، پژوهش و اجرای پروژه در یک تجربه یکپارچه.</p></section>
+
+<section class="education-principles">
+  <article><b>01</b><strong>علمی و کاربردی</strong><span>محتوا باید قابل فهم، مستند، به‌روز و قابل اجرا باشد.</span></article>
+  <article><b>02</b><strong>مسیرمحور</strong><span>هر دانش‌آموز یا دانشجو مسیر مشخص از سطح فعلی تا هدف دارد.</span></article>
+  <article><b>03</b><strong>رایگان + حرفه‌ای</strong><span>ورود رایگان با محدودیت، و مسیرهای کامل و تخصصی به‌صورت پولی.</span></article>
+  <article><b>04</b><strong>یادگیری تا درآمد</strong><span>آموزش به مهارت، پروژه، محصول و فرصت اقتصادی متصل می‌شود.</span></article>
+</section>
+
+<section class="education-section" id="tracks">
+  <div class="education-heading"><span>LEARNING PATHS</span><h2>مسیرهای آموزشی</h2><p>ساختار آموزش از پایه تا تخصص، بدون محدود شدن به یک مقطع یا رشته.</p></div>
+  <div class="education-track-grid">
+    {% for track in tracks %}
+    <article class="education-track-card"><span>{{ track.meta }}</span><h3>{{ track.title }}</h3><p>{{ track.text }}</p><a href="#catalog">ورود به مسیر ↗</a></article>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="education-catalog" id="catalog">
+  <div class="education-heading"><span>CONTENT CATALOG</span><h2>جزوه، دوره، آزمون و پروژه</h2><p>هر محصول آموزشی باید هدف، سطح، پیش‌نیاز، سرفصل، تمرین، ارزیابی و خروجی روشن داشته باشد.</p></div>
+  <div class="education-resource-grid">
+    {% for resource in resources %}
+    <article><b>{{ resource.kind }}</b><span>{{ resource.access }}</span><h3>{{ resource.title }}</h3><p>{{ resource.text }}</p><a href="/store/">مشاهده در فروشگاه ↗</a></article>
+    {% endfor %}
+  </div>
+</section>
+
+{% if courses %}
+{% include "core/education_catalog_filters.html" %}
+
+<section class="education-section education-live-catalog">
+  <div class="education-heading"><span>LIVE CATALOG</span><h2>دوره‌های منتشرشده</h2><p>دوره‌هایی که از چرخه محتوا، کنترل کیفیت و تأیید انتشار عبور کرده‌اند.</p></div>
+  <div class="education-course-grid">
+    {% for course in courses %}
+    <article class="education-course-card">
+      <span>{{ course.track.title }} · {{ course.currency }}</span>
+      <h3>{{ course.title }}</h3>
+      <p>{{ course.summary }}</p>
+      <div><b>{% if course.is_free %}رایگان{% else %}دوره حرفه‌ای{% endif %}</b><strong>{% if course.is_free %}بدون هزینه{% else %}{{ course.price }} {{ course.currency }}{% endif %}</strong></div>
+      <a href="/education/course/{{ course.slug }}/">مشاهده دوره ↗</a>
+    </article>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+<section class="education-access">
+  <article class="education-free"><span>FREE ACCESS</span><h2>رایگان، اما هدفمند</h2><p>بخشی از دانش برای آشنایی، شروع یادگیری و ارزیابی اولیه همیشه در دسترس خواهد بود.</p><ul>{% for item in free_features %}<li>{{ item }}</li>{% endfor %}</ul></article>
+  <article class="education-paid"><span>PREMIUM LEARNING</span><h2>دوره‌های کامل و حرفه‌ای</h2><p>برای مسیرهای عمیق‌تر، محتوای کامل و تجربه آموزشی ساختاریافته ارائه می‌شود.</p><ul>{% for item in paid_features %}<li>{{ item }}</li>{% endfor %}</ul><a href="/store/">ورود به فروشگاه آموزش ↗</a></article>
+</section>
+
+<section class="education-teaching-tools">
+  <div class="education-heading"><span>TEACHER · PROFESSOR · COACH</span><h2>ابزار تدریس حرفه‌ای</h2><p>پاورپوینت‌های اختصاصی برای استاد، معلم و مربی؛ همراه با سناریوی تدریس، یادداشت ارائه، فعالیت کلاسی و ارزیابی.</p></div>
+  <div class="education-teaching-grid">
+    <article><b>استاد</b><h3>کلاس دانشگاهی</h3><p>اسلایدهای مفهومی، منابع، نکات ارائه و فعالیت پژوهشی.</p></article>
+    <article><b>معلم</b><h3>کلاس مدرسه و کنکور</h3><p>اسلاید مرحله‌ای، مثال، تمرین کلاسی و سنجش یادگیری.</p></article>
+    <article><b>مربی</b><h3>کارگاه مهارتی</h3><p>سناریوی کارگاهی، تمرین عملی، پروژه و چک‌لیست ارزیابی.</p></article>
+  </div>
+</section>
+
+<section class="education-quality">
+  <div><span>QUALITY STANDARD</span><h2>هدف طراحی محتوا: نزدیک‌شدن مستمر به استاندارد کیفیت آموزشی ۱۰۰/۱۰۰</h2></div>
+  <div class="education-quality-grid">
+    <article><b>ساختار</b><span>سرفصل کامل، سطح‌بندی و نقشه راه</span></article>
+    <article><b>محتوا</b><span>علمی، کاربردی، شفاف و قابل سنجش</span></article>
+    <article><b>تمرین</b><span>مثال، تمرین، پروژه و آزمون</span></article>
+    <article><b>کنترل کیفیت</b><span>بازبینی، نسخه‌بندی و بهبود مستمر</span></article>
+  </div>
+</section>
+
+<section class="education-agent">
+  <span>INTELLIGENT EDUCATION</span>
+  <h2>آموزش به‌عنوان یک سیستم زنده</h2>
+  <p>معماری صفحه برای بهبود مستمر کاتالوگ، پیشنهاد مسیر، تحلیل تقاضا، بهبود محتوا و اتصال محصولات آموزشی به فروشگاه طراحی شده است.</p>
+</section>
 {% endblock %}

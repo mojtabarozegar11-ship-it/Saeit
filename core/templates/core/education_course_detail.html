@@ -1,0 +1,23 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}{{ course.title }} — آموزش{% endblock %}
+{% block meta_description %}{{ course.summary|truncatechars:155 }}{% endblock %}
+{% block body_class %}page-academy education-page education-course-detail{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'site/education-course-v1.css' %}">{% endblock %}
+{% block content %}
+<section class="education-course-hero">
+  <span>{{ course.track.title }} · {{ course.currency }}</span>
+  <h1>{{ course.title }}</h1>
+  <p>{{ course.summary }}</p>
+  <div class="education-course-meta"><b>{% if course.is_free %}رایگان{% else %}{{ course.price }} {{ course.currency }}{% endif %}</b><span>نسخه {{ course.version }}</span></div>
+  {% if course.is_free %}<form method="post" action="{% url 'education_enroll' course.slug %}">{% csrf_token %}<button class="education-primary" type="submit">{% if enrollment %}ادامه یادگیری{% else %}شروع رایگان دوره{% endif %}</button></form>{% elif course.product and course.product.active %}<a class="education-primary" href="/store/">خرید و ورود به فروشگاه ↗</a>{% endif %}
+</section>
+<section class="education-course-body">
+  <article><span>SYLLABUS</span><h2>سرفصل دوره</h2>{% for item in course.syllabus %}<div class="education-syllabus-item"><b>{{ forloop.counter|stringformat:'02d' }}</b><span>{{ item }}</span></div>{% empty %}<p>سرفصل این دوره هنوز برای انتشار تکمیل نشده است.</p>{% endfor %}</article>
+  <aside><span>PREREQUISITES</span><h3>پیش‌نیاز</h3><p>{{ course.prerequisites|default:'بدون پیش‌نیاز اعلام‌شده' }}</p><span>OUTCOME</span><h3>خروجی یادگیری</h3><p>{{ course.outcome|default:'خروجی دوره در حال تکمیل است.' }}</p></aside>
+</section>
+{% if lesson_rows %}<section class="education-course-list"><span>LESSONS</span><h2>درس‌های منتشرشده</h2>{% for row in lesson_rows %}{% with lesson=row.lesson progress=row.progress %}<article><b>{{ forloop.counter|stringformat:'02d' }}</b><div><h3>{{ lesson.title }}</h3><p>{{ lesson.summary }}</p></div><span>{% if progress and progress.completed %}✓ تکمیل‌شده · {% endif %}{{ lesson.duration_minutes }} دقیقه</span>{% if enrollment or lesson.is_free_preview %}<a href="{% url 'education_lesson' course.slug lesson.id %}">ورود به درس ↗</a>{% endif %}</article>{% endwith %}{% endfor %}</section>{% endif %}
+{% if assessments and enrollment %}<section class="education-course-list"><span>ASSESSMENTS</span><h2>آزمون‌های دوره</h2>{% for assessment in assessments %}<article><b>آزمون</b><div><h3>{{ assessment.title }}</h3><p>{{ assessment.description }}</p></div><a href="{% url 'education_assessment' course.slug assessment.id %}">شروع آزمون ↗</a></article>{% endfor %}</section>{% endif %}
+{% if resources %}<section class="education-course-list"><span>RESOURCES</span><h2>منابع آموزشی</h2>{% for resource in resources %}<article><b>{{ resource.kind }}</b><div><h3>{{ resource.title }}</h3><p>{{ resource.content|truncatechars:180 }}</p></div></article>{% endfor %}</section>{% endif %}
+<section class="education-quality"><div><span>QUALITY GATE</span><h2>انتشار فقط پس از تکمیل کنترل کیفیت و تأیید انتشار.</h2></div></section>
+{% endblock %}
