@@ -1,25 +1,30 @@
 # Master Agent Chatbot
 
-The Android admin chatbot is the owner-facing control surface for Saeit.
+The Android admin app is the owner-facing control surface for Saeit's Master Agent and Robot Empire.
 
-## Contract
-- Conversation is session based.
-- Backend remains authoritative for execution.
-- Chat may propose research plans and explain task state.
-- Sensitive actions require an owner approval recorded by the backend.
-- The client must never report an action as executed merely because a chat response was generated.
-- API calls use HTTPS.
+## Runtime contract
+- Backend is authoritative for execution, approvals, audit, tasks, agents, and robot runs.
+- Chat is an authenticated command/consultation channel; a generated reply is never treated as proof of execution.
+- Risky actions remain approval-gated by the backend.
+- The app uses HTTPS and encrypted local token storage.
+- Dashboard refresh is intentionally lightweight; deep browser checks and expensive evolution work remain server-side.
 
 ## Current endpoints
+- POST /api/auth/token/
+- GET /api/admin/dashboard/
+- GET/POST /api/agent-control/
+- GET /api/tasks/
+- GET /api/approvals/?status=pending
+- POST /api/approvals/{id}/decide/
 - POST /api/master-chat/
 - POST /api/master-chat/{id}/messages/
 
-## Next integration layers
-1. Approval Center
-2. Research request creation
-3. Task status streaming/polling
-4. Agent routing visibility
-5. Audit trail
-6. Secure token storage
+## Operational principle
+Fast path: dashboard → health → chat → approval → task status.
+Deep path: Master Evolution Robot, browser verification, research, and production actions execute on the server under governance.
 
-No production deployment is performed by this Android module.
+## Verification rule
+The Android client must display server state and timestamps rather than inventing success. A command is successful only when the backend returns a successful state transition.
+
+## Build
+The project is configured for Android SDK 35 / Kotlin Compose. Production deployment is intentionally separate from source changes.
