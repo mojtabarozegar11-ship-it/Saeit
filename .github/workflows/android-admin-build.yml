@@ -19,7 +19,6 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
-      - uses: android-actions/setup-android@v3
       - name: Build debug APK
         run: ./gradlew assembleDebug
       - name: Upload debug APK
