@@ -23,6 +23,12 @@ jobs:
           DEBUG: "False"
           ALLOWED_HOSTS: localhost,127.0.0.1
         run: python manage.py check --deploy
+      - name: Build static manifest
+        env:
+          SECRET_KEY: ci-secret-key
+          DEBUG: "False"
+          ALLOWED_HOSTS: localhost,127.0.0.1
+        run: python manage.py collectstatic --noinput
       - name: Run tests
         env:
           SECRET_KEY: ci-secret-key
