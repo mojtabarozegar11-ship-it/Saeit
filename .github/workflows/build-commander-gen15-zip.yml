@@ -1,0 +1,45 @@
+name: Build Commander Gen15 ZIP
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/master-agent-execution-engine
+    paths:
+      - '.github/workflows/build-commander-gen15-zip.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Commander Gen15 source
+        uses: actions/checkout@v4
+        with:
+          ref: feature/master-agent-execution-engine
+          fetch-depth: 1
+
+      - name: Create clean deployment archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .git
+          zip -r SAEIT-COMMANDER-GEN15-NEW.zip . \
+            -x 'SAEIT-COMMANDER-GEN15-NEW.zip' \
+               '.github/*' \
+               '__pycache__/*' '*.pyc' '*.pyo' \
+               '.env' '.env.*' \
+               'db.sqlite3' \
+               'media/*' 'staticfiles/*'
+          test -s SAEIT-COMMANDER-GEN15-NEW.zip
+          unzip -t SAEIT-COMMANDER-GEN15-NEW.zip
+
+      - name: Upload ZIP artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SAEIT-COMMANDER-GEN15-NEW
+          path: SAEIT-COMMANDER-GEN15-NEW.zip
+          if-no-files-found: error
+          retention-days: 7
