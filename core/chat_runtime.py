@@ -3,6 +3,7 @@ import os
 from openai import OpenAI
 
 from .models import ChatMessage
+from .master_agent_capability_pack import capability_pack_prompt
 
 
 SYSTEM_PROMPT = """
@@ -15,6 +16,10 @@ external writes, deletion, legal actions, or production changes without
 an explicit owner approval recorded by the backend.
 Keep responses concise and operational.
 """
+
+
+def master_system_prompt():
+    return SYSTEM_PROMPT.strip() + "\n\n" + capability_pack_prompt()
 
 
 class MasterAgentChat:
@@ -33,11 +38,9 @@ class MasterAgentChat:
             )
         else:
             client = OpenAI(api_key=api_key)
-            history = list(
-                session.messages.order_by("-created_at")[:20]
-            )
+            history = list(session.messages.order_by("-created_at")[:20])
             messages = [
-                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "system", "content": master_system_prompt()},
                 *[
                     {"role": item.role, "content": item.content}
                     for item in reversed(history)
@@ -54,6 +57,6 @@ class MasterAgentChat:
             session=session,
             role="assistant",
             content=reply,
-            metadata={"agent": "master_agent"},
+            metadata={"agent": "master_agent", "capability_pack": "1.0.0"},
         )
         return reply
