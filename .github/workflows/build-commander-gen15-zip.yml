@@ -60,3 +60,5 @@ jobs:
             SAEIT-COMMANDER-GEN15-FINAL.sha256
           if-no-files-found: error
           retention-days: 7
+
+# build trigger: final-gen15-2026-09-30
