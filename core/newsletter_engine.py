@@ -6,10 +6,48 @@ from django.utils.text import slugify
 
 from .models import Agent, NewsletterSchedule, NewsletterSource, NewsletterStory
 
+ANALYSIS_HEADING = "توضیح، تفسیر و تحلیل تخصصی مجتبی روزگار، پژوهشگر و محقق و مدیر عامل شرکت کشت و صنعت زمرد ملل"
+MIN_AUTO_PUBLISH_SCORE = 90
+
 
 def fingerprint(*parts):
-    raw = "|".join(re.sub(r"\\s+", " ", str(p or "")).strip().lower() for p in parts)
+    raw = "|".join(re.sub(r"\s+", " ", str(p or "")).strip().lower() for p in parts)
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def newsletter_quality_score(*, story_type, title, summary, body, source=None, event_date=None, keywords=None):
+    """Deterministic editorial gate. 100 means all publish-critical requirements are present."""
+    title = (title or "").strip()
+    summary = (summary or "").strip()
+    body = (body or "").strip()
+    keywords = keywords or []
+    score = 0
+    checks = {}
+
+    def add(name, ok, points):
+        nonlocal score
+        checks[name] = bool(ok)
+        if ok:
+            score += points
+
+    add("descriptive_title", 35 <= len(title) <= 220, 8)
+    add("useful_summary", len(summary) >= 180, 10)
+    add("substantive_body", len(body) >= 1200, 18)
+    add("context_and_implications", any(x in body for x in ("زمینه", "پیامد", "اهمیت", "اثر", "چشم‌انداز")), 8)
+    add("data_or_evidence", bool(re.search(r"[0-9۰-۹]+|درصد|آمار|داده|مطالعه|گزارش", body)), 8)
+    add("dedicated_expert_analysis", ANALYSIS_HEADING in body, 15)
+    analysis = body.split(ANALYSIS_HEADING, 1)[1].strip() if ANALYSIS_HEADING in body else ""
+    add("substantive_expert_analysis", len(analysis) >= 450, 10)
+    add("seo_keywords", len([k for k in keywords if str(k).strip()]) >= 3, 5)
+    add("event_date", bool(event_date), 4)
+    if story_type == "world":
+        add("credible_source", bool(source and source.url and source.publisher and source.title), 10)
+        add("source_traceability", bool(source and source.content_hash), 4)
+    else:
+        add("source_or_internal_provenance", story_type in ("company", "report") or bool(source), 10)
+        add("traceability", True, 4)
+
+    return min(score, 100), checks
 
 
 def create_draft(*, agent_code, story_type, title, summary, body, source=None, event_date=None, keywords=None, publish_at=None):
@@ -18,21 +56,35 @@ def create_draft(*, agent_code, story_type, title, summary, body, source=None, e
     fp = fingerprint(story_type, title, source_fingerprint, event_date or "")
     if NewsletterStory.objects.filter(fingerprint=fp).exists():
         return None, "duplicate"
+
+    quality_score, quality_checks = newsletter_quality_score(
+        story_type=story_type, title=title, summary=summary, body=body,
+        source=source, event_date=event_date, keywords=keywords,
+    )
     base = slugify(title, allow_unicode=True)[:150] or fp[:12]
     slug = base
     n = 2
     while NewsletterStory.objects.filter(slug=slug).exists():
         slug = f"{base}-{n}"; n += 1
+
+    # Research-based rule: weak/incomplete stories never enter automatic scheduling.
+    can_schedule = bool(publish_at and quality_score >= MIN_AUTO_PUBLISH_SCORE)
     story = NewsletterStory.objects.create(
         agent=agent, source=source, story_type=story_type, title=title.strip(),
         slug=slug, summary=summary.strip(), body=body.strip(), event_date=event_date,
         fingerprint=fp, source_fingerprint=source_fingerprint,
-        seo_keywords=keywords or [], published_at=publish_at, status="scheduled" if publish_at else "draft",
+        seo_keywords=keywords or [], published_at=publish_at if can_schedule else None,
+        status="scheduled" if can_schedule else "draft",
     )
+    story.manager_action = (
+        f"NEWSROOM_QUALITY={quality_score}/100; threshold={MIN_AUTO_PUBLISH_SCORE}; "
+        f"checks={','.join(k for k, v in quality_checks.items() if v)}"
+    )
+    story.save(update_fields=["manager_action", "updated_at"])
     if story.status == "draft":
         from .blog_distribution import queue_story_distribution
         queue_story_distribution(story)
-    return story, "created"
+    return story, "created" if can_schedule or not publish_at else "quality_hold"
 
 
 def process_submission(submission):
@@ -51,13 +103,10 @@ def process_submission(submission):
         return None
 
     story, reason = create_draft(
-        agent_code="content-director",
-        story_type="company",
-        title=submission.subject,
-        summary=submission.body[:500],
-        body=submission.body,
+        agent_code="content-director", story_type="company", title=submission.subject,
+        summary=submission.body[:500], body=submission.body,
         keywords=[submission.subject, "شرکت کشت و صنعت زمرد ملل", "مجتبی روزگار", "محقق و پژوهشگر"],
-        publish_at=submission.requested_publish_at,
+        event_date=timezone.localdate(), publish_at=submission.requested_publish_at,
     )
     if story:
         unit_title = submission.company_unit_title.strip() or f"واحد تحقیق و توسعه · {submission.subject.strip()}"
@@ -69,7 +118,8 @@ def process_submission(submission):
         story.company_activity_status = submission.company_activity_status.strip() or "پژوهش"
         story.company_project_title = submission.company_project_title.strip()
         story.company_activity_content = submission.body.strip()
-        story.manager_action = "محتوای ورودی از پنل مدیریت؛ محدود به فعالیت‌های واقعی شرکت. پرونده فعالیت شرکت نیز از همین خبر ساخته می‌شود."
+        quality_note = story.manager_action
+        story.manager_action = quality_note + " | محتوای ورودی از پنل مدیریت؛ انتشار فقط پس از عبور از گیت کیفیت و تأیید."
         story.save(update_fields=["author_name", "company_activity_kind", "company_unit_title", "company_unit_slug", "company_activity_status", "company_project_title", "company_activity_content", "manager_action", "updated_at"])
     if story is None:
         submission.status = "rejected"
@@ -113,11 +163,14 @@ def daily_quota_snapshot(day=None):
     for key, limit in (("company", company_limit), ("world", schedule.world_news_daily), ("report", schedule.reports_daily)):
         counts[key] = {"target": limit, "published": NewsletterStory.objects.filter(story_type=key, status="published", published_at__date=day).count()}
         counts[key]["remaining"] = max(0, limit - counts[key]["published"])
-    return {"date": day.isoformat(), "configured": True, "approval_required": schedule.publication_requires_approval, "counts": counts}
+    return {"date": day.isoformat(), "configured": True, "approval_required": schedule.publication_requires_approval, "quality_threshold": MIN_AUTO_PUBLISH_SCORE, "counts": counts}
 
 
-def register_source(*, publisher, title, url, kind="world"):
+def register_source(*, publisher, title, url, kind="world", content_hash=""):
     source, created = NewsletterSource.objects.get_or_create(
-        url=url, defaults={"publisher": publisher, "title": title, "kind": kind}
+        url=url, defaults={"publisher": publisher, "title": title, "kind": kind, "content_hash": content_hash}
     )
+    if not created and content_hash and source.content_hash != content_hash:
+        source.content_hash = content_hash
+        source.save(update_fields=["content_hash", "retrieved_at"])
     return source, created
