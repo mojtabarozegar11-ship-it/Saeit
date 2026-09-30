@@ -6,9 +6,36 @@
 {% block page_head %}<script type="application/ld+json">{{ article_jsonld|safe }}</script>{% endblock %}
 {% block content %}
 <div class="newsletter-story-page">
-  <header class="newsletter-story-hero"><a href="/newsletter/">← بازگشت به خبرنامه</a><small>{{ story.get_story_type_display }} · {{ story.published_at|date:"Y/m/d H:i" }}</small><h1>{{ story.title }}</h1><p>{{ story.summary }}</p><div><b>نویسنده: {{ story.author_name }}</b>{% if story.source %}<span>منبع: {{ story.source.publisher }}</span>{% endif %}</div></header>
-  <article class="newsletter-story-body"><div class="newsletter-story-content">{% if story.image %}<figure class="newsletter-story-media"><img src="{{ story.image.url }}" alt="{{ story.title }}" loading="eager"></figure>{% endif %}{{ story.body|linebreaks }}{% if story.video %}<figure class="newsletter-story-media newsletter-story-video"><video controls preload="metadata"><source src="{{ story.video.url }}"></video></figure>{% endif %}</div><aside><span>TRACEABILITY</span><strong>منبع و منشأ</strong>{% if story.source %}<a href="{{ story.source.url }}" target="_blank" rel="nofollow noopener">{{ story.source.title }} ↗</a>{% else %}<p>گزارش داخلی شرکت</p>{% endif %}<small>Fingerprint ثبت‌شده برای کنترل تکرار</small></aside></article>
-  <section class="newsletter-publications"><span>DISTRIBUTION STATUS</span><h2>وضعیت انتشار کانال‌ها</h2><div>{% for item in publications %}<article><b>{{ item.get_channel_display }}</b><span>{{ item.get_status_display }}</span></article>{% empty %}<p>کانال‌های انتشار پس از تأیید خبر در صف توزیع قرار می‌گیرند.</p>{% endfor %}</div></section>
+  <header class="newsletter-story-hero">
+    <a href="/newsletter/">← بازگشت به خبرنامه</a>
+    <small>{{ story.get_story_type_display }} · {{ story.published_at|date:"Y/m/d H:i" }}</small>
+    <h1>{{ story.title }}</h1>
+    <p>{{ story.summary }}</p>
+    <div><b>نویسنده: {{ story.author_name }}</b>{% if story.event_date %}<span>تاریخ رویداد: {{ story.event_date|date:"Y/m/d" }}</span>{% endif %}{% if story.source %}<span>منبع: {{ story.source.publisher }}</span>{% endif %}</div>
+  </header>
+
+  <article class="newsletter-story-body">
+    <div class="newsletter-story-content">
+      {% if story.image %}<figure class="newsletter-story-media"><img src="{{ story.image.url }}" alt="{{ story.title }}" loading="eager"><figcaption>{{ story.title }}</figcaption></figure>{% endif %}
+      <section class="newsletter-original-report"><span>ORIGINAL REPORT</span><h2>اصل خبر، جزئیات و زمینه</h2>{{ story.body|linebreaks }}</section>
+      {% if story.video %}<figure class="newsletter-story-media newsletter-story-video"><video controls preload="metadata"><source src="{{ story.video.url }}"></video></figure>{% endif %}
+      {% if story.manager_action %}<section class="newsletter-quality-note"><span>EDITORIAL CONTROL</span><h2>کنترل کیفیت تحریریه</h2><p>{{ story.manager_action }}</p></section>{% endif %}
+    </div>
+    <aside>
+      <span>TRACEABILITY</span><strong>منبع و منشأ</strong>
+      {% if story.source %}<a href="{{ story.source.url }}" target="_blank" rel="nofollow noopener">{{ story.source.publisher }} — {{ story.source.title }} ↗</a><small>بازیابی: {{ story.source.retrieved_at|date:"Y/m/d H:i" }}</small>{% else %}<p>گزارش داخلی شرکت؛ منشأ باید در پرونده فعالیت قابل رهگیری باشد.</p>{% endif %}
+      <small>Fingerprint ثبت‌شده برای کنترل تکرار</small>
+      {% if story.seo_keywords %}<strong>کلیدواژه‌ها</strong><p>{{ story.seo_keywords|join:"، " }}</p>{% endif %}
+    </aside>
+  </article>
+
+  <section class="newsletter-expert-standard">
+    <span>EXPERT ANALYSIS STANDARD</span>
+    <h2>استاندارد تحلیل اختصاصی هر خبر</h2>
+    <p>هر خبر باید در متن خود بخش مستقل «توضیح، تفسیر و تحلیل تخصصی مجتبی روزگار، پژوهشگر و محقق و مدیر عامل شرکت کشت و صنعت زمرد ملل» داشته باشد؛ تحلیل باید مختص همان خبر، علمی، داده‌محور، غیرتکراری و شامل پیامدها و کاربرد عملی باشد.</p>
+  </section>
+
+  <section class="newsletter-publications"><span>DISTRIBUTION STATUS</span><h2>وضعیت انتشار کانال‌ها</h2><div>{% for item in publications %}<article><b>{{ item.get_channel_display }}</b><span>{{ item.get_status_display }}</span></article>{% empty %}<p>کانال‌های انتشار فقط پس از عبور خبر از کنترل کیفیت و تأیید در صف توزیع قرار می‌گیرند.</p>{% endfor %}</div></section>
   <section class="newsletter-related"><span>RELATED</span><h2>مطالب مرتبط</h2><div>{% for item in related %}<a href="/newsletter/{{ item.slug }}/"><strong>{{ item.title }}</strong><small>{{ item.summary }}</small></a>{% empty %}<p>مطالب مرتبطی ثبت نشده است.</p>{% endfor %}</div></section>
 </div>
 {% endblock %}
