@@ -1,24 +1,8 @@
 from django.core.management.base import BaseCommand, CommandError
 from core.models import AgentTask
-from core.tool_gateway import ToolGateway, ToolSpec
 from core.worker_runner import WorkerRunner
-from core import economic_tools
+from core.economic_tool_pack import build_economic_gateway
 
-TOOLS = {
-    "income_market_research": economic_tools.market_research,
-    "income_opportunity_score": economic_tools.opportunity_score,
-    "income_offer_design": economic_tools.offer_design,
-    "income_mvp_build": economic_tools.mvp_build,
-    "income_growth_experiment": economic_tools.growth_experiment,
-    "income_revenue_verify": economic_tools.revenue_verify,
-    "income_profit_optimize": economic_tools.profit_optimize,
-}
-
-def gateway():
-    return ToolGateway([
-        ToolSpec(code=code, handler=handler, risk="low")
-        for code, handler in TOOLS.items()
-    ])
 
 class Command(BaseCommand):
     help = "Execute queued economic master-agent tasks through the controlled gateway."
@@ -39,7 +23,7 @@ class Command(BaseCommand):
         if not ids:
             self.stdout.write("NO_QUEUED_ECONOMIC_TASK")
             return
-        runner = WorkerRunner(gateway())
+        runner = WorkerRunner(build_economic_gateway())
         for task_id in ids:
             try:
                 task = runner.run(task_id)
