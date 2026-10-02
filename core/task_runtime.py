@@ -141,7 +141,28 @@ class TaskRuntime:
             raise TaskExecutionError("Task cost must be finite")
         if normalized_cost < 0:
             raise TaskExecutionError("Task cost cannot be negative")
-        task.output_data = output_data or {}
+        normalized_output = output_data or {}
+        # Economic work is not complete merely because a handler returned. It must
+        # prove an observable effect. This prevents report-only/no-op cycles from
+        # being counted as operational progress.
+        if str(task.capability_code or "").startswith("income_"):
+            if normalized_output.get("verified_effect") is not True:
+                raise TaskExecutionError(
+                    "Economic task cannot complete without verified_effect=true"
+                )
+            evidence = normalized_output.get("evidence")
+            if not isinstance(evidence, dict) or not any(
+                str(value or "").strip() for value in evidence.values()
+            ):
+                raise TaskExecutionError(
+                    "Economic task cannot complete without concrete evidence"
+                )
+            action = str(normalized_output.get("action_performed") or "").strip()
+            if not action:
+                raise TaskExecutionError(
+                    "Economic task cannot complete without action_performed"
+                )
+        task.output_data = normalized_output
         task.cost = normalized_cost
         task.status = "completed"
         task.save(update_fields=["output_data", "cost", "status", "updated_at"])
