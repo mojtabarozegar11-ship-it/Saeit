@@ -6,6 +6,7 @@ from pathlib import Path
 from .foundation_runtime import ROOT, BASE, connect, atomic_json, business_snapshot
 
 DOMAINS = {
+    'self_improvement': {'repository':'Saeit','objective':'continuously upgrade the primary robot and every project component with verified execution'},
     'economics': {'repository':'Saeit','objective':'measure revenue, costs and unit economics'},
     'business': {'repository':'Saeit','objective':'connect qualified demand to delivered paid orders'},
     'site': {'repository':'Saeit','objective':'diagnose, apply authorized code changes and verify deployment'},
@@ -13,6 +14,7 @@ DOMAINS = {
     'games': {'repository':'Bazei','objective':'build and verify game one before starting another'},
 }
 OPERATIONS = {
+    ('self_improvement','audit'), ('self_improvement','repair'),
     ('economics','audit'), ('economics','unit_economics'),
     ('business','audit'), ('site','audit'), ('site','apply_patch'),
     ('trading','audit'), ('trading','backtest'), ('games','audit'),
@@ -41,6 +43,10 @@ def validate(domain, operation, payload):
         raise ValueError('unsupported_executable_operation')
     if not isinstance(payload,dict) or len(json.dumps(payload)) > 600000:
         raise ValueError('invalid_payload')
+    if operation == 'repair':
+        from .operational_law import automatic_allowed
+        if not automatic_allowed(domain,operation,payload):
+            raise ValueError('unsupported_repair_recipe')
     if operation == 'unit_economics':
         required = {'price','variable_cost','fixed_cost','units','currency'}
         if not required <= payload.keys():
@@ -74,8 +80,9 @@ def submit(domain, operation, payload=None, *, owner=None, request_id=None,
     payload = validate(domain,operation,payload or {})
     if not automatic and not (owner and (getattr(owner,'is_staff',False) or getattr(owner,'is_superuser',False))):
         raise PermissionError('executive_owner_authority_required')
-    if automatic and operation != 'audit':
-        raise PermissionError('automatic_audit_only')
+    from .operational_law import automatic_allowed
+    if automatic and not automatic_allowed(domain,operation,payload):
+        raise PermissionError('automatic_operation_not_authorized')
     c = connection or connect()
     try:
         schema(c)
@@ -121,6 +128,9 @@ def backtest(payload):
                                             'single dataset is not out-of-sample proof']}
 
 def perform(domain, operation, payload):
+    if domain == 'self_improvement':
+        from .self_improvement import audit, repair
+        return repair(payload) if operation == 'repair' else audit()
     if operation == 'unit_economics':
         from .finance_toolkit import unit_economics
         return {'state':'calculated','currency':payload['currency'],'calculation':unit_economics(payload),
@@ -234,7 +244,8 @@ def portfolio(c=None):
             domains[row['domain']]={'objective':row['objective'],'repository':row['repository'],
                 'last_checked':row['last_run'],'evidence_status':result.get('state','untested'),
                 'result':result}
-        return {'identity':'moj_1ro_1','management_mode':'multi_domain_execution',
+        from .operational_law import current
+        return {'constitution':current(),'identity':'moj_1ro_1','management_mode':'multi_domain_execution',
                 'domains':domains,'states':{r[0]:r[1] for r in c.execute(
                     'SELECT state,count(*) FROM executive_tasks GROUP BY state')},
                 'local_reasoning_model':'not_configured','general_autonomous_coding':'not_proven',
@@ -246,11 +257,15 @@ def tick(cycle):
     c=connect()
     try:
         schema(c)
+        from .operational_law import current, priority
+        law = current()
+        atomic_json(BASE/'constitution_active.json',{'version':law['version'],
+            'sha256':law['sha256'],'read_at':time.time(),'cycle':cycle})
         for domain in DOMAINS:
             goal=c.execute('SELECT last_run FROM executive_goals WHERE domain=?',(domain,)).fetchone()
             if time.time()-goal[0]>=900:
                 submit(domain,'audit',request_id='audit:'+domain+':'+str(int(time.time()//900)),
-                       priority=90 if domain=='site' else 40,automatic=True,connection=c)
+                       priority=priority(domain),automatic=True,connection=c)
         result=run_one(c,time.time())
         status=portfolio(c)
         status.update(cycle=cycle,outcome=result)

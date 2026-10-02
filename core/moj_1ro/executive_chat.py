@@ -1,5 +1,5 @@
 """Concise owner-facing results grounded in current executable receipts."""
-NAMES={'economics':'اقتصاد','business':'کسب‌وکار','site':'سایت و برنامه‌نویسی',
+NAMES={'self_improvement':'ارتقای ربات و پروژه','economics':'اقتصاد','business':'کسب‌وکار','site':'سایت و برنامه‌نویسی',
        'trading':'معامله‌گری','games':'بازی‌سازی'}
 STATES={'untested':'آزمایش نشده','observed':'بررسی انجام شده',
         'calculated':'محاسبه انجام شده','applied':'تغییر اعمال شده','blocked':'مانع اجرایی دارد'}
