@@ -6,6 +6,7 @@ LOCK = Path('/home/zomorod2/logs/moj-1ro-1-runtime.lock')
 STATE = ROOT / 'var/moj_runtime/state.json'
 INTERVAL = 10
 ROOT.mkdir(parents=True, exist_ok=True)
+LOCK.parent.mkdir(parents=True, exist_ok=True)
 stream = LOCK.open('a')
 try:
     fcntl.flock(stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
