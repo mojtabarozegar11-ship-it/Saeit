@@ -6,7 +6,10 @@ from core.worker_runner import WorkerRunner
 
 
 class Command(BaseCommand):
-    help = "Execute one queued task for the single Economic Master Agent through real registered tools."
+    help = "Execute queued tasks for the single Economic Master Agent through real registered tools."
+
+    def add_arguments(self, parser):
+        parser.add_argument("--drain", action="store_true")
 
     def handle(self, *args, **options):
         task = AgentTask.objects.filter(
