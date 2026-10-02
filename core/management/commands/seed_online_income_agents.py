@@ -14,19 +14,13 @@ CAPABILITIES = [
     ("income_profit_optimize", "Profit optimization", "Compare verified revenue, direct costs, margin, repeatability and operational load to improve allocation.", "medium"),
 ]
 
-AGENTS = [
-    ("income-research-agent", "Internet Income Research Agent", "Continuously discover evidence-backed legal online income opportunities."),
-    ("income-offer-agent", "Internet Income Offer Agent", "Turn qualified opportunities into concrete products, services and MVP offers."),
-    ("income-growth-agent", "Internet Income Growth Agent", "Run measurable lawful growth and conversion experiments under approval boundaries."),
-    ("income-audit-agent", "Internet Income Audit Agent", "Audit payments, costs, profit evidence, compliance and learning loops."),
-]
+MASTER_AGENT = (
+    "economic-master-agent",
+    "Economic Master Agent",
+    "Build the project, remove blockers, create market-ready assets, commercialize them, and increase verified revenue.",
+)
 
-ASSIGNMENTS = {
-    "income-research-agent": ["income_market_research", "income_opportunity_score"],
-    "income-offer-agent": ["income_opportunity_score", "income_offer_design", "income_mvp_build"],
-    "income-growth-agent": ["income_growth_experiment", "income_profit_optimize"],
-    "income-audit-agent": ["income_revenue_verify", "income_profit_optimize"],
-}
+ASSIGNMENTS = [code for code, *_ in CAPABILITIES]
 
 
 class Command(BaseCommand):
@@ -42,11 +36,15 @@ class Command(BaseCommand):
             )
             capabilities[code] = obj
 
-        for code, name, mission in AGENTS:
-            agent, _ = Agent.objects.update_or_create(
-                code=code,
-                defaults={"name": name, "mission": mission, "risk_level": "medium", "active": True},
-            )
-            agent.capabilities.set([capabilities[c] for c in ASSIGNMENTS[code]])
+        code, name, mission = MASTER_AGENT
+        agent, _ = Agent.objects.update_or_create(
+            code=code,
+            defaults={"name": name, "mission": mission, "risk_level": "medium", "active": True},
+        )
+        agent.capabilities.set([capabilities[c] for c in ASSIGNMENTS])
 
-        self.stdout.write(self.style.SUCCESS("Online-income agents and capabilities are seeded."))
+        # The runtime has one operational economic agent. Legacy split income agents
+        # are retained only as historical records and must never receive new work.
+        Agent.objects.filter(code__startswith="income-").exclude(code=code).update(active=False)
+
+        self.stdout.write(self.style.SUCCESS("Economic Master Agent and online-income capabilities are seeded; legacy income agents are inactive."))
