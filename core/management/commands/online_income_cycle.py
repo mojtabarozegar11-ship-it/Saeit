@@ -4,52 +4,72 @@ from django.db import transaction
 from core.models import Agent, AgentTask
 
 
-PIPELINE = [
-    ("income-research-agent", "income_market_research"),
-    ("income-research-agent", "income_opportunity_score"),
-    ("income-offer-agent", "income_offer_design"),
-    ("income-offer-agent", "income_mvp_build"),
-    ("income-growth-agent", "income_growth_experiment"),
-    ("income-audit-agent", "income_revenue_verify"),
-    ("income-audit-agent", "income_profit_optimize"),
-]
+MASTER_CODES = ("moj_1ro_1", "economic-master-agent")
+ACTION = "implement_feature"
 
 
 class Command(BaseCommand):
-    help = "Queue one auditable online-income pipeline cycle. External actions remain approval-gated."
+    help = "Queue exactly one concrete, auditable master-agent work item."
 
     def add_arguments(self, parser):
         parser.add_argument("--dry-run", action="store_true")
 
     @transaction.atomic
     def handle(self, *args, **options):
-        queued = 0
-        for agent_code, capability_code in PIPELINE:
-            agent = Agent.objects.filter(code=agent_code, active=True).first()
-            if not agent:
-                self.stderr.write(f"Missing active agent: {agent_code}. Run seed_online_income_agents first.")
-                continue
-            if not agent.capabilities.filter(code=capability_code, active=True).exists():
-                self.stderr.write(f"Missing capability {capability_code} on {agent_code}")
-                continue
-            if options["dry_run"]:
-                self.stdout.write(f"DRY RUN: {agent_code} -> {capability_code}")
-                continue
-            AgentTask.objects.create(
-                agent=agent,
-                action_type=capability_code,
-                capability_code=capability_code,
-                risk_snapshot="medium",
-                input_data={
-                    "objective": "Discover and develop lawful, measurable internet-income opportunities into verified profitable revenue.",
-                    "guardrails": [
-                        "No pyramid schemes, fraud, spam, deception or platform-policy evasion.",
-                        "No external spend, contract, payment or sensitive commitment without the applicable approval grant.",
-                        "Revenue is VERIFIED only after reconciled payment evidence.",
-                        "Prefer experiments with measurable conversion, margin and repeatability.",
-                    ],
-                },
-                status="queued",
+        agent = None
+        for code in MASTER_CODES:
+            agent = Agent.objects.filter(code=code, active=True).first()
+            if agent:
+                break
+        if not agent:
+            self.stderr.write("No active master agent found (moj_1ro_1/economic-master-agent).")
+            return
+
+        # Never manufacture activity while prior work is still actionable.
+        existing = AgentTask.objects.filter(
+            agent=agent, status__in=("queued", "running", "blocked")
+        ).order_by("id").first()
+        if existing:
+            self.stdout.write(
+                f"Existing work retained: task={existing.pk} action={existing.action_type} status={existing.status}"
             )
-            queued += 1
-        self.stdout.write(self.style.SUCCESS(f"Queued {queued} online-income tasks."))
+            return
+
+        capability = agent.capabilities.filter(code=ACTION, active=True).first()
+        if not capability:
+            self.stderr.write(
+                f"Master agent lacks real capability '{ACTION}'. "
+                "Cycle stopped instead of creating a fake/report-only task."
+            )
+            return
+
+        payload = {
+            "primary_goal": "Complete the project and create verified lawful revenue.",
+            "work_selection": "highest_impact_unfinished_work",
+            "definition_of_done": [
+                "one concrete named deliverable is changed or created",
+                "the change is verified by evidence/test/state",
+                "a blocker is never reported as success",
+                "research/report text alone is never success",
+            ],
+            "blocker_policy": "record exact blocker, create remediation work, then continue",
+            "revenue_policy": "count revenue only after external settlement evidence and reconciliation",
+        }
+
+        if options["dry_run"]:
+            self.stdout.write(f"DRY RUN: {agent.code} -> {ACTION}")
+            return
+
+        task = AgentTask.objects.create(
+            agent=agent,
+            action_type=ACTION,
+            capability_code=capability.code,
+            risk_snapshot=capability.risk_level or "low",
+            input_data=payload,
+            status="queued",
+        )
+        self.stdout.write(
+            self.style.SUCCESS(
+                f"Queued concrete master work: task={task.pk} agent={agent.code} action={ACTION}"
+            )
+        )
