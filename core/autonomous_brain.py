@@ -1,9 +1,4 @@
-"""Autonomous decision brain for the single economic master agent.
-
-No fixed business pipeline. Each iteration observes current state, generates
-candidate actions, scores them, chooses one, and leaves execution to the
-controlled worker/approval boundary.
-"""
+"""Autonomous observe/decide/replan brain for the single master agent."""
 from dataclasses import dataclass
 from core.models import AgentTask, Product, Order
 
@@ -15,54 +10,51 @@ class Candidate:
     urgency: int
     confidence: int
     risk: int
-    payload: dict
     @property
     def score(self):
-        return self.impact * 4 + self.urgency * 3 + self.confidence * 2 - self.risk * 3
+        return self.impact*4 + self.urgency*3 + self.confidence*2 - self.risk*3
 
 class AutonomousBrain:
     def observe(self):
+        products = Product.objects.all()
         return {
-            "unfinished_tasks": AgentTask.objects.filter(
-                agent__code="economic-master-agent",
-                status__in=("queued","running","blocked"),
-            ).count(),
-            "completed_tasks": AgentTask.objects.filter(
-                agent__code="economic-master-agent", status="completed"
-            ).count(),
-            "active_products": Product.objects.filter(active=True).count(),
+            "unfinished_tasks": AgentTask.objects.filter(agent__code="economic-master-agent",status__in=("queued","running","blocked")).count(),
+            "failed_tasks": AgentTask.objects.filter(agent__code="economic-master-agent",status="failed").count(),
+            "active_products": products.filter(active=True).count(),
+            "offer_designed": products.filter(metadata__commercial_status="offer_designed").count(),
+            "mvp_built": products.filter(metadata__commercial_status="mvp_built").count(),
+            "growth_ready": products.filter(metadata__commercial_status="growth_ready").count(),
             "orders": Order.objects.count(),
             "paid_orders": Order.objects.filter(status__in=("paid","completed")).count(),
         }
 
-    def candidates(self, state):
-        c = []
-        if state["unfinished_tasks"]:
-            c.append(Candidate("continue_existing_work","Finish existing work before inventing more.",10,10,10,1,{}))
-        if state["active_products"] == 0:
-            c += [
-                Candidate("income_market_research","No active product: validate a market before building.",8,8,8,1,{}),
-                Candidate("income_offer_design","No active product: turn validated capability into an offer.",9,7,6,2,{}),
-            ]
-        elif state["orders"] == 0:
-            c.append(Candidate("income_growth_experiment","Product exists but has no orders; test acquisition.",10,9,7,2,{}))
-        else:
-            c.append(Candidate("income_revenue_verify","Orders exist; verify settlement before counting revenue.",10,10,9,1,{}))
-        c.append(Candidate("income_profit_optimize","Measure current economics and find the highest-impact bottleneck.",6,5,8,1,{}))
-        return sorted(c, key=lambda x: x.score, reverse=True)
+    def candidates(self, s):
+        c=[]
+        if s["unfinished_tasks"]:
+            return [Candidate("continue_existing_work","An unfinished task must be resolved first.",10,10,10,1)]
+        # Dependencies are inferred from observed state, not a fixed pipeline.
+        if s["growth_ready"] and s["orders"]:
+            c.append(Candidate("income_revenue_verify","Orders exist for commercialized work; reconcile evidence.",10,10,9,1))
+        if s["mvp_built"]:
+            c.append(Candidate("income_growth_experiment","A built MVP exists; prepare/test acquisition.",10,9,9,2))
+        if s["offer_designed"]:
+            c.append(Candidate("income_mvp_build","A designed offer exists without a built MVP.",10,10,10,2))
+        if not s["offer_designed"] and not s["mvp_built"] and not s["growth_ready"]:
+            c.append(Candidate("income_offer_design","No prepared offer exists; create the highest-value concrete offer.",9,9,8,2))
+            c.append(Candidate("income_market_research","Commercial state is insufficient; gather decision evidence.",8,8,8,1))
+        if s["active_products"] and not s["orders"]:
+            c.append(Candidate("income_growth_experiment","Active product has no orders; acquisition is the bottleneck.",10,9,7,2))
+        c.append(Candidate("income_profit_optimize","Measure economics and identify the next bottleneck.",6,5,8,1))
+        return sorted(c,key=lambda x:x.score,reverse=True)
 
     def decide(self):
-        state = self.observe()
-        ranked = self.candidates(state)
-        chosen = ranked[0]
-        return {
-            "state": state,
-            "chosen": {
-                "action": chosen.action, "reason": chosen.reason, "score": chosen.score,
-                "payload": chosen.payload,
-            },
-            "alternatives": [
-                {"action": x.action, "reason": x.reason, "score": x.score}
-                for x in ranked[1:4]
-            ],
-        }
+        s=self.observe(); ranked=self.candidates(s); chosen=ranked[0]
+        return {"state":s,"chosen":{"action":chosen.action,"reason":chosen.reason,"score":chosen.score},
+                "alternatives":[{"action":x.action,"reason":x.reason,"score":x.score} for x in ranked[1:4]]}
+
+    @staticmethod
+    def prerequisite_from_error(error):
+        e=str(error or "").lower()
+        if "no built mvp" in e: return "income_mvp_build"
+        if "no designed offer" in e: return "income_offer_design"
+        return None
