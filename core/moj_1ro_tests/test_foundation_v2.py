@@ -106,7 +106,8 @@ class FoundationTests(unittest.TestCase):
         self.assertEqual(rt.execute({'kind':'arbitrary_shell','payload':'{}'})['state'], 'blocked')
     def test_summary_is_honest_about_attribution(self):
         rt.plan(self.c, OFFER, SNAP, 1000)
-        row = rt.summary(self.c, 1, SNAP, OFFER, {'state':'completed'})
+        with patch.object(rt, 'offer_readiness', return_value={'purchasable':False,'missing':['product_quality_approval']}):
+            row = rt.summary(self.c, 1, SNAP, OFFER, {'state':'completed'})
         self.assertEqual(row['robot_attributed_revenue'], '0')
         self.assertIn('general_code_repair', row['missing_capabilities'])
 

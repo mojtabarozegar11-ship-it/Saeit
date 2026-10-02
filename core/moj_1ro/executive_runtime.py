@@ -170,13 +170,20 @@ def perform(domain, operation, payload):
                 'profit_known':False,'missing':['verified_cost_ledger','customer_acquisition_cost'],
                 'next_operation':'unit_economics_when_measured_inputs_exist'}
     if domain == 'business':
+        from .customer_path import snapshot as customer_snapshot
+        from .foundation_runtime import active_offer, offer_readiness
         c=connect()
         try:
             counts={r[0]:r[1] for r in c.execute('SELECT state,count(*) FROM opportunities GROUP BY state')}
+            customer_path=customer_snapshot(c)
         finally: c.close()
         b=business_snapshot()
-        return {'state':'observed','business':b,'opportunity_states':counts,
-                'bottleneck':'customer_contact_and_contract' if b['orders']==0 else 'payment_conversion',
+        readiness=offer_readiness(active_offer())
+        return {'state':'blocked' if readiness['missing'] or b['orders']==0 else 'observed',
+                'business':b,'opportunity_states':counts,
+                'bottleneck':readiness['missing'][0] if readiness['missing'] else
+                    ('customer_contact_and_contract' if b['orders']==0 else 'payment_conversion'),
+                'offer_readiness':readiness,'customer_path':customer_path,
                 'contact_executor':'not_connected','draft_is_customer':False}
     if domain == 'site':
         from django.core.management import call_command
@@ -237,6 +244,8 @@ def run_one(c, now):
         result={'state':'blocked','error':type(exc).__name__}
         c.execute("UPDATE executive_tasks SET state='blocked',result=?,lease_until=0,updated=? WHERE id=?",
                   (json.dumps(result),time.time(),task['id']))
+        c.execute("UPDATE executive_goals SET last_result=?,last_run=?,updated=? WHERE domain=?",
+                  (json.dumps(result),time.time(),time.time(),task['domain']))
     c.execute("INSERT INTO executive_events(task_id,event,payload,ts) VALUES(?,?,?,?)",
               (task['id'],result['state'],json.dumps(result,default=str),time.time()))
     c.commit()
@@ -273,11 +282,16 @@ def tick(cycle):
             sync(c,law)
         atomic_json(BASE/'constitution_active.json',{'version':law['version'],
             'sha256':law['sha256'],'read_at':time.time(),'cycle':cycle})
+        interval = max(30, int(law.get('continuous_income_research',{}).get('interval_seconds',900)))
+        now = time.time()
         for domain in DOMAINS:
             goal=c.execute('SELECT last_run FROM executive_goals WHERE domain=?',(domain,)).fetchone()
-            if time.time()-goal[0]>=law.get('continuous_income_research',{}).get('interval_seconds',900):
+            pending = c.execute("""SELECT 1 FROM executive_tasks WHERE domain=?
+                AND operation IN ('audit','research') AND state IN ('ready','retry','running')""",
+                (domain,)).fetchone()
+            if now-goal[0]>=interval and not pending:
                 operation = 'research' if domain == 'income_research' else 'audit'
-                submit(domain,operation,request_id='audit:'+domain+':'+str(int(time.time()//900)),
+                submit(domain,operation,request_id='audit:'+domain+':'+str(int(now//interval)),
                        priority=priority(domain),automatic=True,connection=c)
         result=run_one(c,time.time())
         status=portfolio(c)

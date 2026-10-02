@@ -267,13 +267,12 @@ class OrderViewSet(OwnerScopedMixin, viewsets.ModelViewSet):
             return Response({"detail": "quantity must be a positive integer."}, status=status.HTTP_400_BAD_REQUEST)
         if quantity < 1:
             return Response({"detail": "quantity must be a positive integer."}, status=status.HTTP_400_BAD_REQUEST)
-        try:
-            product = Product.objects.select_for_update().get(pk=product_id, active=True, knowledge_article__published=True)
-        except (Product.DoesNotExist, TypeError, ValueError):
-            return Response({"detail": "Active, published-knowledge-backed product not found."}, status=status.HTTP_404_NOT_FOUND)
-
         from django.db import transaction
         with transaction.atomic():
+            try:
+                product = Product.objects.select_for_update().get(pk=product_id, active=True, knowledge_article__published=True)
+            except (Product.DoesNotExist, TypeError, ValueError):
+                return Response({"detail": "Active, published-knowledge-backed product not found."}, status=status.HTTP_404_NOT_FOUND)
             order = Order.objects.create(
                 customer=request.user,
                 status="pending",

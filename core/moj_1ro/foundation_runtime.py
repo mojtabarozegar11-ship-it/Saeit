@@ -41,6 +41,8 @@ def connect(path=None):
       next_at REAL DEFAULT 0, parent TEXT, last_result TEXT);
     CREATE TABLE IF NOT EXISTS opportunities(url TEXT PRIMARY KEY, evidence TEXT,
       state TEXT, draft_path TEXT, updated REAL);
+    CREATE TABLE IF NOT EXISTS customer_handoffs(url TEXT PRIMARY KEY,
+      product_id INTEGER, state TEXT, artifact_path TEXT, updated REAL);
     """)
     return c
 
@@ -56,6 +58,20 @@ def active_offer():
     p = Product.objects.filter(active=True).order_by('id').first()
     return None if p is None else {'id': p.id, 'title': p.title,
             'type': p.product_type, 'price': str(p.price), 'currency': p.currency}
+
+def offer_readiness(offer):
+    if not offer:
+        return {'purchasable': False, 'missing': ['no_active_offer']}
+    try:
+        from core.product_pipeline import can_publish
+        product = Product.objects.get(pk=offer['id'], active=True)
+        approved = can_publish(product)
+    except ImportError:
+        return {'purchasable': False, 'missing': ['quality_executor_unavailable']}
+    except Product.DoesNotExist:
+        return {'purchasable': False, 'missing': ['active_product_missing']}
+    return {'purchasable': bool(approved),
+            'missing': [] if approved else ['product_quality_approval']}
 
 def outcome(before, after):
     return {'order_growth': after['orders'] > before['orders'],
@@ -97,6 +113,11 @@ def plan(c, offer, snapshot, now):
         enqueue(c, 'health', {}, 'health:' + str(int(now // 300)), now)
         c.execute("UPDATE goals SET last_health=? WHERE id='primary-income'", (now,))
     if offer:
+        for op in c.execute("""SELECT o.url FROM opportunities o
+            LEFT JOIN customer_handoffs h ON h.url=o.url
+            WHERE o.state='draft_ready' AND h.url IS NULL LIMIT 3""").fetchall():
+            enqueue(c, 'handoff', {'url': op['url'], 'offer': offer},
+                    'handoff:' + op['url'] + ':' + str(offer['id']), now)
         # Persisted opportunity state drives the next action, not a decorative strategy label.
         for op in c.execute("SELECT url FROM opportunities WHERE state='candidate' LIMIT 3").fetchall():
             enqueue(c, 'draft', {'url': op['url'], 'offer': offer},
@@ -117,7 +138,7 @@ def claim(c, now):
     c.execute('BEGIN IMMEDIATE')
     row = c.execute("""SELECT * FROM tasks WHERE state IN ('ready','retry')
        AND not_before<=? ORDER BY CASE kind WHEN 'draft' THEN 0
-       WHEN 'health' THEN 1 ELSE 2 END,id LIMIT 1""", (now,)).fetchone()
+       WHEN 'handoff' THEN 0 WHEN 'health' THEN 1 ELSE 2 END,id LIMIT 1""", (now,)).fetchone()
     if row:
         c.execute("UPDATE tasks SET state='running',attempts=attempts+1,lease_until=?,updated=? WHERE id=?",
                   (now + LEASE, now, row['id']))
@@ -169,6 +190,9 @@ def execute(task):
                 'source': source, 'evidence': evidence}
     if task['kind'] == 'draft':
         return {'state': 'completed', 'reason': 'draft_prepared', 'draft_request': payload}
+    if task['kind'] == 'handoff':
+        return {'state': 'completed', 'reason': 'customer_handoff_prepared',
+                'handoff_request': payload}
     if task['kind'] == 'health':
         from django.core.management import call_command
         from io import StringIO
@@ -235,6 +259,29 @@ def commit(c, task, result, now):
             result['artifact_sha256'] = hashlib.sha256(path.read_bytes()).hexdigest()
             c.execute("UPDATE opportunities SET state='draft_ready',draft_path=?,updated=? WHERE url=?",
                       (str(path), now, payload['url']))
+    if task['kind'] == 'handoff':
+        from .customer_path import prepare_handoff
+        payload = result.pop('handoff_request')
+        row = c.execute('SELECT evidence FROM opportunities WHERE url=?',
+                        (payload['url'],)).fetchone()
+        if not row:
+            result = {'state': 'blocked', 'reason': 'opportunity_missing'}
+        else:
+            candidate = json.loads(row[0])
+            if candidate.get('product_id', payload['offer']['id']) != payload['offer']['id']:
+                result = {'state': 'blocked', 'reason': 'opportunity_offer_changed'}
+            else:
+                handoff = prepare_handoff(candidate, payload['offer'],
+                                          offer_readiness(payload['offer']))
+                path = BASE / 'customer_handoffs' / (hashlib.sha256(payload['url'].encode()).hexdigest() + '.json')
+                atomic_json(path, handoff)
+                if json.loads(path.read_text()) != handoff:
+                    raise ValueError('handoff_verification_failed')
+                c.execute('INSERT OR REPLACE INTO customer_handoffs VALUES(?,?,?,?,?)',
+                          (payload['url'], payload['offer']['id'], handoff['state'], str(path), now))
+                result.update(artifact=str(path), missing=handoff['missing'],
+                              artifact_sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
+                              sent=False, customer_verified=False)
     c.execute("UPDATE tasks SET state=?,result=?,lease_until=0,updated=? WHERE id=?",
               (result['state'], json.dumps(result), now, task['id']))
     c.execute("INSERT INTO events(task_id,kind,payload,ts) VALUES(?,?,?,?)",
@@ -250,6 +297,8 @@ def summary(c, cycle, snapshot, offer, result):
             'business_delta': outcome(json.loads(goal['baseline']), snapshot),
             'robot_attributed_revenue': '0', 'revenue_attribution': 'not_established',
             'active_offer': offer, 'outcome': result,
+            'offer_readiness': offer_readiness(offer),
+            'customer_handoffs_prepared': c.execute('SELECT count(*) FROM customer_handoffs').fetchone()[0],
             'opportunity_candidates': c.execute("SELECT count(*) FROM opportunities WHERE state IN ('candidate','draft_ready')").fetchone()[0],
             'drafts_ready': c.execute("SELECT count(*) FROM opportunities WHERE state='draft_ready'").fetchone()[0],
             'source_count': c.execute('SELECT count(*) FROM sources').fetchone()[0],

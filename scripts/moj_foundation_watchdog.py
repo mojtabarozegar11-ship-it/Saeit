@@ -3,6 +3,7 @@ import fcntl, subprocess
 from pathlib import Path
 ROOT = Path('/home/zomorod2/Saeit')
 LOCK = Path('/home/zomorod2/logs/moj-1ro-1-runtime.lock')
+LOCK.parent.mkdir(parents=True, exist_ok=True)
 with LOCK.open('a') as stream:
     try:
         fcntl.flock(stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
