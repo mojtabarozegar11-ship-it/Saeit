@@ -13,6 +13,8 @@ def current():
 def automatic_allowed(domain, operation, payload):
     law = current()
     return operation == 'audit' or (
+        domain == 'income_research' and operation == 'research' and not payload
+        and bool(law.get('continuous_income_research'))) or (
         domain == 'self_improvement' and operation == 'repair' and
         set(payload) == {'recipe'} and payload['recipe'] in law['automatic_repairs'])
 

@@ -6,6 +6,7 @@ from pathlib import Path
 from .foundation_runtime import ROOT, BASE, connect, atomic_json, business_snapshot
 
 DOMAINS = {
+    'income_research': {'repository':'Saeit','objective':'continuously research online income methods and valuable content, products and digital assets; measure real revenue growth'},
     'self_improvement': {'repository':'Saeit','objective':'continuously upgrade the primary robot and every project component with verified execution'},
     'economics': {'repository':'Saeit','objective':'measure revenue, costs and unit economics'},
     'business': {'repository':'Saeit','objective':'connect qualified demand to delivered paid orders'},
@@ -14,6 +15,7 @@ DOMAINS = {
     'games': {'repository':'Bazei','objective':'build and verify game one before starting another'},
 }
 OPERATIONS = {
+    ('income_research','research'),
     ('self_improvement','audit'), ('self_improvement','repair'),
     ('economics','audit'), ('economics','unit_economics'),
     ('business','audit'), ('site','audit'), ('site','apply_patch'),
@@ -128,6 +130,9 @@ def backtest(payload):
                                             'single dataset is not out-of-sample proof']}
 
 def perform(domain, operation, payload):
+    if domain == 'income_research':
+        from .income_research import research
+        return research()
     if domain == 'self_improvement':
         from .self_improvement import audit, repair
         return repair(payload) if operation == 'repair' else audit()
@@ -263,8 +268,9 @@ def tick(cycle):
             'sha256':law['sha256'],'read_at':time.time(),'cycle':cycle})
         for domain in DOMAINS:
             goal=c.execute('SELECT last_run FROM executive_goals WHERE domain=?',(domain,)).fetchone()
-            if time.time()-goal[0]>=900:
-                submit(domain,'audit',request_id='audit:'+domain+':'+str(int(time.time()//900)),
+            if time.time()-goal[0]>=law.get('continuous_income_research',{}).get('interval_seconds',900):
+                operation = 'research' if domain == 'income_research' else 'audit'
+                submit(domain,operation,request_id='audit:'+domain+':'+str(int(time.time()//900)),
                        priority=priority(domain),automatic=True,connection=c)
         result=run_one(c,time.time())
         status=portfolio(c)
