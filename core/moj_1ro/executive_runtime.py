@@ -6,6 +6,7 @@ from pathlib import Path
 from .foundation_runtime import ROOT, BASE, connect, atomic_json, business_snapshot
 
 DOMAINS = {
+    'global_commerce': {'repository':'Saeit','objective':'develop worldwide multilingual commercial infrastructure and evidence-led digital production with fair comparable competitor pricing'},
     'finance_commerce': {'repository':'Saeit','objective':'build and operate the economy financial section and e-commerce, including verified game payment and delivery integration'},
     'income_research': {'repository':'Saeit','objective':'continuously research online income methods and valuable content, products and digital assets; measure real revenue growth'},
     'self_improvement': {'repository':'Saeit','objective':'continuously upgrade the primary robot and every project component with verified execution'},
@@ -16,6 +17,7 @@ DOMAINS = {
     'games': {'repository':'Bazei','objective':'research, build, quality-test, publish and maintain advanced games for USA and global gamers; events, expansions and measured income; game one approval before another'},
 }
 OPERATIONS = {
+    ('global_commerce','audit'), ('global_commerce','price_compare'),
     ('finance_commerce','audit'),
     ('income_research','research'),
     ('self_improvement','audit'), ('self_improvement','repair'),
@@ -48,6 +50,9 @@ def validate(domain, operation, payload):
         raise ValueError('unsupported_executable_operation')
     if not isinstance(payload,dict) or len(json.dumps(payload)) > 600000:
         raise ValueError('invalid_payload')
+    if operation == 'price_compare':
+        from .global_commerce import validate_price
+        validate_price(payload)
     if operation == 'repair':
         from .operational_law import automatic_allowed
         if not automatic_allowed(domain,operation,payload):
@@ -133,6 +138,9 @@ def backtest(payload):
                                             'single dataset is not out-of-sample proof']}
 
 def perform(domain, operation, payload):
+    if domain == 'global_commerce':
+        from .global_commerce import audit, price
+        return price(payload) if operation == 'price_compare' else audit()
     if domain in ('games','finance_commerce'):
         from .lifecycle_mandates import games_audit, finance_audit
         return games_audit() if domain == 'games' else finance_audit()
