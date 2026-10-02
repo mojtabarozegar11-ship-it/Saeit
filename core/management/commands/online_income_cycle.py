@@ -1,23 +1,12 @@
 from django.core.management.base import BaseCommand
 from django.db import transaction
-
+from core.autonomous_brain import AutonomousBrain
 from core.models import Agent, AgentTask
 
-
 MASTER_AGENT_CODE = "economic-master-agent"
-PIPELINE = [
-    "income_market_research",
-    "income_opportunity_score",
-    "income_offer_design",
-    "income_mvp_build",
-    "income_growth_experiment",
-    "income_revenue_verify",
-    "income_profit_optimize",
-]
-
 
 class Command(BaseCommand):
-    help = "Queue exactly one concrete next economic action for the single master agent."
+    help = "Let the master agent observe state and autonomously choose its next work."
 
     def add_arguments(self, parser):
         parser.add_argument("--dry-run", action="store_true")
@@ -26,58 +15,48 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         agent = Agent.objects.filter(code=MASTER_AGENT_CODE, active=True).first()
         if not agent:
-            self.stderr.write("Missing active economic-master-agent. Run seed_online_income_agents first.")
+            self.stderr.write("Missing active economic-master-agent.")
             return
 
-        # Never manufacture more work while a prior economic action is unfinished.
         active = AgentTask.objects.filter(
-            agent=agent,
-            capability_code__startswith="income_",
-            status__in=("queued", "running", "blocked"),
+            agent=agent, status__in=("queued","running","blocked")
         ).order_by("created_at").first()
         if active:
-            self.stdout.write(f"WAITING: task {active.pk} must reach a verified terminal result first.")
+            self.stdout.write(
+                f"BRAIN_CONTINUE task={active.pk} action={active.action_type} status={active.status}"
+            )
             return
 
-        completed = set(
-            AgentTask.objects.filter(
-                agent=agent,
-                capability_code__startswith="income_",
-                status="completed",
-                output_data__verified_effect=True,
-            ).values_list("capability_code", flat=True)
-        )
-        capability_code = next((code for code in PIPELINE if code not in completed), PIPELINE[0])
-
-        if not agent.capabilities.filter(code=capability_code, active=True).exists():
-            self.stderr.write(f"Missing capability {capability_code} on {MASTER_AGENT_CODE}")
+        decision = AutonomousBrain().decide()
+        chosen = decision["chosen"]
+        action = chosen["action"]
+        if action == "continue_existing_work":
+            self.stdout.write("BRAIN_CONTINUE")
             return
-
+        capability = agent.capabilities.filter(code=action, active=True).first()
+        if not capability:
+            self.stderr.write(f"BRAIN_BLOCKED missing capability={action}")
+            return
         if options["dry_run"]:
-            self.stdout.write(f"DRY RUN: {MASTER_AGENT_CODE} -> {capability_code}")
+            self.stdout.write(f"BRAIN_DECISION action={action} reason={chosen['reason']} score={chosen['score']}")
             return
 
         task = AgentTask.objects.create(
             agent=agent,
-            action_type=capability_code,
-            capability_code=capability_code,
-            risk_snapshot="medium",
+            action_type=action,
+            capability_code=action,
+            risk_snapshot=capability.risk_level,
             input_data={
-                "objective": "Complete one concrete, highest-impact step toward a finished project and verified lawful revenue.",
+                "objective": agent.mission,
+                "brain_decision": decision,
                 "execution_contract": {
-                    "one_cycle_one_concrete_action": True,
                     "must_execute_not_just_report": True,
                     "success_requires_verified_effect": True,
-                    "blocker_becomes_remediation_work": True,
+                    "reobserve_after_execution": True,
                 },
-                "guardrails": [
-                    "No fraud, spam, deception or platform-policy evasion.",
-                    "No external spend, contract, payment or sensitive commitment without applicable approval.",
-                    "Revenue is verified only after reconciled external payment evidence.",
-                ],
             },
             status="queued",
         )
         self.stdout.write(self.style.SUCCESS(
-            f"QUEUED concrete task {task.pk}: {MASTER_AGENT_CODE} -> {capability_code}"
+            f"BRAIN_DECISION task={task.pk} action={action} score={chosen['score']} reason={chosen['reason']}"
         ))
