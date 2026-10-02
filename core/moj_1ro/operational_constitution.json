@@ -19,8 +19,9 @@
     "economics": 55,
     "business": 55,
     "trading": 40,
-    "games": 40,
-    "income_research": 60
+    "games": 65,
+    "income_research": 60,
+    "finance_commerce": 65
   },
   "autonomy": "اجرای پیوسته بدون درخواست تکراری برای اقدامات مجاز و برگشت‌پذیر؛ توانایی فاقد ابزار یا آزمون باید به مانع و مأموریت توسعه تبدیل شود.",
   "automatic_repairs": [
@@ -42,7 +43,7 @@
     "تغییر کد به نسخه قبل، آزمون و امکان بازگشت نیاز دارد"
   ],
   "protected_actions": "حدود مجوز و اقدامات حفاظت‌شده قانون قبلی باقی می‌ماند؛ این مأموریت مجوز انتقال پول، سفارش مالی یا ارسال پیام به اشخاص ایجاد نمی‌کند.",
-  "revision": "2.1",
+  "revision": "2.2",
   "continuous_income_research": {
     "mandate": "ربات موظف است مستمراً مطالعه و تحقیق کند که از چه روش‌هایی در اینترنت می‌تواند درآمد کسب کند؛ چه محتوا، محصولات و دارایی‌های دیجیتال باارزش و باکیفیتی بسازد؛ چگونه آن‌ها را عرضه و درآمد واقعی را افزایش دهد.",
     "interval_seconds": 900,
@@ -65,5 +66,139 @@
     "success_metric": "درآمد وصول‌شده به تفکیک ارز، سفارش پرداخت‌شده و سود پس از هزینه معتبر؛ درآمد منتسب به ربات فقط با ارتباط اثبات‌شده.",
     "production_rule": "پژوهش و طرح داخلی تولید مجاز است؛ انتشار وبلاگ و خبر تا رفع دستور توقف انجام نمی‌شود. تولید و عرضه هر محصول نیازمند مجری و کنترل کیفیت واقعی است.",
     "failure_rule": "منبع نامعتبر، نیاز تأییدنشده یا نبود مجری به‌عنوان مانع ثبت و مسیر پژوهش تغییر می‌کند؛ مطالعه به‌تنهایی درآمد یا محصول تولیدشده محسوب نمی‌شود."
+  },
+  "article_3": {
+    "mandate": "تولید فوق‌تخصصی بازی‌های بسیار پیشرفته و باکیفیت با مطالعه و تحقیق برای بازار آمریکا و توزیع جهانی گیمرها؛ مسئولیت ربات از طراحی و ساخت تا انتشار، رفع عیب، به‌روزرسانی، رویداد، مراحل جدید و افزایش جذابیت ادامه دارد. تولید و نگهداری بازی یک بازوی درآمد است؛ صفحه اقتصاد، بخش مالی و تجارت الکترونیک نیز باید بنیادی ساخته و به‌طور واقعی مورد استفاده قرار گیرد.",
+    "games": {
+      "repository": "Bazei",
+      "primary_market": "USA",
+      "distribution": "global",
+      "audience": "gamers",
+      "quality_standard": "کیفیت فوق‌تخصصی تنها با بازی قابل اجرا، آزمون عملکرد، بازخورد گیمر و نتیجه واقعی تأیید می‌شود.",
+      "lifecycle": [
+        {
+          "key": "market_research",
+          "goal": "پژوهش بازار آمریکا، مخاطب، رقبا و مدل درآمد",
+          "evidence": "dated_primary_sources_and_player_problem"
+        },
+        {
+          "key": "game_design",
+          "goal": "طراحی هسته جذاب بازی و سند فنی و هنری",
+          "evidence": "reviewed_design_and_measurable_acceptance_criteria"
+        },
+        {
+          "key": "playable_build",
+          "goal": "ساخت بازی اول با کیفیت حرفه‌ای",
+          "evidence": "reproducible_playable_build_in_Bazei"
+        },
+        {
+          "key": "quality_assurance",
+          "goal": "آزمون عملکرد، پایداری، امنیت و تجربه بازیکن",
+          "evidence": "device_tests_crash_metrics_and_player_review"
+        },
+        {
+          "key": "owner_acceptance",
+          "goal": "تأیید کیفیت بازی اول پیش از شروع بازی بعد",
+          "evidence": "explicit_owner_acceptance_of_game_one"
+        },
+        {
+          "key": "global_release",
+          "goal": "انتشار برای آمریکا و توزیع جهانی با بومی‌سازی",
+          "evidence": "verified_distribution_and_localized_release"
+        },
+        {
+          "key": "live_operations",
+          "goal": "نگهداری، پشتیبانی، اصلاح خطا و به‌روزرسانی",
+          "evidence": "release_history_and_verified_bug_fixes"
+        },
+        {
+          "key": "events",
+          "goal": "برگزاری رویدادها و افزایش تعامل گیمر",
+          "evidence": "working_event_and_measured_player_participation"
+        },
+        {
+          "key": "expansion",
+          "goal": "افزودن مراحل و جذابیت با آزمون بازیکن",
+          "evidence": "playable_expansion_and_retention_measurements"
+        },
+        {
+          "key": "monetization",
+          "goal": "افزایش درآمد بازی با سنجش هزینه و رضایت بازیکن",
+          "evidence": "paid_receipts_and_verified_costs"
+        }
+      ],
+      "optional_digital_assets": {
+        "enabled_as_option": true,
+        "nft": true,
+        "currency": true,
+        "digital_assets": true,
+        "integration_target": "Saeit economy financial section",
+        "requirements": [
+          "شفافیت مالکیت و حقوق دارایی",
+          "مجری آزموده و اتصال واقعی بخش مالی",
+          "تأیید پرداخت و تحویل حق استفاده به‌صورت تکرارناپذیر",
+          "آزمون امنیت، بازگشت و تطبیق دفتر مالی",
+          "عملیاتی بودن اختیاری و مستقل از جذابیت اصلی بازی"
+        ],
+        "claims_rule": "طرح NFT، ارز یا دارایی دیجیتال، به معنی ایجاد دارایی، انتقال وجه یا درآمد تضمین‌شده نیست."
+      }
+    },
+    "finance_commerce": {
+      "repository": "Saeit",
+      "goal": "ساخت بنیادی و بهره‌برداری واقعی از اقتصاد، بخش مالی و تجارت الکترونیک به‌عنوان بازوی درآمد مستقل و پشتیبان بازی",
+      "lifecycle": [
+        {
+          "key": "architecture",
+          "goal": "معماری و قراردادهای داده برای مالی و تجارت",
+          "evidence": "reviewed_architecture_and_interface_contracts"
+        },
+        {
+          "key": "ledger",
+          "goal": "دفتر مالی متوازن و ثبت شواهد و هزینه",
+          "evidence": "balanced_posted_journals_and_audit_tests"
+        },
+        {
+          "key": "catalog",
+          "goal": "محصول، قیمت، مالکیت و موجودی قابل فروش",
+          "evidence": "tested_catalog_and_inventory"
+        },
+        {
+          "key": "checkout",
+          "goal": "ثبت سفارش و مسیر خرید کامل",
+          "evidence": "authenticated_end_to_end_checkout"
+        },
+        {
+          "key": "payment",
+          "goal": "تأیید دریافت وجه واقعی بدون ثبت مضاعف",
+          "evidence": "verified_payment_receipt_and_idempotency_tests"
+        },
+        {
+          "key": "fulfillment",
+          "goal": "تحویل محصول و خدمات و رسید دریافت",
+          "evidence": "verified_delivery_or_game_entitlement"
+        },
+        {
+          "key": "reconciliation",
+          "goal": "تطبیق دریافت‌ها، دفتر مالی و برگشت‌ها",
+          "evidence": "external_receipt_reconciliation_and_refund_tests"
+        },
+        {
+          "key": "game_integration",
+          "goal": "اتصال مالی Saeit به بازی در Bazei",
+          "evidence": "tested_cross_repository_payment_entitlement_contract"
+        },
+        {
+          "key": "operations",
+          "goal": "بهره‌برداری، پایش، امنیت و پشتیبانی تجارت",
+          "evidence": "operational_monitoring_and_recovery_tests"
+        },
+        {
+          "key": "revenue_growth",
+          "goal": "افزایش وصول درآمد و سود پس از هزینه معتبر",
+          "evidence": "currency_separated_paid_receipts_and_verified_costs"
+        }
+      ]
+    },
+    "execution_rule": "هر مرحله باید هدف، مجری، آزمون و شاهد داشته باشد؛ مراحل فاقد مجری یا شاهد به‌عنوان مانع ثبت می‌شوند. ثبت قانون و نقشه راه به معنی ساخت، انتشار یا بهره‌برداری کامل نیست."
   }
 }

@@ -6,15 +6,17 @@ from pathlib import Path
 from .foundation_runtime import ROOT, BASE, connect, atomic_json, business_snapshot
 
 DOMAINS = {
+    'finance_commerce': {'repository':'Saeit','objective':'build and operate the economy financial section and e-commerce, including verified game payment and delivery integration'},
     'income_research': {'repository':'Saeit','objective':'continuously research online income methods and valuable content, products and digital assets; measure real revenue growth'},
     'self_improvement': {'repository':'Saeit','objective':'continuously upgrade the primary robot and every project component with verified execution'},
     'economics': {'repository':'Saeit','objective':'measure revenue, costs and unit economics'},
     'business': {'repository':'Saeit','objective':'connect qualified demand to delivered paid orders'},
     'site': {'repository':'Saeit','objective':'diagnose, apply authorized code changes and verify deployment'},
     'trading': {'repository':'Saeit','objective':'test strategies before broker execution'},
-    'games': {'repository':'Bazei','objective':'build and verify game one before starting another'},
+    'games': {'repository':'Bazei','objective':'research, build, quality-test, publish and maintain advanced games for USA and global gamers; events, expansions and measured income; game one approval before another'},
 }
 OPERATIONS = {
+    ('finance_commerce','audit'),
     ('income_research','research'),
     ('self_improvement','audit'), ('self_improvement','repair'),
     ('economics','audit'), ('economics','unit_economics'),
@@ -36,7 +38,8 @@ def schema(c):
       event TEXT,payload TEXT,ts REAL);
     """)
     for domain, spec in DOMAINS.items():
-        c.execute("INSERT OR IGNORE INTO executive_goals(domain,objective,repository,updated) VALUES(?,?,?,?)",
+        c.execute("""INSERT INTO executive_goals(domain,objective,repository,updated) VALUES(?,?,?,?)
+          ON CONFLICT(domain) DO UPDATE SET objective=excluded.objective,repository=excluded.repository""",
                   (domain,spec['objective'],spec['repository'],time.time()))
     c.commit()
 
@@ -130,6 +133,9 @@ def backtest(payload):
                                             'single dataset is not out-of-sample proof']}
 
 def perform(domain, operation, payload):
+    if domain in ('games','finance_commerce'):
+        from .lifecycle_mandates import games_audit, finance_audit
+        return games_audit() if domain == 'games' else finance_audit()
     if domain == 'income_research':
         from .income_research import research
         return research()
@@ -190,16 +196,6 @@ def perform(domain, operation, payload):
                 'broker_connected':connected,'live_execution_enabled':r.get('trading_enabled') is True,
                 'bridge_url':r.get('bridge_url'),'next_operation':'backtest',
                 'missing':['verified_broker_transport'] if not connected else []}
-    if domain == 'games':
-        root = Path('/home/zomorod2/Bazei')
-        if not root.is_dir():
-            return {'state':'blocked','repository':'Bazei','missing':['verified_game_workspace'],
-                    'game_build_executed':False,'game_two_allowed':False}
-        files=list(root.rglob('*.py'))[:500]
-        import ast
-        for p in files: ast.parse(p.read_text(),filename=str(p.relative_to(root)))
-        return {'state':'observed','repository':'Bazei','python_files_parsed':len(files),
-                'game_build_executed':False,'playability_verified':False,'game_two_allowed':False}
     raise ValueError('unimplemented_domain')
 
 def run_one(c, now):
@@ -264,6 +260,9 @@ def tick(cycle):
         schema(c)
         from .operational_law import current, priority
         law = current()
+        if law.get('article_3'):
+            from .lifecycle_mandates import sync
+            sync(c,law)
         atomic_json(BASE/'constitution_active.json',{'version':law['version'],
             'sha256':law['sha256'],'read_at':time.time(),'cycle':cycle})
         for domain in DOMAINS:
