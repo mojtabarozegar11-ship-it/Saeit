@@ -24,7 +24,15 @@ while True:
     started = time.monotonic()
     count += 1
     try:
-        result = tick(count)
+        # EXECUTIVE_SCHEDULER_INTEGRATION
+        from core.moj_1ro.executive_runtime import tick as executive_tick
+        from core.moj_1ro.foundation_runtime import business_snapshot
+        frame = executive_tick(count) if count % 3 == 0 else None
+        if frame and frame['outcome']['state'] != 'idle':
+            result = {'goal':'executive_portfolio','task_states':frame['states'],
+                      'outcome':frame['outcome'],'business':business_snapshot()}
+        else:
+            result = tick(count)
         atomic_json(STATE, {'cycle': count, 'architecture': VERSION,
                            'updated_at': time.time(), 'outcome': result['outcome']['state']})
         print(time.strftime('%F %T'), json.dumps({
