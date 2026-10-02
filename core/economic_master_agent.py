@@ -1,53 +1,42 @@
-"""Economic Master Agent — economic scientist and bounded autonomous operator.
+"""Economic Master Agent — project-building and revenue-oriented operator.
 
-The public surface is reporting-only. The private execution core is policy-first:
-it may operate only through explicitly owned treasury/account adapters and only
-inside a pre-authorized Economic Constitution. Credentials and balances never
-belong in public reports or source code.
+The agent's permanent mission is to increase verified project completion and
+verified revenue. Research is supporting work, not the terminal output.
+Binding financial actions remain subject to the existing approval/risk layer.
 """
 
 AGENT_CODE = "economic-master-agent"
 AGENT_TITLE = "Economic Master Agent"
 
-REPORT_PIPELINE = (
-    "RESEARCH",
-    "SOURCES",
-    "CLASSIFY",
-    "ANALYZE",
-    "SCENARIO",
-    "FACT_CHECK",
-    "REVIEW",
-    "REPORT",
-    "OWNER_APPROVAL",
-    "PUBLISH",
-)
-
-ECONOMIC_DOMAINS = (
-    "Iran Economy",
-    "Global Economy",
-    "Agriculture & Food Economy",
-    "Industry & Production",
-    "Trade & Supply Chains",
-    "Energy & Resources",
-    "Technology & Digital Economy",
-    "Financial Systems & Markets",
-    "Policy & Regulation",
-    "Geopolitical Economic Risk",
+MISSION = (
+    "build_and_improve_project",
+    "create_market_ready_assets",
+    "commercialize",
+    "increase_verified_revenue",
 )
 
 AUTONOMOUS_ACTIONS = frozenset({
-    "research", "classify", "analyze", "scenario", "fact_check",
-    "report", "rebalance", "buy", "sell", "trade", "payment",
-    "transfer_funds", "place_order", "settle", "reconcile",
+    "research", "classify", "analyze", "scenario", "fact_check", "report",
+    "inspect_project", "repair_project", "implement_feature", "test",
+    "build_product", "improve_product", "quality_check", "price_product",
+    "prepare_listing", "publish_nonbinding_listing", "generate_lead",
+    "qualify_lead", "prepare_proposal", "customer_support", "reconcile",
+})
+
+FINANCIAL_ACTIONS = frozenset({
+    "buy", "sell", "trade", "payment", "transfer_funds",
+    "place_order", "settle", "rebalance",
 })
 
 FORBIDDEN_EXECUTION = frozenset({
-    "open_account", "borrow", "lend", "external_write",
-    "use_third_party_account", "use_unowned_funds", "disable_risk_controls",
-    "bypass_constitution", "bypass_audit", "withdraw_owner_funds",
+    "open_account", "borrow", "lend", "use_third_party_account",
+    "use_unowned_funds", "disable_risk_controls", "bypass_constitution",
+    "bypass_audit", "withdraw_owner_funds",
 })
 
 ECONOMIC_CONSTITUTION = {
+    "mission": "project_completion_and_verified_revenue",
+    "research_is_supporting_work": True,
     "treasury_scope": "owned_accounts_only",
     "third_party_funds": False,
     "pre_trade_risk_check": True,
@@ -56,92 +45,72 @@ ECONOMIC_CONSTITUTION = {
     "duplicate_order_protection": True,
     "liquidity_reserve_required": True,
     "emergency_kill_switch": True,
-    "out_of_policy_requires_owner_approval": True,
-    "public_execution_details": False,
+    "financial_actions_use_existing_approval_policy": True,
+    "never_count_unverified_revenue": True,
 }
 
-PUBLIC_REPORT_RULES = (
-    "report_only",
-    "no_public_numeric_financial_figures",
-    "source_required",
-    "fact_analysis_separation",
-    "uncertainty_explicit",
-    "no_fabricated_sources",
-    "owner_approval_before_publish",
-    "full_audit_trace",
-)
 
 class EconomicMasterAgent:
-    """Policy-first economic intelligence orchestrator."""
+    """Mission-first orchestrator: build -> commercialize -> verify -> improve."""
 
     code = AGENT_CODE
     title = AGENT_TITLE
-    domains = ECONOMIC_DOMAINS
-    pipeline = REPORT_PIPELINE
-    public_rules = PUBLIC_REPORT_RULES
+    mission = MISSION
 
     def can_execute(self, action):
-        """Allow only non-transactional intelligence actions until execution adapters are explicitly enabled."""
         action = str(action or "").strip().lower()
-        intelligence_actions = {
-            "research", "classify", "analyze", "scenario", "fact_check", "report",
-        }
-        return action in intelligence_actions and action not in FORBIDDEN_EXECUTION
+        if not action or action in FORBIDDEN_EXECUTION:
+            return False
+        return action in AUTONOMOUS_ACTIONS or action in FINANCIAL_ACTIONS
 
     def allowed_capabilities(self):
-        return (
-            "economic_research",
-            "source_collection",
-            "economic_classification",
-            "comparative_analysis",
-            "scenario_analysis",
-            "risk_mapping",
-            "fact_checking",
-            "report_drafting",
-            "report_quality_review",
-            "owner_approval_request",
-        )
+        return tuple(sorted(AUTONOMOUS_ACTIONS | FINANCIAL_ACTIONS))
+
+    def next_objective_contract(self):
+        return {
+            "primary_goal": "project_completion_and_verified_revenue",
+            "selection_rule": "highest_impact_unfinished_work",
+            "continuity": "continue_until_verified_result_or_explicit_blocker",
+            "on_blocker": "record_blocker_and_create_remediation_work",
+            "on_success": "verify_evidence_then_select_next_highest_impact_work",
+            "research_only_cycles_are_success": False,
+            "report_only_cycles_are_success": False,
+        }
 
     def report_contract(self):
         return {
             "agent": self.code,
-            "mode": "research_and_reporting",
-            "domains": list(self.domains),
-            "pipeline": list(self.pipeline),
-            "public_rules": list(self.public_rules),
-            "execution": "non_transactional",
-        }
-
-    def trade_email_contract(self):
-        return {
-            "channel": "company_trade_mailbox",
-            "purpose": "international_trade_correspondence",
-            "outbox_first": True,
-            "idempotency": True,
-            "audit": True,
-            "real_send_default": False,
-            "owner_approval_for_binding_commitments": True,
+            "mode": "build_commercialize_improve",
+            "mission": list(self.mission),
+            "execution": "operational_with_policy_gates",
+            "success_requires": [
+                "concrete_output",
+                "verifiable_state_change",
+                "project_progress_or_commercial_progress",
+            ],
+            "revenue_requires_external_settlement_evidence": True,
         }
 
     def system_architecture(self):
         return {
             "orchestrator": "Economic Master Agent",
-            "workers": [
-                "Iran Economy Worker", "Global Economy Worker",
-                "Agriculture Worker", "Industry Worker",
-                "Trade & Supply Chain Worker", "Energy Worker",
-                "Technology Economy Worker", "Policy Worker",
-                "Risk & Scenario Worker", "Fact Check Worker",
-                "Report Editor Worker", "International Trade Worker",
-                "China Trade Worker", "Country Trade Workers",
-                "Trade Compliance Worker", "Trade Correspondence Worker",
+            "objective": self.next_objective_contract(),
+            "pipeline": [
+                "ASSESS_PROJECT",
+                "SELECT_HIGHEST_IMPACT_WORK",
+                "EXECUTE",
+                "VERIFY",
+                "REMEDIATE_BLOCKER",
+                "COMMERCIALIZE",
+                "VERIFY_REVENUE",
+                "LEARN_AND_CONTINUE",
             ],
             "governance": [
-                "Source provenance", "Evidence ledger",
-                "Fact/analysis separation", "Uncertainty gate",
-                "Owner approval", "Audit trail",
+                "Evidence ledger",
+                "Risk gate",
+                "Owner approval where policy requires it",
+                "Audit trail",
             ],
-            "trade_email": self.trade_email_contract(),
             "hard_stop": sorted(FORBIDDEN_EXECUTION),
         }
 
@@ -155,5 +124,4 @@ def economic_agent_architecture():
 
 
 def sanitize_public_report(text):
-    """Keep the public layer narrative; numeric values are not a publish target."""
     return str(text or "").strip()
