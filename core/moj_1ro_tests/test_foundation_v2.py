@@ -137,3 +137,8 @@ class FoundationTests(unittest.TestCase):
         html = '<a href="/projects/python/automation-audit">Workflow Automation Audit</a><p>Closed. We need workflow automation.</p>'
         row = analyse(html, 'https://www.freelancer.com/jobs/automation/', OFFER)
         self.assertEqual(row['candidates'], [])
+
+    def test_other_job_description_cannot_qualify_unrelated_title(self):
+        html = '<a href="/projects/animation/quality">AI Animation Quality Evaluation</a><p>6 days left. Next listing: workflow automation.</p>'
+        row = analyse(html, 'https://www.freelancer.com/jobs/automation/', OFFER)
+        self.assertEqual(row['candidates'], [])

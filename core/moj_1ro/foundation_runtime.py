@@ -250,7 +250,7 @@ def summary(c, cycle, snapshot, offer, result):
             'business_delta': outcome(json.loads(goal['baseline']), snapshot),
             'robot_attributed_revenue': '0', 'revenue_attribution': 'not_established',
             'active_offer': offer, 'outcome': result,
-            'opportunity_candidates': c.execute('SELECT count(*) FROM opportunities').fetchone()[0],
+            'opportunity_candidates': c.execute("SELECT count(*) FROM opportunities WHERE state IN ('candidate','draft_ready')").fetchone()[0],
             'drafts_ready': c.execute("SELECT count(*) FROM opportunities WHERE state='draft_ready'").fetchone()[0],
             'source_count': c.execute('SELECT count(*) FROM sources').fetchone()[0],
             'execution_capabilities': ['public_page_fetch', 'opportunity_extraction',

@@ -84,7 +84,8 @@ def analyse(body, url, offer, is_detail=False):
             title = re.sub(r'\s+', ' ', link['title']).strip()
             position = text.find(title)
             excerpt = text[position:position + 1600] if position >= 0 else ''
-            relevant_need = matches(excerpt, offer_terms)
+            title_need = matches(title, offer_terms)
+            relevant_need = matches(excerpt, offer_terms) if title_need else []
             active_request = re.search(r'\b\d+\s+(?:days?|hours?|minutes?)\s+left\b', excerpt[:300], re.I)
             if active_request and relevant_need:
                 candidates.append({'url': link['url'], 'title': title,
