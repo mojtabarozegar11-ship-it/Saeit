@@ -37,5 +37,8 @@ class StaticResearchBriefVerifier:
         tests = {"passed": all(checks.values()), "runner": "static-research-brief-tests-v1",
                  "checks": checks, "artifact_digest": digest}
         if tests["passed"] is not True or security["passed"] is not True:
-            raise ArtifactVerificationError("Independent Test/Security gate failed.")
+            failed_checks = [name for name, passed in checks.items() if not passed]
+            raise ArtifactVerificationError(
+                f"Independent Test/Security gate failed; failed_checks={failed_checks}; security_findings={findings}"
+            )
         return tests, security
