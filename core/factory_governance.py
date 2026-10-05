@@ -488,7 +488,7 @@ def assert_activation_allowed(product):
 def _assert_release_evidence_current(run, product, artifact):
     required = {
         "product_research", "product_opportunity_score", "product_validation", "product_spec", "product_build_record",
-        "product_qa", "product_localize", "product_launch_candidate",
+        "product_test", "product_security", "product_localize", "product_market_eligibility", "product_qa", "product_launch_candidate",
     }
     items = {item.evidence_type: item for item in run.evidence.select_for_update().all()}
     if not required.issubset(items) or any(items[key].status != FactoryEvidence.VALID for key in required):
@@ -503,14 +503,19 @@ def _assert_release_evidence_current(run, product, artifact):
         snapshot = snapshot_for(key, product, run)
         if item.prerequisite_digest != snapshot["digest"]:
             raise ValidationError(f"Release evidence {key} has stale prerequisites.")
-    qa = (product.metadata.get("qa") or {})
-    if not qa.get("tests", {}).get("passed") or not qa.get("security", {}).get("passed"):
-        raise ValidationError("Current QA and Security evidence must pass.")
+    if not (product.metadata.get("test_attestation") or {}).get("passed"):
+        raise ValidationError("Current independent Test evidence must pass.")
+    if not (product.metadata.get("security_attestation") or {}).get("passed"):
+        raise ValidationError("Current independent Security evidence must pass.")
+    if not (product.metadata.get("qa_attestation") or {}).get("passed"):
+        raise ValidationError("Current independent QA evidence must pass.")
     if (product.metadata.get("validation") or {}).get("outcome") != "VALIDATED":
         raise ValidationError("Release requires the current VALIDATED outcome.")
-    locales = (product.metadata.get("localization") or {}).get("launch_locales") or []
-    if not locales:
-        raise ValidationError("Release manifest requires current localization evidence.")
+    localization = product.metadata.get("localization") or {}
+    required_locales = localization.get("required_locales") or []
+    complete_locales = {item.get("locale") for item in localization.get("locales") or [] if isinstance(item, dict) and item.get("status") == "complete"}
+    if not required_locales or not set(required_locales).issubset(complete_locales):
+        raise ValidationError("Release manifest requires complete current localization evidence.")
     markets = (product.metadata.get("market_eligibility") or [])
     codes = [str(item.get("market_code") or "").upper() for item in markets if isinstance(item, dict)]
     eligibility = market_eligibility_snapshot(codes, for_update=True)
@@ -566,7 +571,7 @@ def _manifest_snapshot(product, run, artifact):
         "run_id": run.run_id, "product_id": product.pk, "spec_version": run.current_spec_version,
         "spec_digest": canonical_spec_digest(spec), "artifact_id": artifact.pk,
         "artifact_digest": artifact_content_digest(artifact), "artifact_version": artifact.version,
-        "locales": sorted((product.metadata.get("localization") or {}).get("launch_locales") or []),
+        "locales": sorted((product.metadata.get("localization") or {}).get("required_locales") or []),
         "markets": sorted(markets, key=lambda item: item.get("market_code", "")),
         "policy_version": str(getattr(settings, "FACTORY_POLICY_VERSION", "factory-policy-v1")),
         "evidence_policy_version": current_evidence_policy_version(),
