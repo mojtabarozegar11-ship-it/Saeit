@@ -1,6 +1,7 @@
 from decimal import Decimal, InvalidOperation
 import uuid
 
+from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 from datetime import timedelta
@@ -106,7 +107,10 @@ class TaskRuntime:
         else:
             task.status = "queued"
             task.execution_id = ""
-            task.next_retry_at = timezone.now() + timedelta(seconds=min(30 * (2 ** max(task.attempt_count - 1, 0)), 300)) if (
+            task.next_retry_at = timezone.now() + timedelta(seconds=min(
+                max(0, int(getattr(settings, "FACTORY_RETRY_BACKOFF_SECONDS", 30)))
+                * (2 ** max(task.attempt_count - 1, 0)), 300
+            )) if (
                 str(task.capability_code or "").startswith("product_")
                 or str(task.action_type or "").startswith("product_")
             ) else None
@@ -316,7 +320,10 @@ class TaskRuntime:
             task.execution_id = ""
             task.status = "queued"
             task.next_retry_at = (
-                timezone.now() + timedelta(seconds=min(30 * (2 ** max(task.attempt_count - 1, 0)), 300))
+                timezone.now() + timedelta(seconds=min(
+                    max(0, int(getattr(settings, "FACTORY_RETRY_BACKOFF_SECONDS", 30)))
+                    * (2 ** max(task.attempt_count - 1, 0)), 300
+                ))
                 if retry_backoff else None
             )
             if task.next_retry_at:
