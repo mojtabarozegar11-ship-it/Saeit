@@ -1,5 +1,7 @@
 """Strict intent and output contracts for the existing Factory task pipeline."""
 from dataclasses import dataclass
+import hashlib
+import json
 
 
 OUTPUT_KEYS = {
@@ -61,8 +63,27 @@ def validate_task_intent(value):
 @dataclass(frozen=True)
 class GatewayAuthorization:
     task_id: int
+    agent_id: int
     execution_id: str
     tool_code: str
+    resource: str
+    environment: str
+    prerequisite_digest: str
+    nonce: object
+
+
+@dataclass(frozen=True)
+class GatewayAdapterReceipt:
+    """One-use proof that the registered FactoryAgentRuntime produced output."""
+    task_id: int
+    agent_id: int
+    execution_id: str
+    action: str
+    resource: str
+    environment: str
+    prerequisite_digest: str
+    output_digest: str
+    values: dict
     nonce: object
 
 
@@ -86,6 +107,11 @@ class GatewayToolAttestation:
 class GatewayToolResult:
     result: object
     attestation: GatewayToolAttestation
+
+
+def canonical_digest(value):
+    encoded = json.dumps(value, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
 
 
 @dataclass(frozen=True)

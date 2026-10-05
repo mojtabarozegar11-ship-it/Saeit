@@ -52,6 +52,7 @@ class WorkerRunner:
             if factory_task and agent_output is not None:
                 raise WorkerRunnerError("Factory specialist outputs must be generated from the Run by an execution adapter.")
             authorization = None
+            adapter_receipt = None
             if factory_task:
                 if self.factory_executor is None:
                     raise WorkerRunnerError("Every Factory stage requires its registered execution adapter.")
@@ -60,9 +61,8 @@ class WorkerRunner:
                 authorization = self.gateway.authorize(
                     tool_code, payload, task_id=task.pk, execution_id=execution_id
                 )
-                agent_output = self.factory_executor.execute(
-                    task, authorization=authorization,
-                    authorization_check=self.gateway.is_authorized,
+                adapter_receipt = self.gateway.execute_factory_adapter(
+                    self.factory_executor, task, authorization
                 )
 
             # Factory tools currently mutate local database state. Commit those
@@ -74,7 +74,8 @@ class WorkerRunner:
                     payload,
                     task_id=task.pk,
                     execution_id=execution_id,
-                    agent_output=agent_output,
+                    adapter_receipt=adapter_receipt,
+                    agent_output=agent_output if not factory_task else None,
                 )
                 gateway_attestation = None
                 if isinstance(result, GatewayToolResult):

@@ -14,6 +14,10 @@ def factory_approval_expiry_default():
     return timezone.now() + timedelta(days=1)
 
 
+def factory_evidence_expiry_default():
+    return timezone.now() + timedelta(days=90)
+
+
 def invalidate_factory_research(project_id):
     project = ResearchProject.objects.filter(pk=project_id).select_related("factory_run__product").first()
     if project and project.factory_run_id and project.factory_run.product_id:
@@ -293,7 +297,11 @@ class ApprovalRequest(T):
                     gate = FactoryReleaseGate.objects.select_related("run", "artifact", "manifest").get(product=product)
                 except FactoryReleaseGate.DoesNotExist as exc:
                     raise ValidationError("Factory Product approval requires its shared Release Gate.") from exc
-                if (
+                revoking_existing_approval = bool(
+                    previous and previous.status == "approved"
+                    and not previous.revoked_at and self.revoked_at
+                )
+                if not revoking_existing_approval and (
                     self.action_type != "activate_product"
                     or not self.release_manifest_digest
                     or not self.expires_at
@@ -305,7 +313,7 @@ class ApprovalRequest(T):
                 ):
                     raise ValidationError("Approval must bind the exact current Factory release manifest and activation action.")
         super().save(*args, **kwargs)
-        if self.status == "approved" and product and product.is_factory_managed:
+        if self.status == "approved" and not self.revoked_at and product and product.is_factory_managed:
             approve_release(product, self.requested_by, self)
 
 
@@ -350,6 +358,7 @@ class KnowledgeArticle(T):
 
 
 class ProductQuerySet(models.QuerySet):
+    @transaction.atomic
     def update(self, **kwargs):
         if kwargs.get("factory_managed") is False and any(
             product.is_factory_managed or bool((product.metadata or {}).get("factory_state"))
@@ -375,6 +384,7 @@ class ProductQuerySet(models.QuerySet):
                     assert_activation_allowed(product)
         return super().update(**kwargs)
 
+    @transaction.atomic
     def bulk_update(self, objs, fields, batch_size=None):
         objs = list(objs)
         if "metadata" in fields and any(
@@ -447,6 +457,7 @@ class Product(T):
             or FactoryReleaseGate.objects.filter(product_id=self.pk).exists()
         )
 
+    @transaction.atomic
     def save(self, *args, **kwargs):
         update_fields = kwargs.get("update_fields")
         factory_managed_before = self.factory_managed
@@ -526,6 +537,8 @@ class FactoryEvidence(T):
     spec_version = models.PositiveIntegerField(default=1)
     artifact_version = models.PositiveIntegerField(default=0)
     status = models.CharField(max_length=12, default=VALID, choices=[(VALID, "Valid"), (STALE, "Stale"), (INVALID, "Invalid")])
+    freshness_policy_version = models.CharField(max_length=64, default="factory-evidence-v1")
+    valid_until = models.DateTimeField(default=factory_evidence_expiry_default)
     details = models.JSONField(default=dict)
     class Meta:
         constraints = [models.UniqueConstraint(fields=["task", "evidence_type"], name="unique_factory_evidence_per_task")]
@@ -555,20 +568,25 @@ class FactoryReleaseGate(T):
     approved_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.PROTECT, related_name="factory_release_approvals")
     approved_at = models.DateTimeField(null=True, blank=True)
 
+    @transaction.atomic
     def save(self, *args, **kwargs):
         if self.status == "approved":
             from .factory_governance import release_manifest_is_current
+            approval = ApprovalRequest.objects.select_for_update().filter(pk=self.approval_id).first()
+            from django.contrib.auth import get_user_model
+            owner = get_user_model().objects.select_for_update().filter(pk=self.approved_by_id).first()
+            run = FactoryRun.objects.select_for_update().filter(pk=self.run_id).first()
+            artifact = FactoryArtifact.objects.select_for_update().filter(pk=self.artifact_id).first()
+            manifest = FactoryReleaseManifest.objects.filter(pk=self.manifest_id).first()
+            product = Product.objects.select_for_update().filter(pk=self.product_id).first()
             if not (
-                self.approval_id and self.approved_by_id and self.approved_by.is_superuser
-                and self.approved_at and self.manifest_id
-                and self.approval.status == "approved"
-                and not self.approval.revoked_at
-                and self.approval.expires_at and self.approval.expires_at > timezone.now()
-                and self.approval.action_type == "activate_product"
-                and self.approval.target_type == "Product"
-                and self.approval.target_id == str(self.product_id)
-                and self.approval.release_manifest_digest == self.manifest.manifest_digest
-                and release_manifest_is_current(self.manifest, self.product, self.run, self.artifact)
+                approval and owner and owner.is_superuser and run and artifact and manifest and product
+                and self.approved_at and approval.status == "approved" and not approval.revoked_at
+                and approval.expires_at and approval.expires_at > timezone.now()
+                and approval.action_type == "activate_product" and approval.target_type == "Product"
+                and approval.target_id == str(self.product_id)
+                and approval.release_manifest_digest == manifest.manifest_digest
+                and release_manifest_is_current(manifest, product, run, artifact)
             ):
                 raise ValidationError("Only an exact, current owner approval can advance the Factory Release Gate.")
         super().save(*args, **kwargs)
@@ -628,6 +646,7 @@ class FactoryMarketEligibility(T):
     reviewed_at = models.DateTimeField()
     valid_until = models.DateTimeField(null=True, blank=True)
 
+    @transaction.atomic
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
         from .factory_governance import invalidate_stale_evidence

@@ -2,8 +2,11 @@
 import hashlib
 import json
 from pathlib import Path
+from datetime import timedelta
 
 from django.core.exceptions import ValidationError
+from django.db import transaction
+from django.contrib.auth import get_user_model
 from django.conf import settings
 from django.utils import timezone
 
@@ -12,7 +15,7 @@ from .models import (
     FactoryReleaseManifest, FactoryRun, FactoryMarketEligibility, Product,
     ResearchProject,
 )
-from .factory_contracts import REQUIRED_OUTPUT_KEYS, EXPECTED_OUTPUT_STATE
+from .factory_contracts import REQUIRED_OUTPUT_KEYS, EXPECTED_OUTPUT_STATE, canonical_digest
 
 PREVIOUS_STATE = {
     "product_research": None,
@@ -23,6 +26,9 @@ PREVIOUS_STATE = {
     "product_localize": "qa_passed",
     "product_launch_candidate": "localized",
 }
+FACTORY_EVIDENCE_POLICY_VERSION = "factory-evidence-v1"
+EVIDENCE_TTL_DAYS = {"product_research": 30, "product_launch_candidate": 30}
+
 STATE_BY_ACTION = {
     "product_research": "researched",
     "product_opportunity_score": "scored",
@@ -60,6 +66,8 @@ def prerequisite_values(action, product, run):
             "id": evidence.pk, "status": evidence.status,
             "prerequisite_digest": evidence.prerequisite_digest,
             "details_digest": digest(evidence.details),
+            "freshness_policy_version": evidence.freshness_policy_version,
+            "valid_until": evidence.valid_until.isoformat() if evidence.valid_until else None,
         }
     if action == "product_opportunity_score":
         values["research"] = meta.get("research")
@@ -145,9 +153,11 @@ def artifact_content_digest(artifact):
     return actual if actual == artifact.content_digest else ""
 
 
-def market_eligibility_snapshot(codes):
+def market_eligibility_snapshot(codes, *, for_update=False):
     now = timezone.now()
     records = FactoryMarketEligibility.objects.filter(market_code__in=codes).order_by("market_code")
+    if for_update:
+        records = records.select_for_update()
     return [
         {"market_code": item.market_code, "eligibility": item.eligibility,
          "reviewed_at": item.reviewed_at.isoformat(),
@@ -175,10 +185,20 @@ def invalidate_stale_evidence(product):
                 current["digest"] != item.prerequisite_digest
                 or (spec_dependent and current["spec_version"] != item.spec_version)
                 or (artifact_dependent and current["artifact_version"] != item.artifact_version)
+                or item.freshness_policy_version != current_evidence_policy_version()
+                or item.valid_until is None or item.valid_until <= timezone.now()
             ):
                 item.status = FactoryEvidence.STALE
                 item.save(update_fields=["status", "updated_at"])
                 changed = True
+
+
+def current_evidence_policy_version():
+    return str(getattr(settings, "FACTORY_EVIDENCE_POLICY_VERSION", FACTORY_EVIDENCE_POLICY_VERSION))
+
+
+def evidence_expiry_for(action):
+    return timezone.now() + timedelta(days=EVIDENCE_TTL_DAYS.get(action, 90))
 
 
 def validate_task_prerequisites(task):
@@ -191,8 +211,15 @@ def validate_task_prerequisites(task):
     if snapshot["digest"] != task.prerequisite_snapshot.get("digest"):
         raise ValidationError("Factory task prerequisites are stale; downstream evidence cannot be consumed.")
     lineage = snapshot["values"].get("lineage")
-    if lineage and lineage.get("status") != FactoryEvidence.VALID:
-        raise ValidationError("Factory task prerequisite evidence is stale or invalid.")
+    if not isinstance(lineage, dict):
+        raise ValidationError("Factory task is missing its required predecessor evidence.")
+    predecessor = FactoryEvidence.objects.filter(pk=lineage.get("id"), product_id=task.product_id).first()
+    if (
+        not predecessor or predecessor.status != FactoryEvidence.VALID
+        or predecessor.freshness_policy_version != current_evidence_policy_version()
+        or not predecessor.valid_until or predecessor.valid_until <= timezone.now()
+    ):
+        raise ValidationError("Factory task prerequisite evidence is stale, invalid, or expired.")
     return True
 
 
@@ -274,6 +301,8 @@ class FactoryTaskVerifier:
                 "spec_version": run.current_spec_version,
                 "artifact_version": run.current_artifact_version,
                 "status": FactoryEvidence.VALID,
+                "freshness_policy_version": current_evidence_policy_version(),
+                "valid_until": evidence_expiry_for(action),
                 "details": {"output": output, "verified_state": product.metadata.get("factory_state")},
             },
         )
@@ -297,60 +326,66 @@ class FactoryTaskVerifier:
         return evidence
 
 
+@transaction.atomic
 def approve_release(product, owner, approval_request):
     if not owner or not owner.is_superuser:
         raise ValidationError("Only the owner may approve Product activation.")
-    gate = FactoryReleaseGate.objects.select_for_update().select_related("run", "artifact").get(product=product)
-    invalidate_stale_evidence(product)
-    if approval_request.status != "approved" or approval_request.revoked_at or not approval_request.expires_at or (
-        approval_request.expires_at <= timezone.now()
+    current_approval = ApprovalRequest.objects.select_for_update().get(pk=approval_request.pk)
+    gate = FactoryReleaseGate.objects.select_for_update().get(product_id=product.pk)
+    run = FactoryRun.objects.select_for_update().get(pk=gate.run_id)
+    artifact = FactoryArtifact.objects.select_for_update().get(pk=gate.artifact_id)
+    manifest = FactoryReleaseManifest.objects.get(pk=gate.manifest_id) if gate.manifest_id else None
+    current_product = Product.objects.select_for_update().get(pk=product.pk)
+    invalidate_stale_evidence(current_product)
+    if current_approval.status != "approved" or current_approval.revoked_at or not current_approval.expires_at or (
+        current_approval.expires_at <= timezone.now()
     ):
         raise ValidationError("A current, non-revoked owner ApprovalRequest is required.")
     if gate.status != "pending_owner_approval":
         raise ValidationError("Release gate is not awaiting owner approval.")
-    if gate.artifact.version != gate.run.current_artifact_version:
+    if artifact.version != run.current_artifact_version:
         raise ValidationError("Release artifact is stale.")
     if (
-        approval_request.action_type != "activate_product"
-        or approval_request.target_type != "Product"
-        or approval_request.target_id != str(product.pk)
-        or not gate.manifest_id
-        or approval_request.release_manifest_digest != gate.manifest.manifest_digest
-        or not release_manifest_is_current(gate.manifest, product, gate.run, gate.artifact)
+        current_approval.action_type != "activate_product"
+        or current_approval.target_type != "Product"
+        or current_approval.target_id != str(current_product.pk)
+        or not manifest
+        or current_approval.release_manifest_digest != manifest.manifest_digest
+        or not release_manifest_is_current(manifest, current_product, run, artifact)
     ):
         raise ValidationError("Approval is not bound to this current release manifest, artifact, and activation action.")
     gate.status = "approved"
-    gate.approval = approval_request
+    gate.approval = current_approval
     gate.approved_by = owner
     gate.approved_at = timezone.now()
     gate.save(update_fields=["status", "approval", "approved_by", "approved_at", "updated_at"])
     return gate
 
 
+@transaction.atomic
 def assert_activation_allowed(product):
     if not product.is_factory_managed:
         return
-    invalidate_stale_evidence(product)
-    try:
-        gate = product.factory_release_gate
-    except FactoryReleaseGate.DoesNotExist:
-        gate = None
-    if not gate or gate.status != "approved" or not gate.approval_id or not gate.approved_by_id or not gate.approved_by.is_superuser:
+    current_product = Product.objects.select_for_update().get(pk=product.pk)
+    if not current_product.is_factory_managed:
+        return
+    invalidate_stale_evidence(current_product)
+    gate = FactoryReleaseGate.objects.select_for_update().filter(product_id=current_product.pk).first()
+    if not gate or gate.status != "approved" or not gate.approval_id or not gate.approved_by_id:
         raise ValidationError("Product Factory activation is blocked by the shared owner Release Gate.")
-    if gate.approval.status != "approved":
-        raise ValidationError("The linked owner ApprovalRequest is not approved.")
-    if not gate.approved_at or gate.artifact.version != gate.run.current_artifact_version:
-        raise ValidationError("Owner approval does not cover the current artifact version.")
+    approval = ApprovalRequest.objects.select_for_update().get(pk=gate.approval_id)
+    run = FactoryRun.objects.select_for_update().get(pk=gate.run_id)
+    artifact = FactoryArtifact.objects.select_for_update().get(pk=gate.artifact_id)
+    manifest = FactoryReleaseManifest.objects.get(pk=gate.manifest_id) if gate.manifest_id else None
+    owner = get_user_model().objects.select_for_update().get(pk=gate.approved_by_id)
     if (
-        gate.approval.revoked_at
-        or not gate.approval.expires_at
-        or gate.approval.expires_at <= timezone.now()
-        or gate.approval.action_type != "activate_product"
-        or gate.approval.target_type != "Product"
-        or gate.approval.target_id != str(product.pk)
-        or not gate.manifest_id
-        or gate.approval.release_manifest_digest != gate.manifest.manifest_digest
-        or not release_manifest_is_current(gate.manifest, product, gate.run, gate.artifact)
+        not owner.is_superuser or approval.status != "approved" or approval.revoked_at
+        or not approval.expires_at or approval.expires_at <= timezone.now()
+        or approval.action_type != "activate_product" or approval.target_type != "Product"
+        or approval.target_id != str(current_product.pk) or not gate.approved_at
+        or artifact.version != run.current_artifact_version or not manifest
+        or approval.release_manifest_digest != manifest.manifest_digest
+        or not release_manifest_is_current(manifest, current_product, run, artifact)
     ):
         raise ValidationError("Release approval is revoked, expired, unrelated, or stale.")
 
@@ -360,11 +395,16 @@ def _assert_release_evidence_current(run, product, artifact):
         "product_research", "product_opportunity_score", "product_spec", "product_build_record",
         "product_qa", "product_localize", "product_launch_candidate",
     }
-    items = {item.evidence_type: item for item in run.evidence.all()}
+    items = {item.evidence_type: item for item in run.evidence.select_for_update().all()}
     if not required.issubset(items) or any(items[key].status != FactoryEvidence.VALID for key in required):
         raise ValidationError("Release requires current, valid evidence for every Factory stage.")
     for key in required:
         item = items[key]
+        if (
+            item.freshness_policy_version != current_evidence_policy_version()
+            or not item.valid_until or item.valid_until <= timezone.now()
+        ):
+            raise ValidationError(f"Release evidence {key} is expired or uses an obsolete freshness policy.")
         snapshot = snapshot_for(key, product, run)
         if item.prerequisite_digest != snapshot["digest"]:
             raise ValidationError(f"Release evidence {key} has stale prerequisites.")
@@ -376,13 +416,19 @@ def _assert_release_evidence_current(run, product, artifact):
         raise ValidationError("Release manifest requires current localization evidence.")
     markets = (product.metadata.get("market_eligibility") or [])
     codes = [str(item.get("market_code") or "").upper() for item in markets if isinstance(item, dict)]
-    eligibility = market_eligibility_snapshot(codes)
+    eligibility = market_eligibility_snapshot(codes, for_update=True)
     if not codes or len(eligibility) != len(set(codes)) or not any(
         item["eligibility"] == FactoryMarketEligibility.ALLOWED and item["current"] for item in eligibility
     ) or any(item["eligibility"] != FactoryMarketEligibility.ALLOWED or not item["current"] for item in eligibility):
         raise ValidationError("Market eligibility is missing, expired, or no longer allowed.")
     if not artifact_content_digest(artifact) or artifact.content_digest != (product.metadata.get("build") or {}).get("sha256"):
         raise ValidationError("Release artifact digest differs from the Product build record.")
+
+
+def canonical_spec_digest(spec):
+    canonical = dict(spec or {})
+    canonical.pop("digest", None)
+    return canonical_digest(canonical)
 
 
 def _manifest_snapshot(product, run, artifact):
@@ -395,11 +441,12 @@ def _manifest_snapshot(product, run, artifact):
     codes = sorted({str(item.get("market_code") or "").upper() for item in markets if isinstance(item, dict)})
     return {
         "run_id": run.run_id, "product_id": product.pk, "spec_version": run.current_spec_version,
-        "spec_digest": spec.get("digest") or digest(spec), "artifact_id": artifact.pk,
+        "spec_digest": canonical_spec_digest(spec), "artifact_id": artifact.pk,
         "artifact_digest": artifact_content_digest(artifact), "artifact_version": artifact.version,
         "locales": sorted((product.metadata.get("localization") or {}).get("launch_locales") or []),
         "markets": sorted(markets, key=lambda item: item.get("market_code", "")),
         "policy_version": str(getattr(settings, "FACTORY_POLICY_VERSION", "factory-policy-v1")),
+        "evidence_policy_version": current_evidence_policy_version(),
         "evidence_digest": digest(evidence), "eligibility_digest": digest(market_eligibility_snapshot(codes)),
     }
 

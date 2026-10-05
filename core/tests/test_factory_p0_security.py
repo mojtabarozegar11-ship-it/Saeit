@@ -15,14 +15,18 @@ from core.autonomous_brain import AutonomousBrain
 from core.factory_agent_runtime import FactoryAgentRuntime, FixtureResearchProvider
 from core.factory_artifact_verifier import ArtifactVerificationError, StaticResearchBriefVerifier
 from core.factory_builder import FactoryBuildError, StaticResearchBriefBuilder
-from core.factory_contracts import FactoryAgentOutput
-from core.factory_governance import assert_activation_allowed
+from core.factory_contracts import FactoryAgentOutput, GatewayAdapterReceipt
+from core.factory_governance import (
+    assert_activation_allowed, canonical_spec_digest, snapshot_for, validate_task_prerequisites,
+)
 from core.factory_tool_pack import build_factory_gateway
 from core.models import (
-    AgentToolGrant, ApprovalRequest, FactoryEvidence, FactoryMarketEligibility,
+    Agent, AgentTask, AgentToolGrant, ApprovalRequest, FactoryEvidence, FactoryMarketEligibility,
     FactoryRun, Product, ResearchSource,
 )
 from core.worker_runner import WorkerRunner
+from core.task_runtime import TaskRuntime
+from core.tool_gateway import ToolGatewayError
 
 
 class CountingProvider(FixtureResearchProvider):
@@ -112,6 +116,174 @@ class FactoryP0SecurityTests(TestCase):
                 {"title": "injected", "sources": [], "product_id": 999, "verified_effect": True},
             )
 
+    def test_gateway_rejects_direct_or_forged_factory_output_without_effect(self):
+        task = self.plan_research("p0-forged-output")
+        running = TaskRuntime().claim(task.pk)
+        gateway = build_factory_gateway()
+        gateway.authorize(task.action_type, running.input_data, task_id=running.pk, execution_id=running.execution_id)
+        forged = FactoryAgentOutput("product_research", {
+            "title": "Forged", "sources": [
+                {"url": "https://fake.test/1", "finding": "one"},
+                {"url": "https://fake.test/2", "finding": "two"},
+            ],
+        })
+        with self.assertRaises(ToolGatewayError):
+            gateway.invoke(
+                task.action_type, running.input_data, task_id=running.pk,
+                execution_id=running.execution_id, agent_output=forged,
+            )
+        self.assertFalse(Product.objects.exists())
+
+        fake_receipt = GatewayAdapterReceipt(
+            task_id=running.pk, agent_id=running.agent_id, execution_id=running.execution_id,
+            action=task.action_type, resource="product:new", environment=running.environment,
+            prerequisite_digest=running.prerequisite_snapshot["digest"],
+            output_digest="0" * 64, values=forged.values, nonce=object(),
+        )
+        with self.assertRaises(ToolGatewayError):
+            gateway.invoke(
+                task.action_type, running.input_data, task_id=running.pk,
+                execution_id=running.execution_id, adapter_receipt=fake_receipt,
+            )
+        self.assertFalse(Product.objects.exists())
+
+    def test_mutated_executor_output_receipt_is_rejected_before_product_creation(self):
+        task = self.plan_research("p0-mutated-receipt")
+        running = TaskRuntime().claim(task.pk)
+        gateway = build_factory_gateway()
+        authorization = gateway.authorize(
+            task.action_type, running.input_data, task_id=running.pk, execution_id=running.execution_id
+        )
+        receipt = gateway.execute_factory_adapter(
+            FactoryAgentRuntime(research_provider=FixtureResearchProvider()), running, authorization
+        )
+        receipt.values["title"] = "Changed after validation"
+        with self.assertRaisesRegex(ToolGatewayError, "mutated"):
+            gateway.invoke(
+                task.action_type, running.input_data, task_id=running.pk,
+                execution_id=running.execution_id, adapter_receipt=receipt,
+            )
+        self.assertFalse(Product.objects.exists())
+
+    def test_task_intent_payload_override_is_rejected_at_gateway(self):
+        task = self.plan_research("p0-payload-override")
+        running = TaskRuntime().claim(task.pk)
+        gateway = build_factory_gateway()
+        gateway.authorize(task.action_type, running.input_data, task_id=running.pk, execution_id=running.execution_id)
+        override = {**running.input_data, "product_id": 999}
+        with self.assertRaisesRegex(ToolGatewayError, "persisted Task intent"):
+            gateway.invoke(
+                task.action_type, override, task_id=running.pk, execution_id=running.execution_id,
+                adapter_receipt=GatewayAdapterReceipt(
+                    task_id=running.pk, agent_id=running.agent_id, execution_id=running.execution_id,
+                    action=task.action_type, resource="product:new", environment=running.environment,
+                    prerequisite_digest=running.prerequisite_snapshot["digest"],
+                    output_digest="0" * 64, values={}, nonce=object(),
+                ),
+            )
+        self.assertFalse(Product.objects.exists())
+
+    def test_old_authorization_token_fails_after_retry_before_provider(self):
+        task = self.plan_research("p0-old-token-retry")
+        runtime = TaskRuntime()
+        old_execution = runtime.claim(task.pk)
+        gateway = build_factory_gateway()
+        authorization = gateway.authorize(
+            task.action_type, old_execution.input_data, task_id=task.pk, execution_id=old_execution.execution_id
+        )
+        runtime.fail(task.pk, RuntimeError("retry"), execution_id=old_execution.execution_id)
+        retry = runtime.claim(task.pk)
+        provider = CountingProvider()
+        with self.assertRaises(Exception):
+            FactoryAgentRuntime(research_provider=provider).execute(
+                retry, authorization=authorization, authorization_check=gateway.is_authorized
+            )
+        self.assertEqual(provider.calls, 0)
+        self.assertFalse(Product.objects.exists())
+
+    def test_old_authorization_token_fails_after_lease_reclaim_before_provider(self):
+        task = self.plan_research("p0-old-token-reclaim")
+        runtime = TaskRuntime()
+        old_execution = runtime.claim(task.pk)
+        gateway = build_factory_gateway()
+        authorization = gateway.authorize(
+            task.action_type, old_execution.input_data, task_id=task.pk, execution_id=old_execution.execution_id
+        )
+        AgentTask.objects.filter(pk=task.pk).update(updated_at=timezone.now() - timedelta(hours=1))
+        runtime.recover_stale(task.pk, stale_after_seconds=1)
+        AgentTask.objects.filter(pk=task.pk).update(next_retry_at=timezone.now() - timedelta(seconds=1))
+        reclaimed = runtime.claim(task.pk)
+        provider = CountingProvider()
+        with self.assertRaises(Exception):
+            FactoryAgentRuntime(research_provider=provider).execute(
+                reclaimed, authorization=authorization, authorization_check=gateway.is_authorized
+            )
+        self.assertEqual(provider.calls, 0)
+        self.assertFalse(Product.objects.exists())
+
+    def test_expired_execution_lease_is_rejected_before_provider(self):
+        task = self.plan_research("p0-expired-execution")
+        running = TaskRuntime().claim(task.pk)
+        gateway = build_factory_gateway()
+        authorization = gateway.authorize(
+            running.action_type, running.input_data, task_id=running.pk,
+            execution_id=running.execution_id,
+        )
+        AgentTask.objects.filter(pk=task.pk).update(updated_at=timezone.now() - timedelta(hours=1))
+        provider = CountingProvider()
+        with self.assertRaisesRegex(ToolGatewayError, "lease has expired"):
+            FactoryAgentRuntime(research_provider=provider).execute(
+                running, authorization=authorization, authorization_check=gateway.is_authorized,
+            )
+        self.assertEqual(provider.calls, 0)
+        self.assertFalse(Product.objects.exists())
+
+    def test_missing_prerequisite_evidence_fails_closed(self):
+        product = Product.objects.create(
+            title="Missing lineage", product_type="digital",
+            metadata={"factory_state": "researched", "research": {"sources": [{}, {}]}},
+        )
+        run = FactoryRun.objects.create(run_id="p0-missing-lineage", product=product, goal=self.goal)
+        agent = Agent.objects.create(code="missing-lineage", name="Missing lineage", mission="Test", active=True)
+        task = AgentTask.objects.create(
+            agent=agent, action_type="product_opportunity_score", capability_code="product_opportunity_score",
+            product=product, factory_run=run, goal=self.goal, prerequisite_snapshot={
+                **snapshot_for("product_opportunity_score", product, run)
+            },
+        )
+        with self.assertRaisesRegex(ValidationError, "missing its required predecessor evidence"):
+            validate_task_prerequisites(task)
+
+    def test_expired_prerequisite_evidence_fails_closed(self):
+        product, run, _ = self.run_factory("p0-expired-evidence", 2)
+        score = run.evidence.get(evidence_type="product_opportunity_score")
+        score.valid_until = timezone.now() - timedelta(seconds=1)
+        score.save(update_fields=["valid_until", "updated_at"])
+        task = AutonomousBrain().plan_product_factory_step(
+            payload={"goal": self.goal}, product_id=product.pk, run_id=run.run_id
+        )
+        with self.assertRaisesRegex(ValidationError, "stale, invalid, or expired"):
+            validate_task_prerequisites(task)
+
+    def test_invalid_predecessor_lineage_cannot_be_consumed(self):
+        product, run, _ = self.run_factory("p0-invalid-lineage", 2)
+        research = run.evidence.get(evidence_type="product_research")
+        research.status = FactoryEvidence.INVALID
+        research.save(update_fields=["status", "updated_at"])
+        task = AutonomousBrain().plan_product_factory_step(
+            payload={"goal": self.goal}, product_id=product.pk, run_id=run.run_id
+        )
+        with self.assertRaisesRegex(ValidationError, "stale, invalid, or expired"):
+            validate_task_prerequisites(task)
+
+    def test_canonical_spec_digest_ignores_claimed_digest_but_tracks_content(self):
+        spec = {"version": 2, "problem": "Original", "acceptance_criteria": ["works"], "digest": "claimed"}
+        actual = canonical_spec_digest(spec)
+        forged = {**spec, "digest": "f" * 64}
+        self.assertEqual(actual, canonical_spec_digest(forged))
+        changed = {**forged, "problem": "Tampered"}
+        self.assertNotEqual(actual, canonical_spec_digest(changed))
+
     def test_builder_does_not_create_workspace_without_gateway_authorization(self):
         with tempfile.TemporaryDirectory() as parent:
             workspace = Path(parent) / "factory-workspace"
@@ -162,11 +334,8 @@ class FactoryP0SecurityTests(TestCase):
         source.snapshot_hash = "f" * 64
         source.save(update_fields=["snapshot_hash", "updated_at"])
         evidence = list(run.evidence.order_by("evidence_type"))
-        research_evidence = next(item for item in evidence if item.evidence_type == "product_research")
-        self.assertEqual(research_evidence.status, FactoryEvidence.VALID)
-        downstream = [item for item in evidence if item.evidence_type != "product_research"]
-        self.assertTrue(downstream)
-        self.assertTrue(all(item.status == FactoryEvidence.STALE for item in downstream))
+        self.assertTrue(evidence)
+        self.assertTrue(all(item.status == FactoryEvidence.STALE for item in evidence))
 
         next_task = AutonomousBrain().plan_product_factory_step(
             payload={"goal": self.goal}, product_id=product.pk, run_id=run.run_id,
@@ -258,6 +427,26 @@ class FactoryP0SecurityTests(TestCase):
         product.active = True
         with self.assertRaises(ValidationError):
             product.save()
+
+    def test_cached_approval_is_rejected_after_revoke_from_independent_object(self):
+        product, _, _ = self.run_factory("p0-cached-approval-revoke", 7)
+        product.owner = self.owner
+        product.save(update_fields=["owner", "updated_at"])
+        approval = ApprovalRequest.objects.create(
+            action_type="activate_product", target_type="Product", target_id=str(product.pk),
+            reason="Approve exact Factory release", risk="high", requested_by=self.owner,
+        )
+        approval.status = "approved"
+        approval.save(update_fields=["status", "updated_at"])
+        cached_gate = product.factory_release_gate
+        self.assertEqual(cached_gate.approval.status, "approved")
+        separate_approval = ApprovalRequest.objects.get(pk=approval.pk)
+        separate_approval.revoked_at = timezone.now()
+        separate_approval.save(update_fields=["revoked_at", "updated_at"])
+        product.active = True
+        with self.assertRaises(ValidationError):
+            product.save()
+        self.assertFalse(Product.objects.get(pk=product.pk).active)
 
     def test_expired_market_eligibility_invalidates_approved_manifest(self):
         product, _, _ = self.run_factory("p0-market-expiry", 7)
