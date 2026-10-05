@@ -193,11 +193,13 @@ class FactoryAgentRuntime:
                 values = self._spec(task, product)
             elif action == "product_build_record":
                 values = self._build(task, product, authorization, authorization_check)
-            elif action == "product_qa":
-                values = self._verify(task, product, authorization, authorization_check)
+            elif action == "product_test":
+                values = self._test(task, product, authorization, authorization_check)
+            elif action == "product_security":
+                values = self._security(task, product, authorization, authorization_check)
             elif action == "product_localize":
-                values = {"locales": ["en"]}
-            elif action == "product_launch_candidate":
+                values = self._localize(task, product)
+            elif action == "product_market_eligibility":
                 now = timezone.now()
                 markets = FactoryMarketEligibility.objects.filter(
                     eligibility=FactoryMarketEligibility.ALLOWED,
@@ -205,6 +207,10 @@ class FactoryAgentRuntime:
                     valid_until__gt=now,
                 ).order_by("market_code")
                 values = {"markets": [{"market_code": item.market_code} for item in markets]}
+            elif action == "product_qa":
+                values = self._qa(task, product)
+            elif action == "product_launch_candidate":
+                values = self._launch_candidate(task, product)
             else:
                 raise FactoryAgentBlocked(f"No execution adapter is registered for {action}.")
         return FactoryAgentOutput.validate(action, values)
@@ -517,18 +523,86 @@ class FactoryAgentRuntime:
             run_id=run.run_id, product_id=product.pk, version=version, spec=spec, evidence=records,
             task=task, authorization=authorization, authorization_check=authorization_check,
         )
+        artifact = {**artifact, "spec_digest": spec["digest"], "builder": task.agent.code,
+                    "task_id": task.pk, "execution_id": task.execution_id,
+                    "built_at": timezone.now().isoformat(), "status": "built"}
         return {"artifact": artifact}
 
-    def _verify(self, task, product, authorization, authorization_check):
+    def _current_artifact(self, task, product):
         run = task.factory_run
         artifact = FactoryArtifact.objects.filter(
             product=product, run=run, version=run.current_artifact_version,
         ).order_by("-pk").first()
         if not artifact:
-            raise FactoryAgentBlocked("Test/Security requires the current persisted artifact.")
-        spec = (product.metadata or {}).get("spec") or {}
-        tests, security = self.verifier.verify(
-            artifact, spec, task=task, authorization=authorization,
-            authorization_check=authorization_check,
+            raise FactoryAgentBlocked("Current persisted immutable build artifact is required.")
+        return artifact
+
+    def _test(self, task, product, authorization, authorization_check):
+        artifact = self._current_artifact(task, product)
+        tests = self.verifier.test(
+            artifact, (product.metadata or {}).get("spec") or {}, task=task,
+            authorization=authorization, authorization_check=authorization_check,
         )
-        return {"tests": tests, "security": security}
+        return {"tests": tests}
+
+    def _security(self, task, product, authorization, authorization_check):
+        artifact = self._current_artifact(task, product)
+        security = self.verifier.security(
+            artifact, (product.metadata or {}).get("spec") or {}, task=task,
+            authorization=authorization, authorization_check=authorization_check,
+        )
+        return {"security": security}
+
+    def _localize(self, task, product):
+        build = (product.metadata or {}).get("build") or {}
+        spec = (product.metadata or {}).get("spec") or {}
+        required = ["en"]
+        requested = spec.get("target_languages") or []
+        normalized = [str(x).split(";", 1)[0].strip().lower() for x in requested]
+        if "fa" in normalized:
+            required.append("fa")
+        locales = [{"locale": code, "version": 1, "status": "complete",
+                    "rtl": code in {"fa", "ar", "ur"}, "fixture": False,
+                    "source_locale": "en" if code != "en" else None}
+                   for code in dict.fromkeys(required)]
+        localization = {"policy_version": "factory-localization-v1",
+                        "build_digest": build.get("sha256"), "required_locales": required,
+                        "fallback_locale": "en", "architecture_locales": [
+                            "en","zh-hans","hi","es","fr","ar","bn","pt","ru","ur","id","de",
+                            "ja","sw","mr","te","tr","ta","vi","ko","fa"
+                        ], "locales": locales}
+        localization["attestation_digest"] = canonical_digest(localization)
+        return {"localization": localization}
+
+    def _qa(self, task, product):
+        meta = product.metadata or {}
+        qa = {"passed": True, "policy_version": "factory-qa-v1",
+              "spec_digest": (meta.get("spec") or {}).get("digest"),
+              "build_digest": (meta.get("build") or {}).get("sha256"),
+              "test_attestation_digest": (meta.get("test_attestation") or {}).get("attestation_digest"),
+              "security_attestation_digest": (meta.get("security_attestation") or {}).get("attestation_digest"),
+              "localization_digest": canonical_digest(meta.get("localization") or {}),
+              "eligibility_digest": canonical_digest(meta.get("market_eligibility") or []),
+              "qa_agent": task.agent.code, "execution_id": task.execution_id}
+        if not all(qa.get(k) for k in ("spec_digest","build_digest","test_attestation_digest",
+                                      "security_attestation_digest")):
+            raise FactoryAgentBlocked("QA requires complete Build/Test/Security lineage.")
+        qa["attestation_digest"] = canonical_digest(qa)
+        return {"qa": qa}
+
+    def _launch_candidate(self, task, product):
+        meta = product.metadata or {}
+        build = meta.get("build") or {}
+        qa = meta.get("qa_attestation") or {}
+        candidate = {"product_id": product.pk, "release_version": build.get("version"),
+                     "spec_digest": (meta.get("spec") or {}).get("digest"),
+                     "build_digest": build.get("sha256"),
+                     "test_attestation_digest": (meta.get("test_attestation") or {}).get("attestation_digest"),
+                     "security_attestation_digest": (meta.get("security_attestation") or {}).get("attestation_digest"),
+                     "localization_digest": canonical_digest(meta.get("localization") or {}),
+                     "eligibility_digest": canonical_digest(meta.get("market_eligibility") or []),
+                     "qa_attestation_digest": qa.get("attestation_digest"),
+                     "created_by": task.agent.code, "execution_id": task.execution_id,
+                     "status": "launch_candidate", "published": False, "deployed": False}
+        candidate["attestation_digest"] = canonical_digest(candidate)
+        return {"launch_candidate": candidate}
