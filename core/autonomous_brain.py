@@ -93,6 +93,10 @@ class AutonomousBrain:
         products = list(products.order_by("-updated_at", "-pk"))
         if product_id is not None and not products:
             raise RuntimeError(f"Product {product_id} does not exist in the factory registry.")
+        products = [
+            item for item in products
+            if isinstance(item.metadata, dict) and item.metadata.get("factory_state")
+        ]
         product = next(
             (item for item in products if item.metadata.get("factory_state") != "launch_candidate"),
             products[0] if products else None,

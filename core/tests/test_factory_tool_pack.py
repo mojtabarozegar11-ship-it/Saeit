@@ -62,6 +62,7 @@ class FactoryToolPackTests(TestCase):
         self.assertEqual(Product.objects.filter(title="Retry-safe product").count(), 1)
 
     def test_master_brain_plans_and_verifies_factory_research_task(self):
+        Product.objects.create(title="Existing catalog item", product_type="digital", metadata={})
         agent = Agent.objects.create(
             code="factory-master-agent", name="Factory Master", mission="Coordinate product factory", active=True
         )
