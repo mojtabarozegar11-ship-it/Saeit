@@ -32,3 +32,19 @@ Staging rollback means stop the staging Passenger app/cron, preserve reports/log
 
 ## Production boundary
 Staging must keep publication, real payments, treasury and crypto execution disabled. Owner approval remains required for Production and governed high-risk actions.
+
+
+## cPanel scheduler
+After preflight passes, configure a staging-only cron (for example every 10 minutes) that activates the staging Python 3.11 virtualenv and runs:
+
+```bash
+SAEIT_STAGING_ROOT=/home/zomorod2/Saeit-staging /home/zomorod2/virtualenv/Saeit-staging/bin/sh /home/zomorod2/Saeit-staging/deploy/staging/staging_tick.sh
+```
+
+If the host does not provide `bin/sh` inside the virtualenv, use `/bin/sh` and prepend the virtualenv's `bin` directory to PATH. The cron must point only at the staging root/database. Do not alter the existing Production cron.
+
+## Secrets required locally
+Generate `SECRET_KEY` and `SAEIT_BRIDGE_SECRET` on the staging host. Configure the dedicated staging PostgreSQL user's password and a staging-only `STAGING_RESEARCH_API_KEY`. None of these belong in GitHub or chat.
+
+## Current external blocker
+The repository now contains a real network-backed staging adapter, but real acceptance still requires an actual staging-only provider credential and a live network call. Evidence quality/coverage is intentionally fail-closed: if real sources do not support the required commercial factors, the Master must re-research or block rather than invent evidence.
