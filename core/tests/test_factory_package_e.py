@@ -27,6 +27,16 @@ class OneShotTestFailureVerifier(StaticResearchBriefVerifier):
         return super().test(*args, **kwargs)
 
 
+class BoundedReresearchProvider(FixtureResearchProvider):
+    def __init__(self):
+        self.calls = 0
+
+    def search(self, **kwargs):
+        self.calls += 1
+        rows = super().search(**kwargs)
+        return rows[:1] if self.calls == 1 else rows
+
+
 class PolicyBlockedProvider(ResearchProvider):
     provider_name = "policy-blocked-ci-provider"
     real_research = False
@@ -130,6 +140,17 @@ class FactoryPackageEGoalOnlyTests(TestCase):
         self.assertEqual(verifier.calls, 2)
         self.assertEqual(run.tasks.filter(action_type="product_build_record").count(), 1)
         self.assertEqual(run.tasks.filter(action_type="product_launch_candidate").count(), 1)
+
+    def test_bounded_reresearch_replans_and_continues_without_external_stage_advance(self):
+        run_id = "package-e-reresearch"
+        provider = BoundedReresearchProvider()
+        output = self.run_goal_only(run_id, executor=self.executor(provider=provider), max_steps=20)
+        self.assertIn("FACTORY_LAUNCH_CANDIDATE", output)
+        run = FactoryRun.objects.get(run_id=run_id)
+        self.assertEqual(provider.calls, 2)
+        self.assertEqual(run.tasks.filter(action_type="product_research").count(), 2)
+        self.assertEqual(run.tasks.filter(action_type="product_validation").count(), 2)
+        self.assertEqual(run.product.metadata["factory_state"], "launch_candidate")
 
     def test_restart_resumes_same_run_without_recreating_goal(self):
         run_id = "package-e-restart"
