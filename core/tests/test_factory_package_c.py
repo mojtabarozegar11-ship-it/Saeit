@@ -17,7 +17,7 @@ from core.factory_agent_runtime import (
 from core.factory_economics import score_opportunity, validate_opportunity
 from core.factory_governance import _assert_real_research_for_release
 from core.factory_tool_pack import build_factory_gateway
-from core.models import AgentTask, Evidence, FactoryEvidence, FactoryRun, Product, ResearchProject, ResearchSource
+from core.models import AgentTask, Evidence, FactoryEvidence, FactoryMarketEligibility, FactoryRun, Product, ResearchProject, ResearchSource
 from core.task_runtime import TaskRuntime
 from core.worker_runner import WorkerRunner
 
@@ -299,6 +299,16 @@ class FactoryPackageCTests(TestCase):
         self.assertNotIn("spec", product.metadata)
 
     def test_fixture_evidence_is_rejected_at_production_release_boundary(self):
+        owner = get_user_model().objects.create_superuser(
+            username="fixture-release-owner", email="fixture-release@example.com", password="test-only"
+        )
+        FactoryMarketEligibility.objects.create(
+            market_code="US", eligibility=FactoryMarketEligibility.ALLOWED,
+            evidence_reference="https://example.com/market-review",
+            review_note="Owner-reviewed market fixture for release-boundary isolation.",
+            reviewed_by=owner, reviewed_at=timezone.now(),
+            valid_until=timezone.now() + timedelta(days=30),
+        )
         product_id = None
         executor = self.executor()
         for _ in range(8):
