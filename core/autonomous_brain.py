@@ -1,6 +1,6 @@
 """Autonomous observe/decide/replan brain for the single master agent."""
 from dataclasses import dataclass
-from core.models import AgentTask, Product, Order
+from core.models import AgentTask, AuditLog, Product, Order
 
 @dataclass(frozen=True)
 class Candidate:
@@ -84,6 +84,107 @@ class AutonomousBrain:
             c.append(Candidate("income_growth_experiment","Active product has no orders; acquisition is the bottleneck.",10,9,7,2))
         c.append(Candidate("income_profit_optimize","Measure economics and identify the next bottleneck.",6,5,8,1))
         return sorted(c,key=lambda x:x.score,reverse=True)
+
+    def observe_product_factory(self, product_id=None):
+        """Observe lifecycle state and runtime work before selecting a factory step."""
+        products = Product.objects.all()
+        if product_id is not None:
+            products = products.filter(pk=product_id)
+        products = list(products.order_by("-updated_at", "-pk"))
+        if product_id is not None and not products:
+            raise RuntimeError(f"Product {product_id} does not exist in the factory registry.")
+        product = next(
+            (item for item in products if item.metadata.get("factory_state") != "launch_candidate"),
+            products[0] if products else None,
+        )
+        tasks = AgentTask.objects.filter(action_type__startswith="product_")
+        if product:
+            tasks = tasks.filter(input_data__product_id=product.pk)
+        else:
+            tasks = tasks.filter(action_type="product_research")
+        pending = tasks.filter(status__in=("queued", "running", "blocked")).order_by("created_at", "pk").first()
+        latest_failure = tasks.filter(status="failed").order_by("-updated_at", "-pk").first()
+        return {
+            "product": product,
+            "factory_state": product.metadata.get("factory_state") if product else "new",
+            "pending_task": pending,
+            "latest_failure": latest_failure,
+            "candidate_count": Product.objects.filter(metadata__factory_state="launch_candidate").count(),
+        }
+
+    def decide_product_factory_step(self, product_id=None):
+        """Select the first unmet lifecycle gate from persisted Product evidence."""
+        state = self.observe_product_factory(product_id)
+        if state["pending_task"]:
+            task = state["pending_task"]
+            return {"action": "continue_existing_task", "task_id": task.pk,
+                    "reason": f"Task {task.pk} is {task.status} and must be resolved first."}
+        if state["latest_failure"]:
+            task = state["latest_failure"]
+            return {"action": "blocked", "task_id": task.pk,
+                    "reason": str((task.output_data or {}).get("error") or "Factory task failed; remediation is required.")}
+        next_action = {
+            "new": "product_research",
+            "researched": "product_opportunity_score",
+            "scored": "product_spec",
+            "specified": "product_build_record",
+            "built": "product_qa",
+            "qa_passed": "product_localize",
+            "localized": "product_launch_candidate",
+            "launch_candidate": "owner_approval_boundary",
+        }
+        action = next_action.get(state["factory_state"])
+        if not action:
+            return {"action": "blocked", "reason": "Unknown factory state; lifecycle state requires review."}
+        if action == "owner_approval_boundary":
+            return {"action": action, "product_id": state["product"].pk,
+                    "reason": "All internal gates passed. Publication remains owner-gated."}
+        return {"action": action,
+                "product_id": state["product"].pk if state["product"] else None,
+                "reason": f"Persisted lifecycle state is {state['factory_state']}; this is the next unmet gate."}
+
+    def plan_product_factory_step(self, payload=None, product_id=None):
+        """Queue one capability-authorized step through the existing MasterAgent planner."""
+        from core.orchestrator import MasterAgent
+
+        decision = self.decide_product_factory_step(product_id)
+        if decision["action"] == "continue_existing_task":
+            return AgentTask.objects.get(pk=decision["task_id"])
+        if decision["action"] in {"blocked", "owner_approval_boundary"}:
+            raise RuntimeError(decision["reason"])
+        task_payload = dict(payload or {})
+        if decision["product_id"] is not None:
+            task_payload["product_id"] = decision["product_id"]
+        required_input = {
+            "product_research": ("title", "sources"),
+            "product_opportunity_score": ("score",),
+            "product_spec": ("spec",),
+            "product_build_record": ("artifact",),
+            "product_qa": ("tests", "security"),
+            "product_localize": ("locales",),
+            "product_launch_candidate": ("markets",),
+        }[decision["action"]]
+        if any(task_payload.get(key) in (None, "", [], {}) for key in required_input):
+            raise RuntimeError(
+                f"The {decision['action']} agent must provide verified output fields: "
+                + ", ".join(required_input)
+            )
+        task = MasterAgent().plan(
+            project=None,
+            action=decision["action"],
+            payload=task_payload,
+            risk="low",
+        )
+        AuditLog.objects.create(
+            actor_type="agent",
+            actor_id="factory-master-agent",
+            action="factory_next_step_planned",
+            target_type="AgentTask",
+            target_id=str(task.pk),
+            after_state={**decision, "status": task.status, "agent": task.agent.code},
+            trace_id=f"factory-master-task-{task.pk}",
+        )
+        return task
 
     def decide(self):
         s=self.observe(); ranked=self.candidates(s); chosen=ranked[0]
