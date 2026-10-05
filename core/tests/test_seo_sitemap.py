@@ -31,6 +31,11 @@ class SitemapRegressionTests(TestCase):
         self.assertNotIn("https://zomorodmelal.ir/newsletter/archive/", locations)
         self.assertEqual(len(locations), len(set(locations)))
 
+    def test_service_hub_count_matches_the_fourteen_listed_paths(self):
+        response = self.client.get("/")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "SERVICES<br><strong>14</strong>")
+
     def test_sitemap_escapes_dynamic_blog_paths_as_valid_xml(self):
         BlogPage.objects.create(
             code="research&development",
