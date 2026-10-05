@@ -63,7 +63,7 @@ class FactoryP1RuntimeTests(TestCase):
         run = FactoryRun.objects.get(run_id=self.run_id)
         product = Product.objects.get(pk=run.product_id)
         evidence = FactoryEvidence.objects.filter(run=run, status=FactoryEvidence.VALID)
-        self.assertEqual(evidence.count(), 6)
+        self.assertEqual(evidence.count(), 7)
         research = product.metadata["research"]
         self.assertFalse(research["real_research"])
         self.assertEqual(research["research_provider"], "fixture")
