@@ -4,7 +4,8 @@ from django.utils import timezone
 from .models import Product
 from .tool_gateway import ToolGateway, ToolSpec
 
-LANGUAGES = ("en","zh-hans","hi","es","fr","ar","bn","pt","ru","ur","id","de","ja","sw","mr","te","tr","ta","vi","ko")\nSUPPORTED_LOCALES = LANGUAGES + ("fa",)
+LANGUAGES = ("en","zh-hans","hi","es","fr","ar","bn","pt","ru","ur","id","de","ja","sw","mr","te","tr","ta","vi","ko")
+SUPPORTED_LOCALES = LANGUAGES + ("fa",)
 
 
 def _product(payload):
