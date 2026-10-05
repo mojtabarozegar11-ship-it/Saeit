@@ -64,7 +64,7 @@ class Command(BaseCommand):
         sources = list(run.research_project.sources.all()) if run and hasattr(run, "research_project") else []
         real_sources = bool(sources) and all(
             item.provenance.get("real_research") is True and
-            item.provenance.get("provider") == "tavily-staging" and
+            item.provenance.get("provider") == "self-hosted-staging" and
             item.provenance.get("provider_request_id") and
             hashlib.sha256(str(item.provenance.get("snapshot_text", "")).encode()).hexdigest() == item.snapshot_hash
             for item in sources)
