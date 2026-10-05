@@ -227,13 +227,13 @@ def validate_task_prerequisites(task):
             raise ValidationError("Bounded re-research request is stale.")
         validation = (product.metadata or {}).get("validation") or {}
         evidence = run.evidence.filter(evidence_type="product_validation").order_by("-created_at", "-pk").first()
-        research_attempts = run.tasks.filter(action_type="product_research").count()
+        research_attempts = run.tasks.filter(action_type="product_research").exclude(pk=task.pk).count()
         if (
             product.metadata.get("factory_state") != "needs_research"
             or validation.get("outcome") not in {"NEEDS_MORE_EVIDENCE", "RESEARCH_AGAIN"}
             or not evidence or evidence.status != FactoryEvidence.VALID
             or (evidence.details.get("output") or {}).get("validation") != validation
-            or research_attempts > 2
+            or research_attempts >= 2
         ):
             raise ValidationError("No current bounded Validation request permits another Research pass.")
         return True
