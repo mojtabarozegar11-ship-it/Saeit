@@ -28,7 +28,7 @@ class StaticResearchBriefVerifier:
         if digest != artifact.content_digest:
             raise ArtifactVerificationError("Artifact digest changed after Builder completion.")
         text = content.decode("utf-8")
-        expected_sources = len(spec.get("evidence_ids", []))
+        expected_sources = len(spec.get("evidence_references", []))
         checks = {
             "valid_utf8_html": text.startswith("<!doctype html>") and "</html>" in text,
             "problem_present": str(spec.get("problem") or "") in text,
