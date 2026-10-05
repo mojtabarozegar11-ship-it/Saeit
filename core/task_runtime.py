@@ -193,6 +193,7 @@ class TaskRuntime:
         expected_states = {
             "product_research": "researched",
             "product_opportunity_score": "scored",
+            "product_validation": "validated",
             "product_spec": "specified",
             "product_build_record": "built",
             "product_qa": "qa_passed",
@@ -212,16 +213,32 @@ class TaskRuntime:
         except (Product.DoesNotExist, TypeError, ValueError) as exc:
             raise TaskExecutionError("Product Factory output references no persisted Product") from exc
         metadata = product.metadata if isinstance(product.metadata, dict) else {}
-        if metadata.get("factory_state") != expected or output.get("factory_state") != expected:
+        allowed_states = {expected}
+        if task.action_type == "product_validation":
+            allowed_states.update({"needs_research", "rejected", "blocked"})
+        if metadata.get("factory_state") not in allowed_states or output.get("factory_state") != metadata.get("factory_state"):
             raise TaskExecutionError("Persisted Product lifecycle state does not match task output")
+        if task.action_type == "product_validation":
+            validation = metadata.get("validation") or {}
+            outcome = (output.get("validation") or {}).get("outcome")
+            if validation.get("outcome") != outcome or outcome not in {
+                "VALIDATED", "NEEDS_MORE_EVIDENCE", "RESEARCH_AGAIN", "REJECTED", "BLOCKED"
+            }:
+                raise TaskExecutionError("Typed Validation outcome was not persisted")
         if task.action_type == "product_research":
             sources = (metadata.get("research") or {}).get("sources") or []
-            if len(sources) < 2 or output.get("evidence_count") != len(sources):
+            if not sources or output.get("evidence_count") != len(sources):
                 raise TaskExecutionError("Research completion requires persisted source evidence")
         elif task.action_type == "product_opportunity_score":
             score = (metadata.get("opportunity") or {}).get("score")
-            if score is None or float(score) != float(output.get("score", -1)):
+            status = (metadata.get("opportunity") or {}).get("status")
+            if (score is None and status != "needs_evidence") or (
+                score is not None and float(score) != float(output.get("score", -1))
+            ):
                 raise TaskExecutionError("Opportunity score was not persisted on the Product")
+        elif task.action_type == "product_validation":
+            if not (metadata.get("validation") or {}).get("policy_version"):
+                raise TaskExecutionError("Validation policy/version is missing")
         elif task.action_type == "product_spec" and not (metadata.get("spec") or {}).get("acceptance_criteria"):
             raise TaskExecutionError("Product specification is missing acceptance criteria")
         elif task.action_type == "product_build_record" and not (metadata.get("build") or {}).get("ref"):
@@ -294,6 +311,10 @@ class TaskRuntime:
             if task.next_retry_at:
                 task.output_data["retry_after"] = task.next_retry_at.isoformat()
         task.save(update_fields=["output_data", "execution_id", "status", "next_retry_at", "updated_at"])
+        if task.status == "blocked" and task.factory_run_id:
+            run = FactoryRun.objects.select_for_update().get(pk=task.factory_run_id)
+            run.status = "blocked"
+            run.save(update_fields=["status", "updated_at"])
         self._audit(
             task,
             "task_failed",

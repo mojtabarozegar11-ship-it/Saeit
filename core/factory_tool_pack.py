@@ -4,6 +4,7 @@ from django.utils import timezone
 from .models import AgentTask, FactoryArtifact, FactoryMarketEligibility, FactoryRun, Product
 from .tool_gateway import ToolGateway, ToolSpec, consume_factory_invocation
 from .factory_contracts import FactoryAgentOutput
+from .factory_contracts import canonical_digest
 
 LANGUAGES = ("en","zh-hans","hi","es","fr","ar","bn","pt","ru","ur","id","de","ja","sw","mr","te","tr","ta","vi","ko")
 SUPPORTED_LOCALES = LANGUAGES + ("fa",)
@@ -29,23 +30,39 @@ def _product(payload):
 def product_research(payload):
     payload = _merge_output(payload, "product_research")
     sources = payload.get("sources") or []
-    if len(sources) < 2 or not all(isinstance(x, dict) and x.get("url") and x.get("finding") for x in sources):
-        raise ValueError("At least two source-backed market findings are required.")
+    if not sources or not all(isinstance(x, dict) and x.get("url") and x.get("finding") for x in sources):
+        raise ValueError("At least one traceable source-backed finding is required; adequacy is decided by Validation.")
     title = str(payload.get("title") or "").strip()
     if not title:
         raise ValueError("title is required")
-    product = Product.objects.create(
-        title=title, product_type=str(payload.get("product_type") or "digital"),
-        price=0, currency=str(payload.get("currency") or "USD"), active=False,
-        factory_managed=True,
-        metadata={"factory_state":"researched","research":{"sources":sources,"market":payload.get("market","global"),"evidence":payload.get("evidence",[]),"research_project_id":payload.get("research_project_id"),"research_report_id":payload.get("research_report_id"),"research_provider":payload.get("research_provider"),"real_research":payload.get("real_research") is True},
-                  "created_at":timezone.now().isoformat(),"languages_target":list(LANGUAGES)}
-    )
+    research = {"sources":sources,"market":payload.get("market","global"),
+        "evidence":payload.get("evidence",[]),"research_project_id":payload.get("research_project_id"),
+        "research_report_id":payload.get("research_report_id"),"research_provider":payload.get("research_provider"),
+        "real_research":payload.get("real_research") is True,"research_plan":payload.get("research_plan") or {}}
+    product = Product.objects.filter(pk=payload.get("product_id")).first() if payload.get("product_id") else None
+    if product:
+        if product.metadata.get("factory_state") != "needs_research":
+            raise ValueError("Bounded re-research is only allowed after a current Validation request.")
+        metadata = dict(product.metadata)
+        for key in ("opportunity", "validation", "spec", "build", "qa", "localization", "market_eligibility"):
+            metadata.pop(key, None)
+        product.metadata = {**metadata,"factory_state":"researched","research":research,
+            "created_at":metadata.get("created_at", timezone.now().isoformat()),"languages_target":list(LANGUAGES)}
+        product.save(update_fields=["metadata","updated_at"])
+    else:
+        product = Product.objects.create(
+            title=title, product_type=str(payload.get("product_type") or "digital"),
+            price=0, currency=str(payload.get("currency") or "USD"), active=False,
+            factory_managed=True,
+            metadata={"factory_state":"researched","research":research,
+                      "created_at":timezone.now().isoformat(),"languages_target":list(LANGUAGES)}
+        )
     run = FactoryRun.objects.filter(run_id=payload.get("__run_id")).first()
     if run:
         run.product = product
         run.save(update_fields=["product", "updated_at"])
-    return {"verified_effect":True,"product_id":product.pk,"factory_state":"researched","evidence_count":len(sources),"title":product.title,"sources":sources}
+    return {"verified_effect":True,"product_id":product.pk,"factory_state":"researched","evidence_count":len(sources),"title":product.title,"sources":sources,
+            "research_provider":research["research_provider"],"real_research":research["real_research"]}
 
 
 def opportunity_score(payload):
@@ -54,22 +71,55 @@ def opportunity_score(payload):
     if product.metadata.get("factory_state")!="researched":
         raise ValueError("Product must have verified research before scoring.")
     score=payload.get("score")
-    try: score=float(score)
-    except (TypeError,ValueError): raise ValueError("numeric score is required")
-    if not 0 <= score <= 100: raise ValueError("score must be between 0 and 100")
-    product.metadata={**product.metadata,"factory_state":"scored","opportunity":{"score":score,"rationale":str(payload.get("rationale") or ""),"rubric":payload.get("rubric") or {}}}
+    if score is not None:
+        try: score=float(score)
+        except (TypeError,ValueError): raise ValueError("score must be numeric or unknown")
+        if not 0 <= score <= 100: raise ValueError("score must be between 0 and 100")
+    rubric = payload.get("rubric") or {}
+    if rubric.get("version") != "wealth-opportunity-v1" or not rubric.get("weights") or not rubric.get("inputs"):
+        raise ValueError("A versioned evidence-backed opportunity rubric is required.")
+    status = payload.get("status", "needs_evidence" if score is None else "scored")
+    if status not in {"scored", "needs_evidence"} or (score is None) != (status == "needs_evidence"):
+        raise ValueError("Opportunity score status must distinguish a reproducible score from unknown inputs.")
+    product.metadata={**product.metadata,"factory_state":"scored","opportunity":{"score":score,"status":status,"rationale":str(payload.get("rationale") or ""),"rubric":rubric}}
     product.save(update_fields=["metadata","updated_at"])
-    return {"verified_effect":True,"product_id":product.pk,"factory_state":"scored","score":score,"rationale":str(payload.get("rationale") or ""),"rubric":payload.get("rubric") or {}}
+    return {"verified_effect":True,"product_id":product.pk,"factory_state":"scored","score":score,"status":payload.get("status","needs_evidence" if score is None else "scored"),"rationale":str(payload.get("rationale") or ""),"rubric":rubric}
+
+
+def product_validation(payload):
+    payload = _merge_output(payload, "product_validation")
+    product = _product(payload)
+    if product.metadata.get("factory_state") != "scored":
+        raise ValueError("Opportunity must be scored before independent Validation.")
+    validation = payload.get("validation") or {}
+    outcome = validation.get("outcome")
+    if outcome not in {"VALIDATED", "NEEDS_MORE_EVIDENCE", "RESEARCH_AGAIN", "REJECTED", "BLOCKED"}:
+        raise ValueError("Validation outcome is missing or invalid.")
+    states = {"VALIDATED":"validated", "NEEDS_MORE_EVIDENCE":"needs_research",
+              "RESEARCH_AGAIN":"needs_research", "REJECTED":"rejected", "BLOCKED":"blocked"}
+    product.metadata = {**product.metadata, "factory_state":states[outcome], "validation":validation}
+    product.save(update_fields=["metadata", "updated_at"])
+    run = FactoryRun.objects.filter(run_id=payload.get("__run_id")).first()
+    if run and outcome in {"REJECTED", "BLOCKED"}:
+        run.status = "rejected" if outcome == "REJECTED" else "blocked"
+        run.save(update_fields=["status", "updated_at"])
+    return {"verified_effect":True,"product_id":product.pk,"factory_state":states[outcome],"validation":validation}
 
 
 def product_spec(payload):
     payload = _merge_output(payload, "product_spec")
     product=_product(payload)
-    if product.metadata.get("factory_state")!="scored":
-        raise ValueError("Product must be scored before specification.")
+    if product.metadata.get("factory_state")!="validated" or (product.metadata.get("validation") or {}).get("outcome") != "VALIDATED":
+        raise ValueError("Product must pass current Validation before specification.")
     spec=payload.get("spec") or {}
     if not isinstance(spec,dict) or not spec.get("problem") or not spec.get("acceptance_criteria"):
         raise ValueError("spec.problem and spec.acceptance_criteria are required")
+    claimed = spec.get("digest")
+    if not claimed:
+        raise ValueError("A canonical specification digest is required.")
+    canonical = dict(spec); canonical.pop("digest", None)
+    if claimed != canonical_digest(canonical):
+        raise ValueError("Specification digest does not match canonical content.")
     product.metadata={**product.metadata,"factory_state":"specified","spec":spec}
     product.save(update_fields=["metadata","updated_at"])
     return {"verified_effect":True,"product_id":product.pk,"factory_state":"specified","spec":spec}
@@ -175,6 +225,7 @@ def build_factory_gateway():
     return ToolGateway([
         ToolSpec(code="product_research",handler=product_research,risk="low"),
         ToolSpec(code="product_opportunity_score",handler=opportunity_score,risk="low"),
+        ToolSpec(code="product_validation",handler=product_validation,risk="low"),
         ToolSpec(code="product_spec",handler=product_spec,risk="medium"),
         ToolSpec(code="product_build_record",handler=product_build_record,risk="medium"),
         ToolSpec(code="product_qa",handler=product_qa,risk="medium"),

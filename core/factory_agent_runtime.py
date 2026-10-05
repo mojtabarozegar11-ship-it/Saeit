@@ -1,7 +1,12 @@
 
 """Agent execution adapters for the existing Product Factory task and tool runtime."""
 import hashlib
+import ipaddress
 import json
+import os
+import time
+from datetime import timedelta
+from urllib.parse import urlsplit
 from decimal import Decimal
 from importlib import import_module
 
@@ -11,13 +16,15 @@ from django.db import transaction
 from django.db import models
 from django.core.exceptions import ValidationError
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 
 from .factory_artifact_verifier import StaticResearchBriefVerifier
 from .factory_builder import StaticResearchBriefBuilder
-from .models import FactoryArtifact, FactoryMarketEligibility, Product, ResearchProject
+from .models import FactoryArtifact, FactoryMarketEligibility, Finding, Product, ResearchProject
 from .factory_governance import validate_task_prerequisites
 from .research_runtime import ResearchRuntime
-from .factory_contracts import FactoryAgentOutput, GatewayAuthorization
+from .factory_contracts import FactoryAgentOutput, GatewayAuthorization, canonical_digest
+from .factory_economics import score_opportunity, validate_opportunity, SOURCE_QUALITY_POLICY_VERSION
 
 
 class FactoryAgentBlocked(RuntimeError):
@@ -25,59 +32,131 @@ class FactoryAgentBlocked(RuntimeError):
 
 
 class ResearchProvider:
-    """Provider contract: return retrieved, source-addressable findings; no fake fallback."""
+    """Trusted, configured adapter contract for bounded search and snapshot fetch."""
 
     provider_name = "unconfigured"
     real_research = False
+    extractor_version = "unknown"
 
-    def search(self, *, goal, constraints, task, authorization, authorization_check):
+    def search(self, *, goal, constraints, plan, task, authorization, authorization_check,
+               timeout_seconds, max_results, max_snapshot_bytes, max_redirects, safe_url_policy):
         raise NotImplementedError
 
 
 class FixtureResearchProvider(ResearchProvider):
-    """Deterministic CI adapter. Its records are explicitly marked as non-real research."""
+    """Deterministic CI-only source records. Never eligible as real release evidence."""
 
     provider_name = "fixture"
     real_research = False
+    extractor_version = "fixture-v1"
 
-    def search(self, *, goal, constraints, task, authorization, authorization_check):
+    def search(self, *, goal, constraints, plan, task, authorization, authorization_check,
+               timeout_seconds, max_results, max_snapshot_bytes, max_redirects, safe_url_policy):
         if not authorization_check(authorization, task, "product_research"):
             raise FactoryAgentBlocked("Research Provider call requires current ToolGateway authorization.")
-        if not str(goal or "").strip():
-            raise ValueError("Research goal is required.")
+        if not callable(safe_url_policy):
+            raise FactoryAgentBlocked("Research requires the enforced safe URL policy at the Provider boundary.")
         now = timezone.now().isoformat()
-        return [
-            {
-                "title": "Fixture evidence: workflow demand",
-                "url": "fixture://research/workflow-demand",
-                "publisher": "CI fixture",
-                "passage": f"Fixture-only observation for goal: {goal}",
-                "confidence": "0.80",
-                "retrieved_at": now,
-                "provenance": {"provider": "fixture", "real_research": False, "fixture_id": "workflow-demand-v1"},
-            },
-            {
-                "title": "Fixture evidence: product constraints",
-                "url": "fixture://research/product-constraints",
-                "publisher": "CI fixture",
-                "passage": "Fixture-only constraint: prefer a small static deliverable with no external side effects.",
-                "confidence": "0.75",
-                "retrieved_at": now,
-                "provenance": {"provider": "fixture", "real_research": False, "fixture_id": "product-constraints-v1"},
-            },
-        ]
+        factors_a = {
+            "market_demand": {"value": 78, "claim": "Fixture-only demand signal."},
+            "willingness_to_pay": {"value": 70, "claim": "Fixture-only willingness-to-pay signal."},
+            "expected_revenue_potential": {"value": 65, "claim": "Fixture-only revenue-potential signal."},
+            "expected_profit_potential": {"value": 72, "claim": "Fixture-only profit-potential signal."},
+            "commercial_success_probability": {"value": 58, "claim": "Fixture-only success signal."},
+        }
+        factors_b = {
+            "time_to_first_revenue": {"value": 80, "claim": "Fixture-only time-to-revenue signal."},
+            "build_cost_efficiency": {"value": 82, "claim": "Fixture-only build-cost signal."},
+            "operating_cost_efficiency": {"value": 76, "claim": "Fixture-only operating-cost signal."},
+            "execution_feasibility": {"value": 81, "claim": "Fixture-only feasibility signal."},
+            "competition_position": {"value": 60, "claim": "Fixture-only competition signal."},
+            "capital_efficiency": {"value": 85, "claim": "Fixture-only capital-efficiency signal."},
+            "legal_safety": {"value": 90, "claim": "Fixture-only legal-risk signal."},
+            "security_safety": {"value": 90, "claim": "Fixture-only security-risk signal."},
+            "scalability": {"value": 68, "claim": "Fixture-only scalability signal."},
+            "defensibility": {"value": 55, "claim": "Fixture-only defensibility signal."},
+        }
+        result = []
+        for key, title, passage, factors in (
+            ("demand", "Fixture demand", f"Fixture-only demand observation for {goal}.", factors_a),
+            ("cost", "Fixture constraints", "Fixture-only low-cost product constraint observation.", factors_b),
+        ):
+            url = f"fixture://source-{key}/snapshot"
+            factor_text = "\n".join(f"{name}: {item['claim']} rating {item['value']}" for name, item in sorted(factors.items()))
+            snapshot = f"Fixture snapshot v1\n{title}\n{passage}\n{factor_text}\n"
+            result.append({
+                "title": title, "url": url, "requested_url": url, "final_url": url,
+                "publisher": f"CI fixture {key}", "source_identity": f"fixture-source-{key}",
+                "query": plan["queries"][0], "provider_request_id": f"fixture-{key}-request-v1",
+                "retrieved_at": now, "content_type": "text/plain", "snapshot": snapshot,
+                "snapshot_sha256": hashlib.sha256(snapshot.encode("utf-8")).hexdigest(),
+                "passage": passage, "passage_locator": {"line": 3},
+                "extractor_version": self.extractor_version, "source_type": "secondary",
+                "confidence": "0.80" if key == "demand" else "0.75",
+                "economic_factors": factors,
+                "provenance": {"real_research": False, "fixture_id": f"{key}-v1"},
+            })
+        return result[:max_results]
 
 
 def configured_research_provider():
-    path = str(getattr(settings, "FACTORY_RESEARCH_PROVIDER", "") or "").strip()
+    path = str(getattr(settings, "FACTORY_RESEARCH_PROVIDER", "") or os.environ.get("FACTORY_RESEARCH_PROVIDER", "")).strip()
     if not path:
-        raise FactoryAgentBlocked("No real Factory research provider is configured.")
-    module, name = path.rsplit(".", 1)
-    provider = getattr(import_module(module), name)()
-    if not isinstance(provider, ResearchProvider):
-        if not callable(getattr(provider, "search", None)):
-            raise FactoryAgentBlocked("Configured research provider does not implement search().")
+        raise FactoryAgentBlocked("PROVIDER_UNAVAILABLE: no real Factory research provider is configured.")
+    try:
+        module, name = path.rsplit(".", 1)
+        provider = getattr(import_module(module), name)()
+    except Exception as exc:
+        raise FactoryAgentBlocked("PROVIDER_UNAVAILABLE: configured research provider could not be loaded.") from exc
+    if not callable(getattr(provider, "search", None)):
+        raise FactoryAgentBlocked("PROVIDER_UNAVAILABLE: configured provider does not implement bounded search().")
+    if getattr(provider, "real_research", None) is not True:
+        raise FactoryAgentBlocked("PROVIDER_UNAVAILABLE: configured provider is not approved for real evidence.")
     return provider
+
+
+def research_plan(goal, constraints=None, validation=None):
+    goal = str(goal or "").strip()[:500]
+    missing = list((validation or {}).get("missing_factors") or [])
+    suffix = ", focused on: " + ", ".join(sorted(set(missing))) if missing else ""
+    return {
+        "version": "research-plan-v1",
+        "goal": goal,
+        "queries": [
+            f"{goal} market demand independent evidence{suffix}",
+            f"{goal} customer willingness to pay pricing{suffix}",
+            f"{goal} alternatives competition and costs{suffix}",
+        ],
+        "hypotheses": ["A defined customer has a measurable problem.", "Customers may pay for a solution."],
+        "source_strategy": ["Prefer primary sources and independent publishers.", "Use a maximum of one counted source per publisher identity."],
+        "stopping_criteria": {"minimum_independent_sources": 2, "maximum_results": 6, "max_attempts": 2},
+        "constraints": constraints if isinstance(constraints, (list, dict)) else [],
+        "timeout_seconds": int(getattr(settings, "FACTORY_RESEARCH_TIMEOUT_SECONDS", 20)),
+        "max_snapshot_bytes": min(max(1024, int(getattr(settings, "FACTORY_RESEARCH_MAX_SNAPSHOT_BYTES", 512000))), 1048576),
+        "max_redirects": min(max(0, int(getattr(settings, "FACTORY_RESEARCH_MAX_REDIRECTS", 3))), 3),
+        "deadline_at": (timezone.now() + timedelta(seconds=min(max(1, int(getattr(settings, "FACTORY_RESEARCH_DEADLINE_SECONDS", 90))), 300))).isoformat(),
+    }
+
+
+def _safe_research_url(value, *, allow_fixture=False):
+    try:
+        parsed = urlsplit(str(value or ""))
+        if allow_fixture and parsed.scheme == "fixture" and parsed.hostname:
+            return True
+        if parsed.scheme not in {"https", "http"} or not parsed.hostname or parsed.username or parsed.password:
+            return False
+        host = parsed.hostname.rstrip(".").lower()
+        if host in {"localhost", "metadata.google.internal", "metadata.azure.internal"} or host.endswith((".localhost", ".local", ".internal")):
+            return False
+        try:
+            address = ipaddress.ip_address(host)
+            if address.is_private or address.is_loopback or address.is_link_local or address.is_reserved or address.is_unspecified or address.is_multicast:
+                return False
+        except ValueError:
+            pass
+        return parsed.port in (None, 80, 443)
+    except (TypeError, ValueError):
+        return False
 
 
 class FactoryAgentRuntime:
@@ -107,6 +186,8 @@ class FactoryAgentRuntime:
                 raise FactoryAgentBlocked("Factory task has no persisted Product prerequisite.")
             if action == "product_opportunity_score":
                 values = self._score(task, product)
+            elif action == "product_validation":
+                values = self._validate(task, product)
             elif action == "product_spec":
                 values = self._spec(task, product)
             elif action == "product_build_record":
@@ -135,113 +216,239 @@ class FactoryAgentRuntime:
 
     @transaction.atomic
     def _research(self, task, authorization, authorization_check):
-        if task.factory_run_id:
-            existing = ResearchProject.objects.filter(factory_run_id=task.factory_run_id).first()
-            if existing:
-                report = existing.reports.order_by("-version", "-pk").first()
-                if not report:
-                    raise FactoryAgentBlocked("Run-bound ResearchProject is incomplete; owner remediation is required.")
-                records = []
-                for item in existing.evidence.select_related("source").order_by("pk"):
-                    source = item.source
-                    records.append({
-                        "source": source.provenance.get("source_url") or source.url,
-                        "title": source.title, "passage": item.passage, "evidence_id": item.pk,
-                        "confidence": str(item.confidence), "snapshot_hash": source.snapshot_hash,
-                        "retrieved_at": source.retrieved_at.isoformat(), "provenance": source.provenance,
-                    })
-                if len(records) < 2:
-                    raise FactoryAgentBlocked("Run-bound ResearchProject has insufficient evidence.")
-                return {
-                    "title": task.goal[:300],
-                    "sources": [{"url": item["source"], "finding": item["passage"]} for item in records],
-                    "research_project_id": existing.pk, "research_report_id": report.pk,
-                    "research_provider": report.content.get("provider", "unknown"),
-                    "real_research": report.content.get("real_research") is True, "evidence": records,
-                }
+        run = task.factory_run if task.factory_run_id else None
+        product = task.product if task.product_id else None
+        existing = ResearchProject.objects.filter(factory_run_id=run.pk).first() if run else None
+        retry_validation = (product.metadata or {}).get("validation") or {} if product else {}
+        is_research_retry = bool(existing and product and product.metadata.get("factory_state") == "needs_research")
+        if existing and not is_research_retry:
+            raise FactoryAgentBlocked("Research Run already has evidence; Master must request a bounded validation re-research.")
         provider = self.research_provider or configured_research_provider()
         goal = str(task.goal or (task.input_data or {}).get("goal") or "").strip()
         if not goal:
-            raise ValueError("Factory Research requires a goal.")
+            raise FactoryAgentBlocked("Research goal is missing.")
         constraints = (task.input_data or {}).get("constraints", [])
+        plan = research_plan(goal, constraints, retry_validation)
+        timeout_seconds = plan["timeout_seconds"]
+        if timeout_seconds < 1 or timeout_seconds > 120:
+            raise FactoryAgentBlocked("Research policy timeout is outside the bounded range.")
         if not authorization_check(authorization, task, "product_research"):
             raise FactoryAgentBlocked("Research Provider call requires current ToolGateway authorization.")
-        records = provider.search(
-            goal=goal, constraints=constraints, task=task,
-            authorization=authorization, authorization_check=authorization_check,
-        )
-        if not isinstance(records, list) or len(records) < 2:
-            raise ValueError("Research provider must return at least two source-backed findings.")
+        started = time.monotonic()
+        max_attempts = min(max(1, int(getattr(settings, "FACTORY_RESEARCH_MAX_ATTEMPTS", 2))), 3)
+        for attempt in range(max_attempts):
+            try:
+                records = provider.search(
+                    goal=goal, constraints=constraints, plan=plan, task=task,
+                    authorization=authorization, authorization_check=authorization_check,
+                    timeout_seconds=timeout_seconds, max_results=6,
+                    max_snapshot_bytes=plan["max_snapshot_bytes"], max_redirects=plan["max_redirects"],
+                    safe_url_policy=lambda url: _safe_research_url(url, allow_fixture=isinstance(provider, FixtureResearchProvider)),
+                )
+                break
+            except FactoryAgentBlocked:
+                raise
+            except Exception as exc:
+                if getattr(exc, "status_code", None) in {401, 403} or getattr(exc, "policy_rejected", False):
+                    raise FactoryAgentBlocked("PROVIDER_UNAVAILABLE: provider authentication or policy rejected the request.") from exc
+                if attempt + 1 >= max_attempts:
+                    raise FactoryAgentBlocked(f"PROVIDER_UNAVAILABLE: research provider failed after bounded retries ({type(exc).__name__}).") from exc
+                retry_after = getattr(exc, "retry_after", None)
+                if retry_after is None:
+                    retry_after = min(0.25 * (2 ** attempt), 1.0)
+                try:
+                    delay = min(max(float(retry_after), 0.0), 3.0)
+                except (TypeError, ValueError):
+                    delay = min(0.25 * (2 ** attempt), 1.0)
+                if time.monotonic() - started + delay >= timeout_seconds:
+                    raise FactoryAgentBlocked("PROVIDER_UNAVAILABLE: provider retry exceeded the research deadline.") from exc
+                time.sleep(delay)
+        if time.monotonic() - started > timeout_seconds:
+            raise FactoryAgentBlocked("PROVIDER_UNAVAILABLE: research provider exceeded its execution deadline.")
         if not authorization_check(authorization, task, "product_research"):
             raise FactoryAgentBlocked("Research grant was revoked before evidence could be persisted.")
+        if not isinstance(records, list) or not records:
+            raise FactoryAgentBlocked("NEEDS_MORE_EVIDENCE: provider returned no source-backed snapshot.")
+        if len(records) > 6:
+            raise FactoryAgentBlocked("Research provider exceeded the maximum result count.")
+
+        is_fixture = isinstance(provider, FixtureResearchProvider)
+        configured_path = str(getattr(settings, "FACTORY_RESEARCH_PROVIDER", "") or os.environ.get("FACTORY_RESEARCH_PROVIDER", "")).strip()
+        provider_class = f"{provider.__class__.__module__}.{provider.__class__.__qualname__}"
+        real_research = bool(
+            not is_fixture and getattr(provider, "real_research", False) is True
+            and configured_path == provider_class
+        )
+        clean_records, seen_source_ids, seen_snapshot_hashes = [], set(), set()
+        if existing:
+            for old in existing.evidence.select_related("source").all():
+                seen_source_ids.add(str(old.source.provenance.get("source_identity") or old.source.url).lower())
+                seen_snapshot_hashes.add(old.source.snapshot_hash)
+        for index, record in enumerate(records):
+            if not isinstance(record, dict):
+                raise FactoryAgentBlocked("Research provider returned a malformed source record.")
+            requested_url = str(record.get("requested_url") or record.get("url") or "").strip()
+            final_url = str(record.get("final_url") or record.get("url") or "").strip()
+            if not _safe_research_url(requested_url, allow_fixture=is_fixture) or not _safe_research_url(final_url, allow_fixture=is_fixture):
+                raise FactoryAgentBlocked("Research source URL is unsafe or targets a private/internal resource.")
+            redirects = int(record.get("redirect_count", 0) or 0)
+            if redirects < 0 or redirects > plan["max_redirects"]:
+                raise FactoryAgentBlocked("Research source exceeded its redirect limit.")
+            content_type = str(record.get("content_type") or "").split(";", 1)[0].lower().strip()
+            if content_type not in {"text/plain", "text/html", "application/json", "text/csv", "application/xml", "text/xml"}:
+                raise FactoryAgentBlocked("Research source content type is unsupported.")
+            snapshot = record.get("snapshot")
+            if not isinstance(snapshot, str) or not snapshot:
+                raise FactoryAgentBlocked("Research source must include a text snapshot for content-based provenance.")
+            snapshot_bytes = snapshot.encode("utf-8")
+            if len(snapshot_bytes) > plan["max_snapshot_bytes"]:
+                raise FactoryAgentBlocked("Research source snapshot exceeded the configured content limit.")
+            snapshot_hash = hashlib.sha256(snapshot_bytes).hexdigest()
+            if record.get("snapshot_sha256") and str(record["snapshot_sha256"]).lower() != snapshot_hash:
+                raise FactoryAgentBlocked("Research snapshot digest does not match retrieved content.")
+            passage = str(record.get("passage") or "").strip()
+            locator = record.get("passage_locator")
+            if not passage or len(passage) > 12000:
+                raise FactoryAgentBlocked("Research passage is empty or exceeds the extraction limit.")
+            if passage not in snapshot:
+                if not isinstance(locator, dict):
+                    raise FactoryAgentBlocked("Research passage cannot be traced to its source snapshot.")
+                try:
+                    start_offset, end_offset = int(locator["start"]), int(locator["end"])
+                except (KeyError, TypeError, ValueError):
+                    raise FactoryAgentBlocked("Research passage locator is invalid.")
+                if start_offset < 0 or end_offset < start_offset or snapshot[start_offset:end_offset] != passage:
+                    raise FactoryAgentBlocked("Research passage locator does not resolve in the source snapshot.")
+            final_parts = urlsplit(final_url)
+            source_identity = str(
+                record.get("source_identity") if is_fixture else (final_parts.hostname or "")
+            ).strip().lower()
+            if not source_identity:
+                source_identity = str(final_parts.hostname or "").strip().lower()
+            if not source_identity:
+                raise FactoryAgentBlocked("Research source identity is required.")
+            if source_identity in seen_source_ids or snapshot_hash in seen_snapshot_hashes:
+                continue
+            retrieved_at = record.get("retrieved_at")
+            if isinstance(retrieved_at, str):
+                retrieved_at = parse_datetime(retrieved_at)
+            if retrieved_at is None or timezone.is_naive(retrieved_at) or retrieved_at > timezone.now() + timedelta(minutes=5):
+                raise FactoryAgentBlocked("Research retrieval timestamp is missing, naive, or in the future.")
+            publisher = str(record.get("publisher") or "").strip()[:300]
+            if not publisher:
+                raise FactoryAgentBlocked("Research publisher identity is required.")
+            source_type = str(record.get("source_type") or "unknown").lower()
+            if source_type not in {"primary", "secondary", "unknown"}:
+                raise FactoryAgentBlocked("Research source type is invalid.")
+            published_at = record.get("published_at")
+            if isinstance(published_at, str):
+                published_at = parse_datetime(published_at)
+            age_reference = published_at if published_at and timezone.is_aware(published_at) else None
+            age_days = max(0, (timezone.now() - age_reference).days) if age_reference else None
+            quality = {
+                "policy_version": SOURCE_QUALITY_POLICY_VERSION,
+                "source_identity": source_identity,
+                "publisher": publisher,
+                "source_type": source_type,
+                "independent_source_key": source_identity,
+                "published_at": published_at.isoformat() if published_at else None,
+                "freshness": (
+                    "unknown" if age_days is None else
+                    "fresh" if age_days <= 180 else "aging" if age_days <= 365 else "stale"
+                ),
+                "duplicate": False,
+                "quality_note": str(record.get("quality_note") or "Retrieved snapshot and publisher identity recorded.")[:500],
+            }
+            provenance = record.get("provenance") if isinstance(record.get("provenance"), dict) else {}
+            factors = {}
+            for factor, claim in (record.get("economic_factors") or {}).items():
+                if not isinstance(claim, dict):
+                    continue
+                claim_text = str(claim.get("claim") or "").strip()
+                factor_value = str(claim.get("value"))
+                if factor in {
+                    "market_demand", "willingness_to_pay", "expected_revenue_potential",
+                    "expected_profit_potential", "time_to_first_revenue", "build_cost_efficiency",
+                    "operating_cost_efficiency", "execution_feasibility", "competition_position",
+                    "capital_efficiency", "legal_safety", "security_safety",
+                    "commercial_success_probability", "scalability", "defensibility",
+                } and claim_text and claim_text in snapshot and factor_value in snapshot:
+                    factors[factor] = {"value": claim.get("value"), "claim": claim_text}
+            clean_records.append({
+                "title": str(record.get("title") or final_url)[:500], "url": final_url,
+                "requested_url": requested_url, "final_url": final_url,
+                "publisher": publisher, "source_identity": source_identity,
+                "query": str(record.get("query") or plan["queries"][min(index, len(plan["queries"]) - 1)])[:1000],
+                "provider_request_id": str(record.get("provider_request_id") or "")[:200],
+                "retrieved_at": retrieved_at, "content_type": content_type,
+                "snapshot": snapshot, "snapshot_hash": snapshot_hash,
+                "passage": passage, "passage_locator": locator or {"match": "exact snapshot text"},
+                "extractor_version": str(record.get("extractor_version") or getattr(provider, "extractor_version", "unknown"))[:100],
+                "source_quality": quality, "source_type": source_type,
+                "confidence": str(record.get("confidence", "0.5")),
+                "economic_factors": factors,
+                "provenance": provenance,
+            })
+            seen_source_ids.add(source_identity)
+            seen_snapshot_hashes.add(snapshot_hash)
+        if not clean_records and not existing:
+            raise FactoryAgentBlocked("NEEDS_MORE_EVIDENCE: retrieved sources were empty or duplicates.")
+        if not clean_records and existing:
+            raise FactoryAgentBlocked("NEEDS_MORE_EVIDENCE: bounded re-research found no independent new source.")
         owner = self._owner(task)
         if not owner:
             raise FactoryAgentBlocked("Research requires an existing owner for ResearchProject provenance.")
-        project = ResearchProject.objects.create(
-            title=f"Factory research: {goal[:240]}",
-            objective=goal,
-            status="evidence_collected",
-            owner=owner,
-            factory_run=task.factory_run if task.factory_run_id else None,
+        project = existing or ResearchProject.objects.create(
+            title=f"Factory research: {goal[:240]}", objective=goal,
+            status="evidence_collected", owner=owner, factory_run=run,
         )
-        persisted = []
-        for record in records:
-            if not isinstance(record, dict) or not record.get("url") or not record.get("passage"):
-                raise ValueError("Provider evidence requires source URL and passage.")
-            passage = str(record["passage"]).strip()
-            if not passage:
-                raise ValueError("Provider returned an empty passage.")
-            source_url = str(record["url"]).strip()
-            raw = json.dumps(
-                {"url": source_url, "passage": passage, "provenance": record.get("provenance", {})},
-                sort_keys=True, separators=(",", ":"), ensure_ascii=False,
-            ).encode("utf-8")
-            snapshot_hash = hashlib.sha256(raw).hexdigest()
+        for record in clean_records:
             source = self.research.register_source(
-                project=project,
-                title=str(record.get("title") or source_url)[:500],
-                url=source_url if source_url.startswith(("https://", "http://")) else "",
-                publisher=str(record.get("publisher") or provider.provider_name)[:300],
-                content_hash=snapshot_hash,
-                snapshot_hash=snapshot_hash,
-                retrieved_at=record.get("retrieved_at") or timezone.now(),
+                project=project, title=record["title"],
+                url=record["final_url"] if record["final_url"].startswith(("https://", "http://")) else "",
+                publisher=record["publisher"], content_hash=record["snapshot_hash"],
+                snapshot_hash=record["snapshot_hash"], retrieved_at=record["retrieved_at"],
                 provenance={
-                    **(record.get("provenance") if isinstance(record.get("provenance"), dict) else {}),
-                    "provider": provider.provider_name,
-                    "real_research": getattr(provider, "real_research", False) is True,
-                    "source_url": source_url,
+                    **record["provenance"], "provider": provider.provider_name,
+                    "provider_request_id": record["provider_request_id"],
+                    "run_id": run.run_id if run else None, "task_id": task.pk,
+                    "execution_id": task.execution_id,
+                    "provider_class": provider_class,
+                    "real_research": real_research, "query": record["query"],
+                    "requested_url": record["requested_url"], "final_url": record["final_url"],
+                    "content_type": record["content_type"], "snapshot_reference": record["final_url"],
+                    "snapshot_text": record["snapshot"], "snapshot_sha256": record["snapshot_hash"],
+                    "passage_locator": record["passage_locator"], "extractor_version": record["extractor_version"],
+                    "source_quality": record["source_quality"], "source_identity": record["source_identity"],
+                    "source_type": record["source_type"], "economic_factors": record["economic_factors"],
                 },
             )
-            evidence = self.research.add_evidence(
-                project, source, passage, confidence=record.get("confidence", "0.5")
-            )
-            finding = self.research.add_finding(
-                project, title=source.title, statement=passage,
-                evidence=[evidence], confidence=record.get("confidence", "0.5"),
-            )
+            evidence = self.research.add_evidence(project, source, record["passage"], confidence=record["confidence"])
+            finding = self.research.add_finding(project, title=source.title, statement=record["passage"], evidence=[evidence], confidence=record["confidence"])
+        persisted = []
+        for item in project.evidence.select_related("source").order_by("pk"):
+            source = item.source
             persisted.append({
-                "source": source.url or source_url,
-                "title": source.title,
-                "passage": evidence.passage,
-                "evidence_id": evidence.pk,
-                "finding_id": finding.pk,
-                "confidence": str(evidence.confidence),
-                "snapshot_hash": source.snapshot_hash,
-                "retrieved_at": source.retrieved_at.isoformat(),
-                "provenance": source.provenance,
+                "source": source.provenance.get("final_url") or source.url,
+                "source_identity": source.provenance.get("source_identity") or source.url,
+                "title": source.title, "passage": item.passage, "evidence_id": item.pk,
+                "finding_id": Finding.objects.filter(evidence__pk=item.pk).order_by("pk").values_list("pk", flat=True).last(),
+                "confidence": str(item.confidence), "snapshot_hash": source.snapshot_hash,
+                "retrieved_at": source.retrieved_at.isoformat(), "provenance": source.provenance,
+                "economic_factors": source.provenance.get("economic_factors", {}),
             })
+        report_version = (project.reports.order_by("-version").values_list("version", flat=True).first() or 0) + 1
         report = self.research.create_report(
             project, f"Factory evidence report: {goal[:240]}",
-            {"goal": goal, "run_id": task.factory_run.run_id if task.factory_run_id else None, "provider": provider.provider_name, "real_research": getattr(provider, "real_research", False) is True, "evidence": persisted},
+            {"goal": goal, "run_id": run.run_id if run else None, "provider": provider.provider_name,
+             "real_research": real_research, "research_plan": plan, "evidence": persisted,
+             "quality_policy_version": SOURCE_QUALITY_POLICY_VERSION}, version=report_version,
         )
         return {
-            "title": goal[:300], "sources": [
-                {"url": item["source"], "finding": item["passage"]} for item in persisted
-            ],
+            "title": goal[:300], "sources": [{"url": item["source"], "finding": item["passage"]} for item in persisted],
             "research_project_id": project.pk, "research_report_id": report.pk,
-            "research_provider": provider.provider_name,
-            "real_research": getattr(provider, "real_research", False) is True,
-            "evidence": persisted,
+            "research_provider": provider.provider_name, "real_research": real_research,
+            "research_plan": plan, "evidence": persisted,
         }
 
     @staticmethod
@@ -254,22 +461,40 @@ class FactoryAgentRuntime:
 
     def _score(self, task, product):
         records = self._research_records(product)
-        confidence = sum(Decimal(item["confidence"]) for item in records) / Decimal(len(records))
-        score = (confidence * Decimal("100")).quantize(Decimal("0.01"))
-        rubric = {"id": "evidence-confidence-v1", "formula": "100 * mean(validated evidence confidence)", "evidence_ids": [item["evidence_id"] for item in records]}
-        return {"score": float(score), "rationale": f"Mean evidence confidence across {len(records)} persisted findings.", "rubric": rubric}
+        return score_opportunity(records)
+
+    def _validate(self, task, product):
+        opportunity = (product.metadata or {}).get("opportunity") or {}
+        research = (product.metadata or {}).get("research") or {}
+        attempts = task.factory_run.tasks.filter(action_type="product_research").count() if task.factory_run_id else 1
+        return {"validation": validate_opportunity(opportunity, research.get("evidence") or [], attempts)}
 
     def _spec(self, task, product):
         records = self._research_records(product)
+        validation = (product.metadata or {}).get("validation") or {}
+        opportunity = (product.metadata or {}).get("opportunity") or {}
+        if validation.get("outcome") != "VALIDATED" or not opportunity.get("rubric"):
+            raise FactoryAgentBlocked("Product Spec requires current validated Research, Evidence, Score, and Validation lineage.")
         problem = str((task.factory_run.goal if task.factory_run_id else task.goal) or "").strip()
         if not problem:
             raise ValueError("A research-backed Product goal is required for specification.")
         spec = {
             "version": int(task.factory_run.current_spec_version + 1 if task.factory_run_id else 1),
             "product_type": "static_research_brief",
+            "goal": problem,
             "problem": problem,
+            "target_customer": "Small agricultural operators managing harvest workflows; assumption to verify in market tests.",
+            "value_proposition": "Organize source-backed harvest workflow information in a compact digital brief.",
+            "functional_requirements": ["Present the defined problem.", "Show source-linked findings and their provenance."],
+            "non_functional_requirements": ["Render as valid UTF-8 HTML.", "Do not claim synthetic research as real market evidence."],
             "title": product.title,
-            "evidence_ids": [item["evidence_id"] for item in records],
+            "target_markets": ["global; assumed pending market-specific eligibility review"],
+            "target_languages": ["en; initial supported-line assumption"],
+            "commercial_assumptions": {"status": "assumptions, not realized revenue", "score_rubric_version": opportunity.get("rubric", {}).get("version")},
+            "constraints": task.factory_run.constraints if task.factory_run_id else [],
+            "evidence_references": [{"evidence_id": item["evidence_id"], "snapshot_digest": item["snapshot_hash"], "source_identity": item.get("source_identity")} for item in records],
+            "score_reference": {"score": opportunity.get("score"), "rubric_version": opportunity.get("rubric", {}).get("version"), "evidence_digest": opportunity.get("rubric", {}).get("evidence_digest")},
+            "validation_reference": {"outcome": validation.get("outcome"), "policy_version": validation.get("policy_version"), "evidence_digest": validation.get("evidence_digest")},
             "acceptance_criteria": [
                 "The artifact is valid UTF-8 HTML.",
                 "The artifact contains the specified problem statement.",
@@ -277,9 +502,7 @@ class FactoryAgentRuntime:
                 "The artifact digest matches the immutable FactoryArtifact record.",
             ],
         }
-        spec["digest"] = hashlib.sha256(
-            json.dumps(spec, sort_keys=True, separators=(",", ":")).encode("utf-8")
-        ).hexdigest()
+        spec["digest"] = canonical_digest(spec)
         return {"spec": spec}
 
     def _build(self, task, product, authorization, authorization_check):

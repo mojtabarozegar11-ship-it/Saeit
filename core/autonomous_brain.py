@@ -163,8 +163,18 @@ class AutonomousBrain:
     def decide_product_factory_step(self, product_id=None, run_id=None):
         """Select the first unmet lifecycle gate from persisted Product evidence."""
         state = self.observe_product_factory(product_id, run_id=run_id)
+        run = FactoryRun.objects.filter(run_id=run_id).first() if run_id else (
+            FactoryRun.objects.filter(product_id=product_id).order_by("-created_at", "-pk").first() if product_id else None
+        )
+        if run and run.status == "rejected":
+            return {"action": "stopped", "reason": "Evidence-backed Validation rejected this opportunity; no build work will be scheduled."}
+        if run and run.status == "blocked":
+            return {"action": "blocked", "reason": "Factory Run is durably blocked and requires the stated remediation."}
         if state["pending_task"]:
             task = state["pending_task"]
+            if task.status == "blocked":
+                return {"action": "blocked", "task_id": task.pk,
+                        "reason": str((task.output_data or {}).get("error") or "Factory task is durably blocked.")}
             return {"action": "continue_existing_task", "task_id": task.pk,
                     "reason": f"Task {task.pk} is {task.status} and must be resolved first."}
         if not state["evidence_valid"]:
@@ -176,7 +186,9 @@ class AutonomousBrain:
         next_action = {
             "new": "product_research",
             "researched": "product_opportunity_score",
-            "scored": "product_spec",
+            "scored": "product_validation",
+            "validated": "product_spec",
+            "needs_research": "product_research",
             "specified": "product_build_record",
             "built": "product_qa",
             "qa_passed": "product_localize",
@@ -184,11 +196,20 @@ class AutonomousBrain:
             "launch_candidate": "owner_approval_boundary",
         }
         action = next_action.get(state["factory_state"])
+        if state["factory_state"] == "rejected":
+            return {"action": "stopped", "reason": "The Product opportunity was rejected by Validation."}
         if not action:
             return {"action": "blocked", "reason": "Unknown factory state; lifecycle state requires review."}
         if action == "owner_approval_boundary":
             return {"action": action, "product_id": state["product"].pk,
                     "reason": "All internal gates passed. Publication remains owner-gated."}
+        if action == "product_research" and state["factory_state"] == "needs_research":
+            run = FactoryRun.objects.filter(run_id=run_id).first() if run_id else (
+                FactoryRun.objects.filter(product_id=state["product"].pk).order_by("-created_at", "-pk").first()
+            )
+            attempts = run.tasks.filter(action_type="product_research").count() if run else 0
+            if attempts >= 2:
+                return {"action": "blocked", "reason": "Bounded re-research limit was reached; owner review is required."}
         return {"action": action,
                 "product_id": state["product"].pk if state["product"] else None,
                 "reason": f"Persisted lifecycle state is {state['factory_state']}; this is the next unmet gate."}
@@ -203,7 +224,7 @@ class AutonomousBrain:
         decision = self.decide_product_factory_step(product_id, run_id=run_id)
         if decision["action"] == "continue_existing_task":
             return AgentTask.objects.get(pk=decision["task_id"])
-        if decision["action"] in {"blocked", "owner_approval_boundary"}:
+        if decision["action"] in {"blocked", "stopped", "owner_approval_boundary"}:
             raise RuntimeError(decision["reason"])
         request = dict(payload or {})
         goal = str(request.get("goal") or decision["reason"]).strip()
@@ -219,6 +240,7 @@ class AutonomousBrain:
         contracts = {
             "product_research": ["title", "sources"],
             "product_opportunity_score": ["score", "rationale", "rubric"],
+            "product_validation": ["validation"],
             "product_spec": ["spec"],
             "product_build_record": ["artifact"],
             "product_qa": ["tests", "security"],
@@ -272,7 +294,7 @@ class AutonomousBrain:
         task.product = product
         task.output_contract = {"required": contracts[action], "state": {
             "product_research": "researched", "product_opportunity_score": "scored",
-            "product_spec": "specified", "product_build_record": "built", "product_qa": "qa_passed",
+            "product_validation": "validated", "product_spec": "specified", "product_build_record": "built", "product_qa": "qa_passed",
             "product_localize": "localized", "product_launch_candidate": "launch_candidate",
         }[action]}
         task.environment = run.environment

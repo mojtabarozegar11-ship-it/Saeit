@@ -185,7 +185,7 @@ class FactoryToolPackTests(TestCase):
                 research_provider=FixtureResearchProvider(),
                 builder=StaticResearchBriefBuilder(workspace),
             )
-            for _ in range(7):
+            for _ in range(8):
                 task = brain.plan_product_factory_step(
                     payload={"goal": goal}, product_id=product_id, run_id=run_id
                 )
@@ -198,17 +198,17 @@ class FactoryToolPackTests(TestCase):
         product = Product.objects.get(pk=product_id)
         self.assertEqual(
             [entry["state"] for entry in product.metadata["factory_history"]],
-            ["researched", "scored", "specified", "built", "qa_passed", "localized", "launch_candidate"],
+            ["researched", "scored", "validated", "specified", "built", "qa_passed", "localized", "launch_candidate"],
         )
         self.assertEqual(list(AgentTask.objects.filter(pk__in=task_ids).order_by("created_at", "pk").values_list("action_type", flat=True)), [
-            "product_research", "product_opportunity_score", "product_spec", "product_build_record",
+            "product_research", "product_opportunity_score", "product_validation", "product_spec", "product_build_record",
             "product_qa", "product_localize", "product_launch_candidate",
         ])
         self.assertTrue(product.metadata["qa"]["tests"]["passed"])
         self.assertTrue(product.metadata["qa"]["security"]["passed"])
         self.assertFalse(product.active)
         self.assertEqual(brain.decide_product_factory_step(product.pk)["action"], "owner_approval_boundary")
-        self.assertEqual(AuditLog.objects.filter(action="factory_next_step_planned").count(), 7)
+        self.assertEqual(AuditLog.objects.filter(action="factory_next_step_planned").count(), 8)
 
     def test_factory_product_activation_is_blocked_without_release_gate_owner_approval(self):
         product = Product.objects.create(

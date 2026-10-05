@@ -5,8 +5,9 @@ import json
 
 
 OUTPUT_KEYS = {
-    "product_research": {"title", "sources", "product_type", "currency", "market", "evidence", "research_project_id", "research_report_id", "research_provider", "real_research"},
-    "product_opportunity_score": {"score", "rationale", "rubric"},
+    "product_research": {"title", "sources", "product_type", "currency", "market", "evidence", "research_project_id", "research_report_id", "research_provider", "real_research", "research_plan"},
+    "product_opportunity_score": {"score", "rationale", "rubric", "status"},
+    "product_validation": {"validation"},
     "product_spec": {"spec"},
     "product_build_record": {"artifact"},
     "product_qa": {"tests", "security"},
@@ -18,6 +19,7 @@ OUTPUT_INTENT_NAMES = {"sources", "score", "spec", "artifact", "tests", "securit
 REQUIRED_OUTPUT_KEYS = {
     "product_research": ["title", "sources"],
     "product_opportunity_score": ["score", "rationale", "rubric"],
+    "product_validation": ["validation"],
     "product_spec": ["spec"],
     "product_build_record": ["artifact"],
     "product_qa": ["tests", "security"],
@@ -27,6 +29,7 @@ REQUIRED_OUTPUT_KEYS = {
 EXPECTED_OUTPUT_STATE = {
     "product_research": "researched",
     "product_opportunity_score": "scored",
+    "product_validation": "validated",
     "product_spec": "specified",
     "product_build_record": "built",
     "product_qa": "qa_passed",

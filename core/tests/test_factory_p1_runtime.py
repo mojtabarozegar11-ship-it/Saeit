@@ -55,15 +55,15 @@ class FactoryP1RuntimeTests(TestCase):
             output = StringIO()
             call_command(
                 "autonomous_master_loop", factory=True, goal=self.goal, run_id=self.run_id,
-                max_steps=5, stdout=output,
+                max_steps=6, stdout=output,
             )
         self.assertIn("FACTORY_PAUSED", output.getvalue())
-        self.assertEqual(AgentTask.objects.filter(factory_run__run_id=self.run_id).count(), 5)
+        self.assertEqual(AgentTask.objects.filter(factory_run__run_id=self.run_id).count(), 6)
 
         run = FactoryRun.objects.get(run_id=self.run_id)
         product = Product.objects.get(pk=run.product_id)
         evidence = FactoryEvidence.objects.filter(run=run, status=FactoryEvidence.VALID)
-        self.assertEqual(evidence.count(), 5)
+        self.assertEqual(evidence.count(), 6)
         research = product.metadata["research"]
         self.assertFalse(research["real_research"])
         self.assertEqual(research["research_provider"], "fixture")
@@ -77,9 +77,9 @@ class FactoryP1RuntimeTests(TestCase):
             self.assertEqual(source.provenance["real_research"], False)
 
         score = product.metadata["opportunity"]
-        self.assertEqual(score["rubric"]["id"], "evidence-confidence-v1")
+        self.assertEqual(score["rubric"]["id"], "wealth-opportunity-v1")
         self.assertEqual(score["rubric"]["evidence_ids"], [item["evidence_id"] for item in research["evidence"]])
-        self.assertEqual(score["score"], 77.5)
+        self.assertEqual(score["score"], 73.57)
         spec = product.metadata["spec"]
         spec_digest = spec.pop("digest")
         self.assertEqual(spec_digest, hashlib.sha256(
@@ -121,3 +121,4 @@ class FactoryP1RuntimeTests(TestCase):
         resumed = TaskRuntime().resume_blocked(task.pk, self.owner, "Configured the approved research provider.")
         self.assertEqual(resumed.status, "queued")
         self.assertIsNone(resumed.next_retry_at)
+

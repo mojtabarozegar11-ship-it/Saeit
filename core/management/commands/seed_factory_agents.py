@@ -7,6 +7,7 @@ from core.models import Agent, AgentCapability, AgentToolGrant
 CAPABILITIES=[
 ("product_research","Market Research","Collect source-backed demand and competitor evidence.","low"),
 ("product_opportunity_score","Opportunity Score","Score evidence-backed opportunities.","low"),
+("product_validation","Opportunity Validation","Independently validate commercial and technical assumptions before specification.","low"),
 ("product_spec","Product Spec","Create measurable product specifications.","medium"),
 ("product_build_record","Build Record","Register versioned build artifacts.","medium"),
 ("product_qa","QA and Security","Require passing test and security evidence.","medium"),
@@ -17,6 +18,7 @@ CAPABILITIES=[
 SPECIALISTS = {
     "product_research": ("factory-market-research-agent", "Market Research Agent", "Collect and qualify source-backed market evidence."),
     "product_opportunity_score": ("factory-opportunity-scoring-agent", "Opportunity Scoring Agent", "Score opportunities from persisted research evidence."),
+    "product_validation": ("factory-opportunity-validation-agent", "Opportunity Validation Agent", "Validate commercial assumptions cheaply before building."),
     "product_spec": ("factory-product-strategist-agent", "Product Strategist", "Turn validated opportunities into measurable product specifications."),
     "product_build_record": ("factory-product-builder-agent", "Product Builder Agent", "Produce and register versioned product build artifacts."),
     "product_qa": ("factory-qa-security-agent", "QA and Security Agent", "Verify automated test and security evidence for builds."),

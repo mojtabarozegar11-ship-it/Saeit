@@ -20,7 +20,8 @@ from .factory_contracts import REQUIRED_OUTPUT_KEYS, EXPECTED_OUTPUT_STATE, cano
 PREVIOUS_STATE = {
     "product_research": None,
     "product_opportunity_score": "researched",
-    "product_spec": "scored",
+    "product_validation": "scored",
+    "product_spec": "validated",
     "product_build_record": "specified",
     "product_qa": "built",
     "product_localize": "qa_passed",
@@ -32,6 +33,7 @@ EVIDENCE_TTL_DAYS = {"product_research": 30, "product_launch_candidate": 30}
 STATE_BY_ACTION = {
     "product_research": "researched",
     "product_opportunity_score": "scored",
+    "product_validation": "validated",
     "product_spec": "specified",
     "product_build_record": "built",
     "product_qa": "qa_passed",
@@ -54,7 +56,8 @@ def prerequisite_values(action, product, run):
     }
     predecessor = {
         "product_opportunity_score": "product_research",
-        "product_spec": "product_opportunity_score",
+        "product_validation": "product_opportunity_score",
+        "product_spec": "product_validation",
         "product_build_record": "product_spec",
         "product_qa": "product_build_record",
         "product_localize": "product_qa",
@@ -72,8 +75,11 @@ def prerequisite_values(action, product, run):
     if action == "product_opportunity_score":
         values["research"] = meta.get("research")
         values["research_runtime_digest"] = research_runtime_digest(meta)
+    elif action == "product_validation":
+        values["opportunity"] = meta.get("opportunity")
     elif action == "product_spec":
         values["opportunity"] = meta.get("opportunity")
+        values["validation"] = meta.get("validation")
     elif action == "product_build_record":
         values["spec"] = meta.get("spec")
         values["spec_version"] = run.current_spec_version
@@ -182,7 +188,7 @@ def invalidate_stale_evidence(product):
                 "product_build_record", "product_qa", "product_localize", "product_launch_candidate"
             }
             if (
-                current["digest"] != item.prerequisite_digest
+                (item.evidence_type != "product_research" and current["digest"] != item.prerequisite_digest)
                 or (
                     item.evidence_type == "product_research"
                     and item.details.get("research_runtime_digest")
@@ -208,6 +214,27 @@ def evidence_expiry_for(action):
 
 def validate_task_prerequisites(task):
     if task.action_type == "product_research":
+        if not task.product_id:
+            return True
+        if not task.factory_run_id or not task.prerequisite_snapshot:
+            raise ValidationError("Bounded re-research requires a versioned Validation request.")
+        product = Product.objects.get(pk=task.product_id)
+        run = FactoryRun.objects.get(pk=task.factory_run_id)
+        invalidate_stale_evidence(product)
+        snapshot = snapshot_for(task.action_type, product, run)
+        if snapshot["digest"] != task.prerequisite_snapshot.get("digest"):
+            raise ValidationError("Bounded re-research request is stale.")
+        validation = (product.metadata or {}).get("validation") or {}
+        evidence = run.evidence.filter(evidence_type="product_validation").order_by("-created_at", "-pk").first()
+        research_attempts = run.tasks.filter(action_type="product_research").count()
+        if (
+            product.metadata.get("factory_state") != "needs_research"
+            or validation.get("outcome") not in {"NEEDS_MORE_EVIDENCE", "RESEARCH_AGAIN"}
+            or not evidence or evidence.status != FactoryEvidence.VALID
+            or (evidence.details.get("output") or {}).get("validation") != validation
+            or research_attempts > 2
+        ):
+            raise ValidationError("No current bounded Validation request permits another Research pass.")
         return True
     if not task.factory_run_id or not task.product_id or not task.prerequisite_snapshot:
         raise ValidationError("Factory task is missing a versioned prerequisite snapshot.")
@@ -243,7 +270,11 @@ class FactoryTaskVerifier:
         if (
             required != REQUIRED_OUTPUT_KEYS[action]
             or contract.get("state") != EXPECTED_OUTPUT_STATE[action]
-            or any(output.get(key) in (None, "", [], {}) for key in REQUIRED_OUTPUT_KEYS[action])
+            or any(
+                output.get(key) in (None, "", [], {})
+                for key in REQUIRED_OUTPUT_KEYS[action]
+                if not (action == "product_opportunity_score" and key == "score" and output.get("status") == "needs_evidence")
+            )
         ):
             raise ValidationError("Task output does not satisfy its declared output contract.")
         if not task.factory_run_id:
@@ -256,7 +287,11 @@ class FactoryTaskVerifier:
         if not product_id:
             raise ValidationError("Factory output must identify the persisted Product.")
         product = Product.objects.select_for_update().get(pk=product_id)
-        if product.metadata.get("factory_state") != STATE_BY_ACTION[action]:
+        actual_state = product.metadata.get("factory_state")
+        valid_states = {STATE_BY_ACTION[action]}
+        if action == "product_validation":
+            valid_states.update({"needs_research", "rejected", "blocked"})
+        if actual_state not in valid_states:
             raise ValidationError("Persisted Product state does not match the task's expected state.")
         if action != "product_research" and product.pk != task.product_id:
             raise ValidationError("Task is bound to a different Product than its output.")
@@ -289,6 +324,36 @@ class FactoryTaskVerifier:
                           "status": "pending_owner_approval", "approval": None,
                           "approved_by": None, "approved_at": None},
             )
+        if action == "product_opportunity_score":
+            from .factory_economics import score_opportunity
+            expected_score = score_opportunity((product.metadata.get("research") or {}).get("evidence") or [])
+            actual_score = product.metadata.get("opportunity") or {}
+            if digest(actual_score) != digest(expected_score):
+                raise ValidationError("Opportunity Score does not reproduce from persisted source evidence and rubric.")
+        if action == "product_validation":
+            from .factory_economics import validate_opportunity
+            research = product.metadata.get("research") or {}
+            expected_validation = validate_opportunity(
+                product.metadata.get("opportunity") or {}, research.get("evidence") or [],
+                run.tasks.filter(action_type="product_research").count(),
+            )
+            if digest((product.metadata.get("validation") or {})) != digest(expected_validation):
+                raise ValidationError("Validation outcome does not reproduce from persisted Score and Evidence.")
+        if action == "product_spec":
+            spec = product.metadata.get("spec") or {}
+            if spec.get("digest") != canonical_spec_digest(spec):
+                raise ValidationError("Product Spec digest does not match canonical content.")
+            research = (product.metadata.get("research") or {}).get("evidence") or []
+            expected_refs = [{"evidence_id": item.get("evidence_id"), "snapshot_digest": item.get("snapshot_hash"),
+                              "source_identity": item.get("source_identity")} for item in research]
+            opportunity = product.metadata.get("opportunity") or {}
+            validation = product.metadata.get("validation") or {}
+            if (
+                spec.get("evidence_references") != expected_refs
+                or spec.get("score_reference", {}).get("evidence_digest") != opportunity.get("rubric", {}).get("evidence_digest")
+                or spec.get("validation_reference", {}).get("evidence_digest") != validation.get("evidence_digest")
+            ):
+                raise ValidationError("Product Spec evidence, Score, or Validation references do not match current persisted lineage.")
         current = snapshot_for(action, product, run)
         output.update({
             "run_id": run.run_id, "product_id": product.pk,
@@ -310,7 +375,9 @@ class FactoryTaskVerifier:
                 "valid_until": evidence_expiry_for(action),
                 "details": {
                     "output": output, "verified_state": product.metadata.get("factory_state"),
-                    **({"research_runtime_digest": research_runtime_digest(product.metadata)} if action == "product_research" else {}),
+                    **({"research_runtime_digest": research_runtime_digest(product.metadata),
+                        "research_request_digest": (task.prerequisite_snapshot or {}).get("values", {}).get("research_request_digest")}
+                       if action == "product_research" else {}),
                 },
             },
         )
@@ -396,11 +463,12 @@ def assert_activation_allowed(product):
         or not release_manifest_is_current(manifest, current_product, run, artifact)
     ):
         raise ValidationError("Release approval is revoked, expired, unrelated, or stale.")
+    _assert_real_research_for_release(current_product)
 
 
 def _assert_release_evidence_current(run, product, artifact):
     required = {
-        "product_research", "product_opportunity_score", "product_spec", "product_build_record",
+        "product_research", "product_opportunity_score", "product_validation", "product_spec", "product_build_record",
         "product_qa", "product_localize", "product_launch_candidate",
     }
     items = {item.evidence_type: item for item in run.evidence.select_for_update().all()}
@@ -419,6 +487,8 @@ def _assert_release_evidence_current(run, product, artifact):
     qa = (product.metadata.get("qa") or {})
     if not qa.get("tests", {}).get("passed") or not qa.get("security", {}).get("passed"):
         raise ValidationError("Current QA and Security evidence must pass.")
+    if (product.metadata.get("validation") or {}).get("outcome") != "VALIDATED":
+        raise ValidationError("Release requires the current VALIDATED outcome.")
     locales = (product.metadata.get("localization") or {}).get("launch_locales") or []
     if not locales:
         raise ValidationError("Release manifest requires current localization evidence.")
@@ -431,6 +501,29 @@ def _assert_release_evidence_current(run, product, artifact):
         raise ValidationError("Market eligibility is missing, expired, or no longer allowed.")
     if not artifact_content_digest(artifact) or artifact.content_digest != (product.metadata.get("build") or {}).get("sha256"):
         raise ValidationError("Release artifact digest differs from the Product build record.")
+
+
+def _assert_real_research_for_release(product):
+    research = (product.metadata or {}).get("research") or {}
+    if research.get("real_research") is not True:
+        raise ValidationError("Fixture/non-real Research evidence cannot qualify for a production release.")
+    configured_provider = str(getattr(settings, "FACTORY_RESEARCH_PROVIDER", "") or "").strip()
+    if not configured_provider:
+        raise ValidationError("No configured real Research Provider is available for release verification.")
+    project = ResearchProject.objects.filter(pk=research.get("research_project_id")).first()
+    if not project:
+        raise ValidationError("Production release requires persisted ResearchProject provenance.")
+    sources = list(project.sources.order_by("pk"))
+    if not sources or any(
+        source.provenance.get("real_research") is not True
+        or source.provenance.get("provider_class") != configured_provider
+        for source in sources
+    ):
+        raise ValidationError("Every source in a production Research lineage must be real-provider evidence.")
+    for source in sources:
+        snapshot = source.provenance.get("snapshot_text")
+        if not isinstance(snapshot, str) or hashlib.sha256(snapshot.encode("utf-8")).hexdigest() != source.snapshot_hash:
+            raise ValidationError("Production Research snapshot digest is absent or does not match content.")
 
 
 def canonical_spec_digest(spec):
