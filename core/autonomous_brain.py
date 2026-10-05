@@ -190,9 +190,12 @@ class AutonomousBrain:
             "validated": "product_spec",
             "needs_research": "product_research",
             "specified": "product_build_record",
-            "built": "product_qa",
-            "qa_passed": "product_localize",
-            "localized": "product_launch_candidate",
+            "built": "product_test",
+            "tested": "product_security",
+            "security_verified": "product_localize",
+            "localized": "product_market_eligibility",
+            "eligible": "product_qa",
+            "qa_passed": "product_launch_candidate",
             "launch_candidate": "owner_approval_boundary",
         }
         action = next_action.get(state["factory_state"])
@@ -243,9 +246,12 @@ class AutonomousBrain:
             "product_validation": ["validation"],
             "product_spec": ["spec"],
             "product_build_record": ["artifact"],
-            "product_qa": ["tests", "security"],
-            "product_localize": ["locales"],
-            "product_launch_candidate": ["markets"],
+            "product_test": ["tests"],
+            "product_security": ["security"],
+            "product_localize": ["localization"],
+            "product_market_eligibility": ["markets"],
+            "product_qa": ["qa"],
+            "product_launch_candidate": ["launch_candidate"],
         }
         product = Product.objects.filter(pk=decision["product_id"]).first() if decision["product_id"] else None
         if product:
@@ -294,8 +300,9 @@ class AutonomousBrain:
         task.product = product
         task.output_contract = {"required": contracts[action], "state": {
             "product_research": "researched", "product_opportunity_score": "scored",
-            "product_validation": "validated", "product_spec": "specified", "product_build_record": "built", "product_qa": "qa_passed",
-            "product_localize": "localized", "product_launch_candidate": "launch_candidate",
+            "product_validation": "validated", "product_spec": "specified", "product_build_record": "built",
+            "product_test": "tested", "product_security": "security_verified", "product_localize": "localized",
+            "product_market_eligibility": "eligible", "product_qa": "qa_passed", "product_launch_candidate": "launch_candidate",
         }[action]}
         task.environment = run.environment
         task.input_data = task_payload
