@@ -38,10 +38,10 @@ Staging must keep publication, real payments, treasury and crypto execution disa
 After preflight passes, configure a staging-only cron (for example every 10 minutes) that activates the staging Python 3.11 virtualenv and runs:
 
 ```bash
-SAEIT_STAGING_ROOT=/home/zomorod2/Saeit-staging /home/zomorod2/virtualenv/Saeit-staging/bin/sh /home/zomorod2/Saeit-staging/deploy/staging/staging_tick.sh
+PATH=/home/zomorod2/virtualenv/Saeit-staging/bin:$PATH SAEIT_STAGING_ROOT=/home/zomorod2/Saeit-staging /bin/sh /home/zomorod2/Saeit-staging/deploy/staging/staging_tick.sh
 ```
 
-If the host does not provide `bin/sh` inside the virtualenv, use `/bin/sh` and prepend the virtualenv's `bin` directory to PATH. The cron must point only at the staging root/database. Do not alter the existing Production cron.
+The cron explicitly prepends the staging virtualenv to PATH and must point only at the staging root/database. Do not alter the existing Production cron.
 
 ## Secrets required locally
 Generate `SECRET_KEY` and `SAEIT_BRIDGE_SECRET` on the staging host. Configure the dedicated staging PostgreSQL user's password and a staging-only `STAGING_RESEARCH_API_KEY`. None of these belong in GitHub or chat.
