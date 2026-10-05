@@ -1,0 +1,15 @@
+const assert=require('node:assert/strict'),{test}=require('node:test');const C=require('../product/calc.js');
+const recipe=()=>({name:'test',currency:'IRT',portions:10,packaging:10000,labor:200000,delivery:50000,overhead:50000,fee:5,margin:20,sale:0,ingredients:[{name:'A',buyQty:1,buyUnit:'kg',price:200000,useQty:2,useUnit:'kg',yield:80},{name:'B',buyQty:1,buyUnit:'kg',price:100000,useQty:1,useUnit:'kg',yield:100}]});
+const near=(a,b)=>assert.ok(Math.abs(a-b)<.0001,`${a} != ${b}`);
+test('documented full order example',()=>{let x=C.calculate(recipe());near(x.cost,1e6);near(x.suggested,1333333.333333);near(x.contribution,266666.666667);near(x.margin,20);near(x.stressContribution,206666.666667);});
+test('kg and g conversion',()=>{let r=recipe();r.ingredients[0].useQty=2000;r.ingredients[0].useUnit='g';near(C.calculate(r).cost,1e6);});
+test('incompatible mass and volume rejected',()=>{let r=recipe();r.ingredients[0].useUnit='l';assert.throws(()=>C.calculate(r));});
+test('zero yield rejected',()=>{let r=recipe();r.ingredients[0].yield=0;assert.throws(()=>C.calculate(r));});
+test('fee plus margin cannot reach 100',()=>{let r=recipe();r.fee=80;assert.throws(()=>C.calculate(r));});
+test('negative cost and nonfinite rejected',()=>{let r=recipe();r.labor=-1;assert.throws(()=>C.calculate(r));r.labor=Infinity;assert.throws(()=>C.calculate(r));});
+test('selling price override shows loss honestly',()=>{let r=recipe();r.sale=900000;assert.ok(C.calculate(r).contribution<0);});
+test('zero portion rejected',()=>{let r=recipe();r.portions=0;assert.throws(()=>C.calculate(r));});
+test('restore whitelist excludes injected keys',()=>{let r=recipe();r.secret='not preserved';assert.equal(C.validate(r).secret,undefined);});
+test('CSV formula escaped',()=>assert.equal(C.csvCell('=IMPORTXML("x")'),'"\'=IMPORTXML(""x"")"'));
+test('empty and oversized ingredient lists rejected',()=>{let r=recipe();r.ingredients=[];assert.throws(()=>C.calculate(r));r.ingredients=Array(51).fill(recipe().ingredients[0]);assert.throws(()=>C.calculate(r));});
+test('round-trip backup does not change calculations',()=>{const r=C.validate(JSON.parse(JSON.stringify(recipe())));near(C.calculate(r).suggested,C.calculate(recipe()).suggested);});

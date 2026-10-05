@@ -1,0 +1,9 @@
+Zomorod CostKit 1.0 — internal business-use licence
+Copyright Zomorod Melal.
+A purchased copy may be used internally by one business on its own devices.
+The downloaded version does not expire. Public redistribution, standalone resale,
+or representing this code as your own is not permitted.
+This calculator is a planning aid, not accounting, tax, legal or investment advice.
+No profit, sales volume or accuracy of user-entered data is guaranteed.
+Mandatory consumer rights are not waived. Support and purchase terms are available
+in the order portal. The seller must approve these terms before enabling sales.
