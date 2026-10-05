@@ -5,6 +5,7 @@ from django.conf import settings
 from django.utils import timezone
 from core.models import AgentTask, AuditLog, FactoryMarketEligibility, FactoryRun, Product, Order
 from core.factory_governance import snapshot_for
+from core.factory_contracts import validate_task_intent
 
 @dataclass(frozen=True)
 class Candidate:
@@ -97,14 +98,11 @@ class AutonomousBrain:
         products = list(products.order_by("-updated_at", "-pk"))
         if product_id is not None and not products:
             raise RuntimeError(f"Product {product_id} does not exist in the factory registry.")
-        products = [
-            item for item in products
-            if isinstance(item.metadata, dict) and item.metadata.get("factory_state")
-        ]
+        products = [item for item in products if item.is_factory_managed]
         if product_id is not None and not products:
             raise RuntimeError(f"Product {product_id} is not registered in the Product Factory lifecycle.")
         product = next(
-            (item for item in products if item.metadata.get("factory_state") != "launch_candidate"),
+            (item for item in products if (item.metadata or {}).get("factory_state") != "launch_candidate"),
             products[0] if products else None,
         )
         tasks = AgentTask.objects.filter(action_type__startswith="product_")
@@ -155,7 +153,7 @@ class AutonomousBrain:
                     )
         return {
             "product": product,
-            "factory_state": product.metadata.get("factory_state") if product else "new",
+            "factory_state": (product.metadata or {}).get("factory_state") if product else "new",
             "pending_task": pending,
             "latest_failure": latest_failure,
             "evidence_valid": evidence_valid,
@@ -211,10 +209,16 @@ class AutonomousBrain:
         goal = str(request.get("goal") or decision["reason"]).strip()
         if not goal:
             raise RuntimeError("A goal is required to plan Factory work.")
+        intent = dict(request)
+        intent["goal"] = goal
+        try:
+            validate_task_intent(intent)
+        except ValueError as exc:
+            raise RuntimeError(str(exc)) from exc
         action = decision["action"]
         contracts = {
             "product_research": ["title", "sources"],
-            "product_opportunity_score": ["score", "rationale"],
+            "product_opportunity_score": ["score", "rationale", "rubric"],
             "product_spec": ["spec"],
             "product_build_record": ["artifact"],
             "product_qa": ["tests", "security"],

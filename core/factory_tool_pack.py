@@ -2,10 +2,21 @@
 from django.utils import timezone
 
 from .models import AgentTask, FactoryArtifact, FactoryMarketEligibility, FactoryRun, Product
-from .tool_gateway import ToolGateway, ToolSpec
+from .tool_gateway import ToolGateway, ToolSpec, consume_factory_invocation
+from .factory_contracts import FactoryAgentOutput
 
 LANGUAGES = ("en","zh-hans","hi","es","fr","ar","bn","pt","ru","ur","id","de","ja","sw","mr","te","tr","ta","vi","ko")
 SUPPORTED_LOCALES = LANGUAGES + ("fa",)
+
+
+def _merge_output(payload, action):
+    consume_factory_invocation(payload, action)
+    output = payload.get("__agent_output")
+    if not isinstance(output, FactoryAgentOutput) or output.action != action:
+        raise ValueError("A validated Factory adapter output is required.")
+    # Trusted adapter values are kept distinct until this tool boundary; user
+    # Task intent is never permitted to supply or override them.
+    return {**payload, **output.values}
 
 
 def _product(payload):
@@ -16,7 +27,7 @@ def _product(payload):
 
 
 def product_research(payload):
-    payload = {**(payload.get("__agent_output") or {}), **payload}
+    payload = _merge_output(payload, "product_research")
     sources = payload.get("sources") or []
     if len(sources) < 2 or not all(isinstance(x, dict) and x.get("url") and x.get("finding") for x in sources):
         raise ValueError("At least two source-backed market findings are required.")
@@ -26,6 +37,7 @@ def product_research(payload):
     product = Product.objects.create(
         title=title, product_type=str(payload.get("product_type") or "digital"),
         price=0, currency=str(payload.get("currency") or "USD"), active=False,
+        factory_managed=True,
         metadata={"factory_state":"researched","research":{"sources":sources,"market":payload.get("market","global"),"evidence":payload.get("evidence",[]),"research_project_id":payload.get("research_project_id"),"research_report_id":payload.get("research_report_id"),"research_provider":payload.get("research_provider"),"real_research":payload.get("real_research") is True},
                   "created_at":timezone.now().isoformat(),"languages_target":list(LANGUAGES)}
     )
@@ -37,7 +49,7 @@ def product_research(payload):
 
 
 def opportunity_score(payload):
-    payload = {**(payload.get("__agent_output") or {}), **payload}
+    payload = _merge_output(payload, "product_opportunity_score")
     product=_product(payload)
     if product.metadata.get("factory_state")!="researched":
         raise ValueError("Product must have verified research before scoring.")
@@ -51,7 +63,7 @@ def opportunity_score(payload):
 
 
 def product_spec(payload):
-    payload = {**(payload.get("__agent_output") or {}), **payload}
+    payload = _merge_output(payload, "product_spec")
     product=_product(payload)
     if product.metadata.get("factory_state")!="scored":
         raise ValueError("Product must be scored before specification.")
@@ -64,7 +76,7 @@ def product_spec(payload):
 
 
 def product_build_record(payload):
-    payload = {**(payload.get("__agent_output") or {}), **payload}
+    payload = _merge_output(payload, "product_build_record")
     product=_product(payload)
     if product.metadata.get("factory_state")!="specified":
         raise ValueError("Product must be specified before build recording.")
@@ -91,7 +103,7 @@ def product_build_record(payload):
 
 
 def product_qa(payload):
-    payload = {**(payload.get("__agent_output") or {}), **payload}
+    payload = _merge_output(payload, "product_qa")
     product=_product(payload)
     if product.metadata.get("factory_state")!="built":
         raise ValueError("Product must be built before QA.")
@@ -105,7 +117,7 @@ def product_qa(payload):
 
 
 def product_localize(payload):
-    payload = {**(payload.get("__agent_output") or {}), **payload}
+    payload = _merge_output(payload, "product_localize")
     product=_product(payload)
     if product.metadata.get("factory_state")!="qa_passed":
         raise ValueError("Product must pass QA before localization.")
@@ -118,7 +130,7 @@ def product_localize(payload):
 
 
 def launch_candidate(payload):
-    payload = {**(payload.get("__agent_output") or {}), **payload}
+    payload = _merge_output(payload, "product_launch_candidate")
     product=_product(payload)
     if product.metadata.get("factory_state")!="localized":
         raise ValueError("Product must be localized before launch candidacy.")

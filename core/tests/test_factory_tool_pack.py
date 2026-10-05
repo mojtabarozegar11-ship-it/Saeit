@@ -17,38 +17,38 @@ from core.factory_agent_runtime import FactoryAgentRuntime, FixtureResearchProvi
 from core.factory_builder import StaticResearchBriefBuilder
 
 class FactoryToolPackTests(TestCase):
-    def test_chain_reaches_launch_candidate_with_evidence(self):
-        r=product_research({"title":"Evidence Product","sources":[{"url":"https://example.com/a","finding":"demand"},{"url":"https://example.com/b","finding":"competition"}]})
-        pid=r["product_id"]
-        opportunity_score({"product_id":pid,"score":82,"rationale":"evidence"})
-        product_spec({"product_id":pid,"spec":{"problem":"costly manual work","acceptance_criteria":["saves time"]}})
-        product_build_record({"product_id":pid,"artifact":{"ref":"git:abc123"}})
-        product_qa({"product_id":pid,"tests":{"passed":True},"security":{"passed":True}})
-        product_localize({"product_id":pid,"locales":["en","fa"]})
+    def test_factory_effect_handlers_refuse_direct_invocation_outside_gateway(self):
+        with self.assertRaisesRegex(ValueError, "ToolGateway"):
+            product_research({"title":"Injected Product","sources":[
+                {"url":"https://example.com/a","finding":"demand"},
+                {"url":"https://example.com/b","finding":"competition"},
+            ]})
+        self.assertFalse(Product.objects.exists())
 
     def test_invalid_research_is_rejected(self):
         with self.assertRaises(ValueError):
             product_research({"title":"No evidence","sources":[]})
 
     def test_brain_does_not_trust_direct_or_unverified_metadata_changes(self):
-        result = product_research({
-            "title":"Unverified product",
-            "sources":[{"url":"https://example.com/a","finding":"a"},{"url":"https://example.com/b","finding":"b"}],
-        })
-        decision = AutonomousBrain().decide_product_factory_step(result["product_id"])
+        product = Product.objects.create(
+            title="Unverified product", product_type="digital",
+            metadata={"factory_state":"researched","research":{"sources":[
+                {"url":"https://example.com/a","finding":"a"},
+                {"url":"https://example.com/b","finding":"b"},
+            ]}},
+        )
+        decision = AutonomousBrain().decide_product_factory_step(product.pk)
         self.assertEqual(decision["action"], "blocked")
         self.assertIn("completed, verified AgentTask", decision["reason"])
 
     def test_launch_requires_allowed_market(self):
-        r=product_research({"title":"P","sources":[{"url":"https://example.com/a","finding":"a"},{"url":"https://example.com/b","finding":"b"}]})
-        pid=r["product_id"]
-        opportunity_score({"product_id":pid,"score":70})
-        product_spec({"product_id":pid,"spec":{"problem":"p","acceptance_criteria":["a"]}})
-        product_build_record({"product_id":pid,"artifact":{"ref":"git:x"}})
-        product_qa({"product_id":pid,"tests":{"passed":True},"security":{"passed":True}})
-        product_localize({"product_id":pid,"locales":["en"]})
-        with self.assertRaises(ValueError):
-            launch_candidate({"product_id":pid,"markets":[{"country":"XX","eligibility":"allowed"}]})
+        product = Product.objects.create(
+            title="P", product_type="digital",
+            metadata={"factory_state":"localized","localization":{"launch_locales":["en"]}},
+        )
+        with self.assertRaisesRegex(ValueError, "ToolGateway"):
+            launch_candidate({"product_id":product.pk,"markets":[{"country":"XX","eligibility":"allowed"}]})
+        self.assertEqual(product.metadata["factory_state"], "localized")
         owner = get_user_model().objects.create_superuser(
             username="factory-owner", email="owner@example.com", password="test-only"
         )
@@ -58,9 +58,9 @@ class FactoryToolPackTests(TestCase):
             review_note="Reviewed for sandbox product test.", reviewed_at=timezone.now(),
             valid_until=timezone.now() + timedelta(days=30),
         )
-        out=launch_candidate({"product_id":pid,"markets":[{"country":"US","eligibility":"restricted"}]})
-        self.assertEqual(out["factory_state"],"launch_candidate")
-        self.assertFalse(Product.objects.get(pk=pid).active)
+        with self.assertRaisesRegex(ValueError, "ToolGateway"):
+            launch_candidate({"product_id":product.pk,"markets":[{"country":"US","eligibility":"restricted"}]})
+        self.assertFalse(Product.objects.get(pk=product.pk).active)
 
     def test_agent_cannot_claim_market_allowed_or_reuse_stale_review(self):
         product = Product.objects.create(
@@ -74,13 +74,15 @@ class FactoryToolPackTests(TestCase):
             market_code="GB", eligibility=FactoryMarketEligibility.PENDING_REVIEW,
             review_note="Pending evidence review.", reviewed_by=owner, reviewed_at=timezone.now(),
         )
-        with self.assertRaisesRegex(ValueError, "allowed launch market"):
+        with self.assertRaisesRegex(ValueError, "ToolGateway"):
             launch_candidate({"product_id":product.pk,"markets":[{"market_code":"GB","eligibility":"allowed"}]})
-        FactoryMarketEligibility.objects.filter(market_code="GB").update(
-            eligibility=FactoryMarketEligibility.ALLOWED, review_note="Reviewed but expired.",
-            evidence_reference="https://example.com/expired-review", valid_until=timezone.now() - timedelta(seconds=1)
-        )
-        with self.assertRaisesRegex(ValueError, "review is stale"):
+        gb_review = FactoryMarketEligibility.objects.get(market_code="GB")
+        gb_review.eligibility = FactoryMarketEligibility.ALLOWED
+        gb_review.review_note = "Reviewed but expired."
+        gb_review.evidence_reference = "https://example.com/expired-review"
+        gb_review.valid_until = timezone.now() - timedelta(seconds=1)
+        gb_review.save()
+        with self.assertRaisesRegex(ValueError, "ToolGateway"):
             launch_candidate({"product_id":product.pk,"markets":[{"market_code":"GB","eligibility":"allowed"}]})
 
     def test_worker_retry_rolls_back_factory_effect_before_replay(self):
@@ -262,7 +264,7 @@ class FactoryToolPackTests(TestCase):
             code=capability.code,
             handler=lambda payload: {"verified_effect":True,"product_id":product.pk,"factory_state":"scored","score":99},
         )])
-        with self.assertRaisesRegex(Exception, "Persisted Product lifecycle state"):
+        with self.assertRaisesRegex(Exception, "Every Factory stage requires"):
             WorkerRunner(gateway).run(task.pk)
         task.refresh_from_db()
         product.refresh_from_db()

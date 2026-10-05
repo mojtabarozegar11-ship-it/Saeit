@@ -106,7 +106,10 @@ class TaskRuntime:
         else:
             task.status = "queued"
             task.execution_id = ""
-            task.next_retry_at = timezone.now() + timedelta(seconds=min(30 * (2 ** max(task.attempt_count - 1, 0)), 300)) if str(task.capability_code or "").startswith("product_") else None
+            task.next_retry_at = timezone.now() + timedelta(seconds=min(30 * (2 ** max(task.attempt_count - 1, 0)), 300)) if (
+                str(task.capability_code or "").startswith("product_")
+                or str(task.action_type or "").startswith("product_")
+            ) else None
             task.output_data = {"error": "Execution became stale and was re-queued for recovery"}
             if task.next_retry_at:
                 task.output_data["retry_after"] = task.next_retry_at.isoformat()
@@ -125,7 +128,7 @@ class TaskRuntime:
         return task
 
     @transaction.atomic
-    def complete(self, task_id, output_data=None, cost=0, execution_id=None):
+    def complete(self, task_id, output_data=None, cost=0, execution_id=None, gateway_attestation=None):
         task = AgentTask.objects.select_for_update().get(pk=task_id)
         if task.status != "running":
             raise TaskExecutionError(f"Task is not running: {task.status}")
@@ -142,7 +145,15 @@ class TaskRuntime:
         if normalized_cost < 0:
             raise TaskExecutionError("Task cost cannot be negative")
         normalized_output = output_data or {}
-        if str(task.capability_code or "").startswith("product_"):
+        if (
+            str(task.capability_code or "").startswith("product_")
+            or str(task.action_type or "").startswith("product_")
+        ):
+            from .tool_gateway import consume_factory_attestation
+            try:
+                consume_factory_attestation(gateway_attestation, task)
+            except Exception as exc:
+                raise TaskExecutionError(str(exc)) from exc
             self._verify_factory_effect(task, normalized_output)
             try:
                 FactoryTaskVerifier().verify(task, normalized_output)

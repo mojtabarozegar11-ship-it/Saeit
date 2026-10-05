@@ -17,7 +17,11 @@ class StaticResearchBriefVerifier:
         re.compile(rb"eval[(]", re.I),
     )
 
-    def verify(self, artifact, spec):
+    def verify(self, artifact, spec, *, task, authorization, authorization_check):
+        if not callable(authorization_check) or not authorization_check(
+            authorization, task, "product_qa"
+        ):
+            raise ArtifactVerificationError("Verifier execution requires current ToolGateway authorization.")
         path = Path(artifact.reference).resolve()
         content = path.read_bytes()
         digest = hashlib.sha256(content).hexdigest()

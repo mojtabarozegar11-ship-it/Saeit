@@ -15,7 +15,9 @@ from django.utils import timezone
 from .factory_artifact_verifier import StaticResearchBriefVerifier
 from .factory_builder import StaticResearchBriefBuilder
 from .models import FactoryArtifact, FactoryMarketEligibility, Product, ResearchProject
+from .factory_governance import validate_task_prerequisites
 from .research_runtime import ResearchRuntime
+from .factory_contracts import FactoryAgentOutput, GatewayAuthorization
 
 
 class FactoryAgentBlocked(RuntimeError):
@@ -28,7 +30,7 @@ class ResearchProvider:
     provider_name = "unconfigured"
     real_research = False
 
-    def search(self, *, goal, constraints):
+    def search(self, *, goal, constraints, task, authorization, authorization_check):
         raise NotImplementedError
 
 
@@ -38,7 +40,9 @@ class FixtureResearchProvider(ResearchProvider):
     provider_name = "fixture"
     real_research = False
 
-    def search(self, *, goal, constraints):
+    def search(self, *, goal, constraints, task, authorization, authorization_check):
+        if not authorization_check(authorization, task, "product_research"):
+            raise FactoryAgentBlocked("Research Provider call requires current ToolGateway authorization.")
         if not str(goal or "").strip():
             raise ValueError("Research goal is required.")
         now = timezone.now().isoformat()
@@ -85,33 +89,43 @@ class FactoryAgentRuntime:
         self.verifier = verifier or StaticResearchBriefVerifier()
         self.research = ResearchRuntime()
 
-    def execute(self, task):
+    def execute(self, task, *, authorization=None, authorization_check=None):
+        if (
+            not isinstance(authorization, GatewayAuthorization)
+            or not callable(authorization_check)
+            or not authorization_check(authorization, task, task.action_type)
+        ):
+            raise FactoryAgentBlocked("Factory adapter execution requires a current ToolGateway authorization.")
         action = task.action_type
+        if action != "product_research":
+            validate_task_prerequisites(task)
         if action == "product_research":
-            return self._research(task)
-        product = task.product
-        if not product:
-            raise FactoryAgentBlocked("Factory task has no persisted Product prerequisite.")
-        if action == "product_opportunity_score":
-            return self._score(task, product)
-        if action == "product_spec":
-            return self._spec(task, product)
-        if action == "product_build_record":
-            return self._build(task, product)
-        if action == "product_qa":
-            return self._verify(task, product)
-        if action == "product_localize":
-            return {"locales": ["en"]}
-        if action == "product_launch_candidate":
-            now = timezone.now()
-            markets = FactoryMarketEligibility.objects.filter(
-                eligibility=FactoryMarketEligibility.ALLOWED,
-                reviewed_by__is_superuser=True,
-            ).filter(
-                models.Q(valid_until__isnull=True) | models.Q(valid_until__gt=now)
-            ).order_by("market_code")
-            return {"markets": [{"market_code": item.market_code} for item in markets]}
-        raise FactoryAgentBlocked(f"No execution adapter is registered for {action}.")
+            values = self._research(task, authorization, authorization_check)
+        else:
+            product = task.product
+            if not product:
+                raise FactoryAgentBlocked("Factory task has no persisted Product prerequisite.")
+            if action == "product_opportunity_score":
+                values = self._score(task, product)
+            elif action == "product_spec":
+                values = self._spec(task, product)
+            elif action == "product_build_record":
+                values = self._build(task, product, authorization, authorization_check)
+            elif action == "product_qa":
+                values = self._verify(task, product, authorization, authorization_check)
+            elif action == "product_localize":
+                values = {"locales": ["en"]}
+            elif action == "product_launch_candidate":
+                now = timezone.now()
+                markets = FactoryMarketEligibility.objects.filter(
+                    eligibility=FactoryMarketEligibility.ALLOWED,
+                    reviewed_by__is_superuser=True,
+                    valid_until__gt=now,
+                ).order_by("market_code")
+                values = {"markets": [{"market_code": item.market_code} for item in markets]}
+            else:
+                raise FactoryAgentBlocked(f"No execution adapter is registered for {action}.")
+        return FactoryAgentOutput.validate(action, values)
 
     @staticmethod
     def _owner(task):
@@ -120,7 +134,7 @@ class FactoryAgentRuntime:
         return get_user_model().objects.filter(is_superuser=True, is_active=True).order_by("pk").first()
 
     @transaction.atomic
-    def _research(self, task):
+    def _research(self, task, authorization, authorization_check):
         if task.factory_run_id:
             existing = ResearchProject.objects.filter(factory_run_id=task.factory_run_id).first()
             if existing:
@@ -150,9 +164,16 @@ class FactoryAgentRuntime:
         if not goal:
             raise ValueError("Factory Research requires a goal.")
         constraints = (task.input_data or {}).get("constraints", [])
-        records = provider.search(goal=goal, constraints=constraints)
+        if not authorization_check(authorization, task, "product_research"):
+            raise FactoryAgentBlocked("Research Provider call requires current ToolGateway authorization.")
+        records = provider.search(
+            goal=goal, constraints=constraints, task=task,
+            authorization=authorization, authorization_check=authorization_check,
+        )
         if not isinstance(records, list) or len(records) < 2:
             raise ValueError("Research provider must return at least two source-backed findings.")
+        if not authorization_check(authorization, task, "product_research"):
+            raise FactoryAgentBlocked("Research grant was revoked before evidence could be persisted.")
         owner = self._owner(task)
         if not owner:
             raise FactoryAgentBlocked("Research requires an existing owner for ResearchProject provenance.")
@@ -261,7 +282,7 @@ class FactoryAgentRuntime:
         ).hexdigest()
         return {"spec": spec}
 
-    def _build(self, task, product):
+    def _build(self, task, product, authorization, authorization_check):
         spec = (product.metadata or {}).get("spec") or {}
         if not spec.get("digest"):
             raise FactoryAgentBlocked("Builder requires a versioned and digested persisted Product spec.")
@@ -270,10 +291,11 @@ class FactoryAgentRuntime:
         version = run.current_artifact_version + 1
         artifact = self.builder.build(
             run_id=run.run_id, product_id=product.pk, version=version, spec=spec, evidence=records,
+            task=task, authorization=authorization, authorization_check=authorization_check,
         )
         return {"artifact": artifact}
 
-    def _verify(self, task, product):
+    def _verify(self, task, product, authorization, authorization_check):
         run = task.factory_run
         artifact = FactoryArtifact.objects.filter(
             product=product, run=run, version=run.current_artifact_version,
@@ -281,5 +303,8 @@ class FactoryAgentRuntime:
         if not artifact:
             raise FactoryAgentBlocked("Test/Security requires the current persisted artifact.")
         spec = (product.metadata or {}).get("spec") or {}
-        tests, security = self.verifier.verify(artifact, spec)
+        tests, security = self.verifier.verify(
+            artifact, spec, task=task, authorization=authorization,
+            authorization_check=authorization_check,
+        )
         return {"tests": tests, "security": security}

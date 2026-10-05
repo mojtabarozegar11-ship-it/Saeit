@@ -5,6 +5,7 @@ from django.db import transaction
 from .services import normalize_action
 from .task_runtime import TaskExecutionError, TaskRuntime
 from .tool_gateway import ToolGateway, ToolGatewayError
+from .factory_contracts import GatewayToolResult
 
 
 class WorkerRunnerError(ValueError):
@@ -44,13 +45,25 @@ class WorkerRunner:
             if not isinstance(payload, dict):
                 raise WorkerRunnerError("Task input must be an object")
 
-            factory_task = str(task.capability_code or "").startswith("product_")
+            factory_task = (
+                str(task.capability_code or "").startswith("product_")
+                or str(task.action_type or "").startswith("product_")
+            )
             if factory_task and agent_output is not None:
                 raise WorkerRunnerError("Factory specialist outputs must be generated from the Run by an execution adapter.")
-            if factory_task and task.action_type == "product_qa" and self.factory_executor is None:
-                raise WorkerRunnerError("Factory QA requires the independent artifact verifier.")
-            if self.factory_executor is not None and agent_output is None and factory_task:
-                agent_output = self.factory_executor.execute(task)
+            authorization = None
+            if factory_task:
+                if self.factory_executor is None:
+                    raise WorkerRunnerError("Every Factory stage requires its registered execution adapter.")
+                # ToolGateway authorization precedes any provider call, database write,
+                # artifact creation, or Builder filesystem operation.
+                authorization = self.gateway.authorize(
+                    tool_code, payload, task_id=task.pk, execution_id=execution_id
+                )
+                agent_output = self.factory_executor.execute(
+                    task, authorization=authorization,
+                    authorization_check=self.gateway.is_authorized,
+                )
 
             # Factory tools currently mutate local database state. Commit those
             # effects with task completion so stale-worker recovery cannot leave
@@ -63,12 +76,17 @@ class WorkerRunner:
                     execution_id=execution_id,
                     agent_output=agent_output,
                 )
+                gateway_attestation = None
+                if isinstance(result, GatewayToolResult):
+                    gateway_attestation = result.attestation
+                    result = result.result
                 output, cost = self._normalize_result(result)
                 completed = self.runtime.complete(
                     task.pk,
                     output_data=output,
                     cost=cost,
                     execution_id=execution_id,
+                    gateway_attestation=gateway_attestation,
                 )
             return completed
         except Exception as exc:
@@ -77,7 +95,7 @@ class WorkerRunner:
                     task.pk,
                     exc,
                     execution_id=execution_id,
-                    retry_backoff=self.factory_executor is not None,
+                    retry_backoff=factory_task if "factory_task" in locals() else False,
                 )
             except TaskExecutionError:
                 # Preserve the original worker failure; a concurrent recovery or

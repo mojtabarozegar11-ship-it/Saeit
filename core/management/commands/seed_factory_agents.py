@@ -1,5 +1,7 @@
 from django.core.management.base import BaseCommand
 from django.db import transaction
+from datetime import timedelta
+from django.utils import timezone
 from core.models import Agent, AgentCapability, AgentToolGrant
 
 CAPABILITIES=[
@@ -36,7 +38,8 @@ class Command(BaseCommand):
             AgentToolGrant.objects.update_or_create(
                 agent=agent, capability_code=code, tool_code=code,
                 resource_scope="product:*", environment="development",
-                defaults={"active": True},
+                defaults={"active": True, "revoked_at": None,
+                          "valid_until": timezone.now() + timedelta(days=1)},
             )
             specialists.append(agent)
         agent,_=Agent.objects.update_or_create(code="factory-master-agent",defaults={

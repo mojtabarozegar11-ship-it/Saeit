@@ -1,7 +1,24 @@
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.db import models
+from django.db import models, transaction
+from django.db.models.signals import m2m_changed
 from django.utils import timezone
+from datetime import timedelta
+
+
+def factory_grant_expiry_default():
+    return timezone.now() + timedelta(days=1)
+
+
+def factory_approval_expiry_default():
+    return timezone.now() + timedelta(days=1)
+
+
+def invalidate_factory_research(project_id):
+    project = ResearchProject.objects.filter(pk=project_id).select_related("factory_run__product").first()
+    if project and project.factory_run_id and project.factory_run.product_id:
+        from .factory_governance import invalidate_stale_evidence
+        invalidate_stale_evidence(project.factory_run.product)
 
 
 class T(models.Model):
@@ -40,6 +57,16 @@ class ResearchSource(T):
         if not self.title.strip():
             raise ValidationError({"title": "Source title cannot be empty."})
 
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        invalidate_factory_research(self.project_id)
+
+    def delete(self, *args, **kwargs):
+        project_id = self.project_id
+        result = super().delete(*args, **kwargs)
+        invalidate_factory_research(project_id)
+        return result
+
 
 class Evidence(T):
     project = models.ForeignKey(
@@ -67,6 +94,16 @@ class Evidence(T):
         if self.confidence is not None and not (0 <= self.confidence <= 1):
             raise ValidationError({"confidence": "Confidence must be between 0 and 1."})
 
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        invalidate_factory_research(self.project_id)
+
+    def delete(self, *args, **kwargs):
+        project_id = self.project_id
+        result = super().delete(*args, **kwargs)
+        invalidate_factory_research(project_id)
+        return result
+
 
 class Finding(T):
     project = models.ForeignKey(
@@ -84,6 +121,16 @@ class Finding(T):
         if self.confidence is not None and not (0 <= self.confidence <= 1):
             raise ValidationError({"confidence": "Confidence must be between 0 and 1."})
 
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        invalidate_factory_research(self.project_id)
+
+    def delete(self, *args, **kwargs):
+        project_id = self.project_id
+        result = super().delete(*args, **kwargs)
+        invalidate_factory_research(project_id)
+        return result
+
 
 class Report(T):
     project = models.ForeignKey(
@@ -100,6 +147,16 @@ class Report(T):
                 fields=["project", "version"], name="unique_report_version_per_project"
             )
         ]
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        invalidate_factory_research(self.project_id)
+
+    def delete(self, *args, **kwargs):
+        project_id = self.project_id
+        result = super().delete(*args, **kwargs)
+        invalidate_factory_research(project_id)
+        return result
 
 
 class Agent(T):
@@ -152,7 +209,39 @@ class AgentTask(T):
     cost = models.DecimalField(max_digits=12, decimal_places=4, default=0)
 
 
+class ApprovalRequestQuerySet(models.QuerySet):
+    def update(self, **kwargs):
+        protected_fields = {
+            "status", "action_type", "target_type", "target_id",
+            "release_manifest_digest", "expires_at", "revoked_at",
+        }
+        if protected_fields.intersection(kwargs):
+            managed_ids = [str(pk) for pk in Product.objects.filter(factory_managed=True).values_list("pk", flat=True)]
+            if self.filter(target_type="Product", target_id__in=managed_ids).exists():
+                raise ValidationError("Factory activation approvals must pass through the bound owner Approval flow.")
+        return super().update(**kwargs)
+
+
+class FactoryReleaseManifestQuerySet(models.QuerySet):
+    def update(self, **kwargs):
+        raise ValidationError("Factory release manifests are immutable.")
+
+    def delete(self):
+        raise ValidationError("Factory release manifests are immutable.")
+
+
+class FactoryReleaseGateQuerySet(models.QuerySet):
+    def update(self, **kwargs):
+        raise ValidationError("Factory release gate state must pass through approve_release().")
+
+
+class FactoryMarketEligibilityQuerySet(models.QuerySet):
+    def update(self, **kwargs):
+        raise ValidationError("Market eligibility changes must pass through the audited owner review flow.")
+
+
 class ApprovalRequest(T):
+    objects = models.Manager.from_queryset(ApprovalRequestQuerySet)()
     action_type = models.CharField(max_length=100)
     target_type = models.CharField(max_length=100)
     target_id = models.CharField(max_length=100)
@@ -160,11 +249,64 @@ class ApprovalRequest(T):
     decision_note = models.TextField(blank=True)
     risk = models.CharField(max_length=10, default="high")
     status = models.CharField(max_length=20, default="pending")
+    release_manifest_digest = models.CharField(max_length=64, blank=True, default="")
+    expires_at = models.DateTimeField(default=factory_approval_expiry_default)
+    revoked_at = models.DateTimeField(null=True, blank=True)
     requested_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
         related_name="approval_requests",
     )
+
+    @transaction.atomic
+    def save(self, *args, **kwargs):
+        from .factory_governance import (
+            approve_release, bind_release_approval, release_manifest_is_current,
+        )
+        from .models import FactoryReleaseGate, Product
+        product = None
+        previous = None
+        if self.pk:
+            previous = ApprovalRequest.objects.filter(pk=self.pk).first()
+            if previous and previous.status == "approved":
+                binding = ("action_type", "target_type", "target_id", "release_manifest_digest", "requested_by_id", "expires_at")
+                if any(getattr(previous, field) != getattr(self, field) for field in binding):
+                    raise ValidationError("An approved release request cannot be rebound or extended.")
+                if previous.revoked_at and self.revoked_at != previous.revoked_at:
+                    raise ValidationError("A revoked release approval cannot be restored.")
+        if self.target_type == "Product" and self.action_type == "activate_product":
+            try:
+                product = Product.objects.get(pk=self.target_id)
+            except Product.DoesNotExist:
+                if self.status == "approved":
+                    raise ValidationError("Product activation approval target does not exist.")
+            if product and product.is_factory_managed and self.status == "pending":
+                bind_release_approval(self)
+        if self.status == "approved" and self.target_type == "Product":
+            if product is None:
+                try:
+                    product = Product.objects.get(pk=self.target_id)
+                except Product.DoesNotExist:
+                    raise ValidationError("Product approval target does not exist.")
+            if product.is_factory_managed:
+                try:
+                    gate = FactoryReleaseGate.objects.select_related("run", "artifact", "manifest").get(product=product)
+                except FactoryReleaseGate.DoesNotExist as exc:
+                    raise ValidationError("Factory Product approval requires its shared Release Gate.") from exc
+                if (
+                    self.action_type != "activate_product"
+                    or not self.release_manifest_digest
+                    or not self.expires_at
+                    or self.expires_at <= timezone.now()
+                    or self.revoked_at
+                    or not gate.manifest_id
+                    or self.release_manifest_digest != gate.manifest.manifest_digest
+                    or not release_manifest_is_current(gate.manifest, product, gate.run, gate.artifact)
+                ):
+                    raise ValidationError("Approval must bind the exact current Factory release manifest and activation action.")
+        super().save(*args, **kwargs)
+        if self.status == "approved" and product and product.is_factory_managed:
+            approve_release(product, self.requested_by, self)
 
 
 class ApprovalGrant(T):
@@ -209,8 +351,15 @@ class KnowledgeArticle(T):
 
 class ProductQuerySet(models.QuerySet):
     def update(self, **kwargs):
+        if kwargs.get("factory_managed") is False and any(
+            product.is_factory_managed or bool((product.metadata or {}).get("factory_state"))
+            for product in self.only("pk", "factory_managed", "metadata")
+        ):
+            raise ValidationError("Factory-managed identity is permanent.")
+        if "metadata" in kwargs and isinstance(kwargs.get("metadata"), dict) and kwargs["metadata"].get("factory_state"):
+            raise ValidationError("Factory-managed Products must be established through Product.save().")
         if "metadata" in kwargs and any(
-            isinstance(product.metadata, dict) and product.metadata.get("factory_state")
+            (product.is_factory_managed or bool((product.metadata or {}).get("factory_state")))
             for product in self.only("metadata")
         ):
             raise ValidationError("Factory Product metadata changes must use save() so dependent evidence is invalidated.")
@@ -221,15 +370,38 @@ class ProductQuerySet(models.QuerySet):
             from .factory_governance import assert_activation_allowed
             for product in self:
                 metadata = kwargs.get("metadata", product.metadata)
-                if isinstance(metadata, dict) and metadata.get("factory_state"):
+                if product.is_factory_managed or bool((metadata or {}).get("factory_state")):
                     product.metadata = metadata
                     assert_activation_allowed(product)
         return super().update(**kwargs)
 
+    def bulk_update(self, objs, fields, batch_size=None):
+        objs = list(objs)
+        if "metadata" in fields and any(
+            product.is_factory_managed
+            or bool((product.metadata or {}).get("factory_state"))
+            for product in objs
+        ):
+            raise ValidationError("Factory Product metadata changes must use save() so dependent evidence is invalidated.")
+        if "factory_managed" in fields and any(
+            not product.factory_managed and (
+                product.is_factory_managed or bool((product.metadata or {}).get("factory_state"))
+            ) for product in objs
+        ):
+            raise ValidationError("Factory-managed identity cannot be removed.")
+        if "active" in fields:
+            from .factory_governance import assert_activation_allowed
+            for product in objs:
+                if product.active and product.is_factory_managed:
+                    assert_activation_allowed(product)
+        return super().bulk_update(objs, fields, batch_size=batch_size)
+
     def bulk_create(self, objs, **kwargs):
         from .factory_governance import assert_activation_allowed
         for product in objs:
-            if product.active and isinstance(product.metadata, dict) and product.metadata.get("factory_state"):
+            if isinstance(product.metadata, dict) and product.metadata.get("factory_state"):
+                product.factory_managed = True
+            if product.active and (product.is_factory_managed or bool((product.metadata or {}).get("factory_state"))):
                 assert_activation_allowed(product)
         return super().bulk_create(objs, **kwargs)
 
@@ -245,6 +417,7 @@ class Product(T):
     price = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     currency = models.CharField(max_length=10, default="IRR")
     active = models.BooleanField(default=False)
+    factory_managed = models.BooleanField(default=False, editable=False)
     owner = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
@@ -261,11 +434,34 @@ class Product(T):
     )
     metadata = models.JSONField(default=dict)
 
+    @property
+    def is_factory_managed(self):
+        if self.factory_managed:
+            return True
+        if not self.pk:
+            return False
+        return (
+            FactoryRun.objects.filter(product_id=self.pk).exists()
+            or FactoryArtifact.objects.filter(product_id=self.pk).exists()
+            or FactoryEvidence.objects.filter(product_id=self.pk).exists()
+            or FactoryReleaseGate.objects.filter(product_id=self.pk).exists()
+        )
+
     def save(self, *args, **kwargs):
+        update_fields = kwargs.get("update_fields")
+        factory_managed_before = self.factory_managed
         previous_metadata = None
         if self.pk:
             previous_metadata = Product.objects.filter(pk=self.pk).values_list("metadata", flat=True).first()
-        if self.active and isinstance(self.metadata, dict) and self.metadata.get("factory_state"):
+        if self.pk:
+            old_factory_managed = Product.objects.filter(pk=self.pk).values_list("factory_managed", flat=True).first()
+            if old_factory_managed:
+                self.factory_managed = True
+        if self.is_factory_managed or (isinstance(self.metadata, dict) and self.metadata.get("factory_state")):
+            self.factory_managed = True
+        if update_fields is not None and factory_managed_before != self.factory_managed:
+            kwargs["update_fields"] = set(update_fields) | {"factory_managed"}
+        if self.active and self.is_factory_managed:
             from .factory_governance import assert_activation_allowed
             assert_activation_allowed(self)
         super().save(*args, **kwargs)
@@ -291,6 +487,7 @@ class FactoryRun(T):
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
         if self.product_id:
+            Product.objects.filter(pk=self.product_id).update(factory_managed=True)
             from .factory_governance import invalidate_stale_evidence
             invalidate_stale_evidence(self.product)
 
@@ -341,21 +538,74 @@ class AgentToolGrant(T):
     resource_scope = models.CharField(max_length=200)
     environment = models.CharField(max_length=40)
     active = models.BooleanField(default=True)
+    valid_until = models.DateTimeField(default=factory_grant_expiry_default)
+    revoked_at = models.DateTimeField(null=True, blank=True)
     class Meta:
         constraints = [models.UniqueConstraint(fields=["agent", "capability_code", "tool_code", "resource_scope", "environment"], name="unique_agent_tool_resource_environment_grant")]
 
 
 class FactoryReleaseGate(T):
+    objects = models.Manager.from_queryset(FactoryReleaseGateQuerySet)()
     product = models.OneToOneField(Product, on_delete=models.PROTECT, related_name="factory_release_gate")
     run = models.ForeignKey(FactoryRun, on_delete=models.PROTECT, related_name="release_gates")
     artifact = models.ForeignKey(FactoryArtifact, on_delete=models.PROTECT, related_name="release_gates")
+    manifest = models.ForeignKey("FactoryReleaseManifest", null=True, blank=True, on_delete=models.PROTECT, related_name="release_gates")
     status = models.CharField(max_length=24, default="pending_owner_approval")
     approval = models.ForeignKey(ApprovalRequest, null=True, blank=True, on_delete=models.PROTECT, related_name="factory_release_gates")
     approved_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.PROTECT, related_name="factory_release_approvals")
     approved_at = models.DateTimeField(null=True, blank=True)
 
+    def save(self, *args, **kwargs):
+        if self.status == "approved":
+            from .factory_governance import release_manifest_is_current
+            if not (
+                self.approval_id and self.approved_by_id and self.approved_by.is_superuser
+                and self.approved_at and self.manifest_id
+                and self.approval.status == "approved"
+                and not self.approval.revoked_at
+                and self.approval.expires_at and self.approval.expires_at > timezone.now()
+                and self.approval.action_type == "activate_product"
+                and self.approval.target_type == "Product"
+                and self.approval.target_id == str(self.product_id)
+                and self.approval.release_manifest_digest == self.manifest.manifest_digest
+                and release_manifest_is_current(self.manifest, self.product, self.run, self.artifact)
+            ):
+                raise ValidationError("Only an exact, current owner approval can advance the Factory Release Gate.")
+        super().save(*args, **kwargs)
+
+
+class FactoryReleaseManifest(T):
+    objects = models.Manager.from_queryset(FactoryReleaseManifestQuerySet)()
+    """Immutable digest binding all release inputs reviewed by the owner."""
+    run = models.ForeignKey(FactoryRun, on_delete=models.PROTECT, related_name="release_manifests")
+    product = models.ForeignKey(Product, on_delete=models.PROTECT, related_name="release_manifests")
+    artifact = models.ForeignKey(FactoryArtifact, on_delete=models.PROTECT, related_name="release_manifests")
+    spec_version = models.PositiveIntegerField()
+    spec_digest = models.CharField(max_length=64)
+    artifact_digest = models.CharField(max_length=64)
+    locales = models.JSONField(default=list)
+    markets = models.JSONField(default=list)
+    policy_version = models.CharField(max_length=80)
+    evidence_digest = models.CharField(max_length=64)
+    eligibility_digest = models.CharField(max_length=64)
+    manifest_digest = models.CharField(max_length=64, unique=True)
+    snapshot = models.JSONField(default=dict)
+
+    def save(self, *args, **kwargs):
+        if self.pk:
+            previous = FactoryReleaseManifest.objects.get(pk=self.pk)
+            fields = ("run_id", "product_id", "artifact_id", "spec_version", "spec_digest",
+                      "artifact_digest", "locales", "markets", "policy_version",
+                      "evidence_digest", "eligibility_digest", "manifest_digest", "snapshot")
+            if any(getattr(previous, field) != getattr(self, field) for field in fields):
+                raise ValidationError("Factory release manifests are immutable.")
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError("Factory release manifests are immutable.")
 
 class FactoryMarketEligibility(T):
+    objects = models.Manager.from_queryset(FactoryMarketEligibilityQuerySet)()
     """Owner-maintained launch eligibility; Agents can only read this registry."""
     ALLOWED = "allowed"
     PENDING_REVIEW = "pending_review"
@@ -377,6 +627,15 @@ class FactoryMarketEligibility(T):
     )
     reviewed_at = models.DateTimeField()
     valid_until = models.DateTimeField(null=True, blank=True)
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        from .factory_governance import invalidate_stale_evidence
+        for product in Product.objects.filter(factory_managed=True).iterator():
+            markets = (product.metadata or {}).get("market_eligibility") or []
+            if any(isinstance(item, dict) and item.get("market_code") == self.market_code for item in markets):
+                invalidate_stale_evidence(product)
+
 
     class Meta:
         ordering = ["market_code"]
@@ -400,6 +659,18 @@ class FactoryMarketEligibility(T):
 
     def __str__(self):
         return f"{self.market_code}: {self.eligibility}"
+
+
+def _invalidate_finding_evidence(sender, instance, action, **kwargs):
+    if action in {"post_add", "post_remove", "post_clear"}:
+        invalidate_factory_research(instance.project_id)
+
+
+m2m_changed.connect(
+    _invalidate_finding_evidence,
+    sender=Finding.evidence.through,
+    dispatch_uid="core.factory_finding_evidence_lineage",
+)
 
 
 class Order(T):

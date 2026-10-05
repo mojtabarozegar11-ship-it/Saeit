@@ -1,14 +1,18 @@
 """Independent Product Factory verification, freshness, and release gates."""
 import hashlib
 import json
+from pathlib import Path
 
 from django.core.exceptions import ValidationError
+from django.conf import settings
 from django.utils import timezone
 
 from .models import (
-    AgentTask, FactoryArtifact, FactoryEvidence, FactoryReleaseGate,
-    FactoryRun, Product,
+    AgentTask, ApprovalRequest, FactoryArtifact, FactoryEvidence, FactoryReleaseGate,
+    FactoryReleaseManifest, FactoryRun, FactoryMarketEligibility, Product,
+    ResearchProject,
 )
+from .factory_contracts import REQUIRED_OUTPUT_KEYS, EXPECTED_OUTPUT_STATE
 
 PREVIOUS_STATE = {
     "product_research": None,
@@ -42,21 +46,46 @@ def prerequisite_values(action, product, run):
         "state": previous, "product_id": product.pk, "run_id": run.run_id,
         "run_goal": run.goal, "run_constraints": run.constraints,
     }
+    predecessor = {
+        "product_opportunity_score": "product_research",
+        "product_spec": "product_opportunity_score",
+        "product_build_record": "product_spec",
+        "product_qa": "product_build_record",
+        "product_localize": "product_qa",
+        "product_launch_candidate": "product_localize",
+    }.get(action)
+    if predecessor:
+        evidence = run.evidence.filter(evidence_type=predecessor).order_by("-created_at", "-pk").first()
+        values["lineage"] = None if not evidence else {
+            "id": evidence.pk, "status": evidence.status,
+            "prerequisite_digest": evidence.prerequisite_digest,
+            "details_digest": digest(evidence.details),
+        }
     if action == "product_opportunity_score":
         values["research"] = meta.get("research")
+        values["research_runtime_digest"] = research_runtime_digest(meta)
     elif action == "product_spec":
         values["opportunity"] = meta.get("opportunity")
     elif action == "product_build_record":
         values["spec"] = meta.get("spec")
         values["spec_version"] = run.current_spec_version
     elif action == "product_qa":
-        values["artifact_version"] = run.current_artifact_version
+        artifact = FactoryArtifact.objects.filter(product=product, run=run, version=run.current_artifact_version).first()
+        values["artifact"] = None if not artifact else {
+            "id": artifact.pk, "version": artifact.version, "digest": artifact_content_digest(artifact),
+            "spec_version": artifact.spec_version,
+        }
     elif action == "product_localize":
         values["qa"] = meta.get("qa")
-        values["artifact_version"] = run.current_artifact_version
+        values["artifact_digest"] = _current_artifact_digest(product, run)
     elif action == "product_launch_candidate":
         values["localization"] = meta.get("localization")
-        values["artifact_version"] = run.current_artifact_version
+        values["artifact_digest"] = _current_artifact_digest(product, run)
+        codes = sorted({
+            str(item.get("market_code") or "").upper()
+            for item in (meta.get("market_eligibility") or []) if isinstance(item, dict)
+        })
+        values["market_eligibility"] = market_eligibility_snapshot(codes)
     return values
 
 
@@ -71,22 +100,100 @@ def snapshot_for(action, product, run):
             "artifact_version": run.current_artifact_version}
 
 
+def research_runtime_digest(meta):
+    research = meta.get("research") or {}
+    records = research.get("evidence") or []
+    stored_digest = digest([
+        {
+            "evidence_id": item.get("evidence_id"), "finding_id": item.get("finding_id"),
+            "snapshot_hash": item.get("snapshot_hash"), "passage": item.get("passage"),
+            "source": item.get("source"), "confidence": item.get("confidence"),
+            "provenance": item.get("provenance"),
+        }
+        for item in records if isinstance(item, dict)
+    ])
+    project = ResearchProject.objects.filter(pk=research.get("research_project_id")).first()
+    if not project:
+        return stored_digest
+    persisted = {
+        "evidence": list(project.evidence.select_related("source").order_by("pk").values(
+            "id", "passage", "confidence", "source_id", "source__url", "source__content_hash",
+            "source__snapshot_hash", "source__provenance", "source__retrieved_at",
+        )),
+        "findings": [
+            {"id": finding.pk, "title": finding.title, "statement": finding.statement,
+             "confidence": finding.confidence, "evidence_ids": sorted(finding.evidence.values_list("pk", flat=True))}
+            for finding in project.findings.order_by("pk")
+        ],
+        "reports": list(project.reports.order_by("version", "pk").values("id", "version", "status", "content")),
+    }
+    return digest({"adapter_records": stored_digest, "research_runtime": persisted})
+
+
+def _current_artifact_digest(product, run):
+    artifact = FactoryArtifact.objects.filter(product=product, run=run, version=run.current_artifact_version).first()
+    return artifact_content_digest(artifact) if artifact else ""
+
+
+def artifact_content_digest(artifact):
+    if not artifact:
+        return ""
+    try:
+        actual = hashlib.sha256(Path(artifact.reference).resolve().read_bytes()).hexdigest()
+    except (OSError, ValueError):
+        return ""
+    return actual if actual == artifact.content_digest else ""
+
+
+def market_eligibility_snapshot(codes):
+    now = timezone.now()
+    records = FactoryMarketEligibility.objects.filter(market_code__in=codes).order_by("market_code")
+    return [
+        {"market_code": item.market_code, "eligibility": item.eligibility,
+         "reviewed_at": item.reviewed_at.isoformat(),
+         "valid_until": item.valid_until.isoformat() if item.valid_until else None,
+         "evidence_reference": item.evidence_reference, "review_note": item.review_note,
+         "current": item.valid_until is not None and item.valid_until > now}
+        for item in records
+    ]
+
+
 def invalidate_stale_evidence(product):
-    for item in FactoryEvidence.objects.filter(product=product, status=FactoryEvidence.VALID).select_related("task", "run"):
-        current = snapshot_for(item.task.action_type, product, item.run)
-        spec_dependent = item.evidence_type in {
-            "product_spec", "product_build_record", "product_qa", "product_localize", "product_launch_candidate"
-        }
-        artifact_dependent = item.evidence_type in {
-            "product_build_record", "product_qa", "product_localize", "product_launch_candidate"
-        }
-        if (
-            current["digest"] != item.prerequisite_digest
-            or (spec_dependent and current["spec_version"] != item.spec_version)
-            or (artifact_dependent and current["artifact_version"] != item.artifact_version)
-        ):
-            item.status = FactoryEvidence.STALE
-            item.save(update_fields=["status", "updated_at"])
+    # Iterate until downstream records observe stale predecessor evidence.
+    changed = True
+    while changed:
+        changed = False
+        for item in FactoryEvidence.objects.filter(product=product, status=FactoryEvidence.VALID).select_related("task", "run"):
+            current = snapshot_for(item.task.action_type, product, item.run)
+            spec_dependent = item.evidence_type in {
+                "product_spec", "product_build_record", "product_qa", "product_localize", "product_launch_candidate"
+            }
+            artifact_dependent = item.evidence_type in {
+                "product_build_record", "product_qa", "product_localize", "product_launch_candidate"
+            }
+            if (
+                current["digest"] != item.prerequisite_digest
+                or (spec_dependent and current["spec_version"] != item.spec_version)
+                or (artifact_dependent and current["artifact_version"] != item.artifact_version)
+            ):
+                item.status = FactoryEvidence.STALE
+                item.save(update_fields=["status", "updated_at"])
+                changed = True
+
+
+def validate_task_prerequisites(task):
+    if task.action_type == "product_research":
+        return True
+    if not task.factory_run_id or not task.product_id or not task.prerequisite_snapshot:
+        raise ValidationError("Factory task is missing a versioned prerequisite snapshot.")
+    invalidate_stale_evidence(task.product)
+    snapshot = snapshot_for(task.action_type, task.product, task.factory_run)
+    if snapshot["digest"] != task.prerequisite_snapshot.get("digest"):
+        raise ValidationError("Factory task prerequisites are stale; downstream evidence cannot be consumed.")
+    lineage = snapshot["values"].get("lineage")
+    if lineage and lineage.get("status") != FactoryEvidence.VALID:
+        raise ValidationError("Factory task prerequisite evidence is stale or invalid.")
+    return True
 
 
 class FactoryTaskVerifier:
@@ -101,11 +208,17 @@ class FactoryTaskVerifier:
             raise ValidationError("Agent success claims do not satisfy independent verification.")
         contract = task.output_contract if isinstance(task.output_contract, dict) else {}
         required = contract.get("required", [])
-        if not isinstance(required, list) or any(output.get(key) in (None, "", [], {}) for key in required):
+        if (
+            required != REQUIRED_OUTPUT_KEYS[action]
+            or contract.get("state") != EXPECTED_OUTPUT_STATE[action]
+            or any(output.get(key) in (None, "", [], {}) for key in REQUIRED_OUTPUT_KEYS[action])
+        ):
             raise ValidationError("Task output does not satisfy its declared output contract.")
         if not task.factory_run_id:
             raise ValidationError("Factory task is not attached to a persistent run.")
         run = FactoryRun.objects.select_for_update().get(pk=task.factory_run_id)
+        if action != "product_research":
+            validate_task_prerequisites(task)
         product_id = output.get("product_id") or task.product_id
         if not product_id:
             raise ValidationError("Factory output must identify the persisted Product.")
@@ -139,7 +252,9 @@ class FactoryTaskVerifier:
                 raise ValidationError("Release candidate has no versioned build artifact.")
             FactoryReleaseGate.objects.update_or_create(
                 product=product,
-                defaults={"run": run, "artifact": artifact, "status": "pending_owner_approval"},
+                defaults={"run": run, "artifact": artifact, "manifest": None,
+                          "status": "pending_owner_approval", "approval": None,
+                          "approved_by": None, "approved_at": None},
             )
         current = snapshot_for(action, product, run)
         output.update({
@@ -166,6 +281,18 @@ class FactoryTaskVerifier:
         task.product = product
         task.save(update_fields=["product", "updated_at"])
         invalidate_stale_evidence(product)
+        if action == "product_launch_candidate":
+            gate = FactoryReleaseGate.objects.get(product=product)
+            gate.manifest = create_release_manifest(product, run, gate.artifact)
+            gate.save(update_fields=["manifest", "updated_at"])
+            # An activation request opened before the final evidence existed is
+            # rebound to the release snapshot before its owner can decide it.
+            for request in ApprovalRequest.objects.filter(
+                action_type="activate_product", target_type="Product",
+                target_id=str(product.pk), status="pending",
+            ):
+                request.release_manifest_digest = gate.manifest.manifest_digest
+                request.save(update_fields=["release_manifest_digest", "updated_at"])
         return evidence
 
 
@@ -174,30 +301,23 @@ def approve_release(product, owner, approval_request):
         raise ValidationError("Only the owner may approve Product activation.")
     gate = FactoryReleaseGate.objects.select_for_update().select_related("run", "artifact").get(product=product)
     invalidate_stale_evidence(product)
-    if approval_request.status != "approved":
-        raise ValidationError("A completed owner ApprovalRequest is required.")
-    required_evidence = {
-        "product_research", "product_opportunity_score", "product_spec",
-        "product_build_record", "product_qa", "product_localize", "product_launch_candidate",
-    }
-    evidence_by_type = {
-        item.evidence_type: item
-        for item in gate.run.evidence.filter(status=FactoryEvidence.VALID)
-    }
-    valid = required_evidence.issubset(evidence_by_type)
-    if valid:
-        for evidence_type in required_evidence:
-            item = evidence_by_type[evidence_type]
-            if evidence_type in {"product_spec", "product_build_record", "product_qa", "product_localize", "product_launch_candidate"}:
-                valid = valid and item.spec_version == gate.run.current_spec_version
-            if evidence_type in {"product_build_record", "product_qa", "product_localize", "product_launch_candidate"}:
-                valid = valid and item.artifact_version == gate.run.current_artifact_version
-    if not valid:
-        raise ValidationError("All current Run evidence must pass verification before owner approval.")
+    if approval_request.status != "approved" or approval_request.revoked_at or not approval_request.expires_at or (
+        approval_request.expires_at <= timezone.now()
+    ):
+        raise ValidationError("A current, non-revoked owner ApprovalRequest is required.")
     if gate.status != "pending_owner_approval":
         raise ValidationError("Release gate is not awaiting owner approval.")
     if gate.artifact.version != gate.run.current_artifact_version:
         raise ValidationError("Release artifact is stale.")
+    if (
+        approval_request.action_type != "activate_product"
+        or approval_request.target_type != "Product"
+        or approval_request.target_id != str(product.pk)
+        or not gate.manifest_id
+        or approval_request.release_manifest_digest != gate.manifest.manifest_digest
+        or not release_manifest_is_current(gate.manifest, product, gate.run, gate.artifact)
+    ):
+        raise ValidationError("Approval is not bound to this current release manifest, artifact, and activation action.")
     gate.status = "approved"
     gate.approval = approval_request
     gate.approved_by = owner
@@ -207,7 +327,7 @@ def approve_release(product, owner, approval_request):
 
 
 def assert_activation_allowed(product):
-    if not isinstance(product.metadata, dict) or not product.metadata.get("factory_state"):
+    if not product.is_factory_managed:
         return
     invalidate_stale_evidence(product)
     try:
@@ -220,3 +340,108 @@ def assert_activation_allowed(product):
         raise ValidationError("The linked owner ApprovalRequest is not approved.")
     if not gate.approved_at or gate.artifact.version != gate.run.current_artifact_version:
         raise ValidationError("Owner approval does not cover the current artifact version.")
+    if (
+        gate.approval.revoked_at
+        or not gate.approval.expires_at
+        or gate.approval.expires_at <= timezone.now()
+        or gate.approval.action_type != "activate_product"
+        or gate.approval.target_type != "Product"
+        or gate.approval.target_id != str(product.pk)
+        or not gate.manifest_id
+        or gate.approval.release_manifest_digest != gate.manifest.manifest_digest
+        or not release_manifest_is_current(gate.manifest, product, gate.run, gate.artifact)
+    ):
+        raise ValidationError("Release approval is revoked, expired, unrelated, or stale.")
+
+
+def _assert_release_evidence_current(run, product, artifact):
+    required = {
+        "product_research", "product_opportunity_score", "product_spec", "product_build_record",
+        "product_qa", "product_localize", "product_launch_candidate",
+    }
+    items = {item.evidence_type: item for item in run.evidence.all()}
+    if not required.issubset(items) or any(items[key].status != FactoryEvidence.VALID for key in required):
+        raise ValidationError("Release requires current, valid evidence for every Factory stage.")
+    for key in required:
+        item = items[key]
+        snapshot = snapshot_for(key, product, run)
+        if item.prerequisite_digest != snapshot["digest"]:
+            raise ValidationError(f"Release evidence {key} has stale prerequisites.")
+    qa = (product.metadata.get("qa") or {})
+    if not qa.get("tests", {}).get("passed") or not qa.get("security", {}).get("passed"):
+        raise ValidationError("Current QA and Security evidence must pass.")
+    locales = (product.metadata.get("localization") or {}).get("launch_locales") or []
+    if not locales:
+        raise ValidationError("Release manifest requires current localization evidence.")
+    markets = (product.metadata.get("market_eligibility") or [])
+    codes = [str(item.get("market_code") or "").upper() for item in markets if isinstance(item, dict)]
+    eligibility = market_eligibility_snapshot(codes)
+    if not codes or len(eligibility) != len(set(codes)) or not any(
+        item["eligibility"] == FactoryMarketEligibility.ALLOWED and item["current"] for item in eligibility
+    ) or any(item["eligibility"] != FactoryMarketEligibility.ALLOWED or not item["current"] for item in eligibility):
+        raise ValidationError("Market eligibility is missing, expired, or no longer allowed.")
+    if not artifact_content_digest(artifact) or artifact.content_digest != (product.metadata.get("build") or {}).get("sha256"):
+        raise ValidationError("Release artifact digest differs from the Product build record.")
+
+
+def _manifest_snapshot(product, run, artifact):
+    _assert_release_evidence_current(run, product, artifact)
+    spec = product.metadata.get("spec") or {}
+    evidence = list(run.evidence.order_by("evidence_type").values(
+        "evidence_type", "prerequisite_digest", "spec_version", "artifact_version", "status", "details"
+    ))
+    markets = product.metadata.get("market_eligibility") or []
+    codes = sorted({str(item.get("market_code") or "").upper() for item in markets if isinstance(item, dict)})
+    return {
+        "run_id": run.run_id, "product_id": product.pk, "spec_version": run.current_spec_version,
+        "spec_digest": spec.get("digest") or digest(spec), "artifact_id": artifact.pk,
+        "artifact_digest": artifact_content_digest(artifact), "artifact_version": artifact.version,
+        "locales": sorted((product.metadata.get("localization") or {}).get("launch_locales") or []),
+        "markets": sorted(markets, key=lambda item: item.get("market_code", "")),
+        "policy_version": str(getattr(settings, "FACTORY_POLICY_VERSION", "factory-policy-v1")),
+        "evidence_digest": digest(evidence), "eligibility_digest": digest(market_eligibility_snapshot(codes)),
+    }
+
+
+def create_release_manifest(product, run, artifact):
+    snapshot = _manifest_snapshot(product, run, artifact)
+    manifest_digest = digest(snapshot)
+    manifest, _ = FactoryReleaseManifest.objects.get_or_create(
+        manifest_digest=manifest_digest,
+        defaults={
+            "run": run, "product": product, "artifact": artifact,
+            "spec_version": snapshot["spec_version"], "spec_digest": snapshot["spec_digest"],
+            "artifact_digest": snapshot["artifact_digest"], "locales": snapshot["locales"],
+            "markets": snapshot["markets"], "policy_version": snapshot["policy_version"],
+            "evidence_digest": snapshot["evidence_digest"], "eligibility_digest": snapshot["eligibility_digest"],
+            "snapshot": snapshot,
+        },
+    )
+    return manifest
+
+
+def release_manifest_is_current(manifest, product, run, artifact):
+    try:
+        return manifest.manifest_digest == digest(_manifest_snapshot(product, run, artifact))
+    except (ValidationError, TypeError, ValueError):
+        return False
+
+
+def bind_release_approval(approval_request):
+    """Bind a pending Product activation request before it can be approved."""
+    if (approval_request.action_type, approval_request.target_type) != ("activate_product", "Product"):
+        return
+    try:
+        product = Product.objects.get(pk=approval_request.target_id)
+        gate = product.factory_release_gate
+    except (Product.DoesNotExist, FactoryReleaseGate.DoesNotExist):
+        return
+    if not product.is_factory_managed:
+        return
+    invalidate_stale_evidence(product)
+    artifact = gate.artifact
+    manifest = create_release_manifest(product, gate.run, artifact)
+    gate.manifest = manifest
+    gate.status = "pending_owner_approval"
+    gate.save(update_fields=["manifest", "status", "updated_at"])
+    approval_request.release_manifest_digest = manifest.manifest_digest

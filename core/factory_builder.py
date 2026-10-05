@@ -22,7 +22,14 @@ class StaticResearchBriefBuilder:
             configured = Path(settings.BASE_DIR) / "factory-workspace"
         self.root = Path(configured).resolve()
 
-    def build(self, *, run_id, product_id, version, spec, evidence):
+    def build(self, *, run_id, product_id, version, spec, evidence, task,
+              authorization, authorization_check):
+        # Check the existing ToolGateway grant immediately before the first
+        # filesystem side effect (including workspace directory creation).
+        if not callable(authorization_check) or not authorization_check(
+            authorization, task, "product_build_record"
+        ):
+            raise FactoryBuildError("Builder file writes require current ToolGateway authorization.")
         if not run_id or any(part in str(run_id) for part in ("/", "\\", "..")):
             raise FactoryBuildError("Invalid Factory Run identifier.")
         if not isinstance(spec, dict) or not isinstance(spec.get("acceptance_criteria"), list):
