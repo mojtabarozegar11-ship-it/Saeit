@@ -125,100 +125,181 @@ def product_spec(payload):
     return {"verified_effect":True,"product_id":product.pk,"factory_state":"specified","spec":spec}
 
 
+def _current_artifact(product, run):
+    artifact = FactoryArtifact.objects.filter(product=product, run=run, version=run.current_artifact_version).first()
+    if not artifact or not artifact.content_digest:
+        raise ValueError("Current immutable build artifact is required.")
+    return artifact
+
+
 def product_build_record(payload):
     payload = _merge_output(payload, "product_build_record")
-    product=_product(payload)
-    if product.metadata.get("factory_state")!="specified":
+    product = _product(payload)
+    if product.metadata.get("factory_state") != "specified":
         raise ValueError("Product must be specified before build recording.")
-    artifact=payload.get("artifact") or {}
-    if not isinstance(artifact,dict) or not artifact.get("ref"):
-        raise ValueError("A versioned build artifact ref is required.")
-    run = FactoryRun.objects.filter(run_id=payload.get("__run_id")).first()
-    task = AgentTask.objects.filter(pk=payload.get("__task_id")).first()
-    if run and task:
-        version = run.current_artifact_version + 1
-        artifact_row = FactoryArtifact.objects.create(
-            product=product, run=run, created_by_task=task, version=version,
-            reference=str(artifact["ref"]), content_digest=str(artifact.get("sha256") or ""),
-            spec_version=run.current_spec_version,
-        )
-        run.current_artifact_version = version
-        run.save(update_fields=["current_artifact_version", "updated_at"])
-        artifact = {**artifact, "version": version, "artifact_id": artifact_row.pk}
-    else:
-        version = 0
-    product.metadata={**product.metadata,"factory_state":"built","build":artifact}
-    product.save(update_fields=["metadata","updated_at"])
-    return {"verified_effect":True,"product_id":product.pk,"factory_state":"built","artifact":artifact,"artifact_version":version}
+    artifact = payload.get("artifact") or {}
+    spec = product.metadata.get("spec") or {}
+    if not isinstance(artifact, dict) or not artifact.get("ref") or not artifact.get("sha256"):
+        raise ValueError("A versioned SHA-256 build artifact is required.")
+    if artifact.get("spec_digest") != spec.get("digest"):
+        raise ValueError("Build must bind the exact Product Spec digest.")
+    run = FactoryRun.objects.get(run_id=payload.get("__run_id"))
+    task = AgentTask.objects.get(pk=payload.get("__task_id"))
+    version = run.current_artifact_version + 1
+    artifact_row = FactoryArtifact.objects.create(
+        product=product, run=run, created_by_task=task, version=version,
+        reference=str(artifact["ref"]), content_digest=str(artifact["sha256"]),
+        spec_version=run.current_spec_version,
+    )
+    run.current_artifact_version = version
+    run.save(update_fields=["current_artifact_version", "updated_at"])
+    artifact = {**artifact, "version": version, "artifact_id": artifact_row.pk}
+    product.metadata = {**product.metadata, "factory_state": "built", "build": artifact}
+    product.save(update_fields=["metadata", "updated_at"])
+    return {"verified_effect": True, "product_id": product.pk, "factory_state": "built",
+            "artifact": artifact, "artifact_version": version}
 
 
-def product_qa(payload):
-    payload = _merge_output(payload, "product_qa")
-    product=_product(payload)
-    if product.metadata.get("factory_state")!="built":
-        raise ValueError("Product must be built before QA.")
-    tests=payload.get("tests") or {}
-    security=payload.get("security") or {}
-    if tests.get("passed") is not True or security.get("passed") is not True:
-        raise ValueError("Passing automated tests and security checks are required.")
-    product.metadata={**product.metadata,"factory_state":"qa_passed","qa":{"tests":tests,"security":security}}
-    product.save(update_fields=["metadata","updated_at"])
-    return {"verified_effect":True,"product_id":product.pk,"factory_state":"qa_passed","tests":tests,"security":security}
+def product_test(payload):
+    payload = _merge_output(payload, "product_test")
+    product = _product(payload)
+    if product.metadata.get("factory_state") != "built":
+        raise ValueError("Product must be built before independent Test.")
+    tests = payload.get("tests") or {}
+    build = product.metadata.get("build") or {}
+    if tests.get("passed") is not True or tests.get("build_digest") != build.get("sha256"):
+        raise ValueError("Independent Test must pass against the exact build digest.")
+    product.metadata = {**product.metadata, "factory_state": "tested", "test_attestation": tests}
+    product.save(update_fields=["metadata", "updated_at"])
+    return {"verified_effect": True, "product_id": product.pk, "factory_state": "tested", "tests": tests}
+
+
+def product_security(payload):
+    payload = _merge_output(payload, "product_security")
+    product = _product(payload)
+    if product.metadata.get("factory_state") != "tested":
+        raise ValueError("Product must pass independent Test before Security.")
+    security = payload.get("security") or {}
+    build = product.metadata.get("build") or {}
+    if security.get("passed") is not True or security.get("build_digest") != build.get("sha256"):
+        raise ValueError("Independent Security must pass against the exact build digest.")
+    if str(security.get("severity") or "").upper() in {"HIGH", "CRITICAL"}:
+        raise ValueError("HIGH/CRITICAL security findings block release progression.")
+    product.metadata = {**product.metadata, "factory_state": "security_verified", "security_attestation": security}
+    product.save(update_fields=["metadata", "updated_at"])
+    return {"verified_effect": True, "product_id": product.pk, "factory_state": "security_verified", "security": security}
 
 
 def product_localize(payload):
     payload = _merge_output(payload, "product_localize")
-    product=_product(payload)
-    if product.metadata.get("factory_state")!="qa_passed":
-        raise ValueError("Product must pass QA before localization.")
-    locales=payload.get("locales") or []
-    if not locales or not all(x in SUPPORTED_LOCALES for x in locales):
-        raise ValueError("At least one supported launch locale is required.")
-    product.metadata={**product.metadata,"factory_state":"localized","localization":{"launch_locales":locales,"architecture_locales":list(LANGUAGES)}}
-    product.save(update_fields=["metadata","updated_at"])
-    return {"verified_effect":True,"product_id":product.pk,"factory_state":"localized","locales":locales}
+    product = _product(payload)
+    if product.metadata.get("factory_state") != "security_verified":
+        raise ValueError("Product must pass independent Security before localization.")
+    localization = payload.get("localization") or {}
+    build = product.metadata.get("build") or {}
+    if localization.get("build_digest") != build.get("sha256"):
+        raise ValueError("Localization must bind the exact build digest.")
+    required = localization.get("required_locales") or []
+    locales = localization.get("locales") or []
+    completed = {x.get("locale") for x in locales if isinstance(x, dict) and x.get("status") == "complete"}
+    if not required or not set(required).issubset(completed):
+        raise ValueError("Every required release locale must be complete.")
+    if any(x not in SUPPORTED_LOCALES for x in required) or localization.get("fallback_locale") != "en":
+        raise ValueError("Localization policy requires supported locales and English fallback.")
+    product.metadata = {**product.metadata, "factory_state": "localized", "localization": localization}
+    product.save(update_fields=["metadata", "updated_at"])
+    return {"verified_effect": True, "product_id": product.pk, "factory_state": "localized", "localization": localization}
 
 
-def launch_candidate(payload):
-    payload = _merge_output(payload, "product_launch_candidate")
-    product=_product(payload)
-    if product.metadata.get("factory_state")!="localized":
-        raise ValueError("Product must be localized before launch candidacy.")
-    requested=payload.get("markets") or []
-    if not requested or not all(isinstance(x,dict) and (x.get("market_code") or x.get("country")) for x in requested):
-        raise ValueError("Market codes are required; eligibility must come from the owner-reviewed registry.")
-    codes = list(dict.fromkeys(str(x.get("market_code") or x.get("country")).strip().upper() for x in requested))
-    registry = {
-        item.market_code: item
-        for item in FactoryMarketEligibility.objects.filter(
-            market_code__in=codes, reviewed_by__is_superuser=True
-        ).select_related("reviewed_by")
-    }
+def product_market_eligibility(payload):
+    payload = _merge_output(payload, "product_market_eligibility")
+    product = _product(payload)
+    if product.metadata.get("factory_state") != "localized":
+        raise ValueError("Product must be localized before market eligibility.")
+    requested = payload.get("markets") or []
+    if not requested or not all(isinstance(x, dict) and x.get("market_code") for x in requested):
+        raise ValueError("Required markets must come from the owner-reviewed registry.")
+    codes = list(dict.fromkeys(str(x["market_code"]).strip().upper() for x in requested))
+    registry = {x.market_code: x for x in FactoryMarketEligibility.objects.filter(
+        market_code__in=codes, reviewed_by__is_superuser=True).select_related("reviewed_by")}
     now = timezone.now()
     markets = []
     for code in codes:
         item = registry.get(code)
         if not item:
             raise ValueError(f"Market {code} has no owner-reviewed eligibility record.")
-        if item.valid_until and item.valid_until <= now:
+        if item.valid_until is None or item.valid_until <= now:
             raise ValueError(f"Market {code} eligibility review is stale.")
-        if item.eligibility == FactoryMarketEligibility.ALLOWED and (
-            not item.evidence_reference or not item.review_note.strip() or not item.valid_until
-        ):
+        if item.eligibility != FactoryMarketEligibility.ALLOWED:
+            raise ValueError(f"Market {code} is not ALLOWED by the owner-reviewed registry.")
+        if not item.evidence_reference or not item.review_note.strip():
             raise ValueError(f"Market {code} has incomplete owner review evidence.")
-        markets.append({
-            "market_code": item.market_code,
-            "eligibility": item.eligibility,
-            "evidence_reference": item.evidence_reference,
-            "reviewed_at": item.reviewed_at.isoformat(),
-            "valid_until": item.valid_until.isoformat() if item.valid_until else None,
-        })
-    if not any(x["eligibility"]==FactoryMarketEligibility.ALLOWED for x in markets):
-        raise ValueError("At least one allowed launch market is required.")
-    product.metadata={**product.metadata,"factory_state":"launch_candidate","market_eligibility":markets,
-                      "launch_candidate_at":timezone.now().isoformat(),"owner_publish_approval_required":True}
-    product.save(update_fields=["metadata","updated_at"])
-    return {"verified_effect":True,"product_id":product.pk,"factory_state":"launch_candidate","owner_publish_approval_required":True,"markets":markets}
+        markets.append({"market_code": code, "eligibility": item.eligibility,
+                        "evidence_reference": item.evidence_reference,
+                        "reviewed_at": item.reviewed_at.isoformat(),
+                        "valid_until": item.valid_until.isoformat()})
+    product.metadata = {**product.metadata, "factory_state": "eligible", "market_eligibility": markets}
+    product.save(update_fields=["metadata", "updated_at"])
+    return {"verified_effect": True, "product_id": product.pk, "factory_state": "eligible", "markets": markets}
+
+
+def product_qa(payload):
+    payload = _merge_output(payload, "product_qa")
+    product = _product(payload)
+    if product.metadata.get("factory_state") != "eligible":
+        raise ValueError("Product must pass localization and market eligibility before QA.")
+    qa = payload.get("qa") or {}
+    build = product.metadata.get("build") or {}
+    spec = product.metadata.get("spec") or {}
+    tests = product.metadata.get("test_attestation") or {}
+    security = product.metadata.get("security_attestation") or {}
+    localization = product.metadata.get("localization") or {}
+    if qa.get("passed") is not True:
+        raise ValueError("Independent QA must pass.")
+    expected = {
+        "spec_digest": spec.get("digest"), "build_digest": build.get("sha256"),
+        "test_attestation_digest": tests.get("attestation_digest"),
+        "security_attestation_digest": security.get("attestation_digest"),
+        "localization_digest": canonical_digest(localization),
+        "eligibility_digest": canonical_digest(product.metadata.get("market_eligibility") or []),
+    }
+    if any(not value for value in expected.values()) or any(qa.get(k) != v for k, v in expected.items()):
+        raise ValueError("QA attestation does not match the exact current release lineage.")
+    product.metadata = {**product.metadata, "factory_state": "qa_passed", "qa_attestation": qa}
+    product.save(update_fields=["metadata", "updated_at"])
+    return {"verified_effect": True, "product_id": product.pk, "factory_state": "qa_passed", "qa": qa}
+
+
+def launch_candidate(payload):
+    payload = _merge_output(payload, "product_launch_candidate")
+    product = _product(payload)
+    if product.metadata.get("factory_state") != "qa_passed":
+        raise ValueError("Product must pass independent QA before launch candidacy.")
+    candidate = payload.get("launch_candidate") or {}
+    build = product.metadata.get("build") or {}
+    spec = product.metadata.get("spec") or {}
+    tests = product.metadata.get("test_attestation") or {}
+    security = product.metadata.get("security_attestation") or {}
+    localization = product.metadata.get("localization") or {}
+    markets = product.metadata.get("market_eligibility") or []
+    qa = product.metadata.get("qa_attestation") or {}
+    expected = {
+        "product_id": product.pk, "release_version": build.get("version"),
+        "spec_digest": spec.get("digest"), "build_digest": build.get("sha256"),
+        "test_attestation_digest": tests.get("attestation_digest"),
+        "security_attestation_digest": security.get("attestation_digest"),
+        "localization_digest": canonical_digest(localization),
+        "eligibility_digest": canonical_digest(markets),
+        "qa_attestation_digest": qa.get("attestation_digest"),
+    }
+    if any(not value for value in expected.values()) or any(candidate.get(k) != v for k, v in expected.items()):
+        raise ValueError("Launch Candidate does not bind the exact verified release lineage.")
+    product.metadata = {**product.metadata, "factory_state": "launch_candidate",
+                        "launch_candidate": candidate, "launch_candidate_at": timezone.now().isoformat(),
+                        "owner_publish_approval_required": True}
+    product.save(update_fields=["metadata", "updated_at"])
+    return {"verified_effect": True, "product_id": product.pk, "factory_state": "launch_candidate",
+            "launch_candidate": candidate, "owner_publish_approval_required": True}
 
 
 def build_factory_gateway():
@@ -228,7 +309,10 @@ def build_factory_gateway():
         ToolSpec(code="product_validation",handler=product_validation,risk="low"),
         ToolSpec(code="product_spec",handler=product_spec,risk="medium"),
         ToolSpec(code="product_build_record",handler=product_build_record,risk="medium"),
-        ToolSpec(code="product_qa",handler=product_qa,risk="medium"),
+        ToolSpec(code="product_test",handler=product_test,risk="medium"),
+        ToolSpec(code="product_security",handler=product_security,risk="medium"),
         ToolSpec(code="product_localize",handler=product_localize,risk="medium"),
+        ToolSpec(code="product_market_eligibility",handler=product_market_eligibility,risk="medium"),
+        ToolSpec(code="product_qa",handler=product_qa,risk="medium"),
         ToolSpec(code="product_launch_candidate",handler=launch_candidate,risk="medium"),
     ])
