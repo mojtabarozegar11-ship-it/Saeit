@@ -4,7 +4,7 @@ from django.utils import timezone
 from .models import Product
 from .tool_gateway import ToolGateway, ToolSpec
 
-LANGUAGES = ("en","zh-hans","hi","es","fr","ar","bn","pt","ru","ur","id","de","ja","sw","mr","te","tr","ta","vi","ko")
+LANGUAGES = ("en","zh-hans","hi","es","fr","ar","bn","pt","ru","ur","id","de","ja","sw","mr","te","tr","ta","vi","ko")\nSUPPORTED_LOCALES = LANGUAGES + ("fa",)
 
 
 def _product(payload):
@@ -85,7 +85,7 @@ def product_localize(payload):
     if product.metadata.get("factory_state")!="qa_passed":
         raise ValueError("Product must pass QA before localization.")
     locales=payload.get("locales") or []
-    if not locales or not all(x in LANGUAGES for x in locales):
+    if not locales or not all(x in SUPPORTED_LOCALES for x in locales):
         raise ValueError("At least one supported launch locale is required.")
     product.metadata={**product.metadata,"factory_state":"localized","localization":{"launch_locales":locales,"architecture_locales":list(LANGUAGES)}}
     product.save(update_fields=["metadata","updated_at"])
