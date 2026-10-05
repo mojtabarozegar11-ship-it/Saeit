@@ -42,7 +42,7 @@ def readiness():
     missing=[]
     checks={
       'ZARINPAL_MERCHANT_ID':bool(re.fullmatch(r'[A-Fa-f0-9-]{36}',os.getenv('ZARINPAL_MERCHANT_ID',''))),
-      'DJANGO_SECRET_KEY':len(settings.SECRET_KEY)>=40 and settings.SECRET_KEY!='change-me-before-production',
+      'SECRET_KEY':len(settings.SECRET_KEY)>=40 and settings.SECRET_KEY not in ('change-me','change-me-before-production'),
       'ZM_COSTKIT_SELLER':bool(os.getenv('ZM_COSTKIT_SELLER','').strip()),
       'ZM_COSTKIT_SUPPORT_EMAIL':bool(re.fullmatch(r'[^\s@]+@[^\s@]+\.[^\s@]+',os.getenv('ZM_COSTKIT_SUPPORT_EMAIL',''))),
       'ZM_COSTKIT_TERMS_APPROVED':os.getenv('ZM_COSTKIT_TERMS_APPROVED')==TERMS_VERSION,

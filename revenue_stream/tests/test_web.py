@@ -2,7 +2,7 @@ import io,os,tempfile,unittest,zipfile
 from unittest.mock import patch
 os.environ.setdefault('DJANGO_SETTINGS_MODULE','revenue_stream.test_settings')
 import django;django.setup()
-from django.test import Client
+from django.test import Client,override_settings
 from revenue_stream import views,config
 
 class FakeGateway:
@@ -35,6 +35,16 @@ class WebTests(unittest.TestCase):
   with patch('revenue_stream.views.gateway') as gateway:
    r=self.c.get('/costkit/checkout/',secure=True);self.assertEqual(r.status_code,503);gateway.assert_not_called()
   self.assertEqual(views.store().metrics()['paid_orders'],0)
+ def test_readiness_reports_actual_django_secret_setting(self):
+  with override_settings(SECRET_KEY='change-me'):
+   missing=config.readiness()
+  self.assertIn('SECRET_KEY',missing)
+  self.assertNotIn('DJANGO_SECRET_KEY',missing)
+ def test_sandbox_gateway_is_selectable_but_never_live_ready(self):
+  with patch.dict(os.environ,{'ZARINPAL_MERCHANT_ID':'a'*36,'ZARINPAL_SANDBOX':'1'}):
+   adapter=views.gateway();missing=config.readiness()
+  self.assertEqual(adapter.base,'https://sandbox.zarinpal.com')
+  self.assertIn('production_gateway',missing)
  def test_csrf_required(self):
   with patch('revenue_stream.views.readiness',return_value=[]):self.assertEqual(self.c.post('/costkit/checkout/',{},secure=True).status_code,403)
  def test_paid_delivery_valid_zip(self):

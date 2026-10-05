@@ -13,7 +13,7 @@ from .gateway import Zarinpal,GatewayError
 from .config import ROOT,TERMS_VERSION,price,readiness,package,artifact_hash,data_path,archive_package,archived
 
 def store(): return Store(data_path())
-def gateway(): return Zarinpal(os.getenv('ZARINPAL_MERCHANT_ID',''))
+def gateway(): return Zarinpal(os.getenv('ZARINPAL_MERCHANT_ID',''),sandbox=os.getenv('ZARINPAL_SANDBOX','0')=='1')
 def secure_response(r):
     r['Cache-Control']='no-store, private';r['Referrer-Policy']='no-referrer';r['X-Robots-Tag']='noindex, nofollow';r['X-Content-Type-Options']='nosniff';return r
 def private(view):

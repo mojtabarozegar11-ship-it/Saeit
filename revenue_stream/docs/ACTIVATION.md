@@ -3,7 +3,7 @@
 ## 1. Current blockers
 
 - `ZARINPAL_MERCHANT_ID`: absent in reviewed production environment; obtain a legitimate approved merchant for the actual seller, domain and permitted product. Provider KYC and any applicable business requirements belong to the human owner.
-- `DJANGO_SECRET_KEY`: absent in the reviewed loader inputs; production settings contain an insecure fallback. Owner must approve a strong server-side secret and session invalidation/rotation. Never print its value or place it in Git. Check cPanel/runtime environment before changing anything to avoid replacing an independently configured key.
+- `SECRET_KEY`: the production project `.env` exists with mode 0600 and Django resolves a weak/short value. The earlier probe looked for `SECRET_KEY`, the wrong name. Verify the effective Passenger Application Manager value without displaying it. Owner approval is required before replacing a key because active sessions will be invalidated.
 - Seller identity, public support contact, refund/support terms and ability to meet the proposed support target need owner approval.
 - Real sandbox/merchant tests, physical mobile use, browser UX and independent security review are incomplete.
 - Production deployment itself requires explicit owner approval under the current mission.
@@ -14,7 +14,7 @@ Configure these through the existing protected environment loader, never the fro
 
 | Key | Required value/action |
 |---|---|
-| `DJANGO_SECRET_KEY` | Strong unique secret; approve rotation and session effects |
+| `SECRET_KEY` | Strong unique secret; approve rotation and session effects |
 | `ZARINPAL_MERCHANT_ID` | Actual approved merchant identifier |
 | `ZARINPAL_SANDBOX` | `0` for live. Live checkout deliberately refuses sandbox mode |
 | `ZM_COSTKIT_SELLER` | Verified legal seller display identity |
@@ -25,6 +25,12 @@ Configure these through the existing protected environment loader, never the fro
 | `ZM_COSTKIT_RELEASE_SHA256` | Exact SHA-256 of deterministic product ZIP approved by owner |
 | `ZM_COSTKIT_LIVE` | Keep absent/`0` until all checks and explicit launch approval; `1` enables checkout |
 | `ZM_COSTKIT_DATA_DIR` | Private persistent directory, e.g. `/home/zomorod2/Saeit/var/moj/costkit` |
+
+### Django secret setup — owner action required
+
+The current `config/settings.py` reads the environment variable `SECRET_KEY`; it does not read `DJANGO_SECRET_KEY`. It also loads `BASE_DIR/.env` and defaults to the weak value `change-me`. With `DEBUG=False`, startup is blocked until a real key is configured. Do not overwrite a currently configured key until the owner confirms it is safe to rotate.
+
+In cPanel, open **Software → Application Manager**, find the existing Django/Passenger application, choose **Edit**, and under **Environment Variables** choose **Add Variable**. Set the variable name to `SECRET_KEY`, paste a newly generated Django key directly into the hosting form, click **Save**, then **Deploy**. Generate it inside the hosting terminal with `python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"`; it is a random 50-character key. Never copy it to chat, GitHub, frontend files or logs. If Application Manager is unavailable, use the hosting provider's per-application environment-variable facility. The fallback `BASE_DIR/.env` file must be private, mode 0600, excluded from Git, and inaccessible from the public document root; restart Passenger after configuration.
 
 SMTP is not required for this first delivery path: buyers receive their file and ticket replies inside the order portal. Do not enable an unreviewed email path to bypass the shared Communication Core. Marketing consent is not inferred from purchase.
 
