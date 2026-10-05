@@ -1,5 +1,6 @@
 import json
 import uuid
+import time
 from django.core.management.base import BaseCommand, CommandError
 from django.core.management import call_command
 from django.conf import settings
@@ -65,8 +66,10 @@ class Command(BaseCommand):
             if not task:
                 delayed = run.tasks.filter(status="queued", next_retry_at__gt=timezone.now()).order_by("next_retry_at", "pk").first()
                 if delayed:
-                    self.stdout.write(f"FACTORY_WAIT run={run_id} task={delayed.pk} retry_at={delayed.next_retry_at}")
-                    return
+                    wait_seconds = max(0.0, (delayed.next_retry_at - timezone.now()).total_seconds())
+                    self.stdout.write(f"FACTORY_RETRY_WAIT run={run_id} task={delayed.pk} retry_at={delayed.next_retry_at}")
+                    time.sleep(min(wait_seconds, 300.0))
+                    continue
                 active = run.tasks.filter(status="running").order_by("created_at", "pk").first()
                 if active:
                     RecoveryScheduler().recover(limit=50, stale_after_seconds=900)
@@ -105,12 +108,17 @@ class Command(BaseCommand):
                     run.status = "blocked"
                     run.save(update_fields=["status", "updated_at"])
                     self.stdout.write(f"FACTORY_BLOCKED run={run_id} task={task.pk} reason={str(exc)[:500]}")
-                else:
-                    self.stdout.write(f"FACTORY_RETRY run={run_id} task={task.pk} next={task.next_retry_at} reason={str(exc)[:300]}")
-                return
+                    return
+                self.stdout.write(f"FACTORY_RETRY run={run_id} task={task.pk} next={task.next_retry_at} reason={str(exc)[:300]}")
+                continue
             self.stdout.write(self.style.SUCCESS(
                 f"FACTORY_STEP run={run_id} step={step + 1} task={done.pk} action={done.action_type} verified=True"
             ))
+            if done.action_type == "product_launch_candidate":
+                self.stdout.write(self.style.SUCCESS(
+                    f"FACTORY_LAUNCH_CANDIDATE run={run_id} product={done.output_data.get('product_id')} published=False deployed=False"
+                ))
+                return
         self.stdout.write(f"FACTORY_PAUSED run={run_id} reason=max_steps; resume with --run-id {run_id}")
 
     def run_economic(self, opts):
