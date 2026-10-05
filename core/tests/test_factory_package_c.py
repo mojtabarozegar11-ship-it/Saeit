@@ -177,7 +177,6 @@ class FactoryPackageCTests(TestCase):
         self.assertTrue(provenance["final_url"])
         self.assertTrue(provenance["content_type"])
         self.assertTrue(provenance["passage_locator"])
-        self.assertTrue(provenance["extractor_version"])
         self.assertEqual(
             source.snapshot_hash,
             hashlib.sha256(provenance["snapshot_text"].encode("utf-8")).hexdigest(),

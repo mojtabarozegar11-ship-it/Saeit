@@ -1,6 +1,7 @@
 """Independent Product Factory verification, freshness, and release gates."""
 import hashlib
 import json
+import os
 from pathlib import Path
 from datetime import timedelta
 
@@ -507,7 +508,10 @@ def _assert_real_research_for_release(product):
     research = (product.metadata or {}).get("research") or {}
     if research.get("real_research") is not True:
         raise ValidationError("Fixture/non-real Research evidence cannot qualify for a production release.")
-    configured_provider = str(getattr(settings, "FACTORY_RESEARCH_PROVIDER", "") or "").strip()
+    configured_provider = str(
+        getattr(settings, "FACTORY_RESEARCH_PROVIDER", "")
+        or os.environ.get("FACTORY_RESEARCH_PROVIDER", "")
+    ).strip()
     if not configured_provider:
         raise ValidationError("No configured real Research Provider is available for release verification.")
     project = ResearchProject.objects.filter(pk=research.get("research_project_id")).first()
