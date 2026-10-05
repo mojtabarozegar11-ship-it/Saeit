@@ -138,6 +138,54 @@ class FactoryToolPackTests(TestCase):
         next_step = brain.decide_product_factory_step(product.pk)
         self.assertEqual(next_step["action"], "product_opportunity_score")
 
+    def test_master_routes_complete_lifecycle_through_specialists_and_runtime(self):
+        call_command("seed_factory_agents", stdout=StringIO())
+        owner = get_user_model().objects.create_superuser(
+            username="e2e-factory-owner", email="e2e-owner@example.com", password="test-only"
+        )
+        FactoryMarketEligibility.objects.create(
+            market_code="US", eligibility=FactoryMarketEligibility.ALLOWED,
+            evidence_reference="https://example.com/market-review", review_note="Test fixture review.",
+            reviewed_by=owner, reviewed_at=timezone.now(), valid_until=timezone.now() + timedelta(days=30),
+        )
+        payloads = [
+            {"title":"Farm harvest log", "sources":[
+                {"url":"https://example.com/demand", "finding":"Small farms need harvest records."},
+                {"url":"https://example.com/competition", "finding":"Current tools are too complex."},
+            ]},
+            {"score":82, "rationale":"Evidence supports a narrow, low-risk utility."},
+            {"spec":{"problem":"Manual harvest records are fragmented.", "acceptance_criteria":["Records a harvest entry.", "Exports a daily summary."]}},
+            {"artifact":{"ref":"test-artifact:sha256:fixture-v1"}},
+            {"tests":{"passed":True, "run_id":"fixture-tests-1"}, "security":{"passed":True, "run_id":"fixture-security-1"}},
+            {"locales":["en", "fa"]},
+            {"markets":[{"market_code":"US"}]},
+        ]
+        brain = AutonomousBrain()
+        product_id = None
+        task_ids = []
+        for payload in payloads:
+            task = brain.plan_product_factory_step(payload=payload, product_id=product_id)
+            self.assertEqual(task.status, "queued")
+            task_ids.append(task.pk)
+            output = StringIO()
+            call_command("factory_product_step", task_id=task.pk, stdout=output)
+            task.refresh_from_db()
+            self.assertEqual(task.status, "completed", output.getvalue())
+            product_id = task.output_data["product_id"]
+
+        product = Product.objects.get(pk=product_id)
+        self.assertEqual(
+            [entry["state"] for entry in product.metadata["factory_history"]],
+            ["researched", "scored", "specified", "built", "qa_passed", "localized", "launch_candidate"],
+        )
+        self.assertEqual(list(AgentTask.objects.filter(pk__in=task_ids).order_by("created_at", "pk").values_list("action_type", flat=True)), [
+            "product_research", "product_opportunity_score", "product_spec", "product_build_record",
+            "product_qa", "product_localize", "product_launch_candidate",
+        ])
+        self.assertFalse(product.active)
+        self.assertEqual(brain.decide_product_factory_step(product.pk)["action"], "owner_approval_boundary")
+        self.assertEqual(AuditLog.objects.filter(action="factory_next_step_planned").count(), len(payloads))
+
     def test_runtime_rejects_success_claim_without_persisted_product_effect(self):
         agent = Agent.objects.create(code="factory-noop-agent", name="Factory no-op", mission="Score", active=True)
         capability = AgentCapability.objects.create(code="product_opportunity_score", name="Score", active=True)
