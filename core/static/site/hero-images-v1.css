@@ -1,8 +1,10 @@
 /* Topic-specific website imagery; these are design assets, not company gallery/news media. */
 :root{--hero-copy-overlay:linear-gradient(270deg,rgba(5,17,12,.94) 0%,rgba(5,17,12,.78) 44%,rgba(5,17,12,.18) 100%)}
-.home-luxury .home-hero-lux,.services-page .services-hero,.page-agriculture .ag-hero,.page-industry .ind-hero,.page-research .res-hero,.page-economy .eco-hero,.page-knowledge .know-hero,.page-market .market-hero,.page-agents .agent-hero,.page-studio .studio-hero,.page-academy .education-hero,.page-weather .weather-hero-v2,.page-newsletter .newsletter-hero,.page-blog .blog-v2-hero,.page-store .store-hero,.page-auctions .auctions-hero{background-size:cover;background-position:center;background-repeat:no-repeat;color:#fff}
+.home-luxury .home-hero-lux,.services-page .services-hero,.page-about .about-hero,.page-contact .contact-hero,.page-agriculture .ag-hero,.page-industry .ind-hero,.page-research .res-hero,.page-economy .eco-hero,.page-knowledge .know-hero,.page-market .market-hero,.page-agents .agent-hero,.page-studio .studio-hero,.page-academy .education-hero,.page-weather .weather-hero-v2,.page-newsletter .newsletter-hero,.page-blog .blog-v2-hero,.page-store .store-hero,.page-auctions .auctions-hero{background-size:cover;background-position:center;background-repeat:no-repeat;color:#fff}
 .home-luxury .home-hero-lux{background-image:var(--hero-copy-overlay),url("/static/site/heroes/platform-home.webp")}
 .services-page .services-hero{background-image:var(--hero-copy-overlay),url("/static/site/heroes/services.webp")}
+.page-about .about-hero{background-image:var(--hero-copy-overlay),url("/static/site/heroes/about.webp")}
+.page-contact .contact-hero{background-image:var(--hero-copy-overlay),url("/static/site/heroes/contact.webp")}
 .page-agriculture .ag-hero{background-image:var(--hero-copy-overlay),url("/static/site/heroes/agriculture.webp")}
 .page-industry .ind-hero{background-image:var(--hero-copy-overlay),url("/static/site/heroes/industry.webp")}
 .page-research .res-hero{background-image:var(--hero-copy-overlay),url("/static/site/heroes/research.webp")}
@@ -51,7 +53,7 @@
 .studio-cta{display:flex;align-items:center;justify-content:space-between;gap:24px;border-top:1px solid rgba(47,62,53,.14)}
 .studio-cta a{display:inline-flex;align-items:center;justify-content:center;padding:14px 22px;border-radius:999px;background:#173b2e;color:#fff;text-decoration:none;white-space:nowrap}
 @media(max-width:700px){
- .home-luxury .home-hero-lux,.services-page .services-hero,.page-agriculture .ag-hero,.page-industry .ind-hero,.page-research .res-hero,.page-economy .eco-hero,.page-knowledge .know-hero,.page-market .market-hero,.page-agents .agent-hero,.page-studio .studio-hero,.page-academy .education-hero,.page-weather .weather-hero-v2,.page-newsletter .newsletter-hero,.page-blog .blog-v2-hero,.page-store .store-hero,.page-auctions .auctions-hero{background-position:58% center}
+ .home-luxury .home-hero-lux,.services-page .services-hero,.page-about .about-hero,.page-contact .contact-hero,.page-agriculture .ag-hero,.page-industry .ind-hero,.page-research .res-hero,.page-economy .eco-hero,.page-knowledge .know-hero,.page-market .market-hero,.page-agents .agent-hero,.page-studio .studio-hero,.page-academy .education-hero,.page-weather .weather-hero-v2,.page-newsletter .newsletter-hero,.page-blog .blog-v2-hero,.page-store .store-hero,.page-auctions .auctions-hero{background-position:58% center}
  .store-hero,.auctions-hero{min-height:440px;padding:72px 24px}
  .studio-hero{min-height:480px;padding:72px 24px}
  .studio-cta{align-items:flex-start;flex-direction:column}

@@ -11,6 +11,8 @@
 {% if request.path == "/" %}<link rel="preload" as="image" href="{% static 'site/heroes/platform-home.webp' %}" fetchpriority="high">
 {% elif request.path == "/services/" %}<link rel="preload" as="image" href="{% static 'site/heroes/services.webp' %}" fetchpriority="high">
 {% elif request.path == "/agriculture/" %}<link rel="preload" as="image" href="{% static 'site/heroes/agriculture.webp' %}" fetchpriority="high">
+{% elif request.path == "/about/" %}<link rel="preload" as="image" href="{% static 'site/heroes/about.webp' %}" fetchpriority="high">
+{% elif request.path == "/contact/" %}<link rel="preload" as="image" href="{% static 'site/heroes/contact.webp' %}" fetchpriority="high">
 {% elif request.path == "/industry/" %}<link rel="preload" as="image" href="{% static 'site/heroes/industry.webp' %}" fetchpriority="high">
 {% elif request.path == "/research/" %}<link rel="preload" as="image" href="{% static 'site/heroes/research.webp' %}" fetchpriority="high">
 {% elif request.path == "/knowledge/" %}<link rel="preload" as="image" href="{% static 'site/heroes/knowledge.webp' %}" fetchpriority="high">
