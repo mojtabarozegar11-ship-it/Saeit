@@ -90,6 +90,7 @@ class FixtureResearchProvider(ResearchProvider):
                 "query": plan["queries"][0], "provider_request_id": f"fixture-{key}-request-v1",
                 "retrieved_at": now, "content_type": "text/plain", "snapshot": snapshot,
                 "snapshot_sha256": hashlib.sha256(snapshot.encode("utf-8")).hexdigest(),
+                "snapshot_hash": hashlib.sha256(snapshot.encode("utf-8")).hexdigest(),
                 "passage": passage, "passage_locator": {"line": 3},
                 "extractor_version": self.extractor_version, "source_type": "secondary",
                 "confidence": "0.80" if key == "demand" else "0.75",
