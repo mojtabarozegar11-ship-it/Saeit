@@ -26,7 +26,7 @@ def product_research(payload):
     product = Product.objects.create(
         title=title, product_type=str(payload.get("product_type") or "digital"),
         price=0, currency=str(payload.get("currency") or "USD"), active=False,
-        metadata={"factory_state":"researched","research":{"sources":sources,"market":payload.get("market","global")},
+        metadata={"factory_state":"researched","research":{"sources":sources,"market":payload.get("market","global"),"evidence":payload.get("evidence",[]),"research_project_id":payload.get("research_project_id"),"research_report_id":payload.get("research_report_id"),"research_provider":payload.get("research_provider"),"real_research":payload.get("real_research") is True},
                   "created_at":timezone.now().isoformat(),"languages_target":list(LANGUAGES)}
     )
     run = FactoryRun.objects.filter(run_id=payload.get("__run_id")).first()

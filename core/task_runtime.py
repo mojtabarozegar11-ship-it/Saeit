@@ -107,10 +107,9 @@ class TaskRuntime:
             task.status = "queued"
             task.execution_id = ""
             task.next_retry_at = timezone.now() + timedelta(seconds=min(30 * (2 ** max(task.attempt_count - 1, 0)), 300)) if str(task.capability_code or "").startswith("product_") else None
-            task.output_data = {
-                "error": "Execution became stale and was re-queued for recovery",
-                "retry_after": task.next_retry_at.isoformat(),
-            }
+            task.output_data = {"error": "Execution became stale and was re-queued for recovery"}
+            if task.next_retry_at:
+                task.output_data["retry_after"] = task.next_retry_at.isoformat()
         task.save(update_fields=["status", "execution_id", "next_retry_at", "output_data", "updated_at"])
         self._audit(
             task,

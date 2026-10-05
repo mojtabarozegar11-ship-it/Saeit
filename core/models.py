@@ -33,7 +33,7 @@ class ResearchSource(T):
     publisher = models.CharField(max_length=300, blank=True)
     content_hash = models.CharField(max_length=128, blank=True)
     retrieved_at = models.DateTimeField(default=timezone.now)
-    provenance = models.JSONField(default=dict)
+    provenance = models.JSONField(default=dict, blank=True)
     snapshot_hash = models.CharField(max_length=64, blank=True, default="")
 
     def clean(self):

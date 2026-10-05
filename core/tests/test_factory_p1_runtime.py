@@ -7,6 +7,7 @@ from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.test import TestCase, override_settings
 from io import StringIO
+from unittest.mock import patch
 
 from core.autonomous_brain import AutonomousBrain
 from core.factory_agent_runtime import FactoryAgentBlocked, FactoryAgentRuntime, FixtureResearchProvider
@@ -18,14 +19,7 @@ from core.task_runtime import TaskRuntime
 from core.worker_runner import WorkerRunner
 
 
-class P1FixtureResearchProvider(FixtureResearchProvider):
-    """Explicit test-only provider used by the master-loop E2E test."""
-
-
-@override_settings(
-    FACTORY_ENVIRONMENT="development",
-    FACTORY_RESEARCH_PROVIDER="core.tests.test_factory_p1_runtime.P1FixtureResearchProvider",
-)
+@override_settings(FACTORY_ENVIRONMENT="development")
 class FactoryP1RuntimeTests(TestCase):
     def setUp(self):
         call_command("seed_factory_agents", verbosity=0)
@@ -52,7 +46,12 @@ class FactoryP1RuntimeTests(TestCase):
         self.assertNotIn("tests", first.input_data)
         self.assertNotIn("security", first.input_data)
 
-        with override_settings(FACTORY_WORKSPACE_ROOT=self.tempdir.name):
+        executor = FactoryAgentRuntime(
+            research_provider=FixtureResearchProvider(),
+            builder=StaticResearchBriefBuilder(self.tempdir.name),
+            verifier=StaticResearchBriefVerifier(),
+        )
+        with patch("core.management.commands.autonomous_master_loop.FactoryAgentRuntime", return_value=executor):
             output = StringIO()
             call_command(
                 "autonomous_master_loop", factory=True, goal=self.goal, run_id=self.run_id,

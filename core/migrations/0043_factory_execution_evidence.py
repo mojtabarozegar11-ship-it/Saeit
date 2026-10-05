@@ -8,7 +8,7 @@ class Migration(migrations.Migration):
 
     operations = [
         migrations.AddField(model_name="researchsource", name="retrieved_at", field=models.DateTimeField(default=django.utils.timezone.now)),
-        migrations.AddField(model_name="researchsource", name="provenance", field=models.JSONField(default=dict)),
+        migrations.AddField(model_name="researchsource", name="provenance", field=models.JSONField(blank=True, default=dict)),
         migrations.AddField(model_name="researchsource", name="snapshot_hash", field=models.CharField(blank=True, default="", max_length=64)),
         migrations.AddField(model_name="agenttask", name="next_retry_at", field=models.DateTimeField(blank=True, null=True)),
         migrations.AddField(
