@@ -93,6 +93,13 @@ def bridge_dispatch(request):
     effective_risk = registry.effective_risk(capability, str(payload.get("risk", "low")))
     from .services import requires_owner_approval
     approval_required = requires_owner_approval(action, effective_risk)
+    if approval_required:
+        trace_id = f"bridge-{uuid.uuid4().hex}"
+        _audit("bridge_dispatch_rejected", after_state={"action": action, "reason": "owner_approval_required", "risk": effective_risk}, trace_id=trace_id)
+        return JsonResponse({
+            "status": "denied", "reason": "owner_approval_required",
+            "risk": effective_risk, "trace_id": trace_id,
+        }, status=403)
     task = AgentTask.objects.create(
         agent=agent,
         action_type=action,
@@ -118,7 +125,7 @@ def bridge_dispatch(request):
         trace_id=trace_id,
     )
     return JsonResponse({
-        "status": "blocked" if approval_required else "queued",
+        "status": "queued",
         "task_id": task.pk,
         "action": action,
         "agent": agent.code,
