@@ -196,8 +196,11 @@ class TaskRuntime:
             "product_validation": "validated",
             "product_spec": "specified",
             "product_build_record": "built",
-            "product_qa": "qa_passed",
+            "product_test": "tested",
+            "product_security": "security_verified",
             "product_localize": "localized",
+            "product_market_eligibility": "eligible",
+            "product_qa": "qa_passed",
             "product_launch_candidate": "launch_candidate",
         }
         expected = expected_states.get(task.action_type)
@@ -243,14 +246,22 @@ class TaskRuntime:
             raise TaskExecutionError("Product specification is missing acceptance criteria")
         elif task.action_type == "product_build_record" and not (metadata.get("build") or {}).get("ref"):
             raise TaskExecutionError("Product build has no persisted versioned artifact reference")
-        elif task.action_type == "product_qa":
-            qa = metadata.get("qa") or {}
-            if (qa.get("tests") or {}).get("passed") is not True or (qa.get("security") or {}).get("passed") is not True:
-                raise TaskExecutionError("QA and security evidence are not both passing")
+        elif task.action_type == "product_test":
+            if (metadata.get("test_attestation") or {}).get("passed") is not True:
+                raise TaskExecutionError("Independent Test attestation was not persisted")
+        elif task.action_type == "product_security":
+            if (metadata.get("security_attestation") or {}).get("passed") is not True:
+                raise TaskExecutionError("Independent Security attestation was not persisted")
         elif task.action_type == "product_localize":
-            locales = (metadata.get("localization") or {}).get("launch_locales") or []
-            if not locales or locales != output.get("locales"):
-                raise TaskExecutionError("Launch locale evidence was not persisted")
+            localization = metadata.get("localization") or {}
+            if not localization.get("required_locales") or localization != output.get("localization"):
+                raise TaskExecutionError("Release-bound localization attestation was not persisted")
+        elif task.action_type == "product_market_eligibility":
+            if not metadata.get("market_eligibility"):
+                raise TaskExecutionError("Owner-reviewed market eligibility was not persisted")
+        elif task.action_type == "product_qa":
+            if (metadata.get("qa_attestation") or {}).get("passed") is not True:
+                raise TaskExecutionError("Independent QA attestation was not persisted")
         elif task.action_type == "product_launch_candidate":
             markets = metadata.get("market_eligibility") or []
             if product.active or metadata.get("owner_publish_approval_required") is not True:
