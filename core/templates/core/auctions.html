@@ -1,14 +1,15 @@
 {% extends "base.html" %}
+{% load static %}
 {% block title %}مزایدات شرکت — Zomorodmelal{% endblock %}
+{% block meta_description %}اطلاعیه مزایدات شرکت کشت و صنعت زمرد ملل؛ فرصت‌ها تنها پس از ثبت و انتشار رسمی در این صفحه نمایش داده می‌شوند.{% endblock %}
+{% block body_class %}page-auctions commerce-page{% endblock %}
 {% block content %}
-<div class="luxury-page" style="padding:70px 6vw;background:#111815;color:#f4efe3;min-height:80vh">
-  <span style="letter-spacing:.16em;color:#c7a65f">COMPANY AUCTIONS</span>
-  <h1 style="font-size:clamp(2.4rem,6vw,5rem);margin:.5rem 0">مزایدات شرکت</h1>
-  <p style="max-width:850px;line-height:2;color:#c9c5bb">فرصت‌های مزایده فقط پس از ثبت و انتشار رسمی در این بخش نمایش داده می‌شوند.</p>
-  {% if auctions %}
-  <div>{% for auction in auctions %}<article><h2>{{ auction.title }}</h2></article>{% endfor %}</div>
-  {% else %}
-  <div style="margin-top:35px;padding:28px;border:1px solid rgba(199,166,95,.3)">در حال حاضر مزایده منتشرشده‌ای برای نمایش وجود ندارد.</div>
-  {% endif %}
+<div class="commerce-page auctions-page">
+  <section class="auctions-hero"><span>COMPANY AUCTIONS · OFFICIAL NOTICES</span><h1>مزایدات شرکت</h1><p>فرصت‌های مزایده فقط پس از ثبت و انتشار رسمی در این بخش نمایش داده می‌شوند.</p></section>
+  <section class="auctions-list" aria-labelledby="auctions-title">
+    <header><span>OFFICIAL OPPORTUNITIES</span><h2 id="auctions-title">فرصت‌های منتشرشده</h2></header>
+    {% if auctions %}<div class="auction-grid">{% for auction in auctions %}<article><h3>{{ auction.title }}</h3></article>{% endfor %}</div>
+    {% else %}<div class="auction-empty" role="status">در حال حاضر مزایده منتشرشده‌ای برای نمایش وجود ندارد.</div>{% endif %}
+  </section>
 </div>
 {% endblock %}

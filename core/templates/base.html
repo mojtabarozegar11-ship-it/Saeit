@@ -7,7 +7,25 @@
 <meta name="description" content="{% block meta_description %}Zomorodmelal؛ پلتفرم خدماتی یکپارچه با خدمات، آموزش، هوش مصنوعی، آب‌وهوا، اقتصاد، استودیو، دانشنامه و شرکت{% endblock %}">
 <title>{% block title %}Zomorodmelal — پلتفرم خدماتی یکپارچه{% endblock %}</title>
 <link rel="icon" type="image/png" href="{% static 'site/company/company-logo.png' %}">
-<link rel="canonical" href="https://zomorodmelal.ir{{ request.path }}">
+<link rel="canonical" href="https://zomorodmelal.ir{% if request.path == "/academy/" %}/education/{% else %}{{ request.path }}{% endif %}">
+{% if request.path == "/" %}<link rel="preload" as="image" href="{% static 'site/heroes/platform-home.webp' %}" fetchpriority="high">
+{% elif request.path == "/services/" %}<link rel="preload" as="image" href="{% static 'site/heroes/services.webp' %}" fetchpriority="high">
+{% elif request.path == "/agriculture/" %}<link rel="preload" as="image" href="{% static 'site/heroes/agriculture.webp' %}" fetchpriority="high">
+{% elif request.path == "/about/" %}<link rel="preload" as="image" href="{% static 'site/heroes/about.webp' %}" fetchpriority="high">
+{% elif request.path == "/contact/" %}<link rel="preload" as="image" href="{% static 'site/heroes/contact.webp' %}" fetchpriority="high">
+{% elif request.path == "/industry/" %}<link rel="preload" as="image" href="{% static 'site/heroes/industry.webp' %}" fetchpriority="high">
+{% elif request.path == "/research/" %}<link rel="preload" as="image" href="{% static 'site/heroes/research.webp' %}" fetchpriority="high">
+{% elif request.path == "/knowledge/" %}<link rel="preload" as="image" href="{% static 'site/heroes/knowledge.webp' %}" fetchpriority="high">
+{% elif request.path == "/economy/" %}<link rel="preload" as="image" href="{% static 'site/heroes/economy.webp' %}" fetchpriority="high">
+{% elif request.path == "/market/" %}<link rel="preload" as="image" href="{% static 'site/heroes/marketplace.webp' %}" fetchpriority="high">
+{% elif request.path == "/agents/" %}<link rel="preload" as="image" href="{% static 'site/heroes/ai.webp' %}" fetchpriority="high">
+{% elif request.path == "/education/" or request.path == "/academy/" %}<link rel="preload" as="image" href="{% static 'site/heroes/academy.webp' %}" fetchpriority="high">
+{% elif request.path == "/studio/" %}<link rel="preload" as="image" href="{% static 'site/heroes/game-studio.webp' %}" fetchpriority="high">
+{% elif request.path == "/weather/" %}<link rel="preload" as="image" href="{% static 'site/heroes/weather.webp' %}" fetchpriority="high">
+{% elif request.path == "/newsletter/" %}<link rel="preload" as="image" href="{% static 'site/heroes/newsletter.webp' %}" fetchpriority="high">
+{% elif request.path == "/blog/" %}<link rel="preload" as="image" href="{% static 'site/heroes/blog.webp' %}" fetchpriority="high">
+{% elif request.path == "/store/" %}<link rel="preload" as="image" href="{% static 'site/heroes/store.webp' %}" fetchpriority="high">
+{% elif request.path == "/auctions/" %}<link rel="preload" as="image" href="{% static 'site/heroes/auctions.webp' %}" fetchpriority="high">{% endif %}
 <link rel="stylesheet" href="{% static 'site/main.css' %}">
 <link rel="stylesheet" href="{% static 'site/site-standard-v1.css' %}">
 <link rel="stylesheet" href="{% static 'site/luxury-pages.css' %}">
@@ -16,6 +34,7 @@
 <link rel="stylesheet" href="{% static 'site/site-standard-v2.css' %}">
 <link rel="stylesheet" href="{% static 'site/site-rtl-standard-v1.css' %}">
 <link rel="stylesheet" href="{% static 'site/site-polish-v3.css' %}">
+<link rel="stylesheet" href="{% static 'site/hero-images-v1.css' %}">
 {% block page_head %}<script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","@id":"https://zomorodmelal.ir/#organization","name":"شرکت کشت و صنعت زمرد ملل","legalName":"شرکت کشت و صنعت زمرد ملل","url":"https://zomorodmelal.ir/","logo":"https://zomorodmelal.ir/static/site/company/company-logo.png","telephone":"+989022048691","foundingDate":"2019-11-07","description":"شرکت کشت و صنعت زمرد ملل؛ ساختار پژوهش‌محور، دانش، فناوری و توسعه زنجیره‌های تخصصی.","employee":{"@type":"Person","name":"مجتبی روزگار","jobTitle":"محقق و پژوهشگر / مدیرعامل شرکت کشت و صنعت زمرد ملل"}}</script>{% endblock %}
 </head>
 <body class="site-standard-v2 {% block body_class %}page-default{% endblock %}">

@@ -1,0 +1,60 @@
+/* Topic-specific website imagery; these are design assets, not company gallery/news media. */
+:root{--hero-copy-overlay:linear-gradient(270deg,rgba(5,17,12,.94) 0%,rgba(5,17,12,.78) 44%,rgba(5,17,12,.18) 100%)}
+.home-luxury .home-hero-lux,.services-page .services-hero,.page-about .about-hero,.page-contact .contact-hero,.page-agriculture .ag-hero,.page-industry .ind-hero,.page-research .res-hero,.page-economy .eco-hero,.page-knowledge .know-hero,.page-market .market-hero,.page-agents .agent-hero,.page-studio .studio-hero,.page-academy .education-hero,.page-weather .weather-hero-v2,.page-newsletter .newsletter-hero,.page-blog .blog-v2-hero,.page-store .store-hero,.page-auctions .auctions-hero{background-size:cover;background-position:center;background-repeat:no-repeat;color:#fff}
+.home-luxury .home-hero-lux{background-image:var(--hero-copy-overlay),url("/static/site/heroes/platform-home.webp")}
+.services-page .services-hero{background-image:var(--hero-copy-overlay),url("/static/site/heroes/services.webp")}
+.page-about .about-hero{background-image:var(--hero-copy-overlay),url("/static/site/heroes/about.webp")}
+.page-contact .contact-hero{background-image:var(--hero-copy-overlay),url("/static/site/heroes/contact.webp")}
+.page-agriculture .ag-hero{background-image:var(--hero-copy-overlay),url("/static/site/heroes/agriculture.webp")}
+.page-industry .ind-hero{background-image:var(--hero-copy-overlay),url("/static/site/heroes/industry.webp")}
+.page-research .res-hero{background-image:var(--hero-copy-overlay),url("/static/site/heroes/research.webp")}
+.page-economy .eco-hero{background-image:var(--hero-copy-overlay),url("/static/site/heroes/economy.webp")}
+.page-knowledge .know-hero{background-image:var(--hero-copy-overlay),url("/static/site/heroes/knowledge.webp")}
+.page-market .market-hero{background-image:var(--hero-copy-overlay),url("/static/site/heroes/marketplace.webp")}
+.page-agents .agent-hero{background-image:var(--hero-copy-overlay),url("/static/site/heroes/ai.webp")}
+.page-studio .studio-hero{background-image:var(--hero-copy-overlay),url("/static/site/heroes/game-studio.webp")}
+.page-academy .education-hero{background-image:var(--hero-copy-overlay),url("/static/site/heroes/academy.webp")}
+.page-academy .education-course-hero{background-image:var(--hero-copy-overlay),url("/static/site/heroes/education-detail.webp")}
+.page-weather .weather-hero-v2{background-image:var(--hero-copy-overlay),url("/static/site/heroes/weather.webp")}
+.page-newsletter .newsletter-hero{background-image:var(--hero-copy-overlay),url("/static/site/heroes/newsletter.webp")}
+.page-blog .blog-v2-hero{background-image:var(--hero-copy-overlay),url("/static/site/heroes/blog.webp")}
+.page-store .store-hero{background-image:var(--hero-copy-overlay),url("/static/site/heroes/store.webp")}
+.page-auctions .auctions-hero{background-image:var(--hero-copy-overlay),url("/static/site/heroes/auctions.webp")}
+.page-agents .agent-intro{color:#fff;background-image:var(--hero-copy-overlay),url("/static/site/heroes/smart-agriculture.webp");background-size:cover;background-position:center}
+.page-research .res-evidence{color:#fff;background-image:var(--hero-copy-overlay),url("/static/site/heroes/laboratory.webp");background-size:cover;background-position:center}
+.company-detail-genetics .company-hero-media{background-image:var(--hero-copy-overlay),url("/static/site/heroes/genetics.webp");background-size:cover;background-position:center}
+.company-detail-genetics .company-hero-photo{opacity:0}
+.commerce-page{min-height:78vh}
+.store-hero,.auctions-hero{min-height:clamp(390px,58vw,650px);padding:clamp(52px,9vw,132px) clamp(24px,8vw,120px);display:flex;flex-direction:column;justify-content:center;gap:18px}
+.store-hero h1,.auctions-hero h1{max-width:850px;margin:0;font-size:clamp(2.6rem,7vw,5.5rem);line-height:1.18}
+.store-hero p,.auctions-hero p{max-width:740px;margin:0;line-height:2;font-size:clamp(1rem,2vw,1.2rem);color:rgba(255,255,255,.86)}
+.store-hero>span,.auctions-hero>span{letter-spacing:.12em;color:#ead18a;font-size:.78rem}
+.store-products,.auctions-list{width:min(calc(100% - 32px),1320px);margin:0 auto;padding:clamp(36px,6vw,76px) 0}
+.store-products header,.auctions-list header{margin-bottom:24px}
+.store-product-grid,.auction-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,250px),1fr));gap:16px}
+.store-product-card,.auction-grid article,.store-empty,.auction-empty{padding:clamp(20px,4vw,32px);border:1px solid rgba(47,62,53,.16);border-radius:18px;background:rgba(255,253,248,.86);box-shadow:0 14px 42px rgba(16,47,37,.07)}
+.store-product-card h3,.auction-grid h3{line-height:1.6}
+.store-product-card strong{display:inline-block;margin-top:12px}
+.store-empty,.auction-empty{grid-column:1/-1;line-height:2}
+.studio-hero{min-height:clamp(460px,66vw,740px);padding:clamp(56px,9vw,136px) clamp(24px,8vw,120px);position:relative;display:flex;align-items:center}
+.studio-hero-copy{position:relative;z-index:1;max-width:780px}
+.studio-hero h1{font-size:clamp(2.8rem,7vw,6rem);line-height:1.18}
+.studio-hero p,.studio-intro p,.studio-cta p{line-height:2}
+.studio-index{position:absolute;left:6vw;bottom:36px;color:rgba(255,255,255,.72);letter-spacing:.1em}
+.studio-index strong{font-size:3rem;color:#ead18a}
+.studio-intro,.studio-projects,.studio-links,.studio-cta{width:min(calc(100% - 32px),1320px);margin:0 auto;padding:clamp(30px,5vw,64px) 0}
+.studio-intro>span,.studio-cta span{color:#9a7c3d;letter-spacing:.1em;font-size:.78rem}
+.studio-intro h2,.studio-cta h2{font-size:clamp(1.8rem,4vw,3rem);line-height:1.4}
+.studio-projects{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:16px}
+.studio-projects article{padding:24px;border:1px solid rgba(47,62,53,.14);border-radius:18px;background:rgba(255,253,248,.85)}
+.studio-projects p{line-height:1.9}
+.studio-links{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:12px}
+.studio-links a{display:flex;flex-direction:column;gap:10px;padding:20px;border:1px solid rgba(47,62,53,.14);border-radius:16px;background:rgba(255,253,248,.75);text-decoration:none}
+.studio-cta{display:flex;align-items:center;justify-content:space-between;gap:24px;border-top:1px solid rgba(47,62,53,.14)}
+.studio-cta a{display:inline-flex;align-items:center;justify-content:center;padding:14px 22px;border-radius:999px;background:#173b2e;color:#fff;text-decoration:none;white-space:nowrap}
+@media(max-width:700px){
+ .home-luxury .home-hero-lux,.services-page .services-hero,.page-about .about-hero,.page-contact .contact-hero,.page-agriculture .ag-hero,.page-industry .ind-hero,.page-research .res-hero,.page-economy .eco-hero,.page-knowledge .know-hero,.page-market .market-hero,.page-agents .agent-hero,.page-studio .studio-hero,.page-academy .education-hero,.page-weather .weather-hero-v2,.page-newsletter .newsletter-hero,.page-blog .blog-v2-hero,.page-store .store-hero,.page-auctions .auctions-hero{background-position:58% center}
+ .store-hero,.auctions-hero{min-height:440px;padding:72px 24px}
+ .studio-hero{min-height:480px;padding:72px 24px}
+ .studio-cta{align-items:flex-start;flex-direction:column}
+}
