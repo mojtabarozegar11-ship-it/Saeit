@@ -204,6 +204,26 @@ class FactoryP0SecurityTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertFalse(Product.objects.get(pk=product.pk).active)
 
+    def test_product_admin_cannot_activate_around_release_gate(self):
+        product = Product.objects.create(
+            title="Admin bypass", product_type="digital", owner=self.owner,
+            metadata={"factory_state": "launch_candidate"},
+        )
+        self.client.force_login(self.owner)
+        with self.assertRaises(ValidationError):
+            self.client.post(
+                reverse("admin:core_product_change", args=[product.pk]),
+                {
+                    "title": product.title, "product_type": product.product_type,
+                    "price": str(product.price), "currency": product.currency,
+                    "active": "on", "owner": str(self.owner.pk),
+                    "knowledge_article": "", "metadata": '{"factory_state":"launch_candidate"}',
+                    "_save": "Save",
+                },
+            )
+        product.refresh_from_db()
+        self.assertFalse(product.active)
+
     def test_unrelated_or_unbound_approval_cannot_approve_factory_product(self):
         product, _, _ = self.run_factory("p0-approval-binding", 7)
         request = ApprovalRequest(
