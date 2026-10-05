@@ -7,7 +7,7 @@ from datetime import timedelta
 
 from .agent_registry import AgentRegistry
 from .factory_governance import FactoryTaskVerifier
-from .models import AgentTask, ApprovalRequest, AuditLog, FactoryMarketEligibility, Product
+from .models import AgentTask, ApprovalRequest, AuditLog, FactoryMarketEligibility, FactoryRun, Product
 from .services import normalize_risk, requires_owner_approval
 
 
@@ -279,7 +279,7 @@ class TaskRuntime:
         history.append({
             "task_id": task.pk,
             "action": task.action_type,
-            "state": expected,
+            "state": metadata.get("factory_state"),
             "execution_id": task.execution_id,
             "verified_at": timezone.now().isoformat(),
         })
