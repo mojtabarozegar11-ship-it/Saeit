@@ -165,6 +165,15 @@ class ToolGateway:
             raise ToolGatewayError("Tool payload must be an object")
         task = self._authorize_execution(spec, task_id, execution_id)
         self._authorize_factory_grant(task, code, data)
+        if (
+            str(task.capability_code or "").startswith("product_")
+            or str(task.action_type or "").startswith("product_")
+        ):
+            from .factory_governance import validate_task_prerequisites
+            try:
+                validate_task_prerequisites(task)
+            except Exception as exc:
+                raise ToolGatewayError(f"Factory prerequisites are stale or invalid: {exc}") from exc
         token = GatewayAuthorization(task_id=task.pk, execution_id=task.execution_id, tool_code=code, nonce=object())
         self._authorizations.add(token.nonce)
         trace_id = f"tool-{task.pk}-{task.execution_id}-{code}"

@@ -97,7 +97,7 @@ class FactoryToolPackTests(TestCase):
             agent=agent, action_type="product_research", capability_code=capability.code,
             risk_snapshot="low", goal=run.goal, factory_run=run,
             input_data={"goal":run.goal, "run_id":run.run_id},
-            output_contract={"required":["title","sources"]},
+            output_contract={"required":["title","sources"], "state":"researched"},
             prerequisite_snapshot=snapshot_for("product_research", None, run),
         )
         AgentToolGrant.objects.create(agent=agent, capability_code=capability.code,

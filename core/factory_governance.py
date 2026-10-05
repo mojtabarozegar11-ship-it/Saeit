@@ -81,10 +81,10 @@ def prerequisite_values(action, product, run):
     elif action == "product_launch_candidate":
         values["localization"] = meta.get("localization")
         values["artifact_digest"] = _current_artifact_digest(product, run)
-        codes = sorted({
-            str(item.get("market_code") or "").upper()
-            for item in (meta.get("market_eligibility") or []) if isinstance(item, dict)
-        })
+        # This prerequisite is captured before the adapter chooses its launch
+        # markets. Bind the reviewed registry snapshot so eligibility changes
+        # invalidate this stage without making its own output mutate the snapshot.
+        codes = sorted(FactoryMarketEligibility.objects.values_list("market_code", flat=True))
         values["market_eligibility"] = market_eligibility_snapshot(codes)
     return values
 
@@ -217,8 +217,9 @@ class FactoryTaskVerifier:
         if not task.factory_run_id:
             raise ValidationError("Factory task is not attached to a persistent run.")
         run = FactoryRun.objects.select_for_update().get(pk=task.factory_run_id)
-        if action != "product_research":
-            validate_task_prerequisites(task)
+        # Current prerequisites are checked by ToolGateway before adapter execution.
+        # Rechecking the original snapshot here would compare it with the effect this
+        # stage has just applied (for example, newly recorded market eligibility).
         product_id = output.get("product_id") or task.product_id
         if not product_id:
             raise ValidationError("Factory output must identify the persisted Product.")
