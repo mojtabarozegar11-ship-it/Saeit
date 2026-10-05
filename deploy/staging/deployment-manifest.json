@@ -1,0 +1,18 @@
+{
+  "schema": "zomorod.staging-transfer.v1",
+  "environment": "staging",
+  "python": "3.11",
+  "target_host": "staging.zomorodmelal.ir",
+  "target_database": "zomorod2_saeit_stg",
+  "secrets_committed": false,
+  "production_publication": false,
+  "real_payments": false,
+  "treasury_execution": false,
+  "crypto_execution": false,
+  "required_commands": [
+    "python manage.py staging_preflight",
+    "python manage.py staging_autonomy_acceptance --goal <GOAL>"
+  ],
+  "gate97_passed_by_package": false,
+  "notes": "Replace SOURCE_SHA at packaging time with the verified branch HEAD and preserve the generated archive SHA256."
+}
