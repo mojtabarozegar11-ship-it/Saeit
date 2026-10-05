@@ -311,7 +311,7 @@ class FactoryPackageCTests(TestCase):
         )
         product_id = None
         executor = self.executor()
-        for _ in range(8):
+        for _ in range(11):
             completed = self.run_next(executor, product_id)
             product_id = completed.output_data["product_id"]
         product = Product.objects.get(pk=product_id)
