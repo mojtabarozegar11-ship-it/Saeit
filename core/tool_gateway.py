@@ -308,10 +308,16 @@ class ToolGateway:
             if data != task.input_data:
                 raise ToolGatewayError("Factory payload must exactly match the persisted Task intent")
             from .factory_governance import validate_task_prerequisites
-            try:
-                validate_task_prerequisites(task)
-            except Exception as exc:
-                raise ToolGatewayError(f"Factory prerequisites are stale or invalid: {exc}") from exc
+            # Authorization already validates the prerequisite snapshot before the
+            # adapter runs. Bounded re-research legitimately persists new evidence,
+            # which stales the prior Validation evidence before invoke(). The signed
+            # adapter receipt below remains bound to the originally authorized
+            # prerequisite digest, so do not reject that stage for its own evidence.
+            if code != "product_research" or not task.product_id:
+                try:
+                    validate_task_prerequisites(task)
+                except Exception as exc:
+                    raise ToolGatewayError(f"Factory prerequisites are stale or invalid: {exc}") from exc
             snapshot = task.prerequisite_snapshot if isinstance(task.prerequisite_snapshot, dict) else {}
             expected_context = (
                 task.pk, task.agent_id, task.execution_id, task.action_type,
