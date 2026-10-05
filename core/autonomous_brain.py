@@ -1,6 +1,7 @@
 """Autonomous observe/decide/replan brain for the single master agent."""
 from dataclasses import dataclass
-from core.models import AgentTask, AuditLog, Product, Order
+from django.utils import timezone
+from core.models import AgentTask, AuditLog, FactoryMarketEligibility, Product, Order
 
 @dataclass(frozen=True)
 class Candidate:
@@ -127,6 +128,26 @@ class AutonomousBrain:
                     verified_task
                     and latest_effect.get("state") == product.metadata.get("factory_state")
                 )
+                if evidence_valid and product.metadata.get("factory_state") == "launch_candidate":
+                    markets = product.metadata.get("market_eligibility") or []
+                    reviewed = {
+                        item.market_code: item
+                        for item in FactoryMarketEligibility.objects.filter(
+                            market_code__in=[
+                                item.get("market_code") for item in markets if isinstance(item, dict)
+                            ], reviewed_by__is_superuser=True
+                        ).select_related("reviewed_by")
+                    }
+                    now = timezone.now()
+                    evidence_valid = any(
+                        isinstance(item, dict)
+                        and (record := reviewed.get(item.get("market_code"))) is not None
+                        and record.eligibility == FactoryMarketEligibility.ALLOWED
+                        and record.eligibility == item.get("eligibility")
+                        and (record.valid_until is None or record.valid_until > now)
+                        and bool(record.evidence_reference and record.review_note.strip() and record.valid_until)
+                        for item in markets
+                    )
         return {
             "product": product,
             "factory_state": product.metadata.get("factory_state") if product else "new",

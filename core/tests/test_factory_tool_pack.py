@@ -1,8 +1,11 @@
 from django.test import TestCase
+from django.contrib.auth import get_user_model
 from django.core.management import call_command
+from django.utils import timezone
+from datetime import timedelta
 from io import StringIO
 from core.factory_tool_pack import product_research, opportunity_score, product_spec, product_build_record, product_qa, product_localize, launch_candidate
-from core.models import Product
+from core.models import Product, FactoryMarketEligibility
 from core.models import Agent, AgentCapability, AgentTask, AuditLog
 from core.tool_gateway import ToolGateway, ToolSpec
 from core.worker_runner import WorkerRunner
@@ -40,10 +43,40 @@ class FactoryToolPackTests(TestCase):
         product_qa({"product_id":pid,"tests":{"passed":True},"security":{"passed":True}})
         product_localize({"product_id":pid,"locales":["en"]})
         with self.assertRaises(ValueError):
-            launch_candidate({"product_id":pid,"markets":[{"country":"XX","eligibility":"pending_review"}]})
-        out=launch_candidate({"product_id":pid,"markets":[{"country":"US","eligibility":"allowed"}]})
+            launch_candidate({"product_id":pid,"markets":[{"country":"XX","eligibility":"allowed"}]})
+        owner = get_user_model().objects.create_superuser(
+            username="factory-owner", email="owner@example.com", password="test-only"
+        )
+        FactoryMarketEligibility.objects.create(
+            market_code="US", eligibility=FactoryMarketEligibility.ALLOWED,
+            evidence_reference="https://example.com/market-review", reviewed_by=owner,
+            review_note="Reviewed for sandbox product test.", reviewed_at=timezone.now(),
+            valid_until=timezone.now() + timedelta(days=30),
+        )
+        out=launch_candidate({"product_id":pid,"markets":[{"country":"US","eligibility":"restricted"}]})
         self.assertEqual(out["factory_state"],"launch_candidate")
         self.assertFalse(Product.objects.get(pk=pid).active)
+
+    def test_agent_cannot_claim_market_allowed_or_reuse_stale_review(self):
+        product = Product.objects.create(
+            title="Market proof", product_type="digital",
+            metadata={"factory_state":"localized", "localization":{"launch_locales":["en"]}},
+        )
+        owner = get_user_model().objects.create_superuser(
+            username="market-owner", email="market-owner@example.com", password="test-only"
+        )
+        FactoryMarketEligibility.objects.create(
+            market_code="GB", eligibility=FactoryMarketEligibility.PENDING_REVIEW,
+            review_note="Pending evidence review.", reviewed_by=owner, reviewed_at=timezone.now(),
+        )
+        with self.assertRaisesRegex(ValueError, "allowed launch market"):
+            launch_candidate({"product_id":product.pk,"markets":[{"market_code":"GB","eligibility":"allowed"}]})
+        FactoryMarketEligibility.objects.filter(market_code="GB").update(
+            eligibility=FactoryMarketEligibility.ALLOWED, review_note="Reviewed but expired.",
+            evidence_reference="https://example.com/expired-review", valid_until=timezone.now() - timedelta(seconds=1)
+        )
+        with self.assertRaisesRegex(ValueError, "review is stale"):
+            launch_candidate({"product_id":product.pk,"markets":[{"market_code":"GB","eligibility":"allowed"}]})
 
     def test_worker_retry_rolls_back_factory_effect_before_replay(self):
         agent = Agent.objects.create(code="factory-retry", name="Factory retry", mission="Research", active=True)

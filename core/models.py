@@ -218,6 +218,53 @@ class Product(T):
     metadata = models.JSONField(default=dict)
 
 
+class FactoryMarketEligibility(T):
+    """Owner-maintained launch eligibility; Agents can only read this registry."""
+    ALLOWED = "allowed"
+    PENDING_REVIEW = "pending_review"
+    RESTRICTED = "restricted"
+    UNSUPPORTED = "unsupported"
+    STATUS_CHOICES = [
+        (ALLOWED, "Allowed"),
+        (PENDING_REVIEW, "Pending Review"),
+        (RESTRICTED, "Restricted"),
+        (UNSUPPORTED, "Unsupported"),
+    ]
+
+    market_code = models.CharField(max_length=16, unique=True)
+    eligibility = models.CharField(max_length=20, choices=STATUS_CHOICES)
+    evidence_reference = models.URLField(blank=True)
+    review_note = models.TextField(blank=True)
+    reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="factory_market_reviews"
+    )
+    reviewed_at = models.DateTimeField()
+    valid_until = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["market_code"]
+
+    def clean(self):
+        super().clean()
+        if self.eligibility == self.ALLOWED:
+            errors = {}
+            if not self.evidence_reference:
+                errors["evidence_reference"] = "Allowed markets require a reviewable evidence reference."
+            if not str(self.review_note or "").strip():
+                errors["review_note"] = "Allowed markets require a documented review note."
+            if not self.valid_until:
+                errors["valid_until"] = "Allowed market reviews must expire and be renewed."
+            elif self.reviewed_at and self.valid_until <= self.reviewed_at:
+                errors["valid_until"] = "Review expiry must be later than the review time."
+            if errors:
+                raise ValidationError(errors)
+        if self.reviewed_by_id and not self.reviewed_by.is_superuser:
+            raise ValidationError({"reviewed_by": "Only the owner account may approve market eligibility."})
+
+    def __str__(self):
+        return f"{self.market_code}: {self.eligibility}"
+
+
 class Order(T):
     customer = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="orders"

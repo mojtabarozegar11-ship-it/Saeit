@@ -1,7 +1,7 @@
 """Bounded tools for the autonomous digital product factory."""
 from django.utils import timezone
 
-from .models import Product
+from .models import FactoryMarketEligibility, Product
 from .tool_gateway import ToolGateway, ToolSpec
 
 LANGUAGES = ("en","zh-hans","hi","es","fr","ar","bn","pt","ru","ur","id","de","ja","sw","mr","te","tr","ta","vi","ko")
@@ -97,10 +97,36 @@ def launch_candidate(payload):
     product=_product(payload)
     if product.metadata.get("factory_state")!="localized":
         raise ValueError("Product must be localized before launch candidacy.")
-    markets=payload.get("markets") or []
-    if not markets or not all(isinstance(x,dict) and x.get("country") and x.get("eligibility") in {"allowed","pending_review","restricted","unsupported"} for x in markets):
-        raise ValueError("Country eligibility records are required.")
-    if not any(x["eligibility"]=="allowed" for x in markets):
+    requested=payload.get("markets") or []
+    if not requested or not all(isinstance(x,dict) and (x.get("market_code") or x.get("country")) for x in requested):
+        raise ValueError("Market codes are required; eligibility must come from the owner-reviewed registry.")
+    codes = list(dict.fromkeys(str(x.get("market_code") or x.get("country")).strip().upper() for x in requested))
+    registry = {
+        item.market_code: item
+        for item in FactoryMarketEligibility.objects.filter(
+            market_code__in=codes, reviewed_by__is_superuser=True
+        ).select_related("reviewed_by")
+    }
+    now = timezone.now()
+    markets = []
+    for code in codes:
+        item = registry.get(code)
+        if not item:
+            raise ValueError(f"Market {code} has no owner-reviewed eligibility record.")
+        if item.valid_until and item.valid_until <= now:
+            raise ValueError(f"Market {code} eligibility review is stale.")
+        if item.eligibility == FactoryMarketEligibility.ALLOWED and (
+            not item.evidence_reference or not item.review_note.strip() or not item.valid_until
+        ):
+            raise ValueError(f"Market {code} has incomplete owner review evidence.")
+        markets.append({
+            "market_code": item.market_code,
+            "eligibility": item.eligibility,
+            "evidence_reference": item.evidence_reference,
+            "reviewed_at": item.reviewed_at.isoformat(),
+            "valid_until": item.valid_until.isoformat() if item.valid_until else None,
+        })
+    if not any(x["eligibility"]==FactoryMarketEligibility.ALLOWED for x in markets):
         raise ValueError("At least one allowed launch market is required.")
     product.metadata={**product.metadata,"factory_state":"launch_candidate","market_eligibility":markets,
                       "launch_candidate_at":timezone.now().isoformat(),"owner_publish_approval_required":True}

@@ -6,7 +6,7 @@ from django.utils import timezone
 from datetime import timedelta
 
 from .agent_registry import AgentRegistry
-from .models import AgentTask, ApprovalRequest, AuditLog, Product
+from .models import AgentTask, ApprovalRequest, AuditLog, FactoryMarketEligibility, Product
 from .services import normalize_risk, requires_owner_approval
 
 
@@ -222,7 +222,24 @@ class TaskRuntime:
             markets = metadata.get("market_eligibility") or []
             if product.active or metadata.get("owner_publish_approval_required") is not True:
                 raise TaskExecutionError("Launch candidacy must remain inactive and owner-gated")
-            if not any(item.get("eligibility") == "allowed" for item in markets if isinstance(item, dict)):
+            reviewed = []
+            now = timezone.now()
+            for item in markets:
+                if not isinstance(item, dict):
+                    continue
+                record = FactoryMarketEligibility.objects.select_for_update().filter(
+                    market_code=item.get("market_code"), reviewed_by__is_superuser=True
+                ).select_related("reviewed_by").first()
+                if not record or record.eligibility != item.get("eligibility"):
+                    raise TaskExecutionError("Market eligibility does not match the owner-reviewed registry")
+                if record.valid_until and record.valid_until <= now:
+                    raise TaskExecutionError("Market eligibility review expired before task verification")
+                if record.eligibility == FactoryMarketEligibility.ALLOWED and (
+                    not record.evidence_reference or not record.review_note.strip() or not record.valid_until
+                ):
+                    raise TaskExecutionError("Allowed market is missing owner review evidence")
+                reviewed.append(record)
+            if not any(item.eligibility == FactoryMarketEligibility.ALLOWED for item in reviewed):
                 raise TaskExecutionError("Launch candidacy requires an allowed market record")
 
         history = list(metadata.get("factory_history") or [])
