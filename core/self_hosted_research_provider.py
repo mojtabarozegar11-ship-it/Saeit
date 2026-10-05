@@ -27,7 +27,7 @@ class SelfHostedStagingResearchProvider(ResearchProvider):
     provider_name = "self-hosted-staging"
     real_research = True
     extractor_version = "self-hosted-web-v1"
-    search_endpoint = "https://www.google.com/search?q={query}&num=10&filter=1"
+    search_endpoint = "https://search.brave.com/search?q={query}&source=web"
     user_agent = "ZomorodResearch/1.0 (+https://zomorodmelal.ir)"
 
     def __init__(self):
@@ -74,7 +74,7 @@ class SelfHostedStagingResearchProvider(ResearchProvider):
             else:
                 continue
             host = (urlsplit(target).hostname or "").lower()
-            if host and "google." not in host and target not in links:
+            if host and not any(engine in host for engine in ("google.", "search.brave.com", "imgs.search.brave.com", "cdn.search.brave.com", "tiles.search.brave.com")) and target not in links:
                 links.append(target)
         return links
 
