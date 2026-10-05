@@ -569,7 +569,7 @@ class FactoryAgentRuntime:
                         "build_digest": build.get("sha256"), "required_locales": required,
                         "fallback_locale": "en", "architecture_locales": [
                             "en","zh-hans","hi","es","fr","ar","bn","pt","ru","ur","id","de",
-                            "ja","sw","mr","te","tr","ta","vi","ko","fa"
+                            "ja","sw","mr","te","tr","ta","vi","ko","it","nl","pl","th","fa"
                         ], "locales": locales}
         localization["attestation_digest"] = canonical_digest(localization)
         return {"localization": localization}
