@@ -250,8 +250,15 @@ class ToolGateway:
             result = executor.execute(
                 current, authorization=authorization, authorization_check=self.is_authorized
             )
-            if not self.is_authorized(authorization, current, current.action_type):
-                raise ToolGatewayError("Factory adapter authorization expired before output could be accepted")
+            # The adapter may legitimately persist this stage's evidence, which can
+            # make the original prerequisite snapshot stale. Recheck execution
+            # identity/lease and the effective grant here without rejecting the
+            # adapter for its own authorized writes.
+            try:
+                self._authorize_execution(self._tools[current.action_type], current.pk, authorization.execution_id)
+                self._authorize_factory_grant(current, current.action_type, current.input_data or {})
+            except Exception as exc:
+                raise ToolGatewayError("Factory adapter authorization expired before output could be accepted") from exc
             validated = FactoryAgentOutput.validate(current.action_type, getattr(result, "values", None))
             if not isinstance(result, FactoryAgentOutput) or result.action != current.action_type:
                 raise ToolGatewayError("Factory adapter returned output outside the registered contract")
