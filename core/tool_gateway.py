@@ -1,7 +1,8 @@
 from dataclasses import dataclass
+from django.conf import settings
 from typing import Any, Callable, Dict
 
-from .models import AgentTask, ApprovalRequest, AuditLog
+from .models import AgentCapability, AgentTask, AgentToolGrant, ApprovalRequest, AuditLog
 from .services import normalize_action, normalize_risk, requires_owner_approval
 
 
@@ -73,7 +74,33 @@ class ToolGateway:
 
         return task
 
-    def invoke(self, tool_code, payload=None, *, task_id=None, execution_id=None):
+    @staticmethod
+    def _resource(task, payload):
+        product_id = task.product_id or task.input_data.get("product_id") or payload.get("product_id")
+        return f"product:{product_id}" if product_id else "product:new"
+
+    def _authorize_factory_grant(self, task, code, payload):
+        if not str(task.capability_code or "").startswith("product_"):
+            return
+        if not AgentCapability.objects.filter(code=task.capability_code, active=True, agents__pk=task.agent_id).exists():
+            raise ToolGatewayError("The assigned Agent no longer holds the active capability")
+        environment = str(getattr(settings, "FACTORY_ENVIRONMENT", "development"))
+        if task.environment != environment:
+            raise ToolGatewayError("Task environment does not match the trusted execution environment")
+        resource = self._resource(task, payload)
+        grants = AgentToolGrant.objects.filter(
+            agent_id=task.agent_id, capability_code=task.capability_code,
+            tool_code=code, environment=environment, active=True,
+        )
+        allowed = any(
+            grant.resource_scope == resource or
+            (grant.resource_scope.endswith(":*") and resource.startswith(grant.resource_scope[:-1]))
+            for grant in grants
+        )
+        if not allowed:
+            raise ToolGatewayError("No effective Agent × capability × tool × resource × environment grant")
+
+    def invoke(self, tool_code, payload=None, *, task_id=None, execution_id=None, agent_output=None):
         code = normalize_action(tool_code)
         spec = self._tools.get(code)
         if not spec:
@@ -86,6 +113,15 @@ class ToolGateway:
             raise ToolGatewayError("Tool payload must be an object")
 
         task = self._authorize_execution(spec, task_id, execution_id)
+        self._authorize_factory_grant(task, code, data)
+        data = dict(data)
+        if task.product_id:
+            data["product_id"] = task.product_id
+        if task.factory_run_id:
+            data["__run_id"] = task.factory_run.run_id
+        data["__task_id"] = task.pk
+        if agent_output is not None:
+            data["__agent_output"] = agent_output
         trace_id = f"tool-{task.pk}-{task.execution_id}-{code}"
         AuditLog.objects.create(
             actor_type="agent",

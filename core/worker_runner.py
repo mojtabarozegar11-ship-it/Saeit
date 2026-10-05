@@ -32,7 +32,7 @@ class WorkerRunner:
             for action, tool in (tool_map or {}).items()
         }
 
-    def run(self, task_id):
+    def run(self, task_id, agent_output=None):
         task = self.runtime.claim(task_id)
         execution_id = task.execution_id
         try:
@@ -51,6 +51,7 @@ class WorkerRunner:
                     payload,
                     task_id=task.pk,
                     execution_id=execution_id,
+                    agent_output=agent_output,
                 )
                 output, cost = self._normalize_result(result)
                 completed = self.runtime.complete(

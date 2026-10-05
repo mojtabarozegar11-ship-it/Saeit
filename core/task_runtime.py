@@ -6,6 +6,7 @@ from django.utils import timezone
 from datetime import timedelta
 
 from .agent_registry import AgentRegistry
+from .factory_governance import FactoryTaskVerifier
 from .models import AgentTask, ApprovalRequest, AuditLog, FactoryMarketEligibility, Product
 from .services import normalize_risk, requires_owner_approval
 
@@ -144,6 +145,10 @@ class TaskRuntime:
         normalized_output = output_data or {}
         if str(task.capability_code or "").startswith("product_"):
             self._verify_factory_effect(task, normalized_output)
+            try:
+                FactoryTaskVerifier().verify(task, normalized_output)
+            except Exception as exc:
+                raise TaskExecutionError(str(exc)) from exc
         # Economic work is not complete merely because a handler returned. It must
         # prove an observable effect. This prevents report-only/no-op cycles from
         # being counted as operational progress.

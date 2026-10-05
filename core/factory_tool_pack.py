@@ -1,7 +1,7 @@
 """Bounded tools for the autonomous digital product factory."""
 from django.utils import timezone
 
-from .models import FactoryMarketEligibility, Product
+from .models import AgentTask, FactoryArtifact, FactoryMarketEligibility, FactoryRun, Product
 from .tool_gateway import ToolGateway, ToolSpec
 
 LANGUAGES = ("en","zh-hans","hi","es","fr","ar","bn","pt","ru","ur","id","de","ja","sw","mr","te","tr","ta","vi","ko")
@@ -16,6 +16,7 @@ def _product(payload):
 
 
 def product_research(payload):
+    payload = {**(payload.get("__agent_output") or {}), **payload}
     sources = payload.get("sources") or []
     if len(sources) < 2 or not all(isinstance(x, dict) and x.get("url") and x.get("finding") for x in sources):
         raise ValueError("At least two source-backed market findings are required.")
@@ -28,10 +29,15 @@ def product_research(payload):
         metadata={"factory_state":"researched","research":{"sources":sources,"market":payload.get("market","global")},
                   "created_at":timezone.now().isoformat(),"languages_target":list(LANGUAGES)}
     )
-    return {"verified_effect":True,"product_id":product.pk,"factory_state":"researched","evidence_count":len(sources)}
+    run = FactoryRun.objects.filter(run_id=payload.get("__run_id")).first()
+    if run:
+        run.product = product
+        run.save(update_fields=["product", "updated_at"])
+    return {"verified_effect":True,"product_id":product.pk,"factory_state":"researched","evidence_count":len(sources),"title":product.title,"sources":sources}
 
 
 def opportunity_score(payload):
+    payload = {**(payload.get("__agent_output") or {}), **payload}
     product=_product(payload)
     if product.metadata.get("factory_state")!="researched":
         raise ValueError("Product must have verified research before scoring.")
@@ -41,10 +47,11 @@ def opportunity_score(payload):
     if not 0 <= score <= 100: raise ValueError("score must be between 0 and 100")
     product.metadata={**product.metadata,"factory_state":"scored","opportunity":{"score":score,"rationale":str(payload.get("rationale") or "")}}
     product.save(update_fields=["metadata","updated_at"])
-    return {"verified_effect":True,"product_id":product.pk,"factory_state":"scored","score":score}
+    return {"verified_effect":True,"product_id":product.pk,"factory_state":"scored","score":score,"rationale":str(payload.get("rationale") or "")}
 
 
 def product_spec(payload):
+    payload = {**(payload.get("__agent_output") or {}), **payload}
     product=_product(payload)
     if product.metadata.get("factory_state")!="scored":
         raise ValueError("Product must be scored before specification.")
@@ -53,22 +60,38 @@ def product_spec(payload):
         raise ValueError("spec.problem and spec.acceptance_criteria are required")
     product.metadata={**product.metadata,"factory_state":"specified","spec":spec}
     product.save(update_fields=["metadata","updated_at"])
-    return {"verified_effect":True,"product_id":product.pk,"factory_state":"specified"}
+    return {"verified_effect":True,"product_id":product.pk,"factory_state":"specified","spec":spec}
 
 
 def product_build_record(payload):
+    payload = {**(payload.get("__agent_output") or {}), **payload}
     product=_product(payload)
     if product.metadata.get("factory_state")!="specified":
         raise ValueError("Product must be specified before build recording.")
     artifact=payload.get("artifact") or {}
     if not isinstance(artifact,dict) or not artifact.get("ref"):
         raise ValueError("A versioned build artifact ref is required.")
+    run = FactoryRun.objects.filter(run_id=payload.get("__run_id")).first()
+    task = AgentTask.objects.filter(pk=payload.get("__task_id")).first()
+    if run and task:
+        version = run.current_artifact_version + 1
+        artifact_row = FactoryArtifact.objects.create(
+            product=product, run=run, created_by_task=task, version=version,
+            reference=str(artifact["ref"]), content_digest=str(artifact.get("sha256") or ""),
+            spec_version=run.current_spec_version,
+        )
+        run.current_artifact_version = version
+        run.save(update_fields=["current_artifact_version", "updated_at"])
+        artifact = {**artifact, "version": version, "artifact_id": artifact_row.pk}
+    else:
+        version = 0
     product.metadata={**product.metadata,"factory_state":"built","build":artifact}
     product.save(update_fields=["metadata","updated_at"])
-    return {"verified_effect":True,"product_id":product.pk,"factory_state":"built","artifact":artifact}
+    return {"verified_effect":True,"product_id":product.pk,"factory_state":"built","artifact":artifact,"artifact_version":version}
 
 
 def product_qa(payload):
+    payload = {**(payload.get("__agent_output") or {}), **payload}
     product=_product(payload)
     if product.metadata.get("factory_state")!="built":
         raise ValueError("Product must be built before QA.")
@@ -78,10 +101,11 @@ def product_qa(payload):
         raise ValueError("Passing automated tests and security checks are required.")
     product.metadata={**product.metadata,"factory_state":"qa_passed","qa":{"tests":tests,"security":security}}
     product.save(update_fields=["metadata","updated_at"])
-    return {"verified_effect":True,"product_id":product.pk,"factory_state":"qa_passed"}
+    return {"verified_effect":True,"product_id":product.pk,"factory_state":"qa_passed","tests":tests,"security":security}
 
 
 def product_localize(payload):
+    payload = {**(payload.get("__agent_output") or {}), **payload}
     product=_product(payload)
     if product.metadata.get("factory_state")!="qa_passed":
         raise ValueError("Product must pass QA before localization.")
@@ -94,6 +118,7 @@ def product_localize(payload):
 
 
 def launch_candidate(payload):
+    payload = {**(payload.get("__agent_output") or {}), **payload}
     product=_product(payload)
     if product.metadata.get("factory_state")!="localized":
         raise ValueError("Product must be localized before launch candidacy.")
@@ -131,7 +156,7 @@ def launch_candidate(payload):
     product.metadata={**product.metadata,"factory_state":"launch_candidate","market_eligibility":markets,
                       "launch_candidate_at":timezone.now().isoformat(),"owner_publish_approval_required":True}
     product.save(update_fields=["metadata","updated_at"])
-    return {"verified_effect":True,"product_id":product.pk,"factory_state":"launch_candidate","owner_publish_approval_required":True}
+    return {"verified_effect":True,"product_id":product.pk,"factory_state":"launch_candidate","owner_publish_approval_required":True,"markets":markets}
 
 
 def build_factory_gateway():

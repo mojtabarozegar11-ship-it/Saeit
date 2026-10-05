@@ -132,6 +132,12 @@ class AgentTask(T):
     bridge_idempotency_key = models.CharField(max_length=128, null=True, blank=True, unique=True)
     bridge_request_digest = models.CharField(max_length=64, blank=True, default="")
     execution_id = models.CharField(max_length=64, blank=True, default="")
+    goal = models.TextField(blank=True, default="")
+    factory_run = models.ForeignKey("FactoryRun", null=True, blank=True, on_delete=models.PROTECT, related_name="tasks")
+    product = models.ForeignKey("Product", null=True, blank=True, on_delete=models.PROTECT, related_name="factory_tasks")
+    output_contract = models.JSONField(default=dict)
+    prerequisite_snapshot = models.JSONField(default=dict)
+    environment = models.CharField(max_length=40, default="development")
     attempt_count = models.PositiveIntegerField(default=0)
     max_attempts = models.PositiveIntegerField(default=3)
     input_data = models.JSONField(default=dict)
@@ -195,7 +201,39 @@ class KnowledgeArticle(T):
     published = models.BooleanField(default=False)
 
 
+class ProductQuerySet(models.QuerySet):
+    def update(self, **kwargs):
+        if "metadata" in kwargs and any(
+            isinstance(product.metadata, dict) and product.metadata.get("factory_state")
+            for product in self.only("metadata")
+        ):
+            raise ValidationError("Factory Product metadata changes must use save() so dependent evidence is invalidated.")
+        activating = kwargs.get("active") is True or (
+            "active" in kwargs and not isinstance(kwargs.get("active"), bool)
+        )
+        if activating:
+            from .factory_governance import assert_activation_allowed
+            for product in self:
+                metadata = kwargs.get("metadata", product.metadata)
+                if isinstance(metadata, dict) and metadata.get("factory_state"):
+                    product.metadata = metadata
+                    assert_activation_allowed(product)
+        return super().update(**kwargs)
+
+    def bulk_create(self, objs, **kwargs):
+        from .factory_governance import assert_activation_allowed
+        for product in objs:
+            if product.active and isinstance(product.metadata, dict) and product.metadata.get("factory_state"):
+                assert_activation_allowed(product)
+        return super().bulk_create(objs, **kwargs)
+
+
+class ProductManager(models.Manager.from_queryset(ProductQuerySet)):
+    pass
+
+
 class Product(T):
+    objects = ProductManager()
     title = models.CharField(max_length=300)
     product_type = models.CharField(max_length=50)
     price = models.DecimalField(max_digits=14, decimal_places=2, default=0)
@@ -216,6 +254,93 @@ class Product(T):
         blank=True,
     )
     metadata = models.JSONField(default=dict)
+
+    def save(self, *args, **kwargs):
+        previous_metadata = None
+        if self.pk:
+            previous_metadata = Product.objects.filter(pk=self.pk).values_list("metadata", flat=True).first()
+        if self.active and isinstance(self.metadata, dict) and self.metadata.get("factory_state"):
+            from .factory_governance import assert_activation_allowed
+            assert_activation_allowed(self)
+        super().save(*args, **kwargs)
+        if self.pk:
+            if isinstance(previous_metadata, dict) and previous_metadata.get("spec") != (self.metadata or {}).get("spec"):
+                for run in FactoryRun.objects.filter(product_id=self.pk):
+                    run.current_spec_version += 1
+                    run.save(update_fields=["current_spec_version", "updated_at"])
+            from .factory_governance import invalidate_stale_evidence
+            invalidate_stale_evidence(self)
+
+
+class FactoryRun(T):
+    run_id = models.CharField(max_length=64, unique=True)
+    product = models.ForeignKey("Product", null=True, blank=True, on_delete=models.PROTECT, related_name="factory_runs")
+    goal = models.TextField()
+    status = models.CharField(max_length=20, default="active")
+    environment = models.CharField(max_length=40, default="development")
+    current_spec_version = models.PositiveIntegerField(default=1)
+    current_artifact_version = models.PositiveIntegerField(default=0)
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        if self.product_id:
+            from .factory_governance import invalidate_stale_evidence
+            invalidate_stale_evidence(self.product)
+
+
+class FactoryArtifact(T):
+    product = models.ForeignKey("Product", on_delete=models.PROTECT, related_name="factory_artifacts")
+    run = models.ForeignKey(FactoryRun, on_delete=models.PROTECT, related_name="artifacts")
+    created_by_task = models.OneToOneField(AgentTask, on_delete=models.PROTECT, related_name="factory_artifact")
+    version = models.PositiveIntegerField()
+    reference = models.CharField(max_length=500)
+    content_digest = models.CharField(max_length=128, blank=True, default="")
+    spec_version = models.PositiveIntegerField()
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["product", "version"], name="unique_factory_artifact_version")]
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        from .factory_governance import invalidate_stale_evidence
+        invalidate_stale_evidence(self.product)
+
+
+class FactoryEvidence(T):
+    VALID = "valid"
+    STALE = "stale"
+    INVALID = "invalid"
+    task = models.ForeignKey(AgentTask, on_delete=models.PROTECT, related_name="factory_evidence")
+    run = models.ForeignKey(FactoryRun, on_delete=models.PROTECT, related_name="evidence")
+    product = models.ForeignKey(Product, on_delete=models.PROTECT, related_name="factory_evidence")
+    evidence_type = models.CharField(max_length=80)
+    prerequisite_digest = models.CharField(max_length=64)
+    spec_version = models.PositiveIntegerField(default=1)
+    artifact_version = models.PositiveIntegerField(default=0)
+    status = models.CharField(max_length=12, default=VALID, choices=[(VALID, "Valid"), (STALE, "Stale"), (INVALID, "Invalid")])
+    details = models.JSONField(default=dict)
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["task", "evidence_type"], name="unique_factory_evidence_per_task")]
+
+
+class AgentToolGrant(T):
+    agent = models.ForeignKey(Agent, on_delete=models.CASCADE, related_name="tool_grants")
+    capability_code = models.CharField(max_length=100)
+    tool_code = models.CharField(max_length=100)
+    resource_scope = models.CharField(max_length=200)
+    environment = models.CharField(max_length=40)
+    active = models.BooleanField(default=True)
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["agent", "capability_code", "tool_code", "resource_scope", "environment"], name="unique_agent_tool_resource_environment_grant")]
+
+
+class FactoryReleaseGate(T):
+    product = models.OneToOneField(Product, on_delete=models.PROTECT, related_name="factory_release_gate")
+    run = models.ForeignKey(FactoryRun, on_delete=models.PROTECT, related_name="release_gates")
+    artifact = models.ForeignKey(FactoryArtifact, on_delete=models.PROTECT, related_name="release_gates")
+    status = models.CharField(max_length=24, default="pending_owner_approval")
+    approval = models.ForeignKey(ApprovalRequest, null=True, blank=True, on_delete=models.PROTECT, related_name="factory_release_gates")
+    approved_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.PROTECT, related_name="factory_release_approvals")
+    approved_at = models.DateTimeField(null=True, blank=True)
 
 
 class FactoryMarketEligibility(T):

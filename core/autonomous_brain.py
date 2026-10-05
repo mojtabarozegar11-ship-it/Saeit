@@ -1,7 +1,10 @@
 """Autonomous observe/decide/replan brain for the single master agent."""
 from dataclasses import dataclass
+import uuid
+from django.conf import settings
 from django.utils import timezone
-from core.models import AgentTask, AuditLog, FactoryMarketEligibility, Product, Order
+from core.models import AgentTask, AuditLog, FactoryMarketEligibility, FactoryRun, Product, Order
+from core.factory_governance import snapshot_for
 
 @dataclass(frozen=True)
 class Candidate:
@@ -106,7 +109,7 @@ class AutonomousBrain:
         )
         tasks = AgentTask.objects.filter(action_type__startswith="product_")
         if product:
-            tasks = tasks.filter(input_data__product_id=product.pk)
+            tasks = tasks.filter(product_id=product.pk)
         else:
             tasks = tasks.filter(action_type="product_research")
         pending = tasks.filter(status__in=("queued", "running", "blocked")).order_by("created_at", "pk").first()
@@ -199,29 +202,49 @@ class AutonomousBrain:
             return AgentTask.objects.get(pk=decision["task_id"])
         if decision["action"] in {"blocked", "owner_approval_boundary"}:
             raise RuntimeError(decision["reason"])
-        task_payload = dict(payload or {})
-        if decision["product_id"] is not None:
-            task_payload["product_id"] = decision["product_id"]
-        required_input = {
-            "product_research": ("title", "sources"),
-            "product_opportunity_score": ("score",),
-            "product_spec": ("spec",),
-            "product_build_record": ("artifact",),
-            "product_qa": ("tests", "security"),
-            "product_localize": ("locales",),
-            "product_launch_candidate": ("markets",),
-        }[decision["action"]]
-        if any(task_payload.get(key) in (None, "", [], {}) for key in required_input):
-            raise RuntimeError(
-                f"The {decision['action']} agent must provide verified output fields: "
-                + ", ".join(required_input)
-            )
+        request = dict(payload or {})
+        goal = str(request.get("goal") or decision["reason"]).strip()
+        if not goal:
+            raise RuntimeError("A goal is required to plan Factory work.")
+        action = decision["action"]
+        contracts = {
+            "product_research": ["title", "sources"],
+            "product_opportunity_score": ["score", "rationale"],
+            "product_spec": ["spec"],
+            "product_build_record": ["artifact"],
+            "product_qa": ["tests", "security"],
+            "product_localize": ["locales"],
+            "product_launch_candidate": ["markets"],
+        }
+        product = Product.objects.filter(pk=decision["product_id"]).first() if decision["product_id"] else None
+        if product:
+            run = FactoryRun.objects.filter(product=product, status="active").order_by("-created_at", "-pk").first()
+            if not run:
+                raise RuntimeError("Product has no active Factory Run.")
+        else:
+            run = FactoryRun.objects.create(run_id=uuid.uuid4().hex, goal=goal, environment=str(getattr(settings, "FACTORY_ENVIRONMENT", "development")))
+        task_payload = {"goal": goal, "run_id": run.run_id}
+        if product:
+            task_payload["product_id"] = product.pk
         task = MasterAgent().plan(
             project=None,
             action=decision["action"],
             payload=task_payload,
             risk="low",
         )
+        task.goal = goal
+        task.factory_run = run
+        task.product = product
+        task.output_contract = {"required": contracts[action], "state": {
+            "product_research": "researched", "product_opportunity_score": "scored",
+            "product_spec": "specified", "product_build_record": "built", "product_qa": "qa_passed",
+            "product_localize": "localized", "product_launch_candidate": "launch_candidate",
+        }[action]}
+        task.environment = run.environment
+        task.input_data = task_payload
+        task.prerequisite_snapshot = snapshot_for(action, product, run)
+        task.save(update_fields=["goal", "factory_run", "product", "output_contract", "environment",
+                                 "input_data", "prerequisite_snapshot", "updated_at"])
         AuditLog.objects.create(
             actor_type="agent",
             actor_id="factory-master-agent",

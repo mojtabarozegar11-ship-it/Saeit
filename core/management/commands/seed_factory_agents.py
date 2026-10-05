@@ -1,6 +1,6 @@
 from django.core.management.base import BaseCommand
 from django.db import transaction
-from core.models import Agent, AgentCapability
+from core.models import Agent, AgentCapability, AgentToolGrant
 
 CAPABILITIES=[
 ("product_research","Market Research","Collect source-backed demand and competitor evidence.","low"),
@@ -33,6 +33,11 @@ class Command(BaseCommand):
             agent,_=Agent.objects.update_or_create(code=agent_code,defaults={
                 "name":agent_name,"mission":mission,"risk_level":risk,"active":True})
             agent.capabilities.set([cap])
+            AgentToolGrant.objects.update_or_create(
+                agent=agent, capability_code=code, tool_code=code,
+                resource_scope="product:*", environment="development",
+                defaults={"active": True},
+            )
             specialists.append(agent)
         agent,_=Agent.objects.update_or_create(code="factory-master-agent",defaults={
             "name":"Zomorod Factory Master Agent",
