@@ -10,9 +10,12 @@ OUTPUT_KEYS = {
     "product_validation": {"validation"},
     "product_spec": {"spec"},
     "product_build_record": {"artifact"},
-    "product_qa": {"tests", "security"},
-    "product_localize": {"locales"},
-    "product_launch_candidate": {"markets"},
+    "product_test": {"tests"},
+    "product_security": {"security"},
+    "product_localize": {"localization"},
+    "product_market_eligibility": {"markets"},
+    "product_qa": {"qa"},
+    "product_launch_candidate": {"launch_candidate"},
 }
 INTENT_KEYS = {"goal", "run_id", "product_id", "constraints"}
 OUTPUT_INTENT_NAMES = {"sources", "score", "spec", "artifact", "tests", "security", "evidence"}
@@ -22,9 +25,12 @@ REQUIRED_OUTPUT_KEYS = {
     "product_validation": ["validation"],
     "product_spec": ["spec"],
     "product_build_record": ["artifact"],
-    "product_qa": ["tests", "security"],
-    "product_localize": ["locales"],
-    "product_launch_candidate": ["markets"],
+    "product_test": ["tests"],
+    "product_security": ["security"],
+    "product_localize": ["localization"],
+    "product_market_eligibility": ["markets"],
+    "product_qa": ["qa"],
+    "product_launch_candidate": ["launch_candidate"],
 }
 EXPECTED_OUTPUT_STATE = {
     "product_research": "researched",
@@ -32,8 +38,11 @@ EXPECTED_OUTPUT_STATE = {
     "product_validation": "validated",
     "product_spec": "specified",
     "product_build_record": "built",
-    "product_qa": "qa_passed",
+    "product_test": "tested",
+    "product_security": "security_verified",
     "product_localize": "localized",
+    "product_market_eligibility": "eligible",
+    "product_qa": "qa_passed",
     "product_launch_candidate": "launch_candidate",
 }
 
