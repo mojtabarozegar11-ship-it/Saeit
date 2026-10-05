@@ -62,11 +62,11 @@ class StagingPreflight:
         staging_identity = str(getattr(settings, "STAGING_DB_IDENTITY", "") or "").strip()
         production_identity = str(getattr(settings, "PRODUCTION_DB_IDENTITY", "") or "").strip()
         check("staging_db_identity_configured", bool(staging_identity), "STAGING_DB_IDENTITY is required.")
-        check("database_matches_staging_identity", bool(staging_identity and staging_identity in db_name),
+        check("database_matches_staging_identity", bool(staging_identity and staging_identity == db_name),
               "Configured database does not match STAGING_DB_IDENTITY.")
-        check("production_db_not_selected", not production_identity or production_identity not in db_name,
+        check("production_db_not_selected", bool(production_identity) and production_identity != db_name,
               "Staging database appears to match PRODUCTION_DB_IDENTITY.")
-        check("database_not_sqlite", db.get("ENGINE") != "django.db.backends.sqlite3",
+        check("database_not_sqlite", db.get("ENGINE") == "django.db.backends.postgresql",
               "Real staging acceptance requires an isolated non-SQLite database.")
         check("publication_disabled", not getattr(settings, "PRODUCTION_PUBLICATION_ENABLED", False),
               "Production publication must be disabled in staging.")
@@ -105,8 +105,26 @@ class StagingPreflight:
         except Exception:
             audit_ok = False
         check("audit_logging_available", audit_ok, "Audit logging/database access is unavailable.")
-        check("master_worker_available", True, "Master/Worker runtime is unavailable.")
+        from .models import Agent, AgentToolGrant
+        from .management.commands.seed_factory_agents import SPECIALISTS
+        from django.utils import timezone
+        try:
+            available = Agent.objects.filter(code="factory-master-agent", active=True).exists() and all(
+                AgentToolGrant.objects.filter(agent__code=agent[0], agent__active=True,
+                    capability_code=action, tool_code=action, environment="staging", active=True,
+                    revoked_at__isnull=True, valid_until__gt=timezone.now()).exists()
+                for action, agent in SPECIALISTS.items())
+        except Exception:
+            available = False
+        check("master_worker_available", available, "Staging Master/specialist grants missing or expired.")
         return StagingPreflightResult("PASS" if not blockers else "BLOCKED", checks, tuple(blockers))
+
+
+REQUIRED_STAGES = (
+    "product_research", "product_opportunity_score", "product_validation", "product_spec",
+    "product_build_record", "product_test", "product_security", "product_localize",
+    "product_market_eligibility", "product_qa", "product_launch_candidate",
+)
 
 
 def validate_acceptance_report(report):
@@ -115,12 +133,19 @@ def validate_acceptance_report(report):
                      "production_action_successes")
     if report.get("environment") != "staging":
         return False
-    if any(int(report.get(key, -1)) != 0 for key in required_zero):
+    if any(type(report.get(key)) is not int or report[key] != 0 for key in required_zero):
         return False
     if report.get("published") is not False or report.get("deployed") is not False:
         return False
-    if report.get("lineage_verification") is not True:
+    if report.get("lineage_verification") is not True or report.get("real_source_provenance") is not True:
         return False
-    if not report.get("launch_candidate_id") or not report.get("stages_completed"):
+    if not report.get("launch_candidate_id") or not report.get("providers_used"):
         return False
-    return True
+    stages = report.get("stages_completed", [])
+    if any(stage not in stages for stage in REQUIRED_STAGES):
+        return False
+    if [stages.index(stage) for stage in REQUIRED_STAGES] != sorted(stages.index(stage) for stage in REQUIRED_STAGES):
+        return False
+    identities = report.get("independent_verifier_identities", {})
+    names = [identities.get(key) for key in ("product_validation", "product_test", "product_security", "product_qa")]
+    return all(names) and len(set(names)) == 4 and report.get("builder_identity") not in names

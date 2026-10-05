@@ -2,7 +2,7 @@ from unittest.mock import patch
 
 from django.test import TestCase, override_settings
 
-from core.staging_readiness import StagingPreflight, production_action_allowed, validate_acceptance_report
+from core.staging_readiness import REQUIRED_STAGES, StagingPreflight, production_action_allowed, validate_acceptance_report
 
 
 class StagingReadinessTests(TestCase):
@@ -12,7 +12,10 @@ class StagingReadinessTests(TestCase):
             "human_task_creation_count": 0, "manual_stage_advancement_count": 0,
             "external_intermediate_artifact_count": 0, "production_action_successes": 0,
             "published": False, "deployed": False, "lineage_verification": True,
-            "launch_candidate_id": "abc", "stages_completed": ["product_launch_candidate"],
+            "launch_candidate_id": "abc", "stages_completed": list(REQUIRED_STAGES), "real_source_provenance": True,
+            "providers_used": ["tavily-staging"], "builder_identity": "builder",
+            "independent_verifier_identities": {"product_validation": "validator", "product_test": "tester",
+                                                "product_security": "security", "product_qa": "qa"},
         }
 
     @override_settings(

@@ -71,10 +71,12 @@ DATABASES = {
 STAGING_DB_IDENTITY = env("STAGING_DB_IDENTITY", default="")
 PRODUCTION_DB_IDENTITY = env("PRODUCTION_DB_IDENTITY", default="")
 if SAEIT_ENV == "staging":
+    if DEBUG or DATABASES["default"]["ENGINE"] != "django.db.backends.postgresql":
+        raise RuntimeError("Staging requires DEBUG=False and PostgreSQL")
     db_name = str(DATABASES["default"].get("NAME") or "")
-    if not STAGING_DB_IDENTITY or STAGING_DB_IDENTITY not in db_name:
+    if not STAGING_DB_IDENTITY or STAGING_DB_IDENTITY != db_name:
         raise RuntimeError("Staging DATABASE_URL must match STAGING_DB_IDENTITY")
-    if PRODUCTION_DB_IDENTITY and PRODUCTION_DB_IDENTITY in db_name:
+    if not PRODUCTION_DB_IDENTITY or PRODUCTION_DB_IDENTITY == db_name:
         raise RuntimeError("Staging must never select the production database identity")
 
 AUTH_PASSWORD_VALIDATORS = [
@@ -145,3 +147,6 @@ if SAEIT_ENV == "staging" and any((
     TREASURY_EXECUTION_ENABLED, CRYPTO_EXECUTION_ENABLED,
 )):
     raise RuntimeError("Production publication/payment/treasury/crypto execution must be disabled in staging")
+
+FACTORY_ENVIRONMENT = SAEIT_ENV if SAEIT_ENV == "staging" else env("FACTORY_ENVIRONMENT", default="development")
+STAGING_RESEARCH_API_KEY = env("STAGING_RESEARCH_API_KEY", default="")
