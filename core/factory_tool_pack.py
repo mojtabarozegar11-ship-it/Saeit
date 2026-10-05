@@ -6,7 +6,7 @@ from .tool_gateway import ToolGateway, ToolSpec, consume_factory_invocation
 from .factory_contracts import FactoryAgentOutput
 from .factory_contracts import canonical_digest
 
-LANGUAGES = ("en","zh-hans","hi","es","fr","ar","bn","pt","ru","ur","id","de","ja","sw","mr","te","tr","ta","vi","ko")
+LANGUAGES = ("en","zh-hans","hi","es","fr","ar","bn","pt","ru","ur","id","de","ja","sw","mr","te","tr","ta","vi","ko","it","nl","pl","th")
 SUPPORTED_LOCALES = LANGUAGES + ("fa",)
 
 
