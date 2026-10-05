@@ -10,7 +10,7 @@ def test_self_hosted_provider_is_explicitly_real_and_keyless():
     provider = SelfHostedStagingResearchProvider()
     assert provider.real_research is True
     assert provider.provider_name == "self-hosted-staging"
-    assert provider.search_endpoint.startswith("https://")
+    assert provider.search_endpoint.startswith("https://search.brave.com/")
 
 
 @override_settings(SAEIT_ENV="production")
