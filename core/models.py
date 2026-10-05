@@ -126,6 +126,11 @@ class AgentTask(T):
     action_type = models.CharField(max_length=100, default="")
     capability_code = models.CharField(max_length=100, default="")
     risk_snapshot = models.CharField(max_length=10, default="low")
+    # Bridge identifiers make authenticated dispatch safe to retry without
+    # creating duplicate work after a caller loses the response.
+    bridge_nonce = models.CharField(max_length=128, null=True, blank=True, unique=True)
+    bridge_idempotency_key = models.CharField(max_length=128, null=True, blank=True, unique=True)
+    bridge_request_digest = models.CharField(max_length=64, blank=True, default="")
     execution_id = models.CharField(max_length=64, blank=True, default="")
     attempt_count = models.PositiveIntegerField(default=0)
     max_attempts = models.PositiveIntegerField(default=3)

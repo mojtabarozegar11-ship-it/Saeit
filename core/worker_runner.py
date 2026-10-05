@@ -1,5 +1,6 @@
 from decimal import Decimal, InvalidOperation
 from typing import Mapping, Optional
+from django.db import transaction
 
 from .services import normalize_action
 from .task_runtime import TaskExecutionError, TaskRuntime
@@ -41,19 +42,23 @@ class WorkerRunner:
             if not isinstance(payload, dict):
                 raise WorkerRunnerError("Task input must be an object")
 
-            result = self.gateway.invoke(
-                tool_code,
-                payload,
-                task_id=task.pk,
-                execution_id=execution_id,
-            )
-            output, cost = self._normalize_result(result)
-            completed = self.runtime.complete(
-                task.pk,
-                output_data=output,
-                cost=cost,
-                execution_id=execution_id,
-            )
+            # Factory tools currently mutate local database state. Commit those
+            # effects with task completion so stale-worker recovery cannot leave
+            # an applied effect attached to a task that is retried.
+            with transaction.atomic():
+                result = self.gateway.invoke(
+                    tool_code,
+                    payload,
+                    task_id=task.pk,
+                    execution_id=execution_id,
+                )
+                output, cost = self._normalize_result(result)
+                completed = self.runtime.complete(
+                    task.pk,
+                    output_data=output,
+                    cost=cost,
+                    execution_id=execution_id,
+                )
             return completed
         except Exception as exc:
             try:
