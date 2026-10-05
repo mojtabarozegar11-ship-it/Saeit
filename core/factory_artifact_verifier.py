@@ -12,7 +12,7 @@ class StaticResearchBriefVerifier:
     """Reads the stored artifact by reference and never trusts Builder pass claims."""
     FORBIDDEN = (
         re.compile(rb"<script", re.I),
-        re.compile(rb"(?:^|[<\\s])on[a-z]+[ \\t\\r\\n]*=", re.I),
+        re.compile(rb"(?:^|[<\s])on[a-z]+[\t ]*=", re.I),
         re.compile(rb"javascript[ ]*:", re.I),
         re.compile(rb"eval[(]", re.I),
     )
