@@ -24,9 +24,12 @@ PREVIOUS_STATE = {
     "product_validation": "scored",
     "product_spec": "validated",
     "product_build_record": "specified",
-    "product_qa": "built",
-    "product_localize": "qa_passed",
-    "product_launch_candidate": "localized",
+    "product_test": "built",
+    "product_security": "tested",
+    "product_localize": "security_verified",
+    "product_market_eligibility": "localized",
+    "product_qa": "eligible",
+    "product_launch_candidate": "qa_passed",
 }
 FACTORY_EVIDENCE_POLICY_VERSION = "factory-evidence-v1"
 EVIDENCE_TTL_DAYS = {"product_research": 30, "product_launch_candidate": 30}
@@ -37,8 +40,11 @@ STATE_BY_ACTION = {
     "product_validation": "validated",
     "product_spec": "specified",
     "product_build_record": "built",
-    "product_qa": "qa_passed",
+    "product_test": "tested",
+    "product_security": "security_verified",
     "product_localize": "localized",
+    "product_market_eligibility": "eligible",
+    "product_qa": "qa_passed",
     "product_launch_candidate": "launch_candidate",
 }
 
@@ -60,9 +66,12 @@ def prerequisite_values(action, product, run):
         "product_validation": "product_opportunity_score",
         "product_spec": "product_validation",
         "product_build_record": "product_spec",
-        "product_qa": "product_build_record",
-        "product_localize": "product_qa",
-        "product_launch_candidate": "product_localize",
+        "product_test": "product_build_record",
+        "product_security": "product_test",
+        "product_localize": "product_security",
+        "product_market_eligibility": "product_localize",
+        "product_qa": "product_market_eligibility",
+        "product_launch_candidate": "product_qa",
     }.get(action)
     if predecessor:
         evidence = run.evidence.filter(evidence_type=predecessor).order_by("-created_at", "-pk").first()
@@ -84,23 +93,32 @@ def prerequisite_values(action, product, run):
     elif action == "product_build_record":
         values["spec"] = meta.get("spec")
         values["spec_version"] = run.current_spec_version
-    elif action == "product_qa":
+    elif action in {"product_test", "product_security"}:
         artifact = FactoryArtifact.objects.filter(product=product, run=run, version=run.current_artifact_version).first()
         values["artifact"] = None if not artifact else {
             "id": artifact.pk, "version": artifact.version, "digest": artifact_content_digest(artifact),
             "spec_version": artifact.spec_version,
         }
+        values["spec_digest"] = (meta.get("spec") or {}).get("digest")
+        if action == "product_security":
+            values["test_attestation"] = meta.get("test_attestation")
     elif action == "product_localize":
-        values["qa"] = meta.get("qa")
+        values["security_attestation"] = meta.get("security_attestation")
         values["artifact_digest"] = _current_artifact_digest(product, run)
-    elif action == "product_launch_candidate":
+    elif action == "product_market_eligibility":
         values["localization"] = meta.get("localization")
         values["artifact_digest"] = _current_artifact_digest(product, run)
-        # This prerequisite is captured before the adapter chooses its launch
-        # markets. Bind the reviewed registry snapshot so eligibility changes
-        # invalidate this stage without making its own output mutate the snapshot.
         codes = sorted(FactoryMarketEligibility.objects.values_list("market_code", flat=True))
         values["market_eligibility"] = market_eligibility_snapshot(codes)
+    elif action == "product_qa":
+        values["test_attestation"] = meta.get("test_attestation")
+        values["security_attestation"] = meta.get("security_attestation")
+        values["localization"] = meta.get("localization")
+        values["market_eligibility"] = meta.get("market_eligibility")
+        values["artifact_digest"] = _current_artifact_digest(product, run)
+    elif action == "product_launch_candidate":
+        values["qa_attestation"] = meta.get("qa_attestation")
+        values["artifact_digest"] = _current_artifact_digest(product, run)
     return values
 
 
@@ -183,10 +201,10 @@ def invalidate_stale_evidence(product):
         for item in FactoryEvidence.objects.filter(product=product, status=FactoryEvidence.VALID).select_related("task", "run"):
             current = snapshot_for(item.task.action_type, product, item.run)
             spec_dependent = item.evidence_type in {
-                "product_spec", "product_build_record", "product_qa", "product_localize", "product_launch_candidate"
+                "product_spec", "product_build_record", "product_test", "product_security", "product_localize", "product_market_eligibility", "product_qa", "product_launch_candidate"
             }
             artifact_dependent = item.evidence_type in {
-                "product_build_record", "product_qa", "product_localize", "product_launch_candidate"
+                "product_build_record", "product_test", "product_security", "product_localize", "product_market_eligibility", "product_qa", "product_launch_candidate"
             }
             if (
                 (item.evidence_type != "product_research" and current["digest"] != item.prerequisite_digest)
