@@ -1,17 +1,20 @@
 import json
+import tempfile
 from django.test import TestCase
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.utils import timezone
 from datetime import timedelta
 from io import StringIO
-from core.factory_tool_pack import product_research, opportunity_score, product_spec, product_build_record, product_qa, product_localize, launch_candidate
+from core.factory_tool_pack import product_research, opportunity_score, product_spec, product_build_record, product_qa, product_localize, launch_candidate, build_factory_gateway
 from core.models import Product, FactoryMarketEligibility, FactoryRun, FactoryEvidence, AgentToolGrant
 from core.models import Agent, AgentCapability, AgentTask, AuditLog
 from core.tool_gateway import ToolGateway, ToolSpec
 from core.worker_runner import WorkerRunner
 from core.autonomous_brain import AutonomousBrain
 from core.factory_governance import snapshot_for
+from core.factory_agent_runtime import FactoryAgentRuntime, FixtureResearchProvider
+from core.factory_builder import StaticResearchBriefBuilder
 
 class FactoryToolPackTests(TestCase):
     def test_chain_reaches_launch_candidate_with_evidence(self):
@@ -84,6 +87,9 @@ class FactoryToolPackTests(TestCase):
         agent = Agent.objects.create(code="factory-retry", name="Factory retry", mission="Research", active=True)
         capability = AgentCapability.objects.create(code="product_research", name="Research", active=True)
         capability.agents.add(agent)
+        owner = get_user_model().objects.create_superuser(
+            username="factory-retry-owner", email="factory-retry@example.com", password="test-only"
+        )
         run = FactoryRun.objects.create(run_id="retry-run", goal="Research a retry-safe product.")
         task = AgentTask.objects.create(
             agent=agent, action_type="product_research", capability_code=capability.code,
@@ -99,26 +105,31 @@ class FactoryToolPackTests(TestCase):
             product_research(payload)
             raise RuntimeError("simulated process failure after database effect")
 
+        executor = FactoryAgentRuntime(research_provider=FixtureResearchProvider())
         with self.assertRaisesRegex(RuntimeError, "simulated process failure"):
-            WorkerRunner(ToolGateway([ToolSpec(code="product_research", handler=fail_after_effect)])).run(task.pk, agent_output={
-                "title":"Retry-safe product", "sources":[
-                    {"url":"https://example.com/a", "finding":"demand"},
-                    {"url":"https://example.com/b", "finding":"competition"},
-                ]})
+            WorkerRunner(
+                ToolGateway([ToolSpec(code="product_research", handler=fail_after_effect)]),
+                factory_executor=executor,
+            ).run(task.pk)
         task.refresh_from_db()
         self.assertEqual(task.status, "queued")
-        self.assertEqual(Product.objects.filter(title="Retry-safe product").count(), 0)
+        self.assertGreater(task.next_retry_at, timezone.now())
+        self.assertEqual(Product.objects.count(), 0)
 
-        completed = WorkerRunner(ToolGateway([ToolSpec(code="product_research", handler=product_research)])).run(task.pk, agent_output={
-            "title":"Retry-safe product", "sources":[
-                {"url":"https://example.com/a", "finding":"demand"},
-                {"url":"https://example.com/b", "finding":"competition"},
-            ]})
+        task.next_retry_at = timezone.now() - timedelta(seconds=1)
+        task.save(update_fields=["next_retry_at", "updated_at"])
+        completed = WorkerRunner(
+            ToolGateway([ToolSpec(code="product_research", handler=product_research)]),
+            factory_executor=executor,
+        ).run(task.pk)
         self.assertEqual(completed.status, "completed")
-        self.assertEqual(Product.objects.filter(title="Retry-safe product").count(), 1)
+        self.assertEqual(Product.objects.count(), 1)
 
     def test_master_brain_plans_and_verifies_factory_research_task(self):
         Product.objects.create(title="Existing catalog item", product_type="digital", metadata={})
+        owner = get_user_model().objects.create_superuser(
+            username="factory-master-owner", email="factory-master@example.com", password="test-only"
+        )
         agent = Agent.objects.create(
             code="factory-master-agent", name="Factory Master", mission="Coordinate product factory", active=True
         )
@@ -138,20 +149,17 @@ class FactoryToolPackTests(TestCase):
         self.assertTrue(AuditLog.objects.filter(action="factory_next_step_planned", target_id=str(task.pk)).exists())
         self.assertEqual(brain.plan_product_factory_step({"goal":"ignored retry"}).pk, task.pk)
 
-        output = StringIO()
-        call_command("factory_product_step", task_id=task.pk, result_json=json.dumps({
-            "title":"Farm workflow evidence digest",
-            "sources":[
-                {"url":"https://example.com/demand", "finding":"Small farms need a simple harvest log."},
-                {"url":"https://example.com/alternatives", "finding":"Available tools are overly complex for a small operation."},
-            ],
-        }), stdout=output)
-        completed = AgentTask.objects.get(pk=task.pk)
+        with tempfile.TemporaryDirectory() as workspace:
+            executor = FactoryAgentRuntime(
+                research_provider=FixtureResearchProvider(),
+                builder=StaticResearchBriefBuilder(workspace),
+            )
+            completed = WorkerRunner(build_factory_gateway(), factory_executor=executor).run(task.pk)
         self.assertEqual(completed.status, "completed")
-        self.assertIn("verified=True", output.getvalue())
         product = Product.objects.get(pk=completed.output_data["product_id"])
         self.assertEqual(product.metadata["factory_state"], "researched")
         self.assertEqual(product.metadata["factory_history"][-1]["task_id"], task.pk)
+        self.assertFalse(product.metadata["research"]["real_research"])
         next_step = brain.decide_product_factory_step(product.pk)
         self.assertEqual(next_step["action"], "product_opportunity_score")
 
@@ -165,30 +173,25 @@ class FactoryToolPackTests(TestCase):
             evidence_reference="https://example.com/market-review", review_note="Test fixture review.",
             reviewed_by=owner, reviewed_at=timezone.now(), valid_until=timezone.now() + timedelta(days=30),
         )
-        payloads = [
-            {"title":"Farm harvest log", "sources":[
-                {"url":"https://example.com/demand", "finding":"Small farms need harvest records."},
-                {"url":"https://example.com/competition", "finding":"Current tools are too complex."},
-            ]},
-            {"score":82, "rationale":"Evidence supports a narrow, low-risk utility."},
-            {"spec":{"problem":"Manual harvest records are fragmented.", "acceptance_criteria":["Records a harvest entry.", "Exports a daily summary."]}},
-            {"artifact":{"ref":"test-artifact:sha256:fixture-v1"}},
-            {"tests":{"passed":True, "run_id":"fixture-tests-1"}, "security":{"passed":True, "run_id":"fixture-security-1"}},
-            {"locales":["en", "fa"]},
-            {"markets":[{"market_code":"US"}]},
-        ]
+        goal = "Build a source-backed farm harvest digital product."
+        run_id = "factory-full-e2e-run"
         brain = AutonomousBrain()
         product_id = None
         task_ids = []
-        for payload in payloads:
-            task = brain.plan_product_factory_step(payload={"goal":"Build a source-backed farm harvest digital product."}, product_id=product_id)
-            self.assertEqual(task.status, "queued")
-            task_ids.append(task.pk)
-            output = StringIO()
-            call_command("factory_product_step", task_id=task.pk, result_json=json.dumps(payload), stdout=output)
-            task.refresh_from_db()
-            self.assertEqual(task.status, "completed", output.getvalue())
-            product_id = task.output_data["product_id"]
+        with tempfile.TemporaryDirectory() as workspace:
+            executor = FactoryAgentRuntime(
+                research_provider=FixtureResearchProvider(),
+                builder=StaticResearchBriefBuilder(workspace),
+            )
+            for _ in range(7):
+                task = brain.plan_product_factory_step(
+                    payload={"goal": goal}, product_id=product_id, run_id=run_id
+                )
+                self.assertEqual(task.status, "queued")
+                task_ids.append(task.pk)
+                done = WorkerRunner(build_factory_gateway(), factory_executor=executor).run(task.pk)
+                self.assertEqual(done.status, "completed")
+                product_id = done.output_data["product_id"]
 
         product = Product.objects.get(pk=product_id)
         self.assertEqual(
@@ -199,9 +202,11 @@ class FactoryToolPackTests(TestCase):
             "product_research", "product_opportunity_score", "product_spec", "product_build_record",
             "product_qa", "product_localize", "product_launch_candidate",
         ])
+        self.assertTrue(product.metadata["qa"]["tests"]["passed"])
+        self.assertTrue(product.metadata["qa"]["security"]["passed"])
         self.assertFalse(product.active)
         self.assertEqual(brain.decide_product_factory_step(product.pk)["action"], "owner_approval_boundary")
-        self.assertEqual(AuditLog.objects.filter(action="factory_next_step_planned").count(), len(payloads))
+        self.assertEqual(AuditLog.objects.filter(action="factory_next_step_planned").count(), 7)
 
     def test_factory_product_activation_is_blocked_without_release_gate_owner_approval(self):
         product = Product.objects.create(

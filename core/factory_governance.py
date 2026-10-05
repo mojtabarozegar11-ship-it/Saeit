@@ -32,10 +32,16 @@ STATE_BY_ACTION = {
 
 def prerequisite_values(action, product, run):
     if action == "product_research" or product is None:
-        return {"state": "new"}
+        return {
+            "state": "new", "run_id": run.run_id, "run_goal": run.goal,
+            "run_constraints": run.constraints,
+        }
     meta = product.metadata if isinstance(product.metadata, dict) else {}
     previous = PREVIOUS_STATE.get(action)
-    values = {"state": previous, "product_id": product.pk, "run_id": run.run_id}
+    values = {
+        "state": previous, "product_id": product.pk, "run_id": run.run_id,
+        "run_goal": run.goal, "run_constraints": run.constraints,
+    }
     if action == "product_opportunity_score":
         values["research"] = meta.get("research")
     elif action == "product_spec":
@@ -97,9 +103,9 @@ class FactoryTaskVerifier:
         required = contract.get("required", [])
         if not isinstance(required, list) or any(output.get(key) in (None, "", [], {}) for key in required):
             raise ValidationError("Task output does not satisfy its declared output contract.")
-        run = task.factory_run
-        if not run:
+        if not task.factory_run_id:
             raise ValidationError("Factory task is not attached to a persistent run.")
+        run = FactoryRun.objects.select_for_update().get(pk=task.factory_run_id)
         product_id = output.get("product_id") or task.product_id
         if not product_id:
             raise ValidationError("Factory output must identify the persisted Product.")

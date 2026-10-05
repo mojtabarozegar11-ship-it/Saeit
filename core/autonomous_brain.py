@@ -89,7 +89,7 @@ class AutonomousBrain:
         c.append(Candidate("income_profit_optimize","Measure economics and identify the next bottleneck.",6,5,8,1))
         return sorted(c,key=lambda x:x.score,reverse=True)
 
-    def observe_product_factory(self, product_id=None):
+    def observe_product_factory(self, product_id=None, run_id=None):
         """Observe lifecycle state and runtime work before selecting a factory step."""
         products = Product.objects.all()
         if product_id is not None:
@@ -108,6 +108,8 @@ class AutonomousBrain:
             products[0] if products else None,
         )
         tasks = AgentTask.objects.filter(action_type__startswith="product_")
+        if run_id:
+            tasks = tasks.filter(factory_run__run_id=run_id)
         if product:
             tasks = tasks.filter(product_id=product.pk)
         else:
@@ -160,9 +162,9 @@ class AutonomousBrain:
             "candidate_count": Product.objects.filter(metadata__factory_state="launch_candidate").count(),
         }
 
-    def decide_product_factory_step(self, product_id=None):
+    def decide_product_factory_step(self, product_id=None, run_id=None):
         """Select the first unmet lifecycle gate from persisted Product evidence."""
-        state = self.observe_product_factory(product_id)
+        state = self.observe_product_factory(product_id, run_id=run_id)
         if state["pending_task"]:
             task = state["pending_task"]
             return {"action": "continue_existing_task", "task_id": task.pk,
@@ -193,11 +195,14 @@ class AutonomousBrain:
                 "product_id": state["product"].pk if state["product"] else None,
                 "reason": f"Persisted lifecycle state is {state['factory_state']}; this is the next unmet gate."}
 
-    def plan_product_factory_step(self, payload=None, product_id=None):
+    def plan_product_factory_step(self, payload=None, product_id=None, run_id=None):
         """Queue one capability-authorized step through the existing MasterAgent planner."""
         from core.orchestrator import MasterAgent
 
-        decision = self.decide_product_factory_step(product_id)
+        existing_run = FactoryRun.objects.filter(run_id=run_id).first() if run_id else None
+        if existing_run and not product_id:
+            product_id = existing_run.product_id
+        decision = self.decide_product_factory_step(product_id, run_id=run_id)
         if decision["action"] == "continue_existing_task":
             return AgentTask.objects.get(pk=decision["task_id"])
         if decision["action"] in {"blocked", "owner_approval_boundary"}:
@@ -218,12 +223,38 @@ class AutonomousBrain:
         }
         product = Product.objects.filter(pk=decision["product_id"]).first() if decision["product_id"] else None
         if product:
-            run = FactoryRun.objects.filter(product=product, status="active").order_by("-created_at", "-pk").first()
+            runs = FactoryRun.objects.filter(product=product, status="active")
+            if run_id:
+                runs = runs.filter(run_id=run_id)
+            run = runs.order_by("-created_at", "-pk").first()
             if not run:
                 raise RuntimeError("Product has no active Factory Run.")
         else:
-            run = FactoryRun.objects.create(run_id=uuid.uuid4().hex, goal=goal, environment=str(getattr(settings, "FACTORY_ENVIRONMENT", "development")))
+            run = existing_run
+            if run and run.goal != goal:
+                raise RuntimeError("A resumed Factory Run must keep its original goal.")
+            if not run:
+                run = FactoryRun.objects.create(
+                    run_id=run_id or uuid.uuid4().hex, goal=goal,
+                    constraints=request.get("constraints", []),
+                    environment=str(getattr(settings, "FACTORY_ENVIRONMENT", "development")),
+                )
+        constraints = request.get("constraints", run.constraints)
+        if not isinstance(constraints, (list, dict)):
+            raise RuntimeError("Factory constraints must be a JSON object or list.")
+        if run.tasks.exists() and constraints != run.constraints:
+            raise RuntimeError("Constraints are immutable after a Factory Run has tasks.")
+        if constraints != run.constraints:
+            run.constraints = constraints
+            run.save(update_fields=["constraints", "updated_at"])
+        if run.status != "active":
+            raise RuntimeError(f"Factory Run cannot continue from status {run.status}.")
+        existing_task = run.tasks.filter(status__in=("queued", "running", "blocked")).order_by("created_at", "pk").first()
+        if existing_task:
+            return existing_task
         task_payload = {"goal": goal, "run_id": run.run_id}
+        if constraints:
+            task_payload["constraints"] = constraints
         if product:
             task_payload["product_id"] = product.pk
         task = MasterAgent().plan(

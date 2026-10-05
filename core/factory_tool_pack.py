@@ -45,9 +45,9 @@ def opportunity_score(payload):
     try: score=float(score)
     except (TypeError,ValueError): raise ValueError("numeric score is required")
     if not 0 <= score <= 100: raise ValueError("score must be between 0 and 100")
-    product.metadata={**product.metadata,"factory_state":"scored","opportunity":{"score":score,"rationale":str(payload.get("rationale") or "")}}
+    product.metadata={**product.metadata,"factory_state":"scored","opportunity":{"score":score,"rationale":str(payload.get("rationale") or ""),"rubric":payload.get("rubric") or {}}}
     product.save(update_fields=["metadata","updated_at"])
-    return {"verified_effect":True,"product_id":product.pk,"factory_state":"scored","score":score,"rationale":str(payload.get("rationale") or "")}
+    return {"verified_effect":True,"product_id":product.pk,"factory_state":"scored","score":score,"rationale":str(payload.get("rationale") or ""),"rubric":payload.get("rubric") or {}}}
 
 
 def product_spec(payload):

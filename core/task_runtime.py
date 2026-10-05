@@ -28,6 +28,8 @@ class TaskRuntime:
             if task.status == "failed" and task.attempt_count >= task.max_attempts:
                 raise TaskExecutionError("Task retry budget exhausted")
             raise TaskExecutionError(f"Task is not executable from status: {task.status}")
+        if task.next_retry_at and task.next_retry_at > timezone.now():
+            raise TaskExecutionError("Task retry backoff has not elapsed")
         if not task.agent.active:
             raise TaskExecutionError("Task agent is inactive")
 
@@ -99,19 +101,17 @@ class TaskRuntime:
         previous_execution_id = task.execution_id
         if task.attempt_count >= task.max_attempts:
             task.status = "failed"
-            task.output_data = {
-                "error": "Execution became stale and retry budget was exhausted"
-            }
+            task.next_retry_at = None
+            task.output_data = {"error": "Execution became stale and retry budget was exhausted"}
         else:
             task.status = "queued"
             task.execution_id = ""
+            task.next_retry_at = timezone.now() + timedelta(seconds=min(30 * (2 ** max(task.attempt_count - 1, 0)), 300)) if str(task.capability_code or "").startswith("product_") else None
             task.output_data = {
-                "error": "Execution became stale and was re-queued for recovery"
+                "error": "Execution became stale and was re-queued for recovery",
+                "retry_after": task.next_retry_at.isoformat(),
             }
-
-        task.save(
-            update_fields=["status", "execution_id", "output_data", "updated_at"]
-        )
+        task.save(update_fields=["status", "execution_id", "next_retry_at", "output_data", "updated_at"])
         self._audit(
             task,
             "task_recovered_stale",
@@ -172,7 +172,8 @@ class TaskRuntime:
         task.output_data = normalized_output
         task.cost = normalized_cost
         task.status = "completed"
-        task.save(update_fields=["output_data", "cost", "status", "updated_at"])
+        task.next_retry_at = None
+        task.save(update_fields=["output_data", "cost", "status", "next_retry_at", "updated_at"])
         self._audit(task, "task_completed", {"status": "completed", "execution_id": task.execution_id})
         return task
 
@@ -259,7 +260,7 @@ class TaskRuntime:
         product.save(update_fields=["metadata", "updated_at"])
 
     @transaction.atomic
-    def fail(self, task_id, error, execution_id=None):
+    def fail(self, task_id, error, execution_id=None, retry_backoff=False):
         task = AgentTask.objects.select_for_update().get(pk=task_id)
         if task.status != "running":
             raise TaskExecutionError(f"Task is not running: {task.status}")
@@ -269,13 +270,20 @@ class TaskRuntime:
             raise TaskExecutionError("Task failure reason is required")
         previous_execution_id = task.execution_id
         task.output_data = {"error": str(error)[:5000]}
-        if task.attempt_count >= task.max_attempts:
-            task.status = "failed"
+        if getattr(error, "retryable", True) is False:
+            task.status, task.execution_id, task.next_retry_at = "blocked", "", None
+        elif task.attempt_count >= task.max_attempts:
+            task.status, task.next_retry_at = "failed", None
         else:
-            # Invalidate the previous worker identity before the retry is claimable.
             task.execution_id = ""
             task.status = "queued"
-        task.save(update_fields=["output_data", "execution_id", "status", "updated_at"])
+            task.next_retry_at = (
+                timezone.now() + timedelta(seconds=min(30 * (2 ** max(task.attempt_count - 1, 0)), 300))
+                if retry_backoff else None
+            )
+            if task.next_retry_at:
+                task.output_data["retry_after"] = task.next_retry_at.isoformat()
+        task.save(update_fields=["output_data", "execution_id", "status", "next_retry_at", "updated_at"])
         self._audit(
             task,
             "task_failed",
@@ -288,6 +296,24 @@ class TaskRuntime:
             },
             trace_execution_id=previous_execution_id,
         )
+        return task
+
+    @transaction.atomic
+    def resume_blocked(self, task_id, owner, reason):
+        task = AgentTask.objects.select_for_update().get(pk=task_id)
+        if task.status != "blocked":
+            raise TaskExecutionError("Only a blocked task can be resumed")
+        if not owner or not owner.is_superuser:
+            raise TaskExecutionError("Owner authority is required to resume blocked work")
+        if not str(reason or "").strip():
+            raise TaskExecutionError("A remediation reason is required")
+        task.status, task.execution_id, task.next_retry_at = "queued", "", None
+        task.output_data = {**(task.output_data or {}), "resumed_by": owner.pk, "remediation": str(reason)[:1000]}
+        task.save(update_fields=["status", "execution_id", "next_retry_at", "output_data", "updated_at"])
+        if task.factory_run_id and task.factory_run.status == "blocked":
+            task.factory_run.status = "active"
+            task.factory_run.save(update_fields=["status", "updated_at"])
+        self._audit(task, "task_resumed_after_remediation", task.output_data)
         return task
 
     def _audit(self, task, action, state, trace_execution_id=None):

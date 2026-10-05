@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.utils import timezone
 
 
 class T(models.Model):
@@ -20,6 +21,7 @@ class ResearchProject(T):
         on_delete=models.PROTECT,
         related_name="research_projects",
     )
+    factory_run = models.OneToOneField("FactoryRun", null=True, blank=True, on_delete=models.PROTECT, related_name="research_project")
 
 
 class ResearchSource(T):
@@ -30,6 +32,9 @@ class ResearchSource(T):
     url = models.URLField(blank=True)
     publisher = models.CharField(max_length=300, blank=True)
     content_hash = models.CharField(max_length=128, blank=True)
+    retrieved_at = models.DateTimeField(default=timezone.now)
+    provenance = models.JSONField(default=dict)
+    snapshot_hash = models.CharField(max_length=64, blank=True, default="")
 
     def clean(self):
         if not self.title.strip():
@@ -140,6 +145,7 @@ class AgentTask(T):
     environment = models.CharField(max_length=40, default="development")
     attempt_count = models.PositiveIntegerField(default=0)
     max_attempts = models.PositiveIntegerField(default=3)
+    next_retry_at = models.DateTimeField(null=True, blank=True)
     input_data = models.JSONField(default=dict)
     output_data = models.JSONField(default=dict)
     status = models.CharField(max_length=20, default="queued")
@@ -276,6 +282,7 @@ class FactoryRun(T):
     run_id = models.CharField(max_length=64, unique=True)
     product = models.ForeignKey("Product", null=True, blank=True, on_delete=models.PROTECT, related_name="factory_runs")
     goal = models.TextField()
+    constraints = models.JSONField(default=list)
     status = models.CharField(max_length=20, default="active")
     environment = models.CharField(max_length=40, default="development")
     current_spec_version = models.PositiveIntegerField(default=1)
@@ -300,6 +307,11 @@ class FactoryArtifact(T):
         constraints = [models.UniqueConstraint(fields=["product", "version"], name="unique_factory_artifact_version")]
 
     def save(self, *args, **kwargs):
+        if self.pk:
+            previous = FactoryArtifact.objects.get(pk=self.pk)
+            immutable = ("product_id", "run_id", "created_by_task_id", "version", "reference", "content_digest", "spec_version")
+            if any(getattr(previous, field) != getattr(self, field) for field in immutable):
+                raise ValidationError("FactoryArtifact versions are immutable.")
         super().save(*args, **kwargs)
         from .factory_governance import invalidate_stale_evidence
         invalidate_stale_evidence(self.product)

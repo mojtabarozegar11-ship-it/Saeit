@@ -1,0 +1,124 @@
+import hashlib
+import json
+import tempfile
+from pathlib import Path
+
+from django.contrib.auth import get_user_model
+from django.core.management import call_command
+from django.test import TestCase, override_settings
+from io import StringIO
+
+from core.autonomous_brain import AutonomousBrain
+from core.factory_agent_runtime import FactoryAgentBlocked, FactoryAgentRuntime, FixtureResearchProvider
+from core.factory_artifact_verifier import StaticResearchBriefVerifier
+from core.factory_builder import StaticResearchBriefBuilder
+from core.factory_tool_pack import build_factory_gateway
+from core.models import AgentTask, FactoryArtifact, FactoryEvidence, FactoryRun, Product, ResearchSource
+from core.task_runtime import TaskRuntime
+from core.worker_runner import WorkerRunner
+
+
+class P1FixtureResearchProvider(FixtureResearchProvider):
+    """Explicit test-only provider used by the master-loop E2E test."""
+
+
+@override_settings(
+    FACTORY_ENVIRONMENT="development",
+    FACTORY_RESEARCH_PROVIDER="core.tests.test_factory_p1_runtime.P1FixtureResearchProvider",
+)
+class FactoryP1RuntimeTests(TestCase):
+    def setUp(self):
+        call_command("seed_factory_agents", verbosity=0)
+        self.owner = get_user_model().objects.create_superuser(
+            username="p1-factory-owner", email="p1-owner@example.com", password="test-only"
+        )
+        self.goal = "Create a small evidence-backed harvest tracking brief."
+        self.run_id = "p1-e2e-run"
+        self.brain = AutonomousBrain()
+        self.tempdir = tempfile.TemporaryDirectory()
+
+    def tearDown(self):
+        self.tempdir.cleanup()
+
+    def test_goal_to_independent_research_score_spec_build_and_test_security(self):
+        first = self.brain.plan_product_factory_step(
+            payload={"goal": self.goal}, run_id=self.run_id,
+        )
+        self.assertEqual(first.input_data, {"goal": self.goal, "run_id": self.run_id})
+        self.assertNotIn("sources", first.input_data)
+        self.assertNotIn("score", first.input_data)
+        self.assertNotIn("spec", first.input_data)
+        self.assertNotIn("artifact", first.input_data)
+        self.assertNotIn("tests", first.input_data)
+        self.assertNotIn("security", first.input_data)
+
+        with override_settings(FACTORY_WORKSPACE_ROOT=self.tempdir.name):
+            output = StringIO()
+            call_command(
+                "autonomous_master_loop", factory=True, goal=self.goal, run_id=self.run_id,
+                max_steps=5, stdout=output,
+            )
+        self.assertIn("FACTORY_PAUSED", output.getvalue())
+        self.assertEqual(AgentTask.objects.filter(factory_run__run_id=self.run_id).count(), 5)
+
+        run = FactoryRun.objects.get(run_id=self.run_id)
+        product = Product.objects.get(pk=run.product_id)
+        evidence = FactoryEvidence.objects.filter(run=run, status=FactoryEvidence.VALID)
+        self.assertEqual(evidence.count(), 5)
+        research = product.metadata["research"]
+        self.assertFalse(research["real_research"])
+        self.assertEqual(research["research_provider"], "fixture")
+        self.assertEqual(len(research["evidence"]), 2)
+        sources = ResearchSource.objects.filter(project_id=research["research_project_id"])
+        self.assertEqual(sources.count(), 2)
+        for source in sources:
+            self.assertTrue(source.retrieved_at)
+            self.assertTrue(source.snapshot_hash)
+            self.assertEqual(len(source.snapshot_hash), 64)
+            self.assertEqual(source.provenance["real_research"], False)
+
+        score = product.metadata["opportunity"]
+        self.assertEqual(score["rubric"]["id"], "evidence-confidence-v1")
+        self.assertEqual(score["rubric"]["evidence_ids"], [item["evidence_id"] for item in research["evidence"]])
+        self.assertEqual(score["score"], 77.5)
+        spec = product.metadata["spec"]
+        spec_digest = spec.pop("digest")
+        self.assertEqual(spec_digest, hashlib.sha256(
+            json.dumps(spec, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest())
+        spec["digest"] = spec_digest
+        artifact = FactoryArtifact.objects.get(run=run, version=1)
+        self.assertEqual(artifact.content_digest, product.metadata["build"]["sha256"])
+        self.assertTrue(Path(artifact.reference).is_file())
+        qa = product.metadata["qa"]
+        self.assertTrue(qa["tests"]["passed"])
+        self.assertTrue(qa["security"]["passed"])
+        self.assertEqual(qa["tests"]["artifact_digest"], artifact.content_digest)
+        self.assertEqual(qa["security"]["artifact_digest"], artifact.content_digest)
+        self.assertEqual(product.metadata["factory_state"], "qa_passed")
+        self.assertFalse(product.active)
+
+    @override_settings(FACTORY_RESEARCH_PROVIDER="")
+    def test_missing_real_provider_blocks_instead_of_claiming_research_success(self):
+        task = self.brain.plan_product_factory_step(
+            payload={"goal": self.goal}, run_id=self.run_id,
+        )
+        with self.assertRaises(FactoryAgentBlocked):
+            WorkerRunner(
+                build_factory_gateway(), factory_executor=FactoryAgentRuntime()
+            ).run(task.pk)
+        task.refresh_from_db()
+        run = FactoryRun.objects.get(run_id=self.run_id)
+        self.assertEqual(task.status, "blocked")
+        self.assertNotEqual(task.status, "completed")
+        self.assertIsNone(run.product_id)
+
+    def test_owner_can_resume_blocked_work_after_documented_remediation(self):
+        task = self.brain.plan_product_factory_step(
+            payload={"goal": self.goal}, run_id=self.run_id,
+        )
+        task.status = "blocked"
+        task.save(update_fields=["status", "updated_at"])
+        resumed = TaskRuntime().resume_blocked(task.pk, self.owner, "Configured the approved research provider.")
+        self.assertEqual(resumed.status, "queued")
+        self.assertIsNone(resumed.next_retry_at)

@@ -24,8 +24,10 @@ class WorkerRunner:
         gateway: ToolGateway,
         runtime: Optional[TaskRuntime] = None,
         tool_map: Optional[Mapping[str, str]] = None,
+        factory_executor=None,
     ):
         self.gateway = gateway
+        self.factory_executor = factory_executor
         self.runtime = runtime or TaskRuntime()
         self.tool_map = {
             normalize_action(action): normalize_action(tool)
@@ -41,6 +43,14 @@ class WorkerRunner:
             payload = task.input_data or {}
             if not isinstance(payload, dict):
                 raise WorkerRunnerError("Task input must be an object")
+
+            factory_task = str(task.capability_code or "").startswith("product_")
+            if factory_task and agent_output is not None:
+                raise WorkerRunnerError("Factory specialist outputs must be generated from the Run by an execution adapter.")
+            if factory_task and task.action_type == "product_qa" and self.factory_executor is None:
+                raise WorkerRunnerError("Factory QA requires the independent artifact verifier.")
+            if self.factory_executor is not None and agent_output is None and factory_task:
+                agent_output = self.factory_executor.execute(task)
 
             # Factory tools currently mutate local database state. Commit those
             # effects with task completion so stale-worker recovery cannot leave
@@ -65,8 +75,9 @@ class WorkerRunner:
             try:
                 self.runtime.fail(
                     task.pk,
-                    str(exc)[:5000],
+                    exc,
                     execution_id=execution_id,
+                    retry_backoff=self.factory_executor is not None,
                 )
             except TaskExecutionError:
                 # Preserve the original worker failure; a concurrent recovery or
