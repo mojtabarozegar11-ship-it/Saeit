@@ -183,6 +183,11 @@ def invalidate_stale_evidence(product):
             }
             if (
                 current["digest"] != item.prerequisite_digest
+                or (
+                    item.evidence_type == "product_research"
+                    and item.details.get("research_runtime_digest")
+                    != research_runtime_digest(product.metadata if isinstance(product.metadata, dict) else {})
+                )
                 or (spec_dependent and current["spec_version"] != item.spec_version)
                 or (artifact_dependent and current["artifact_version"] != item.artifact_version)
                 or item.freshness_policy_version != current_evidence_policy_version()
@@ -303,7 +308,10 @@ class FactoryTaskVerifier:
                 "status": FactoryEvidence.VALID,
                 "freshness_policy_version": current_evidence_policy_version(),
                 "valid_until": evidence_expiry_for(action),
-                "details": {"output": output, "verified_state": product.metadata.get("factory_state")},
+                "details": {
+                    "output": output, "verified_state": product.metadata.get("factory_state"),
+                    **({"research_runtime_digest": research_runtime_digest(product.metadata)} if action == "product_research" else {}),
+                },
             },
         )
         run.product = product

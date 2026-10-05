@@ -12,7 +12,7 @@ from django.urls import reverse
 from rest_framework.test import APIClient
 
 from core.autonomous_brain import AutonomousBrain
-from core.factory_agent_runtime import FactoryAgentRuntime, FixtureResearchProvider
+from core.factory_agent_runtime import FactoryAgentBlocked, FactoryAgentRuntime, FixtureResearchProvider
 from core.factory_artifact_verifier import ArtifactVerificationError, StaticResearchBriefVerifier
 from core.factory_builder import FactoryBuildError, StaticResearchBriefBuilder
 from core.factory_contracts import FactoryAgentOutput, GatewayAdapterReceipt
@@ -231,7 +231,7 @@ class FactoryP0SecurityTests(TestCase):
         )
         AgentTask.objects.filter(pk=task.pk).update(updated_at=timezone.now() - timedelta(hours=1))
         provider = CountingProvider()
-        with self.assertRaisesRegex(ToolGatewayError, "lease has expired"):
+        with self.assertRaises(FactoryAgentBlocked):
             FactoryAgentRuntime(research_provider=provider).execute(
                 running, authorization=authorization, authorization_check=gateway.is_authorized,
             )
@@ -262,7 +262,7 @@ class FactoryP0SecurityTests(TestCase):
         task = AutonomousBrain().plan_product_factory_step(
             payload={"goal": self.goal}, product_id=product.pk, run_id=run.run_id
         )
-        with self.assertRaisesRegex(ValidationError, "stale, invalid, or expired"):
+        with self.assertRaisesRegex(ValidationError, "prerequisites are stale"):
             validate_task_prerequisites(task)
 
     def test_invalid_predecessor_lineage_cannot_be_consumed(self):
@@ -273,7 +273,7 @@ class FactoryP0SecurityTests(TestCase):
         task = AutonomousBrain().plan_product_factory_step(
             payload={"goal": self.goal}, product_id=product.pk, run_id=run.run_id
         )
-        with self.assertRaisesRegex(ValidationError, "stale, invalid, or expired"):
+        with self.assertRaisesRegex(ValidationError, "prerequisites are stale"):
             validate_task_prerequisites(task)
 
     def test_canonical_spec_digest_ignores_claimed_digest_but_tracks_content(self):
