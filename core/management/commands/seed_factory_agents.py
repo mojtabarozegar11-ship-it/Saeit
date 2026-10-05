@@ -10,9 +10,12 @@ CAPABILITIES=[
 ("product_validation","Opportunity Validation","Independently validate commercial and technical assumptions before specification.","low"),
 ("product_spec","Product Spec","Create measurable product specifications.","medium"),
 ("product_build_record","Build Record","Register versioned build artifacts.","medium"),
-("product_qa","QA and Security","Require passing test and security evidence.","medium"),
-("product_localize","Localization","Prepare validated launch locales.","medium"),
-("product_launch_candidate","Launch Candidate","Prepare eligible markets for owner-gated publication.","medium"),
+("product_test","Independent Test","Independently test the exact immutable build artifact.","medium"),
+("product_security","Independent Security","Independently verify security of the exact build artifact.","medium"),
+("product_localize","Localization","Prepare release-bound locale attestations.","medium"),
+("product_market_eligibility","Market Eligibility","Read and bind owner-reviewed market eligibility.","medium"),
+("product_qa","Independent QA","Attest complete release lineage before launch candidacy.","medium"),
+("product_launch_candidate","Launch Candidate","Record a verified inactive launch candidate.","medium"),
 ]
 
 SPECIALISTS = {
@@ -21,9 +24,12 @@ SPECIALISTS = {
     "product_validation": ("factory-opportunity-validation-agent", "Opportunity Validation Agent", "Validate commercial assumptions cheaply before building."),
     "product_spec": ("factory-product-strategist-agent", "Product Strategist", "Turn validated opportunities into measurable product specifications."),
     "product_build_record": ("factory-product-builder-agent", "Product Builder Agent", "Produce and register versioned product build artifacts."),
-    "product_qa": ("factory-qa-security-agent", "QA and Security Agent", "Verify automated test and security evidence for builds."),
-    "product_localize": ("factory-localization-agent", "Localization Agent", "Prepare locale-aware launch content and formatting."),
-    "product_launch_candidate": ("factory-market-eligibility-agent", "Market Eligibility Agent", "Validate market eligibility evidence before launch candidacy."),
+    "product_test": ("factory-independent-test-agent", "Independent Test Agent", "Test immutable build artifacts independently from Builder."),
+    "product_security": ("factory-independent-security-agent", "Independent Security Agent", "Security-verify immutable build artifacts independently from Builder."),
+    "product_localize": ("factory-localization-agent", "Localization Agent", "Produce release-bound locale attestations with English fallback and RTL metadata."),
+    "product_market_eligibility": ("factory-market-eligibility-agent", "Market Eligibility Agent", "Bind owner-reviewed market decisions without self-approval."),
+    "product_qa": ("factory-independent-qa-agent", "Independent QA Agent", "Verify exact release lineage across build, test, security, localization and eligibility."),
+    "product_launch_candidate": ("factory-launch-candidate-agent", "Launch Candidate Agent", "Record an inactive verified candidate for the owner-gated publication boundary."),
 }
 
 class Command(BaseCommand):
