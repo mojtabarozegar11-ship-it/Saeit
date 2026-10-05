@@ -32,5 +32,8 @@ class Command(BaseCommand):
                 raise CommandError(str(exc)) from exc
         if not task:
             self.stdout.write("FACTORY_IDLE"); return
+        if task.status != "queued":
+            self.stdout.write(f"FACTORY_WAIT task={task.pk} status={task.status}")
+            return
         done=WorkerRunner(build_factory_gateway()).run(task.pk)
         self.stdout.write(self.style.SUCCESS(f"FACTORY_DONE task={done.pk} action={done.action_type} verified={done.output_data.get('verified_effect')}"))

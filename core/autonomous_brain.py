@@ -97,6 +97,8 @@ class AutonomousBrain:
             item for item in products
             if isinstance(item.metadata, dict) and item.metadata.get("factory_state")
         ]
+        if product_id is not None and not products:
+            raise RuntimeError(f"Product {product_id} is not registered in the Product Factory lifecycle.")
         product = next(
             (item for item in products if item.metadata.get("factory_state") != "launch_candidate"),
             products[0] if products else None,
@@ -108,11 +110,29 @@ class AutonomousBrain:
             tasks = tasks.filter(action_type="product_research")
         pending = tasks.filter(status__in=("queued", "running", "blocked")).order_by("created_at", "pk").first()
         latest_failure = tasks.filter(status="failed").order_by("-updated_at", "-pk").first()
+        evidence_valid = product is None
+        if product:
+            history = product.metadata.get("factory_history") or []
+            if history and isinstance(history[-1], dict):
+                latest_effect = history[-1]
+                verified_task = AgentTask.objects.filter(
+                    pk=latest_effect.get("task_id"),
+                    status="completed",
+                    action_type=latest_effect.get("action"),
+                    execution_id=latest_effect.get("execution_id"),
+                    output_data__product_id=product.pk,
+                    output_data__verified_effect=True,
+                ).exists()
+                evidence_valid = (
+                    verified_task
+                    and latest_effect.get("state") == product.metadata.get("factory_state")
+                )
         return {
             "product": product,
             "factory_state": product.metadata.get("factory_state") if product else "new",
             "pending_task": pending,
             "latest_failure": latest_failure,
+            "evidence_valid": evidence_valid,
             "candidate_count": Product.objects.filter(metadata__factory_state="launch_candidate").count(),
         }
 
@@ -123,6 +143,8 @@ class AutonomousBrain:
             task = state["pending_task"]
             return {"action": "continue_existing_task", "task_id": task.pk,
                     "reason": f"Task {task.pk} is {task.status} and must be resolved first."}
+        if not state["evidence_valid"]:
+            return {"action": "blocked", "reason": "Current Product state has no matching completed, verified AgentTask evidence."}
         if state["latest_failure"]:
             task = state["latest_failure"]
             return {"action": "blocked", "task_id": task.pk,

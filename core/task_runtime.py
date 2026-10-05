@@ -6,7 +6,7 @@ from django.utils import timezone
 from datetime import timedelta
 
 from .agent_registry import AgentRegistry
-from .models import AgentTask, ApprovalRequest, AuditLog
+from .models import AgentTask, ApprovalRequest, AuditLog, Product
 from .services import normalize_risk, requires_owner_approval
 
 
@@ -142,6 +142,8 @@ class TaskRuntime:
         if normalized_cost < 0:
             raise TaskExecutionError("Task cost cannot be negative")
         normalized_output = output_data or {}
+        if str(task.capability_code or "").startswith("product_"):
+            self._verify_factory_effect(task, normalized_output)
         # Economic work is not complete merely because a handler returned. It must
         # prove an observable effect. This prevents report-only/no-op cycles from
         # being counted as operational progress.
@@ -168,6 +170,71 @@ class TaskRuntime:
         task.save(update_fields=["output_data", "cost", "status", "updated_at"])
         self._audit(task, "task_completed", {"status": "completed", "execution_id": task.execution_id})
         return task
+
+    @staticmethod
+    def _verify_factory_effect(task, output):
+        """Re-read the product write before accepting an agent's success claim."""
+        expected_states = {
+            "product_research": "researched",
+            "product_opportunity_score": "scored",
+            "product_spec": "specified",
+            "product_build_record": "built",
+            "product_qa": "qa_passed",
+            "product_localize": "localized",
+            "product_launch_candidate": "launch_candidate",
+        }
+        expected = expected_states.get(task.action_type)
+        if not expected:
+            raise TaskExecutionError("Product Factory task has no registered lifecycle verifier")
+        if output.get("verified_effect") is not True:
+            raise TaskExecutionError("Product Factory task did not report a verifiable effect")
+        product_id = output.get("product_id")
+        if not product_id:
+            raise TaskExecutionError("Product Factory output must identify its Product")
+        try:
+            product = Product.objects.select_for_update().get(pk=product_id)
+        except (Product.DoesNotExist, TypeError, ValueError) as exc:
+            raise TaskExecutionError("Product Factory output references no persisted Product") from exc
+        metadata = product.metadata if isinstance(product.metadata, dict) else {}
+        if metadata.get("factory_state") != expected or output.get("factory_state") != expected:
+            raise TaskExecutionError("Persisted Product lifecycle state does not match task output")
+        if task.action_type == "product_research":
+            sources = (metadata.get("research") or {}).get("sources") or []
+            if len(sources) < 2 or output.get("evidence_count") != len(sources):
+                raise TaskExecutionError("Research completion requires persisted source evidence")
+        elif task.action_type == "product_opportunity_score":
+            score = (metadata.get("opportunity") or {}).get("score")
+            if score is None or float(score) != float(output.get("score", -1)):
+                raise TaskExecutionError("Opportunity score was not persisted on the Product")
+        elif task.action_type == "product_spec" and not (metadata.get("spec") or {}).get("acceptance_criteria"):
+            raise TaskExecutionError("Product specification is missing acceptance criteria")
+        elif task.action_type == "product_build_record" and not (metadata.get("build") or {}).get("ref"):
+            raise TaskExecutionError("Product build has no persisted versioned artifact reference")
+        elif task.action_type == "product_qa":
+            qa = metadata.get("qa") or {}
+            if (qa.get("tests") or {}).get("passed") is not True or (qa.get("security") or {}).get("passed") is not True:
+                raise TaskExecutionError("QA and security evidence are not both passing")
+        elif task.action_type == "product_localize":
+            locales = (metadata.get("localization") or {}).get("launch_locales") or []
+            if not locales or locales != output.get("locales"):
+                raise TaskExecutionError("Launch locale evidence was not persisted")
+        elif task.action_type == "product_launch_candidate":
+            markets = metadata.get("market_eligibility") or []
+            if product.active or metadata.get("owner_publish_approval_required") is not True:
+                raise TaskExecutionError("Launch candidacy must remain inactive and owner-gated")
+            if not any(item.get("eligibility") == "allowed" for item in markets if isinstance(item, dict)):
+                raise TaskExecutionError("Launch candidacy requires an allowed market record")
+
+        history = list(metadata.get("factory_history") or [])
+        history.append({
+            "task_id": task.pk,
+            "action": task.action_type,
+            "state": expected,
+            "execution_id": task.execution_id,
+            "verified_at": timezone.now().isoformat(),
+        })
+        product.metadata = {**metadata, "factory_history": history}
+        product.save(update_fields=["metadata", "updated_at"])
 
     @transaction.atomic
     def fail(self, task_id, error, execution_id=None):

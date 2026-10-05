@@ -22,6 +22,15 @@ class FactoryToolPackTests(TestCase):
         with self.assertRaises(ValueError):
             product_research({"title":"No evidence","sources":[]})
 
+    def test_brain_does_not_trust_direct_or_unverified_metadata_changes(self):
+        result = product_research({
+            "title":"Unverified product",
+            "sources":[{"url":"https://example.com/a","finding":"a"},{"url":"https://example.com/b","finding":"b"}],
+        })
+        decision = AutonomousBrain().decide_product_factory_step(result["product_id"])
+        self.assertEqual(decision["action"], "blocked")
+        self.assertIn("completed, verified AgentTask", decision["reason"])
+
     def test_launch_requires_allowed_market(self):
         r=product_research({"title":"P","sources":[{"url":"https://example.com/a","finding":"a"},{"url":"https://example.com/b","finding":"b"}]})
         pid=r["product_id"]
@@ -92,5 +101,30 @@ class FactoryToolPackTests(TestCase):
         self.assertIn("verified=True", output.getvalue())
         product = Product.objects.get(pk=completed.output_data["product_id"])
         self.assertEqual(product.metadata["factory_state"], "researched")
+        self.assertEqual(product.metadata["factory_history"][-1]["task_id"], task.pk)
         next_step = brain.decide_product_factory_step(product.pk)
         self.assertEqual(next_step["action"], "product_opportunity_score")
+
+    def test_runtime_rejects_success_claim_without_persisted_product_effect(self):
+        agent = Agent.objects.create(code="factory-noop-agent", name="Factory no-op", mission="Score", active=True)
+        capability = AgentCapability.objects.create(code="product_opportunity_score", name="Score", active=True)
+        capability.agents.add(agent)
+        product = Product.objects.create(
+            title="No-op product", product_type="digital",
+            metadata={"factory_state":"researched", "research":{"sources":[{}, {}]}},
+        )
+        task = AgentTask.objects.create(
+            agent=agent, action_type=capability.code, capability_code=capability.code,
+            input_data={"product_id":product.pk}, risk_snapshot="low",
+        )
+        gateway = ToolGateway([ToolSpec(
+            code=capability.code,
+            handler=lambda payload: {"verified_effect":True,"product_id":product.pk,"factory_state":"scored","score":99},
+        )])
+        with self.assertRaisesRegex(Exception, "Persisted Product lifecycle state"):
+            WorkerRunner(gateway).run(task.pk)
+        task.refresh_from_db()
+        product.refresh_from_db()
+        self.assertEqual(product.metadata["factory_state"], "researched")
+        self.assertNotIn("factory_history", product.metadata)
+        self.assertEqual(task.status, "queued")
