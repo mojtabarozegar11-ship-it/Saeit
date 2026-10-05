@@ -52,7 +52,7 @@ def _factor_entries(records):
             by_factor[factor].append({
                 "value": value, "source_id": source_id,
                 "evidence_id": record.get("evidence_id"),
-                "snapshot_digest": record.get("snapshot_hash"),
+                "snapshot_digest": record.get("snapshot_hash") or record.get("snapshot_sha256"),
                 "quality_weight": (
                     {"primary": Decimal("1.0"), "secondary": Decimal("0.75"), "unknown": Decimal("0.5")}.get(quality.get("source_type"), Decimal("0.5"))
                     * {"fresh": Decimal("1.0"), "aging": Decimal("0.75"), "unknown": Decimal("0.5")}.get(quality.get("freshness"), Decimal("0.5"))
@@ -102,7 +102,7 @@ def score_opportunity(records):
             "unknown_factors": [key for key, value in factors.items() if value["status"] != "EVIDENCE_BACKED"],
             "conflicts": conflicts, "assumptions": ["Factor ratings are 0..100 desirability assessments supported by listed source claims."],
             "uncertainty": "Unknown factors remain unknown; source disagreement is recorded as conflict.",
-            "evidence_digest": canonical_digest([record.get("snapshot_hash") for record in records or []]),
+            "evidence_digest": canonical_digest([record.get("snapshot_hash") or record.get("snapshot_sha256") for record in records or []]),
         },
     }
 
