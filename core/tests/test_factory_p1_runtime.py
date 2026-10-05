@@ -55,10 +55,10 @@ class FactoryP1RuntimeTests(TestCase):
             output = StringIO()
             call_command(
                 "autonomous_master_loop", factory=True, goal=self.goal, run_id=self.run_id,
-                max_steps=6, stdout=output,
+                max_steps=7, stdout=output,
             )
         self.assertIn("FACTORY_PAUSED", output.getvalue())
-        self.assertEqual(AgentTask.objects.filter(factory_run__run_id=self.run_id).count(), 6)
+        self.assertEqual(AgentTask.objects.filter(factory_run__run_id=self.run_id).count(), 7)
 
         run = FactoryRun.objects.get(run_id=self.run_id)
         product = Product.objects.get(pk=run.product_id)
@@ -89,12 +89,13 @@ class FactoryP1RuntimeTests(TestCase):
         artifact = FactoryArtifact.objects.get(run=run, version=1)
         self.assertEqual(artifact.content_digest, product.metadata["build"]["sha256"])
         self.assertTrue(Path(artifact.reference).is_file())
-        qa = product.metadata["qa"]
-        self.assertTrue(qa["tests"]["passed"])
-        self.assertTrue(qa["security"]["passed"])
-        self.assertEqual(qa["tests"]["artifact_digest"], artifact.content_digest)
-        self.assertEqual(qa["security"]["artifact_digest"], artifact.content_digest)
-        self.assertEqual(product.metadata["factory_state"], "qa_passed")
+        tests = product.metadata["test_attestation"]
+        security = product.metadata["security_attestation"]
+        self.assertTrue(tests["passed"])
+        self.assertTrue(security["passed"])
+        self.assertEqual(tests["build_digest"], artifact.content_digest)
+        self.assertEqual(security["build_digest"], artifact.content_digest)
+        self.assertEqual(product.metadata["factory_state"], "security_verified")
         self.assertFalse(product.active)
 
     @override_settings(FACTORY_RESEARCH_PROVIDER="")
