@@ -34,7 +34,7 @@ class CoreTests(unittest.TestCase):
   self.assertEqual(sum(results),0);self.assertEqual(self.s.metrics()['events']['payment_verified'],1)
  def test_ref_cannot_pay_two_orders(self):
   one=self.order();self.pay(one);two=self.order('two')
-  with self.assertRaises((Rejected,sqlite3.IntegrityError)):self.pay(two)
+  with self.assertRaisesRegex(Rejected,'reference_already_used'):self.pay(two)
   self.assertEqual(self.s.metrics()['paid_orders'],1)
  def test_unknown_request_not_retried(self):
   o=self.order();self.s.claim_request(o['id']);self.s.uncertain(o['id']);self.assertFalse(self.s.claim_request(o['id']))
