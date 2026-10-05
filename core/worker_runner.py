@@ -53,22 +53,20 @@ class WorkerRunner:
                 raise WorkerRunnerError("Factory specialist outputs must be generated from the Run by an execution adapter.")
             authorization = None
             adapter_receipt = None
-            if factory_task:
-                if self.factory_executor is None:
-                    raise WorkerRunnerError("Every Factory stage requires its registered execution adapter.")
-                # ToolGateway authorization precedes any provider call, database write,
-                # artifact creation, or Builder filesystem operation.
-                authorization = self.gateway.authorize(
-                    tool_code, payload, task_id=task.pk, execution_id=execution_id
-                )
-                adapter_receipt = self.gateway.execute_factory_adapter(
-                    self.factory_executor, task, authorization
-                )
+            if factory_task and self.factory_executor is None:
+                raise WorkerRunnerError("Every Factory stage requires its registered execution adapter.")
 
-            # Factory tools currently mutate local database state. Commit those
-            # effects with task completion so stale-worker recovery cannot leave
-            # an applied effect attached to a task that is retried.
+            # Factory adapters and tools both persist Factory state. Keep adapter
+            # evidence, the tool effect, and task completion in one transaction so
+            # any downstream failure rolls the entire stage back before retry.
             with transaction.atomic():
+                if factory_task:
+                    authorization = self.gateway.authorize(
+                        tool_code, payload, task_id=task.pk, execution_id=execution_id
+                    )
+                    adapter_receipt = self.gateway.execute_factory_adapter(
+                        self.factory_executor, task, authorization
+                    )
                 result = self.gateway.invoke(
                     tool_code,
                     payload,
