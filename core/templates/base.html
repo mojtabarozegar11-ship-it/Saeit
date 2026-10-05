@@ -8,7 +8,8 @@
 <title>{% block title %}Zomorodmelal — پلتفرم خدماتی یکپارچه{% endblock %}</title>
 <link rel="icon" type="image/png" href="{% static 'site/company/company-logo.png' %}">
 <link rel="canonical" href="https://zomorodmelal.ir{% if request.path == "/academy/" %}/education/{% else %}{{ request.path }}{% endif %}">
-{% if request.path == "/" or request.path == "/services/" %}<link rel="preload" as="image" href="{% static 'site/heroes/services.webp' %}" fetchpriority="high">
+{% if request.path == "/" %}<link rel="preload" as="image" href="{% static 'site/heroes/platform-home.webp' %}" fetchpriority="high">
+{% elif request.path == "/services/" %}<link rel="preload" as="image" href="{% static 'site/heroes/services.webp' %}" fetchpriority="high">
 {% elif request.path == "/agriculture/" %}<link rel="preload" as="image" href="{% static 'site/heroes/agriculture.webp' %}" fetchpriority="high">
 {% elif request.path == "/industry/" %}<link rel="preload" as="image" href="{% static 'site/heroes/industry.webp' %}" fetchpriority="high">
 {% elif request.path == "/research/" %}<link rel="preload" as="image" href="{% static 'site/heroes/research.webp' %}" fetchpriority="high">

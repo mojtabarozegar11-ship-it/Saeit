@@ -1,7 +1,7 @@
 /* Topic-specific website imagery; these are design assets, not company gallery/news media. */
 :root{--hero-copy-overlay:linear-gradient(270deg,rgba(5,17,12,.94) 0%,rgba(5,17,12,.78) 44%,rgba(5,17,12,.18) 100%)}
 .home-luxury .home-hero-lux,.services-page .services-hero,.page-agriculture .ag-hero,.page-industry .ind-hero,.page-research .res-hero,.page-economy .eco-hero,.page-knowledge .know-hero,.page-market .market-hero,.page-agents .agent-hero,.page-studio .studio-hero,.page-academy .education-hero,.page-weather .weather-hero-v2,.page-newsletter .newsletter-hero,.page-blog .blog-v2-hero,.page-store .store-hero,.page-auctions .auctions-hero{background-size:cover;background-position:center;background-repeat:no-repeat;color:#fff}
-.home-luxury .home-hero-lux{background-image:var(--hero-copy-overlay),url("/static/site/heroes/services.webp")}
+.home-luxury .home-hero-lux{background-image:var(--hero-copy-overlay),url("/static/site/heroes/platform-home.webp")}
 .services-page .services-hero{background-image:var(--hero-copy-overlay),url("/static/site/heroes/services.webp")}
 .page-agriculture .ag-hero{background-image:var(--hero-copy-overlay),url("/static/site/heroes/agriculture.webp")}
 .page-industry .ind-hero{background-image:var(--hero-copy-overlay),url("/static/site/heroes/industry.webp")}
