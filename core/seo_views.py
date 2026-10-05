@@ -71,7 +71,7 @@ def robots_txt(request):
 
 @require_GET
 def sitemap_xml(request):
-    urls = ["/", "/company/", "/company/executive/", "/research/", "/knowledge/", "/market/", "/agriculture/", "/industry/", "/agents/", "/education/", "/academy/", "/weather/", "/economy/", "/studio/", "/newsletter/", "/blog/", "/store/", "/auctions/", "/company-gallery/"]
+    urls = ["/", "/company/", "/company/executive/", "/research/", "/knowledge/", "/market/", "/agriculture/", "/industry/", "/agents/", "/education/", "/weather/", "/economy/", "/studio/", "/newsletter/", "/blog/", "/store/", "/auctions/", "/company-gallery/"]
     urls += [f"/blog/{quote(str(code), safe='')}/" for code in BlogPage.objects.filter(active=True).values_list("code", flat=True)]
     company_ranges = {"department": 9, "unit": 9, "genetics": 12, "product": 55, "statutory": 18, "craft": 2, "project": 5, "channel": 4, "social": 3, "future": 4}
     for kind, count in company_ranges.items():

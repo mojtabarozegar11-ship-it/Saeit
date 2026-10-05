@@ -21,7 +21,6 @@ class SitemapRegressionTests(TestCase):
         locations = self.read_sitemap_locations()
         for path in (
             "/education/",
-            "/academy/",
             "/weather/",
             "/economy/",
             "/studio/",

@@ -7,7 +7,7 @@
 <meta name="description" content="{% block meta_description %}Zomorodmelal؛ پلتفرم خدماتی یکپارچه با خدمات، آموزش، هوش مصنوعی، آب‌وهوا، اقتصاد، استودیو، دانشنامه و شرکت{% endblock %}">
 <title>{% block title %}Zomorodmelal — پلتفرم خدماتی یکپارچه{% endblock %}</title>
 <link rel="icon" type="image/png" href="{% static 'site/company/company-logo.png' %}">
-<link rel="canonical" href="https://zomorodmelal.ir{{ request.path }}">
+<link rel="canonical" href="https://zomorodmelal.ir{% if request.path == "/academy/" %}/education/{% else %}{{ request.path }}{% endif %}">
 {% if request.path == "/" or request.path == "/services/" %}<link rel="preload" as="image" href="{% static 'site/heroes/services.webp' %}" fetchpriority="high">
 {% elif request.path == "/agriculture/" %}<link rel="preload" as="image" href="{% static 'site/heroes/agriculture.webp' %}" fetchpriority="high">
 {% elif request.path == "/industry/" %}<link rel="preload" as="image" href="{% static 'site/heroes/industry.webp' %}" fetchpriority="high">

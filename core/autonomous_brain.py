@@ -17,20 +17,33 @@ class Candidate:
 class AutonomousBrain:
     def observe(self):
         products = Product.objects.all()
-        completed_tasks = AgentTask.objects.filter(
-            agent__code="economic-master-agent", status="completed"
-        ).values_list("capability_code", "output_data")
-        verified_actions = {
-            capability_code
-            for capability_code, output_data in completed_tasks
-            if isinstance(output_data, dict)
-            and output_data.get("verified_effect") is True
-        }
+        economic_tasks = AgentTask.objects.filter(agent__code="economic-master-agent")
+        latest_offer = economic_tasks.filter(
+            capability_code="income_offer_design"
+        ).order_by("-created_at", "-pk").first()
+        prerequisite_tasks = economic_tasks.filter(
+            status="completed", output_data__verified_effect=True
+        )
+        if latest_offer:
+            prerequisite_tasks = prerequisite_tasks.filter(
+                created_at__gt=latest_offer.created_at
+            )
+        latest_research = prerequisite_tasks.filter(
+            capability_code="income_market_research"
+        ).order_by("-created_at", "-pk").first()
+        market_research_complete = latest_research is not None
+        opportunity_scored = bool(
+            latest_research
+            and prerequisite_tasks.filter(
+                capability_code="income_opportunity_score",
+                created_at__gt=latest_research.created_at,
+            ).exists()
+        )
         return {
             "unfinished_tasks": AgentTask.objects.filter(agent__code="economic-master-agent",status__in=("queued","running","blocked")).count(),
             "failed_tasks": AgentTask.objects.filter(agent__code="economic-master-agent",status="failed").count(),
-            "market_research_complete": "income_market_research" in verified_actions,
-            "opportunity_scored": "income_opportunity_score" in verified_actions,
+            "market_research_complete": market_research_complete,
+            "opportunity_scored": opportunity_scored,
             "active_products": products.filter(active=True).count(),
             "offer_designed": products.filter(metadata__commercial_status="offer_designed").count(),
             "mvp_built": products.filter(metadata__commercial_status="mvp_built").count(),
