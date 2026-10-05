@@ -36,7 +36,7 @@ class Command(BaseCommand):
             specialists.append(agent)
         agent,_=Agent.objects.update_or_create(code="factory-master-agent",defaults={
             "name":"Zomorod Factory Master Agent",
-            "mission":"Research, score, specify, build, test, localize and prepare lawful digital products for launch candidate status.",
+            "mission":"Observe Product Factory state, select qualified specialist agents, enforce lifecycle gates and replan blocked work.",
             "risk_level":"medium","active":True})
         agent.capabilities.clear()
         self.stdout.write(self.style.SUCCESS(

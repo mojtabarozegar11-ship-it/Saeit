@@ -1,11 +1,12 @@
 from django.test import TestCase
+from django.core.management import call_command
+from io import StringIO
 from core.factory_tool_pack import product_research, opportunity_score, product_spec, product_build_record, product_qa, product_localize, launch_candidate
 from core.models import Product
 from core.models import Agent, AgentCapability, AgentTask, AuditLog
 from core.tool_gateway import ToolGateway, ToolSpec
 from core.worker_runner import WorkerRunner
 from core.autonomous_brain import AutonomousBrain
-from core.factory_tool_pack import build_factory_gateway
 
 class FactoryToolPackTests(TestCase):
     def test_chain_reaches_launch_candidate_with_evidence(self):
@@ -84,8 +85,11 @@ class FactoryToolPackTests(TestCase):
         self.assertTrue(AuditLog.objects.filter(action="factory_next_step_planned", target_id=str(task.pk)).exists())
         self.assertEqual(brain.plan_product_factory_step({"title":"ignored", "sources":[{}, {}]}).pk, task.pk)
 
-        completed = WorkerRunner(build_factory_gateway()).run(task.pk)
+        output = StringIO()
+        call_command("factory_product_step", task_id=task.pk, stdout=output)
+        completed = AgentTask.objects.get(pk=task.pk)
         self.assertEqual(completed.status, "completed")
+        self.assertIn("verified=True", output.getvalue())
         product = Product.objects.get(pk=completed.output_data["product_id"])
         self.assertEqual(product.metadata["factory_state"], "researched")
         next_step = brain.decide_product_factory_step(product.pk)
