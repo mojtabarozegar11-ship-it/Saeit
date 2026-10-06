@@ -1,0 +1,53 @@
+name: Factory Staging 24x7
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: factory-staging-autonomy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  factory-staging:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    env:
+      SAEIT_ENV: staging
+      FACTORY_ENVIRONMENT: staging
+      DATABASE_URL: ${{ secrets.FACTORY_STAGING_DATABASE_URL }}
+      SECRET_KEY: ${{ secrets.FACTORY_STAGING_SECRET_KEY }}
+      STAGING_DB_IDENTITY: neondb
+      PRODUCTION_DB_IDENTITY: zomorod2_saeit_prod
+      PRODUCTION_PUBLICATION_ENABLED: "false"
+      REAL_PAYMENTS_ENABLED: "false"
+      TREASURY_EXECUTION_ENABLED: "false"
+      CRYPTO_EXECUTION_ENABLED: "false"
+      FACTORY_RESEARCH_PROVIDER: ${{ secrets.FACTORY_RESEARCH_PROVIDER }}
+      FACTORY_RESEARCH_PROVIDER_TIER: ${{ secrets.FACTORY_RESEARCH_PROVIDER_TIER }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: factory/integration-control-bridge-20261005
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install
+        run: pip install -r requirements.txt
+      - name: Fail closed without staging secrets
+        shell: bash
+        run: |
+          test -n "$DATABASE_URL" || { echo "FACTORY_STAGING_DATABASE_URL missing"; exit 2; }
+          test -n "$SECRET_KEY" || { echo "FACTORY_STAGING_SECRET_KEY missing"; exit 2; }
+          test "$SAEIT_ENV" = staging
+      - name: Migrate staging
+        run: python manage.py migrate --noinput
+      - name: Seed factory agents
+        run: python manage.py seed_factory_agents
+      - name: Recover and advance bounded factory work
+        run: python manage.py factory_staging_tick --max-runs 5 --max-steps 20
