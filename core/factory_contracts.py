@@ -45,6 +45,7 @@ EXPECTED_OUTPUT_STATE = {
     "product_localize": "localized",
     "product_market_eligibility": "eligible",
     "product_qa": "qa_passed",
+    "product_package_price": "packaged_priced",
     "product_launch_candidate": "launch_candidate",
 }
 
