@@ -67,6 +67,12 @@ class MojPlayWinRevenueRoutingTests(TestCase):
         self.assertContains(response,"GLOBAL / STORE")
         self.assertContains(response,"No public products yet.")
 
+    def test_product_detail_rejects_inactive_inventory(self):
+        from core.models import Product
+        product=Product.objects.create(title="Private draft",product_type="digital",active=False)
+        response=self.client.get(f"/store/product/{product.pk}/",HTTP_HOST="mojplaywin.com")
+        self.assertEqual(response.status_code,404)
+
     def test_zomorod_services_preserved(self):
         response=self.client.get("/services/",HTTP_HOST="zomorodmelal.ir")
         self.assertNotEqual(response.status_code,404)
