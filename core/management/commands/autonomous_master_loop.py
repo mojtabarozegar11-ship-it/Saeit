@@ -114,9 +114,9 @@ class Command(BaseCommand):
             self.stdout.write(self.style.SUCCESS(
                 f"FACTORY_STEP run={run_id} step={step + 1} task={done.pk} action={done.action_type} verified=True"
             ))
-            if done.action_type == "product_launch_candidate":
+            if done.action_type == "product_package_price":
                 self.stdout.write(self.style.SUCCESS(
-                    f"FACTORY_LAUNCH_CANDIDATE run={run_id} product={done.output_data.get('product_id')} published=False deployed=False"
+                    f"FACTORY_PHASE_14_COMPLETE run={run_id} product={done.output_data.get('product_id')} launch_candidate=False published=False deployed=False"
                 ))
                 return
         self.stdout.write(f"FACTORY_PAUSED run={run_id} reason=max_steps; resume with --run-id {run_id}")
