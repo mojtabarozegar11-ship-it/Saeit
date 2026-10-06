@@ -77,6 +77,14 @@ class MojPlayWinRevenueRoutingTests(TestCase):
         response=self.client.get("/services/",HTTP_HOST="zomorodmelal.ir")
         self.assertNotEqual(response.status_code,404)
 
+    def test_store_renders_product_title(self):
+        from core.models import Product
+        product=Product.objects.create(title="Verified Tool",product_type="digital",price=10,currency="USD",active=True,metadata={"summary":"Useful verified tool."})
+        response=self.client.get("/store/",HTTP_HOST="mojplaywin.com")
+        self.assertContains(response,"Verified Tool")
+        self.assertContains(response,"Useful verified tool.")
+        self.assertContains(response,f"/store/product/{product.pk}/")
+
 class BusinessArchitectureTests(TestCase):
     def test_seeded_games_are_us_first(self):
         from core.models import BusinessUnit, MarketPolicy
@@ -95,10 +103,3 @@ class BusinessArchitectureTests(TestCase):
         from core.models import LegalEntity
         self.assertFalse(LegalEntity.objects.filter(jurisdiction__iexact="CA").exists())
 
-    def test_store_renders_product_title(self):
-        from core.models import Product
-        product=Product.objects.create(title="Verified Tool",product_type="digital",price=10,currency="USD",active=True,metadata={"summary":"Useful verified tool."})
-        response=self.client.get("/store/",HTTP_HOST="mojplaywin.com")
-        self.assertContains(response,"Verified Tool")
-        self.assertContains(response,"Useful verified tool.")
-        self.assertContains(response,f"/store/product/{product.pk}/")
