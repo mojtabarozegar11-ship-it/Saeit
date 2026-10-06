@@ -747,6 +747,45 @@ class PaymentIntent(T):
     provider_reference = models.CharField(max_length=200, blank=True, default="")
 
 
+class CryptoPaymentIntent(T):
+    AWAITING_PAYMENT = "awaiting_payment"
+    CONFIRMING = "confirming"
+    CONFIRMED = "confirmed"
+    EXPIRED = "expired"
+    FAILED = "failed"
+    STATUS_CHOICES = [(x, x.replace("_", " ").title()) for x in (AWAITING_PAYMENT, CONFIRMING, CONFIRMED, EXPIRED, FAILED)]
+    order = models.OneToOneField(Order, on_delete=models.PROTECT, related_name="crypto_payment_intent")
+    network = models.CharField(max_length=40)
+    asset = models.CharField(max_length=24)
+    amount = models.DecimalField(max_digits=36, decimal_places=18)
+    quote_currency = models.CharField(max_length=10, default="USD")
+    quote_amount = models.DecimalField(max_digits=14, decimal_places=2)
+    receiving_address = models.CharField(max_length=200)
+    tx_hash = models.CharField(max_length=200, blank=True, default="")
+    confirmations = models.PositiveIntegerField(default=0)
+    required_confirmations = models.PositiveIntegerField(default=1)
+    status = models.CharField(max_length=24, choices=STATUS_CHOICES, default=AWAITING_PAYMENT)
+    provider = models.CharField(max_length=60, default="not_configured")
+    provider_reference = models.CharField(max_length=200, blank=True, default="")
+    expires_at = models.DateTimeField()
+    verified_at = models.DateTimeField(null=True, blank=True)
+
+    def clean(self):
+        if not self.receiving_address.strip():
+            raise ValidationError({"receiving_address": "A receiving address is required."})
+        if self.status == self.CONFIRMED and (not self.tx_hash or self.confirmations < self.required_confirmations or not self.verified_at):
+            raise ValidationError("Confirmed crypto payments require a transaction hash, sufficient confirmations and verification time.")
+
+class WalletConnection(T):
+    customer = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="wallet_connections")
+    network = models.CharField(max_length=40)
+    address = models.CharField(max_length=200)
+    verified = models.BooleanField(default=False)
+    verification_method = models.CharField(max_length=40, default="signed_message")
+    verified_at = models.DateTimeField(null=True, blank=True)
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["network", "address"], name="unique_wallet_network_address")]
+
 class LedgerEntry(T):
     order = models.ForeignKey(Order, on_delete=models.PROTECT, related_name="ledger_entries")
     payment_intent = models.ForeignKey(
