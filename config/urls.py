@@ -4,7 +4,7 @@ from django.urls import include, path
 from django.views.generic import RedirectView
 
 from core.views import home, platform_page
-from core.brand_views import branded_home, branded_page, branded_game
+from core.brand_views import branded_home, branded_page, branded_game, branded_store
 from core.brand import brand_for_request
 from core.commerce_views import store_home, auctions_home
 from core.seo_views import site_search
@@ -56,7 +56,7 @@ urlpatterns = [
     path("search/", site_search, name="site_search"),
     path("robots.txt", branded_robots_txt, name="robots_txt"),
     path("sitemap.xml", branded_sitemap_xml, name="sitemap_xml"),
-    path("store/", store_home, name="store"),
+    path("store/", lambda request: branded_store(request) if brand_for_request(request) else store_home(request), name="store"),
     path("auctions/", auctions_home, name="auctions"),
     path("company-gallery/", company_gallery, name="company_gallery"),
     path("company-content/<slug:slug>/", company_content_feed, name="company_content_feed"),
