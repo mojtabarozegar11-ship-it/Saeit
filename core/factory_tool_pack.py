@@ -270,6 +270,36 @@ def product_qa(payload):
     return {"verified_effect": True, "product_id": product.pk, "factory_state": "qa_passed", "qa": qa}
 
 
+def product_package_price(payload):
+    payload = _merge_output(payload, "product_package_price")
+    product = _product(payload)
+    if product.metadata.get("factory_state") != "qa_passed":
+        raise ValueError("Product must pass independent QA before Packaging & Pricing.")
+    package_pricing = payload.get("package_pricing") or {}
+    qa = product.metadata.get("qa_attestation") or {}
+    package = package_pricing.get("package") or {}
+    pricing = package_pricing.get("pricing") or {}
+    if package_pricing.get("qa_attestation_digest") != qa.get("attestation_digest"):
+        raise ValueError("Packaging & Pricing must bind the exact QA attestation.")
+    if package.get("release_artifact_digest") != (product.metadata.get("build") or {}).get("sha256"):
+        raise ValueError("Package must bind the exact release artifact.")
+    if not package.get("supported_markets") or not package.get("supported_locales"):
+        raise ValueError("Package must declare eligible markets and supported locales.")
+    if pricing.get("currency") != product.currency or pricing.get("status") not in {"configured", "market_test_required"}:
+        raise ValueError("Pricing must declare the Product currency and an explicit evidence status.")
+    if pricing.get("status") == "configured" and not pricing.get("list_price"):
+        raise ValueError("Configured pricing requires a persisted list price.")
+    claimed = package_pricing.get("attestation_digest")
+    canonical = dict(package_pricing); canonical.pop("attestation_digest", None)
+    if not claimed or claimed != canonical_digest(canonical):
+        raise ValueError("Packaging & Pricing attestation digest does not match canonical content.")
+    product.metadata = {**product.metadata, "factory_state": "packaged_priced",
+                        "package_pricing": package_pricing}
+    product.save(update_fields=["metadata", "updated_at"])
+    return {"verified_effect": True, "product_id": product.pk,
+            "factory_state": "packaged_priced", "package_pricing": package_pricing}
+
+
 def launch_candidate(payload):
     payload = _merge_output(payload, "product_launch_candidate")
     product = _product(payload)
@@ -314,5 +344,6 @@ def build_factory_gateway():
         ToolSpec(code="product_localize",handler=product_localize,risk="medium"),
         ToolSpec(code="product_market_eligibility",handler=product_market_eligibility,risk="medium"),
         ToolSpec(code="product_qa",handler=product_qa,risk="medium"),
+        ToolSpec(code="product_package_price",handler=product_package_price,risk="medium"),
         ToolSpec(code="product_launch_candidate",handler=launch_candidate,risk="medium"),
     ])
