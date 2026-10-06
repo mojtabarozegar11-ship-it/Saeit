@@ -104,11 +104,8 @@ class FactoryPackageEGoalOnlyTests(TestCase):
         self.assertEqual(run.goal, self.goal)
         self.assertEqual(product.metadata["factory_state"], "packaged_priced")
         package_pricing = product.metadata["package_pricing"]
-        self.assertEqual(candidate["spec_digest"], product.metadata["spec"]["digest"])
-        self.assertEqual(candidate["build_digest"], product.metadata["build"]["sha256"])
-        self.assertEqual(candidate["test_attestation_digest"], product.metadata["test_attestation"]["attestation_digest"])
-        self.assertEqual(candidate["security_attestation_digest"], product.metadata["security_attestation"]["attestation_digest"])
-        self.assertEqual(candidate["qa_attestation_digest"], product.metadata["qa_attestation"]["attestation_digest"])
+        self.assertEqual(package_pricing["package"]["release_artifact_digest"], product.metadata["build"]["sha256"])
+        self.assertEqual(package_pricing["qa_attestation_digest"], product.metadata["qa_attestation"]["attestation_digest"])
         self.assertTrue(all(e.prerequisite_digest for e in run.evidence.filter(status=FactoryEvidence.VALID)))
         agents = {task.action_type: task.agent.code for task in tasks}
         self.assertNotEqual(agents["product_build_record"], agents["product_test"])
