@@ -41,3 +41,11 @@ body:before{content:"";position:fixed;inset:0;pointer-events:none;z-index:-1;opa
 a:focus-visible,button:focus-visible{box-shadow:0 0 0 5px rgba(231,207,150,.14)}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important;transition-duration:.01ms!important}}
 @media (prefers-contrast:more){:root{--muted:#d6d7da;--line:rgba(255,255,255,.34)}.mpw-page-card,.card{border-width:2px}}
+
+/* Coin-inspired brand mark — restrained super-luxury identity */
+.mpw-mark{position:relative;width:46px;height:46px;flex:0 0 46px;border-radius:50%;border:1px solid rgba(255,225,151,.8);background:radial-gradient(circle at 34% 26%,#fff1b8 0,#d49b32 14%,#7b4c13 31%,#0a0908 34%,#050608 68%,#3b260d 70%,#d8a84c 76%,#6f4311 86%,#080808 100%);box-shadow:inset 0 0 0 2px rgba(255,222,142,.16),inset 0 0 16px rgba(0,0,0,.75),0 8px 30px rgba(216,168,76,.14)}
+.mpw-mark b{font-family:Georgia,"Times New Roman",serif;font-size:23px;line-height:1;color:#f4d27d;text-shadow:0 1px 0 #fff0b3,0 3px 8px #000}
+.mpw-mark i{position:absolute;inset:4px;border:1px solid rgba(244,210,125,.36);border-radius:50%;pointer-events:none}
+.mpw-crown{position:absolute;top:-8px;left:50%;transform:translateX(-50%);font-size:13px;color:#f7d77f;text-shadow:0 2px 7px #000}
+.mpw-brand:hover .mpw-mark{box-shadow:inset 0 0 0 2px rgba(255,222,142,.2),inset 0 0 16px rgba(0,0,0,.72),0 10px 38px rgba(216,168,76,.24)}
+@media(max-width:850px){.mpw-mark{width:42px;height:42px;flex-basis:42px}.mpw-brand>span:last-child{font-size:.92rem}.mpw-brand small{font-size:.48rem}}
