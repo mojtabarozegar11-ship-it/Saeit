@@ -195,7 +195,8 @@ class AutonomousBrain:
             "security_verified": "product_localize",
             "localized": "product_market_eligibility",
             "eligible": "product_qa",
-            "qa_passed": "product_launch_candidate",
+            "qa_passed": "product_package_price",
+            "packaged_priced": "phase_14_complete",
             "launch_candidate": "owner_approval_boundary",
         }
         action = next_action.get(state["factory_state"])
@@ -203,6 +204,9 @@ class AutonomousBrain:
             return {"action": "stopped", "reason": "The Product opportunity was rejected by Validation."}
         if not action:
             return {"action": "blocked", "reason": "Unknown factory state; lifecycle state requires review."}
+        if action == "phase_14_complete":
+            return {"action": action, "product_id": state["product"].pk,
+                    "reason": "Stages 1-14 are complete. Launch Candidate and publication remain outside the current autonomous phase."}
         if action == "owner_approval_boundary":
             return {"action": action, "product_id": state["product"].pk,
                     "reason": "All internal gates passed. Publication remains owner-gated."}
@@ -227,7 +231,7 @@ class AutonomousBrain:
         decision = self.decide_product_factory_step(product_id, run_id=run_id)
         if decision["action"] == "continue_existing_task":
             return AgentTask.objects.get(pk=decision["task_id"])
-        if decision["action"] in {"blocked", "stopped", "owner_approval_boundary"}:
+        if decision["action"] in {"blocked", "stopped", "phase_14_complete", "owner_approval_boundary"}:
             raise RuntimeError(decision["reason"])
         request = dict(payload or {})
         goal = str(request.get("goal") or decision["reason"]).strip()
@@ -251,6 +255,7 @@ class AutonomousBrain:
             "product_localize": ["localization"],
             "product_market_eligibility": ["markets"],
             "product_qa": ["qa"],
+            "product_package_price": ["package_pricing"],
             "product_launch_candidate": ["launch_candidate"],
         }
         product = Product.objects.filter(pk=decision["product_id"]).first() if decision["product_id"] else None
@@ -302,7 +307,8 @@ class AutonomousBrain:
             "product_research": "researched", "product_opportunity_score": "scored",
             "product_validation": "validated", "product_spec": "specified", "product_build_record": "built",
             "product_test": "tested", "product_security": "security_verified", "product_localize": "localized",
-            "product_market_eligibility": "eligible", "product_qa": "qa_passed", "product_launch_candidate": "launch_candidate",
+            "product_market_eligibility": "eligible", "product_qa": "qa_passed",
+            "product_package_price": "packaged_priced", "product_launch_candidate": "launch_candidate",
         }[action]}
         task.environment = run.environment
         task.input_data = task_payload
