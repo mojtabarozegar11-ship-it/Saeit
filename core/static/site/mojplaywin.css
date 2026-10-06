@@ -61,3 +61,14 @@ a:focus-visible,button:focus-visible{box-shadow:0 0 0 5px rgba(231,207,150,.14)}
 .mpw-hero-copy{position:relative;z-index:2}
 .mpw-hero-copy:before{content:"";position:absolute;left:0;top:-2rem;width:62px;height:1px;background:linear-gradient(90deg,var(--gold),transparent)}
 @media(max-width:850px){.mpw-hero{grid-template-columns:1fr;gap:1rem}.mpw-hero-visual{order:-1}.mpw-coin-frame{width:min(82vw,480px)}.mpw-coin-frame span{font-size:.5rem}.mpw-hero-copy{text-align:center}.mpw-hero-copy:before{left:50%;transform:translateX(-50%)}.mpw-hero p{margin-inline:auto}.actions{justify-content:center}}
+
+/* Final public-site polish */
+::selection{background:#e7cf96;color:#080706}
+img{max-width:100%;display:block}
+.mpw-page-hero{max-width:none;padding-right:clamp(1.2rem,14vw,14rem);border-bottom:1px solid rgba(231,207,150,.08)}
+.mpw-page-hero>p{max-width:820px}.mpw-page-grid{max-width:1600px;margin-inline:auto}
+.mpw-page-card strong{display:block;margin-top:1.4rem;font-family:Georgia,"Times New Roman",serif;font-size:1.35rem;color:var(--gold)}
+.mpw-page-card>a{margin-top:1.6rem}.mpw-page-card>a:hover{text-decoration:underline;text-underline-offset:5px}
+.mpw-page-cta{max-width:1370px;margin-inline:auto;margin-bottom:7rem;border-radius:2px}
+.mpw-footer a{transition:color .2s ease}.mpw-footer a:hover{color:var(--gold)}
+@media(max-width:520px){.mpw-header{padding-inline:1rem}.mpw-brand small{display:none}.mpw-hero{padding-inline:1.15rem}.mpw-hero h1{font-size:clamp(3rem,16vw,4.8rem)}.mpw-games,.mpw-worlds,.mpw-news,.mpw-community,.mpw-support{padding:5rem 1.15rem}.mpw-page-hero{padding:6.5rem 1.15rem 3.5rem}.mpw-page-grid{padding:1rem 1.15rem 5rem}.mpw-page-cta{margin:0 1.15rem 5rem}.mpw-footer{padding:2.5rem 1.15rem}}
