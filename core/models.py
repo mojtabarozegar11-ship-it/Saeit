@@ -57,6 +57,45 @@ class BrandSite(T):
         return self.name
 
 
+class BusinessUnit(T):
+    code = models.SlugField(unique=True)
+    name = models.CharField(max_length=160)
+    category = models.CharField(max_length=80)
+    status = models.CharField(max_length=24, default="future")
+    description = models.TextField(blank=True)
+    primary_market = models.CharField(max_length=80, blank=True)
+    global_scope = models.BooleanField(default=False)
+    metadata = models.JSONField(default=dict, blank=True)
+
+    def __str__(self):
+        return self.name
+
+
+class MarketPolicy(T):
+    business_unit = models.ForeignKey(BusinessUnit, on_delete=models.CASCADE, related_name="market_policies")
+    market_code = models.CharField(max_length=16)
+    role = models.CharField(max_length=24, default="eligible")
+    status = models.CharField(max_length=24, default="planned")
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["business_unit", "market_code"], name="unique_business_unit_market")]
+
+
+class LegalEntity(T):
+    code = models.SlugField(unique=True)
+    name = models.CharField(max_length=200)
+    jurisdiction = models.CharField(max_length=80)
+    status = models.CharField(max_length=24, default="future")
+    registration_reference = models.CharField(max_length=160, blank=True)
+    verified_at = models.DateTimeField(null=True, blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+
+    def clean(self):
+        if self.status == "active" and (not self.registration_reference.strip() or not self.verified_at):
+            raise ValidationError("Active legal entities require verified registration evidence.")
+
+
 class ResearchProject(T):
     title = models.CharField(max_length=300)
     objective = models.TextField()
