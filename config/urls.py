@@ -6,7 +6,8 @@ from django.views.generic import RedirectView
 from core.views import home, platform_page
 from core.brand_views import branded_home
 from core.commerce_views import store_home, auctions_home
-from core.seo_views import site_search, robots_txt, sitemap_xml
+from core.seo_views import site_search
+from core.brand_seo_views import branded_robots_txt, branded_sitemap_xml
 from core.weather_views import weather
 from core.academy_views import (
     academy, education, education_course_detail, education_enroll,
@@ -32,8 +33,8 @@ urlpatterns = [
     path("studio/", lambda request: platform_page(request, "studio"), name="studio"),
     path("agents/", lambda request: platform_page(request, "agents"), name="agents"),
     path("search/", site_search, name="site_search"),
-    path("robots.txt", robots_txt, name="robots_txt"),
-    path("sitemap.xml", sitemap_xml, name="sitemap_xml"),
+    path("robots.txt", branded_robots_txt, name="robots_txt"),
+    path("sitemap.xml", branded_sitemap_xml, name="sitemap_xml"),
     path("store/", store_home, name="store"),
     path("auctions/", auctions_home, name="auctions"),
     path("company-gallery/", company_gallery, name="company_gallery"),
