@@ -9,6 +9,7 @@ from django.utils import timezone
 from .chat_runtime import MasterAgentChat
 from .models import (
     Agent,
+    BrandSite,
     AgentCapability,
     AgentTask,
     ApprovalRequest,
@@ -104,6 +105,7 @@ admin.site.register([
     KnowledgeArticle,
     Product,
     Order,
+    BrandSite,
 ])
 
 
