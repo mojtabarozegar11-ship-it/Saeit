@@ -1,0 +1,12 @@
+from django.db import migrations, models
+import django.db.models.deletion
+from django.conf import settings
+class Migration(migrations.Migration):
+    dependencies=[("core","0046_brandsite")]
+    operations=[
+      migrations.CreateModel(name="CryptoPaymentIntent",fields=[
+       ("id",models.BigAutoField(auto_created=True,primary_key=True,serialize=False,verbose_name="ID")),("created_at",models.DateTimeField(auto_now_add=True)),("updated_at",models.DateTimeField(auto_now=True)),
+       ("network",models.CharField(max_length=40)),("asset",models.CharField(max_length=24)),("amount",models.DecimalField(decimal_places=18,max_digits=36)),("quote_currency",models.CharField(default="USD",max_length=10)),("quote_amount",models.DecimalField(decimal_places=2,max_digits=14)),("receiving_address",models.CharField(max_length=200)),("tx_hash",models.CharField(blank=True,default="",max_length=200)),("confirmations",models.PositiveIntegerField(default=0)),("required_confirmations",models.PositiveIntegerField(default=1)),("status",models.CharField(choices=[("awaiting_payment","Awaiting Payment"),("confirming","Confirming"),("confirmed","Confirmed"),("expired","Expired"),("failed","Failed")],default="awaiting_payment",max_length=24)),("provider",models.CharField(default="not_configured",max_length=60)),("provider_reference",models.CharField(blank=True,default="",max_length=200)),("expires_at",models.DateTimeField()),("verified_at",models.DateTimeField(blank=True,null=True)),("order",models.OneToOneField(on_delete=django.db.models.deletion.PROTECT,related_name="crypto_payment_intent",to="core.order"))]),
+      migrations.CreateModel(name="WalletConnection",fields=[
+       ("id",models.BigAutoField(auto_created=True,primary_key=True,serialize=False,verbose_name="ID")),("created_at",models.DateTimeField(auto_now_add=True)),("updated_at",models.DateTimeField(auto_now=True)),("network",models.CharField(max_length=40)),("address",models.CharField(max_length=200)),("verified",models.BooleanField(default=False)),("verification_method",models.CharField(default="signed_message",max_length=40)),("verified_at",models.DateTimeField(blank=True,null=True)),("customer",models.ForeignKey(on_delete=django.db.models.deletion.PROTECT,related_name="wallet_connections",to=settings.AUTH_USER_MODEL))],options={"constraints":[models.UniqueConstraint(fields=("network","address"),name="unique_wallet_network_address")]}),
+    ]
