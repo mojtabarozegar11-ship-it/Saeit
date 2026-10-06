@@ -35,3 +35,9 @@ body:before{content:"";position:fixed;inset:0;pointer-events:none;z-index:-1;opa
 .mpw-page-cta{border-color:var(--line);background:radial-gradient(circle at 90% 20%,rgba(140,115,255,.10),transparent 30%),linear-gradient(120deg,#0d0f14,#090a0e);box-shadow:0 30px 90px rgba(0,0,0,.25)}
 .mpw-footer{border-color:var(--line);background:#040507}
 @media(max-width:850px){.mpw-header{height:70px}.mpw-hero h1{font-size:clamp(3.5rem,15vw,6rem)}.mpw-page-hero:after{opacity:.4}.mpw-nav{background:rgba(7,8,11,.98);border-bottom:1px solid var(--line)}}
+
+/* Accessibility hardening */
+:focus-visible{outline:2px solid var(--gold);outline-offset:4px;border-radius:8px}
+a:focus-visible,button:focus-visible{box-shadow:0 0 0 5px rgba(231,207,150,.14)}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important;transition-duration:.01ms!important}}
+@media (prefers-contrast:more){:root{--muted:#d6d7da;--line:rgba(255,255,255,.34)}.mpw-page-card,.card{border-width:2px}}
