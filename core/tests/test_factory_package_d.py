@@ -53,7 +53,7 @@ class FactoryPackageDTests(TestCase):
         self.assertEqual(product.metadata["factory_state"], "specified")
         return product
 
-    def test_validated_spec_autonomously_reaches_inactive_launch_candidate_with_exact_lineage(self):
+    def test_validated_spec_autonomously_reaches_packaged_priced_with_exact_lineage(self):
         product = self.specified_product()
         # Package-D acceptance starts here: the only input is the already persisted,
         # independently verified Product Spec. The factory creates every later artifact.
@@ -65,7 +65,7 @@ class FactoryPackageDTests(TestCase):
             product.refresh_from_db()
         self.assertEqual(actions, [
             "product_build_record", "product_test", "product_security", "product_localize",
-            "product_market_eligibility", "product_qa", "product_launch_candidate",
+            "product_market_eligibility", "product_qa", "product_package_price",
         ])
         self.assertEqual(
             AgentTask.objects.filter(factory_run__run_id=self.run_id).count() - start_task_count, 7
@@ -77,16 +77,12 @@ class FactoryPackageDTests(TestCase):
         self.assertEqual(meta["security_attestation"]["build_digest"], build["sha256"])
         self.assertEqual(meta["localization"]["build_digest"], build["sha256"])
         self.assertEqual(meta["qa_attestation"]["build_digest"], build["sha256"])
-        candidate = meta["launch_candidate"]
-        self.assertEqual(candidate["spec_digest"], meta["spec"]["digest"])
-        self.assertEqual(candidate["build_digest"], build["sha256"])
-        self.assertEqual(candidate["test_attestation_digest"], meta["test_attestation"]["attestation_digest"])
-        self.assertEqual(candidate["security_attestation_digest"], meta["security_attestation"]["attestation_digest"])
-        self.assertEqual(candidate["qa_attestation_digest"], meta["qa_attestation"]["attestation_digest"])
-        self.assertFalse(candidate["published"])
-        self.assertFalse(candidate["deployed"])
+        package_pricing = meta["package_pricing"]
+        self.assertEqual(package_pricing["package"]["release_artifact_digest"], build["sha256"])
+        self.assertEqual(package_pricing["qa_attestation_digest"], meta["qa_attestation"]["attestation_digest"])
+        self.assertTrue(package_pricing["attestation_digest"])
         self.assertFalse(product.active)
-        self.assertEqual(meta["factory_state"], "launch_candidate")
+        self.assertEqual(meta["factory_state"], "packaged_priced")
         agents = dict(AgentTask.objects.filter(factory_run__run_id=self.run_id).values_list("action_type", "agent__code"))
         self.assertNotEqual(agents["product_build_record"], agents["product_test"])
         self.assertNotEqual(agents["product_build_record"], agents["product_security"])
@@ -105,7 +101,7 @@ class FactoryPackageDTests(TestCase):
         with self.assertRaises(Exception):
             WorkerRunner(build_factory_gateway(), factory_executor=self.executor).run(task.pk)
         product.refresh_from_db()
-        self.assertNotIn(product.metadata["factory_state"], {"eligible", "qa_passed", "launch_candidate"})
+        self.assertNotIn(product.metadata["factory_state"], {"eligible", "qa_passed", "packaged_priced", "launch_candidate"})
 
     def test_upstream_spec_change_stales_downstream_evidence(self):
         product = self.specified_product()
