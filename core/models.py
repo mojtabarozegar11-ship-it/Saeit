@@ -33,6 +33,30 @@ class T(models.Model):
         abstract = True
 
 
+class BrandSite(T):
+    code = models.SlugField(unique=True)
+    name = models.CharField(max_length=120)
+    primary_domain = models.CharField(max_length=253, unique=True)
+    aliases = models.JSONField(default=list, blank=True)
+    default_language = models.CharField(max_length=12, default="en")
+    direction = models.CharField(max_length=3, default="ltr")
+    theme_key = models.SlugField(default="default")
+    seo_title = models.CharField(max_length=200, blank=True)
+    seo_description = models.TextField(blank=True)
+    active = models.BooleanField(default=True)
+
+    def clean(self):
+        self.primary_domain = self.primary_domain.strip().lower().rstrip(".")
+        self.aliases = sorted({str(x).strip().lower().rstrip(".") for x in (self.aliases or []) if str(x).strip()})
+        if self.direction not in {"ltr", "rtl"}:
+            raise ValidationError({"direction": "Direction must be ltr or rtl."})
+        if self.primary_domain in self.aliases:
+            raise ValidationError({"aliases": "Primary domain must not be repeated as an alias."})
+
+    def __str__(self):
+        return self.name
+
+
 class ResearchProject(T):
     title = models.CharField(max_length=300)
     objective = models.TextField()
