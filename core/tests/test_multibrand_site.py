@@ -1,6 +1,7 @@
 from django.test import RequestFactory, SimpleTestCase, override_settings
 from core.brand import brand_for_request
 from core.brand_views import branded_home
+from core.brand_seo_views import branded_robots_txt, branded_sitemap_xml
 
 @override_settings(ALLOWED_HOSTS=["zomorodmelal.ir", "mojplaywin.com", "www.mojplaywin.com", "testserver"])
 class MultiBrandRoutingTests(SimpleTestCase):
@@ -26,3 +27,12 @@ class MultiBrandRoutingTests(SimpleTestCase):
         response = branded_home(self.rf.get("/", HTTP_HOST="zomorodmelal.ir"))
         self.assertEqual(response.status_code, 200)
         self.assertIn("Zomorodmelal", response.content.decode("utf-8"))
+
+    def test_mojplaywin_robots_and_sitemap_are_domain_correct(self):
+        request = self.rf.get("/robots.txt", HTTP_HOST="mojplaywin.com")
+        robots = branded_robots_txt(request).content.decode("utf-8")
+        self.assertIn("https://mojplaywin.com/sitemap.xml", robots)
+        self.assertNotIn("zomorodmelal.ir", robots)
+        sitemap = branded_sitemap_xml(self.rf.get("/sitemap.xml", HTTP_HOST="mojplaywin.com")).content.decode("utf-8")
+        self.assertIn("https://mojplaywin.com/", sitemap)
+        self.assertNotIn("zomorodmelal.ir", sitemap)
