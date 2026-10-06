@@ -4,7 +4,7 @@ from django.urls import include, path
 from django.views.generic import RedirectView
 
 from core.views import home, platform_page
-from core.brand_views import branded_home
+from core.brand_views import branded_home, branded_page, branded_game
 from core.commerce_views import store_home, auctions_home
 from core.seo_views import site_search
 from core.brand_seo_views import branded_robots_txt, branded_sitemap_xml
@@ -21,6 +21,8 @@ from core.knowledge_views import knowledge_article_detail, knowledge_book_detail
 
 urlpatterns = [
     path("", branded_home, name="home"),
+    path("games/first-realm/", branded_game, {"slug": "first-realm"}, name="mpw_first_realm"),
+    path("<str:page>/", branded_page, name="brand_page"),
     path("agriculture/", lambda request: platform_page(request, "agriculture"), name="agriculture"),
     path("industry/", lambda request: platform_page(request, "industry"), name="industry"),
     path("research/", lambda request: platform_page(request, "research"), name="research"),
