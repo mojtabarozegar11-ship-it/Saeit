@@ -94,3 +94,11 @@ class BusinessArchitectureTests(TestCase):
     def test_no_canadian_legal_entity_is_fabricated(self):
         from core.models import LegalEntity
         self.assertFalse(LegalEntity.objects.filter(jurisdiction__iexact="CA").exists())
+
+    def test_store_renders_product_title(self):
+        from core.models import Product
+        product=Product.objects.create(title="Verified Tool",product_type="digital",price=10,currency="USD",active=True,metadata={"summary":"Useful verified tool."})
+        response=self.client.get("/store/",HTTP_HOST="mojplaywin.com")
+        self.assertContains(response,"Verified Tool")
+        self.assertContains(response,"Useful verified tool.")
+        self.assertContains(response,f"/store/product/{product.pk}/")
