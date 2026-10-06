@@ -83,14 +83,14 @@ class FactoryPackageEGoalOnlyTests(TestCase):
     def test_goal_only_happy_path_creates_every_stage_and_launch_candidate(self):
         run_id = "package-e-goal-only"
         output = self.run_goal_only(run_id)
-        self.assertIn("FACTORY_LAUNCH_CANDIDATE", output)
+        self.assertIn("FACTORY_PHASE_14_COMPLETE", output)
         run = FactoryRun.objects.get(run_id=run_id)
         product = Product.objects.get(pk=run.product_id)
         tasks = list(run.tasks.order_by("created_at", "pk"))
         expected = [
             "product_research", "product_opportunity_score", "product_validation", "product_spec",
             "product_build_record", "product_test", "product_security", "product_localize",
-            "product_market_eligibility", "product_qa", "product_launch_candidate",
+            "product_market_eligibility", "product_qa", "product_package_price",
         ]
         self.assertEqual([task.action_type for task in tasks], expected)
         self.assertTrue(all(task.goal == self.goal for task in tasks))
@@ -102,8 +102,8 @@ class FactoryPackageEGoalOnlyTests(TestCase):
             len(expected),
         )
         self.assertEqual(run.goal, self.goal)
-        self.assertEqual(product.metadata["factory_state"], "launch_candidate")
-        candidate = product.metadata["launch_candidate"]
+        self.assertEqual(product.metadata["factory_state"], "packaged_priced")
+        package_pricing = product.metadata["package_pricing"]
         self.assertEqual(candidate["spec_digest"], product.metadata["spec"]["digest"])
         self.assertEqual(candidate["build_digest"], product.metadata["build"]["sha256"])
         self.assertEqual(candidate["test_attestation_digest"], product.metadata["test_attestation"]["attestation_digest"])
@@ -115,8 +115,8 @@ class FactoryPackageEGoalOnlyTests(TestCase):
         self.assertNotEqual(agents["product_build_record"], agents["product_security"])
         self.assertNotEqual(agents["product_build_record"], agents["product_qa"])
         self.assertNotEqual(agents["product_validation"], agents["product_build_record"])
-        self.assertFalse(candidate["published"])
-        self.assertFalse(candidate["deployed"])
+        self.assertTrue(package_pricing["attestation_digest"])
+        self.assertEqual(package_pricing["qa_attestation_digest"], product.metadata["qa_attestation"]["attestation_digest"])
         self.assertFalse(product.active)
         with self.assertRaisesRegex(ValidationError, "Fixture/non-real"):
             _assert_real_research_for_release(product)
@@ -130,7 +130,7 @@ class FactoryPackageEGoalOnlyTests(TestCase):
         verifier = OneShotTestFailureVerifier()
         output = self.run_goal_only(run_id, executor=self.executor(verifier=verifier), max_steps=20)
         self.assertIn("FACTORY_RETRY", output)
-        self.assertIn("FACTORY_LAUNCH_CANDIDATE", output)
+        self.assertIn("FACTORY_PHASE_14_COMPLETE", output)
         run = FactoryRun.objects.get(run_id=run_id)
         test_tasks = run.tasks.filter(action_type="product_test")
         self.assertEqual(test_tasks.count(), 1)
@@ -139,18 +139,18 @@ class FactoryPackageEGoalOnlyTests(TestCase):
         self.assertEqual(task.attempt_count, 2)
         self.assertEqual(verifier.calls, 2)
         self.assertEqual(run.tasks.filter(action_type="product_build_record").count(), 1)
-        self.assertEqual(run.tasks.filter(action_type="product_launch_candidate").count(), 1)
+        self.assertEqual(run.tasks.filter(action_type="product_package_price").count(), 1)
 
     def test_bounded_reresearch_replans_and_continues_without_external_stage_advance(self):
         run_id = "package-e-reresearch"
         provider = BoundedReresearchProvider()
         output = self.run_goal_only(run_id, executor=self.executor(provider=provider), max_steps=20)
-        self.assertIn("FACTORY_LAUNCH_CANDIDATE", output)
+        self.assertIn("FACTORY_PHASE_14_COMPLETE", output)
         run = FactoryRun.objects.get(run_id=run_id)
         self.assertEqual(provider.calls, 2)
         self.assertEqual(run.tasks.filter(action_type="product_research").count(), 2)
         self.assertEqual(run.tasks.filter(action_type="product_validation").count(), 2)
-        self.assertEqual(run.product.metadata["factory_state"], "launch_candidate")
+        self.assertEqual(run.product.metadata["factory_state"], "packaged_priced")
 
     def test_restart_resumes_same_run_without_recreating_goal(self):
         run_id = "package-e-restart"
@@ -159,7 +159,7 @@ class FactoryPackageEGoalOnlyTests(TestCase):
         run = FactoryRun.objects.get(run_id=run_id)
         original_pk, original_goal = run.pk, run.goal
         second = self.run_goal_only(run_id, max_steps=20, include_goal=False)
-        self.assertIn("FACTORY_LAUNCH_CANDIDATE", second)
+        self.assertIn("FACTORY_PHASE_14_COMPLETE", second)
         run.refresh_from_db()
         self.assertEqual(run.pk, original_pk)
         self.assertEqual(run.goal, original_goal)
@@ -188,4 +188,4 @@ class FactoryPackageEGoalOnlyTests(TestCase):
         invalidate_stale_evidence(product)
         stale = set(run.evidence.filter(status=FactoryEvidence.STALE).values_list("evidence_type", flat=True))
         self.assertTrue({"product_build_record", "product_test", "product_security", "product_qa",
-                         "product_launch_candidate"}.issubset(stale))
+                         "product_package_price"}.issubset(stale))
