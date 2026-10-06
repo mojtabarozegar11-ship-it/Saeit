@@ -497,7 +497,7 @@ def assert_activation_allowed(product):
 def _assert_release_evidence_current(run, product, artifact):
     required = {
         "product_research", "product_opportunity_score", "product_validation", "product_spec", "product_build_record",
-        "product_test", "product_security", "product_localize", "product_market_eligibility", "product_qa", "product_launch_candidate",
+        "product_test", "product_security", "product_localize", "product_market_eligibility", "product_qa", "product_package_price", "product_launch_candidate",
     }
     items = {item.evidence_type: item for item in run.evidence.select_for_update().all()}
     if not required.issubset(items) or any(items[key].status != FactoryEvidence.VALID for key in required):
