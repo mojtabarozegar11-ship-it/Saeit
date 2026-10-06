@@ -4,6 +4,7 @@ from django.urls import include, path
 from django.views.generic import RedirectView
 
 from core.views import home, platform_page
+from core.brand_views import branded_home
 from core.commerce_views import store_home, auctions_home
 from core.seo_views import site_search, robots_txt, sitemap_xml
 from core.weather_views import weather
@@ -18,7 +19,7 @@ from core.company_content_views import company_gallery, company_content_feed, co
 from core.knowledge_views import knowledge_article_detail, knowledge_book_detail, knowledge_domain_detail
 
 urlpatterns = [
-    path("", services, name="home"),
+    path("", branded_home, name="home"),
     path("agriculture/", lambda request: platform_page(request, "agriculture"), name="agriculture"),
     path("industry/", lambda request: platform_page(request, "industry"), name="industry"),
     path("research/", lambda request: platform_page(request, "research"), name="research"),
