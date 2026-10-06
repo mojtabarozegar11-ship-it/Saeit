@@ -21,7 +21,7 @@ class MultiBrandRoutingTests(TestCase):
         self.assertEqual(response.status_code, 200)
         body = response.content.decode("utf-8")
         self.assertIn("MojPlayWin", body)
-        self.assertIn("Play the world.", body)
+        self.assertIn("Own the next move.", body)
         self.assertNotIn("Zomorodmelal", body)
 
     def test_primary_brand_keeps_existing_home(self):
@@ -36,6 +36,9 @@ class MultiBrandRoutingTests(TestCase):
         self.assertNotIn("zomorodmelal.ir", robots)
         sitemap = branded_sitemap_xml(self.rf.get("/sitemap.xml", HTTP_HOST="mojplaywin.com")).content.decode("utf-8")
         self.assertIn("https://mojplaywin.com/", sitemap)
+        self.assertIn("https://mojplaywin.com/store/", sitemap)
+        self.assertIn("https://mojplaywin.com/crypto-payments/", sitemap)
+        self.assertIn("https://mojplaywin.com/canada-vision/", sitemap)
         self.assertNotIn("zomorodmelal.ir", sitemap)
 
     def test_database_brand_alias_resolves_without_code_change(self):
