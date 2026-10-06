@@ -198,17 +198,17 @@ class FactoryToolPackTests(TestCase):
         product = Product.objects.get(pk=product_id)
         self.assertEqual(
             [entry["state"] for entry in product.metadata["factory_history"]],
-            ["researched", "scored", "validated", "specified", "built", "tested", "security_verified", "localized", "eligible", "qa_passed", "launch_candidate"],
+            ["researched", "scored", "validated", "specified", "built", "tested", "security_verified", "localized", "eligible", "qa_passed", "packaged_priced"],
         )
         self.assertEqual(list(AgentTask.objects.filter(pk__in=task_ids).order_by("created_at", "pk").values_list("action_type", flat=True)), [
             "product_research", "product_opportunity_score", "product_validation", "product_spec", "product_build_record",
-            "product_test", "product_security", "product_localize", "product_market_eligibility", "product_qa", "product_launch_candidate",
+            "product_test", "product_security", "product_localize", "product_market_eligibility", "product_qa", "product_package_price",
         ])
         self.assertTrue(product.metadata["test_attestation"]["passed"])
         self.assertTrue(product.metadata["security_attestation"]["passed"])
         self.assertTrue(product.metadata["qa_attestation"]["passed"])
         self.assertFalse(product.active)
-        self.assertEqual(brain.decide_product_factory_step(product.pk)["action"], "owner_approval_boundary")
+        self.assertEqual(brain.decide_product_factory_step(product.pk)["action"], "phase_14_complete")
         self.assertEqual(AuditLog.objects.filter(action="factory_next_step_planned").count(), 11)
 
     def test_factory_product_activation_is_blocked_without_release_gate_owner_approval(self):
