@@ -302,7 +302,7 @@ class FactoryP0SecurityTests(TestCase):
                 authorization_check=lambda *_: False,
             )
 
-    def run_factory(self, run_id, steps):
+    def run_factory(self, run_id, steps, include_launch_candidate=False):
         FactoryMarketEligibility.objects.update_or_create(
             market_code="US",
             defaults={
@@ -320,9 +320,26 @@ class FactoryP0SecurityTests(TestCase):
         )
         product_id = None
         last = None
-        for _ in range(steps):
+        for _ in range(min(steps, 11)):
             task = brain.plan_product_factory_step(
                 payload={"goal": self.goal}, product_id=product_id, run_id=run_id,
+            )
+            last = WorkerRunner(build_factory_gateway(), factory_executor=executor).run(task.pk)
+            product_id = last.output_data["product_id"]
+        if include_launch_candidate or steps > 11:
+            # Stage 15 is intentionally outside autonomous planning. Security tests
+            # may construct it explicitly to exercise the future owner-gated release boundary.
+            product = Product.objects.get(pk=product_id)
+            run = FactoryRun.objects.get(run_id=run_id)
+            agent = Agent.objects.get(code="factory-launch-candidate-agent")
+            task = AgentTask.objects.create(
+                agent=agent, action_type="product_launch_candidate",
+                capability_code="product_launch_candidate", risk_snapshot="high",
+                goal=self.goal, factory_run=run, product=product,
+                input_data={"goal": self.goal, "product_id": product.pk, "run_id": run.run_id},
+                output_contract={"required": ["launch_candidate"]},
+                prerequisite_snapshot=snapshot_for("product_launch_candidate", product, run),
+                environment="test",
             )
             last = WorkerRunner(build_factory_gateway(), factory_executor=executor).run(task.pk)
             product_id = last.output_data["product_id"]
