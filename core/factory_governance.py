@@ -29,7 +29,8 @@ PREVIOUS_STATE = {
     "product_localize": "security_verified",
     "product_market_eligibility": "localized",
     "product_qa": "eligible",
-    "product_launch_candidate": "qa_passed",
+    "product_package_price": "qa_passed",
+    "product_launch_candidate": "packaged_priced",
 }
 FACTORY_EVIDENCE_POLICY_VERSION = "factory-evidence-v1"
 EVIDENCE_TTL_DAYS = {"product_research": 30, "product_launch_candidate": 30}
@@ -45,6 +46,7 @@ STATE_BY_ACTION = {
     "product_localize": "localized",
     "product_market_eligibility": "eligible",
     "product_qa": "qa_passed",
+    "product_package_price": "packaged_priced",
     "product_launch_candidate": "launch_candidate",
 }
 
@@ -71,7 +73,8 @@ def prerequisite_values(action, product, run):
         "product_localize": "product_security",
         "product_market_eligibility": "product_localize",
         "product_qa": "product_market_eligibility",
-        "product_launch_candidate": "product_qa",
+        "product_package_price": "product_qa",
+        "product_launch_candidate": "product_package_price",
     }.get(action)
     if predecessor:
         evidence = run.evidence.filter(evidence_type=predecessor).order_by("-created_at", "-pk").first()
@@ -116,8 +119,14 @@ def prerequisite_values(action, product, run):
         values["localization"] = meta.get("localization")
         values["market_eligibility"] = meta.get("market_eligibility")
         values["artifact_digest"] = _current_artifact_digest(product, run)
+    elif action == "product_package_price":
+        values["qa_attestation"] = meta.get("qa_attestation")
+        values["market_eligibility"] = meta.get("market_eligibility")
+        values["localization"] = meta.get("localization")
+        values["artifact_digest"] = _current_artifact_digest(product, run)
     elif action == "product_launch_candidate":
         values["qa_attestation"] = meta.get("qa_attestation")
+        values["package_pricing"] = meta.get("package_pricing")
         values["artifact_digest"] = _current_artifact_digest(product, run)
     return values
 
@@ -201,10 +210,10 @@ def invalidate_stale_evidence(product):
         for item in FactoryEvidence.objects.filter(product=product, status=FactoryEvidence.VALID).select_related("task", "run"):
             current = snapshot_for(item.task.action_type, product, item.run)
             spec_dependent = item.evidence_type in {
-                "product_spec", "product_build_record", "product_test", "product_security", "product_localize", "product_market_eligibility", "product_qa", "product_launch_candidate"
+                "product_spec", "product_build_record", "product_test", "product_security", "product_localize", "product_market_eligibility", "product_qa", "product_package_price", "product_launch_candidate"
             }
             artifact_dependent = item.evidence_type in {
-                "product_build_record", "product_test", "product_security", "product_localize", "product_market_eligibility", "product_qa", "product_launch_candidate"
+                "product_build_record", "product_test", "product_security", "product_localize", "product_market_eligibility", "product_qa", "product_package_price", "product_launch_candidate"
             }
             if (
                 (item.evidence_type != "product_research" and current["digest"] != item.prerequisite_digest)
