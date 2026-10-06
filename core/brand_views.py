@@ -46,12 +46,6 @@ def branded_product(request, pk):
     product=get_object_or_404(Product, pk=pk, active=True)
     return render(request,"brands/mojplaywin/product.html",{"brand":brand,"product":product})
 
-def branded_product(request, pk):
-    brand=brand_for_request(request)
-    if not brand or brand.code!="mojplaywin": raise Http404
-    product=get_object_or_404(Product, pk=pk, active=True)
-    return render(request,"brands/mojplaywin/product.html",{"brand":brand,"product":product})
-
 def branded_store(request):
     brand=brand_for_request(request)
     if not brand or brand.code!="mojplaywin": raise Http404
