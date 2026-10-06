@@ -1,5 +1,6 @@
 from django.http import Http404
 from django.shortcuts import render
+from .models import Product
 from .brand import brand_for_request
 from .services_views import services
 
@@ -39,6 +40,12 @@ def branded_home(request):
     brand=brand_for_request(request)
     if brand:return render(request,brand.template,{"brand":brand})
     return services(request)
+def branded_store(request):
+    brand=brand_for_request(request)
+    if not brand or brand.code!="mojplaywin": raise Http404
+    products=Product.objects.filter(active=True).order_by("-id")
+    return render(request,"brands/mojplaywin/store.html",{"brand":brand,"products":products})
+
 def branded_page(request, page):
     brand=brand_for_request(request)
     if not brand or brand.code!="mojplaywin": raise Http404
