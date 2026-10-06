@@ -4,7 +4,8 @@ from pathlib import Path
 from django.core.management import call_command
 from django.core.management.base import BaseCommand, CommandError
 
-from core.autonomous_brain import AutonomousBrain\nfrom core.models import FactoryRun
+from core.autonomous_brain import AutonomousBrain
+from core.models import FactoryRun
 
 
 class Command(BaseCommand):
@@ -31,7 +32,13 @@ class Command(BaseCommand):
             urls = item.get("evidence_urls") or []
             if not oid or not problem or not urls:
                 continue
-            existing = next((run for run in FactoryRun.objects.order_by("-created_at")[:500]\n                             if isinstance(run.constraints, dict)\n                             and run.constraints.get("discovery_opportunity_id") == oid), None)\n            if existing:\n                queued.append({"opportunity_id": oid, "run_id": existing.run_id, "status": "existing"})\n                continue\n            goal = (
+            existing = next((run for run in FactoryRun.objects.order_by("-created_at")[:500]
+                             if isinstance(run.constraints, dict)
+                             and run.constraints.get("discovery_opportunity_id") == oid), None)
+            if existing:
+                queued.append({"opportunity_id": oid, "run_id": existing.run_id, "status": "existing"})
+                continue
+            goal = (
                 "Research this evidence-backed product opportunity and determine whether it "
                 f"deserves progression through the Product Factory. Opportunity {oid}. "
                 f"Problem signal: {problem[:900]}"
