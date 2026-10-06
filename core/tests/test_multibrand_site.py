@@ -76,3 +76,21 @@ class MojPlayWinRevenueRoutingTests(TestCase):
     def test_zomorod_services_preserved(self):
         response=self.client.get("/services/",HTTP_HOST="zomorodmelal.ir")
         self.assertNotEqual(response.status_code,404)
+
+class BusinessArchitectureTests(TestCase):
+    def test_seeded_games_are_us_first(self):
+        from core.models import BusinessUnit, MarketPolicy
+        games=BusinessUnit.objects.get(code="games")
+        self.assertEqual(games.primary_market,"US")
+        self.assertFalse(games.global_scope)
+        self.assertTrue(MarketPolicy.objects.filter(business_unit=games,market_code="US",role="primary").exists())
+
+    def test_global_services_are_marked_global(self):
+        from core.models import BusinessUnit
+        services=BusinessUnit.objects.get(code="services")
+        self.assertTrue(services.global_scope)
+        self.assertEqual(services.primary_market,"GLOBAL")
+
+    def test_no_canadian_legal_entity_is_fabricated(self):
+        from core.models import LegalEntity
+        self.assertFalse(LegalEntity.objects.filter(jurisdiction__iexact="CA").exists())
