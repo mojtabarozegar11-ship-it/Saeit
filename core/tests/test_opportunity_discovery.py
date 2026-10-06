@@ -39,8 +39,7 @@ def test_discovery_fails_closed_in_production():
         OpportunityDiscovery(provider=FakeProvider()).discover(seeds=["x"])
 
 
-@override_settings(SAEIT_ENV="test")
-def test_stage1_report_intakes_into_stage2_factory_run(tmp_path, capsys):
+@pytest.mark.django_db\n@override_settings(SAEIT_ENV="test")\ndef test_stage1_report_intakes_into_stage2_factory_run(tmp_path, capsys):
     report = OpportunityDiscovery(provider=FakeProvider()).discover(
         seeds=["inventory problems"], max_opportunities=1
     )
