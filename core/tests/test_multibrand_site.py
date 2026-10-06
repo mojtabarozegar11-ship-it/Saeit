@@ -47,3 +47,23 @@ class MultiBrandRoutingTests(TestCase):
         brand = brand_for_request(self.rf.get("/", HTTP_HOST="www.future.example"))
         self.assertEqual(brand.code, "futurebrand")
         self.assertEqual(brand.domain, "future.example")
+
+class MojPlayWinRevenueRoutingTests(TestCase):
+    def test_zomorod_agriculture_is_not_shadowed_by_brand_router(self):
+        response=self.client.get("/agriculture/", HTTP_HOST="zomorodmelal.ir")
+        self.assertNotEqual(response.status_code,404)
+
+    def test_mojplaywin_revenue_pages_resolve(self):
+        for path in ("/products/","/services/","/ai/","/software/","/commerce/","/blockchain/","/crypto-payments/","/global-business/","/agro-industry/","/canada-vision/"):
+            response=self.client.get(path,HTTP_HOST="mojplaywin.com")
+            self.assertEqual(response.status_code,200,path)
+
+    def test_mojplaywin_store_uses_real_inventory_and_empty_state(self):
+        response=self.client.get("/store/",HTTP_HOST="mojplaywin.com")
+        self.assertEqual(response.status_code,200)
+        self.assertContains(response,"GLOBAL / STORE")
+        self.assertContains(response,"No public products yet.")
+
+    def test_zomorod_services_preserved(self):
+        response=self.client.get("/services/",HTTP_HOST="zomorodmelal.ir")
+        self.assertNotEqual(response.status_code,404)
