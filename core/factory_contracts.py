@@ -15,6 +15,7 @@ OUTPUT_KEYS = {
     "product_localize": {"localization"},
     "product_market_eligibility": {"markets"},
     "product_qa": {"qa"},
+    "product_package_price": {"package_pricing"},
     "product_launch_candidate": {"launch_candidate"},
 }
 INTENT_KEYS = {"goal", "run_id", "product_id", "constraints"}
