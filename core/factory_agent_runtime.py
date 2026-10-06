@@ -642,6 +642,7 @@ class FactoryAgentRuntime:
                      "localization_digest": canonical_digest(meta.get("localization") or {}),
                      "eligibility_digest": canonical_digest(meta.get("market_eligibility") or []),
                      "qa_attestation_digest": qa.get("attestation_digest"),
+                     "package_pricing_digest": (meta.get("package_pricing") or {}).get("attestation_digest"),
                      "created_by": task.agent.code, "execution_id": task.execution_id,
                      "status": "launch_candidate", "published": False, "deployed": False}
         candidate["attestation_digest"] = canonical_digest(candidate)
