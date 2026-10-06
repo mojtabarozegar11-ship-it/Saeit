@@ -1,3 +1,7 @@
+import json
+
+import pytest
+from django.core.management import call_command
 from django.test import override_settings
 
 from core.opportunity_discovery import OpportunityDiscovery
@@ -29,9 +33,5 @@ def test_discovery_returns_bounded_deduplicated_pool():
 
 @override_settings(SAEIT_ENV="production")
 def test_discovery_fails_closed_in_production():
-    try:
+    with pytest.raises(Exception, match="disabled in production"):
         OpportunityDiscovery(provider=FakeProvider()).discover(seeds=["x"])
-    except Exception as exc:
-        assert "disabled in production" in str(exc)
-    else:
-        raise AssertionError("production discovery must fail closed")
