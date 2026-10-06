@@ -4,7 +4,7 @@ from core.brand_views import branded_home
 from core.brand_seo_views import branded_robots_txt, branded_sitemap_xml
 from core.models import BrandSite
 
-@override_settings(ALLOWED_HOSTS=["zomorodmelal.ir", "mojplaywin.com", "www.mojplaywin.com", "testserver"])
+@override_settings(ALLOWED_HOSTS=["zomorodmelal.ir", "mojplaywin.com", "www.mojplaywin.com", "www.future.example", "testserver"])
 class MultiBrandRoutingTests(TestCase):
     def setUp(self):
         self.rf = RequestFactory()
