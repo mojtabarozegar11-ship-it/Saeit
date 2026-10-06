@@ -49,3 +49,15 @@ a:focus-visible,button:focus-visible{box-shadow:0 0 0 5px rgba(231,207,150,.14)}
 .mpw-crown{position:absolute;top:-8px;left:50%;transform:translateX(-50%);font-size:13px;color:#f7d77f;text-shadow:0 2px 7px #000}
 .mpw-brand:hover .mpw-mark{box-shadow:inset 0 0 0 2px rgba(255,222,142,.2),inset 0 0 16px rgba(0,0,0,.72),0 10px 38px rgba(216,168,76,.24)}
 @media(max-width:850px){.mpw-mark{width:42px;height:42px;flex-basis:42px}.mpw-brand>span:last-child{font-size:.92rem}.mpw-brand small{font-size:.48rem}}
+
+/* Approved coin hero — quiet wealth, not visual noise */
+.mpw-hero{grid-template-columns:minmax(0,1.08fr) minmax(340px,.92fr);gap:clamp(2rem,5vw,7rem)}
+.mpw-hero-visual{position:relative;display:grid;place-items:center;min-width:0}
+.mpw-coin-frame{position:relative;width:min(100%,620px);aspect-ratio:1;display:grid;place-items:center}
+.mpw-coin-frame:before{content:"";position:absolute;inset:8%;border-radius:50%;background:radial-gradient(circle,rgba(232,185,83,.17),rgba(232,185,83,.04) 38%,transparent 68%);filter:blur(18px)}
+.mpw-coin-frame:after{content:"";position:absolute;left:18%;right:18%;bottom:5%;height:9%;background:radial-gradient(ellipse,rgba(230,180,75,.25),transparent 67%);filter:blur(16px)}
+.mpw-coin-frame img{position:relative;z-index:1;width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 35px 65px rgba(0,0,0,.58))}
+.mpw-coin-frame span{position:absolute;z-index:2;bottom:1.5%;left:50%;transform:translateX(-50%);white-space:nowrap;font-size:.58rem;letter-spacing:.34em;color:rgba(231,207,150,.66)}
+.mpw-hero-copy{position:relative;z-index:2}
+.mpw-hero-copy:before{content:"";position:absolute;left:0;top:-2rem;width:62px;height:1px;background:linear-gradient(90deg,var(--gold),transparent)}
+@media(max-width:850px){.mpw-hero{grid-template-columns:1fr;gap:1rem}.mpw-hero-visual{order:-1}.mpw-coin-frame{width:min(82vw,480px)}.mpw-coin-frame span{font-size:.5rem}.mpw-hero-copy{text-align:center}.mpw-hero-copy:before{left:50%;transform:translateX(-50%)}.mpw-hero p{margin-inline:auto}.actions{justify-content:center}}
