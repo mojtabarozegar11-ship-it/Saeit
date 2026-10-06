@@ -95,7 +95,7 @@ class FactoryPackageEGoalOnlyTests(TestCase):
         self.assertEqual([task.action_type for task in tasks], expected)
         self.assertTrue(all(task.goal == self.goal for task in tasks))
         forbidden = {"sources", "evidence", "score", "validation", "spec", "artifact",
-                     "tests", "security", "localization", "markets", "qa", "launch_candidate"}
+                     "tests", "security", "localization", "markets", "qa", "package_pricing", "launch_candidate"}
         self.assertTrue(all(not (set(task.input_data) & forbidden) for task in tasks))
         self.assertEqual(
             AuditLog.objects.filter(action="factory_next_step_planned", target_id__in=[str(x.pk) for x in tasks]).count(),
