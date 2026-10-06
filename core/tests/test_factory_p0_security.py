@@ -403,7 +403,7 @@ class FactoryP0SecurityTests(TestCase):
             request.save()
 
     def test_spec_or_artifact_change_after_approval_invalidates_release(self):
-        product, run, _ = self.run_factory("p0-release-binding", 11)
+        product, run, _ = self.run_factory("p0-release-binding", 12)
         product.owner = self.owner
         product.save(update_fields=["owner", "updated_at"])
         approval = ApprovalRequest.objects.create(
@@ -429,7 +429,7 @@ class FactoryP0SecurityTests(TestCase):
             product.save()
 
     def test_cached_approval_is_rejected_after_revoke_from_independent_object(self):
-        product, _, _ = self.run_factory("p0-cached-approval-revoke", 11)
+        product, _, _ = self.run_factory("p0-cached-approval-revoke", 12)
         product.owner = self.owner
         product.save(update_fields=["owner", "updated_at"])
         approval = ApprovalRequest.objects.create(
@@ -449,7 +449,7 @@ class FactoryP0SecurityTests(TestCase):
         self.assertFalse(Product.objects.get(pk=product.pk).active)
 
     def test_expired_market_eligibility_invalidates_approved_manifest(self):
-        product, _, _ = self.run_factory("p0-market-expiry", 11)
+        product, _, _ = self.run_factory("p0-market-expiry", 12)
         product.owner = self.owner
         product.save(update_fields=["owner", "updated_at"])
         approval = ApprovalRequest.objects.create(
@@ -469,7 +469,7 @@ class FactoryP0SecurityTests(TestCase):
             product.save()
 
     def test_artifact_digest_change_after_approval_rejects_old_manifest(self):
-        product, _, _ = self.run_factory("p0-artifact-binding", 11)
+        product, _, _ = self.run_factory("p0-artifact-binding", 12)
         product.owner = self.owner
         product.save(update_fields=["owner", "updated_at"])
         approval = ApprovalRequest.objects.create(
