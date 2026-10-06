@@ -4,7 +4,7 @@ from pathlib import Path
 from django.core.management import call_command
 from django.core.management.base import BaseCommand, CommandError
 
-from core.autonomous_brain import AutonomousBrain
+from core.autonomous_brain import AutonomousBrain\nfrom core.models import FactoryRun
 
 
 class Command(BaseCommand):
@@ -31,7 +31,7 @@ class Command(BaseCommand):
             urls = item.get("evidence_urls") or []
             if not oid or not problem or not urls:
                 continue
-            goal = (
+            existing = next((run for run in FactoryRun.objects.order_by("-created_at")[:500]\n                             if isinstance(run.constraints, dict)\n                             and run.constraints.get("discovery_opportunity_id") == oid), None)\n            if existing:\n                queued.append({"opportunity_id": oid, "run_id": existing.run_id, "status": "existing"})\n                continue\n            goal = (
                 "Research this evidence-backed product opportunity and determine whether it "
                 f"deserves progression through the Product Factory. Opportunity {oid}. "
                 f"Problem signal: {problem[:900]}"
@@ -46,7 +46,7 @@ class Command(BaseCommand):
                     },
                 }
             )
-            queued.append({"opportunity_id": oid, "task_id": task.pk, "run_id": task.factory_run.run_id})
+            queued.append({"opportunity_id": oid, "task_id": task.pk, "run_id": task.factory_run.run_id, "status": "queued"})
         if not queued:
             raise CommandError("No valid Stage-1 opportunities were eligible for Stage-2 intake.")
         self.stdout.write(json.dumps({"status": "PASS", "queued": queued}, sort_keys=True))
