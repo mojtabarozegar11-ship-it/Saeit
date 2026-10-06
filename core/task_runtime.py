@@ -205,6 +205,7 @@ class TaskRuntime:
             "product_localize": "localized",
             "product_market_eligibility": "eligible",
             "product_qa": "qa_passed",
+            "product_package_price": "packaged_priced",
             "product_launch_candidate": "launch_candidate",
         }
         expected = expected_states.get(task.action_type)
@@ -266,6 +267,10 @@ class TaskRuntime:
         elif task.action_type == "product_qa":
             if (metadata.get("qa_attestation") or {}).get("passed") is not True:
                 raise TaskExecutionError("Independent QA attestation was not persisted")
+        elif task.action_type == "product_package_price":
+            package_pricing = metadata.get("package_pricing") or {}
+            if not package_pricing.get("attestation_digest") or package_pricing != output.get("package_pricing"):
+                raise TaskExecutionError("Packaging & Pricing attestation was not persisted")
         elif task.action_type == "product_launch_candidate":
             markets = metadata.get("market_eligibility") or []
             if product.active or metadata.get("owner_publish_approval_required") is not True:
