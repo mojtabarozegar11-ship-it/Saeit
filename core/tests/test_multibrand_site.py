@@ -1,10 +1,11 @@
-from django.test import RequestFactory, SimpleTestCase, override_settings
+from django.test import RequestFactory, TestCase, override_settings
 from core.brand import brand_for_request
 from core.brand_views import branded_home
 from core.brand_seo_views import branded_robots_txt, branded_sitemap_xml
+from core.models import BrandSite
 
 @override_settings(ALLOWED_HOSTS=["zomorodmelal.ir", "mojplaywin.com", "www.mojplaywin.com", "testserver"])
-class MultiBrandRoutingTests(SimpleTestCase):
+class MultiBrandRoutingTests(TestCase):
     def setUp(self):
         self.rf = RequestFactory()
 
@@ -36,3 +37,13 @@ class MultiBrandRoutingTests(SimpleTestCase):
         sitemap = branded_sitemap_xml(self.rf.get("/sitemap.xml", HTTP_HOST="mojplaywin.com")).content.decode("utf-8")
         self.assertIn("https://mojplaywin.com/", sitemap)
         self.assertNotIn("zomorodmelal.ir", sitemap)
+
+    def test_database_brand_alias_resolves_without_code_change(self):
+        BrandSite.objects.create(
+            code="futurebrand", name="Future Brand", primary_domain="future.example",
+            aliases=["www.future.example"], default_language="en", direction="ltr",
+            theme_key="mojplaywin", active=True,
+        )
+        brand = brand_for_request(self.rf.get("/", HTTP_HOST="www.future.example"))
+        self.assertEqual(brand.code, "futurebrand")
+        self.assertEqual(brand.domain, "future.example")
