@@ -209,6 +209,8 @@ class FactoryAgentRuntime:
                 values = {"markets": [{"market_code": item.market_code} for item in markets]}
             elif action == "product_qa":
                 values = self._qa(task, product)
+            elif action == "product_package_price":
+                values = self._package_price(task, product)
             elif action == "product_launch_candidate":
                 values = self._launch_candidate(task, product)
             else:
@@ -589,6 +591,44 @@ class FactoryAgentRuntime:
             raise FactoryAgentBlocked("QA requires complete Build/Test/Security lineage.")
         qa["attestation_digest"] = canonical_digest(qa)
         return {"qa": qa}
+
+    def _package_price(self, task, product):
+        meta = product.metadata or {}
+        qa = meta.get("qa_attestation") or {}
+        opportunity = meta.get("opportunity") or {}
+        markets = meta.get("market_eligibility") or []
+        if qa.get("passed") is not True or not qa.get("attestation_digest"):
+            raise FactoryAgentBlocked("Packaging & Pricing requires a current passing QA attestation.")
+        market_codes = [item.get("market_code") for item in markets if isinstance(item, dict) and item.get("market_code")]
+        if not market_codes:
+            raise FactoryAgentBlocked("Packaging & Pricing requires at least one eligible market.")
+        amount = str(product.price) if product.price and product.price > 0 else None
+        package_pricing = {
+            "policy_version": "factory-package-pricing-v1",
+            "product_id": product.pk,
+            "package": {
+                "format": "digital",
+                "release_artifact_digest": (meta.get("build") or {}).get("sha256"),
+                "supported_markets": market_codes,
+                "supported_locales": (meta.get("localization") or {}).get("required_locales") or [],
+            },
+            "pricing": {
+                "currency": product.currency,
+                "list_price": amount,
+                "status": "configured" if amount is not None else "market_test_required",
+                "evidence_basis": {
+                    "opportunity_score": opportunity.get("score"),
+                    "rubric_version": (opportunity.get("rubric") or {}).get("version"),
+                    "research_digest": canonical_digest((meta.get("research") or {}).get("evidence") or []),
+                },
+                "note": "No monetary price is invented when persisted willingness-to-pay evidence does not establish one.",
+            },
+            "qa_attestation_digest": qa.get("attestation_digest"),
+            "created_by": task.agent.code,
+            "execution_id": task.execution_id,
+        }
+        package_pricing["attestation_digest"] = canonical_digest(package_pricing)
+        return {"package_pricing": package_pricing}
 
     def _launch_candidate(self, task, product):
         meta = product.metadata or {}
