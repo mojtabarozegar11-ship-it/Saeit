@@ -303,8 +303,8 @@ def product_package_price(payload):
 def launch_candidate(payload):
     payload = _merge_output(payload, "product_launch_candidate")
     product = _product(payload)
-    if product.metadata.get("factory_state") != "qa_passed":
-        raise ValueError("Product must pass independent QA before launch candidacy.")
+    if product.metadata.get("factory_state") != "packaged_priced":
+        raise ValueError("Product must complete Packaging & Pricing before launch candidacy.")
     candidate = payload.get("launch_candidate") or {}
     build = product.metadata.get("build") or {}
     spec = product.metadata.get("spec") or {}
@@ -321,6 +321,7 @@ def launch_candidate(payload):
         "localization_digest": canonical_digest(localization),
         "eligibility_digest": canonical_digest(markets),
         "qa_attestation_digest": qa.get("attestation_digest"),
+        "package_pricing_digest": (product.metadata.get("package_pricing") or {}).get("attestation_digest"),
     }
     if any(not value for value in expected.values()) or any(candidate.get(k) != v for k, v in expected.items()):
         raise ValueError("Launch Candidate does not bind the exact verified release lineage.")
