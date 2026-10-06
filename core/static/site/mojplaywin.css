@@ -72,3 +72,5 @@ img{max-width:100%;display:block}
 .mpw-page-cta{max-width:1370px;margin-inline:auto;margin-bottom:7rem;border-radius:2px}
 .mpw-footer a{transition:color .2s ease}.mpw-footer a:hover{color:var(--gold)}
 @media(max-width:520px){.mpw-header{padding-inline:1rem}.mpw-brand small{display:none}.mpw-hero{padding-inline:1.15rem}.mpw-hero h1{font-size:clamp(3rem,16vw,4.8rem)}.mpw-games,.mpw-worlds,.mpw-news,.mpw-community,.mpw-support{padding:5rem 1.15rem}.mpw-page-hero{padding:6.5rem 1.15rem 3.5rem}.mpw-page-grid{padding:1rem 1.15rem 5rem}.mpw-page-cta{margin:0 1.15rem 5rem}.mpw-footer{padding:2.5rem 1.15rem}}
+
+.mpw-section-label{max-width:1600px;margin:0 auto;padding:3.5rem 7vw 0;color:rgba(231,207,150,.72);font-size:.62rem;letter-spacing:.28em}.mpw-section-label+ .mpw-page-grid{padding-top:1.5rem}@media(max-width:520px){.mpw-section-label{padding:2.5rem 1.15rem 0}}
