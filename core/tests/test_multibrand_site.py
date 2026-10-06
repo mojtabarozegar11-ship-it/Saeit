@@ -51,6 +51,7 @@ class MultiBrandRoutingTests(TestCase):
         self.assertEqual(brand.code, "futurebrand")
         self.assertEqual(brand.domain, "future.example")
 
+@override_settings(ALLOWED_HOSTS=["zomorodmelal.ir", "mojplaywin.com", "www.mojplaywin.com", "testserver"])
 class MojPlayWinRevenueRoutingTests(TestCase):
     def test_zomorod_agriculture_is_not_shadowed_by_brand_router(self):
         response=self.client.get("/agriculture/", HTTP_HOST="zomorodmelal.ir")
