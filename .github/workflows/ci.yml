@@ -9,6 +9,7 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     env:
       DEBUG: "true"
       SECRET_KEY: "ci-only-secret-key"
@@ -32,4 +33,4 @@ jobs:
       - name: Build static manifest
         run: python manage.py collectstatic --noinput
       - name: Run tests
-        run: pytest -q
+        run: pytest -vv
