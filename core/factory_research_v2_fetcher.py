@@ -4,6 +4,7 @@ Standalone on purpose: safe to test before the deployed Django model reconciliat
 """
 import http.client
 import ipaddress
+import re
 import socket
 import ssl
 from urllib.parse import urlsplit
@@ -62,15 +63,26 @@ def fetch_source(url, *, timeout=6, byte_limit=256_000):
                 or parsed.password is not None or parsed.fragment
                 or parsed.port not in (None, 443) or host.endswith(".")):
             raise UnsafeSource("Only HTTPS public hostnames on port 443 are accepted")
-        ipaddress.ip_address(host)
-        raise UnsafeSource("IP literals are not accepted")
+        normalized = host.lower()
+        try:
+            ipaddress.ip_address(normalized)
+        except ValueError:
+            pass
+        else:
+            raise UnsafeSource("IP literals are not accepted")
+        labels = normalized.split(".")
+        if (len(normalized) > 253 or len(labels) < 2
+                or normalized in ("localhost", "localhost.localdomain")
+                or normalized.endswith((".localhost", ".local", ".internal", ".test", ".invalid"))
+                or labels[-1].isdigit()
+                or not all(1 <= len(label) <= 63
+                           and re.fullmatch(r"[a-z0-9](?:[a-z0-9-]*[a-z0-9])?", label)
+                           for label in labels)):
+            raise UnsafeSource("Unsafe hostname")
     except ValueError as exc:
         if isinstance(exc, UnsafeSource):
             raise
-        if not host or "." not in host or host.lower().endswith(
-            (".localhost", ".local", ".internal", ".test", ".invalid")
-        ) or host.lower() in ("localhost", "localhost.localdomain"):
-            raise UnsafeSource("Unsafe hostname") from exc
+        raise UnsafeSource("Malformed URL") from exc
     if not 1 <= timeout <= 20 or not 100 <= byte_limit <= 256_000:
         raise ValueError("Fetch bounds exceeded")
     addresses = public_addresses(host)
