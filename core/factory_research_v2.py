@@ -24,7 +24,7 @@ def acceptable_discovery_url(url):
     """
     if not isinstance(url, str) or len(url) > 1800:
         return False
-    if re.search(r"[\\x00-\\x20\\x7f]", url):
+    if re.search(r"[\x00-\x20\x7f]", url):
         return False
     try:
         parts = urlsplit(url)
