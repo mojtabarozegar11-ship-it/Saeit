@@ -33,7 +33,7 @@ def acceptable_discovery_url(url):
                 or parts.password is not None or parts.fragment
                 or parts.port not in (None, 443)):
             return False
-        normalized = host.rstrip(".").lower()
+        if host.endswith("."):\n            return False\n        normalized = host.lower()
         if normalized in ("localhost", "localhost.localdomain") or normalized.endswith(
                 (".localhost", ".local", ".internal", ".test", ".invalid")
         ):
