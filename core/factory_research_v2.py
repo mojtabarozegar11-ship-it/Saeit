@@ -7,6 +7,8 @@ pinned public-IP connections (protecting against DNS rebinding and SSRF).
 from datetime import timedelta
 import hashlib
 from urllib.parse import urlsplit
+import ipaddress
+import re
 
 from django.db import transaction
 from django.utils import timezone
@@ -14,15 +16,43 @@ from django.utils import timezone
 from .models import FactorySourceJob, FactoryEvidenceSnapshot
 
 
+def acceptable_discovery_url(url):
+    """Fail closed on malformed or obviously unsafe discovery URLs.
+
+    This is an admission filter, NOT a substitute for pinned-IP checks at
+    connection time in the future HTTP fetcher.
+    """
+    if not isinstance(url, str) or len(url) > 1800:
+        return False
+    if re.search(r"[\\x00-\\x20\\x7f]", url):
+        return False
+    try:
+        parts = urlsplit(url)
+        host = parts.hostname
+        if (parts.scheme != "https" or not host or parts.username is not None
+                or parts.password is not None or parts.fragment
+                or parts.port not in (None, 443)):
+            return False
+        normalized = host.rstrip(".").lower()
+        if normalized in ("localhost", "localhost.localdomain") or normalized.endswith(
+                (".localhost", ".local", ".internal", ".test", ".invalid")
+        ):
+            return False
+        try:
+            ipaddress.ip_address(normalized.strip("[]"))
+        except ValueError:
+            return bool(re.fullmatch(r"[a-z0-9.-]+", normalized)) and "." in normalized
+        return False  # Reject IP literals; connection-time DNS pinning remains mandatory.
+    except ValueError:
+        return False
+
+
 @transaction.atomic
 def schedule(project, urls):
     """Persist discoveries idempotently; discovery failure cannot destroy evidence."""
     created = 0
     for url in list(urls)[:16]:
-        if not isinstance(url, str) or not url.startswith("https://"):
-            continue
-        host = urlsplit(url).hostname
-        if not host or len(url) > 1800 or urlsplit(url).username:
+        if not acceptable_discovery_url(url):
             continue
         _, added = FactorySourceJob.objects.get_or_create(
             project=project, url=url, defaults={"status": "queued"}
