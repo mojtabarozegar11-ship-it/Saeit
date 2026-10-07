@@ -2,6 +2,10 @@
 
 Run only after deployed model/code reconciliation. No network or production DB needed.
 """
+import hashlib
+from unittest.mock import patch
+from types import SimpleNamespace
+
 from django.test import SimpleTestCase
 from core.factory_research_v2 import acceptable_discovery_url
 
@@ -42,3 +46,21 @@ class DiscoveryURLAdmissionTests(SimpleTestCase):
     def test_rejects_non_string_and_oversized_url(self):
         self.assertFalse(acceptable_discovery_url(None))
         self.assertFalse(acceptable_discovery_url('https://example.com/' + 'a' * 2000))
+
+
+class EvidenceIntegrityTests(SimpleTestCase):
+    def test_readiness_rejects_tampered_snapshot(self):
+        from core.factory_research_v2 import evidence_ready
+        valid_text = "verified source content"
+        good = SimpleNamespace(source_job=SimpleNamespace(url="https://one.example.com/"),
+                               body=valid_text, sha256=hashlib.sha256(valid_text.encode()).hexdigest())
+        tampered = SimpleNamespace(source_job=SimpleNamespace(url="https://two.example.com/"),
+                                   body="modified", sha256=hashlib.sha256(b"original").hexdigest())
+        class FakeQuerySet:
+            def filter(self, **kwargs):
+                return self
+            def select_related(self, *args):
+                return [good, tampered]
+        with patch("core.factory_research_v2.FactoryEvidenceSnapshot.objects", FakeQuerySet()):
+            self.assertFalse(evidence_ready(object(), minimum=2))
+            self.assertTrue(evidence_ready(object(), minimum=1))
