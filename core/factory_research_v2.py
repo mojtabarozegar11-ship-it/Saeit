@@ -43,7 +43,18 @@ def acceptable_discovery_url(url):
         try:
             ipaddress.ip_address(normalized.strip("[]"))
         except ValueError:
-            return bool(re.fullmatch(r"[a-z0-9.-]+", normalized)) and "." in normalized
+            labels = normalized.split(".")
+            # Admission is not DNS resolution or transport authorization.
+            return (
+                len(normalized) <= 253
+                and len(labels) >= 2
+                and all(
+                    1 <= len(label) <= 63
+                    and re.fullmatch(r"[a-z0-9](?:[a-z0-9-]*[a-z0-9])?", label)
+                    for label in labels
+                )
+                and not labels[-1].isdigit()
+            )
         return False  # Reject IP literals; connection-time DNS pinning remains mandatory.
     except ValueError:
         return False
