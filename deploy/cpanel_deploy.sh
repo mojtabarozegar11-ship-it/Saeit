@@ -1,22 +1,31 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
-APPROOT="/home/zomorodm/repositories/Saeit"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+APPROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 cd "$APPROOT"
+
+if [ ! -f manage.py ]; then
+    echo "ERROR: manage.py not found in resolved app root: $APPROOT" >&2
+    exit 1
+fi
 
 if [ -n "${VIRTUAL_ENV:-}" ] && [ -x "$VIRTUAL_ENV/bin/python" ]; then
     PYTHON="$VIRTUAL_ENV/bin/python"
-elif [ -x "/home/zomorodm/virtualenv/repositories/Saeit/3.11/bin/python" ]; then
-    PYTHON="/home/zomorodm/virtualenv/repositories/Saeit/3.11/bin/python"
+elif [ -x "$APPROOT/venv/bin/python" ]; then
+    PYTHON="$APPROOT/venv/bin/python"
+elif [ -x "$APPROOT/.venv/bin/python" ]; then
+    PYTHON="$APPROOT/.venv/bin/python"
 elif command -v python3 >/dev/null 2>&1; then
     PYTHON="$(command -v python3)"
 elif command -v python >/dev/null 2>&1; then
     PYTHON="$(command -v python)"
 else
-    echo "ERROR: Python executable not found."
+    echo "ERROR: Python executable not found." >&2
     exit 1
 fi
 
+echo "Deploy root: $APPROOT"
 echo "Using Python: $PYTHON"
 "$PYTHON" --version
 
@@ -25,7 +34,6 @@ echo "Using Python: $PYTHON"
 "$PYTHON" manage.py production_gate
 "$PYTHON" manage.py collectstatic --noinput
 
-# Passenger reload: touching the WSGI entrypoint requests a graceful reload.
 touch passenger_wsgi.py
 
 echo "Saeit Django deployment completed."

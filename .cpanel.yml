@@ -1,4 +1,4 @@
 ---
 deployment:
   tasks:
-    - /bin/bash /home/zomorodm/repositories/Saeit/deploy/cpanel_deploy.sh
+    - /bin/bash ./deploy/cpanel_deploy.sh
