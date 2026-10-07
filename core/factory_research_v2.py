@@ -99,7 +99,9 @@ def finish(job, *, body, content_type, source_verified=False):
         raise ValueError("Source payload outside accepted bounds")
     if not any(t in content_type.lower() for t in ("text/html", "text/plain")):
         raise ValueError("Source must be HTML or plain text")
-    digest = hashlib.sha256(body).hexdigest()
+    stored_text = body.decode("utf-8", "replace")
+    # The digest must match the exact persisted text, including replacement chars.
+    digest = hashlib.sha256(stored_text.encode("utf-8")).hexdigest()
     with transaction.atomic():
         fresh = FactorySourceJob.objects.select_for_update().get(pk=job.pk)
         if fresh.status != "running" or fresh.attempts != job.attempts:
@@ -107,7 +109,7 @@ def finish(job, *, body, content_type, source_verified=False):
         FactoryEvidenceSnapshot.objects.update_or_create(
             source_job=fresh,
             defaults={
-                "sha256": digest, "body": body.decode("utf-8", "replace"),
+                "sha256": digest, "body": stored_text,
                 "content_type": content_type[:100],
                 "fetched_at": timezone.now(),
                 "verified_relevant": bool(source_verified),
@@ -139,5 +141,6 @@ def evidence_ready(project, minimum=2):
         for row in FactoryEvidenceSnapshot.objects
           .filter(source_job__project=project, verified_relevant=True)
           .select_related("source_job")
+        if hashlib.sha256(row.body.encode("utf-8")).hexdigest() == row.sha256
     }
     return len(domains) >= minimum
