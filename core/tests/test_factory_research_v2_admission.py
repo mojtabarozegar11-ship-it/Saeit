@@ -30,6 +30,15 @@ class DiscoveryURLAdmissionTests(SimpleTestCase):
             with self.subTest(url=url):
                 self.assertFalse(acceptable_discovery_url(url))
 
+    def test_rejects_malformed_dns_labels(self):
+        for url in (
+            'https://a..example.com/', 'https://-bad.example.com/',
+            'https://bad-.example.com/', 'https://example..com/',
+            'https://123.456/', 'https://' + 'a' * 64 + '.example.com/',
+        ):
+            with self.subTest(url=url):
+                self.assertFalse(acceptable_discovery_url(url))
+
     def test_rejects_non_string_and_oversized_url(self):
         self.assertFalse(acceptable_discovery_url(None))
         self.assertFalse(acceptable_discovery_url('https://example.com/' + 'a' * 2000))
