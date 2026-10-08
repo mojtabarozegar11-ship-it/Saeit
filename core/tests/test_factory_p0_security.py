@@ -339,9 +339,9 @@ class FactoryP0SecurityTests(TestCase):
                 input_data={"goal": self.goal, "product_id": product.pk, "run_id": run.run_id},
                 output_contract={"required": ["launch_candidate"]},
                 prerequisite_snapshot=snapshot_for("product_launch_candidate", product, run),
-                environment="test",
+                environment=getattr(__import__("django.conf", fromlist=["settings"]).settings, "SAEIT_ENV", "test"),
             )
-            ApprovalRequest.objects.create(
+            ApprovalRequest.objects.create;
                 action_type="product_launch_candidate", target_type="AgentTask",
                 target_id=str(task.pk), reason="Authorize isolated security test",
                 risk="high", status="approved", requested_by=self.owner,
