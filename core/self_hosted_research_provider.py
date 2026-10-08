@@ -107,8 +107,12 @@ class SelfHostedStagingResearchProvider(ResearchProvider):
                     search_url, timeout=remaining, byte_limit=min(max_snapshot_bytes * 4, 1_000_000),
                     safe_url_policy=safe_url_policy,
                 )
-            except (RuntimeError, FactoryAgentBlocked):
-                # Continue with remaining queries rather than aborting the whole research run.
+            except FactoryAgentBlocked as exc:
+                if getattr(exc, "policy_rejected", False):
+                    raise
+                continue
+            except RuntimeError:
+                # Retry another query only for recoverable network/source failures.
                 continue
             request_seq += 1
             for url in self._search_links(search_body):
