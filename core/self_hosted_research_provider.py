@@ -82,9 +82,9 @@ class SelfHostedStagingResearchProvider(ResearchProvider):
     def _text_snapshot(body, content_type):
         if content_type != "text/html":
             return body.strip()
-        body = re.sub(r"(?is)<(script|style|noscript).*?>.*?</\\1>", " ", body)
+        body = re.sub(r"(?is)<(script|style|noscript).*?>.*?</\1>", " ", body)
         body = re.sub(r"(?s)<[^>]+>", " ", body)
-        return re.sub(r"\\s+", " ", html.unescape(body)).strip()
+        return re.sub(r"\s+", " ", html.unescape(body)).strip()
 
     def search(self, *, goal, constraints, plan, task, authorization, authorization_check,
                timeout_seconds, max_results, max_snapshot_bytes, max_redirects, safe_url_policy):
