@@ -3,6 +3,7 @@ from datetime import timedelta
 from pathlib import Path
 from unittest.mock import patch
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.core.management import call_command
@@ -339,9 +340,9 @@ class FactoryP0SecurityTests(TestCase):
                 input_data={"goal": self.goal, "product_id": product.pk, "run_id": run.run_id},
                 output_contract={"required": ["launch_candidate"]},
                 prerequisite_snapshot=snapshot_for("product_launch_candidate", product, run),
-                environment=getattr(__import__("django.conf", fromlist=["settings"]).settings, "SAEIT_ENV", "test"),
+                environment=settings.SAEIT_ENV,
             )
-            ApprovalRequest.objects.create;
+            ApprovalRequest.objects.create(
                 action_type="product_launch_candidate", target_type="AgentTask",
                 target_id=str(task.pk), reason="Authorize isolated security test",
                 risk="high", status="approved", requested_by=self.owner,
