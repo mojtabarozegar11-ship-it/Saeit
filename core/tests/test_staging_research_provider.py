@@ -28,3 +28,28 @@ def test_search_link_extraction_excludes_search_engine_links():
 def test_html_extraction_normalizes_whitespace():
     text = '<style>hidden</style><p>Useful   evidence</p>'
     assert SelfHostedStagingResearchProvider._text_snapshot(text, 'text/html') == 'Useful evidence'
+
+
+@override_settings(SAEIT_ENV='staging')
+def test_search_retries_next_query_after_network_failure(monkeypatch):
+    provider = SelfHostedStagingResearchProvider()
+    seen = []
+
+    def fake_get(url, **kwargs):
+        seen.append(url)
+        if len(seen) == 1:
+            raise RuntimeError('network timeout')
+        if len(seen) == 2:
+            return url, 'text/html', '<a href="https://public.example/report">report</a>'
+        return url, 'text/plain', 'Independent research evidence'
+
+    monkeypatch.setattr(provider, '_get', fake_get)
+    records = provider.search(
+        goal='test', constraints=[], plan={'queries': ['first', 'second']},
+        task=None, authorization=None, authorization_check=lambda *args: True,
+        timeout_seconds=10, max_results=1, max_snapshot_bytes=10000,
+        max_redirects=0, safe_url_policy=lambda url: url.startswith('https://'),
+    )
+    assert len(records) == 1
+    assert len(seen) == 3
+    assert records[0]['snapshot'] == 'Independent research evidence'
