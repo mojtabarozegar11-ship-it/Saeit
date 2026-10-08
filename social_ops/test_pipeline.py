@@ -14,6 +14,8 @@ class ThreeBrandPipelineTests(unittest.TestCase):
         self.assertEqual({b["id"] for b in brands}, {"personal", "company", "mojplaywin"})
         self.assertEqual(len({b["id"] for b in brands}), len(brands))
         self.assertEqual(data["policy"]["publishing"], "disabled_until_platform_connection_and_approval")
+        languages = {b["id"]: b["primary_language"] for b in brands}
+        self.assertEqual(languages, {"personal": "en", "company": "fa", "mojplaywin": "en"})
 
     def test_drafts_are_isolated_and_not_published(self):
         subprocess.run([sys.executable, "social_ops/generate.py"], cwd=ROOT, check=True)
@@ -24,6 +26,10 @@ class ThreeBrandPipelineTests(unittest.TestCase):
             self.assertTrue(all(x["brand"] == brand for x in items))
             self.assertTrue(all(x["status"] == "draft_requires_review" for x in items))
             self.assertEqual(len({x["id"] for x in items}), len(items))
+            if brand in ("personal", "mojplaywin"):
+                self.assertTrue(all(x["title"].isascii() for x in items))
+            else:
+                self.assertTrue(any(not x["title"].isascii() for x in items))
 
 if __name__ == "__main__":
     unittest.main()
