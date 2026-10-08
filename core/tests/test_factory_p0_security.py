@@ -338,7 +338,7 @@ class FactoryP0SecurityTests(TestCase):
                 capability_code="product_launch_candidate", risk_snapshot="high",
                 goal=self.goal, factory_run=run, product=product,
                 input_data={"goal": self.goal, "product_id": product.pk, "run_id": run.run_id},
-                output_contract={"required": ["launch_candidate"]},
+                output_contract={},
                 prerequisite_snapshot=snapshot_for("product_launch_candidate", product, run),
                 environment=settings.SAEIT_ENV,
             )
