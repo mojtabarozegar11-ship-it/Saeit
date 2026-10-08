@@ -5,9 +5,9 @@ from pathlib import Path
 
 TOPICS = {
     "personal": [
-        ("اقتصاد تولید", "سه پرسش کلیدی پیش از سرمایه‌گذاری در یک کسب‌وکار تولیدی"),
-        ("مدیریت", "چگونه هزینه‌های ثابت و متغیر را در تصمیم‌گیری جدا کنیم؟"),
-        ("آموزش", "تفاوت درآمد، سود و جریان نقدی در مدیریت کسب‌وکار"),
+        ("Production economics", "Three questions to ask before investing in a production business"),
+        ("Management", "How to distinguish fixed and variable costs in business decisions"),
+        ("Business education", "Revenue, profit and cash flow: why the difference matters"),
     ],
     "company": [
         ("پژوهش", "چرا مستندسازی شواهد برای توسعه محصول اهمیت دارد؟"),
