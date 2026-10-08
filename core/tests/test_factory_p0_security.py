@@ -341,6 +341,11 @@ class FactoryP0SecurityTests(TestCase):
                 prerequisite_snapshot=snapshot_for("product_launch_candidate", product, run),
                 environment="test",
             )
+            ApprovalRequest.objects.create(
+                action_type="product_launch_candidate", target_type="AgentTask",
+                target_id=str(task.pk), reason="Authorize isolated security test",
+                risk="high", status="approved", requested_by=self.owner,
+            )
             last = WorkerRunner(build_factory_gateway(), factory_executor=executor).run(task.pk)
             product_id = last.output_data["product_id"]
         return Product.objects.get(pk=product_id), FactoryRun.objects.get(run_id=run_id), last
