@@ -190,6 +190,41 @@ class KnowledgeArticle(T):
     published = models.BooleanField(default=False)
 
 
+class DailyContentPlan(T):
+    """One daily two-article publication plan for the site's content agent."""
+    project = models.ForeignKey(ResearchProject, on_delete=models.CASCADE, related_name="daily_content_plans")
+    run_date = models.DateField()
+    company_topic = models.CharField(max_length=300)
+    ceo_topic = models.CharField(max_length=300)
+    company_title = models.CharField(max_length=300, blank=True)
+    ceo_title = models.CharField(max_length=300, blank=True)
+    status = models.CharField(max_length=30, default="planned")
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["project", "run_date"], name="unique_daily_content_plan_per_project_day")
+        ]
+
+
+class DailyContentDraft(T):
+    """Generated article draft; publishing remains behind owner approval."""
+    KIND_CHOICES = (("company", "company"), ("ceo", "ceo"))
+    plan = models.ForeignKey(DailyContentPlan, on_delete=models.CASCADE, related_name="drafts")
+    kind = models.CharField(max_length=20, choices=KIND_CHOICES)
+    title = models.CharField(max_length=300)
+    slug = models.SlugField(unique=True)
+    content = models.TextField()
+    status = models.CharField(max_length=30, default="draft")
+    knowledge_article = models.OneToOneField(
+        "KnowledgeArticle", on_delete=models.PROTECT, null=True, blank=True, related_name="daily_content_draft"
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["plan", "kind"], name="unique_daily_content_draft_kind")
+        ]
+
+
 class Product(T):
     title = models.CharField(max_length=300)
     product_type = models.CharField(max_length=50)
