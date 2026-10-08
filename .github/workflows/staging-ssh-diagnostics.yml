@@ -1,0 +1,76 @@
+name: Staging SSH diagnostics (manual, read-only)
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Target server
+        type: choice
+        required: true
+        options: [host, vps]
+      check:
+        description: Read-only diagnostic
+        type: choice
+        required: true
+        options: [identity, staging_directory, staging_processes]
+permissions:
+  contents: read
+concurrency:
+  group: staging-ssh-diagnostics
+  cancel-in-progress: false
+jobs:
+  diagnostics:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Choose isolated credentials
+        env:
+          TARGET: ${{ inputs.target }}
+          HOST_HOST: ${{ secrets.SAEIT_HOST_SSH_HOST }}
+          HOST_USER: ${{ secrets.SAEIT_HOST_SSH_USER }}
+          HOST_PORT: ${{ secrets.SAEIT_HOST_SSH_PORT }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+          HOST_KNOWN: ${{ secrets.SAEIT_HOST_SSH_KNOWN_HOSTS }}
+          VPS_HOST: ${{ secrets.SAEIT_VPS_SSH_HOST }}
+          VPS_USER: ${{ secrets.SAEIT_VPS_SSH_USER }}
+          VPS_PORT: ${{ secrets.SAEIT_VPS_SSH_PORT }}
+          VPS_KEY: ${{ secrets.SAEIT_VPS_SSH_PRIVATE_KEY }}
+          VPS_KNOWN: ${{ secrets.SAEIT_VPS_SSH_KNOWN_HOSTS }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          if [[ "$TARGET" == host ]]; then
+            h="$HOST_HOST"; u="$HOST_USER"; p="$HOST_PORT"; k="$HOST_KEY"; known="$HOST_KNOWN"
+          else
+            h="$VPS_HOST"; u="$VPS_USER"; p="$VPS_PORT"; k="$VPS_KEY"; known="$VPS_KNOWN"
+          fi
+          [[ -n "$h" && -n "$u" && -n "$k" && -n "$known" ]] || { echo "Missing SSH secrets"; exit 1; }
+          [[ "$u" =~ ^[a-zA-Z_][a-zA-Z0-9_.-]*$ ]] || exit 1
+          [[ "$h" =~ ^[a-zA-Z0-9.:-]+$ ]] || exit 1
+          p="${p:-22}"
+          [[ "$p" =~ ^[0-9]{1,5}$ ]] && ((p >= 1 && p <= 65535)) || exit 1
+          mkdir -p "$HOME/.ssh"
+          printf '%s\n' "$k" > "$HOME/.ssh/id_staging"
+          printf '%s\n' "$known" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/"*
+          {
+            printf 'SSH_TARGET=%s\n' "$h"
+            printf 'SSH_USER=%s\n' "$u"
+            printf 'SSH_PORT=%s\n' "$p"
+          } >> "$GITHUB_ENV"
+      - name: Run one allowlisted diagnostic
+        shell: bash
+        env:
+          CHECK: ${{ inputs.check }}
+        run: |
+          set -euo pipefail
+          case "$CHECK" in
+            identity) remote='id -un; hostname' ;;
+            staging_directory) remote='test -d /home/zomorod2/Saeit-staging && echo STAGING_DIRECTORY_PRESENT || echo STAGING_DIRECTORY_MISSING' ;;
+            staging_processes) remote='ps -eo pid,comm,args | grep -E "[f]actory_staging_tick|[s]tage1_10s_loop" | cut -c1-180 | head -20 || true' ;;
+            *) exit 1 ;;
+          esac
+          ssh -i "$HOME/.ssh/id_staging" -p "$SSH_PORT" \
+            -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            -o ConnectTimeout=10 -o ConnectionAttempts=1 \
+            "$SSH_USER@$SSH_TARGET" "$remote"
