@@ -1,0 +1,22 @@
+name: Social Drafts (isolated)
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 6 * * *'
+permissions:
+  contents: read
+jobs:
+  drafts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Generate independent brand drafts
+        run: python social_ops/generate.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: social-two-brand-drafts
+          path: social_ops/output/*.json
+          retention-days: 7
