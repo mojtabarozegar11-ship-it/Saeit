@@ -1,4 +1,4 @@
-name: Social Drafts (isolated)
+name: Social Drafts (three-brand pilot)
 on:
   workflow_dispatch:
   schedule:
@@ -13,10 +13,12 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+      - name: Validate three-brand registry and draft safety
+        run: python -m unittest discover -s social_ops -p 'test_*.py'
       - name: Generate independent brand drafts
         run: python social_ops/generate.py
       - uses: actions/upload-artifact@v4
         with:
-          name: social-two-brand-drafts
+          name: social-three-brand-drafts
           path: social_ops/output/*.json
           retention-days: 7
