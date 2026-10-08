@@ -23,3 +23,8 @@ def test_search_link_extraction_excludes_search_engine_links():
     body = '<a href="/url?q=https%3A%2F%2Fexample.com%2Freport&x=1">x</a>' \
            '<a href="https://www.google.com/preferences">g</a>'
     assert SelfHostedStagingResearchProvider._search_links(body) == ["https://example.com/report"]
+
+
+def test_html_extraction_normalizes_whitespace():
+    text = '<style>hidden</style><p>Useful   evidence</p>'
+    assert SelfHostedStagingResearchProvider._text_snapshot(text, 'text/html') == 'Useful evidence'
