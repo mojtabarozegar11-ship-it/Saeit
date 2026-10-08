@@ -509,7 +509,7 @@ class FactoryP0SecurityTests(TestCase):
             product.save()
 
     def test_expired_approval_cannot_activate_current_release(self):
-        product, _, _ = self.run_factory("p0-approval-expiry", 11)
+        product, _, _ = self.run_factory("p0-approval-expiry", 12)
         product.owner = self.owner
         product.save(update_fields=["owner", "updated_at"])
         approval = ApprovalRequest.objects.create(
