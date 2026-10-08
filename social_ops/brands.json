@@ -1,0 +1,78 @@
+{
+  "schema_version": 1,
+  "rollout": "three_brand_pilot",
+  "future_capacity": {
+    "websites": 30,
+    "blogs": 30,
+    "status": "deferred"
+  },
+  "brands": [
+    {
+      "id": "personal",
+      "display_name": "مجتبی روزگار",
+      "type": "personal",
+      "website": null,
+      "primary_language": "fa",
+      "channels": [
+        "instagram",
+        "youtube",
+        "linkedin",
+        "telegram",
+        "facebook"
+      ],
+      "revenue": [
+        "education",
+        "consulting",
+        "digital_products"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "company",
+      "display_name": "شرکت کشت و صنعت زمرد ملل",
+      "type": "company",
+      "website": "https://zomorodmelal.ir",
+      "primary_language": "fa",
+      "channels": [
+        "instagram",
+        "linkedin",
+        "youtube",
+        "telegram",
+        "facebook",
+        "pinterest"
+      ],
+      "revenue": [
+        "services",
+        "products",
+        "research_outputs"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "mojplaywin",
+      "display_name": "MojPlayWin",
+      "type": "digital_entertainment",
+      "website": "https://mojplaywin.com",
+      "primary_language": "en",
+      "channels": [
+        "youtube",
+        "tiktok",
+        "instagram",
+        "discord",
+        "x",
+        "reddit"
+      ],
+      "revenue": [
+        "games",
+        "digital_products"
+      ],
+      "status": "planned"
+    }
+  ],
+  "policy": {
+    "publishing": "disabled_until_platform_connection_and_approval",
+    "accounts": "not_created",
+    "separate_reporting": true,
+    "credential_storage": "secrets_only"
+  }
+}
