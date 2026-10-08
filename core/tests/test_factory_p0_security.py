@@ -4,6 +4,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from django.conf import settings
+from core.factory_contracts import REQUIRED_OUTPUT_KEYS, EXPECTED_OUTPUT_STATE
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.core.management import call_command
@@ -338,7 +339,10 @@ class FactoryP0SecurityTests(TestCase):
                 capability_code="product_launch_candidate", risk_snapshot="high",
                 goal=self.goal, factory_run=run, product=product,
                 input_data={"goal": self.goal, "product_id": product.pk, "run_id": run.run_id},
-                output_contract={},
+                output_contract={
+                    "required": REQUIRED_OUTPUT_KEYS["product_launch_candidate"],
+                    "state": EXPECTED_OUTPUT_STATE["product_launch_candidate"],
+                },
                 prerequisite_snapshot=snapshot_for("product_launch_candidate", product, run),
                 environment=settings.SAEIT_ENV,
             )
