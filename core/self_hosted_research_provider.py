@@ -102,10 +102,14 @@ class SelfHostedStagingResearchProvider(ResearchProvider):
             if remaining <= 0:
                 break
             search_url = self.search_endpoint.format(query=quote_plus(query))
-            _, _, search_body = self._get(
-                search_url, timeout=remaining, byte_limit=min(max_snapshot_bytes * 4, 1_000_000),
-                safe_url_policy=safe_url_policy,
-            )
+            try:
+                _, _, search_body = self._get(
+                    search_url, timeout=remaining, byte_limit=min(max_snapshot_bytes * 4, 1_000_000),
+                    safe_url_policy=safe_url_policy,
+                )
+            except (RuntimeError, FactoryAgentBlocked):
+                # Continue with remaining queries rather than aborting the whole research run.
+                continue
             request_seq += 1
             for url in self._search_links(search_body):
                 if len(records) >= max_results:
