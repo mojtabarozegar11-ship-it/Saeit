@@ -1,4 +1,4 @@
-"""Produce two separate, offline, non-publishing editorial draft queues."""
+"""Offline editorial drafts for the initial three-brand pilot. Never publishes."""
 import json
 from datetime import datetime, timezone
 from pathlib import Path
@@ -14,9 +14,18 @@ TOPICS = {
         ("کشاورزی", "نقش مدیریت منابع در پایداری تولید کشاورزی"),
         ("خدمات", "چگونه یک درخواست خدمات پژوهشی را دقیق تعریف کنیم؟"),
     ],
+    "mojplaywin": [
+        ("Game design", "Three principles of fair and engaging game design"),
+        ("Digital products", "How to evaluate a digital product before launch"),
+        ("Community", "Why player feedback matters for a game roadmap"),
+    ],
 }
 
 def main():
+    config = json.loads(Path("social_ops/brands.json").read_text(encoding="utf-8"))
+    active = {brand["id"] for brand in config["brands"]}
+    if active != set(TOPICS):
+        raise ValueError("Brand registry and draft topics differ")
     output = Path("social_ops/output")
     output.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now(timezone.utc).isoformat()
@@ -24,13 +33,12 @@ def main():
         drafts = [
             {"id": f"{brand}-{index:03}", "brand": brand, "category": category,
              "title": title, "status": "draft_requires_review",
-             "text": f"{title}\n\nبرای انتشار، متن مستند و مثال‌های معتبر باید تکمیل و بررسی شوند.",
-             "created_at": timestamp}
+             "text": title, "created_at": timestamp}
             for index, (category, title) in enumerate(topics, 1)
         ]
         (output / f"{brand}_drafts.json").write_text(
             json.dumps(drafts, ensure_ascii=False, indent=2), encoding="utf-8")
-        print(f"{brand}: {len(drafts)} offline drafts generated; none published")
+        print(f"{brand}: {len(drafts)} drafts generated; none published")
 
 if __name__ == "__main__":
     main()
