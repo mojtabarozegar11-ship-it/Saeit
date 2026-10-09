@@ -3,7 +3,7 @@ from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 from django.db.models import Count
 
-from core.models import AgentTask, FactoryRun, Product, ResearchProject
+from core.models import AgentTask, Evidence, FactoryRun, Product, ResearchProject
 
 
 class Command(BaseCommand):
@@ -31,6 +31,10 @@ class Command(BaseCommand):
             waiting_retry += stage4.get("status") in {"waiting_for_evidence", "retry_scheduled"}
         self.stdout.write(f"STAGE4_CAPACITY_EXHAUSTED={exhausted} STAGE4_RETRY_PENDING={waiting_retry}")
         self.stdout.write(f"RESEARCH_PROJECTS_WITH_EVIDENCE={evidence_count}")
+        self.stdout.write(
+            f"REAL_SOURCE_EVIDENCE_ROWS="
+            f"{Evidence.objects.filter(source__provenance__real_research=True).count()}"
+        )
         provider_path = str(getattr(settings, "FACTORY_RESEARCH_PROVIDER", "") or "").strip()
         self.stdout.write(f"RESEARCH_PROVIDER_CONFIGURED={int(bool(provider_path))}")
         self.stdout.write(
