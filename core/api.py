@@ -326,6 +326,8 @@ class PaymentIntentViewSet(OwnerScopedMixin, viewsets.ReadOnlyModelViewSet):
             )
         if len(key) > 128:
             return Response({"detail": "idempotency_key must be at most 128 characters."}, status=status.HTTP_400_BAD_REQUEST)
+        if not isinstance(order_id, (int, str)) or isinstance(order_id, bool) or not str(order_id).isascii() or not str(order_id).isdigit():
+            return Response({"detail": "order_id must be a positive integer."}, status=status.HTTP_400_BAD_REQUEST)
         try:
             order_id = int(order_id)
         except (TypeError, ValueError, OverflowError):
