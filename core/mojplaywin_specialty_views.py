@@ -29,3 +29,25 @@ def specialty_page(request, kind, slug):
     response["X-Robots-Tag"] = "noindex, follow, noarchive"
     response["Cache-Control"] = "private, no-store"
     return response
+
+
+@require_GET
+def specialty_directory(request, kind):
+    """Editorial directory only; preserve the legacy services page on other hosts."""
+    if kind not in ("products", "services"):
+        raise Http404
+    brand = brand_for_request(request)
+    if getattr(brand, "code", None) != "mojplaywin":
+        if kind == "services":
+            from .services_views import services
+            return services(request)
+        raise Http404
+    entries = [
+        {"title": item["title"], "focus": item["focus"], "url": f"/{key}/"}
+        for key, item in SPECIALTIES.items() if item["kind"] == kind
+    ]
+    response = render(request, "brands/mojplaywin/specialty_directory.html",
+                      {"brand": brand, "kind": kind, "entries": entries})
+    response["X-Robots-Tag"] = "noindex, follow, noarchive"
+    response["Cache-Control"] = "private, no-store"
+    return response
