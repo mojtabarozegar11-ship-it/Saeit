@@ -35,3 +35,9 @@ class MojPlayWinSurfaceContractTests(SimpleTestCase):
             source = (base / filename).read_text(encoding='utf-8')
             self.assertIn('factory_release_gate__status="approved"', source)
             self.assertIn('factory_managed=False', source)
+
+    def test_order_lock_is_inside_transaction_and_factory_release_checked(self):
+        source = (Path(settings.BASE_DIR) / 'core' / 'api.py').read_text(encoding='utf-8')
+        section = source.split('class OrderViewSet(', 1)[1].split('class PaymentIntentViewSet(', 1)[0]
+        self.assertLess(section.index('with transaction.atomic():'), section.index('Product.objects.select_for_update()'))
+        self.assertIn('factory_release_gate__status="approved"', section)
