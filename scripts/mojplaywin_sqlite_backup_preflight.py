@@ -32,15 +32,16 @@ def main():
         raise SystemExit("BLOCKED: SQLite path is not a regular file")
     if not os.access(source, os.R_OK):
         raise SystemExit("BLOCKED: database file is not readable")
-    output_dir = pathlib.Path(args.output_dir).expanduser().resolve()
+    output_candidate = pathlib.Path(args.output_dir).expanduser()
+    if output_candidate.is_symlink():
+        raise SystemExit("BLOCKED: backup directory must not be a symlink")
+    output_dir = output_candidate.resolve()
     if output_dir == source.parent or output_dir == source:
         raise SystemExit("BLOCKED: choose a separate private backup directory")
     for root_arg in args.web_root:
         root = pathlib.Path(root_arg).expanduser().resolve()
         if output_dir == root or root in output_dir.parents:
             raise SystemExit("BLOCKED: backup directory is inside a served web root")
-    if output_dir.is_symlink():
-        raise SystemExit("BLOCKED: backup directory must not be a symlink")
     if not output_dir.exists() or not output_dir.is_dir():
         raise SystemExit("BLOCKED: output directory must already exist")
     if output_dir.stat().st_mode & 0o077:
