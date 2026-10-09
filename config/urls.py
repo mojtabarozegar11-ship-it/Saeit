@@ -54,7 +54,7 @@ urlpatterns = [
     path("education/course/<slug:slug>/assessment/<int:assessment_id>/submit/", education_assessment_submit, name="education_assessment_submit"),
     path("education/course/<slug:slug>/certificate/issue/", education_issue_certificate, name="education_issue_certificate"),
     path("academy/", academy, name="academy"),
-    path("services/", services, name="services"),
+    path("services/", lambda request: specialty_directory(request, "services"), name="services"),
     path("admin/", admin.site.urls),
     path("api/", include("core.urls")),
 ]
@@ -66,8 +66,9 @@ from core.blog_views import blog_home, blog_page
 urlpatterns += [path("blog/", blog_home, name="blog"), path("blog/<path:slug>/", blog_page, name="blog_page")]
 
 # MojPlayWin editorial specialties: domain-guarded views, drafts only.
-from core.mojplaywin_specialty_views import specialty_page
+from core.mojplaywin_specialty_views import specialty_page, specialty_directory
 urlpatterns += [
+    path("products/", lambda request: specialty_directory(request, "products"), name="mojplaywin_products_directory"),
     path("products/<slug:slug>/", lambda request, slug: specialty_page(request, "products", slug), name="mojplaywin_product_specialty"),
     path("services/<slug:slug>/", lambda request, slug: specialty_page(request, "services", slug), name="mojplaywin_service_specialty"),
 ]
