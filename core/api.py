@@ -269,8 +269,8 @@ class OrderViewSet(OwnerScopedMixin, viewsets.ModelViewSet):
             quantity = int(quantity)
         except (TypeError, ValueError):
             return Response({"detail": "quantity must be a positive integer."}, status=status.HTTP_400_BAD_REQUEST)
-        if quantity < 1:
-            return Response({"detail": "quantity must be a positive integer."}, status=status.HTTP_400_BAD_REQUEST)
+        if not 1 <= quantity <= 100:
+            return Response({"detail": "quantity must be between 1 and 100."}, status=status.HTTP_400_BAD_REQUEST)
         with transaction.atomic():
             try:
                 product = Product.objects.select_for_update().filter(
