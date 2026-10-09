@@ -1,6 +1,4 @@
 from django.test import TestCase
-from django.contrib.auth import get_user_model
-from django.urls import reverse
 from core.models import KnowledgeArticle, Product
 
 
@@ -17,7 +15,7 @@ class MojPlayWinSitemapSafetyTests(TestCase):
             content="Internal testing only", published=False,
         )
         other_product = Product.objects.create(
-            name="Unreleased cross-brand product", knowledge_article=other_article,
+            title="Unreleased cross-brand product", product_type="digital", knowledge_article=other_article,
             active=True, metadata={"brand_code": "another-brand"},
         )
         response = self.client.get("/sitemap.xml", HTTP_HOST="mojplaywin.com")
