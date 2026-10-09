@@ -1,76 +1,70 @@
-name: Staging SSH diagnostics (manual, read-only)
+name: Staging SSH relay diagnostics
 on:
+  push:
+    branches: [chore/ssh-vps-relay-20261009]
+    paths: [.github/workflows/staging-ssh-diagnostics.yml]
   workflow_dispatch:
-    inputs:
-      target:
-        description: Target server
-        type: choice
-        required: true
-        options: [host, vps]
-      check:
-        description: Read-only diagnostic
-        type: choice
-        required: true
-        options: [identity, staging_directory, staging_processes]
 permissions:
   contents: read
 concurrency:
-  group: staging-ssh-diagnostics
+  group: staging-ssh-relay
   cancel-in-progress: false
 jobs:
   diagnostics:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 3
     steps:
-      - name: Choose isolated credentials
+      - name: Configure pinned SSH identities
         env:
-          TARGET: ${{ inputs.target }}
-          HOST_HOST: ${{ secrets.SAEIT_HOST_SSH_HOST }}
-          HOST_USER: ${{ secrets.SAEIT_HOST_SSH_USER }}
-          HOST_PORT: ${{ secrets.SAEIT_HOST_SSH_PORT }}
-          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
-          HOST_KNOWN: ${{ secrets.SAEIT_HOST_SSH_KNOWN_HOSTS }}
           VPS_HOST: ${{ secrets.SAEIT_VPS_SSH_HOST }}
           VPS_USER: ${{ secrets.SAEIT_VPS_SSH_USER }}
           VPS_PORT: ${{ secrets.SAEIT_VPS_SSH_PORT }}
           VPS_KEY: ${{ secrets.SAEIT_VPS_SSH_PRIVATE_KEY }}
           VPS_KNOWN: ${{ secrets.SAEIT_VPS_SSH_KNOWN_HOSTS }}
-        shell: bash
+          HOST_HOST: ${{ secrets.SAEIT_HOST_SSH_HOST }}
+          HOST_USER: ${{ secrets.SAEIT_HOST_SSH_USER }}
+          HOST_PORT: ${{ secrets.SAEIT_HOST_SSH_PORT }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+          HOST_KNOWN: ${{ secrets.SAEIT_HOST_SSH_KNOWN_HOSTS }}
+        shell: python
+        run: |
+          import os, pathlib, re, sys
+          missing = [f"{prefix}_{field}" for prefix in ("VPS","HOST")
+                     for field in ("HOST","USER","KEY","KNOWN")
+                     if not os.environ.get(f"{prefix}_{field}")]
+          if missing:
+              print("MISSING_CONFIGURATION: " + ", ".join(missing))
+              sys.exit(2)
+          root = pathlib.Path(os.environ["RUNNER_TEMP"]) / "saeit-ssh"
+          root.mkdir(mode=0o700)
+          configs = []
+          for prefix, alias in (("VPS","saeit-vps"), ("HOST","saeit-host")):
+              host, user = (os.environ[f"{prefix}_{f}"] for f in ("HOST","USER"))
+              port = os.environ.get(f"{prefix}_PORT") or "22"
+              if not re.fullmatch(r"[A-Za-z0-9.:-]+", host) or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.-]*", user):
+                  sys.exit("Invalid SSH destination")
+              if not port.isdigit() or not 1 <= int(port) <= 65535:
+                  sys.exit("Invalid SSH port")
+              if user == "root":
+                  sys.exit("Use a dedicated restricted SSH account; root is not permitted")
+              key, known = root / (alias + ".key"), root / (alias + ".known")
+              for path, value in ((key, os.environ[f"{prefix}_KEY"]), (known, os.environ[f"{prefix}_KNOWN"])):
+                  path.write_text(value.rstrip() + "\n")
+                  path.chmod(0o600)
+              configs.append(f"Host {alias}\n  HostName {host}\n  User {user}\n  Port {port}\n  IdentityFile {key}\n  UserKnownHostsFile {known}\n")
+          configs.append("Host saeit-host\n  ProxyJump saeit-vps\n")
+          configs.append("Host *\n  BatchMode yes\n  IdentitiesOnly yes\n  StrictHostKeyChecking yes\n  ConnectTimeout 10\n  ConnectionAttempts 1\n  ServerAliveInterval 10\n  ServerAliveCountMax 1\n  ForwardAgent no\n  RequestTTY no\n  LogLevel ERROR\n")
+          config = root / "config"
+          config.write_text("\n".join(configs))
+          config.chmod(0o600)
+      - name: Authenticated VPS read-only proof
         run: |
           set -euo pipefail
-          umask 077
-          if [[ "$TARGET" == host ]]; then
-            h="$HOST_HOST"; u="$HOST_USER"; p="$HOST_PORT"; k="$HOST_KEY"; known="$HOST_KNOWN"
-          else
-            h="$VPS_HOST"; u="$VPS_USER"; p="$VPS_PORT"; k="$VPS_KEY"; known="$VPS_KNOWN"
-          fi
-          [[ -n "$h" && -n "$u" && -n "$k" && -n "$known" ]] || { echo "Missing SSH secrets"; exit 1; }
-          [[ "$u" =~ ^[a-zA-Z_][a-zA-Z0-9_.-]*$ ]] || exit 1
-          [[ "$h" =~ ^[a-zA-Z0-9.:-]+$ ]] || exit 1
-          p="${p:-22}"
-          [[ "$p" =~ ^[0-9]{1,5}$ ]] && ((p >= 1 && p <= 65535)) || exit 1
-          mkdir -p "$HOME/.ssh"
-          printf '%s\n' "$k" > "$HOME/.ssh/id_staging"
-          printf '%s\n' "$known" > "$HOME/.ssh/known_hosts"
-          chmod 600 "$HOME/.ssh/"*
-          {
-            printf 'SSH_TARGET=%s\n' "$h"
-            printf 'SSH_USER=%s\n' "$u"
-            printf 'SSH_PORT=%s\n' "$p"
-          } >> "$GITHUB_ENV"
-      - name: Run one allowlisted diagnostic
-        shell: bash
-        env:
-          CHECK: ${{ inputs.check }}
+          timeout 35s ssh -F "$RUNNER_TEMP/saeit-ssh/config" saeit-vps 'id -un; hostname; date -u +%FT%TZ'
+      - name: Authenticated host proof through VPS
         run: |
           set -euo pipefail
-          case "$CHECK" in
-            identity) remote='id -un; hostname' ;;
-            staging_directory) remote='test -d /home/zomorod2/Saeit-staging && echo STAGING_DIRECTORY_PRESENT || echo STAGING_DIRECTORY_MISSING' ;;
-            staging_processes) remote='ps -eo pid,comm,args | grep -E "[f]actory_staging_tick|[s]tage1_10s_loop" | cut -c1-180 | head -20 || true' ;;
-            *) exit 1 ;;
-          esac
-          ssh -i "$HOME/.ssh/id_staging" -p "$SSH_PORT" \
-            -o BatchMode=yes -o StrictHostKeyChecking=yes \
-            -o ConnectTimeout=10 -o ConnectionAttempts=1 \
-            "$SSH_USER@$SSH_TARGET" "$remote"
+          timeout 45s ssh -F "$RUNNER_TEMP/saeit-ssh/config" saeit-host 'set -eu; id -un; hostname; test -d /home/zomorod2/Saeit-staging; printf "STAGING_DIRECTORY_PRESENT\n"; date -u +%FT%TZ'
+      - name: Remove runner credentials
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/saeit-ssh"
