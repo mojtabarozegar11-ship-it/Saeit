@@ -1,6 +1,11 @@
 name: VPS SSH Read-Only Verification
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - factory/integration-control-bridge-20261005
+    paths:
+      - .github/workflows/vps-ssh-readonly-verify.yml
 permissions:
   contents: read
 jobs:
