@@ -122,3 +122,23 @@ class PaymentWebhookValidationTests(TestCase):
         self.assertEqual(order.status, 'pending')
         self.assertEqual(intent.status, 'gateway_pending')
         self.assertFalse(LedgerEntry.objects.exists())
+
+    def test_signed_success_cannot_reopen_non_pending_order(self):
+        user = get_user_model().objects.create_user(username='mpw_webhook_cancelled', password='test-only')
+        order = Order.objects.create(customer=user, total=Decimal('11.00'), currency='USD', status='cancelled')
+        intent = PaymentIntent.objects.create(
+            order=order, amount=Decimal('11.00'), currency='USD',
+            idempotency_key='cancelled-order-key', provider='test-gateway', status='gateway_pending',
+        )
+        import json
+        payload = json.dumps({
+            'event_type': 'payment.succeeded', 'payment_intent_id': intent.pk,
+            'amount': '11.00', 'currency': 'USD',
+        }).encode()
+        response = self.request(payload, event_id='evt-cancelled-order')
+        self.assertEqual(response.status_code, 409)
+        order.refresh_from_db()
+        intent.refresh_from_db()
+        self.assertEqual(order.status, 'cancelled')
+        self.assertEqual(intent.status, 'gateway_pending')
+        self.assertFalse(LedgerEntry.objects.exists())
