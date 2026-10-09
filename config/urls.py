@@ -69,6 +69,8 @@ urlpatterns += [path("blog/", blog_home, name="blog"), path("blog/<path:slug>/",
 # MojPlayWin editorial specialties: domain-guarded views, drafts only.
 from core.mojplaywin_specialty_views import specialty_page, specialty_directory
 urlpatterns += [
+    path("editorial/products/", lambda request: specialty_directory(request, "products"), name="mojplaywin_editorial_products_directory"),
+    path("editorial/services/", lambda request: specialty_directory(request, "services"), name="mojplaywin_editorial_services_directory"),
     path("products/", lambda request: specialty_directory(request, "products"), name="mojplaywin_products_directory"),
     path("products/<slug:slug>/", lambda request, slug: specialty_page(request, "products", slug), name="mojplaywin_product_specialty"),
     path("services/<slug:slug>/", lambda request, slug: specialty_page(request, "services", slug), name="mojplaywin_service_specialty"),
