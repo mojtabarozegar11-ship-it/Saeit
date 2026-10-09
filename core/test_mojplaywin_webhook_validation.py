@@ -157,3 +157,11 @@ class PaymentWebhookValidationTests(TestCase):
                 payload = {'event_type': 'payment.failed', 'payment_intent_id': 1}
                 payload[field] = value
                 self.assertEqual(self.request(json.dumps(payload).encode(), event_id='evt-long-field').status_code, 400)
+
+    def test_webhook_locks_order_before_settlement(self):
+        from pathlib import Path
+        from django.conf import settings
+        source = (Path(settings.BASE_DIR) / 'core' / 'api.py').read_text(encoding='utf-8')
+        section = source.split('class PaymentWebhookViewSet(', 1)[1].split('class AgentTaskViewSet(', 1)[0]
+        self.assertIn('Order.objects.select_for_update().get(pk=intent.order_id)', section)
+        self.assertIn('intent.order = locked_order', section)
