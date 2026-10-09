@@ -127,12 +127,12 @@ jobs:
           echo 'Public navigation not verified; inspect live template routing before claiming success' >&2
           exit 1
       - name: Restore navigation backup if deployment verification failed
-        if: failure() && inputs.mode == 'deploy' && env.FILE_REPLACED == 'true'
+        if: failure() && inputs.mode == 'deploy' && env.BACKUP_PATH != ''
         shell: bash
         run: |
           set -euo pipefail
           if test -f "$RUNNER_TEMP/moj-ssh/config" && test -n "${BACKUP_PATH:-}"; then
-            ssh -F "$RUNNER_TEMP/moj-ssh/config" hosting "set -eu; if test -s '$BACKUP_PATH'; then cp -p '$BACKUP_PATH' '$TARGET_PATH'; touch /home/zomorod2/mojplaywin.com/tmp/restart.txt; echo ROLLBACK_COMPLETED; fi" || true
+            ssh -F "$RUNNER_TEMP/moj-ssh/config" hosting "set -eu; if test -s '$BACKUP_PATH' && test -f '$TARGET_PATH'; then cp -p '$BACKUP_PATH' '$TARGET_PATH'; touch /home/zomorod2/mojplaywin.com/tmp/restart.txt; echo ROLLBACK_COMPLETED; fi" || true
           fi
       - name: Clean temporary SSH credentials
         if: always()
