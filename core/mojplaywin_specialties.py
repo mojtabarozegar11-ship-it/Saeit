@@ -6,6 +6,7 @@ SPECIALTIES = {
         "checks": "Compatibility, licensing, and maintenance scope",
         "intro": "Software Products are a specialist product category in MojPlayWin's digital production roadmap. This page documents technical considerations and release evidence; it does not represent an item currently for sale.",
         "workflow": "Research the intended users; specify architecture, packaging, and versioned distribution; prototype; independently test; publish only after release authorization.",
+        "accent": "#56b9ff",
         "status": "editorial_draft",
     },
     "products/web-applications": {
@@ -14,6 +15,7 @@ SPECIALTIES = {
         "checks": "Supported browsers, hosting dependencies, and privacy",
         "intro": "Web Applications are a specialist product category in MojPlayWin's digital production roadmap. This page documents technical considerations and release evidence; it does not represent an item currently for sale.",
         "workflow": "Research the intended users; specify browser delivery, accessibility, and server-side security; prototype; independently test; publish only after release authorization.",
+        "accent": "#a99cff",
         "status": "editorial_draft",
     },
     "products/mobile-apps": {
@@ -22,6 +24,7 @@ SPECIALTIES = {
         "checks": "Platform compatibility, permissions, and release channels",
         "intro": "Mobile Apps are a specialist product category in MojPlayWin's digital production roadmap. This page documents technical considerations and release evidence; it does not represent an item currently for sale.",
         "workflow": "Research the intended users; specify native and cross-platform app engineering; prototype; independently test; publish only after release authorization.",
+        "accent": "#f4b860",
         "status": "editorial_draft",
     },
     "products/mobile-games": {
@@ -30,6 +33,7 @@ SPECIALTIES = {
         "checks": "Age suitability, supported devices, and update cadence",
         "intro": "Mobile Games are a specialist product category in MojPlayWin's digital production roadmap. This page documents technical considerations and release evidence; it does not represent an item currently for sale.",
         "workflow": "Research the intended users; specify touch controls, device performance, and player progression; prototype; independently test; publish only after release authorization.",
+        "accent": "#7bd6bd",
         "status": "editorial_draft",
     },
     "products/browser-games": {
@@ -38,6 +42,7 @@ SPECIALTIES = {
         "checks": "Browser support, offline behavior, and session persistence",
         "intro": "Browser Games are a specialist product category in MojPlayWin's digital production roadmap. This page documents technical considerations and release evidence; it does not represent an item currently for sale.",
         "workflow": "Research the intended users; specify web runtime, loading budgets, and input accessibility; prototype; independently test; publish only after release authorization.",
+        "accent": "#e6a6d9",
         "status": "editorial_draft",
     },
     "products/strategy-games": {
@@ -46,6 +51,7 @@ SPECIALTIES = {
         "checks": "Rules transparency, difficulty, and save systems",
         "intro": "Strategy Games are a specialist product category in MojPlayWin's digital production roadmap. This page documents technical considerations and release evidence; it does not represent an item currently for sale.",
         "workflow": "Research the intended users; specify decision systems, balancing, and scenario design; prototype; independently test; publish only after release authorization.",
+        "accent": "#a5c86b",
         "status": "editorial_draft",
     },
     "products/educational-games": {
@@ -54,6 +60,7 @@ SPECIALTIES = {
         "checks": "Curriculum alignment, accessibility, and safeguarding",
         "intro": "Educational Games are a specialist product category in MojPlayWin's digital production roadmap. This page documents technical considerations and release evidence; it does not represent an item currently for sale.",
         "workflow": "Research the intended users; specify learning objectives, assessment design, and inclusive play; prototype; independently test; publish only after release authorization.",
+        "accent": "#edaa87",
         "status": "editorial_draft",
     },
     "products/multiplayer-games": {
@@ -62,6 +69,7 @@ SPECIALTIES = {
         "checks": "Server availability, moderation, and data retention",
         "intro": "Multiplayer Games are a specialist product category in MojPlayWin's digital production roadmap. This page documents technical considerations and release evidence; it does not represent an item currently for sale.",
         "workflow": "Research the intended users; specify matchmaking, synchronization, and fair-play design; prototype; independently test; publish only after release authorization.",
+        "accent": "#8fb9e9",
         "status": "editorial_draft",
     },
     "products/ai-tools": {
@@ -70,6 +78,7 @@ SPECIALTIES = {
         "checks": "Data handling, accuracy limits, and human oversight",
         "intro": "AI Tools are a specialist product category in MojPlayWin's digital production roadmap. This page documents technical considerations and release evidence; it does not represent an item currently for sale.",
         "workflow": "Research the intended users; specify model evaluation, task boundaries, and explainable outputs; prototype; independently test; publish only after release authorization.",
+        "accent": "#56b9ff",
         "status": "editorial_draft",
     },
     "products/ai-assistants": {
@@ -78,6 +87,7 @@ SPECIALTIES = {
         "checks": "Privacy, supported tasks, and failure handling",
         "intro": "AI Assistants are a specialist product category in MojPlayWin's digital production roadmap. This page documents technical considerations and release evidence; it does not represent an item currently for sale.",
         "workflow": "Research the intended users; specify conversation design, retrieval quality, and escalation; prototype; independently test; publish only after release authorization.",
+        "accent": "#a99cff",
         "status": "editorial_draft",
     },
     "products/ai-agents": {
@@ -86,6 +96,7 @@ SPECIALTIES = {
         "checks": "Autonomy boundaries, audit logs, and owner authorization",
         "intro": "AI Agents are a specialist product category in MojPlayWin's digital production roadmap. This page documents technical considerations and release evidence; it does not represent an item currently for sale.",
         "workflow": "Research the intended users; specify tool permissions, execution traces, and approval gates; prototype; independently test; publish only after release authorization.",
+        "accent": "#f4b860",
         "status": "editorial_draft",
     },
     "products/automation-systems": {
@@ -94,6 +105,7 @@ SPECIALTIES = {
         "checks": "Integration scope, rollback, and service dependencies",
         "intro": "Automation Systems are a specialist product category in MojPlayWin's digital production roadmap. This page documents technical considerations and release evidence; it does not represent an item currently for sale.",
         "workflow": "Research the intended users; specify workflow orchestration, retries, and monitoring; prototype; independently test; publish only after release authorization.",
+        "accent": "#7bd6bd",
         "status": "editorial_draft",
     },
     "products/software-bots": {
@@ -102,6 +114,7 @@ SPECIALTIES = {
         "checks": "Platform terms, access permissions, and monitoring",
         "intro": "Software Bots are a specialist product category in MojPlayWin's digital production roadmap. This page documents technical considerations and release evidence; it does not represent an item currently for sale.",
         "workflow": "Research the intended users; specify event-driven tasks, rate limits, and safe credentials; prototype; independently test; publish only after release authorization.",
+        "accent": "#e6a6d9",
         "status": "editorial_draft",
     },
     "products/saas-products": {
@@ -110,6 +123,7 @@ SPECIALTIES = {
         "checks": "Service levels, billing terms, and account deletion",
         "intro": "SaaS Products are a specialist product category in MojPlayWin's digital production roadmap. This page documents technical considerations and release evidence; it does not represent an item currently for sale.",
         "workflow": "Research the intended users; specify tenant isolation, subscriptions, and service reliability; prototype; independently test; publish only after release authorization.",
+        "accent": "#a5c86b",
         "status": "editorial_draft",
     },
     "products/plugins-extensions": {
@@ -118,6 +132,7 @@ SPECIALTIES = {
         "checks": "Supported platforms, installation, and security updates",
         "intro": "Plugins & Extensions are a specialist product category in MojPlayWin's digital production roadmap. This page documents technical considerations and release evidence; it does not represent an item currently for sale.",
         "workflow": "Research the intended users; specify host compatibility, permissions, and versioning; prototype; independently test; publish only after release authorization.",
+        "accent": "#edaa87",
         "status": "editorial_draft",
     },
     "products/website-templates": {
@@ -126,6 +141,7 @@ SPECIALTIES = {
         "checks": "Accessibility, licensing, and browser testing",
         "intro": "Website Templates are a specialist product category in MojPlayWin's digital production roadmap. This page documents technical considerations and release evidence; it does not represent an item currently for sale.",
         "workflow": "Research the intended users; specify responsive components, semantic markup, and customization; prototype; independently test; publish only after release authorization.",
+        "accent": "#8fb9e9",
         "status": "editorial_draft",
     },
     "products/e-commerce-templates": {
@@ -134,6 +150,7 @@ SPECIALTIES = {
         "checks": "Payment provider compatibility, tax configuration, and fulfillment",
         "intro": "E-commerce Templates are a specialist product category in MojPlayWin's digital production roadmap. This page documents technical considerations and release evidence; it does not represent an item currently for sale.",
         "workflow": "Research the intended users; specify product discovery, checkout integration, and trust signals; prototype; independently test; publish only after release authorization.",
+        "accent": "#56b9ff",
         "status": "editorial_draft",
     },
     "products/apis-sdks": {
@@ -142,6 +159,7 @@ SPECIALTIES = {
         "checks": "Rate limits, changelogs, and credential safety",
         "intro": "APIs & SDKs are a specialist product category in MojPlayWin's digital production roadmap. This page documents technical considerations and release evidence; it does not represent an item currently for sale.",
         "workflow": "Research the intended users; specify endpoint contracts, authentication, and developer experience; prototype; independently test; publish only after release authorization.",
+        "accent": "#a99cff",
         "status": "editorial_draft",
     },
     "products/data-analytics-tools": {
@@ -150,6 +168,7 @@ SPECIALTIES = {
         "checks": "Source provenance, consent, and reporting accuracy",
         "intro": "Data Analytics Tools are a specialist product category in MojPlayWin's digital production roadmap. This page documents technical considerations and release evidence; it does not represent an item currently for sale.",
         "workflow": "Research the intended users; specify data pipelines, metrics definitions, and dashboards; prototype; independently test; publish only after release authorization.",
+        "accent": "#f4b860",
         "status": "editorial_draft",
     },
     "products/business-dashboards": {
@@ -158,6 +177,7 @@ SPECIALTIES = {
         "checks": "Data refresh rates, permissions, and decision limits",
         "intro": "Business Dashboards are a specialist product category in MojPlayWin's digital production roadmap. This page documents technical considerations and release evidence; it does not represent an item currently for sale.",
         "workflow": "Research the intended users; specify operational kpis, role-based access, and reporting; prototype; independently test; publish only after release authorization.",
+        "accent": "#7bd6bd",
         "status": "editorial_draft",
     },
     "products/security-software": {
@@ -166,6 +186,7 @@ SPECIALTIES = {
         "checks": "Security scope, false positives, and independent validation",
         "intro": "Security Software are a specialist product category in MojPlayWin's digital production roadmap. This page documents technical considerations and release evidence; it does not represent an item currently for sale.",
         "workflow": "Research the intended users; specify threat modeling, defensive checks, and patch lifecycle; prototype; independently test; publish only after release authorization.",
+        "accent": "#e6a6d9",
         "status": "editorial_draft",
     },
     "products/digital-design-assets": {
@@ -174,6 +195,7 @@ SPECIALTIES = {
         "checks": "Usage rights, resolution, and editable formats",
         "intro": "Digital Design Assets are a specialist product category in MojPlayWin's digital production roadmap. This page documents technical considerations and release evidence; it does not represent an item currently for sale.",
         "workflow": "Research the intended users; specify reusable visual systems, formats, and licensing; prototype; independently test; publish only after release authorization.",
+        "accent": "#a5c86b",
         "status": "editorial_draft",
     },
     "products/3d-assets": {
@@ -182,6 +204,7 @@ SPECIALTIES = {
         "checks": "Polygon budgets, engine compatibility, and licenses",
         "intro": "3D Assets are a specialist product category in MojPlayWin's digital production roadmap. This page documents technical considerations and release evidence; it does not represent an item currently for sale.",
         "workflow": "Research the intended users; specify geometry optimization, materials, and export formats; prototype; independently test; publish only after release authorization.",
+        "accent": "#edaa87",
         "status": "editorial_draft",
     },
     "products/web3-products": {
@@ -190,6 +213,7 @@ SPECIALTIES = {
         "checks": "Chain compatibility, custody, and transaction fees",
         "intro": "Web3 Products are a specialist product category in MojPlayWin's digital production roadmap. This page documents technical considerations and release evidence; it does not represent an item currently for sale.",
         "workflow": "Research the intended users; specify wallet connectivity, on-chain verification, and network risks; prototype; independently test; publish only after release authorization.",
+        "accent": "#8fb9e9",
         "status": "editorial_draft",
     },
     "products/digital-learning-products": {
@@ -198,6 +222,7 @@ SPECIALTIES = {
         "checks": "Prerequisites, learning outcomes, and content revisions",
         "intro": "Digital Learning Products are a specialist product category in MojPlayWin's digital production roadmap. This page documents technical considerations and release evidence; it does not represent an item currently for sale.",
         "workflow": "Research the intended users; specify modular lessons, progress design, and accessible formats; prototype; independently test; publish only after release authorization.",
+        "accent": "#56b9ff",
         "status": "editorial_draft",
     },
     "services/website-development": {
@@ -206,6 +231,7 @@ SPECIALTIES = {
         "checks": "Deliverables, hosting responsibilities, and accessibility review",
         "intro": "Website Development is a specialist service discipline within MojPlayWin's proposed virtual services. This page explains the delivery approach and qualification requirements; it does not imply bookings are open.",
         "workflow": "Qualify the request; define scope around discovery, information architecture, and responsive implementation; document milestones; review quality; accept orders only after operational approval.",
+        "accent": "#a99cff",
         "status": "editorial_draft",
     },
     "services/custom-software-development": {
@@ -214,6 +240,7 @@ SPECIALTIES = {
         "checks": "Scope control, security review, and acceptance criteria",
         "intro": "Custom Software Development is a specialist service discipline within MojPlayWin's proposed virtual services. This page explains the delivery approach and qualification requirements; it does not imply bookings are open.",
         "workflow": "Qualify the request; define scope around requirements mapping, system design, and maintainable code; document milestones; review quality; accept orders only after operational approval.",
+        "accent": "#f4b860",
         "status": "editorial_draft",
     },
     "services/app-development-services": {
@@ -222,6 +249,7 @@ SPECIALTIES = {
         "checks": "Device coverage, app-store rules, and maintenance",
         "intro": "App Development Services is a specialist service discipline within MojPlayWin's proposed virtual services. This page explains the delivery approach and qualification requirements; it does not imply bookings are open.",
         "workflow": "Qualify the request; define scope around platform selection, interface prototyping, and release preparation; document milestones; review quality; accept orders only after operational approval.",
+        "accent": "#7bd6bd",
         "status": "editorial_draft",
     },
     "services/game-development-services": {
@@ -230,6 +258,7 @@ SPECIALTIES = {
         "checks": "Platform targets, art pipeline, and playtesting",
         "intro": "Game Development Services is a specialist service discipline within MojPlayWin's proposed virtual services. This page explains the delivery approach and qualification requirements; it does not imply bookings are open.",
         "workflow": "Qualify the request; define scope around gameplay prototypes, engine workflows, and quality assurance; document milestones; review quality; accept orders only after operational approval.",
+        "accent": "#e6a6d9",
         "status": "editorial_draft",
     },
     "services/ai-development-services": {
@@ -238,6 +267,7 @@ SPECIALTIES = {
         "checks": "Privacy, human oversight, and measurable acceptance",
         "intro": "AI Development Services is a specialist service discipline within MojPlayWin's proposed virtual services. This page explains the delivery approach and qualification requirements; it does not imply bookings are open.",
         "workflow": "Qualify the request; define scope around use-case validation, data readiness, and model evaluation; document milestones; review quality; accept orders only after operational approval.",
+        "accent": "#a5c86b",
         "status": "editorial_draft",
     },
     "services/workflow-automation": {
@@ -246,6 +276,7 @@ SPECIALTIES = {
         "checks": "Access scopes, retries, and operational ownership",
         "intro": "Workflow Automation is a specialist service discipline within MojPlayWin's proposed virtual services. This page explains the delivery approach and qualification requirements; it does not imply bookings are open.",
         "workflow": "Qualify the request; define scope around process mapping, integration design, and failure recovery; document milestones; review quality; accept orders only after operational approval.",
+        "accent": "#edaa87",
         "status": "editorial_draft",
     },
     "services/ai-agent-development": {
@@ -254,6 +285,7 @@ SPECIALTIES = {
         "checks": "Approval gates, auditability, and safe handoff",
         "intro": "AI Agent Development is a specialist service discipline within MojPlayWin's proposed virtual services. This page explains the delivery approach and qualification requirements; it does not imply bookings are open.",
         "workflow": "Qualify the request; define scope around agent boundaries, tool permissions, and evaluation harnesses; document milestones; review quality; accept orders only after operational approval.",
+        "accent": "#8fb9e9",
         "status": "editorial_draft",
     },
     "services/design-branding": {
@@ -262,6 +294,7 @@ SPECIALTIES = {
         "checks": "Brand rights, deliverable formats, and usage guidelines",
         "intro": "Design & Branding is a specialist service discipline within MojPlayWin's proposed virtual services. This page explains the delivery approach and qualification requirements; it does not imply bookings are open.",
         "workflow": "Qualify the request; define scope around visual identity systems, design research, and accessible components; document milestones; review quality; accept orders only after operational approval.",
+        "accent": "#56b9ff",
         "status": "editorial_draft",
     },
     "services/content-production": {
@@ -270,6 +303,7 @@ SPECIALTIES = {
         "checks": "Source accuracy, originality, and publication approval",
         "intro": "Content Production is a specialist service discipline within MojPlayWin's proposed virtual services. This page explains the delivery approach and qualification requirements; it does not imply bookings are open.",
         "workflow": "Qualify the request; define scope around editorial research, structured writing, and review workflows; document milestones; review quality; accept orders only after operational approval.",
+        "accent": "#a99cff",
         "status": "editorial_draft",
     },
     "services/video-animation": {
@@ -278,6 +312,7 @@ SPECIALTIES = {
         "checks": "Usage rights, captioning, and production milestones",
         "intro": "Video & Animation is a specialist service discipline within MojPlayWin's proposed virtual services. This page explains the delivery approach and qualification requirements; it does not imply bookings are open.",
         "workflow": "Qualify the request; define scope around storyboards, motion design, and delivery formats; document milestones; review quality; accept orders only after operational approval.",
+        "accent": "#f4b860",
         "status": "editorial_draft",
     },
     "services/seo-services": {
@@ -286,6 +321,7 @@ SPECIALTIES = {
         "checks": "Search guidelines, measurable outcomes, and no ranking guarantees",
         "intro": "SEO Services is a specialist service discipline within MojPlayWin's proposed virtual services. This page explains the delivery approach and qualification requirements; it does not imply bookings are open.",
         "workflow": "Qualify the request; define scope around technical crawling, information architecture, and content quality; document milestones; review quality; accept orders only after operational approval.",
+        "accent": "#7bd6bd",
         "status": "editorial_draft",
     },
     "services/digital-marketing": {
@@ -294,6 +330,7 @@ SPECIALTIES = {
         "checks": "Consent, advertising rules, and budget accountability",
         "intro": "Digital Marketing is a specialist service discipline within MojPlayWin's proposed virtual services. This page explains the delivery approach and qualification requirements; it does not imply bookings are open.",
         "workflow": "Qualify the request; define scope around audience segmentation, channel planning, and attribution; document milestones; review quality; accept orders only after operational approval.",
+        "accent": "#e6a6d9",
         "status": "editorial_draft",
     },
     "services/social-media-management": {
@@ -302,6 +339,7 @@ SPECIALTIES = {
         "checks": "Account authorization, platform policies, and reporting",
         "intro": "Social Media Management is a specialist service discipline within MojPlayWin's proposed virtual services. This page explains the delivery approach and qualification requirements; it does not imply bookings are open.",
         "workflow": "Qualify the request; define scope around channel strategy, editorial calendars, and moderation workflows; document milestones; review quality; accept orders only after operational approval.",
+        "accent": "#a5c86b",
         "status": "editorial_draft",
     },
     "services/market-research": {
@@ -310,6 +348,7 @@ SPECIALTIES = {
         "checks": "Sample bias, evidence quality, and uncertainty",
         "intro": "Market Research is a specialist service discipline within MojPlayWin's proposed virtual services. This page explains the delivery approach and qualification requirements; it does not imply bookings are open.",
         "workflow": "Qualify the request; define scope around research questions, source triangulation, and demand analysis; document milestones; review quality; accept orders only after operational approval.",
+        "accent": "#edaa87",
         "status": "editorial_draft",
     },
     "services/translation-localization": {
@@ -318,6 +357,7 @@ SPECIALTIES = {
         "checks": "Locale conventions, reviewer signoff, and accessibility",
         "intro": "Translation & Localization is a specialist service discipline within MojPlayWin's proposed virtual services. This page explains the delivery approach and qualification requirements; it does not imply bookings are open.",
         "workflow": "Qualify the request; define scope around terminology management, cultural adaptation, and language qa; document milestones; review quality; accept orders only after operational approval.",
+        "accent": "#8fb9e9",
         "status": "editorial_draft",
     },
 }
