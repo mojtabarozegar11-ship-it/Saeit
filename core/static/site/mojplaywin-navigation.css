@@ -15,3 +15,15 @@
 
 /* Compact navigation begins before desktop links collide with the brand. */
 @media(min-width:851px) and (max-width:1150px){.mpw-header{height:70px}.mpw-header .mpw-cta{display:none}.mpw-header .mpw-menu{display:block;margin-left:auto;background:none;border:1px solid var(--line);color:var(--ink);padding:.6rem;border-radius:8px}.mpw-header .mpw-nav-groups{display:none;position:absolute;top:70px;left:0;right:0;max-height:calc(100dvh - 70px);overflow-y:auto;background:#0b0d13;padding:1.5rem;flex-direction:column;align-items:stretch;font-size:1rem}.mpw-header .mpw-nav-groups.open{display:flex}.mpw-header .mpw-nav-group{width:100%}.mpw-header .mpw-dropdown{position:static;max-height:none;min-width:0;box-shadow:none;border:0;border-left:1px solid var(--line);background:transparent;margin-left:.5rem}.mpw-header .mpw-nav-group>summary{padding:.8rem 0}}
+
+
+/* Progressive navigation polish: scoped to MojPlayWin only. */
+.mpw-nav-group>summary{border-radius:8px;transition:color .2s ease,background-color .2s ease}
+.mpw-nav-group>summary:focus-visible{outline:2px solid var(--gold,#e7cf96);outline-offset:3px}
+.mpw-nav-group[open]>summary{color:var(--ink,#fff)}
+.mpw-dropdown{animation:mpw-menu-reveal .16s ease-out;overscroll-behavior:contain}
+.mpw-dropdown a{display:block;line-height:1.35}
+.mpw-dropdown a:focus-visible{outline:2px solid var(--gold,#e7cf96);outline-offset:-2px}
+@keyframes mpw-menu-reveal{from{opacity:0;transform:translateY(-5px)}to{opacity:1;transform:translateY(0)}}
+@media(min-width:1151px){.mpw-nav-group:last-child .mpw-dropdown{left:auto;right:0}}
+@media(prefers-reduced-motion:reduce){.mpw-dropdown{animation:none}.mpw-nav-group>summary{transition:none}}
