@@ -439,6 +439,10 @@ class PaymentWebhookViewSet(viewsets.ViewSet):
             if intent is None:
                 return Response({"detail": "Payment intent not found for provider."}, status=status.HTTP_404_NOT_FOUND)
 
+            # Lock the parent order as well: cancellation and settlement must not race.
+            locked_order = Order.objects.select_for_update().get(pk=intent.order_id)
+            intent.order = locked_order
+
             event = PaymentWebhookEvent.objects.create(
                 provider=provider,
                 event_id=event_id,
