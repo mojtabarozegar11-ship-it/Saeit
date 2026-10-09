@@ -1,10 +1,10 @@
 # Zomorod Melal — SEO execution specification (2026-10-09)
 
 ## Business goal
-Increase qualified organic discovery for **شرکت خدمات کشاورزی** (P0) and related non-brand terms. Ranking is not guaranteed; baseline impressions, clicks, position and conversions must be measured in Search Console.
+Increase qualified organic discovery for **کشاورزی** (P0, head term) and **شرکت خدمات کشاورزی** (P1, high-intent commercial term), followed by related non-brand terms. Ranking is not guaranteed; baseline impressions, clicks, position and conversions must be measured in Search Console.
 
 ## Keyword-to-page mapping
-- P0: شرکت خدمات کشاورزی → primary agricultural services landing page, with clear service offerings and contact/lead CTA.
+- P0: کشاورزی → /agriculture/ as the comprehensive agriculture pillar page, with original helpful content, credible sources, and links to all agricultural subtopics. Avoid thin keyword-stuffed content.\n- P1: شرکت خدمات کشاورزی → primary agricultural services landing page, with clear service offerings and contact/lead CTA.
 - P1: کشت و صنعت → agricultural industry hub.
 - P1: شرکت کشاورزی → company/agriculture overview; avoid competing duplicate pages.
 - P1: شرکت تحقیقات کشاورزی → agricultural research page with real projects and methods.
