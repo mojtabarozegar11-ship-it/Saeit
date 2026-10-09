@@ -27,3 +27,29 @@ class AgriculturalSeoPageTests(SimpleTestCase):
 
     def test_unknown_topic_is_404(self):
         self.assertEqual(self.client.get("/agricultural-topics/unknown/").status_code, 404)
+
+
+class AgriculturePillarSeoTests(SimpleTestCase):
+    def test_agriculture_pillar_has_unique_search_metadata_and_internal_links(self):
+        response = self.client.get("/agriculture/")
+        self.assertEqual(response.status_code, 200)
+        html = response.content.decode("utf-8")
+        self.assertIn("<title>کشاورزی | دانش، خدمات و فناوری کشاورزی | زمرد ملل</title>", html)
+        self.assertIn('rel="canonical" href="https://zomorodmelal.ir/agriculture/"', html)
+        for slug in PAGES:
+            self.assertIn(f'href="/agricultural-topics/{slug}/"', html)
+
+    def test_homepage_promotes_agriculture_and_services(self):
+        response = self.client.get("/")
+        self.assertEqual(response.status_code, 200)
+        html = response.content.decode("utf-8")
+        self.assertIn("<title>کشاورزی و خدمات کشاورزی | شرکت کشت و صنعت زمرد ملل</title>", html)
+        self.assertIn('href="/agriculture/"', html)
+        self.assertIn('href="/agricultural-topics/agricultural-services/"', html)
+
+    def test_services_page_links_to_agriculture(self):
+        response = self.client.get("/services/")
+        self.assertEqual(response.status_code, 200)
+        html = response.content.decode("utf-8")
+        self.assertIn('href="/agriculture/"', html)
+        self.assertIn('href="/agricultural-topics/agricultural-services/"', html)
