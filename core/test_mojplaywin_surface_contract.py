@@ -28,3 +28,10 @@ class MojPlayWinSurfaceContractTests(SimpleTestCase):
         source = path.read_text(encoding='utf-8')
         self.assertIn('Order availability.', source)
         self.assertNotIn('Secure order path.', source)
+
+    def test_factory_products_require_release_gate_for_public_surfaces(self):
+        base = Path(settings.BASE_DIR) / 'core'
+        for filename in ('brand_views.py', 'mojplaywin_catalog_engine.py'):
+            source = (base / filename).read_text(encoding='utf-8')
+            self.assertIn('factory_release_gate__status="approved"', source)
+            self.assertIn('factory_managed=False', source)
