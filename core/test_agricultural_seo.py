@@ -46,6 +46,7 @@ class AgriculturePillarSeoTests(SimpleTestCase):
         self.assertEqual(response.status_code, 200)
         html = response.content.decode("utf-8")
         self.assertIn("<title>کشاورزی و خدمات کشاورزی | شرکت کشت و صنعت زمرد ملل</title>", html)
+        self.assertIn("کشاورزی، کشت و صنعت و", html)
         self.assertIn('href="/agriculture/"', html)
         self.assertIn('href="/agricultural-topics/agricultural-services/"', html)
 
