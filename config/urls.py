@@ -3,6 +3,7 @@ from django.contrib import admin
 from django.urls import include, path
 from django.views.generic import RedirectView
 
+from core.agricultural_seo_views import agricultural_seo_page
 from core.views import home, platform_page
 from core.brand_views import branded_home, branded_page, branded_game, branded_store, branded_product, branded_product
 from core.brand import brand_for_request
@@ -42,6 +43,7 @@ urlpatterns = [
     path("privacy/", branded_page, {"page": "privacy"}, name="mpw_privacy"),
     path("terms/", branded_page, {"page": "terms"}, name="mpw_terms"),
     path("cookies/", branded_page, {"page": "cookies"}, name="mpw_cookies"),
+    path("agricultural-topics/<slug:slug>/", agricultural_seo_page, name="agricultural_seo_page"),
     path("agriculture/", lambda request: platform_page(request, "agriculture"), name="agriculture"),
     path("industry/", lambda request: platform_page(request, "industry"), name="industry"),
     path("research/", lambda request: platform_page(request, "research"), name="research"),
