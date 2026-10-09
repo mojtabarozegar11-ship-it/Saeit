@@ -124,6 +124,10 @@ jobs:
               if val: print("TASK_REASON",k,val[:500])
           except Exception as e:
            print("DIAGNOSTIC_ERROR_TYPE",type(e).__name__)
+           print("DIAGNOSTIC_ERROR",re.sub(r"(?i)(://)[^ @]+@",r"\1[redacted]@",str(e))[:300])
+           print("ENV_FILE_EXISTS",Path(".env").exists())
+           print("STAGING_ENV_FILE_EXISTS",Path(".env.staging").exists())
+           print("FACTORY_FILES",[str(p) for p in Path("var/factory").glob("*")][:15])
           PYDIAG
           echo READONLY_FACTORY_DIAGNOSTIC=completed
           REMOTE
