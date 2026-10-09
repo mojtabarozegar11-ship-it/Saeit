@@ -1,0 +1,42 @@
+name: Social Drafts - Daily Safe Pilot
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 6 * * *'
+permissions:
+  contents: read
+jobs:
+  drafts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Generate two brand draft queues (no publication)
+        shell: bash
+        run: |
+          mkdir -p output
+          python3 - <<'PY'
+          import json, datetime, pathlib
+          day = datetime.datetime.now(datetime.timezone.utc).date()
+          topics = {
+            "personal": ["اقتصاد کشاورزی و مدیریت تولید", "پژوهش علمی و نوآوری", "کارآفرینی و مدیریت کسب‌وکار"],
+            "company": ["معرفی خدمات شرکت زمرد ملل", "پژوهش و توسعه در کشاورزی", "آموزش و دانشنامه تخصصی"],
+          }
+          for brand, choices in topics.items():
+            topic = choices[day.toordinal() % len(choices)]
+            draft = {
+              "brand": brand, "date_utc": day.isoformat(),
+              "topic": topic, "status": "draft_requires_review",
+              "text": f"پیشنویس موضوع: {topic}. متن نهایی باید با منابع معتبر و بازبینی انسانی تکمیل شود.",
+              "publish": False, "approved": False,
+              "note": "No social account access; not published or queued for publication."
+            }
+            pathlib.Path(f"output/{brand}.json").write_text(
+              json.dumps(draft, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+          PY
+      - name: Upload draft artifacts only
+        uses: actions/upload-artifact@v4
+        with:
+          name: social-drafts
+          path: output/*.json
+          retention-days: 7
