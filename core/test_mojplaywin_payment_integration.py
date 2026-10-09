@@ -64,3 +64,16 @@ class PaymentIntentIntegrationTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertFalse(PaymentIntent.objects.exists())
         self.assertFalse(ApprovalRequest.objects.filter(action_type='payment').exists())
+
+    def test_same_order_different_key_returns_conflict(self):
+        self.assertEqual(self.request(self.user, self.order.pk, 'first-key').status_code, 202)
+        response = self.request(self.user, self.order.pk, 'second-key')
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(PaymentIntent.objects.count(), 1)
+        self.assertEqual(ApprovalRequest.objects.filter(action_type='payment').count(), 1)
+
+    def test_same_key_cannot_be_reused_for_another_order(self):
+        other_order = Order.objects.create(customer=self.user, total=Decimal('10.00'), currency='USD', status='pending')
+        self.assertEqual(self.request(self.user, self.order.pk, 'shared-key').status_code, 202)
+        self.assertEqual(self.request(self.user, other_order.pk, 'shared-key').status_code, 409)
+        self.assertEqual(PaymentIntent.objects.count(), 1)
