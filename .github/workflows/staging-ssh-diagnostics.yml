@@ -21,9 +21,9 @@ jobs:
           VPS_PORT: "22"
           VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
           VPS_KNOWN: "verify-pinned-rsa"
-          HOST_HOST: ${{ secrets.SAEIT_HOST_SSH_HOST }}
+          HOST_HOST: "zohal.pws-dns.net"
           HOST_USER: ${{ secrets.SAEIT_HOST_SSH_USER }}
-          HOST_PORT: ${{ secrets.SAEIT_HOST_SSH_PORT }}
+          HOST_PORT: "1396"
           HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
           HOST_KNOWN: ${{ secrets.SAEIT_HOST_SSH_KNOWN_HOSTS }}
         shell: python
