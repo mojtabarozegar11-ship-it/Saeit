@@ -36,6 +36,7 @@ def evaluate(items, as_of=None):
             rate = engagement / max(1, views or followers)
             days = max(1, (as_of - published).total_seconds() / 86400)
             ranked.append({"platform": platform, "url": url, "source_url": item["source_url"],
+                           "title": item.get("title", ""), "category": item.get("category", ""),
                            "published_at": published.isoformat(), "engagement": engagement,
                            "engagement_rate_proxy": round(rate, 5),
                            "velocity_proxy": round(engagement / days, 2),
