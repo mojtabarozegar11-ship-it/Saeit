@@ -1,0 +1,24 @@
+name: SEO Staging 500 Diagnostics
+on:
+  push:
+    branches:
+      - factory/integration-control-bridge-20261005
+    paths:
+      - 'scripts/seo_staging_500_diagnose.sh'
+      - '.github/workflows/seo-staging-500-diagnostics.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  staging-diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Read-only staging diagnostics
+        env:
+          STAGING_SSH_KEY: ${{ secrets.STAGING_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.KNOWN_HOSTS }}
+        run: bash scripts/seo_staging_500_diagnose.sh
