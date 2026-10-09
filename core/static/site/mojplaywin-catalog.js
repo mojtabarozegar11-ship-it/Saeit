@@ -1,7 +1,7 @@
 (() => {
   'use strict';
-  const root = document.querySelector('[data-mpw-catalog]');
-  if (!root) return;
+  const roots = document.querySelectorAll('[data-mpw-catalog]');
+  roots.forEach((root) => {
   const message = (text) => { root.replaceChildren(); const p = document.createElement('p'); p.className = 'mpw-catalog-message'; p.textContent = text; root.append(p); };
   const card = (product) => {
     const article = document.createElement('article'); article.className = 'mpw-catalog-card';
@@ -15,4 +15,5 @@
     .then((r) => { if (!r.ok) throw new Error('Unavailable'); return r.json(); })
     .then((data) => { if (!Array.isArray(data.products)) throw new Error('Invalid response'); root.replaceChildren(); if (!data.products.length) { message('No public products are available yet. Browse our development categories below.'); return; } data.products.forEach((p) => root.append(card(p))); })
     .catch(() => message('The live catalog is temporarily unavailable. Please browse the store instead.'));
+  });
 })();
