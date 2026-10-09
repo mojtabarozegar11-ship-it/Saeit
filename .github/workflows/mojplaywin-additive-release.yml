@@ -110,6 +110,8 @@ jobs:
               done
             done'
           echo 'Preflight complete. Deployment remains staging-only and cannot be called a production release.'
+          echo '::error::Production application/template mapping is not established. Blocking deploy to avoid a misleading staging-only release.'
+          exit 1
 
       - name: Deploy one backed-up navigation file through VPS
         if: inputs.mode == 'deploy'
