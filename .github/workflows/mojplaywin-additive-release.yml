@@ -91,6 +91,26 @@ jobs:
             ForwardAgent no
           EOF
           chmod 600 "$RUNNER_TEMP/moj-ssh/config"
+      - name: Preflight production mapping (read-only)
+        if: inputs.mode == 'deploy'
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -F "$RUNNER_TEMP/moj-ssh/config" hosting 'set -eu
+            echo "Production directory:"
+            ls -ld /home/zomorod2/mojplaywin.com
+            echo "Passenger entrypoint:"
+            if test -f /home/zomorod2/mojplaywin.com/passenger_wsgi.py; then
+              grep -nE "sys.path|DJANGO_SETTINGS_MODULE|application|activate_this" /home/zomorod2/mojplaywin.com/passenger_wsgi.py || true
+            fi
+            echo "Known template candidates:"
+            for base in /home/zomorod2/mojplaywin.com /home/zomorod2/Saeit-staging /home/zomorod2/mojplaywin-release-20261009-200458/release-src; do
+              for rel in core/templates/brands/mojplaywin/about.html core/templates/brands/mojplaywin/includes/mega_nav.html; do
+                test ! -f "$base/$rel" || printf "FOUND %s\\n" "$base/$rel"
+              done
+            done'
+          echo 'Preflight complete. Deployment remains staging-only and cannot be called a production release.'
+
       - name: Deploy one backed-up navigation file through VPS
         if: inputs.mode == 'deploy'
         shell: bash
