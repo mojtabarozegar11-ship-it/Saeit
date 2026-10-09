@@ -21,6 +21,17 @@ class Command(BaseCommand):
             .values("status").annotate(total=Count("pk"))
         ):
             self.stdout.write(f"RESEARCH_TASK_STATUS {status}={count}")
+        research_projects = ResearchProject.objects.count()
+        evidence_count = ResearchProject.objects.filter(evidence__isnull=False).distinct().count()
+        waiting_retry = 0
+        exhausted = 0
+        for metadata in waiting.values_list("metadata", flat=True).iterator(chunk_size=200):
+            validation = (metadata or {}).get("validation") or {}
+            stage4 = validation.get("stage4_research") or {}
+            exhausted += stage4.get("status") == "capacity_exhausted"
+            waiting_retry += stage4.get("status") in {"waiting_for_evidence", "retry_scheduled"}
+        self.stdout.write(f"STAGE4_CAPACITY_EXHAUSTED={exhausted} STAGE4_RETRY_PENDING={waiting_retry}")
+        self.stdout.write(f"RESEARCH_PROJECTS_WITH_EVIDENCE={evidence_count}")
         self.stdout.write(
             f"RESEARCH_PROJECTS={ResearchProject.objects.count()} "
             f"ACTIVE_RUNS={FactoryRun.objects.filter(status='active').count()}"
