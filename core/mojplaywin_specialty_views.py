@@ -26,5 +26,5 @@ def specialty_page(request, kind, slug):
         {"brand": brand, "specialty": item, "kind": kind,
          "siblings": siblings, "specialty_key": key},
     )
-    response["X-Robots-Tag"] = "noindex, follow"
+    response["X-Robots-Tag"] = "noindex, follow, noarchive"
     return response
