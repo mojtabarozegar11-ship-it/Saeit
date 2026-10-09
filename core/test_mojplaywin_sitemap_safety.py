@@ -1,11 +1,11 @@
 """Regression checks: editorial draft URLs must not leak into public sitemaps."""
-from django.test import SimpleTestCase, override_settings
+from django.test import TestCase, override_settings
 
 from core.mojplaywin_specialties import SPECIALTIES
 
 
 @override_settings(ALLOWED_HOSTS=["testserver", "mojplaywin.com", "zomorodmelal.ir"])
-class MojPlayWinSitemapSafetyTests(SimpleTestCase):
+class MojPlayWinSitemapSafetyTests(TestCase):
     def test_editorial_draft_urls_are_absent_from_sitemap(self):
         response = self.client.get("/sitemap.xml", HTTP_HOST="mojplaywin.com")
         self.assertEqual(response.status_code, 200)
