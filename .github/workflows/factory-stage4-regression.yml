@@ -34,4 +34,4 @@ jobs:
       - name: Django checks
         run: python manage.py check
       - name: Focused factory regressions
-        run: python -m pytest -q core/test_factory_staging_tick_scheduler.py core/test_factory_stage4_diagnostics.py
+        run: python -m pytest -q core/test_factory_staging_tick_scheduler.py core/test_factory_stage4_diagnostics.py core/test_factory_stage4_provider_boundary.py
