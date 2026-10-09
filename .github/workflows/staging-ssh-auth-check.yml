@@ -89,16 +89,23 @@ jobs:
           test -n "${task_python:-}" || { echo PYTHON_DJANGO=missing; exit 2; }
           "$task_python" - <<'PYDIAG'
           from pathlib import Path
-          import json,re
-          p=Path("var/factory/operations/factory_tick_boot.py")
-          for i,line in enumerate(p.read_text().splitlines(),1):
-           if any(k in line.lower() for k in ["secret","password","token","private_key"]): continue
-           print("BOOT",i,line)
-          for name in ["inventory_independent_evidence_20261008.json","independent_fetch_smoke_20261008.json"]:
-           p=Path("var/factory/research")/name
-           if p.exists():
-            d=json.loads(p.read_text())
-            print("REPORT",name,re.sub(r"https?://\\S+","[url]",json.dumps(d,ensure_ascii=False))[:16000])
+          import sqlite3,json,environ,re
+          env=environ.Env(); environ.Env.read_env(".env")
+          cfg=env.db("DATABASE_URL")
+          if cfg["ENGINE"]!="django.db.backends.sqlite3": raise SystemExit("EXPECTED_SQLITE_READONLY_INSPECTION")
+          p=Path(cfg["NAME"]).resolve()
+          if not p.is_relative_to(Path.cwd()): raise SystemExit("DATABASE_OUTSIDE_STAGING")
+          conn=sqlite3.connect(p.as_uri()+"?mode=ro",uri=True)
+          conn.execute("PRAGMA query_only=ON")
+          for table in ["core_factoryrun","core_agenttask","core_evidence","core_researchsource"]:
+           try: print("ROW_COUNT",table,conn.execute("SELECT COUNT(*) FROM "+table).fetchone()[0])
+           except sqlite3.Error as e: print("DB_ERROR",table,type(e).__name__)
+          for row in conn.execute("SELECT id,status,action_type,factory_run_id,output_data FROM core_agenttask WHERE action_type='product_research' ORDER BY id DESC LIMIT 8"):
+           data=json.loads(row[4] or "{}")
+           print("TASK",row[:4],"ERROR",str(data.get("error",""))[:600])
+          print("RUN_STATUS",conn.execute("SELECT status,count(*) FROM core_factoryrun GROUP BY status").fetchall())
+          for line in Path("var/factory/operations/stage1_10s_loop.sh").read_text().splitlines():
+           if not any(k in line.lower() for k in ["password","secret","token","key"]): print("LOOP",line)
           PYDIAG
           echo READONLY_FACTORY_DIAGNOSTIC=completed
           REMOTE
