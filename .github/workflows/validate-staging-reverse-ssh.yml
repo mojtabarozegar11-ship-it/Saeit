@@ -1,0 +1,31 @@
+name: Validate Staging Reverse SSH Tunnel Package
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - factory/integration-control-bridge-20261005
+    paths:
+      - scripts/staging/install-host-reverse-tunnel.sh
+      - docs/staging/reverse-ssh-tunnel.md
+      - .github/workflows/validate-staging-reverse-ssh.yml
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate installer syntax and safety invariants
+        shell: bash
+        run: |
+          set -euo pipefail
+          script=scripts/staging/install-host-reverse-tunnel.sh
+          bash -n "$script"
+          grep -Fq '127.0.0.1:$REMOTE_PORT' "$script"
+          grep -Fq 'StrictHostKeyChecking=yes' "$script"
+          grep -Fq 'ExitOnForwardFailure=yes' "$script"
+          grep -Fq 'VPS_HOST_RSA_FINGERPRINT' "$script"
+          grep -Fq 'ssh-keygen -q -t ed25519' "$script"
+          test -s docs/staging/reverse-ssh-tunnel.md
+          echo "Staging reverse SSH package validation passed; no host deployment attempted."

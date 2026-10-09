@@ -1,12 +1,14 @@
 from decimal import Decimal, InvalidOperation
 import uuid
 
+from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 from datetime import timedelta
 
 from .agent_registry import AgentRegistry
-from .models import AgentTask, ApprovalRequest, AuditLog
+from .factory_governance import FactoryTaskVerifier
+from .models import AgentTask, ApprovalRequest, AuditLog, FactoryMarketEligibility, FactoryRun, Product
 from .services import normalize_risk, requires_owner_approval
 
 
@@ -27,6 +29,8 @@ class TaskRuntime:
             if task.status == "failed" and task.attempt_count >= task.max_attempts:
                 raise TaskExecutionError("Task retry budget exhausted")
             raise TaskExecutionError(f"Task is not executable from status: {task.status}")
+        if task.next_retry_at and task.next_retry_at > timezone.now():
+            raise TaskExecutionError("Task retry backoff has not elapsed")
         if not task.agent.active:
             raise TaskExecutionError("Task agent is inactive")
 
@@ -98,19 +102,22 @@ class TaskRuntime:
         previous_execution_id = task.execution_id
         if task.attempt_count >= task.max_attempts:
             task.status = "failed"
-            task.output_data = {
-                "error": "Execution became stale and retry budget was exhausted"
-            }
+            task.next_retry_at = None
+            task.output_data = {"error": "Execution became stale and retry budget was exhausted"}
         else:
             task.status = "queued"
             task.execution_id = ""
-            task.output_data = {
-                "error": "Execution became stale and was re-queued for recovery"
-            }
-
-        task.save(
-            update_fields=["status", "execution_id", "output_data", "updated_at"]
-        )
+            task.next_retry_at = timezone.now() + timedelta(seconds=min(
+                max(0, int(getattr(settings, "FACTORY_RETRY_BACKOFF_SECONDS", 30)))
+                * (2 ** max(task.attempt_count - 1, 0)), 300
+            )) if (
+                str(task.capability_code or "").startswith("product_")
+                or str(task.action_type or "").startswith("product_")
+            ) else None
+            task.output_data = {"error": "Execution became stale and was re-queued for recovery"}
+            if task.next_retry_at:
+                task.output_data["retry_after"] = task.next_retry_at.isoformat()
+        task.save(update_fields=["status", "execution_id", "next_retry_at", "output_data", "updated_at"])
         self._audit(
             task,
             "task_recovered_stale",
@@ -125,7 +132,7 @@ class TaskRuntime:
         return task
 
     @transaction.atomic
-    def complete(self, task_id, output_data=None, cost=0, execution_id=None):
+    def complete(self, task_id, output_data=None, cost=0, execution_id=None, gateway_attestation=None):
         task = AgentTask.objects.select_for_update().get(pk=task_id)
         if task.status != "running":
             raise TaskExecutionError(f"Task is not running: {task.status}")
@@ -142,6 +149,20 @@ class TaskRuntime:
         if normalized_cost < 0:
             raise TaskExecutionError("Task cost cannot be negative")
         normalized_output = output_data or {}
+        if (
+            str(task.capability_code or "").startswith("product_")
+            or str(task.action_type or "").startswith("product_")
+        ):
+            from .tool_gateway import consume_factory_attestation
+            try:
+                consume_factory_attestation(gateway_attestation, task)
+            except Exception as exc:
+                raise TaskExecutionError(str(exc)) from exc
+            self._verify_factory_effect(task, normalized_output)
+            try:
+                FactoryTaskVerifier().verify(task, normalized_output)
+            except Exception as exc:
+                raise TaskExecutionError(str(exc)) from exc
         # Economic work is not complete merely because a handler returned. It must
         # prove an observable effect. This prevents report-only/no-op cycles from
         # being counted as operational progress.
@@ -165,12 +186,128 @@ class TaskRuntime:
         task.output_data = normalized_output
         task.cost = normalized_cost
         task.status = "completed"
-        task.save(update_fields=["output_data", "cost", "status", "updated_at"])
+        task.next_retry_at = None
+        task.save(update_fields=["output_data", "cost", "status", "next_retry_at", "updated_at"])
         self._audit(task, "task_completed", {"status": "completed", "execution_id": task.execution_id})
         return task
 
+    @staticmethod
+    def _verify_factory_effect(task, output):
+        """Re-read the product write before accepting an agent's success claim."""
+        expected_states = {
+            "product_research": "researched",
+            "product_opportunity_score": "scored",
+            "product_validation": "validated",
+            "product_spec": "specified",
+            "product_build_record": "built",
+            "product_test": "tested",
+            "product_security": "security_verified",
+            "product_localize": "localized",
+            "product_market_eligibility": "eligible",
+            "product_qa": "qa_passed",
+            "product_package_price": "packaged_priced",
+            "product_launch_candidate": "launch_candidate",
+        }
+        expected = expected_states.get(task.action_type)
+        if not expected:
+            raise TaskExecutionError("Product Factory task has no registered lifecycle verifier")
+        if output.get("verified_effect") is not True:
+            raise TaskExecutionError("Product Factory task did not report a verifiable effect")
+        product_id = output.get("product_id")
+        if not product_id:
+            raise TaskExecutionError("Product Factory output must identify its Product")
+        try:
+            product = Product.objects.select_for_update().get(pk=product_id)
+        except (Product.DoesNotExist, TypeError, ValueError) as exc:
+            raise TaskExecutionError("Product Factory output references no persisted Product") from exc
+        metadata = product.metadata if isinstance(product.metadata, dict) else {}
+        allowed_states = {expected}
+        if task.action_type == "product_validation":
+            allowed_states.update({"needs_research", "rejected", "blocked"})
+        if metadata.get("factory_state") not in allowed_states or output.get("factory_state") != metadata.get("factory_state"):
+            raise TaskExecutionError("Persisted Product lifecycle state does not match task output")
+        if task.action_type == "product_validation":
+            validation = metadata.get("validation") or {}
+            outcome = (output.get("validation") or {}).get("outcome")
+            if validation.get("outcome") != outcome or outcome not in {
+                "VALIDATED", "NEEDS_MORE_EVIDENCE", "RESEARCH_AGAIN", "REJECTED", "BLOCKED"
+            }:
+                raise TaskExecutionError("Typed Validation outcome was not persisted")
+        if task.action_type == "product_research":
+            sources = (metadata.get("research") or {}).get("sources") or []
+            if not sources or output.get("evidence_count") != len(sources):
+                raise TaskExecutionError("Research completion requires persisted source evidence")
+        elif task.action_type == "product_opportunity_score":
+            score = (metadata.get("opportunity") or {}).get("score")
+            status = (metadata.get("opportunity") or {}).get("status")
+            if (score is None and status != "needs_evidence") or (
+                score is not None and float(score) != float(output.get("score", -1))
+            ):
+                raise TaskExecutionError("Opportunity score was not persisted on the Product")
+        elif task.action_type == "product_validation":
+            if not (metadata.get("validation") or {}).get("policy_version"):
+                raise TaskExecutionError("Validation policy/version is missing")
+        elif task.action_type == "product_spec" and not (metadata.get("spec") or {}).get("acceptance_criteria"):
+            raise TaskExecutionError("Product specification is missing acceptance criteria")
+        elif task.action_type == "product_build_record" and not (metadata.get("build") or {}).get("ref"):
+            raise TaskExecutionError("Product build has no persisted versioned artifact reference")
+        elif task.action_type == "product_test":
+            if (metadata.get("test_attestation") or {}).get("passed") is not True:
+                raise TaskExecutionError("Independent Test attestation was not persisted")
+        elif task.action_type == "product_security":
+            if (metadata.get("security_attestation") or {}).get("passed") is not True:
+                raise TaskExecutionError("Independent Security attestation was not persisted")
+        elif task.action_type == "product_localize":
+            localization = metadata.get("localization") or {}
+            if not localization.get("required_locales") or localization != output.get("localization"):
+                raise TaskExecutionError("Release-bound localization attestation was not persisted")
+        elif task.action_type == "product_market_eligibility":
+            if not metadata.get("market_eligibility"):
+                raise TaskExecutionError("Owner-reviewed market eligibility was not persisted")
+        elif task.action_type == "product_qa":
+            if (metadata.get("qa_attestation") or {}).get("passed") is not True:
+                raise TaskExecutionError("Independent QA attestation was not persisted")
+        elif task.action_type == "product_package_price":
+            package_pricing = metadata.get("package_pricing") or {}
+            if not package_pricing.get("attestation_digest") or package_pricing != output.get("package_pricing"):
+                raise TaskExecutionError("Packaging & Pricing attestation was not persisted")
+        elif task.action_type == "product_launch_candidate":
+            markets = metadata.get("market_eligibility") or []
+            if product.active or metadata.get("owner_publish_approval_required") is not True:
+                raise TaskExecutionError("Launch candidacy must remain inactive and owner-gated")
+            reviewed = []
+            now = timezone.now()
+            for item in markets:
+                if not isinstance(item, dict):
+                    continue
+                record = FactoryMarketEligibility.objects.select_for_update().filter(
+                    market_code=item.get("market_code"), reviewed_by__is_superuser=True
+                ).select_related("reviewed_by").first()
+                if not record or record.eligibility != item.get("eligibility"):
+                    raise TaskExecutionError("Market eligibility does not match the owner-reviewed registry")
+                if record.valid_until and record.valid_until <= now:
+                    raise TaskExecutionError("Market eligibility review expired before task verification")
+                if record.eligibility == FactoryMarketEligibility.ALLOWED and (
+                    not record.evidence_reference or not record.review_note.strip() or not record.valid_until
+                ):
+                    raise TaskExecutionError("Allowed market is missing owner review evidence")
+                reviewed.append(record)
+            if not any(item.eligibility == FactoryMarketEligibility.ALLOWED for item in reviewed):
+                raise TaskExecutionError("Launch candidacy requires an allowed market record")
+
+        history = list(metadata.get("factory_history") or [])
+        history.append({
+            "task_id": task.pk,
+            "action": task.action_type,
+            "state": metadata.get("factory_state"),
+            "execution_id": task.execution_id,
+            "verified_at": timezone.now().isoformat(),
+        })
+        product.metadata = {**metadata, "factory_history": history}
+        product.save(update_fields=["metadata", "updated_at"])
+
     @transaction.atomic
-    def fail(self, task_id, error, execution_id=None):
+    def fail(self, task_id, error, execution_id=None, retry_backoff=False):
         task = AgentTask.objects.select_for_update().get(pk=task_id)
         if task.status != "running":
             raise TaskExecutionError(f"Task is not running: {task.status}")
@@ -180,13 +317,27 @@ class TaskRuntime:
             raise TaskExecutionError("Task failure reason is required")
         previous_execution_id = task.execution_id
         task.output_data = {"error": str(error)[:5000]}
-        if task.attempt_count >= task.max_attempts:
-            task.status = "failed"
+        if getattr(error, "retryable", True) is False:
+            task.status, task.execution_id, task.next_retry_at = "blocked", "", None
+        elif task.attempt_count >= task.max_attempts:
+            task.status, task.next_retry_at = "failed", None
         else:
-            # Invalidate the previous worker identity before the retry is claimable.
             task.execution_id = ""
             task.status = "queued"
-        task.save(update_fields=["output_data", "execution_id", "status", "updated_at"])
+            task.next_retry_at = (
+                timezone.now() + timedelta(seconds=min(
+                    max(0, int(getattr(settings, "FACTORY_RETRY_BACKOFF_SECONDS", 30)))
+                    * (2 ** max(task.attempt_count - 1, 0)), 300
+                ))
+                if retry_backoff else None
+            )
+            if task.next_retry_at:
+                task.output_data["retry_after"] = task.next_retry_at.isoformat()
+        task.save(update_fields=["output_data", "execution_id", "status", "next_retry_at", "updated_at"])
+        if task.status == "blocked" and task.factory_run_id:
+            run = FactoryRun.objects.select_for_update().get(pk=task.factory_run_id)
+            run.status = "blocked"
+            run.save(update_fields=["status", "updated_at"])
         self._audit(
             task,
             "task_failed",
@@ -199,6 +350,24 @@ class TaskRuntime:
             },
             trace_execution_id=previous_execution_id,
         )
+        return task
+
+    @transaction.atomic
+    def resume_blocked(self, task_id, owner, reason):
+        task = AgentTask.objects.select_for_update().get(pk=task_id)
+        if task.status != "blocked":
+            raise TaskExecutionError("Only a blocked task can be resumed")
+        if not owner or not owner.is_superuser:
+            raise TaskExecutionError("Owner authority is required to resume blocked work")
+        if not str(reason or "").strip():
+            raise TaskExecutionError("A remediation reason is required")
+        task.status, task.execution_id, task.next_retry_at = "queued", "", None
+        task.output_data = {**(task.output_data or {}), "resumed_by": owner.pk, "remediation": str(reason)[:1000]}
+        task.save(update_fields=["status", "execution_id", "next_retry_at", "output_data", "updated_at"])
+        if task.factory_run_id and task.factory_run.status == "blocked":
+            task.factory_run.status = "active"
+            task.factory_run.save(update_fields=["status", "updated_at"])
+        self._audit(task, "task_resumed_after_remediation", task.output_data)
         return task
 
     def _audit(self, task, action, state, trace_execution_id=None):

@@ -8,6 +8,9 @@ environ.Env.read_env(BASE_DIR / ".env")
 
 SECRET_KEY = env("SECRET_KEY", default="change-me")
 DEBUG = env("DEBUG")
+SAEIT_ENV = env("SAEIT_ENV", default="development").strip().lower()
+if SAEIT_ENV not in {"development", "test", "ci", "staging", "production"}:
+    raise RuntimeError("SAEIT_ENV must explicitly identify development, test, ci, staging, or production")
 
 if not DEBUG and SECRET_KEY == "change-me":
     raise RuntimeError("SECRET_KEY must be configured when DEBUG=False")
@@ -59,9 +62,22 @@ TEMPLATES = [
     }
 ]
 
+DATABASE_URL = env("DATABASE_URL", default="")
+if SAEIT_ENV == "staging" and not DATABASE_URL:
+    raise RuntimeError("Staging requires an explicit isolated DATABASE_URL; fallback databases are forbidden")
 DATABASES = {
     "default": env.db("DATABASE_URL", default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}")
 }
+STAGING_DB_IDENTITY = env("STAGING_DB_IDENTITY", default="")
+PRODUCTION_DB_IDENTITY = env("PRODUCTION_DB_IDENTITY", default="")
+if SAEIT_ENV == "staging":
+    if DEBUG or DATABASES["default"]["ENGINE"] != "django.db.backends.postgresql":
+        raise RuntimeError("Staging requires DEBUG=False and PostgreSQL")
+    db_name = str(DATABASES["default"].get("NAME") or "")
+    if not STAGING_DB_IDENTITY or STAGING_DB_IDENTITY != db_name:
+        raise RuntimeError("Staging DATABASE_URL must match STAGING_DB_IDENTITY")
+    if not PRODUCTION_DB_IDENTITY or PRODUCTION_DB_IDENTITY == db_name:
+        raise RuntimeError("Staging must never select the production database identity")
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
@@ -117,3 +133,20 @@ CSRF_COOKIE_SECURE = env("CSRF_COOKIE_SECURE", default=False)
 SECURE_HSTS_SECONDS = env("SECURE_HSTS_SECONDS", default=0)
 SECURE_HSTS_INCLUDE_SUBDOMAINS = env("SECURE_HSTS_INCLUDE_SUBDOMAINS", default=False)
 SECURE_HSTS_PRELOAD = env("SECURE_HSTS_PRELOAD", default=False)
+
+# Explicit external-action boundaries. Staging is always fail-closed.
+PRODUCTION_PUBLICATION_ENABLED = env.bool("PRODUCTION_PUBLICATION_ENABLED", default=False)
+REAL_PAYMENTS_ENABLED = env.bool("REAL_PAYMENTS_ENABLED", default=False)
+TREASURY_EXECUTION_ENABLED = env.bool("TREASURY_EXECUTION_ENABLED", default=False)
+CRYPTO_EXECUTION_ENABLED = env.bool("CRYPTO_EXECUTION_ENABLED", default=False)
+FACTORY_RESEARCH_PROVIDER = env("FACTORY_RESEARCH_PROVIDER", default="")
+FACTORY_RESEARCH_PROVIDER_TIER = env("FACTORY_RESEARCH_PROVIDER_TIER", default="")
+SAEIT_BRIDGE_SECRET = env("SAEIT_BRIDGE_SECRET", default="")
+if SAEIT_ENV == "staging" and any((
+    PRODUCTION_PUBLICATION_ENABLED, REAL_PAYMENTS_ENABLED,
+    TREASURY_EXECUTION_ENABLED, CRYPTO_EXECUTION_ENABLED,
+)):
+    raise RuntimeError("Production publication/payment/treasury/crypto execution must be disabled in staging")
+
+FACTORY_ENVIRONMENT = SAEIT_ENV if SAEIT_ENV == "staging" else env("FACTORY_ENVIRONMENT", default="development")
+STAGING_RESEARCH_API_KEY = env("STAGING_RESEARCH_API_KEY", default="")

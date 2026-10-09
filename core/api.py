@@ -2,6 +2,10 @@ from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, BasePermission, IsAuthenticated, IsAuthenticatedOrReadOnly
 from rest_framework.response import Response
+from django.core.exceptions import ValidationError
+from django.db import models, transaction
+from django.conf import settings
+from django.utils import timezone
 
 from .approval import ApprovalService
 from .chat_runtime import MasterAgentChat
@@ -272,7 +276,6 @@ class OrderViewSet(OwnerScopedMixin, viewsets.ModelViewSet):
         except (Product.DoesNotExist, TypeError, ValueError):
             return Response({"detail": "Active, published-knowledge-backed product not found."}, status=status.HTTP_404_NOT_FOUND)
 
-        from django.db import transaction
         with transaction.atomic():
             order = Order.objects.create(
                 customer=request.user,
@@ -576,7 +579,7 @@ class ApprovalRequestViewSet(viewsets.ReadOnlyModelViewSet):
                 actor_type="owner",
                 note=note,
             )
-        except ValueError as exc:
+        except (ValueError, ValidationError) as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
         return Response(self.get_serializer(approval).data)
 

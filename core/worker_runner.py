@@ -1,9 +1,11 @@
 from decimal import Decimal, InvalidOperation
 from typing import Mapping, Optional
+from django.db import transaction
 
 from .services import normalize_action
 from .task_runtime import TaskExecutionError, TaskRuntime
 from .tool_gateway import ToolGateway, ToolGatewayError
+from .factory_contracts import GatewayToolResult
 
 
 class WorkerRunnerError(ValueError):
@@ -23,15 +25,17 @@ class WorkerRunner:
         gateway: ToolGateway,
         runtime: Optional[TaskRuntime] = None,
         tool_map: Optional[Mapping[str, str]] = None,
+        factory_executor=None,
     ):
         self.gateway = gateway
+        self.factory_executor = factory_executor
         self.runtime = runtime or TaskRuntime()
         self.tool_map = {
             normalize_action(action): normalize_action(tool)
             for action, tool in (tool_map or {}).items()
         }
 
-    def run(self, task_id):
+    def run(self, task_id, agent_output=None):
         task = self.runtime.claim(task_id)
         execution_id = task.execution_id
         try:
@@ -41,26 +45,56 @@ class WorkerRunner:
             if not isinstance(payload, dict):
                 raise WorkerRunnerError("Task input must be an object")
 
-            result = self.gateway.invoke(
-                tool_code,
-                payload,
-                task_id=task.pk,
-                execution_id=execution_id,
+            factory_task = (
+                str(task.capability_code or "").startswith("product_")
+                or str(task.action_type or "").startswith("product_")
             )
-            output, cost = self._normalize_result(result)
-            completed = self.runtime.complete(
-                task.pk,
-                output_data=output,
-                cost=cost,
-                execution_id=execution_id,
-            )
+            if factory_task and agent_output is not None:
+                raise WorkerRunnerError("Factory specialist outputs must be generated from the Run by an execution adapter.")
+            authorization = None
+            adapter_receipt = None
+            if factory_task and self.factory_executor is None:
+                raise WorkerRunnerError("Every Factory stage requires its registered execution adapter.")
+
+            # Factory adapters and tools both persist Factory state. Keep adapter
+            # evidence, the tool effect, and task completion in one transaction so
+            # any downstream failure rolls the entire stage back before retry.
+            with transaction.atomic():
+                if factory_task:
+                    authorization = self.gateway.authorize(
+                        tool_code, payload, task_id=task.pk, execution_id=execution_id
+                    )
+                    adapter_receipt = self.gateway.execute_factory_adapter(
+                        self.factory_executor, task, authorization
+                    )
+                result = self.gateway.invoke(
+                    tool_code,
+                    payload,
+                    task_id=task.pk,
+                    execution_id=execution_id,
+                    adapter_receipt=adapter_receipt,
+                    agent_output=agent_output if not factory_task else None,
+                )
+                gateway_attestation = None
+                if isinstance(result, GatewayToolResult):
+                    gateway_attestation = result.attestation
+                    result = result.result
+                output, cost = self._normalize_result(result)
+                completed = self.runtime.complete(
+                    task.pk,
+                    output_data=output,
+                    cost=cost,
+                    execution_id=execution_id,
+                    gateway_attestation=gateway_attestation,
+                )
             return completed
         except Exception as exc:
             try:
                 self.runtime.fail(
                     task.pk,
-                    str(exc)[:5000],
+                    exc,
                     execution_id=execution_id,
+                    retry_backoff=factory_task if "factory_task" in locals() else False,
                 )
             except TaskExecutionError:
                 # Preserve the original worker failure; a concurrent recovery or

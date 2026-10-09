@@ -1,12 +1,13 @@
 {% extends "base.html" %}
 {% load static %}
-{% block title %}Zomorodmelal — خدمات و اکوسیستم یکپارچه{% endblock %}
+{% block title %}کشاورزی و خدمات کشاورزی | شرکت کشت و صنعت زمرد ملل{% endblock %}
+{% block meta_description %}کشاورزی، خدمات تخصصی کشاورزی، تحقیقات، اصلاح نژاد، فناوری‌های نوین و کشت و صنعت در شرکت زمرد ملل؛ آشنایی با فعالیت‌ها و مسیرهای همکاری.{% endblock %}
 {% block body_class %}services-page{% endblock %}
 {% block extra_css %}<link rel="stylesheet" href="{% static 'site/home-luxury.css' %}">{% endblock %}
 {% block content %}
 <section class="services-hero">
   <div class="services-index">SERVICES<br><strong>14</strong></div>
-  <div class="services-copy"><span>SUPER PLATFORM · SERVICES</span><h1>یک درگاه برای<br><em>همه خدمات</em></h1><p>صفحه اصلی، هاب خدماتی پلتفرم است؛ از زنجیره‌های کشاورزی، صنعت و بازار تا آب‌وهوا، اقتصاد و استودیو.</p></div>
+  <div class="services-copy"><span>SUPER PLATFORM · SERVICES</span><h1>کشاورزی، کشت و صنعت و<br><em>خدمات تخصصی زمرد ملل</em></h1><p>شرکت کشت و صنعت زمرد ملل، فعالیت‌های کشاورزی، پژوهش، آموزش، فناوری و خدمات مرتبط با زنجیره تولید را در کنار سایر بخش‌های تخصصی معرفی می‌کند.</p></div>
 </section>
 <section class="services-grid">
   {% for item in items %}<article class="services-core-card"><div class="services-no">{{ item.no }}</div><span>{{ item.meta }}</span><h2>{{ item.title }}</h2><p>{{ item.text }}</p><a href="{{ item.url }}">ورود به خدمت ↗</a></article>{% endfor %}
@@ -21,5 +22,6 @@
   <article class="services-domain services-domain-platform"><div class="services-no">14</div><span>KNOWLEDGE · ENCYCLOPEDIA</span><h2>دانشنامه</h2><p>مرجع ساختاریافته دانش، مفاهیم و محتوای قابل استفاده پلتفرم.</p><a href="/knowledge/">ورود به دانشنامه ↗</a></article>
 </section>
 <section class="services-map" aria-label="معماری خدمات"><div><span>PLATFORM MAP</span><h2>یک هاب، چند مسیر مستقل</h2><p>کاربر از صفحه اصلی وارد خدمات می‌شود و بدون خروج از معماری پلتفرم، به حوزه تخصصی موردنیاز خود می‌رسد.</p></div><div class="services-map-flow"><b>خدمات</b><i>→</i><span>کشاورزی</span><span>صنعت</span><span>بازار</span><i>→</i><span>آب‌وهوا</span><span>اقتصاد</span><span>استودیو</span></div></section>
+<section class="services-map" aria-label="خدمات کشاورزی"><div><h2>کشاورزی و خدمات تخصصی</h2><p>خدمات کشاورزی، تحقیقات، اصلاح نژاد و فناوری‌های نوین را بررسی کنید.</p></div><div><a href="/agriculture/">راهنمای کشاورزی</a> · <a href="/agricultural-topics/agricultural-services/">شرکت خدمات کشاورزی</a> · <a href="/agricultural-topics/agricultural-research/">تحقیقات کشاورزی</a> · <a href="/agricultural-topics/breeding/">اصلاح نژاد</a></div></section>
 <section class="services-cta"><span>ONE PLATFORM · MANY CAPABILITIES</span><h2>صفحه اصلی؛ یک درگاه برای همه خدمات و زنجیره‌ها.</h2><p>کشاورزی، صنعت و بازار در خدمات یکپارچه شده‌اند و آب‌وهوا، اقتصاد و استودیو نیز به‌عنوان مسیرهای مستقل این پلتفرم از همین درگاه قابل دسترسی‌اند.</p><a href="/company/">شرکت ↗</a></section>
 {% endblock %}

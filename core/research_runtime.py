@@ -3,6 +3,7 @@ from decimal import Decimal, InvalidOperation
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils.text import slugify
+from django.utils import timezone
 
 from .models import ResearchProject, ResearchSource, Evidence, Finding, Report, KnowledgeArticle
 
@@ -11,13 +12,16 @@ class ResearchRuntime:
     """Evidence-first research pipeline with project-boundary validation."""
 
     @transaction.atomic
-    def register_source(self, project, title, url="", publisher="", content_hash=""):
+    def register_source(self, project, title, url="", publisher="", content_hash="", retrieved_at=None, provenance=None, snapshot_hash=""):
         source = ResearchSource(
             project=project,
             title=title,
             url=url,
             publisher=publisher,
             content_hash=content_hash,
+            retrieved_at=retrieved_at or timezone.now(),
+            provenance=provenance or {},
+            snapshot_hash=snapshot_hash or content_hash,
         )
         source.full_clean()
         source.save()

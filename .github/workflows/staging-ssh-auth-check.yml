@@ -1,0 +1,116 @@
+name: Staging SSH Authentication Check
+on:
+  workflow_dispatch:
+  push:
+    branches: [factory/integration-control-bridge-20261005]
+    paths: [.github/workflows/staging-ssh-auth-check.yml]
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Check staging SSH configuration and authentication without host changes
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+          HOST_KNOWN: ${{ secrets.SAEIT_VPS_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          test -n "$VPS_KEY" || { echo "VPS_KEY=missing"; exit 1; }
+          printf '%s\n' "$VPS_KEY" > ~/.ssh/vps_key
+          chmod 600 ~/.ssh/vps_key
+          ssh-keyscan -T 8 -t rsa 178.239.147.150 2>/dev/null > ~/.ssh/vps_hosts
+          test "$(ssh-keygen -lf ~/.ssh/vps_hosts -E sha256 | awk 'NR==1{print $2}')" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          chmod 600 ~/.ssh/vps_hosts
+          if [ -z "$HOST_KEY" ]; then echo "HOST_AUTH_KEY=missing"; else echo "HOST_AUTH_KEY=configured"; fi
+          if [ -z "$HOST_KNOWN" ]; then echo "HOST_KNOWN_HOSTS_SECRET=missing"; else echo "HOST_KNOWN_HOSTS_SECRET=configured"; fi
+          ssh -F /dev/null -i ~/.ssh/vps_key -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=~/.ssh/vps_hosts -o IdentitiesOnly=yes githubops@178.239.147.150 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          tmp="$(mktemp)"
+          trap 'rm -f "$tmp"' EXIT
+          ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net 2>/dev/null > "$tmp"
+          test -s "$tmp" || { echo "HOST_NETWORK=failed"; exit 1; }
+          test "$(ssh-keygen -lf "$tmp" -E sha256 | awk 'NR==1{print $2}')" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          echo "HOST_NETWORK_AND_KEY_CONSISTENCY=ok"
+          echo "HOST_AUTHENTICATION=not_attempted_without_approved_host_key_and_dedicated_host_credentials"
+          REMOTE
+      - name: Inspect staging via verified VPS relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$(mktemp -d)"
+          trap 'rm -rf "$d"' EXIT
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          printf '%s\n' "$VPS_KEY" > "$d/vps"
+          printf '%s\n' "$HOST_KEY" > "$d/host"
+          ssh-keygen -y -P '' -f "$d/vps" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 2>/dev/null > "$d/vps_known"
+          test "$(ssh-keygen -lf "$d/vps_known" -E sha256 | awk 'NR==1{print $2}')" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -i "$d/vps" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/vps_known" githubops@178.239.147.150 'ssh-keyscan -T 10 -p 1396 -t ed25519 zohal.pws-dns.net 2>/dev/null' > "$d/host_known"
+          test "$(ssh-keygen -lf "$d/host_known" -E sha256 | awk 'NR==1{print $2}')" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          cat "$d/vps_known" "$d/host_known" > "$d/known"
+          cat > "$d/config" <<EOF
+          Host relay
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps
+            IdentitiesOnly yes
+            UserKnownHostsFile $d/known
+            StrictHostKeyChecking yes
+            BatchMode yes
+          Host staging-host
+            HostName zohal.pws-dns.net
+            Port 1396
+            User zomorod2
+            IdentityFile $d/host
+            IdentitiesOnly yes
+            UserKnownHostsFile $d/known
+            StrictHostKeyChecking yes
+            BatchMode yes
+            ProxyJump relay
+          EOF
+          chmod 600 "$d/config"
+          timeout 90s ssh -F "$d/config" staging-host 'bash -s' <<'REMOTE'
+          set -eu
+          cd /home/zomorod2/Saeit-staging
+          for candidate in /home/zomorod2/virtualenv/Saeit-staging/*/bin/python .venv/bin/python venv/bin/python python3; do
+            if "$candidate" -c 'import django' >/dev/null 2>&1; then task_python="$candidate"; break; fi
+          done
+          test -n "${task_python:-}" || { echo PYTHON_DJANGO=missing; exit 2; }
+          "$task_python" - <<'PYDIAG'
+          from pathlib import Path
+          import sqlite3,json,environ,re
+          env=environ.Env(); environ.Env.read_env(".env")
+          cfg=env.db("DATABASE_URL")
+          if cfg["ENGINE"]!="django.db.backends.sqlite3": raise SystemExit("EXPECTED_SQLITE_READONLY_INSPECTION")
+          p=Path(cfg["NAME"]).resolve()
+          if not p.is_relative_to(Path.cwd()): raise SystemExit("DATABASE_OUTSIDE_STAGING")
+          conn=sqlite3.connect(p.as_uri()+"?mode=ro",uri=True)
+          conn.execute("PRAGMA query_only=ON")
+          for table in ["core_factoryrun","core_agenttask","core_evidence","core_researchsource"]:
+           try: print("ROW_COUNT",table,conn.execute("SELECT COUNT(*) FROM "+table).fetchone()[0])
+           except sqlite3.Error as e: print("DB_ERROR",table,type(e).__name__)
+          for row in conn.execute("SELECT id,status,action_type,factory_run_id,product_id,output_data FROM core_agenttask WHERE factory_run_id IN (173,174) OR status='blocked' ORDER BY id DESC LIMIT 24"):
+           data=json.loads(row[5] or "{}")
+           print("TASK",row[:5],"RESULT",json.dumps({k:data[k] for k in ["factory_state","verified_effect","error","evidence_count"] if k in data})[:800])
+          for row in conn.execute("SELECT id,status,product_id FROM core_factoryrun WHERE status='blocked' OR id IN (173,174)"):
+           print("RUN",row)
+          for row in conn.execute("SELECT id,metadata FROM core_product WHERE id IN (SELECT product_id FROM core_factoryrun WHERE id IN (173,174))"):
+           m=json.loads(row[1] or "{}")
+           print("PRODUCT",row[0],"STATE",m.get("factory_state"),"VALIDATION",json.dumps(m.get("validation",{}))[:1800])
+          for row in conn.execute("SELECT id,output_data FROM core_agenttask WHERE factory_run_id IN (SELECT id FROM core_factoryrun WHERE status='blocked') ORDER BY id DESC LIMIT 5"):
+           print("BLOCKED_RUN_TASK",row[0],json.dumps(json.loads(row[1] or "{}"))[:1000])
+          
+          PYDIAG
+          echo READONLY_FACTORY_DIAGNOSTIC=completed
+          REMOTE
