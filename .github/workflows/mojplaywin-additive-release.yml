@@ -1,8 +1,5 @@
-name: MojPlayWin additive release (one-time authorized push)
+name: MojPlayWin additive release (manual approval required)
 on:
-  push:
-    branches: [seo/mojplaywin-40-isolated-20261009]
-    paths: [.github/workflows/mojplaywin-additive-release.yml]
   workflow_dispatch:
     inputs:
       mode:
@@ -31,7 +28,7 @@ jobs:
           test -s core/templates/brands/mojplaywin/specialty_directory.html
           test -s core/templates/brands/mojplaywin/about.html
       - name: Configure pinned relay and host keys
-        if: github.event_name == 'push' || inputs.mode == 'deploy'
+        if: inputs.mode == 'deploy'
         shell: bash
         env:
           VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
@@ -49,9 +46,27 @@ jobs:
           chmod 600 "$RUNNER_TEMP/moj-ssh/"*
           ssh-keygen -y -P '' -f "$RUNNER_TEMP/moj-ssh/vps.key" >/dev/null
           ssh-keygen -y -P '' -f "$RUNNER_TEMP/moj-ssh/host.key" >/dev/null
-          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$RUNNER_TEMP/moj-ssh/vps.known"
-          test "$(ssh-keygen -lf "$RUNNER_TEMP/moj-ssh/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
-          test "$(ssh-keygen -lf "$RUNNER_TEMP/moj-ssh/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          # Never trust ssh-keyscan by itself: require a pinned fingerprint.
+          # A scan failure must stop the release rather than disabling host checks.
+          if ! ssh-keyscan -T 15 -t rsa 178.239.147.150 > "$RUNNER_TEMP/moj-ssh/vps.known"; then
+            echo "::error::VPS RSA keyscan failed; check network reachability and SSH port." >&2
+            exit 1
+          fi
+          fingerprint() {
+            ssh-keygen -lf "$1" -E sha256 | awk '{print $2}' | sort -u
+          }
+          vps_fingerprint="$(fingerprint "$RUNNER_TEMP/moj-ssh/vps.known")"
+          host_fingerprint="$(fingerprint "$RUNNER_TEMP/moj-ssh/host.known")"
+          echo "VPS RSA fingerprint: $vps_fingerprint"
+          echo "Hosting pinned fingerprint: $host_fingerprint"
+          if [[ "$vps_fingerprint" != 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs' ]]; then
+            echo "::error::VPS host fingerprint mismatch. Deployment blocked; verify out of band." >&2
+            exit 1
+          fi
+          if [[ "$host_fingerprint" != 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04' ]]; then
+            echo "::error::Hosting known_hosts fingerprint mismatch. Deployment blocked." >&2
+            exit 1
+          fi
           cat > "$RUNNER_TEMP/moj-ssh/config" <<EOF
           Host relay
             HostName 178.239.147.150
@@ -101,7 +116,7 @@ jobs:
           echo 'Public navigation not verified; inspect live template routing before claiming success' >&2
           exit 1
       - name: Restore navigation backup if deployment verification failed
-        if: failure() && (github.event_name == 'push' || inputs.mode == 'deploy')
+        if: failure() && inputs.mode == 'deploy'
         shell: bash
         run: |
           set -euo pipefail
