@@ -6,6 +6,8 @@ from django.views.generic import RedirectView
 from core.agricultural_seo_views import agricultural_seo_page
 from core.views import home, platform_page
 from core.brand_views import branded_home, branded_page, branded_game, branded_store, branded_product, branded_product
+from core.mojplaywin_section_views import section_page
+from core.mojplaywin_specialty_views import specialty_page
 from core.brand import brand_for_request
 from core.commerce_views import store_home, auctions_home
 from core.seo_views import site_search
@@ -24,6 +26,14 @@ from core.knowledge_views import knowledge_article_detail, knowledge_book_detail
 urlpatterns = [
     path("", branded_home, name="home"),
     path("games/first-realm/", branded_game, {"slug": "first-realm"}, name="mpw_first_realm"),
+    path("markets/", section_page, {"section": "markets"}, name="mpw_markets"),
+    path("marketing/", section_page, {"section": "marketing"}, name="mpw_marketing"),
+    path("gold-jewelry/", section_page, {"section": "gold-jewelry"}, name="mpw_gold_jewelry"),
+    path("stocks/", section_page, {"section": "stocks"}, name="mpw_stocks"),
+    path("real-estate/", section_page, {"section": "real-estate"}, name="mpw_real_estate"),
+    path("encyclopedia/", section_page, {"section": "encyclopedia"}, name="mpw_encyclopedia"),
+    path("products/<slug:slug>/", specialty_page, {"kind": "products"}, name="mpw_specialty_product"),
+    path("services/<slug:slug>/", specialty_page, {"kind": "services"}, name="mpw_specialty_service"),
     path("products/", branded_page, {"page": "products"}, name="mpw_products"),
     path("games/", branded_page, {"page": "games"}, name="mpw_games"),
     path("worlds/", branded_page, {"page": "worlds"}, name="mpw_worlds"),
@@ -46,13 +56,13 @@ urlpatterns = [
     path("agricultural-topics/<slug:slug>/", agricultural_seo_page, name="agricultural_seo_page"),
     path("agriculture/", lambda request: platform_page(request, "agriculture"), name="agriculture"),
     path("industry/", lambda request: platform_page(request, "industry"), name="industry"),
-    path("research/", lambda request: platform_page(request, "research"), name="research"),
+    path("research/", lambda request: section_page(request, "research") if getattr(brand_for_request(request), "code", None) == "mojplaywin" else platform_page(request, "research"), name="research"),
     path("knowledge/", lambda request: platform_page(request, "knowledge"), name="knowledge"),
     path("knowledge/article/<slug:slug>/", knowledge_article_detail, name="knowledge_article_detail"),
     path("knowledge/book/<slug:slug>/", knowledge_book_detail, name="knowledge_book_detail"),
     path("knowledge/domain/<slug:slug>/", knowledge_domain_detail, name="knowledge_domain_detail"),
     path("market/", lambda request: platform_page(request, "market"), name="market"),
-    path("economy/", lambda request: platform_page(request, "economy"), name="economy"),
+    path("economy/", lambda request: section_page(request, "economy") if getattr(brand_for_request(request), "code", None) == "mojplaywin" else platform_page(request, "economy"), name="economy"),
     path("studio/", lambda request: branded_page(request, "studio") if brand_for_request(request) else platform_page(request, "studio"), name="studio"),
     path("agents/", lambda request: platform_page(request, "agents"), name="agents"),
     path("search/", site_search, name="site_search"),
@@ -69,7 +79,7 @@ urlpatterns = [
     path("about/", lambda request: branded_page(request, "about") if brand_for_request(request) else RedirectView.as_view(pattern_name="company", permanent=True)(request), name="about"),
     path("contact/", lambda request: branded_page(request, "contact") if brand_for_request(request) else RedirectView.as_view(pattern_name="company", permanent=True)(request), name="contact"),
     path("weather/", weather, name="weather"),
-    path("education/", education, name="education"),
+    path("education/", lambda request: section_page(request, "education") if getattr(brand_for_request(request), "code", None) == "mojplaywin" else education(request), name="education"),
     path("education/dashboard/", education_dashboard, name="education_dashboard"),
     path("education/certificate/<str:code>/", education_certificate, name="education_certificate"),
     path("education/course/<slug:slug>/", education_course_detail, name="education_course_detail"),

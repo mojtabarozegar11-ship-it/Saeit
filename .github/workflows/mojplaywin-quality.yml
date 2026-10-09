@@ -1,0 +1,74 @@
+name: MojPlayWin Template and Catalog Tests
+on:
+  push:
+    branches:
+      - seo/mojplaywin-global-products-20261009
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  mojplaywin-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DJANGO_SECRET_KEY: ci-only-not-for-production-0123456789
+      SECRET_KEY: ci-only-not-for-production-0123456789
+      DEBUG: "false"
+      SAEIT_ENV: ci
+      DATABASE_URL: sqlite:///test-mojplaywin.sqlite3
+      ALLOWED_HOSTS: "testserver,mojplaywin.com"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Django checks
+        run: python manage.py check
+      - name: Collect static assets for manifest-backed templates
+        run: python manage.py collectstatic --noinput
+      - name: Migration drift check
+        run: python manage.py makemigrations --check --dry-run
+      - name: Template and catalog regression tests
+        run: python -m pytest core/test_mojplaywin_catalog_engine.py core/test_mojplaywin_surface_contract.py core/test_mojplaywin_template_integration.py core/test_mojplaywin_navigation.py core/test_mojplaywin_order_integration.py core/test_mojplaywin_payment_integration.py core/test_mojplaywin_webhook_validation.py -q
+
+  mojplaywin-postgres-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: mojplaywin_ci
+          POSTGRES_USER: mojplaywin_ci
+          POSTGRES_PASSWORD: ci-only-not-for-production
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U mojplaywin_ci -d mojplaywin_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      SECRET_KEY: ci-only-not-for-production-0123456789
+      DEBUG: "false"
+      SAEIT_ENV: ci
+      DATABASE_URL: postgres://mojplaywin_ci:ci-only-not-for-production@127.0.0.1:5432/mojplaywin_ci
+      ALLOWED_HOSTS: "testserver,mojplaywin.com"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+      - name: PostgreSQL Django and migration checks
+        run: |
+          python manage.py check
+          python manage.py makemigrations --check --dry-run
+      - name: PostgreSQL order, payment and webhook integration tests
+        run: python -m pytest core/test_mojplaywin_order_integration.py core/test_mojplaywin_payment_integration.py core/test_mojplaywin_webhook_validation.py -q

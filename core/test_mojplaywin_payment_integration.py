@@ -1,0 +1,105 @@
+"""Payment-intent integration tests; no external gateway is called."""
+from decimal import Decimal
+from django.contrib.auth import get_user_model
+from django.test import TestCase
+from rest_framework.test import APIRequestFactory, force_authenticate
+from core.api import PaymentIntentViewSet
+from core.models import ApprovalRequest, Order, PaymentIntent
+
+
+class PaymentIntentIntegrationTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username="mpw_payment_staff", password="test-only-password", is_staff=True
+        )
+        self.other = get_user_model().objects.create_user(
+            username="mpw_payment_other", password="test-only-password", is_staff=True
+        )
+        self.order = Order.objects.create(
+            customer=self.user, total=Decimal("25.00"), currency="USD", status="pending"
+        )
+        self.factory = APIRequestFactory()
+        self.view = PaymentIntentViewSet.as_view({"post": "create_intent"})
+
+    def request(self, user, order_id, key):
+        request = self.factory.post(
+            "/api/payments/create/",
+            {"order_id": order_id, "idempotency_key": key},
+            format="json",
+        )
+        force_authenticate(request, user=user)
+        return self.view(request)
+
+    def test_creates_pending_intent_with_owner_approval(self):
+        response = self.request(self.user, self.order.pk, "mpw-payment-key-1")
+        self.assertEqual(response.status_code, 202)
+        intent = PaymentIntent.objects.get()
+        self.assertEqual(intent.amount, Decimal("25.00"))
+        self.assertEqual(intent.provider, "not_configured")
+        self.assertEqual(intent.status, "awaiting_approval")
+        approval = ApprovalRequest.objects.get(target_type="PaymentIntent", target_id=str(intent.pk))
+        self.assertEqual(approval.status, "pending")
+        self.assertEqual(approval.action_type, "payment")
+
+    def test_same_key_is_idempotent(self):
+        self.assertEqual(self.request(self.user, self.order.pk, "mpw-payment-key-2").status_code, 202)
+        self.assertEqual(self.request(self.user, self.order.pk, "mpw-payment-key-2").status_code, 200)
+        self.assertEqual(PaymentIntent.objects.count(), 1)
+        self.assertEqual(ApprovalRequest.objects.filter(action_type="payment").count(), 1)
+
+    def test_other_customer_cannot_start_payment(self):
+        response = self.request(self.other, self.order.pk, "mpw-payment-key-3")
+        self.assertEqual(response.status_code, 404)
+        self.assertFalse(PaymentIntent.objects.exists())
+
+    def test_non_pending_order_cannot_start_payment(self):
+        self.order.status = "paid"
+        self.order.save()
+        response = self.request(self.user, self.order.pk, "mpw-payment-key-4")
+        self.assertEqual(response.status_code, 409)
+        self.assertFalse(PaymentIntent.objects.exists())
+
+    def test_oversized_idempotency_key_is_rejected(self):
+        response = self.request(self.user, self.order.pk, 'x' * 129)
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(PaymentIntent.objects.exists())
+        self.assertFalse(ApprovalRequest.objects.filter(action_type='payment').exists())
+
+    def test_same_order_different_key_returns_conflict(self):
+        self.assertEqual(self.request(self.user, self.order.pk, 'first-key').status_code, 202)
+        response = self.request(self.user, self.order.pk, 'second-key')
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(PaymentIntent.objects.count(), 1)
+        self.assertEqual(ApprovalRequest.objects.filter(action_type='payment').count(), 1)
+
+    def test_same_key_cannot_be_reused_for_another_order(self):
+        other_order = Order.objects.create(customer=self.user, total=Decimal('10.00'), currency='USD', status='pending')
+        self.assertEqual(self.request(self.user, self.order.pk, 'shared-key').status_code, 202)
+        self.assertEqual(self.request(self.user, other_order.pk, 'shared-key').status_code, 409)
+        self.assertEqual(PaymentIntent.objects.count(), 1)
+
+    def test_invalid_order_ids_return_bad_request_without_side_effects(self):
+        for invalid in ('abc', '-5', '1.2', 1.2, True, '1e3', ' 1 ', '١'):
+            with self.subTest(order_id=invalid):
+                response = self.request(self.user, invalid, 'invalid-order-id')
+                self.assertEqual(response.status_code, 400)
+        self.assertFalse(PaymentIntent.objects.exists())
+        self.assertFalse(ApprovalRequest.objects.filter(action_type='payment').exists())
+
+    def test_database_constraint_conflict_returns_409_without_partial_approval(self):
+        from unittest.mock import patch
+        from django.db import IntegrityError
+        with patch('core.api.PaymentIntent.objects.create', side_effect=IntegrityError('simulated unique conflict')):
+            response = self.request(self.user, self.order.pk, 'race-key')
+        self.assertEqual(response.status_code, 409)
+        self.assertFalse(PaymentIntent.objects.exists())
+        self.assertFalse(ApprovalRequest.objects.filter(action_type='payment').exists())
+
+    def test_payment_intent_creation_uses_row_lock_and_atomic_transaction(self):
+        from pathlib import Path
+        from django.conf import settings
+        source = (Path(settings.BASE_DIR) / 'core' / 'api.py').read_text(encoding='utf-8')
+        section = source.split('    def create_intent(self, request):', 1)[1].split('class PaymentWebhookViewSet(', 1)[0]
+        self.assertIn('with transaction.atomic():', section)
+        self.assertIn('Order.objects.select_for_update()', section)
+        self.assertIn('except IntegrityError:', section)
