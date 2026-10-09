@@ -22,3 +22,9 @@ class MojPlayWinSurfaceContractTests(SimpleTestCase):
         source = path.read_text(encoding='utf-8')
         self.assertIn('metadata__brand_code="mojplaywin"', source)
         self.assertIn('knowledge_article__published=True', source)
+
+    def test_product_page_does_not_claim_live_checkout(self):
+        path = Path(settings.BASE_DIR) / 'core' / 'templates' / 'brands' / 'mojplaywin' / 'product.html'
+        source = path.read_text(encoding='utf-8')
+        self.assertIn('Order availability.', source)
+        self.assertNotIn('Secure order path.', source)
