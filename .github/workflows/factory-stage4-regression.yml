@@ -1,0 +1,37 @@
+name: Factory Stage 4 Regression
+
+on:
+  push:
+    branches:
+      - "fix/factory-stage4-runtime-20261010"
+  pull_request:
+    branches:
+      - "factory/integration-control-bridge-20261005"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  factory-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SECRET_KEY: ci-only-factory-regression-key
+      DEBUG: "True"
+      ALLOWED_HOSTS: localhost,127.0.0.1
+      SAEIT_ENV: test
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+      - name: Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install requirements
+        run: python -m pip install -r requirements.txt
+      - name: Django checks
+        run: python manage.py check
+      - name: Focused factory regressions
+        run: python -m pytest -q core/test_factory_staging_tick_scheduler.py core/test_factory_stage4_diagnostics.py
