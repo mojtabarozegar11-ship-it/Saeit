@@ -1,13 +1,14 @@
 """Exercise payment webhook authentication and malformed-payload behavior without gateway access."""
 import hashlib
 import hmac
-from django.test import SimpleTestCase, override_settings
+from django.test import TestCase, override_settings
 from rest_framework.test import APIRequestFactory
 from core.api import PaymentWebhookViewSet
+from core.models import PaymentWebhookEvent
 
 
 @override_settings(PAYMENT_WEBHOOK_SECRET="ci-test-only-webhook-secret")
-class PaymentWebhookValidationTests(SimpleTestCase):
+class PaymentWebhookValidationTests(TestCase):
     def setUp(self):
         self.factory = APIRequestFactory()
         self.view = PaymentWebhookViewSet.as_view({"post": "create"})
@@ -47,3 +48,14 @@ class PaymentWebhookValidationTests(SimpleTestCase):
         self.assertEqual(response.status_code, 400)
         response = self.request(b'{}', event_id="e" * 129)
         self.assertEqual(response.status_code, 400)
+
+    def test_reused_event_id_with_different_payload_is_rejected(self):
+        original = b'{"event_type":"payment.failed","payment_intent_id":1}'
+        PaymentWebhookEvent.objects.create(
+            provider='test-gateway', event_id='evt-1', event_type='payment.failed',
+            payload_hash=hashlib.sha256(original).hexdigest(), status='processed',
+        )
+        self.assertEqual(self.request(original).status_code, 200)
+        changed = b'{"event_type":"payment.succeeded","payment_intent_id":1}'
+        self.assertEqual(self.request(changed).status_code, 409)
+        self.assertEqual(PaymentWebhookEvent.objects.count(), 1)
