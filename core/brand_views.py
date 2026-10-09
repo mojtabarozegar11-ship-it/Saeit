@@ -43,13 +43,13 @@ def branded_home(request):
 def branded_product(request, pk):
     brand=brand_for_request(request)
     if not brand or brand.code!="mojplaywin": raise Http404
-    product=get_object_or_404(Product, pk=pk, active=True)
+    product=get_object_or_404(Product, pk=pk, active=True, knowledge_article__published=True, metadata__brand_code="mojplaywin")
     return render(request,"brands/mojplaywin/product.html",{"brand":brand,"product":product})
 
 def branded_store(request):
     brand=brand_for_request(request)
     if not brand or brand.code!="mojplaywin": raise Http404
-    products=Product.objects.filter(active=True).order_by("-id")
+    products=Product.objects.filter(active=True, knowledge_article__published=True, metadata__brand_code="mojplaywin").order_by("-id")
     return render(request,"brands/mojplaywin/store.html",{"brand":brand,"products":products})
 
 def branded_page(request, page):
