@@ -53,6 +53,20 @@ class MojPlayWinFortySpecialtyTests(SimpleTestCase):
                         self.assertContains(response, "/" + key + "/")
                         self.assertContains(response, escape(item["title"]))
 
+    def test_editorial_hubs_have_independent_namespaced_urls(self):
+        for kind in ("products", "services"):
+            response = self.client.get("/editorial/" + kind + "/", HTTP_HOST="mojplaywin.com")
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response["X-Robots-Tag"], "noindex, follow, noarchive")
+            for key in SPECIALTIES:
+                if key.startswith(kind + "/"):
+                    self.assertContains(response, "/" + key + "/")
+            response_other = self.client.get("/editorial/" + kind + "/", HTTP_HOST="zomorodmelal.ir")
+            if kind == "products":
+                self.assertEqual(response_other.status_code, 404)
+            else:
+                self.assertNotContains(response_other, "MojPlayWin")
+
     def test_other_domain_preserves_legacy_services_page(self):
         response = self.client.get("/services/", HTTP_HOST="zomorodmelal.ir")
         self.assertEqual(response.status_code, 200)
