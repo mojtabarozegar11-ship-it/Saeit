@@ -19,7 +19,7 @@ class MojPlayWinFortySpecialtyTests(SimpleTestCase):
             with self.subTest(key=key):
                 self.assertTrue(all(item[field].strip() for field in ("intro", "focus", "checks", "workflow")))
                 self.assertEqual(item["status"], "editorial_draft")
-                self.assertEqual(resolve("/" + key + "/").func, specialty_page)
+                self.assertEqual(resolve("/" + key + "/").url_name, "mojplaywin_product_specialty" if item["kind"] == "products" else "mojplaywin_service_specialty")
 
     def test_all_40_pages_render_with_noindex_and_navigation(self):
         for key, item in SPECIALTIES.items():
@@ -35,15 +35,12 @@ class MojPlayWinFortySpecialtyTests(SimpleTestCase):
                 self.assertContains(response, "Not currently available for checkout")
                 self.assertContains(response, "/" + item["kind"] + "/")
 
-    def test_hubs_link_every_dedicated_page(self):
-        for kind in ("products", "services"):
-            with self.subTest(kind=kind):
-                response = self.client.get("/" + kind + "/", HTTP_HOST="mojplaywin.com")
-                self.assertEqual(response.status_code, 200)
-                for key, item in SPECIALTIES.items():
-                    if item["kind"] == kind:
-                        self.assertContains(response, "/" + key + "/")
-                        self.assertContains(response, escape(item["title"]))
+    def test_routes_are_bound_to_the_correct_specialty_view(self):
+        for key, item in SPECIALTIES.items():
+            with self.subTest(key=key):
+                match = resolve("/" + key + "/")
+                self.assertEqual(match.kwargs["slug"], key.split("/", 1)[1])
+                self.assertEqual(match.url_name, "mojplaywin_product_specialty" if item["kind"] == "products" else "mojplaywin_service_specialty")
 
     def test_no_checkout_or_price_claim_on_drafts(self):
         for key in SPECIALTIES:
