@@ -91,3 +91,15 @@ jobs:
             fi
           done
           REMOTE
+
+      - name: Inspect VPS port 443 locally
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -F /dev/null -i ~/.ssh/vps_key -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=~/.ssh/known_hosts -o ConnectTimeout=10 -o IdentitiesOnly=yes githubops@178.239.147.150 'bash -s' <<'REMOTE'
+          if timeout 5 bash -c 'echo >/dev/tcp/127.0.0.1/443' 2>/dev/null; then
+            echo 'VPS_TCP443=reachable_from_loopback'
+          else
+            echo 'VPS_TCP443=not_reachable_from_loopback'
+          fi
+          REMOTE
