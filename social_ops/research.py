@@ -49,6 +49,11 @@ def main():
     root = Path(__file__).resolve().parent
     path = root / "research_sources.json"
     items = json.loads(path.read_text(encoding="utf-8"))["posts"]
+    discovery = root / "output" / "youtube_discovery.json"
+    if discovery.exists():
+        fetched = json.loads(discovery.read_text(encoding="utf-8"))
+        if fetched.get("state", {}).get("status") in ("ok", "partial"):
+            items.extend(fetched.get("posts", []))
     ranked = evaluate(items)
     out = root / "output"
     out.mkdir(exist_ok=True)
