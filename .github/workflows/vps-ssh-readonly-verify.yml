@@ -32,7 +32,7 @@ jobs:
           ssh-keyscan -T 10 -t rsa "$VPS_HOST" 2>/dev/null > ~/.ssh/known_hosts
           test -s ~/.ssh/known_hosts || { echo "::error::Could not obtain VPS RSA host key"; exit 1; }
           actual_fingerprint="$(ssh-keygen -lf ~/.ssh/known_hosts -E sha256 | awk 'NR==1 {print $2}')"
-          expected_fingerprint="SHA256:AYdzF3K5uSwAXElE1w/dKoO4iT2BbMGWHbRA2Cu4rrs"
+          expected_fingerprint="SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
           if [[ "$actual_fingerprint" != "$expected_fingerprint" ]]; then
             echo "Observed VPS RSA fingerprint: $actual_fingerprint"
             echo "::error::VPS host fingerprint mismatch; SSH authentication intentionally blocked"
