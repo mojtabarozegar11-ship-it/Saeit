@@ -22,7 +22,7 @@ jobs:
           VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
           VPS_KNOWN: "verify-pinned-rsa"
           HOST_HOST: "zohal.pws-dns.net"
-          HOST_USER: ${{ secrets.SAEIT_HOST_SSH_USER }}
+          HOST_USER: "zomorod2"
           HOST_PORT: "1396"
           HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
           HOST_KNOWN: ${{ secrets.SAEIT_HOST_SSH_KNOWN_HOSTS }}
@@ -69,18 +69,44 @@ jobs:
         run: |
           set -euo pipefail
           timeout 35s ssh -F "$RUNNER_TEMP/saeit-ssh/config" saeit-vps 'id -un; hostname; date -u +%FT%TZ'
-      - name: Diagnose hosting SSH banner from VPS
+      - name: Verify hosting key against owner-confirmed fingerprint
+        shell: python
         run: |
-          set -euo pipefail
-          timeout 30s ssh -F "$RUNNER_TEMP/saeit-ssh/config" saeit-vps 'bash -s' <<'REMOTE'
-          for port in 22 1396; do
-            if timeout 7 bash -c 'exec 3<>/dev/tcp/zohal.pws-dns.net/"$1"; IFS= read -r -t 5 banner <&3; case "$banner" in SSH-*) printf "PORT_%s_SSH_BANNER_OK\n" "$1";; *) exit 1;; esac' _ "$port" 2>/dev/null; then
-              :
-            else
-              printf 'PORT_%s_NO_SSH_BANNER\n' "$port"
-            fi
-          done
-          REMOTE
+          import os, pathlib, subprocess, sys
+          root = pathlib.Path(os.environ["RUNNER_TEMP"]) / "saeit-ssh"
+          expected = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          endpoint = "[zohal.pws-dns.net]:1396"
+          old = root / "saeit-host.known"
+          match = subprocess.run(["ssh-keygen", "-F", endpoint, "-f", str(old)], capture_output=True, text=True, timeout=5)
+          entries = [line for line in match.stdout.splitlines() if line and not line.startswith("#")]
+          print("OLD_ENDPOINT_MATCH=" + str(bool(entries)))
+          for i, entry in enumerate(entries):
+              parts = entry.split()
+              tmp = root / ("old-entry-" + str(i))
+              tmp.write_text(entry + "\n")
+              fp = subprocess.run(["ssh-keygen", "-lf", str(tmp), "-E", "sha256"], capture_output=True, text=True, timeout=5)
+              values = fp.stdout.split()
+              print("OLD_MATCH_TYPE=" + (parts[1] if len(parts)>1 else "invalid"))
+              print("OLD_MATCH_FINGERPRINT_VALID=" + str(len(values)>1 and values[1]==expected))
+          scan = subprocess.run(["ssh", "-F", str(root/"config"), "saeit-vps",
+              "timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net"],
+              capture_output=True, text=True, timeout=30)
+          lines = [line.split() for line in scan.stdout.splitlines() if line and not line.startswith("#")]
+          if scan.returncode or not lines or any(len(p)!=3 or p[0]!=endpoint or p[1]!="ssh-ed25519" for p in lines):
+              sys.exit("Hosting key scan failed validation")
+          candidate = root / "host.candidate"
+          candidate.write_text("\n".join(" ".join(p) for p in lines) + "\n")
+          fp = subprocess.run(["ssh-keygen", "-lf", str(candidate), "-E", "sha256"], capture_output=True, text=True, timeout=5)
+          fingerprints = [line.split()[1] for line in fp.stdout.splitlines() if len(line.split())>1]
+          if fp.returncode or not fingerprints or set(fingerprints)!={expected}:
+              sys.exit("Hosting fingerprint mismatch; no trust update")
+          old.write_text(candidate.read_text())
+          old.chmod(0o600)
+          print("HOST_ED25519_PIN_VERIFIED=" + expected)
+          keycheck = subprocess.run(["ssh-keygen", "-y", "-P", "", "-f", str(root/"saeit-host.key")], capture_output=True, timeout=5)
+          if keycheck.returncode:
+              sys.exit("Hosting authentication key invalid or encrypted; no secret output")
+          print("HOST_AUTH_KEY_FORMAT_VALID")
       - name: Authenticated host proof through VPS
         run: |
           set -euo pipefail
