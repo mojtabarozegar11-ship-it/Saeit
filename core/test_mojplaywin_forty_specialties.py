@@ -24,7 +24,7 @@ class MojPlayWinFortySpecialtyTests(SimpleTestCase):
             with self.subTest(key=key):
                 response = self.client.get("/" + key + "/", HTTP_HOST="mojplaywin.com")
                 self.assertEqual(response.status_code, 200)
-                self.assertEqual(response["X-Robots-Tag"], "noindex, follow")
+                self.assertEqual(response["X-Robots-Tag"], "noindex, follow, noarchive")
                 self.assertContains(response, item["title"])
                 self.assertContains(response, item["focus"])
                 self.assertContains(response, item["checks"])
