@@ -21,7 +21,7 @@ jobs:
       DEBUG: "True"
       ALLOWED_HOSTS: localhost,127.0.0.1
       SAEIT_ENV: test
-      FACTORY_ENVIRONMENT: staging
+      FACTORY_ENVIRONMENT: development
     steps:
       - name: Checkout branch
         uses: actions/checkout@v4
