@@ -103,10 +103,15 @@ jobs:
           backup="${target}.before-additive-release-${GITHUB_RUN_ID}"
           echo "BACKUP_PATH=$backup" >> "$GITHUB_ENV"
           echo "TARGET_PATH=$target" >> "$GITHUB_ENV"
-          "${SSH[@]}" hosting "test -f '$target' && test -d /home/zomorod2/mojplaywin.com/tmp"
+          "${SSH[@]}" hosting "id -un | grep -Fxq zomorod2; test -f '$target' && test -d /home/zomorod2/mojplaywin.com/tmp"
           "${SSH[@]}" hosting "umask 077; cp -p '$target' '$backup'"
           "${SCP[@]}" core/templates/brands/mojplaywin/includes/mega_nav.html "hosting:$staging"
-          "${SSH[@]}" hosting "set -eu; test -s '$staging'; grep -Fq '/editorial/products/' '$staging'; grep -Fq '/editorial/services/' '$staging'; grep -Fq '/about/founder/' '$staging'; mv -f '$staging' '$target'; touch /home/zomorod2/mojplaywin.com/tmp/restart.txt"
+          "${SSH[@]}" hosting "set -eu; test -s '$staging'; grep -Fq '/editorial/products/' '$staging'; grep -Fq '/editorial/services/' '$staging'; grep -Fq '/about/founder/' '$staging'; mv -f '$staging' '$target'"
+      - name: Mark replacement and restart Passenger
+        if: inputs.mode == 'deploy'
+        run: |
+          echo "FILE_REPLACED=true" >> "$GITHUB_ENV"
+          ssh -F "$RUNNER_TEMP/moj-ssh/config" hosting "touch /home/zomorod2/mojplaywin.com/tmp/restart.txt"
       - name: Verify public navigation
         if: inputs.mode == 'deploy'
         shell: bash
@@ -122,7 +127,7 @@ jobs:
           echo 'Public navigation not verified; inspect live template routing before claiming success' >&2
           exit 1
       - name: Restore navigation backup if deployment verification failed
-        if: failure() && inputs.mode == 'deploy' && env.BACKUP_PATH != ''
+        if: failure() && inputs.mode == 'deploy' && env.FILE_REPLACED == 'true'
         shell: bash
         run: |
           set -euo pipefail
