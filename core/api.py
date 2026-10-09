@@ -410,6 +410,13 @@ class PaymentWebhookViewSet(viewsets.ViewSet):
         event_type = str(payload.get("event_type", "")).strip()
         intent_id = payload.get("payment_intent_id")
         provider_reference = str(payload.get("provider_reference", "")).strip()
+        if (not isinstance(intent_id, (int, str)) or isinstance(intent_id, bool)
+                or not str(intent_id).isascii() or not str(intent_id).isdigit()
+                or int(intent_id) < 1):
+            return Response({"detail": "payment_intent_id must be a positive integer."}, status=status.HTTP_400_BAD_REQUEST)
+        intent_id = int(intent_id)
+        if len(event_type) > 50 or len(provider_reference) > 200:
+            return Response({"detail": "Webhook payload fields exceed allowed length."}, status=status.HTTP_400_BAD_REQUEST)
         if not event_type or not intent_id:
             return Response({"detail": "event_type and payment_intent_id are required."}, status=status.HTTP_400_BAD_REQUEST)
 
