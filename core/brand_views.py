@@ -58,7 +58,15 @@ def branded_page(request, page):
     if not brand or brand.code!="mojplaywin": raise Http404
     data=PAGES.get(page) or FACTORY_CATALOG.get(page) or CORPORATE_FUTURE.get(page)
     if not data: raise Http404
-    return render(request,"brands/mojplaywin/page.html",{"brand":brand,"page":data,"page_key":page})
+    context = {"brand": brand, "page": data, "page_key": page}
+    if page in ("products", "services"):
+        from .mojplaywin_specialties import SPECIALTIES
+        context["specialties"] = [
+            {"title": item["title"], "focus": item["focus"], "status": item["status"],
+             "url": "/" + key + "/"}
+            for key, item in SPECIALTIES.items() if item["kind"] == page
+        ]
+    return render(request, "brands/mojplaywin/page.html", context)
 def branded_game(request, slug):
     brand=brand_for_request(request)
     if not brand or brand.code!="mojplaywin" or slug!="first-realm": raise Http404
