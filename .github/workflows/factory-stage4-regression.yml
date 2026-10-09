@@ -20,7 +20,7 @@ jobs:
       SECRET_KEY: ci-only-factory-regression-key
       DEBUG: "True"
       ALLOWED_HOSTS: localhost,127.0.0.1
-      SAEIT_ENV: test
+      SAEIT_ENV: development
       FACTORY_ENVIRONMENT: development
     steps:
       - name: Checkout branch
