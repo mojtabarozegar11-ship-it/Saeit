@@ -1,0 +1,21 @@
+name: SEO Staging HTTP Smoke
+on:
+  push:
+    branches:
+      - factory/integration-control-bridge-20261005
+    paths:
+      - 'scripts/seo_http_smoke.py'
+      - '.github/workflows/seo-staging-http-smoke.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  staging-http:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check deployed staging SEO pages (read only)
+        run: python3 scripts/seo_http_smoke.py https://staging.zomorodmelal.ir
