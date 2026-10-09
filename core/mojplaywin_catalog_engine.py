@@ -25,5 +25,6 @@ def public_catalog(request):
               "price": str(p.price), "currency": p.currency,
               "url": "/store/product/%s/" % p.pk} for p in queryset[:limit]]
     response = JsonResponse({"products": items, "count": len(items), "limit": limit})
+    response["X-Content-Type-Options"] = "nosniff"
     response["Cache-Control"] = "public, max-age=60"
     return response
