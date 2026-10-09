@@ -1,0 +1,29 @@
+/* Isolated grouped navigation; existing logo and visual system are unchanged. */
+.mpw-nav-groups{align-items:center;gap:clamp(.45rem,1vw,1rem)}
+.mpw-nav-group{position:relative}
+.mpw-nav-group>summary{cursor:pointer;list-style:none;white-space:nowrap;padding:.6rem .15rem;color:var(--muted)}
+.mpw-nav-group>summary::-webkit-details-marker{display:none}
+.mpw-nav-group>summary:after{content:" ▾";font-size:.75em}
+.mpw-nav-group[open]>summary,.mpw-nav-group>summary:hover{color:#e7cf96}
+.mpw-dropdown{position:absolute;top:100%;left:0;min-width:225px;max-height:70vh;overflow:auto;display:flex;flex-direction:column;padding:.65rem;background:#0c0e12;border:1px solid var(--line);border-radius:12px;box-shadow:0 22px 50px #0009;z-index:12}
+.mpw-dropdown a{padding:.7rem .8rem;border-radius:7px;white-space:nowrap}
+.mpw-dropdown a:hover,.mpw-dropdown a:focus-visible{background:#ffffff12;color:var(--gold)}
+.mpw-dropdown a:after{display:none}
+.mpw-nav-group:focus-within>summary{outline:2px solid #e7cf96;outline-offset:2px}
+@media(max-width:1100px){.mpw-header{gap:.8rem;padding-inline:1.2rem}.mpw-nav-groups{gap:.55rem;font-size:.82rem}}
+@media(max-width:850px){.mpw-nav-groups{align-items:stretch;gap:.3rem;max-height:calc(100dvh - 70px);overflow-y:auto}.mpw-nav-group{width:100%}.mpw-nav-group>summary{padding:.8rem 0}.mpw-dropdown{position:static;min-width:0;max-height:none;box-shadow:none;background:transparent;border:0;border-left:1px solid var(--line);border-radius:0;margin-left:.5rem;padding:.2rem .8rem}.mpw-dropdown a{white-space:normal}.mpw-header .mpw-nav-groups{margin-left:0}}
+
+/* Compact navigation begins before desktop links collide with the brand. */
+@media(min-width:851px) and (max-width:1150px){.mpw-header{height:70px}.mpw-header .mpw-cta{display:none}.mpw-header .mpw-menu{display:block;margin-left:auto;background:none;border:1px solid var(--line);color:var(--ink);padding:.6rem;border-radius:8px}.mpw-header .mpw-nav-groups{display:none;position:absolute;top:70px;left:0;right:0;max-height:calc(100dvh - 70px);overflow-y:auto;background:#0b0d13;padding:1.5rem;flex-direction:column;align-items:stretch;font-size:1rem}.mpw-header .mpw-nav-groups.open{display:flex}.mpw-header .mpw-nav-group{width:100%}.mpw-header .mpw-dropdown{position:static;max-height:none;min-width:0;box-shadow:none;border:0;border-left:1px solid var(--line);background:transparent;margin-left:.5rem}.mpw-header .mpw-nav-group>summary{padding:.8rem 0}}
+
+
+/* Progressive navigation polish: scoped to MojPlayWin only. */
+.mpw-nav-group>summary{border-radius:8px;transition:color .2s ease,background-color .2s ease}
+.mpw-nav-group>summary:focus-visible{outline:2px solid var(--gold,#e7cf96);outline-offset:3px}
+.mpw-nav-group[open]>summary{color:var(--ink,#fff)}
+.mpw-dropdown{animation:mpw-menu-reveal .16s ease-out;overscroll-behavior:contain}
+.mpw-dropdown a{display:block;line-height:1.35}
+.mpw-dropdown a:focus-visible{outline:2px solid var(--gold,#e7cf96);outline-offset:-2px}
+@keyframes mpw-menu-reveal{from{opacity:0;transform:translateY(-5px)}to{opacity:1;transform:translateY(0)}}
+@media(min-width:1151px){.mpw-nav-group:last-child .mpw-dropdown{left:auto;right:0}}
+@media(prefers-reduced-motion:reduce){.mpw-dropdown{animation:none}.mpw-nav-group>summary{transition:none}}

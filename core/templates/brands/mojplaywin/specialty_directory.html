@@ -1,0 +1,7 @@
+{% extends 'brands/mojplaywin/base.html' %}
+{% block title %}{{ kind|title }} Directory | MojPlayWin{% endblock %}
+{% block meta_description %}Explore MojPlayWin's editorial {{ kind }} roadmap. Every specialty is a draft, not a live offer.{% endblock %}
+{% block content %}
+<style>.mpw-directory{max-width:1200px;margin:auto;padding:3rem 1.25rem}.mpw-directory-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:1rem}.mpw-directory-card{padding:1.4rem;border:1px solid #445064;border-radius:18px;background:#121a29}.mpw-directory-card a{color:#b7e2ff}.mpw-directory-card p{line-height:1.6}.mpw-directory-note{margin:1.5rem 0 2rem;color:#d1d7e5}</style>
+<section class="mpw-directory" aria-labelledby="mpw-directory-title"><p>MOJPLAYWIN / EDITORIAL ROADMAP</p><h1 id="mpw-directory-title">{{ kind|title }} specialties</h1><p class="mpw-directory-note">These categories are editorial drafts. No price, inventory, service availability, or delivery promise is implied.</p><div class="mpw-directory-grid">{% for entry in entries %}<article class="mpw-directory-card"><h2><a href="{{ entry.url }}">{{ entry.title }}</a></h2><p>{{ entry.focus }}</p><small>EDITORIAL DRAFT · NOT FOR SALE</small></article>{% endfor %}</div></section>
+{% endblock %}
