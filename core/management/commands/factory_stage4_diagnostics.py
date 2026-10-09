@@ -1,4 +1,5 @@
 """Read-only stage-4 research diagnostics; no network requests or state mutation."""
+import os
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 from django.db.models import Count
@@ -35,7 +36,7 @@ class Command(BaseCommand):
             f"REAL_SOURCE_EVIDENCE_ROWS="
             f"{Evidence.objects.filter(source__provenance__real_research=True).count()}"
         )
-        provider_path = str(getattr(settings, "FACTORY_RESEARCH_PROVIDER", "") or "").strip()
+        provider_path = str(getattr(settings, "FACTORY_RESEARCH_PROVIDER", "") or os.environ.get("FACTORY_RESEARCH_PROVIDER", "")).strip()
         self.stdout.write(f"RESEARCH_PROVIDER_CONFIGURED={int(bool(provider_path))}")
         self.stdout.write(
             f"RESEARCH_PROJECTS_WITH_REAL_SOURCE="
