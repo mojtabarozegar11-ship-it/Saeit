@@ -103,6 +103,12 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 APP_VERSION = env("APP_VERSION", default="0.1.0")
 PAYMENT_WEBHOOK_SECRET = env("PAYMENT_WEBHOOK_SECRET", default="")
 
+# Public receiving addresses only; these settings do not prove blockchain settlement.
+MOJPLAYWIN_TRON_RECEIVE_ADDRESS = env("MOJPLAYWIN_TRON_RECEIVE_ADDRESS", default="")
+MOJPLAYWIN_ETHEREUM_RECEIVE_ADDRESS = env("MOJPLAYWIN_ETHEREUM_RECEIVE_ADDRESS", default="")
+MOJPLAYWIN_CRYPTO_CHECKOUT_ENABLED = env.bool("MOJPLAYWIN_CRYPTO_CHECKOUT_ENABLED", default=False)
+
+
 # Company international trade mailbox. Credentials remain in environment/.env only.
 COMPANY_TRADE_EMAIL = env("COMPANY_TRADE_EMAIL", default="")
 TRADE_EMAIL_ENABLED = env.bool("TRADE_EMAIL_ENABLED", default=False)
