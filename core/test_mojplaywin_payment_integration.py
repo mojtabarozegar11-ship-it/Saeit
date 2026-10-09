@@ -58,3 +58,9 @@ class PaymentIntentIntegrationTests(TestCase):
         response = self.request(self.user, self.order.pk, "mpw-payment-key-4")
         self.assertEqual(response.status_code, 409)
         self.assertFalse(PaymentIntent.objects.exists())
+
+    def test_oversized_idempotency_key_is_rejected(self):
+        response = self.request(self.user, self.order.pk, 'x' * 129)
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(PaymentIntent.objects.exists())
+        self.assertFalse(ApprovalRequest.objects.filter(action_type='payment').exists())
