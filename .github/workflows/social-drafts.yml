@@ -15,6 +15,8 @@ jobs:
           python-version: '3.11'
       - name: Validate editorial and multi-tenant safety
         run: python -m unittest discover -s social_ops -p 'test_*.py'
+      - name: Evaluate research evidence before drafting
+        run: python social_ops/research.py
       - name: Generate independent brand drafts
         run: python social_ops/generate.py
       - name: Generate isolated editorial agent drafts
