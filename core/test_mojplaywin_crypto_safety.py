@@ -56,3 +56,18 @@ class CryptoPaymentSafetyTests(TestCase):
         intent.full_clean()
         self.assertEqual(intent.status, CryptoPaymentIntent.AWAITING_PAYMENT)
         self.assertIsNone(intent.verified_at)
+
+    def test_default_crypto_checkout_is_disabled(self):
+        from django.conf import settings
+        self.assertFalse(settings.MOJPLAYWIN_CRYPTO_CHECKOUT_ENABLED)
+
+    def test_crypto_record_cannot_be_created_without_an_order(self):
+        with self.assertRaises(ValidationError):
+            self.intent(order=None).full_clean()
+
+    def test_crypto_record_is_unique_per_order(self):
+        first = self.intent()
+        first.full_clean()
+        first.save()
+        with self.assertRaises(ValidationError):
+            self.intent(asset="ETH", network="ETHEREUM").full_clean()
