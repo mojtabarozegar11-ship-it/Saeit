@@ -21,5 +21,10 @@ class PublicCatalogEngineTests(SimpleTestCase):
             response = public_catalog(self.factory.get('/api/mojplaywin/catalog/', {'limit': value}))
             self.assertEqual(response.status_code, 400)
 
+    @patch('core.mojplaywin_catalog_engine.brand_for_request', return_value=SimpleNamespace(code='mojplaywin'))
+    def test_catalog_rejects_mutating_methods(self, _brand):
+        response = public_catalog(self.factory.post('/api/mojplaywin/catalog/'))
+        self.assertEqual(response.status_code, 405)
+
     def test_url_is_registered(self):
         self.assertEqual(reverse('mojplaywin-public-catalog'), '/api/mojplaywin/catalog/')
