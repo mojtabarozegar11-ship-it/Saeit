@@ -61,3 +61,10 @@ class MojPlayWinSurfaceContractTests(SimpleTestCase):
         self.assertLess(section.index('with transaction.atomic():'), section.index('PaymentIntent.objects.create('))
         self.assertLess(section.index('PaymentIntent.objects.create('), section.index('ApprovalRequest.objects.create('))
         self.assertIn('Owner approval required before initiating an external payment.', section)
+
+    def test_payment_webhook_rejects_non_object_json(self):
+        source = (Path(settings.BASE_DIR) / 'core' / 'api.py').read_text(encoding='utf-8')
+        section = source.split('class PaymentWebhookViewSet(', 1)[1].split('class AgentTaskViewSet(', 1)[0]
+        self.assertIn('if not isinstance(payload, dict):', section)
+        self.assertIn('Webhook payload must be a JSON object.', section)
+        self.assertIn('Webhook headers exceed allowed length.', section)
