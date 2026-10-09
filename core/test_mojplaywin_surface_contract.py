@@ -54,3 +54,10 @@ class MojPlayWinSurfaceContractTests(SimpleTestCase):
         section = source.split('class OrderViewSet(', 1)[1].split('class PaymentIntentViewSet(', 1)[0]
         self.assertIn('1 <= quantity <= 100', section)
         self.assertIn('quantity must be between 1 and 100.', section)
+
+    def test_payment_intent_and_owner_approval_share_transaction(self):
+        source = (Path(settings.BASE_DIR) / 'core' / 'api.py').read_text(encoding='utf-8')
+        section = source.split('class PaymentIntentViewSet(', 1)[1].split('class PaymentWebhookViewSet(', 1)[0]
+        self.assertLess(section.index('with transaction.atomic():'), section.index('PaymentIntent.objects.create('))
+        self.assertLess(section.index('PaymentIntent.objects.create('), section.index('ApprovalRequest.objects.create('))
+        self.assertIn('Owner approval required before initiating an external payment.', section)
