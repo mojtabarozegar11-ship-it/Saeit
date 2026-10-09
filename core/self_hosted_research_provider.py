@@ -5,6 +5,7 @@ read-only, bounded, provenance-preserving, and rejects unsafe/private URLs via
 the Factory runtime policy. It does not generate or invent economic ratings.
 """
 import hashlib
+import logging
 import html
 import re
 import time
@@ -16,6 +17,9 @@ from django.conf import settings
 from django.utils import timezone
 
 from .factory_agent_runtime import FactoryAgentBlocked, ResearchProvider
+
+
+logger = logging.getLogger(__name__)
 
 
 class _NoRedirect(HTTPRedirectHandler):
@@ -94,6 +98,13 @@ class SelfHostedStagingResearchProvider(ResearchProvider):
             raise FactoryAgentBlocked("Research requires safe URL enforcement")
         started = time.monotonic()
         records, seen_hosts = [], set()
+        failures = {}
+
+        def record_failure(stage, reason):
+            key = f'{stage}:{reason}'
+            failures[key] = failures.get(key, 0) + 1
+            logger.warning('staging_research_failure task_id=%s stage=%s reason=%s count=%d',
+                           getattr(task, 'pk', None), stage, reason, failures[key])
         request_seq = 0
         for query in plan["queries"][:3]:
             if not authorization_check(authorization, task, "product_research"):
@@ -108,17 +119,19 @@ class SelfHostedStagingResearchProvider(ResearchProvider):
                     safe_url_policy=safe_url_policy,
                 )
             except FactoryAgentBlocked as exc:
-                if getattr(exc, "policy_rejected", False):
+                record_failure('discovery', 'policy_rejected' if getattr(exc, 'policy_rejected', False) else 'blocked')
+                if getattr(exc, 'policy_rejected', False):
                     raise
                 continue
-            except RuntimeError:
-                # Retry another query only for recoverable network/source failures.
+            except RuntimeError as exc:
+                record_failure('discovery', 'http_' + str(exc.status_code) if getattr(exc, 'status_code', None) else 'network_or_http')
                 continue
             request_seq += 1
             for url in self._search_links(search_body):
                 if len(records) >= max_results:
                     return records
                 if not safe_url_policy(url):
+                    record_failure('source', 'unsafe_url')
                     continue
                 host = (urlsplit(url).hostname or "").lower().removeprefix("www.")
                 if not host or host in seen_hosts:
@@ -131,12 +144,16 @@ class SelfHostedStagingResearchProvider(ResearchProvider):
                         url, timeout=remaining, byte_limit=max_snapshot_bytes,
                         safe_url_policy=safe_url_policy,
                     )
-                except (FactoryAgentBlocked, RuntimeError):
+                except (FactoryAgentBlocked, RuntimeError) as exc:
+                    record_failure('fetch', 'policy_rejected' if getattr(exc, 'policy_rejected', False) else ('http_' + str(exc.status_code) if getattr(exc, 'status_code', None) else type(exc).__name__))
+                    if getattr(exc, 'policy_rejected', False):
+                        raise
                     continue
                 if final_url != url and not safe_url_policy(final_url):
                     continue
                 snapshot = self._text_snapshot(body, content_type)
                 if not snapshot:
+                    record_failure('extract', 'empty_content')
                     continue
                 encoded = snapshot.encode("utf-8")
                 if len(encoded) > max_snapshot_bytes:
@@ -164,5 +181,6 @@ class SelfHostedStagingResearchProvider(ResearchProvider):
                 })
                 seen_hosts.add(host)
         if not records:
-            raise FactoryAgentBlocked("NEEDS_MORE_EVIDENCE: no usable direct web source snapshots")
+            summary = ','.join(f'{key}={count}' for key, count in sorted(failures.items())) or 'no_discovered_urls'
+            raise FactoryAgentBlocked(f'NEEDS_MORE_EVIDENCE: no usable direct web source snapshots ({summary})')
         return records
