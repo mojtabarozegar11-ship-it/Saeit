@@ -52,3 +52,23 @@ jobs:
           result="$(ssh -F /dev/null -i ~/.ssh/vps_key -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=~/.ssh/known_hosts -o ConnectTimeout=10 -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" whoami)"
           test "$result" = githubops || { echo "::error::Unexpected remote identity"; exit 1; }
           echo "VPS SSH verified: githubops"
+
+      - name: Check VPS to hosting network only
+        shell: bash
+        env:
+          VPS_HOST: "178.239.147.150"
+          VPS_USER: "githubops"
+        run: |
+          set -euo pipefail
+          ssh -F /dev/null -i ~/.ssh/vps_key -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=~/.ssh/known_hosts -o ConnectTimeout=10 -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" 'bash -s' <<'REMOTE'
+          set -u
+          for host in staging.zomorodmelal.ir zomorodmelal.ir; do
+            echo "HOST=$host"
+            getent ahostsv4 "$host" | awk 'NR==1 {print "RESOLVED_IP="$1}' || true
+            if timeout 6 bash -c 'echo >/dev/tcp/"$1"/22' _ "$host" 2>/dev/null; then
+              echo "TCP22=reachable"
+            else
+              echo "TCP22=unreachable_or_filtered"
+            fi
+          done
+          REMOTE
