@@ -78,6 +78,29 @@ class MojPlayWinRevenueRoutingTests(TestCase):
         response=self.client.get("/services/",HTTP_HOST="zomorodmelal.ir")
         self.assertNotEqual(response.status_code,404)
 
+    def test_store_does_not_publish_unverified_or_other_brand_inventory(self):
+        from core.models import KnowledgeArticle, Product
+        unpublished = KnowledgeArticle.objects.create(
+            title="Draft listing", slug="mpw-draft-listing", content="Not released.", published=False
+        )
+        published = KnowledgeArticle.objects.create(
+            title="Other brand listing", slug="mpw-other-brand-listing",
+            content="Published elsewhere.", published=True
+        )
+        Product.objects.create(
+            title="Unreleased MojPlayWin Product", product_type="digital", active=True,
+            knowledge_article=unpublished, metadata={"brand_code": "mojplaywin"}
+        )
+        Product.objects.create(
+            title="Other Brand Product", product_type="digital", active=True,
+            knowledge_article=published, metadata={"brand_code": "other"}
+        )
+        response = self.client.get("/store/", HTTP_HOST="mojplaywin.com")
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Unreleased MojPlayWin Product")
+        self.assertNotContains(response, "Other Brand Product")
+        self.assertContains(response, "No public products yet.")
+
     def test_store_renders_product_title(self):
         from core.models import KnowledgeArticle, Product
         article = KnowledgeArticle.objects.create(title="Verified Tool documentation", slug="verified-tool-documentation", content="Published product information.", published=True)
