@@ -33,7 +33,11 @@ jobs:
           test -s ~/.ssh/known_hosts || { echo "::error::Could not obtain VPS RSA host key"; exit 1; }
           actual_fingerprint="$(ssh-keygen -lf ~/.ssh/known_hosts -E sha256 | awk 'NR==1 {print $2}')"
           expected_fingerprint="SHA256:AYdzF3K5uSwAXElE1w/dKoO4iT2BbMGWHbRA2Cu4rrs"
-          test "$actual_fingerprint" = "$expected_fingerprint" || { echo "::error::VPS host fingerprint mismatch"; exit 1; }
+          if [[ "$actual_fingerprint" != "$expected_fingerprint" ]]; then
+            echo "Observed VPS RSA fingerprint: $actual_fingerprint"
+            echo "::error::VPS host fingerprint mismatch; SSH authentication intentionally blocked"
+            exit 1
+          fi
           chmod 600 ~/.ssh/known_hosts
           ssh-keygen -y -f ~/.ssh/vps_key >/dev/null
           ssh-keygen -F "$VPS_HOST" -f ~/.ssh/known_hosts >/dev/null
