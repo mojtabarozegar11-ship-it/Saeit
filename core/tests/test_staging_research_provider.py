@@ -53,3 +53,25 @@ def test_search_retries_next_query_after_network_failure(monkeypatch):
     assert len(records) == 1
     assert len(seen) == 3
     assert records[0]['snapshot'] == 'Independent research evidence'
+
+
+@override_settings(SAEIT_ENV='staging')
+def test_search_policy_rejection_is_not_retried(monkeypatch):
+    provider = SelfHostedStagingResearchProvider()
+    seen = []
+
+    def reject_url(url, **kwargs):
+        seen.append(url)
+        error = FactoryAgentBlocked('Research URL rejected by safe URL policy')
+        error.policy_rejected = True
+        raise error
+
+    monkeypatch.setattr(provider, '_get', reject_url)
+    with pytest.raises(FactoryAgentBlocked, match='safe URL policy'):
+        provider.search(
+            goal='test', constraints=[], plan={'queries': ['first', 'second']},
+            task=None, authorization=None, authorization_check=lambda *args: True,
+            timeout_seconds=10, max_results=1, max_snapshot_bytes=10000,
+            max_redirects=0, safe_url_policy=lambda url: url.startswith('https://'),
+        )
+    assert len(seen) == 1
