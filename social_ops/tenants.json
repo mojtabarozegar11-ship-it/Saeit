@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "capacity": {
+    "max_tenants": 50,
+    "max_destinations_per_tenant": 20
+  },
+  "tenants": [
+    {
+      "id": "personal",
+      "name": "Mojtaba Rozegar Professional",
+      "destinations": [
+        {
+          "id": "ig_professional",
+          "network": "instagram",
+          "account_ref": "dr.mojtaba.rozegar",
+          "enabled": false,
+          "authorized": false
+        },
+        {
+          "id": "fb_professional",
+          "network": "facebook",
+          "account_ref": "",
+          "enabled": false,
+          "authorized": false
+        }
+      ]
+    },
+    {
+      "id": "company",
+      "name": "Zomorod Melal",
+      "destinations": []
+    },
+    {
+      "id": "vancouver_personal",
+      "name": "Personal Lifestyle",
+      "destinations": [
+        {
+          "id": "ig_lifestyle",
+          "network": "instagram",
+          "account_ref": "roozegar_mojtaba",
+          "enabled": false,
+          "authorized": false
+        }
+      ]
+    }
+  ]
+}
