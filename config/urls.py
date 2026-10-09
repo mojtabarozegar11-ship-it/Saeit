@@ -64,3 +64,10 @@ urlpatterns += [path("newsletter/", newsletter_home, name="newsletter"), path("n
 
 from core.blog_views import blog_home, blog_page
 urlpatterns += [path("blog/", blog_home, name="blog"), path("blog/<path:slug>/", blog_page, name="blog_page")]
+
+# MojPlayWin editorial specialties: domain-guarded views, drafts only.
+from core.mojplaywin_specialty_views import specialty_page
+urlpatterns += [
+    path("products/<slug:slug>/", lambda request, slug: specialty_page(request, "products", slug), name="mojplaywin_product_specialty"),
+    path("services/<slug:slug>/", lambda request, slug: specialty_page(request, "services", slug), name="mojplaywin_service_specialty"),
+]
