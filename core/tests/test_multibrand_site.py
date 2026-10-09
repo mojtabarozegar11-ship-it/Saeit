@@ -79,8 +79,9 @@ class MojPlayWinRevenueRoutingTests(TestCase):
         self.assertNotEqual(response.status_code,404)
 
     def test_store_renders_product_title(self):
-        from core.models import Product
-        product=Product.objects.create(title="Verified Tool",product_type="digital",price=10,currency="USD",active=True,metadata={"summary":"Useful verified tool."})
+        from core.models import KnowledgeArticle, Product
+        article = KnowledgeArticle.objects.create(title="Verified Tool documentation", slug="verified-tool-documentation", content="Published product information.", published=True)
+        product=Product.objects.create(title="Verified Tool",product_type="digital",price=10,currency="USD",active=True,knowledge_article=article,metadata={"summary":"Useful verified tool.", "brand_code": "mojplaywin"})
         response=self.client.get("/store/",HTTP_HOST="mojplaywin.com")
         self.assertContains(response,"Verified Tool")
         self.assertContains(response,"Useful verified tool.")
