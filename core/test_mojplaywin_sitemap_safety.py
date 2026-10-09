@@ -1,7 +1,8 @@
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from core.models import KnowledgeArticle, Product
 
 
+@override_settings(ALLOWED_HOSTS=["testserver", "mojplaywin.com", "zomorodmelal.ir"])
 class MojPlayWinSitemapSafetyTests(TestCase):
     def test_specialty_drafts_not_in_sitemap(self):
         response = self.client.get("/sitemap.xml", HTTP_HOST="mojplaywin.com")
