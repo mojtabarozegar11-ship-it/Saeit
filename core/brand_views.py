@@ -1,4 +1,5 @@
 from django.http import Http404
+from django.db.models import Q
 from django.shortcuts import render, get_object_or_404
 from .models import Product
 from .brand import brand_for_request
@@ -43,13 +44,13 @@ def branded_home(request):
 def branded_product(request, pk):
     brand=brand_for_request(request)
     if not brand or brand.code!="mojplaywin": raise Http404
-    product=get_object_or_404(Product, pk=pk, active=True, knowledge_article__published=True, metadata__brand_code="mojplaywin")
+    product=get_object_or_404(Product.objects.filter(Q(factory_managed=False) | Q(factory_release_gate__status="approved")), pk=pk, active=True, knowledge_article__published=True, metadata__brand_code="mojplaywin")
     return render(request,"brands/mojplaywin/product.html",{"brand":brand,"product":product})
 
 def branded_store(request):
     brand=brand_for_request(request)
     if not brand or brand.code!="mojplaywin": raise Http404
-    products=Product.objects.filter(active=True, knowledge_article__published=True, metadata__brand_code="mojplaywin").order_by("-id")
+    products=Product.objects.filter(active=True, knowledge_article__published=True, metadata__brand_code="mojplaywin").filter(Q(factory_managed=False) | Q(factory_release_gate__status="approved")).order_by("-id").distinct()
     return render(request,"brands/mojplaywin/store.html",{"brand":brand,"products":products})
 
 def branded_page(request, page):
