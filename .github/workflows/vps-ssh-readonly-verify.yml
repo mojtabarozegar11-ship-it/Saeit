@@ -103,3 +103,24 @@ jobs:
             echo 'VPS_TCP443=not_reachable_from_loopback'
           fi
           REMOTE
+
+      - name: Inspect VPS SSH and HTTPS listeners read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -F /dev/null -i ~/.ssh/vps_key -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=~/.ssh/known_hosts -o ConnectTimeout=10 -o IdentitiesOnly=yes githubops@178.239.147.150 'bash -s' <<'REMOTE'
+          set -u
+          echo "DIAGNOSTIC_START"
+          for cmd in ss curl ssh sshd; do command -v "$cmd" || true; done
+          if command -v ss >/dev/null; then
+            ss -H -ltn | awk '$4 ~ /:(22|443|8443|22222)$/ {print "LISTENER="$4}'
+          fi
+          for port in 22 443 8443; do
+            if timeout 3 bash -c 'echo >/dev/tcp/127.0.0.1/"$1"' _ "$port" 2>/dev/null; then
+              echo "LOCAL_PORT_${port}=reachable"
+            else
+              echo "LOCAL_PORT_${port}=unreachable"
+            fi
+          done
+          echo "DIAGNOSTIC_END"
+          REMOTE
