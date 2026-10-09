@@ -21,6 +21,7 @@ jobs:
       DEBUG: "True"
       ALLOWED_HOSTS: localhost,127.0.0.1
       SAEIT_ENV: test
+      FACTORY_ENVIRONMENT: staging
     steps:
       - name: Checkout branch
         uses: actions/checkout@v4
@@ -40,5 +41,7 @@ jobs:
       - name: Focused factory regressions
         run: python -m pytest -q core/test_factory_staging_tick_scheduler.py core/test_factory_stage4_diagnostics.py core/test_factory_stage4_provider_boundary.py
 
+      - name: Build static manifest for page rendering tests
+        run: python manage.py collectstatic --noinput
       - name: Full project regression suite
         run: python -m pytest -q
