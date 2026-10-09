@@ -7,3 +7,9 @@
 @media(max-width:900px){.mpw-catalog-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:620px){.mpw-catalog-grid{grid-template-columns:1fr}.mpw-catalog-head{display:block}.mpw-catalog-head>a{display:inline-block;margin-top:1rem}}
 @media(prefers-reduced-motion:reduce){.mpw-page-card{transition:none}.mpw-page-card:hover{transform:none}}
+
+/* Dedicated site-leadership profile, independent of unverified corporate claims. */
+.mpw-director{display:grid;grid-template-columns:minmax(180px,1fr) minmax(0,2.4fr);align-items:center;gap:clamp(1.5rem,5vw,4rem);margin:2rem clamp(1.2rem,7vw,8rem) 5rem;padding:clamp(1.5rem,4vw,3rem);border:1px solid rgba(231,207,150,.3);border-radius:24px;background:linear-gradient(120deg,rgba(231,207,150,.08),rgba(16,19,28,.96))}
+.mpw-director-monogram{display:grid;place-items:center;aspect-ratio:4/5;max-width:300px;width:100%;border-radius:18px;border:1px solid rgba(231,207,150,.45);background:radial-gradient(circle at 30% 20%,rgba(231,207,150,.22),transparent 60%),#10131c;color:#e7cf96;font:700 clamp(3rem,7vw,6rem)/1 Georgia,serif;letter-spacing:-.08em}
+.mpw-director-copy h2{font-size:clamp(2rem,4vw,4rem);line-height:1.1;margin:.6rem 0}.mpw-director-copy p{color:var(--muted);line-height:1.8;max-width:68ch}.mpw-director-copy .mpw-director-role{color:#e7cf96;font-weight:700;letter-spacing:.04em}.mpw-director-copy a{color:#e7cf96}
+@media(max-width:700px){.mpw-director{grid-template-columns:1fr}.mpw-director-monogram{max-width:200px;aspect-ratio:1}}
