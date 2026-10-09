@@ -110,7 +110,6 @@ jobs:
       - name: Mark replacement and restart Passenger
         if: inputs.mode == 'deploy'
         run: |
-          echo "FILE_REPLACED=true" >> "$GITHUB_ENV"
           ssh -F "$RUNNER_TEMP/moj-ssh/config" hosting "touch /home/zomorod2/mojplaywin.com/tmp/restart.txt"
       - name: Verify public navigation
         if: inputs.mode == 'deploy'
@@ -118,9 +117,14 @@ jobs:
         run: |
           set -euo pipefail
           for attempt in 1 2 3 4 5; do
-            if curl --fail --silent --show-error --max-time 15 https://mojplaywin.com/ | grep -q '/editorial/products/'; then
-              echo 'Public navigation verified'
-              exit 0
+            if curl --fail --silent --show-error --location --max-time 15 \
+              --output "$RUNNER_TEMP/moj-home.html" https://mojplaywin.com/; then
+              if grep -Fq '/editorial/products/' "$RUNNER_TEMP/moj-home.html" &&
+                 grep -Fq '/editorial/services/' "$RUNNER_TEMP/moj-home.html" &&
+                 grep -Fq '/about/founder/' "$RUNNER_TEMP/moj-home.html"; then
+                echo 'All three public navigation links verified'
+                exit 0
+              fi
             fi
             sleep 5
           done
