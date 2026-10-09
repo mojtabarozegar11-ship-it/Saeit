@@ -85,3 +85,21 @@ class PaymentIntentIntegrationTests(TestCase):
                 self.assertEqual(response.status_code, 400)
         self.assertFalse(PaymentIntent.objects.exists())
         self.assertFalse(ApprovalRequest.objects.filter(action_type='payment').exists())
+
+    def test_database_constraint_conflict_returns_409_without_partial_approval(self):
+        from unittest.mock import patch
+        from django.db import IntegrityError
+        with patch('core.api.PaymentIntent.objects.create', side_effect=IntegrityError('simulated unique conflict')):
+            response = self.request(self.user, self.order.pk, 'race-key')
+        self.assertEqual(response.status_code, 409)
+        self.assertFalse(PaymentIntent.objects.exists())
+        self.assertFalse(ApprovalRequest.objects.filter(action_type='payment').exists())
+
+    def test_payment_intent_creation_uses_row_lock_and_atomic_transaction(self):
+        from pathlib import Path
+        from django.conf import settings
+        source = (Path(settings.BASE_DIR) / 'core' / 'api.py').read_text(encoding='utf-8')
+        section = source.split('    def create_intent(self, request):', 1)[1].split('class PaymentWebhookViewSet(', 1)[0]
+        self.assertIn('with transaction.atomic():', section)
+        self.assertIn('Order.objects.select_for_update()', section)
+        self.assertIn('except IntegrityError:', section)
