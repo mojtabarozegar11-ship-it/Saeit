@@ -15,6 +15,7 @@ import time
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--output-dir", required=True, help="Private backup directory outside web root")
+    parser.add_argument("--web-root", action="append", required=True, help="Public document root; repeat for every served root")
     args = parser.parse_args()
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
     import django
@@ -32,8 +33,12 @@ def main():
     if not os.access(source, os.R_OK):
         raise SystemExit("BLOCKED: database file is not readable")
     output_dir = pathlib.Path(args.output_dir).expanduser().resolve()
-    if output_dir == source.parent or output_dir == source or str(output_dir).startswith(str(source.parent / "public_html")):
+    if output_dir == source.parent or output_dir == source:
         raise SystemExit("BLOCKED: choose a separate private backup directory")
+    for root_arg in args.web_root:
+        root = pathlib.Path(root_arg).expanduser().resolve()
+        if output_dir == root or root in output_dir.parents:
+            raise SystemExit("BLOCKED: backup directory is inside a served web root")
     if not output_dir.exists() or not output_dir.is_dir():
         raise SystemExit("BLOCKED: output directory must already exist")
     if output_dir.stat().st_mode & 0o077:
