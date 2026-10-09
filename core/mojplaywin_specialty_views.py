@@ -27,4 +27,5 @@ def specialty_page(request, kind, slug):
          "siblings": siblings, "specialty_key": key},
     )
     response["X-Robots-Tag"] = "noindex, follow, noarchive"
+    response["Cache-Control"] = "private, no-store"
     return response
