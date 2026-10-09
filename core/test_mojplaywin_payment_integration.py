@@ -79,7 +79,7 @@ class PaymentIntentIntegrationTests(TestCase):
         self.assertEqual(PaymentIntent.objects.count(), 1)
 
     def test_invalid_order_ids_return_bad_request_without_side_effects(self):
-        for invalid in ('abc', '-5', '1.2'):
+        for invalid in ('abc', '-5', '1.2', 1.2, True, '1e3', ' 1 ', '١'):
             with self.subTest(order_id=invalid):
                 response = self.request(self.user, invalid, 'invalid-order-id')
                 self.assertEqual(response.status_code, 400)
