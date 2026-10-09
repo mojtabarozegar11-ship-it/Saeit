@@ -6,6 +6,9 @@
 {% block twitter_title %}{{ specialty.title }} — MojPlayWin{% endblock %}
 {% block twitter_description %}{{ specialty.focus }}{% endblock %}
 {% block content %}
+<style>
+.mpw-specialty-steps{counter-reset:mpw-step;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1rem;margin:1.5rem 0 2.5rem}.mpw-specialty-step{position:relative;padding:1.4rem;border:1px solid color-mix(in srgb,var(--specialty-accent) 38%,transparent);border-radius:16px;background:rgba(255,255,255,.035)}.mpw-specialty-step:before{counter-increment:mpw-step;content:counter(mpw-step,decimal-leading-zero);display:block;color:var(--specialty-accent);font-weight:800;font-size:1.5rem;margin-bottom:.6rem}.mpw-specialty-step h3{margin:.2rem 0 .7rem}.mpw-specialty-step p{line-height:1.7}.mpw-specialty--services .mpw-specialty-steps{grid-template-columns:repeat(auto-fit,minmax(180px,1fr))}.mpw-specialty--services .mpw-specialty-step{border-top:4px solid var(--specialty-accent)}.mpw-specialty--products .mpw-specialty-step{border-left:4px solid var(--specialty-accent)}@media(max-width:600px){.mpw-specialty-steps{grid-template-columns:1fr}.mpw-specialty-step{padding:1rem}}
+</style>
 <article class="mpw-specialty mpw-specialty--{{ kind }}" style="--specialty-accent:{{ specialty.accent }}" data-specialty="{{ specialty_key }}" data-publication="{{ specialty.status }}">
 <section class="mpw-page-hero" style="border-top:3px solid var(--specialty-accent);background:linear-gradient(145deg,rgba(255,255,255,.035),transparent);">
   <nav aria-label="Breadcrumb"><a href="/">Home</a> / <a href="/{{ kind }}/">{{ kind|title }}</a> / {{ specialty.title }}</nav>
@@ -20,6 +23,7 @@
   <section class="mpw-page-card"><small>QUALITY &amp; TRUST</small><h2>Verification priorities</h2><p>{{ specialty.checks }}.</p><p>Claims require documented evidence and review before any public commercial launch.</p></section>
   <section class="mpw-page-card"><small>PROCESS</small><h2>Delivery lifecycle</h2><p>{{ specialty.workflow }}</p></section>
 </section>
+<section aria-labelledby="mpw-release-lifecycle"><div class="mpw-section-label">RELEASE READINESS / EVIDENCE</div><h2 id="mpw-release-lifecycle">How this specialty moves from concept to release</h2><div class="mpw-specialty-steps"><div class="mpw-specialty-step"><h3>Discover</h3><p>Define intended users, risks, and measurable requirements for {{ specialty.title }}.</p></div><div class="mpw-specialty-step"><h3>Build</h3><p>Prototype and document {{ specialty.focus|lower }}.</p></div><div class="mpw-specialty-step"><h3>Verify</h3><p>Independently assess {{ specialty.checks|lower }}.</p></div><div class="mpw-specialty-step"><h3>Approve</h3><p>Publish only when the evidence, ownership, and release authorization are confirmed.</p></div></div></section>
 <section class="mpw-page-cta">
   <small>AVAILABILITY / EDITORIAL DRAFT</small>
   <h2>Not currently available for checkout</h2>
