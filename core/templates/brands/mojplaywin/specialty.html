@@ -1,0 +1,36 @@
+{% extends 'brands/mojplaywin/base.html' %}
+{% block title %}{{ specialty.title }} | MojPlayWin {{ kind|title }}{% endblock %}
+{% block meta_description %}{{ specialty.focus }}. {{ specialty.checks }}. MojPlayWin editorial roadmap.{% endblock %}
+{% block og_title %}{{ specialty.title }} — MojPlayWin{% endblock %}
+{% block og_description %}{{ specialty.intro }}{% endblock %}
+{% block twitter_title %}{{ specialty.title }} — MojPlayWin{% endblock %}
+{% block twitter_description %}{{ specialty.focus }}{% endblock %}
+{% block content %}
+<article class="mpw-specialty mpw-specialty--{{ kind }}" data-specialty="{{ specialty_key }}" data-publication="{{ specialty.status }}">
+<section class="mpw-page-hero">
+  <nav aria-label="Breadcrumb"><a href="/">Home</a> / <a href="/{{ kind }}/">{{ kind|title }}</a> / {{ specialty.title }}</nav>
+  <span class="eyebrow">MOJPLAYWIN / {{ kind|upper }} / SPECIALIST EDITORIAL</span>
+  <h1>{{ specialty.title }}</h1>
+  <p>{{ specialty.intro }}</p>
+  <p><strong>Publication status:</strong> Editorial draft — not available to order.</p>
+</section>
+<div class="mpw-section-label">{{ specialty.title|upper }} / DISCIPLINE BRIEF</div>
+<section class="mpw-page-grid" aria-label="Specialty technical information">
+  <section class="mpw-page-card"><small>TECHNICAL SCOPE</small><h2>Engineering focus</h2><p>{{ specialty.focus }}.</p><p>Design choices are assessed against user needs, technical feasibility, and measurable release criteria.</p></section>
+  <section class="mpw-page-card"><small>QUALITY &amp; TRUST</small><h2>Verification priorities</h2><p>{{ specialty.checks }}.</p><p>Claims require documented evidence and review before any public commercial launch.</p></section>
+  <section class="mpw-page-card"><small>PROCESS</small><h2>Delivery lifecycle</h2><p>{{ specialty.workflow }}</p></section>
+</section>
+<section class="mpw-page-cta">
+  <small>AVAILABILITY / EDITORIAL DRAFT</small>
+  <h2>Not currently available for checkout</h2>
+  <p>No price, stock, delivery date, or operational capability is asserted for this specialty. Only verified listings appear in the live catalog.</p>
+  {% if kind == 'products' %}<a class="primary" href="/store/">Browse verified products →</a>{% else %}<a class="primary" href="/services/">Explore service overview →</a>{% endif %}
+  <a href="/contact/">Contact →</a>
+</section>
+<section class="mpw-page-grid" aria-label="Related {{ kind }}">
+  <div class="mpw-page-card"><h2>Other {{ kind }}</h2>
+    <nav aria-label="Related specialties">{% for related in siblings %}<a href="{{ related.url }}">{{ related.title }}</a>{% if not forloop.last %} · {% endif %}{% endfor %}</nav>
+  </div>
+</section>
+</article>
+{% endblock %}
