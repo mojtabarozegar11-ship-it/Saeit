@@ -6,11 +6,11 @@
 {% block twitter_title %}{{ specialty.title }} — MojPlayWin{% endblock %}
 {% block twitter_description %}{{ specialty.focus }}{% endblock %}
 {% block content %}
-<article class="mpw-specialty mpw-specialty--{{ kind }}" data-specialty="{{ specialty_key }}" data-publication="{{ specialty.status }}">
-<section class="mpw-page-hero">
+<article class="mpw-specialty mpw-specialty--{{ kind }}" style="--specialty-accent:{{ specialty.accent }}" data-specialty="{{ specialty_key }}" data-publication="{{ specialty.status }}">
+<section class="mpw-page-hero" style="border-top:3px solid var(--specialty-accent);background:linear-gradient(145deg,rgba(255,255,255,.035),transparent);">
   <nav aria-label="Breadcrumb"><a href="/">Home</a> / <a href="/{{ kind }}/">{{ kind|title }}</a> / {{ specialty.title }}</nav>
   <span class="eyebrow">MOJPLAYWIN / {{ kind|upper }} / SPECIALIST EDITORIAL</span>
-  <h1>{{ specialty.title }}</h1>
+  <h1 style="text-decoration:underline;text-decoration-color:var(--specialty-accent);text-underline-offset:.3em;">{{ specialty.title }}</h1>
   <p>{{ specialty.intro }}</p>
   <p><strong>Publication status:</strong> Editorial draft — not available to order.</p>
 </section>
