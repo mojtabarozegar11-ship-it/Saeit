@@ -68,3 +68,10 @@ class MojPlayWinSurfaceContractTests(SimpleTestCase):
         self.assertIn('if not isinstance(payload, dict):', section)
         self.assertIn('Webhook payload must be a JSON object.', section)
         self.assertIn('Webhook headers exceed allowed length.', section)
+
+    def test_failed_payment_webhook_requires_authorized_gateway_state(self):
+        source = (Path(settings.BASE_DIR) / 'core' / 'api.py').read_text(encoding='utf-8')
+        section = source.split('class PaymentWebhookViewSet(', 1)[1].split('class AgentTaskViewSet(', 1)[0]
+        failed_branch = section.split('elif event_type == "payment.failed":', 1)[1].split('else:', 1)[0]
+        self.assertIn('intent.status not in {"ready_for_gateway", "gateway_pending"}', failed_branch)
+        self.assertIn('Payment intent is not in a failable state.', failed_branch)
