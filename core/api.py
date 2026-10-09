@@ -452,7 +452,7 @@ class PaymentWebhookViewSet(viewsets.ViewSet):
                     event.save(update_fields=["status", "error", "processed_at", "updated_at"])
                     return Response({"detail": event.error}, status=status.HTTP_409_CONFLICT)
 
-                if intent.status not in {"ready_for_gateway", "gateway_pending"}:
+                if intent.status not in {"ready_for_gateway", "gateway_pending"} or intent.order.status != "pending":
                     event.status = "rejected"
                     event.error = "Payment intent is not in a settleable state."
                     event.processed_at = timezone.now()
@@ -480,7 +480,7 @@ class PaymentWebhookViewSet(viewsets.ViewSet):
                 )
                 event.status = "processed"
             elif event_type == "payment.failed":
-                if intent.status not in {"ready_for_gateway", "gateway_pending"}:
+                if intent.status not in {"ready_for_gateway", "gateway_pending"} or intent.order.status != "pending":
                     event.status = "rejected"
                     event.error = "Payment intent is not in a failable state."
                     event.processed_at = timezone.now()
