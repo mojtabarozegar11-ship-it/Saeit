@@ -34,6 +34,25 @@ class MojPlayWinFortySpecialtyTests(SimpleTestCase):
                 self.assertContains(response, "Not currently available for checkout")
                 self.assertContains(response, "/" + item["kind"] + "/")
 
+    def test_hubs_link_every_dedicated_page(self):
+        for kind in ("products", "services"):
+            with self.subTest(kind=kind):
+                response = self.client.get("/" + kind + "/", HTTP_HOST="mojplaywin.com")
+                self.assertEqual(response.status_code, 200)
+                for key, item in SPECIALTIES.items():
+                    if item["kind"] == kind:
+                        self.assertContains(response, "/" + key + "/")
+                        self.assertContains(response, item["title"])
+
+    def test_no_checkout_or_price_claim_on_drafts(self):
+        for key in SPECIALTIES:
+            with self.subTest(key=key):
+                response = self.client.get("/" + key + "/", HTTP_HOST="mojplaywin.com")
+                self.assertNotContains(response, 'name="quantity"')
+                self.assertNotContains(response, 'type="submit"')
+                self.assertNotContains(response, 'Add to cart')
+                self.assertContains(response, "Editorial draft")
+
     def test_other_brand_is_not_exposed(self):
         response = self.client.get("/products/software-products/", HTTP_HOST="zomorodmelal.ir")
         self.assertEqual(response.status_code, 404)
