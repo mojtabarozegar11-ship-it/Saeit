@@ -33,5 +33,9 @@ jobs:
         run: python -m pip install -r requirements.txt
       - name: Django checks
         run: python manage.py check
+      - name: Migration consistency
+        run: python manage.py makemigrations --check --dry-run
+      - name: Apply test database migrations
+        run: python manage.py migrate --noinput
       - name: Focused factory regressions
         run: python -m pytest -q core/test_factory_staging_tick_scheduler.py core/test_factory_stage4_diagnostics.py core/test_factory_stage4_provider_boundary.py
