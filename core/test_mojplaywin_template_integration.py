@@ -21,6 +21,8 @@ class MojPlayWinTemplateIntegrationTests(SimpleTestCase):
         self.assertIn('Mojtaba Roozegar', rendered)
         self.assertIn('Website Owner &amp; Director', rendered)
         self.assertIn('accountablePerson', rendered)
+        self.assertIn('Contact MojPlayWin →', rendered)
+        self.assertNotIn('About MojPlayWin →', rendered)
 
     def test_assets_referenced_by_base_exist(self):
         root = Path(settings.BASE_DIR) / 'core' / 'static' / 'site'
