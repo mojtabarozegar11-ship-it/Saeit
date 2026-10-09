@@ -1,5 +1,6 @@
 from django.test import SimpleTestCase, override_settings
 from django.urls import resolve
+from django.utils.html import escape
 
 from core.mojplaywin_specialties import SPECIALTIES
 from core.mojplaywin_specialty_views import specialty_page
@@ -27,7 +28,7 @@ class MojPlayWinFortySpecialtyTests(SimpleTestCase):
                 self.assertEqual(response.status_code, 200)
                 self.assertEqual(response["X-Robots-Tag"], "noindex, follow, noarchive")
                 self.assertEqual(response["Cache-Control"], "private, no-store")
-                self.assertContains(response, item["title"])
+                self.assertContains(response, escape(item["title"]))
                 self.assertContains(response, item["focus"])
                 self.assertContains(response, item["checks"])
                 self.assertContains(response, 'rel="canonical"')
@@ -42,7 +43,7 @@ class MojPlayWinFortySpecialtyTests(SimpleTestCase):
                 for key, item in SPECIALTIES.items():
                     if item["kind"] == kind:
                         self.assertContains(response, "/" + key + "/")
-                        self.assertContains(response, item["title"])
+                        self.assertContains(response, escape(item["title"]))
 
     def test_no_checkout_or_price_claim_on_drafts(self):
         for key in SPECIALTIES:
