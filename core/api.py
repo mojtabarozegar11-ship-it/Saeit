@@ -416,6 +416,8 @@ class PaymentWebhookViewSet(viewsets.ViewSet):
                 provider=provider, event_id=event_id
             ).first()
             if existing:
+                if existing.payload_hash != payload_hash:
+                    return Response({"detail": "Event ID was already used with a different payload."}, status=status.HTTP_409_CONFLICT)
                 return Response(
                     {"status": existing.status, "event_id": event_id},
                     status=status.HTTP_200_OK,
