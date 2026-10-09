@@ -441,7 +441,8 @@ class PaymentWebhookViewSet(viewsets.ViewSet):
             if event_type == "payment.succeeded":
                 amount = str(payload.get("amount", ""))
                 currency = str(payload.get("currency", "")).strip()
-                if amount != str(intent.amount) or currency != intent.currency:
+                if (amount != str(intent.amount) or currency != intent.currency
+                        or intent.amount != intent.order.total or intent.currency != intent.order.currency):
                     event.status = "rejected"
                     event.error = "Amount or currency mismatch."
                     event.processed_at = timezone.now()
