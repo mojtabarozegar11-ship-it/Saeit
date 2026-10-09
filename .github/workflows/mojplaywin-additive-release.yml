@@ -24,6 +24,9 @@ jobs:
           set -euo pipefail
           python -m compileall -q core/mojplaywin_specialties.py core/mojplaywin_specialty_views.py core/mojplaywin_about_views.py
           test -s core/templates/brands/mojplaywin/includes/mega_nav.html
+          grep -Fq '/editorial/products/' core/templates/brands/mojplaywin/includes/mega_nav.html
+          grep -Fq '/editorial/services/' core/templates/brands/mojplaywin/includes/mega_nav.html
+          grep -Fq '/about/founder/' core/templates/brands/mojplaywin/includes/mega_nav.html
           test -s core/templates/brands/mojplaywin/specialty.html
           test -s core/templates/brands/mojplaywin/specialty_directory.html
           test -s core/templates/brands/mojplaywin/about.html
@@ -96,10 +99,14 @@ jobs:
           SSH=(ssh -F "$RUNNER_TEMP/moj-ssh/config")
           SCP=(scp -F "$RUNNER_TEMP/moj-ssh/config")
           target=/home/zomorod2/Saeit-staging/core/templates/brands/mojplaywin/includes/mega_nav.html
-          "${SSH[@]}" hosting "test -f $target && test -d /home/zomorod2/mojplaywin.com/tmp"
-          "${SSH[@]}" hosting "umask 077; cp -p $target $target.before-additive-release"
-          "${SCP[@]}" core/templates/brands/mojplaywin/includes/mega_nav.html "hosting:$target"
-          "${SSH[@]}" hosting "test -s $target && touch /home/zomorod2/mojplaywin.com/tmp/restart.txt"
+          staging="${target}.incoming-${GITHUB_RUN_ID}"
+          backup="${target}.before-additive-release-${GITHUB_RUN_ID}"
+          echo "BACKUP_PATH=$backup" >> "$GITHUB_ENV"
+          echo "TARGET_PATH=$target" >> "$GITHUB_ENV"
+          "${SSH[@]}" hosting "test -f '$target' && test -d /home/zomorod2/mojplaywin.com/tmp"
+          "${SSH[@]}" hosting "umask 077; cp -p '$target' '$backup'"
+          "${SCP[@]}" core/templates/brands/mojplaywin/includes/mega_nav.html "hosting:$staging"
+          "${SSH[@]}" hosting "set -eu; test -s '$staging'; grep -Fq '/editorial/products/' '$staging'; grep -Fq '/editorial/services/' '$staging'; grep -Fq '/about/founder/' '$staging'; mv -f '$staging' '$target'; touch /home/zomorod2/mojplaywin.com/tmp/restart.txt"
       - name: Verify public navigation
         if: inputs.mode == 'deploy'
         shell: bash
@@ -115,12 +122,12 @@ jobs:
           echo 'Public navigation not verified; inspect live template routing before claiming success' >&2
           exit 1
       - name: Restore navigation backup if deployment verification failed
-        if: failure() && inputs.mode == 'deploy'
+        if: failure() && inputs.mode == 'deploy' && env.BACKUP_PATH != ''
         shell: bash
         run: |
           set -euo pipefail
-          if test -f "$RUNNER_TEMP/moj-ssh/config"; then
-            ssh -F "$RUNNER_TEMP/moj-ssh/config" hosting 'set -eu; f=/home/zomorod2/Saeit-staging/core/templates/brands/mojplaywin/includes/mega_nav.html; if test -s "$f.before-additive-release"; then cp -p "$f.before-additive-release" "$f"; touch /home/zomorod2/mojplaywin.com/tmp/restart.txt; echo ROLLBACK_COMPLETED; fi' || true
+          if test -f "$RUNNER_TEMP/moj-ssh/config" && test -n "${BACKUP_PATH:-}"; then
+            ssh -F "$RUNNER_TEMP/moj-ssh/config" hosting "set -eu; if test -s '$BACKUP_PATH'; then cp -p '$BACKUP_PATH' '$TARGET_PATH'; touch /home/zomorod2/mojplaywin.com/tmp/restart.txt; echo ROLLBACK_COMPLETED; fi" || true
           fi
       - name: Clean temporary SSH credentials
         if: always()
