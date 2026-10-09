@@ -16,11 +16,11 @@ jobs:
     steps:
       - name: Configure pinned SSH identities
         env:
-          VPS_HOST: ${{ secrets.SAEIT_VPS_SSH_HOST }}
-          VPS_USER: ${{ secrets.SAEIT_VPS_SSH_USER }}
-          VPS_PORT: ${{ secrets.SAEIT_VPS_SSH_PORT }}
-          VPS_KEY: ${{ secrets.SAEIT_VPS_SSH_PRIVATE_KEY }}
-          VPS_KNOWN: ${{ secrets.SAEIT_VPS_SSH_KNOWN_HOSTS }}
+          VPS_HOST: "178.239.147.150"
+          VPS_USER: "githubops"
+          VPS_PORT: "22"
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          VPS_KNOWN: "verify-pinned-rsa"
           HOST_HOST: ${{ secrets.SAEIT_HOST_SSH_HOST }}
           HOST_USER: ${{ secrets.SAEIT_HOST_SSH_USER }}
           HOST_PORT: ${{ secrets.SAEIT_HOST_SSH_PORT }}
@@ -28,7 +28,7 @@ jobs:
           HOST_KNOWN: ${{ secrets.SAEIT_HOST_SSH_KNOWN_HOSTS }}
         shell: python
         run: |
-          import os, pathlib, re, sys
+          import os, pathlib, re, sys, subprocess
           missing = [f"{prefix}_{field}" for prefix in ("VPS","HOST")
                      for field in ("HOST","USER","KEY","KNOWN")
                      if not os.environ.get(f"{prefix}_{field}")]
@@ -37,6 +37,14 @@ jobs:
               sys.exit(2)
           root = pathlib.Path(os.environ["RUNNER_TEMP"]) / "saeit-ssh"
           root.mkdir(mode=0o700)
+          scan = subprocess.run(["ssh-keyscan", "-T", "10", "-t", "rsa", os.environ["VPS_HOST"]], capture_output=True, text=True, timeout=15)
+          candidate = root / "vps.candidate"
+          candidate.write_text(scan.stdout)
+          fp = subprocess.run(["ssh-keygen", "-lf", str(candidate), "-E", "sha256"], capture_output=True, text=True, timeout=5)
+          fingerprints = [line.split()[1] for line in fp.stdout.splitlines() if len(line.split()) > 1]
+          if fp.returncode or not fingerprints or set(fingerprints) != {"SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"}:
+              sys.exit("VPS host fingerprint mismatch or unavailable")
+          os.environ["VPS_KNOWN"] = scan.stdout
           configs = []
           for prefix, alias in (("VPS","saeit-vps"), ("HOST","saeit-host")):
               host, user = (os.environ[f"{prefix}_{f}"] for f in ("HOST","USER"))
