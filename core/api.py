@@ -324,6 +324,8 @@ class PaymentIntentViewSet(OwnerScopedMixin, viewsets.ReadOnlyModelViewSet):
                 {"detail": "order_id and idempotency_key are required."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        if len(key) > 128:
+            return Response({"detail": "idempotency_key must be at most 128 characters."}, status=status.HTTP_400_BAD_REQUEST)
         order = Order.objects.filter(pk=order_id, customer=request.user).first()
         if order is None:
             return Response({"detail": "Order not found."}, status=status.HTTP_404_NOT_FOUND)
