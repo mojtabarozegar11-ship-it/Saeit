@@ -1,0 +1,71 @@
+name: Factory Staging Readonly Acceptance
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Inspect staging via verified VPS relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$(mktemp -d)"
+          trap 'rm -rf "$d"' EXIT
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          printf '%s\n' "$VPS_KEY" > "$d/vps"
+          printf '%s\n' "$HOST_KEY" > "$d/host"
+          ssh-keygen -y -P '' -f "$d/vps" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 2>/dev/null > "$d/vps_known"
+          test "$(ssh-keygen -lf "$d/vps_known" -E sha256 | awk 'NR==1{print $2}')" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -i "$d/vps" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/vps_known" githubops@178.239.147.150 'ssh-keyscan -T 10 -p 1396 -t ed25519 zohal.pws-dns.net 2>/dev/null' > "$d/host_known"
+          test "$(ssh-keygen -lf "$d/host_known" -E sha256 | awk 'NR==1{print $2}')" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          cat "$d/vps_known" "$d/host_known" > "$d/known"
+          cat > "$d/config" <<EOF
+          Host relay
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps
+            IdentitiesOnly yes
+            UserKnownHostsFile $d/known
+            StrictHostKeyChecking yes
+            BatchMode yes
+          Host staging-host
+            HostName zohal.pws-dns.net
+            Port 1396
+            User zomorod2
+            IdentityFile $d/host
+            IdentitiesOnly yes
+            UserKnownHostsFile $d/known
+            StrictHostKeyChecking yes
+            BatchMode yes
+            ProxyJump relay
+          EOF
+          chmod 600 "$d/config"
+          timeout 90s ssh -F "$d/config" staging-host 'bash -s' <<'REMOTE'
+          set -eu
+          cd /home/zomorod2/Saeit-staging
+          printf 'STAGING_DIRECTORY=present\n'
+          printf 'STAGING_GIT_HEAD='
+          (git rev-parse --short HEAD 2>/dev/null || printf 'unavailable\n')
+          printf 'STAGING_GIT_BRANCH='
+          (git branch --show-current 2>/dev/null || printf 'unavailable\n')
+          if [ -f manage.py ]; then echo 'DJANGO_MANAGE_PY=present'; else echo 'DJANGO_MANAGE_PY=missing'; fi
+          if [ -d var/factory ]; then echo 'FACTORY_VAR_DIRECTORY=present'; else echo 'FACTORY_VAR_DIRECTORY=missing'; fi
+          if command -v curl >/dev/null 2>&1; then
+            for host in www.fao.org www.wikipedia.org; do
+              code="$(curl -L -sS --max-redirs 3 --connect-timeout 6 --max-time 15 -o /dev/null -w '%{http_code}' "https://$host/" 2>/dev/null || true)"
+              echo "HTTPS_PROBE_$host=${code:-failed}"
+            done
+          else
+            echo 'CURL=unavailable'
+          fi
+          echo 'READONLY_ACCEPTANCE=completed'
+          REMOTE

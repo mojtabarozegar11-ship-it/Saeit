@@ -1,0 +1,59 @@
+name: Staging Stage 4 Network Diagnostics
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: staging
+    steps:
+      - name: Check staging SSH configuration
+        env:
+          SSH_HOST: ${{ secrets.STAGING_SSH_HOST }}
+          SSH_USER: ${{ secrets.STAGING_SSH_USER }}
+          SSH_KEY: ${{ secrets.STAGING_SSH_KEY }}
+          SSH_HOST_KEY: ${{ secrets.STAGING_SSH_HOST_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in SSH_HOST SSH_USER SSH_KEY SSH_HOST_KEY; do
+            if [[ -z "${!name}" ]]; then
+              echo "::error::Missing staging SSH secret: $name"
+              exit 1
+            fi
+          done
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/staging_key
+          chmod 600 ~/.ssh/staging_key
+          printf '%s\n' "$SSH_HOST_KEY" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+          echo "Staging SSH secrets configured"
+      - name: Run read-only network probes on staging
+        env:
+          SSH_HOST: ${{ secrets.STAGING_SSH_HOST }}
+          SSH_USER: ${{ secrets.STAGING_SSH_USER }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=10 \
+            -i ~/.ssh/staging_key "$SSH_USER@$SSH_HOST" 'bash -s' <<'REMOTE'
+          set -uo pipefail
+          echo "probe_environment=staging"
+          for url in https://search.brave.com/ https://www.wikipedia.org/ https://www.fao.org/; do
+            host="${url#https://}"
+            host="${host%%/*}"
+            echo "probe_host=$host"
+            if command -v curl >/dev/null 2>&1; then
+              curl --silent --show-error --location --max-redirs 0 \
+                --connect-timeout 5 --max-time 12 --output /dev/null \
+                --write-out 'http_code=%{http_code} remote_ip=%{remote_ip} ssl_verify=%{ssl_verify_result} total_seconds=%{time_total}\n' \
+                "$url" || echo "probe_failed=$host"
+            else
+              echo "curl_unavailable"
+            fi
+          done
+          echo "probe_finished"
+          REMOTE

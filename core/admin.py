@@ -1,12 +1,15 @@
 from django.contrib import admin
 from django.contrib.admin import ModelAdmin
+from django.db import transaction
 from django.http import HttpResponseRedirect
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
+from django.utils import timezone
 
 from .chat_runtime import MasterAgentChat
 from .models import (
     Agent,
+    BrandSite,
     AgentCapability,
     AgentTask,
     ApprovalRequest,
@@ -14,6 +17,7 @@ from .models import (
     ChatMessage,
     ChatSession,
     Evidence,
+    FactoryMarketEligibility,
     Finding,
     KnowledgeArticle,
     Order,
@@ -101,7 +105,49 @@ admin.site.register([
     KnowledgeArticle,
     Product,
     Order,
+    BrandSite,
 ])
+
+
+@admin.register(FactoryMarketEligibility)
+class FactoryMarketEligibilityAdmin(ModelAdmin):
+    list_display = ("market_code", "eligibility", "reviewed_by", "reviewed_at", "valid_until")
+    list_filter = ("eligibility",)
+    search_fields = ("market_code", "evidence_reference", "review_note")
+    readonly_fields = ("reviewed_by", "reviewed_at")
+
+    def has_add_permission(self, request):
+        return request.user.is_superuser
+
+    def has_change_permission(self, request, obj=None):
+        return request.user.is_superuser
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    @transaction.atomic
+    def save_model(self, request, obj, form, change):
+        previous = None
+        if change:
+            previous = FactoryMarketEligibility.objects.select_for_update().get(pk=obj.pk)
+        obj.reviewed_by = request.user
+        obj.reviewed_at = timezone.now()
+        obj.save()
+        AuditLog.objects.create(
+            actor_type="owner",
+            actor_id=str(request.user.pk),
+            action="factory_market_eligibility_reviewed",
+            target_type="FactoryMarketEligibility",
+            target_id=str(obj.pk),
+            before_state={"eligibility": previous.eligibility} if previous else {},
+            after_state={
+                "market_code": obj.market_code,
+                "eligibility": obj.eligibility,
+                "reviewed_at": obj.reviewed_at.isoformat(),
+                "valid_until": obj.valid_until.isoformat() if obj.valid_until else None,
+            },
+            trace_id=f"factory-market-review-{obj.market_code}-{obj.reviewed_at.timestamp()}",
+        )
 
 @admin.register(EducationTrack)
 class EducationTrackAdmin(ModelAdmin):

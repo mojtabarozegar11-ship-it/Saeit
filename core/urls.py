@@ -11,6 +11,7 @@ from .api import (
 from .views import HealthView
 from .weather_views import weather_api
 from .bridge_views import bridge_health, bridge_dispatch
+from .mojplaywin_catalog_engine import public_catalog
 
 router = DefaultRouter()
 router.register("projects", ResearchProjectViewSet, basename="research-project")
@@ -31,6 +32,7 @@ router.register("payment-webhooks", PaymentWebhookViewSet, basename="payment-web
 
 urlpatterns = [
     path("health/", HealthView.as_view(), name="health"),
+    path("mojplaywin/catalog/", public_catalog, name="mojplaywin-public-catalog"),
     path("weather/", weather_api, name="weather"),
     path("bridge/health/", bridge_health, name="bridge-health"),
     path("bridge/dispatch/", bridge_dispatch, name="bridge-dispatch"),
