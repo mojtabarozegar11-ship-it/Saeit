@@ -1,5 +1,5 @@
 from django.test import SimpleTestCase
-from django.urls import resolve, reverse
+from django.urls import resolve
 
 from core.mojplaywin_specialties import SPECIALTIES
 from core.mojplaywin_specialty_views import specialty_page
