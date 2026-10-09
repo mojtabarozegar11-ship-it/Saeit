@@ -1,5 +1,6 @@
 """Read-only public catalog engine. Never activates, sells or releases a factory product."""
 from django.http import JsonResponse, Http404
+from django.db.models import Q
 from django.views.decorators.http import require_GET
 from .brand import brand_for_request
 from .models import Product
@@ -16,7 +17,9 @@ def public_catalog(request):
         return JsonResponse({"error": "limit must be an integer"}, status=400)
     if not 1 <= limit <= 100:
         return JsonResponse({"error": "limit must be between 1 and 100"}, status=400)
-    queryset = Product.objects.filter(active=True, knowledge_article__published=True, metadata__brand_code="mojplaywin").order_by("-id")
+    queryset = Product.objects.filter(
+        active=True, knowledge_article__published=True, metadata__brand_code="mojplaywin"
+    ).filter(Q(factory_managed=False) | Q(factory_release_gate__status="approved")).order_by("-id").distinct()
     # No factory activation or release bypass: only already-public products are shown.
     items = [{"id": p.pk, "title": p.title, "type": p.product_type,
               "price": str(p.price), "currency": p.currency,
