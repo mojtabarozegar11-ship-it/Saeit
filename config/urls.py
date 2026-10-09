@@ -6,6 +6,7 @@ from django.views.generic import RedirectView
 from core.agricultural_seo_views import agricultural_seo_page
 from core.views import home, platform_page
 from core.brand_views import branded_home, branded_page, branded_game, branded_store, branded_product, branded_product
+from core.mojplaywin_section_views import section_page
 from core.brand import brand_for_request
 from core.commerce_views import store_home, auctions_home
 from core.seo_views import site_search
@@ -24,6 +25,12 @@ from core.knowledge_views import knowledge_article_detail, knowledge_book_detail
 urlpatterns = [
     path("", branded_home, name="home"),
     path("games/first-realm/", branded_game, {"slug": "first-realm"}, name="mpw_first_realm"),
+    path("markets/", section_page, {"section": "markets"}, name="mpw_markets"),
+    path("marketing/", section_page, {"section": "marketing"}, name="mpw_marketing"),
+    path("gold-jewelry/", section_page, {"section": "gold-jewelry"}, name="mpw_gold_jewelry"),
+    path("stocks/", section_page, {"section": "stocks"}, name="mpw_stocks"),
+    path("real-estate/", section_page, {"section": "real-estate"}, name="mpw_real_estate"),
+    path("encyclopedia/", section_page, {"section": "encyclopedia"}, name="mpw_encyclopedia"),
     path("products/", branded_page, {"page": "products"}, name="mpw_products"),
     path("games/", branded_page, {"page": "games"}, name="mpw_games"),
     path("worlds/", branded_page, {"page": "worlds"}, name="mpw_worlds"),
