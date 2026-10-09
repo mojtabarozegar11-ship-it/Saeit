@@ -16,7 +16,7 @@ def public_catalog(request):
         return JsonResponse({"error": "limit must be an integer"}, status=400)
     if not 1 <= limit <= 100:
         return JsonResponse({"error": "limit must be between 1 and 100"}, status=400)
-    queryset = Product.objects.filter(active=True).order_by("-id")
+    queryset = Product.objects.filter(active=True, knowledge_article__published=True, metadata__brand_code="mojplaywin").order_by("-id")
     # No factory activation or release bypass: only already-public products are shown.
     items = [{"id": p.pk, "title": p.title, "type": p.product_type,
               "price": str(p.price), "currency": p.currency,
