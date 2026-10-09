@@ -16,13 +16,12 @@ jobs:
       - name: Verify required configuration
         shell: bash
         env:
-          VPS_HOST: ${{ secrets.VPS_SSH_HOST }}
-          VPS_USER: ${{ secrets.VPS_SSH_USER }}
+          VPS_HOST: "178.239.147.150"
+          VPS_USER: "githubops"
           VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
-          VPS_KNOWN_HOSTS: ${{ secrets.VPS_SSH_KNOWN_HOSTS }}
         run: |
           set -euo pipefail
-          for v in VPS_HOST VPS_USER VPS_KEY VPS_KNOWN_HOSTS; do
+          for v in VPS_HOST VPS_USER VPS_KEY; do
             if [[ -z "${!v}" ]]; then echo "::error::Missing secret $v"; exit 1; fi
           done
           test "$VPS_USER" = githubops || { echo "::error::Unexpected SSH user"; exit 1; }
@@ -30,7 +29,11 @@ jobs:
           chmod 700 ~/.ssh
           printf '%s\n' "$VPS_KEY" > ~/.ssh/vps_key
           chmod 600 ~/.ssh/vps_key
-          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          ssh-keyscan -T 10 -t rsa "$VPS_HOST" 2>/dev/null > ~/.ssh/known_hosts
+          test -s ~/.ssh/known_hosts || { echo "::error::Could not obtain VPS RSA host key"; exit 1; }
+          actual_fingerprint="$(ssh-keygen -lf ~/.ssh/known_hosts -E sha256 | awk 'NR==1 {print $2}')"
+          expected_fingerprint="SHA256:AYdzF3K5uSwAXElE1w/dKoO4iT2BbMGWHbRA2Cu4rrs"
+          test "$actual_fingerprint" = "$expected_fingerprint" || { echo "::error::VPS host fingerprint mismatch"; exit 1; }
           chmod 600 ~/.ssh/known_hosts
           ssh-keygen -y -f ~/.ssh/vps_key >/dev/null
           ssh-keygen -F "$VPS_HOST" -f ~/.ssh/known_hosts >/dev/null
@@ -39,7 +42,7 @@ jobs:
         shell: bash
         env:
           VPS_HOST: ${{ secrets.VPS_SSH_HOST }}
-          VPS_USER: ${{ secrets.VPS_SSH_USER }}
+          VPS_USER: "githubops"
         run: |
           set -euo pipefail
           result="$(ssh -F /dev/null -i ~/.ssh/vps_key -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=~/.ssh/known_hosts -o ConnectTimeout=10 -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" whoami)"
