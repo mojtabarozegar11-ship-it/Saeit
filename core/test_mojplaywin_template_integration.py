@@ -18,6 +18,9 @@ class MojPlayWinTemplateIntegrationTests(SimpleTestCase):
         rendered = template.render({'page': page, 'page_key': 'about'})
         self.assertNotIn('data-mpw-catalog', rendered)
         self.assertIn('OUR ECOSYSTEM', rendered)
+        self.assertIn('Mojtaba Roozegar', rendered)
+        self.assertIn('Website Owner &amp; Director', rendered)
+        self.assertIn('accountablePerson', rendered)
 
     def test_assets_referenced_by_base_exist(self):
         root = Path(settings.BASE_DIR) / 'core' / 'static' / 'site'
