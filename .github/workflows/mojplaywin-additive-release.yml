@@ -31,36 +31,35 @@ jobs:
         if: inputs.mode == 'deploy'
         shell: bash
         env:
-          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          VPS_KEY: ${{ secrets.SAEIT_VPS_SSH_PRIVATE_KEY }}
+          VPS_KNOWN: ${{ secrets.SAEIT_VPS_SSH_KNOWN_HOSTS }}
           HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
           HOST_KNOWN: ${{ secrets.SAEIT_HOST_SSH_KNOWN_HOSTS }}
         run: |
           set -euo pipefail
           umask 077
-          test -n "$VPS_KEY" && test -n "$HOST_KEY" && test -n "$HOST_KNOWN"
+          test -n "$VPS_KEY" && test -n "$VPS_KNOWN" && test -n "$HOST_KEY" && test -n "$HOST_KNOWN"
           mkdir -p "$RUNNER_TEMP/moj-ssh"
           printf '%s\n' "$VPS_KEY" > "$RUNNER_TEMP/moj-ssh/vps.key"
           printf '%s\n' "$HOST_KEY" > "$RUNNER_TEMP/moj-ssh/host.key"
           printf '%s\n' "$HOST_KNOWN" > "$RUNNER_TEMP/moj-ssh/host.known"
+          printf '%s\n' "$VPS_KNOWN" > "$RUNNER_TEMP/moj-ssh/vps.known"
           sed -i 's/\r$//' "$RUNNER_TEMP/moj-ssh/"*.key
           chmod 600 "$RUNNER_TEMP/moj-ssh/"*
           ssh-keygen -y -P '' -f "$RUNNER_TEMP/moj-ssh/vps.key" >/dev/null
           ssh-keygen -y -P '' -f "$RUNNER_TEMP/moj-ssh/host.key" >/dev/null
-          # Never trust ssh-keyscan by itself: require a pinned fingerprint.
-          # A scan failure must stop the release rather than disabling host checks.
-          if ! ssh-keyscan -T 15 -t rsa 178.239.147.150 > "$RUNNER_TEMP/moj-ssh/vps.known"; then
-            echo "::error::VPS RSA keyscan failed; check network reachability and SSH port." >&2
-            exit 1
-          fi
+          # Use separately provisioned pinned known_hosts; never trust a live scan.
+          # Normalize CRLF without modifying key material.
+          sed -i 's/\r$//' "$RUNNER_TEMP/moj-ssh/"*.known
           fingerprint() {
             ssh-keygen -lf "$1" -E sha256 | awk '{print $2}' | sort -u
           }
           vps_fingerprint="$(fingerprint "$RUNNER_TEMP/moj-ssh/vps.known")"
           host_fingerprint="$(fingerprint "$RUNNER_TEMP/moj-ssh/host.known")"
-          echo "VPS RSA fingerprint: $vps_fingerprint"
+          echo "VPS pinned fingerprint: $vps_fingerprint"
           echo "Hosting pinned fingerprint: $host_fingerprint"
           if [[ "$vps_fingerprint" != 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs' ]]; then
-            echo "::error::VPS host fingerprint mismatch. Deployment blocked; verify out of band." >&2
+            echo "::error::VPS known_hosts fingerprint mismatch. Deployment blocked; verify out of band." >&2
             exit 1
           fi
           if [[ "$host_fingerprint" != 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04' ]]; then
