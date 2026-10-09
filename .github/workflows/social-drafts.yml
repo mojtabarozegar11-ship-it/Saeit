@@ -1,4 +1,4 @@
-name: Social Drafts (three-brand pilot)
+name: Social Drafts (multi-tenant foundation)
 on:
   workflow_dispatch:
   schedule:
@@ -13,14 +13,16 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Validate three-brand registry and draft safety
+      - name: Validate editorial and multi-tenant safety
         run: python -m unittest discover -s social_ops -p 'test_*.py'
       - name: Generate independent brand drafts
         run: python social_ops/generate.py
       - name: Generate isolated editorial agent drafts
         run: python social_ops/agent.py
+      - name: Build authorized dispatch plan (no posting)
+        run: python social_ops/multi_tenant.py
       - uses: actions/upload-artifact@v4
         with:
-          name: social-three-brand-drafts
+          name: social-multi-tenant-drafts
           path: social_ops/output/*.json
           retention-days: 7
