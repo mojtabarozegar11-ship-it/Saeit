@@ -339,22 +339,23 @@ class PaymentIntentViewSet(OwnerScopedMixin, viewsets.ReadOnlyModelViewSet):
                 status=status.HTTP_200_OK,
             )
 
-        intent = PaymentIntent.objects.create(
-            order=order,
-            amount=order.total,
-            currency=order.currency,
-            idempotency_key=key,
-            status="awaiting_approval",
-            provider="not_configured",
-        )
-        approval = ApprovalRequest.objects.create(
-            action_type="payment",
-            target_type="PaymentIntent",
-            target_id=str(intent.pk),
-            reason="Owner approval required before initiating an external payment.",
-            risk="critical",
-            requested_by=request.user,
-        )
+        with transaction.atomic():
+            intent = PaymentIntent.objects.create(
+                order=order,
+                amount=order.total,
+                currency=order.currency,
+                idempotency_key=key,
+                status="awaiting_approval",
+                provider="not_configured",
+            )
+            approval = ApprovalRequest.objects.create(
+                action_type="payment",
+                target_type="PaymentIntent",
+                target_id=str(intent.pk),
+                reason="Owner approval required before initiating an external payment.",
+                risk="critical",
+                requested_by=request.user,
+            )
         return Response(
             {
                 "status": "approval_required",
