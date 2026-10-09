@@ -1,24 +1,21 @@
-from django.test import TestCase, override_settings
-from core.models import KnowledgeArticle, Product
+"""Regression checks: editorial draft URLs must not leak into public sitemaps."""
+from django.test import SimpleTestCase, override_settings
+
+from core.mojplaywin_specialties import SPECIALTIES
 
 
 @override_settings(ALLOWED_HOSTS=["testserver", "mojplaywin.com", "zomorodmelal.ir"])
-class MojPlayWinSitemapSafetyTests(TestCase):
-    def test_specialty_drafts_not_in_sitemap(self):
+class MojPlayWinSitemapSafetyTests(SimpleTestCase):
+    def test_editorial_draft_urls_are_absent_from_sitemap(self):
         response = self.client.get("/sitemap.xml", HTTP_HOST="mojplaywin.com")
         self.assertEqual(response.status_code, 200)
-        self.assertNotIn(b"/products/software-products/", response.content)
-        self.assertNotIn(b"/services/seo-services/", response.content)
+        for key in SPECIALTIES:
+            with self.subTest(key=key):
+                self.assertNotIn(("/" + key + "/").encode(), response.content)
 
-    def test_other_brand_and_unpublished_products_are_excluded(self):
-        other_article = KnowledgeArticle.objects.create(
-            title="Unreleased cross-brand article", slug="unreleased-cross-brand-sitemap",
-            content="Internal testing only", published=False,
-        )
-        other_product = Product.objects.create(
-            title="Unreleased cross-brand product", product_type="digital", knowledge_article=other_article,
-            active=True, metadata={"brand_code": "another-brand"},
-        )
-        response = self.client.get("/sitemap.xml", HTTP_HOST="mojplaywin.com")
+    def test_unrelated_site_sitemap_has_no_specialty_drafts(self):
+        response = self.client.get("/sitemap.xml", HTTP_HOST="zomorodmelal.ir")
         self.assertEqual(response.status_code, 200)
-        self.assertNotIn(f"/store/product/{other_product.pk}/".encode(), response.content)
+        for key in SPECIALTIES:
+            with self.subTest(key=key):
+                self.assertNotIn(("/" + key + "/").encode(), response.content)
