@@ -21,4 +21,6 @@ def section_page(request, section):
             ('Resources', 'Learning', 'Discover educational resources as they become available.'),
         ],
     }
-    return render(request, 'brands/mojplaywin/page.html', {'brand': brand, 'page': page, 'page_key': section})
+    response = render(request, 'brands/mojplaywin/page.html', {'brand': brand, 'page': page, 'page_key': section})
+    response['X-Robots-Tag'] = 'noindex, follow'
+    return response
