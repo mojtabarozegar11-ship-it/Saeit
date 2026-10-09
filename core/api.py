@@ -336,48 +336,48 @@ class PaymentIntentViewSet(OwnerScopedMixin, viewsets.ReadOnlyModelViewSet):
             return Response({"detail": "order_id must be a positive integer."}, status=status.HTTP_400_BAD_REQUEST)
         try:
             with transaction.atomic():
-            order = Order.objects.select_for_update().filter(pk=order_id, customer=request.user).first()
-            if order is None:
-                return Response({"detail": "Order not found."}, status=status.HTTP_404_NOT_FOUND)
-            if order.status != "pending":
-                return Response({"detail": "Only pending orders can start payment."}, status=status.HTTP_409_CONFLICT)
+                order = Order.objects.select_for_update().filter(pk=order_id, customer=request.user).first()
+                if order is None:
+                    return Response({"detail": "Order not found."}, status=status.HTTP_404_NOT_FOUND)
+                if order.status != "pending":
+                    return Response({"detail": "Only pending orders can start payment."}, status=status.HTTP_409_CONFLICT)
     
-            existing = PaymentIntent.objects.filter(idempotency_key=key).first()
-            if existing:
-                if existing.order_id != order.pk:
-                    return Response({"detail": "Idempotency key is already bound to another order."}, status=status.HTTP_409_CONFLICT)
-                return Response(
-                    {"status": "existing", "payment_intent": self.get_serializer(existing).data},
-                    status=status.HTTP_200_OK,
+                existing = PaymentIntent.objects.filter(idempotency_key=key).first()
+                if existing:
+                    if existing.order_id != order.pk:
+                        return Response({"detail": "Idempotency key is already bound to another order."}, status=status.HTTP_409_CONFLICT)
+                    return Response(
+                        {"status": "existing", "payment_intent": self.get_serializer(existing).data},
+                        status=status.HTTP_200_OK,
+                    )
+    
+                if PaymentIntent.objects.filter(order=order).exists():
+                    return Response({"detail": "Order already has a payment intent; reuse its original idempotency key."}, status=status.HTTP_409_CONFLICT)
+    
+                intent = PaymentIntent.objects.create(
+                    order=order,
+                    amount=order.total,
+                    currency=order.currency,
+                    idempotency_key=key,
+                    status="awaiting_approval",
+                    provider="not_configured",
                 )
-    
-            if PaymentIntent.objects.filter(order=order).exists():
-                return Response({"detail": "Order already has a payment intent; reuse its original idempotency key."}, status=status.HTTP_409_CONFLICT)
-    
-            intent = PaymentIntent.objects.create(
-                order=order,
-                amount=order.total,
-                currency=order.currency,
-                idempotency_key=key,
-                status="awaiting_approval",
-                provider="not_configured",
-            )
-            approval = ApprovalRequest.objects.create(
-                action_type="payment",
-                target_type="PaymentIntent",
-                target_id=str(intent.pk),
-                reason="Owner approval required before initiating an external payment.",
-                risk="critical",
-                requested_by=request.user,
-            )
-            return Response(
-                {
-                    "status": "approval_required",
-                    "payment_intent": self.get_serializer(intent).data,
-                    "approval": ApprovalRequestSerializer(approval).data,
-                },
-                status=status.HTTP_202_ACCEPTED,
-            )
+                approval = ApprovalRequest.objects.create(
+                    action_type="payment",
+                    target_type="PaymentIntent",
+                    target_id=str(intent.pk),
+                    reason="Owner approval required before initiating an external payment.",
+                    risk="critical",
+                    requested_by=request.user,
+                )
+                return Response(
+                    {
+                        "status": "approval_required",
+                        "payment_intent": self.get_serializer(intent).data,
+                        "approval": ApprovalRequestSerializer(approval).data,
+                    },
+                    status=status.HTTP_202_ACCEPTED,
+                )
     
         except IntegrityError:
             return Response({"detail": "Payment intent conflict; retry with the original key."}, status=status.HTTP_409_CONFLICT)
