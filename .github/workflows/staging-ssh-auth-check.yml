@@ -1,0 +1,41 @@
+name: Staging SSH Authentication Check
+on:
+  workflow_dispatch:
+  push:
+    branches: [factory/integration-control-bridge-20261005]
+    paths: [.github/workflows/staging-ssh-auth-check.yml]
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Check staging SSH configuration and authentication without host changes
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+          HOST_KNOWN: ${{ secrets.SAEIT_VPS_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          test -n "$VPS_KEY" || { echo "VPS_KEY=missing"; exit 1; }
+          printf '%s\n' "$VPS_KEY" > ~/.ssh/vps_key
+          chmod 600 ~/.ssh/vps_key
+          ssh-keyscan -T 8 -t rsa 178.239.147.150 2>/dev/null > ~/.ssh/vps_hosts
+          test "$(ssh-keygen -lf ~/.ssh/vps_hosts -E sha256 | awk 'NR==1{print $2}')" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          chmod 600 ~/.ssh/vps_hosts
+          if [ -z "$HOST_KEY" ]; then echo "HOST_AUTH_KEY=missing"; else echo "HOST_AUTH_KEY=configured"; fi
+          if [ -z "$HOST_KNOWN" ]; then echo "HOST_KNOWN_HOSTS_SECRET=missing"; else echo "HOST_KNOWN_HOSTS_SECRET=configured"; fi
+          ssh -F /dev/null -i ~/.ssh/vps_key -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=~/.ssh/vps_hosts -o IdentitiesOnly=yes githubops@178.239.147.150 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          tmp="$(mktemp)"
+          trap 'rm -f "$tmp"' EXIT
+          ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net 2>/dev/null > "$tmp"
+          test -s "$tmp" || { echo "HOST_NETWORK=failed"; exit 1; }
+          test "$(ssh-keygen -lf "$tmp" -E sha256 | awk 'NR==1{print $2}')" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          echo "HOST_NETWORK_AND_KEY_CONSISTENCY=ok"
+          echo "HOST_AUTHENTICATION=not_attempted_without_approved_host_key_and_dedicated_host_credentials"
+          REMOTE
