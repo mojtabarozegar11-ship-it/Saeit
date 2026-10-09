@@ -142,3 +142,18 @@ class PaymentWebhookValidationTests(TestCase):
         self.assertEqual(order.status, 'cancelled')
         self.assertEqual(intent.status, 'gateway_pending')
         self.assertFalse(LedgerEntry.objects.exists())
+
+    def test_signed_invalid_intent_identifiers_are_rejected(self):
+        import json
+        for invalid in [True, False, None, -1, 0, 1.5, '1e2', ' 1', '١', [], {}]:
+            with self.subTest(invalid=invalid):
+                payload = json.dumps({'event_type': 'payment.failed', 'payment_intent_id': invalid}).encode()
+                self.assertEqual(self.request(payload, event_id='evt-invalid-id').status_code, 400)
+
+    def test_signed_oversized_event_fields_are_rejected(self):
+        import json
+        for field, value in [('event_type', 'x' * 51), ('provider_reference', 'x' * 201)]:
+            with self.subTest(field=field):
+                payload = {'event_type': 'payment.failed', 'payment_intent_id': 1}
+                payload[field] = value
+                self.assertEqual(self.request(json.dumps(payload).encode(), event_id='evt-long-field').status_code, 400)
