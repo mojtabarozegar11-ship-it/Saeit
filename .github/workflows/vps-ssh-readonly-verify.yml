@@ -124,3 +124,20 @@ jobs:
           done
           echo "DIAGNOSTIC_END"
           REMOTE
+
+      - name: Check reverse tunnel presence and sshd forwarding policy
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -F /dev/null -i ~/.ssh/vps_key -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=~/.ssh/known_hosts -o ConnectTimeout=10 -o IdentitiesOnly=yes githubops@178.239.147.150 'bash -s' <<'REMOTE'
+          set -u
+          if timeout 3 bash -c 'echo >/dev/tcp/127.0.0.1/22222' 2>/dev/null; then
+            echo "REVERSE_TUNNEL_22222=LISTENING"
+          else
+            echo "REVERSE_TUNNEL_22222=NOT_LISTENING"
+          fi
+          if command -v ss >/dev/null; then
+            ss -H -ltn | awk '$4 ~ /:(22222)$/ {print "TUNNEL_SOCKET="$4}'
+          fi
+          echo "VPS_USER=$(id -un)"
+          REMOTE
