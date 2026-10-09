@@ -69,6 +69,18 @@ jobs:
         run: |
           set -euo pipefail
           timeout 35s ssh -F "$RUNNER_TEMP/saeit-ssh/config" saeit-vps 'id -un; hostname; date -u +%FT%TZ'
+      - name: Diagnose hosting SSH banner from VPS
+        run: |
+          set -euo pipefail
+          timeout 30s ssh -F "$RUNNER_TEMP/saeit-ssh/config" saeit-vps 'bash -s' <<'REMOTE'
+          for port in 22 1396; do
+            if timeout 7 bash -c 'exec 3<>/dev/tcp/zohal.pws-dns.net/"$1"; IFS= read -r -t 5 banner <&3; case "$banner" in SSH-*) printf "PORT_%s_SSH_BANNER_OK\n" "$1";; *) exit 1;; esac' _ "$port" 2>/dev/null; then
+              :
+            else
+              printf 'PORT_%s_NO_SSH_BANNER\n' "$port"
+            fi
+          done
+          REMOTE
       - name: Authenticated host proof through VPS
         run: |
           set -euo pipefail
