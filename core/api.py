@@ -273,7 +273,9 @@ class OrderViewSet(OwnerScopedMixin, viewsets.ModelViewSet):
             return Response({"detail": "quantity must be between 1 and 100."}, status=status.HTTP_400_BAD_REQUEST)
         with transaction.atomic():
             try:
-                product = Product.objects.select_for_update().filter(
+                # Lock only the product row; the optional release gate uses an outer join.
+                # PostgreSQL rejects FOR UPDATE against the nullable join side.
+                product = Product.objects.select_for_update(of=("self",)).filter(
                     models.Q(factory_managed=False) | models.Q(factory_release_gate__status="approved"),
                     pk=product_id, active=True, knowledge_article__published=True,
                 ).get()
