@@ -72,3 +72,22 @@ jobs:
             fi
           done
           REMOTE
+
+      - name: Check common SSH ports on hosting IP from VPS
+        shell: bash
+        env:
+          VPS_HOST: "178.239.147.150"
+          VPS_USER: "githubops"
+        run: |
+          set -euo pipefail
+          ssh -F /dev/null -i ~/.ssh/vps_key -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=~/.ssh/known_hosts -o ConnectTimeout=10 -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" 'bash -s' <<'REMOTE'
+          set -u
+          target=178.239.147.125
+          for port in 22 2222 2022 2200; do
+            if timeout 4 bash -c 'echo >/dev/tcp/"$1"/"$2"' _ "$target" "$port" 2>/dev/null; then
+              echo "hosting_ssh_candidate_port_$port=reachable"
+            else
+              echo "hosting_ssh_candidate_port_$port=unreachable_or_filtered"
+            fi
+          done
+          REMOTE
