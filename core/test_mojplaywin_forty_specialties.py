@@ -42,6 +42,24 @@ class MojPlayWinFortySpecialtyTests(SimpleTestCase):
                 self.assertEqual(match.kwargs["slug"], key.split("/", 1)[1])
                 self.assertEqual(match.url_name, "mojplaywin_product_specialty" if item["kind"] == "products" else "mojplaywin_service_specialty")
 
+    def test_hubs_link_every_dedicated_page(self):
+        for kind in ("products", "services"):
+            with self.subTest(kind=kind):
+                response = self.client.get("/" + kind + "/", HTTP_HOST="mojplaywin.com")
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response["X-Robots-Tag"], "noindex, follow, noarchive")
+                for key, item in SPECIALTIES.items():
+                    if item["kind"] == kind:
+                        self.assertContains(response, "/" + key + "/")
+                        self.assertContains(response, escape(item["title"]))
+
+    def test_other_domain_preserves_legacy_services_page(self):
+        response = self.client.get("/services/", HTTP_HOST="zomorodmelal.ir")
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "MojPlayWin")
+        response = self.client.get("/products/", HTTP_HOST="zomorodmelal.ir")
+        self.assertEqual(response.status_code, 404)
+
     def test_no_checkout_or_price_claim_on_drafts(self):
         for key in SPECIALTIES:
             with self.subTest(key=key):
