@@ -1,5 +1,8 @@
 name: MojPlayWin additive release (manual)
 on:
+  push:
+    branches: [seo/mojplaywin-40-isolated-20261009]
+    paths: [.github/workflows/mojplaywin-additive-release.yml]
   workflow_dispatch:
     inputs:
       mode:
@@ -27,41 +30,62 @@ jobs:
           test -s core/templates/brands/mojplaywin/specialty.html
           test -s core/templates/brands/mojplaywin/specialty_directory.html
           test -s core/templates/brands/mojplaywin/about.html
-      - name: Configure verified SSH connection
+      - name: Configure pinned relay and host keys
         if: inputs.mode == 'deploy'
-        env:
-          SSH_HOST: ${{ secrets.SAEIT_HOST_SSH_HOST }}
-          SSH_USER: ${{ secrets.SAEIT_HOST_SSH_USER }}
-          SSH_PORT: ${{ secrets.SAEIT_HOST_SSH_PORT }}
-          SSH_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
-          SSH_KNOWN: ${{ secrets.SAEIT_HOST_SSH_KNOWN_HOSTS }}
         shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+          HOST_KNOWN: ${{ secrets.SAEIT_HOST_SSH_KNOWN_HOSTS }}
         run: |
           set -euo pipefail
           umask 077
-          test -n "$SSH_HOST" && test -n "$SSH_USER" && test -n "$SSH_KEY" && test -n "$SSH_KNOWN"
-          [[ "$SSH_HOST" =~ ^[a-zA-Z0-9.-]+$ ]]
-          [[ "$SSH_USER" =~ ^[a-zA-Z_][a-zA-Z0-9_.-]*$ ]]
-          SSH_PORT="${SSH_PORT:-22}"
-          [[ "$SSH_PORT" =~ ^[0-9]{1,5}$ ]] && ((SSH_PORT >= 1 && SSH_PORT <= 65535))
-          mkdir -p "$HOME/.ssh"
-          printf '%s\n' "$SSH_KEY" > "$HOME/.ssh/mojplaywin_key"
-          printf '%s\n' "$SSH_KNOWN" > "$HOME/.ssh/known_hosts"
-          chmod 600 "$HOME/.ssh/mojplaywin_key" "$HOME/.ssh/known_hosts"
-          printf 'TARGET_HOST=%s\nTARGET_USER=%s\nTARGET_PORT=%s\n' "$SSH_HOST" "$SSH_USER" "$SSH_PORT" >> "$GITHUB_ENV"
-      - name: Upload only approved additive files
+          test -n "$VPS_KEY" && test -n "$HOST_KEY" && test -n "$HOST_KNOWN"
+          mkdir -p "$RUNNER_TEMP/moj-ssh"
+          printf '%s\n' "$VPS_KEY" > "$RUNNER_TEMP/moj-ssh/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$RUNNER_TEMP/moj-ssh/host.key"
+          printf '%s\n' "$HOST_KNOWN" > "$RUNNER_TEMP/moj-ssh/host.known"
+          sed -i 's/\\r$//' "$RUNNER_TEMP/moj-ssh/"*.key
+          chmod 600 "$RUNNER_TEMP/moj-ssh/"*
+          ssh-keygen -y -P '' -f "$RUNNER_TEMP/moj-ssh/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$RUNNER_TEMP/moj-ssh/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$RUNNER_TEMP/moj-ssh/vps.known"
+          test "$(ssh-keygen -lf "$RUNNER_TEMP/moj-ssh/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          test "$(ssh-keygen -lf "$RUNNER_TEMP/moj-ssh/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          cat > "$RUNNER_TEMP/moj-ssh/config" <<EOF
+          Host relay
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $RUNNER_TEMP/moj-ssh/vps.key
+            UserKnownHostsFile $RUNNER_TEMP/moj-ssh/vps.known
+          Host hosting
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $RUNNER_TEMP/moj-ssh/host.key
+            UserKnownHostsFile $RUNNER_TEMP/moj-ssh/host.known
+            ProxyJump relay
+          Host *
+            StrictHostKeyChecking yes
+            BatchMode yes
+            IdentitiesOnly yes
+            ConnectTimeout 10
+            ForwardAgent no
+          EOF
+          chmod 600 "$RUNNER_TEMP/moj-ssh/config"
+      - name: Deploy one backed-up navigation file through VPS
         if: inputs.mode == 'deploy'
         shell: bash
         run: |
           set -euo pipefail
-          SSH=(ssh -i "$HOME/.ssh/mojplaywin_key" -p "$TARGET_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=10)
-          SCP=(scp -i "$HOME/.ssh/mojplaywin_key" -P "$TARGET_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes)
-          REMOTE="$TARGET_USER@$TARGET_HOST"
-          # No destructive sync, migrations, URL replacement, or factory changes.
-          "${SSH[@]}" "$REMOTE" 'test -d /home/zomorod2/Saeit-staging/core/templates/brands/mojplaywin/includes && test -f /home/zomorod2/Saeit-staging/core/mojplaywin_specialty_views.py'
-          "${SSH[@]}" "$REMOTE" 'set -eu; umask 077; cp /home/zomorod2/Saeit-staging/core/templates/brands/mojplaywin/includes/mega_nav.html /home/zomorod2/Saeit-staging/core/templates/brands/mojplaywin/includes/mega_nav.html.before-additive-release'
-          "${SCP[@]}" core/templates/brands/mojplaywin/includes/mega_nav.html "$REMOTE:/home/zomorod2/Saeit-staging/core/templates/brands/mojplaywin/includes/mega_nav.html"
-          "${SSH[@]}" "$REMOTE" 'test -s /home/zomorod2/Saeit-staging/core/templates/brands/mojplaywin/includes/mega_nav.html && touch /home/zomorod2/mojplaywin.com/tmp/restart.txt'
+          SSH=(ssh -F "$RUNNER_TEMP/moj-ssh/config")
+          SCP=(scp -F "$RUNNER_TEMP/moj-ssh/config")
+          target=/home/zomorod2/Saeit-staging/core/templates/brands/mojplaywin/includes/mega_nav.html
+          "${SSH[@]}" hosting "test -f $target && test -d /home/zomorod2/mojplaywin.com/tmp"
+          "${SSH[@]}" hosting "umask 077; cp -p $target $target.before-additive-release"
+          "${SCP[@]}" core/templates/brands/mojplaywin/includes/mega_nav.html "hosting:$target"
+          "${SSH[@]}" hosting "test -s $target && touch /home/zomorod2/mojplaywin.com/tmp/restart.txt"
       - name: Verify public navigation
         if: inputs.mode == 'deploy'
         shell: bash
@@ -76,3 +100,6 @@ jobs:
           done
           echo 'Public navigation not verified; inspect live template routing before claiming success' >&2
           exit 1
+      - name: Clean temporary SSH credentials
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/moj-ssh"
