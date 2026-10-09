@@ -88,55 +88,17 @@ jobs:
           done
           test -n "${task_python:-}" || { echo PYTHON_DJANGO=missing; exit 2; }
           "$task_python" - <<'PYDIAG'
-          import os, json, hashlib, re
           from pathlib import Path
-          for name in ["core/self_hosted_research_provider.py", "core/factory_agent_runtime.py"]:
-           p=Path(name)
+          import json,re
+          p=Path("var/factory/operations/factory_tick_boot.py")
+          for i,line in enumerate(p.read_text().splitlines(),1):
+           if any(k in line.lower() for k in ["secret","password","token","private_key"]): continue
+           print("BOOT",i,line)
+          for name in ["inventory_independent_evidence_20261008.json","independent_fetch_smoke_20261008.json"]:
+           p=Path("var/factory/research")/name
            if p.exists():
-            s=p.read_text()
-            print("CODE",name,hashlib.sha256(s.encode()).hexdigest())
-            for line in s.splitlines():
-             if any(t in line for t in ["search_endpoint =", "economic_factors\": {}", "max_results=6"]): print("CODE_SETTING",line.strip())
-          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
-          try:
-           import django
-           django.setup()
-           from django.conf import settings
-           print("ENV",settings.SAEIT_ENV)
-           if settings.SAEIT_ENV!="staging": raise RuntimeError("not_staging")
-           from django.db import connection
-           if connection.vendor=="postgresql":
-            with connection.cursor() as cur: cur.execute("SET default_transaction_read_only = on")
-           from core.models import FactoryRun, AgentTask, Evidence, ResearchSource
-           from django.db.models import Count
-           print("PROVIDER",getattr(settings,"FACTORY_RESEARCH_PROVIDER","unset"))
-           print("RUN_COUNTS",list(FactoryRun.objects.values("status").annotate(n=Count("id"))))
-           print("TASK_COUNTS",list(AgentTask.objects.filter(action_type="product_research").values("status").annotate(n=Count("id"))))
-           print("EVIDENCE_COUNT",Evidence.objects.count(),"SOURCE_COUNT",ResearchSource.objects.count())
-           for t in AgentTask.objects.filter(action_type="product_research").order_by("-pk")[:5]:
-            out=t.output_data or {}
-            print("TASK",t.pk,"RUN",t.factory_run_id,"PRODUCT",t.product_id,"STATUS",t.status,"ATTEMPTS",t.attempt_count,"OUTPUT_KEYS",list(out) if isinstance(out,dict) else [])
-            if isinstance(out,dict):
-             for k in ["error","reason","message","blocked_reason"]:
-              val=str(out.get(k,""))
-              val=re.sub(r"https?://\\S+","[url]",val)
-              val=re.sub(r"(?i)(password|token|secret|key)\\s*[=:]\\s*\\S+",r"\\1=[redacted]",val)
-              if val: print("TASK_REASON",k,val[:500])
-          except Exception as e:
-           print("DIAGNOSTIC_ERROR_TYPE",type(e).__name__)
-           print("DIAGNOSTIC_ERROR",re.sub(r"(?i)(://)[^ @]+@",r"\1[redacted]@",str(e))[:300])
-           print("ENV_FILE_EXISTS",Path(".env").exists())
-           print("STAGING_ENV_FILE_EXISTS",Path(".env.staging").exists())
-           print("FACTORY_FILES",[str(p) for p in Path("var/factory").glob("*")][:15])
-           import environ
-           from urllib.parse import urlsplit
-           env=environ.Env()
-           environ.Env.read_env(".env")
-           print("CONFIG_DEBUG",env.bool("DEBUG",default=False))
-           print("CONFIG_DATABASE_SCHEME",urlsplit(env("DATABASE_URL",default="")).scheme)
-           print("CONFIG_DATABASE_IDENTITIES_DISTINCT",env("STAGING_DB_IDENTITY",default="")==env("PRODUCTION_DB_IDENTITY",default=""))
-           for folder in ["var/factory/operations","var/factory/research"]:
-            print("REPORT_FILES",folder,[p.name for p in sorted(Path(folder).glob("*"),key=lambda p:p.stat().st_mtime,reverse=True)[:6]])
+            d=json.loads(p.read_text())
+            print("REPORT",name,re.sub(r"https?://\\S+","[url]",json.dumps(d,ensure_ascii=False))[:16000])
           PYDIAG
           echo READONLY_FACTORY_DIAGNOSTIC=completed
           REMOTE
