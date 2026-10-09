@@ -3,7 +3,7 @@ from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, BasePermission, IsAuthenticated, IsAuthenticatedOrReadOnly
 from rest_framework.response import Response
 from django.core.exceptions import ValidationError
-from django.db import models, transaction
+from django.db import IntegrityError, models, transaction
 from django.conf import settings
 from django.utils import timezone
 
@@ -334,25 +334,26 @@ class PaymentIntentViewSet(OwnerScopedMixin, viewsets.ReadOnlyModelViewSet):
             return Response({"detail": "order_id must be a positive integer."}, status=status.HTTP_400_BAD_REQUEST)
         if order_id < 1:
             return Response({"detail": "order_id must be a positive integer."}, status=status.HTTP_400_BAD_REQUEST)
-        order = Order.objects.filter(pk=order_id, customer=request.user).first()
-        if order is None:
-            return Response({"detail": "Order not found."}, status=status.HTTP_404_NOT_FOUND)
-        if order.status != "pending":
-            return Response({"detail": "Only pending orders can start payment."}, status=status.HTTP_409_CONFLICT)
-
-        existing = PaymentIntent.objects.filter(idempotency_key=key).first()
-        if existing:
-            if existing.order_id != order.pk:
-                return Response({"detail": "Idempotency key is already bound to another order."}, status=status.HTTP_409_CONFLICT)
-            return Response(
-                {"status": "existing", "payment_intent": self.get_serializer(existing).data},
-                status=status.HTTP_200_OK,
-            )
-
-        if PaymentIntent.objects.filter(order=order).exists():
-            return Response({"detail": "Order already has a payment intent; reuse its original idempotency key."}, status=status.HTTP_409_CONFLICT)
-
-        with transaction.atomic():
+        try:
+            with transaction.atomic():
+            order = Order.objects.select_for_update().filter(pk=order_id, customer=request.user).first()
+            if order is None:
+                return Response({"detail": "Order not found."}, status=status.HTTP_404_NOT_FOUND)
+            if order.status != "pending":
+                return Response({"detail": "Only pending orders can start payment."}, status=status.HTTP_409_CONFLICT)
+    
+            existing = PaymentIntent.objects.filter(idempotency_key=key).first()
+            if existing:
+                if existing.order_id != order.pk:
+                    return Response({"detail": "Idempotency key is already bound to another order."}, status=status.HTTP_409_CONFLICT)
+                return Response(
+                    {"status": "existing", "payment_intent": self.get_serializer(existing).data},
+                    status=status.HTTP_200_OK,
+                )
+    
+            if PaymentIntent.objects.filter(order=order).exists():
+                return Response({"detail": "Order already has a payment intent; reuse its original idempotency key."}, status=status.HTTP_409_CONFLICT)
+    
             intent = PaymentIntent.objects.create(
                 order=order,
                 amount=order.total,
@@ -369,15 +370,17 @@ class PaymentIntentViewSet(OwnerScopedMixin, viewsets.ReadOnlyModelViewSet):
                 risk="critical",
                 requested_by=request.user,
             )
-        return Response(
-            {
-                "status": "approval_required",
-                "payment_intent": self.get_serializer(intent).data,
-                "approval": ApprovalRequestSerializer(approval).data,
-            },
-            status=status.HTTP_202_ACCEPTED,
-        )
-
+            return Response(
+                {
+                    "status": "approval_required",
+                    "payment_intent": self.get_serializer(intent).data,
+                    "approval": ApprovalRequestSerializer(approval).data,
+                },
+                status=status.HTTP_202_ACCEPTED,
+            )
+    
+        except IntegrityError:
+            return Response({"detail": "Payment intent conflict; retry with the original key."}, status=status.HTTP_409_CONFLICT)
 
 class PaymentWebhookViewSet(viewsets.ViewSet):
     permission_classes = [AllowAny]
