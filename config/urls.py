@@ -7,6 +7,7 @@ from core.agricultural_seo_views import agricultural_seo_page
 from core.views import home, platform_page
 from core.brand_views import branded_home, branded_page, branded_game, branded_store, branded_product, branded_product
 from core.mojplaywin_section_views import section_page
+from core.mojplaywin_specialty_views import specialty_page
 from core.brand import brand_for_request
 from core.commerce_views import store_home, auctions_home
 from core.seo_views import site_search
@@ -31,6 +32,8 @@ urlpatterns = [
     path("stocks/", section_page, {"section": "stocks"}, name="mpw_stocks"),
     path("real-estate/", section_page, {"section": "real-estate"}, name="mpw_real_estate"),
     path("encyclopedia/", section_page, {"section": "encyclopedia"}, name="mpw_encyclopedia"),
+    path("products/<slug:slug>/", specialty_page, {"kind": "products"}, name="mpw_specialty_product"),
+    path("services/<slug:slug>/", specialty_page, {"kind": "services"}, name="mpw_specialty_service"),
     path("products/", branded_page, {"page": "products"}, name="mpw_products"),
     path("games/", branded_page, {"page": "games"}, name="mpw_games"),
     path("worlds/", branded_page, {"page": "worlds"}, name="mpw_worlds"),
