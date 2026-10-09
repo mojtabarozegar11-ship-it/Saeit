@@ -22,6 +22,8 @@ class AgriculturalSeoPageTests(SimpleTestCase):
             self.assertIn('name="description"', html)
             self.assertIn('lang="fa" dir="rtl"', html)
             self.assertGreaterEqual(len(sections), 3)
+            self.assertIn("راهنمای کاربردی", html)
+            self.assertIn("تصمیم‌گیری", html)
             titles.add(keyword)
         self.assertEqual(len(titles), len(PAGES))
 
