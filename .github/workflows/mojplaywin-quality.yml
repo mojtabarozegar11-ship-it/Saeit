@@ -14,7 +14,8 @@ jobs:
     env:
       DJANGO_SECRET_KEY: ci-only-not-for-production-0123456789
       SECRET_KEY: ci-only-not-for-production-0123456789
-      DJANGO_DEBUG: "false"
+      DEBUG: "false"
+      SAEIT_ENV: ci
       DATABASE_URL: sqlite:///test-mojplaywin.sqlite3
       ALLOWED_HOSTS: "testserver,mojplaywin.com"
     steps:
