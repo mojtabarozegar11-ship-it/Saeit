@@ -100,12 +100,17 @@ jobs:
           for table in ["core_factoryrun","core_agenttask","core_evidence","core_researchsource"]:
            try: print("ROW_COUNT",table,conn.execute("SELECT COUNT(*) FROM "+table).fetchone()[0])
            except sqlite3.Error as e: print("DB_ERROR",table,type(e).__name__)
-          for row in conn.execute("SELECT id,status,action_type,factory_run_id,output_data FROM core_agenttask WHERE action_type='product_research' ORDER BY id DESC LIMIT 8"):
-           data=json.loads(row[4] or "{}")
-           print("TASK",row[:4],"ERROR",str(data.get("error",""))[:600])
-          print("RUN_STATUS",conn.execute("SELECT status,count(*) FROM core_factoryrun GROUP BY status").fetchall())
-          for line in Path("var/factory/operations/stage1_10s_loop.sh").read_text().splitlines():
-           if not any(k in line.lower() for k in ["password","secret","token","key"]): print("LOOP",line)
+          for row in conn.execute("SELECT id,status,action_type,factory_run_id,product_id,output_data FROM core_agenttask WHERE factory_run_id IN (173,174) OR status='blocked' ORDER BY id DESC LIMIT 24"):
+           data=json.loads(row[5] or "{}")
+           print("TASK",row[:5],"RESULT",json.dumps({k:data[k] for k in ["factory_state","verified_effect","error","evidence_count"] if k in data})[:800])
+          for row in conn.execute("SELECT id,status,product_id FROM core_factoryrun WHERE status='blocked' OR id IN (173,174)"):
+           print("RUN",row)
+          for row in conn.execute("SELECT id,metadata FROM core_product WHERE id IN (SELECT product_id FROM core_factoryrun WHERE id IN (173,174))"):
+           m=json.loads(row[1] or "{}")
+           print("PRODUCT",row[0],"STATE",m.get("factory_state"),"VALIDATION",json.dumps(m.get("validation",{}))[:1800])
+          for row in conn.execute("SELECT id,output_data FROM core_agenttask WHERE factory_run_id IN (SELECT id FROM core_factoryrun WHERE status='blocked') ORDER BY id DESC LIMIT 5"):
+           print("BLOCKED_RUN_TASK",row[0],json.dumps(json.loads(row[1] or "{}"))[:1000])
+          
           PYDIAG
           echo READONLY_FACTORY_DIAGNOSTIC=completed
           REMOTE
