@@ -30,5 +30,7 @@ class Stage4DiagnosticsTests(TestCase):
         self.assertIn("STAGE4_PRODUCTS_WAITING=2", report)
         self.assertIn("STAGE4_CAPACITY_EXHAUSTED=1", report)
         self.assertIn("STAGE4_RETRY_PENDING=1", report)
+        self.assertIn("REAL_SOURCE_EVIDENCE_ROWS=0", report)
+        self.assertIn("RESEARCH_PROVIDER_CONFIGURED=", report)
         self.assertIn("STAGE4_DIAGNOSTIC_ONLY", report)
         self.assertEqual(Product.objects.count(), 2)
