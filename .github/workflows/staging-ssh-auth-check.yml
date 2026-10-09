@@ -83,20 +83,47 @@ jobs:
           timeout 90s ssh -F "$d/config" staging-host 'bash -s' <<'REMOTE'
           set -eu
           cd /home/zomorod2/Saeit-staging
-          printf 'STAGING_DIRECTORY=present\n'
-          printf 'STAGING_GIT_HEAD='
-          (git rev-parse --short HEAD 2>/dev/null || printf 'unavailable\n')
-          printf 'STAGING_GIT_BRANCH='
-          (git branch --show-current 2>/dev/null || printf 'unavailable\n')
-          if [ -f manage.py ]; then echo 'DJANGO_MANAGE_PY=present'; else echo 'DJANGO_MANAGE_PY=missing'; fi
-          if [ -d var/factory ]; then echo 'FACTORY_VAR_DIRECTORY=present'; else echo 'FACTORY_VAR_DIRECTORY=missing'; fi
-          if command -v curl >/dev/null 2>&1; then
-            for host in www.fao.org www.wikipedia.org; do
-              code="$(curl -L -sS --max-redirs 3 --connect-timeout 6 --max-time 15 -o /dev/null -w '%{http_code}' "https://$host/" 2>/dev/null || true)"
-              echo "HTTPS_PROBE_$host=${code:-failed}"
-            done
-          else
-            echo 'CURL=unavailable'
-          fi
-          echo 'READONLY_ACCEPTANCE=completed'
+          for candidate in /home/zomorod2/virtualenv/Saeit-staging/*/bin/python .venv/bin/python venv/bin/python python3; do
+            if "$candidate" -c 'import django' >/dev/null 2>&1; then task_python="$candidate"; break; fi
+          done
+          test -n "${task_python:-}" || { echo PYTHON_DJANGO=missing; exit 2; }
+          "$task_python" - <<'PYDIAG'
+          import os, json, hashlib, re
+          from pathlib import Path
+          for name in ["core/self_hosted_research_provider.py", "core/factory_agent_runtime.py"]:
+           p=Path(name)
+           if p.exists():
+            s=p.read_text()
+            print("CODE",name,hashlib.sha256(s.encode()).hexdigest())
+            for line in s.splitlines():
+             if any(t in line for t in ["search_endpoint =", "economic_factors\": {}", "max_results=6"]): print("CODE_SETTING",line.strip())
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          try:
+           import django
+           django.setup()
+           from django.conf import settings
+           print("ENV",settings.SAEIT_ENV)
+           if settings.SAEIT_ENV!="staging": raise RuntimeError("not_staging")
+           from django.db import connection
+           if connection.vendor=="postgresql":
+            with connection.cursor() as cur: cur.execute("SET default_transaction_read_only = on")
+           from core.models import FactoryRun, AgentTask, Evidence, ResearchSource
+           from django.db.models import Count
+           print("PROVIDER",getattr(settings,"FACTORY_RESEARCH_PROVIDER","unset"))
+           print("RUN_COUNTS",list(FactoryRun.objects.values("status").annotate(n=Count("id"))))
+           print("TASK_COUNTS",list(AgentTask.objects.filter(action_type="product_research").values("status").annotate(n=Count("id"))))
+           print("EVIDENCE_COUNT",Evidence.objects.count(),"SOURCE_COUNT",ResearchSource.objects.count())
+           for t in AgentTask.objects.filter(action_type="product_research").order_by("-pk")[:5]:
+            out=t.output_data or {}
+            print("TASK",t.pk,"RUN",t.factory_run_id,"PRODUCT",t.product_id,"STATUS",t.status,"ATTEMPTS",t.attempt_count,"OUTPUT_KEYS",list(out) if isinstance(out,dict) else [])
+            if isinstance(out,dict):
+             for k in ["error","reason","message","blocked_reason"]:
+              val=str(out.get(k,""))
+              val=re.sub(r"https?://\\S+","[url]",val)
+              val=re.sub(r"(?i)(password|token|secret|key)\\s*[=:]\\s*\\S+",r"\\1=[redacted]",val)
+              if val: print("TASK_REASON",k,val[:500])
+          except Exception as e:
+           print("DIAGNOSTIC_ERROR_TYPE",type(e).__name__)
+          PYDIAG
+          echo READONLY_FACTORY_DIAGNOSTIC=completed
           REMOTE
