@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "mission": "Evidence-based expertise for 30-50 independent businesses",
+  "domains": [
+    "brand_strategy",
+    "content_creation",
+    "marketing",
+    "business_management",
+    "platform_policies",
+    "analytics"
+  ],
+  "refresh": {
+    "trend_research_hours": 24,
+    "platform_policy_days": 7,
+    "evergreen_knowledge_days": 30
+  },
+  "source_priority": [
+    "official_platform_documentation",
+    "peer_reviewed_research",
+    "recognized_industry_research",
+    "first_party_performance_data"
+  ],
+  "rules": {
+    "require_source_url": true,
+    "require_observed_at": true,
+    "require_industry_relevance": true,
+    "verify_before_strategy_change": true,
+    "no_unverified_claims": true,
+    "tenant_isolation": true,
+    "never_auto_publish_unapproved": true,
+    "retain_previous_version": true
+  },
+  "status": "policy_only_not_live_research"
+}
