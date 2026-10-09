@@ -1,10 +1,11 @@
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, override_settings
 from django.urls import resolve
 
 from core.mojplaywin_specialties import SPECIALTIES
 from core.mojplaywin_specialty_views import specialty_page
 
 
+@override_settings(ALLOWED_HOSTS=["testserver", "mojplaywin.com", "zomorodmelal.ir"])
 class MojPlayWinFortySpecialtyTests(SimpleTestCase):
     def test_exact_25_product_and_15_service_pages(self):
         self.assertEqual(sum(x["kind"] == "products" for x in SPECIALTIES.values()), 25)
