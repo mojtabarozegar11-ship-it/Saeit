@@ -1,10 +1,12 @@
 """Exercise payment webhook authentication and malformed-payload behavior without gateway access."""
 import hashlib
 import hmac
+from decimal import Decimal
+from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from rest_framework.test import APIRequestFactory
 from core.api import PaymentWebhookViewSet
-from core.models import PaymentWebhookEvent
+from core.models import PaymentWebhookEvent, PaymentIntent, Order, LedgerEntry
 
 
 @override_settings(PAYMENT_WEBHOOK_SECRET="ci-test-only-webhook-secret")
@@ -59,3 +61,44 @@ class PaymentWebhookValidationTests(TestCase):
         changed = b'{"event_type":"payment.succeeded","payment_intent_id":1}'
         self.assertEqual(self.request(changed).status_code, 409)
         self.assertEqual(PaymentWebhookEvent.objects.count(), 1)
+
+    def test_signed_success_settles_order_and_creates_one_ledger_entry(self):
+        user = get_user_model().objects.create_user(username='mpw_webhook_customer', password='test-only')
+        order = Order.objects.create(customer=user, total=Decimal('12.50'), currency='USD', status='pending')
+        intent = PaymentIntent.objects.create(
+            order=order, amount=Decimal('12.50'), currency='USD',
+            idempotency_key='webhook-success-key', provider='test-gateway', status='gateway_pending',
+        )
+        import json
+        payload = json.dumps({
+            'event_type': 'payment.succeeded', 'payment_intent_id': intent.pk,
+            'amount': '12.50', 'currency': 'USD', 'provider_reference': 'gateway-ref-1',
+        }).encode()
+        first = self.request(payload)
+        self.assertEqual(first.status_code, 200)
+        intent.refresh_from_db()
+        order.refresh_from_db()
+        self.assertEqual(intent.status, 'succeeded')
+        self.assertEqual(order.status, 'paid')
+        self.assertEqual(LedgerEntry.objects.filter(payment_intent=intent, entry_type='payment').count(), 1)
+        self.assertEqual(self.request(payload).status_code, 200)
+        self.assertEqual(LedgerEntry.objects.filter(payment_intent=intent, entry_type='payment').count(), 1)
+
+    def test_failed_event_cannot_reverse_succeeded_payment(self):
+        user = get_user_model().objects.create_user(username='mpw_webhook_paid', password='test-only')
+        order = Order.objects.create(customer=user, total=Decimal('7.00'), currency='USD', status='paid')
+        intent = PaymentIntent.objects.create(
+            order=order, amount=Decimal('7.00'), currency='USD',
+            idempotency_key='webhook-paid-key', provider='test-gateway', status='succeeded',
+        )
+        import json
+        payload = json.dumps({
+            'event_type': 'payment.failed', 'payment_intent_id': intent.pk,
+        }).encode()
+        response = self.request(payload, event_id='evt-late-failure')
+        self.assertEqual(response.status_code, 409)
+        intent.refresh_from_db()
+        order.refresh_from_db()
+        self.assertEqual(intent.status, 'succeeded')
+        self.assertEqual(order.status, 'paid')
+        self.assertFalse(LedgerEntry.objects.exists())
