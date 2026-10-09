@@ -65,3 +65,23 @@ class FactoryStagingTickSchedulingTests(TestCase):
         AgentTask.objects.create(agent=self.agent, factory_run=busy,
                                  action_type="product_research", status="running")
         self.assertEqual(self.tick(), [ready.run_id])
+
+    def test_no_due_runs_do_not_claim_progress(self):
+        waiting = self.run_record("waiting-only")
+        AgentTask.objects.create(
+            agent=self.agent, factory_run=waiting, action_type="product_research",
+            status="queued", next_retry_at=timezone.now() + timedelta(hours=1),
+        )
+        self.assertEqual(self.tick(), [])
+
+    def test_running_task_with_due_queue_is_not_dispatched_twice(self):
+        busy = self.run_record("busy-with-queue")
+        ready = self.run_record("ready-with-busy")
+        AgentTask.objects.create(
+            agent=self.agent, factory_run=busy, action_type="product_research", status="running",
+        )
+        AgentTask.objects.create(
+            agent=self.agent, factory_run=busy, action_type="product_validation",
+            status="queued", next_retry_at=timezone.now() - timedelta(minutes=1),
+        )
+        self.assertEqual(self.tick(), [ready.run_id])
