@@ -33,4 +33,4 @@ jobs:
       - name: Migration drift check
         run: python manage.py makemigrations --check --dry-run
       - name: Template and catalog regression tests
-        run: python -m pytest core/test_mojplaywin_catalog_engine.py core/test_mojplaywin_surface_contract.py core/test_mojplaywin_template_integration.py core/test_mojplaywin_navigation.py -q
+        run: python -m pytest core/test_mojplaywin_catalog_engine.py core/test_mojplaywin_surface_contract.py core/test_mojplaywin_template_integration.py core/test_mojplaywin_navigation.py core/test_mojplaywin_order_integration.py -q
