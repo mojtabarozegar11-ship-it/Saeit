@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "scope": "end-to-end research, strategy, branding, content, publishing, analytics and continuous improvement",
+  "principles": [
+    "evidence_before_claim",
+    "source_traceability",
+    "recency_and_relevance",
+    "tenant_isolation",
+    "measurable_outcomes",
+    "reproducible_decisions",
+    "human_oversight_for_high_impact_actions"
+  ],
+  "stages": [
+    {
+      "id": "research",
+      "requirements": [
+        "source_url",
+        "publication_or_observation_date",
+        "source_type",
+        "relevance",
+        "limitations"
+      ]
+    },
+    {
+      "id": "strategy",
+      "requirements": [
+        "business_goal",
+        "audience_hypothesis",
+        "evidence_links",
+        "confidence",
+        "success_metric"
+      ]
+    },
+    {
+      "id": "creation",
+      "requirements": [
+        "originality",
+        "platform_fit",
+        "brand_fit",
+        "factual_claim_sources"
+      ]
+    },
+    {
+      "id": "quality",
+      "requirements": [
+        "fact_check",
+        "copyright_review",
+        "policy_check",
+        "accessibility",
+        "approval_state"
+      ]
+    },
+    {
+      "id": "distribution",
+      "requirements": [
+        "authorized_account",
+        "platform_policy",
+        "idempotency",
+        "schedule",
+        "audit_log"
+      ]
+    },
+    {
+      "id": "measurement",
+      "requirements": [
+        "observed_metrics",
+        "measurement_window",
+        "baseline",
+        "uncertainty"
+      ]
+    },
+    {
+      "id": "learning",
+      "requirements": [
+        "new_evidence",
+        "versioned_change",
+        "before_after_evaluation",
+        "rollback_plan"
+      ]
+    }
+  ],
+  "policy": {
+    "missing_evidence": "block_factual_claims",
+    "outdated_evidence": "reverify",
+    "unsupported_source": "exclude",
+    "publish_without_permission": "block",
+    "unverified_metrics": "never_invent"
+  },
+  "status": "architecture_standard_not_yet_enforced"
+}
