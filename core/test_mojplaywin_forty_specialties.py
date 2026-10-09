@@ -53,6 +53,17 @@ class MojPlayWinFortySpecialtyTests(SimpleTestCase):
                 self.assertNotContains(response, 'Add to cart')
                 self.assertContains(response, "Editorial draft")
 
+    def test_release_journey_is_rendered_on_every_page(self):
+        for key in SPECIALTIES:
+            with self.subTest(key=key):
+                response = self.client.get("/" + key + "/", HTTP_HOST="mojplaywin.com")
+                self.assertContains(response, "How this specialty moves from concept to release")
+                self.assertContains(response, "Discover")
+                self.assertContains(response, "Build")
+                self.assertContains(response, "Verify")
+                self.assertContains(response, "Approve")
+                self.assertContains(response, 'class="mpw-specialty-steps"')
+
     def test_other_brand_is_not_exposed(self):
         response = self.client.get("/products/software-products/", HTTP_HOST="zomorodmelal.ir")
         self.assertEqual(response.status_code, 404)
