@@ -103,9 +103,19 @@ jobs:
           old.write_text(candidate.read_text())
           old.chmod(0o600)
           print("HOST_ED25519_PIN_VERIFIED=" + expected)
-          keycheck = subprocess.run(["ssh-keygen", "-y", "-P", "", "-f", str(root/"saeit-host.key")], capture_output=True, timeout=5)
+          authfile = root / "saeit-host.key"
+          raw = authfile.read_text()
+          normalized = raw.replace("\r\n", "\n").strip()
+          if "\n" not in normalized and "\\n" in normalized:
+              normalized = normalized.replace("\\n", "\n")
+          authfile.write_text(normalized + "\n")
+          keycheck = subprocess.run(["ssh-keygen", "-y", "-P", "", "-f", str(authfile)], capture_output=True, timeout=5)
           if keycheck.returncode:
-              sys.exit("Hosting authentication key invalid or encrypted; no secret output")
+              err = keycheck.stderr.decode("utf-8", "replace").lower()
+              category = ("PUBLIC_KEY_IN_PRIVATE_KEY_SECRET" if normalized.startswith(("ssh-", "ecdsa-"))
+                          else "ENCRYPTED_PRIVATE_KEY" if "passphrase" in err
+                          else "INVALID_PRIVATE_KEY_FORMAT")
+              sys.exit("HOST_AUTH_KEY_ERROR=" + category)
           print("HOST_AUTH_KEY_FORMAT_VALID")
       - name: Authenticated host proof through VPS
         run: |
