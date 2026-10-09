@@ -1,6 +1,7 @@
 from django.core.management import call_command
 from django.core.management.base import BaseCommand
 from django.conf import settings
+from django.utils import timezone
 
 from core.models import FactoryRun
 from core.recovery_scheduler import RecoveryScheduler
@@ -23,12 +24,14 @@ class Command(BaseCommand):
 
         limit = max(1, min(int(options["max_runs"]), 10))
         runs = []
-        for run in FactoryRun.objects.filter(status="active").order_by("created_at", "pk"):
+        for run in FactoryRun.objects.filter(status="active").order_by("updated_at", "pk"):
             if isinstance(run.constraints, dict) and run.constraints.get("source_stage") == "opportunity_discovery":
                 runs.append(run)
                 if len(runs) >= limit:
                     break
         for run in runs:
+            # Rotate waiting runs so other products get scheduled.
+            FactoryRun.objects.filter(pk=run.pk, status="active").update(updated_at=timezone.now())
             call_command(
                 "autonomous_master_loop",
                 factory=True,
@@ -37,5 +40,5 @@ class Command(BaseCommand):
                 max_steps=max(1, min(int(options["max_steps"]), 30)),
             )
         self.stdout.write(self.style.SUCCESS(
-            f"FACTORY_TICK_OK recovered={summary.recovered} failed={summary.failed} advanced_runs={len(runs)}"
+            f"FACTORY_TICK_OK recovered={summary.recovered} failed={summary.failed} processed_runs={len(runs)}"
         ))
