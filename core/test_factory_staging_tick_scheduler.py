@@ -58,3 +58,10 @@ class FactoryStagingTickSchedulingTests(TestCase):
         second = self.run_record("second")
         self.assertEqual(self.tick(), [first.run_id])
         self.assertEqual(self.tick(), [second.run_id])
+
+    def test_running_task_is_skipped(self):
+        busy = self.run_record("busy")
+        ready = self.run_record("ready-after-busy")
+        AgentTask.objects.create(agent=self.agent, factory_run=busy,
+                                 action_type="product_research", status="running")
+        self.assertEqual(self.tick(), [ready.run_id])
