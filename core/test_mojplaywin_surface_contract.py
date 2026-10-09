@@ -41,3 +41,10 @@ class MojPlayWinSurfaceContractTests(SimpleTestCase):
         section = source.split('class OrderViewSet(', 1)[1].split('class PaymentIntentViewSet(', 1)[0]
         self.assertLess(section.index('with transaction.atomic():'), section.index('Product.objects.select_for_update()'))
         self.assertIn('factory_release_gate__status="approved"', section)
+
+    def test_about_identifies_site_director_without_claiming_incorporation(self):
+        source = (Path(settings.BASE_DIR) / 'core' / 'templates' / 'brands' / 'mojplaywin' / 'page.html').read_text(encoding='utf-8')
+        self.assertIn('Mojtaba Roozegar', source)
+        self.assertIn('Website Owner &amp; Director', source)
+        self.assertIn("{% if page_key == 'about' %}", source)
+        self.assertIn('does not imply a separately registered legal entity', source)
