@@ -341,6 +341,9 @@ class PaymentIntentViewSet(OwnerScopedMixin, viewsets.ReadOnlyModelViewSet):
                 status=status.HTTP_200_OK,
             )
 
+        if PaymentIntent.objects.filter(order=order).exists():
+            return Response({"detail": "Order already has a payment intent; reuse its original idempotency key."}, status=status.HTTP_409_CONFLICT)
+
         with transaction.atomic():
             intent = PaymentIntent.objects.create(
                 order=order,
