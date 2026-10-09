@@ -28,5 +28,7 @@ jobs:
         run: python -m pip install -r requirements.txt
       - name: Django checks
         run: python manage.py check
+      - name: Collect static assets for manifest-backed templates
+        run: python manage.py collectstatic --noinput
       - name: Template and catalog regression tests
         run: python -m pytest core/test_mojplaywin_catalog_engine.py core/test_mojplaywin_surface_contract.py core/test_mojplaywin_template_integration.py core/test_mojplaywin_navigation.py -q
