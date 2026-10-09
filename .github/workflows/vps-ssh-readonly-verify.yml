@@ -1,0 +1,42 @@
+name: VPS SSH Read-Only Verification
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Verify required configuration
+        shell: bash
+        env:
+          VPS_HOST: ${{ secrets.VPS_SSH_HOST }}
+          VPS_USER: ${{ secrets.VPS_SSH_USER }}
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          for v in VPS_HOST VPS_USER VPS_KEY VPS_KNOWN_HOSTS; do
+            if [[ -z "${!v}" ]]; then echo "::error::Missing secret $v"; exit 1; fi
+          done
+          test "$VPS_USER" = githubops || { echo "::error::Unexpected SSH user"; exit 1; }
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$VPS_KEY" > ~/.ssh/vps_key
+          chmod 600 ~/.ssh/vps_key
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+          ssh-keygen -y -f ~/.ssh/vps_key >/dev/null
+          ssh-keygen -F "$VPS_HOST" -f ~/.ssh/known_hosts >/dev/null
+          echo "SSH configuration parsed successfully"
+      - name: Run safe identity check
+        shell: bash
+        env:
+          VPS_HOST: ${{ secrets.VPS_SSH_HOST }}
+          VPS_USER: ${{ secrets.VPS_SSH_USER }}
+        run: |
+          set -euo pipefail
+          result="$(ssh -F /dev/null -i ~/.ssh/vps_key -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=~/.ssh/known_hosts -o ConnectTimeout=10 -o IdentitiesOnly=yes "$VPS_USER@$VPS_HOST" whoami)"
+          test "$result" = githubops || { echo "::error::Unexpected remote identity"; exit 1; }
+          echo "VPS SSH verified: githubops"
