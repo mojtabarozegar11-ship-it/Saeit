@@ -1,0 +1,78 @@
+name: MojPlayWin additive release (manual)
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Validate first; deploy only with explicit selection
+        required: true
+        type: choice
+        options: [validate, deploy]
+permissions:
+  contents: read
+concurrency:
+  group: mojplaywin-additive-release
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate release payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m compileall -q core/mojplaywin_specialties.py core/mojplaywin_specialty_views.py core/mojplaywin_about_views.py
+          test -s core/templates/brands/mojplaywin/includes/mega_nav.html
+          test -s core/templates/brands/mojplaywin/specialty.html
+          test -s core/templates/brands/mojplaywin/specialty_directory.html
+          test -s core/templates/brands/mojplaywin/about.html
+      - name: Configure verified SSH connection
+        if: inputs.mode == 'deploy'
+        env:
+          SSH_HOST: ${{ secrets.SAEIT_HOST_SSH_HOST }}
+          SSH_USER: ${{ secrets.SAEIT_HOST_SSH_USER }}
+          SSH_PORT: ${{ secrets.SAEIT_HOST_SSH_PORT }}
+          SSH_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+          SSH_KNOWN: ${{ secrets.SAEIT_HOST_SSH_KNOWN_HOSTS }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$SSH_HOST" && test -n "$SSH_USER" && test -n "$SSH_KEY" && test -n "$SSH_KNOWN"
+          [[ "$SSH_HOST" =~ ^[a-zA-Z0-9.-]+$ ]]
+          [[ "$SSH_USER" =~ ^[a-zA-Z_][a-zA-Z0-9_.-]*$ ]]
+          SSH_PORT="${SSH_PORT:-22}"
+          [[ "$SSH_PORT" =~ ^[0-9]{1,5}$ ]] && ((SSH_PORT >= 1 && SSH_PORT <= 65535))
+          mkdir -p "$HOME/.ssh"
+          printf '%s\n' "$SSH_KEY" > "$HOME/.ssh/mojplaywin_key"
+          printf '%s\n' "$SSH_KNOWN" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/mojplaywin_key" "$HOME/.ssh/known_hosts"
+          printf 'TARGET_HOST=%s\nTARGET_USER=%s\nTARGET_PORT=%s\n' "$SSH_HOST" "$SSH_USER" "$SSH_PORT" >> "$GITHUB_ENV"
+      - name: Upload only approved additive files
+        if: inputs.mode == 'deploy'
+        shell: bash
+        run: |
+          set -euo pipefail
+          SSH=(ssh -i "$HOME/.ssh/mojplaywin_key" -p "$TARGET_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=10)
+          SCP=(scp -i "$HOME/.ssh/mojplaywin_key" -P "$TARGET_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes)
+          REMOTE="$TARGET_USER@$TARGET_HOST"
+          # No destructive sync, migrations, URL replacement, or factory changes.
+          "${SSH[@]}" "$REMOTE" 'test -d /home/zomorod2/Saeit-staging/core/templates/brands/mojplaywin/includes && test -f /home/zomorod2/Saeit-staging/core/mojplaywin_specialty_views.py'
+          "${SSH[@]}" "$REMOTE" 'set -eu; umask 077; cp /home/zomorod2/Saeit-staging/core/templates/brands/mojplaywin/includes/mega_nav.html /home/zomorod2/Saeit-staging/core/templates/brands/mojplaywin/includes/mega_nav.html.before-additive-release'
+          "${SCP[@]}" core/templates/brands/mojplaywin/includes/mega_nav.html "$REMOTE:/home/zomorod2/Saeit-staging/core/templates/brands/mojplaywin/includes/mega_nav.html"
+          "${SSH[@]}" "$REMOTE" 'test -s /home/zomorod2/Saeit-staging/core/templates/brands/mojplaywin/includes/mega_nav.html && touch /home/zomorod2/mojplaywin.com/tmp/restart.txt'
+      - name: Verify public navigation
+        if: inputs.mode == 'deploy'
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4 5; do
+            if curl --fail --silent --show-error --max-time 15 https://mojplaywin.com/ | grep -q '/editorial/products/'; then
+              echo 'Public navigation verified'
+              exit 0
+            fi
+            sleep 5
+          done
+          echo 'Public navigation not verified; inspect live template routing before claiming success' >&2
+          exit 1
