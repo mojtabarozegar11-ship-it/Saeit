@@ -387,6 +387,8 @@ class PaymentWebhookViewSet(viewsets.ViewSet):
         event_id = str(request.headers.get("X-Payment-Event-Id", "")).strip()
         signature = str(request.headers.get("X-Payment-Signature", "")).strip()
         secret = str(getattr(settings, "PAYMENT_WEBHOOK_SECRET", "") or "")
+        if len(provider) > 50 or len(event_id) > 128 or len(signature) > 128:
+            return Response({"detail": "Webhook headers exceed allowed length."}, status=status.HTTP_400_BAD_REQUEST)
         if not provider or not event_id or not signature or not secret:
             return Response({"detail": "Webhook authentication headers are required."}, status=status.HTTP_401_UNAUTHORIZED)
 
@@ -400,6 +402,8 @@ class PaymentWebhookViewSet(viewsets.ViewSet):
         except (UnicodeDecodeError, json.JSONDecodeError):
             return Response({"detail": "Webhook payload must be valid JSON."}, status=status.HTTP_400_BAD_REQUEST)
 
+        if not isinstance(payload, dict):
+            return Response({"detail": "Webhook payload must be a JSON object."}, status=status.HTTP_400_BAD_REQUEST)
         event_type = str(payload.get("event_type", "")).strip()
         intent_id = payload.get("payment_intent_id")
         provider_reference = str(payload.get("provider_reference", "")).strip()
