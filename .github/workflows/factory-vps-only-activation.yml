@@ -61,4 +61,23 @@ jobs:
           kill -0 "$pid"
           echo FACTORY_VPS_PROCESS_ALIVE
           tail -n 12 "$base/operations/vps-only-factory.log" 2>/dev/null || true
+          cd "$app"
+          SAEIT_ENV=production MOJ_FACTORY_LOCAL_MODE=1 "$base/.venv/bin/python" - <<'PY'
+          import os
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          import django
+          django.setup()
+          from django.conf import settings
+          from core.factory_agent_runtime import configured_research_provider
+          print("VPS_ENV",settings.SAEIT_ENV)
+          print("VPS_PROVIDER_CONFIGURED",bool(getattr(settings,"FACTORY_RESEARCH_PROVIDER",None)))
+          try:
+              p=configured_research_provider()
+              print("VPS_PROVIDER_READY",type(p).__name__)
+          except Exception as exc:
+              print("VPS_PROVIDER_ERROR",type(exc).__name__)
+              print("VPS_PROVIDER_REASON",str(exc)[:160])
+              if exc.__cause__:
+                  print("VPS_PROVIDER_INNER_REASON",str(exc.__cause__)[:160])
+          PY
           REMOTE
