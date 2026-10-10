@@ -1,0 +1,50 @@
+name: Connect Desktop Commander to VPS
+on:
+  workflow_dispatch:
+  push:
+    branches: [chore/ssh-vps-relay-20261009]
+    paths: [.github/workflows/connect-desktop-commander-vps.yml]
+permissions:
+  contents: read
+jobs:
+  connect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Start Desktop Commander remote agent on VPS only
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/desktop-commander-vps"
+          mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o BatchMode=yes -i "$d/key" githubops@178.239.147.150 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          mkdir -p "$HOME/.local/state/desktop-commander"
+          state="$HOME/.local/state/desktop-commander"
+          if test -f "$state/remote.pid" && kill -0 "$(cat "$state/remote.pid")" 2>/dev/null; then
+            echo DESKTOP_COMMANDER_VPS_AGENT_ALREADY_RUNNING
+          else
+            command -v node >/dev/null || { echo VPS_NODE_MISSING; exit 2; }
+            command -v npx >/dev/null || { echo VPS_NPX_MISSING; exit 2; }
+            nohup npx --yes @wonderwhy-er/desktop-commander@latest remote </dev/null >"$state/remote.log" 2>&1 &
+            echo $! > "$state/remote.pid"
+            echo DESKTOP_COMMANDER_VPS_AGENT_START_REQUESTED
+          fi
+          sleep 12
+          if kill -0 "$(cat "$state/remote.pid")" 2>/dev/null; then
+            echo DESKTOP_COMMANDER_VPS_AGENT_PROCESS_ALIVE
+          else
+            echo DESKTOP_COMMANDER_VPS_AGENT_EXITED
+          fi
+          echo DESKTOP_COMMANDER_VPS_LOG_TAIL_BEGIN
+          tail -n 30 "$state/remote.log" 2>/dev/null | sed -E 's/(token|secret|password|authorization|api[_-]?key)([=: ]+)[^ ]+/\1\2[REDACTED]/Ig' || true
+          echo DESKTOP_COMMANDER_VPS_LOG_TAIL_END
+          REMOTE
