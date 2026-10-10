@@ -1,0 +1,85 @@
+name: VPS Factory Provider Recovery
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: vps-factory-provider-recovery
+  cancel-in-progress: false
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Backup and repair VPS research provider without touching cPanel
+        shell: bash
+        env:
+          SSH_HOST: ${{ secrets.SAEIT_VPS_SSH_HOST }}
+          SSH_USER: ${{ secrets.SAEIT_VPS_SSH_USER }}
+          SSH_PORT: ${{ secrets.SAEIT_VPS_SSH_PORT }}
+          SSH_KEY: ${{ secrets.SAEIT_VPS_SSH_PRIVATE_KEY }}
+          SSH_KNOWN: ${{ secrets.SAEIT_VPS_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$SSH_HOST" && test -n "$SSH_USER" && test -n "$SSH_KEY" && test -n "$SSH_KNOWN"
+          test "$SSH_HOST" = "178.239.147.150"
+          test "$SSH_USER" = "githubops"
+          mkdir -p "$RUNNER_TEMP/factory-ssh"
+          printf '%s\n' "$SSH_KEY" > "$RUNNER_TEMP/factory-ssh/key"
+          printf '%s\n' "$SSH_KNOWN" > "$RUNNER_TEMP/factory-ssh/known"
+          chmod 600 "$RUNNER_TEMP/factory-ssh/"*
+          ssh -i "$RUNNER_TEMP/factory-ssh/key" -p "${SSH_PORT:-22}" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$RUNNER_TEMP/factory-ssh/known" -o BatchMode=yes "$SSH_USER@$SSH_HOST" 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          base="$HOME/factory-runtime"
+          app="$base/django-app"
+          ops="$base/operations"
+          db="$base/private/factory-fresh-isolated.sqlite3"
+          test -f "$app/manage.py"
+          test -x "$base/.venv/bin/python"
+          test -f "$db"
+          test -f "$ops/vps-only-loop.sh"
+          mkdir -p "$ops/backups"
+          exec 9>"$ops/provider-recovery.lock"
+          flock -n 9 || { echo RECOVERY_ALREADY_RUNNING; exit 1; }
+          stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+          "$base/.venv/bin/python" - "$db" "$ops/backups/factory-$stamp.sqlite3" <<'PY'
+          import sqlite3,sys
+          source=sqlite3.connect("file:"+sys.argv[1]+"?mode=ro",uri=True)
+          target=sqlite3.connect(sys.argv[2])
+          source.backup(target)
+          assert target.execute("pragma integrity_check").fetchone()[0]=="ok"
+          target.close();source.close()
+          print("DATABASE_BACKUP_OK")
+          PY
+          cp -p "$ops/vps-only-loop.sh" "$ops/backups/vps-only-loop-$stamp.sh"
+          "$base/.venv/bin/python" - "$ops/vps-only-loop.sh" <<'PY'
+          import pathlib,sys
+          p=pathlib.Path(sys.argv[1])
+          s=p.read_text()
+          line='export FACTORY_RESEARCH_PROVIDER=core.self_hosted_research_provider.SelfHostedStagingResearchProvider'
+          if line not in s:
+              anchor='export SAEIT_ENV=production MOJ_FACTORY_LOCAL_MODE=1'
+              assert s.count(anchor)==1,"UNKNOWN_LOOP_LAYOUT"
+              s=s.replace(anchor,anchor+'\n'+line)
+              p.write_text(s)
+          print("PROVIDER_LOOP_CONFIG_OK")
+          PY
+          chmod 700 "$ops/vps-only-loop.sh"
+          cd "$app"
+          export SAEIT_ENV=production MOJ_FACTORY_LOCAL_MODE=1
+          export MOJ_PAID_LLM_ENABLED=0 MOJ_LLM_DAILY_CALL_BUDGET=0 MOJ_LLM_MAX_COST_MINOR=0
+          export FACTORY_RESEARCH_PROVIDER=core.self_hosted_research_provider.SelfHostedStagingResearchProvider
+          "$base/.venv/bin/python" - <<'PY'
+          import os,django
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          django.setup()
+          from core.factory_agent_runtime import configured_research_provider
+          p=configured_research_provider()
+          assert type(p).__name__=="SelfHostedStagingResearchProvider"
+          print("PROVIDER_CONFIG_OK")
+          PY
+          echo "PROVIDER_CONFIG_REPAIRED_RESTART_REQUIRED"
+          echo "Existing process intentionally not terminated until restart procedure is verified."
+          REMOTE
