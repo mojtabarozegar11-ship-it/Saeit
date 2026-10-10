@@ -1,5 +1,10 @@
 name: Factory VPS Consolidation Inventory
 on:
+  push:
+    branches:
+      - fix/factory-stage4-runtime-20261010
+    paths:
+      - .github/workflows/factory-vps-consolidation-inventory.yml
   workflow_dispatch:
 permissions:
   contents: read
