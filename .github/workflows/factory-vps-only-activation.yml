@@ -78,6 +78,7 @@ jobs:
           try:
               candidate=SelfHostedStagingResearchProvider()
               print("VPS_PROVIDER_DIRECT_READY",getattr(candidate,"real_research",False) is True and callable(getattr(candidate,"search",None)))
+              print("VPS_PROVIDER_CLASS",type(candidate).__name__)
           except Exception as exc:
               print("VPS_PROVIDER_DIRECT_ERROR",type(exc).__name__,str(exc)[:160])
           try:
