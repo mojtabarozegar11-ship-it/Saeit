@@ -23,7 +23,20 @@ section{margin-top:24px;scroll-margin-top:92px}
 </style></head><body>
 <header><div><h1>{% if lang == "fa" %}پنل جامع مدیریت پرسنل{% else %}Unified Staff Management{% endif %}</h1><p>{% if lang == "fa" %}کارخانه، دو سایت، مستر ایجنت و زیرساخت — فقط داده مستند{% else %}Factory, websites, master agent and infrastructure — evidence only{% endif %}</p></div>
 <div><nav aria-label="Language"><a href="?lang=fa" lang="fa">فارسی</a> | <a href="?lang=en" lang="en">English</a></nav><button id="refresh" type="button">{% if lang == "fa" %}به‌روزرسانی{% else %}Refresh{% endif %}</button><p id="updated" aria-live="polite">در انتظار دریافت اطلاعات</p></div></header>
-<nav class="staff-nav" aria-label="Staff navigation"><a href="#staff-summary">خلاصه / Summary</a><a href="#management-modules">بخش‌ها / Modules</a><a href="#staff-agents">ایجنت‌ها / Agents</a><a href="#staff-approvals">تأییدیه‌ها / Approvals</a><a href="#staff-content">محتوا / Content</a><a href="#staff-album">آلبوم / Album</a><a href="#staff-infrastructure">زیرساخت / Infrastructure</a></nav>
+<nav class="staff-nav" aria-label="Staff navigation"><a href="#staff-workflow">مراحل / Workflow</a><a href="#staff-settings">تنظیمات / Settings</a><a href="#staff-master-chats">چت مسترها / Chats</a><a href="#staff-summary">خلاصه / Summary</a><a href="#management-modules">بخش‌ها / Modules</a><a href="#staff-agents">ایجنت‌ها / Agents</a><a href="#staff-approvals">تأییدیه‌ها / Approvals</a><a href="#staff-content">محتوا / Content</a><a href="#staff-album">آلبوم / Album</a><a href="#staff-infrastructure">زیرساخت / Infrastructure</a></nav>
+<section id="staff-workflow" class="card" aria-label="Factory and agent workflow">
+<h2>{% if lang == 'fa' %}مراحل کارخانه و ایجنت‌ها{% else %}Factory and agent workflow{% endif %}</h2>
+<p>{% if lang == 'fa' %}درصد پیشرفت تنها پس از اتصال به رکوردهای معتبر تولید محاسبه می‌شود.{% else %}Progress is calculated only from verified production records.{% endif %}</p>
+<p id="workflow-evidence" role="status">در انتظار داده ثبت‌شده / Waiting for recorded tasks</p>
+<div id="workflow-records" class="grid" aria-live="polite"></div></section>
+<section id="staff-settings" class="card"><h2>{% if lang == 'fa' %}تنظیمات و اختیارات{% else %}Settings and permissions{% endif %}</h2>
+<p>{% if lang == 'fa' %}تغییر تنظیمات زیرساخت، هزینه، انتشار و اختیارات نیازمند مجوز مالک است.{% else %}Infrastructure, spending, publishing and permissions changes require owner approval.{% endif %}</p>
+<div class="grid">{% for item in agent_settings %}<article class="card"><strong>{{ item.label }}</strong><p><small>{% if lang == 'fa' %}تغییر مستقیم غیرفعال؛ اتصال و تأیید لازم است{% else %}Direct changes disabled pending integration and approval{% endif %}</small></p></article>{% endfor %}</div></section>
+<section id="staff-master-chats" class="card"><h2>{% if lang == 'fa' %}گفتگو با سه مستر ایجنت{% else %}Three master-agent conversations{% endif %}</h2>
+<div class="grid"><article class="card"><h3>{% if lang == 'fa' %}مستر ایجنت کارخانه{% else %}Factory master agent{% endif %}</h3><p role="status">{% if lang == 'fa' %}اتصال گفتگو برقرار نیست{% else %}Chat not connected{% endif %}</p></article>
+<article class="card"><h3>{% if lang == 'fa' %}مستر ایجنت زمرد ملل{% else %}Zomorod master agent{% endif %}</h3><p role="status">{% if lang == 'fa' %}اتصال گفتگو برقرار نیست{% else %}Chat not connected{% endif %}</p></article>
+<article class="card"><h3>{% if lang == 'fa' %}مستر ایجنت مج پلی وین{% else %}Mojplaywin master agent{% endif %}</h3><p role="status">{% if lang == 'fa' %}اتصال گفتگو برقرار نیست{% else %}Chat not connected{% endif %}</p></article></div></section>
+<section class="card" aria-label="Master agent connectivity"><h2>وضعیت اتصال مستر ایجنت‌ها / Master agent connectivity</h2><p id="master-chat-connectivity" role="status">سه اتصال نیازمند اعتبارسنجی سرور هستند؛ هیچ فرمانی از این بخش اجرا نمی‌شود. / Three server connections require verification; no commands are executed here.</p></section>
 <section id="staff-summary" class="grid" aria-label="Staff summary"><article class="card"><strong>{{ staff_counts.staff }}</strong><p>{% if lang == "fa" %}کاربر فعال پرسنل{% else %}Active staff accounts{% endif %}</p></article><article class="card"><strong>{{ staff_counts.agents }}</strong><p>{% if lang == "fa" %}ایجنت ثبت‌شده{% else %}Registered agents{% endif %}</p></article><article class="card"><strong>{{ staff_counts.approvals }}</strong><p>{% if lang == "fa" %}تأییدیه در انتظار{% else %}Pending approvals{% endif %}</p></article><article class="card"><strong>{{ staff_counts.drafts }}</strong><p>{% if lang == "fa" %}پیش‌نویس محتوا{% else %}Content drafts{% endif %}</p></article></section>
 <section id="management-modules" class="card"><h2>{% if lang == "fa" %}بخش‌های مدیریتی{% else %}Management Modules{% endif %}</h2><div class="grid">{% for item in modules %}<div class="card"><span class="label">{{ item.label }}</span><p><small>{% if item.connected %}{% if lang == "fa" %}بخش اولیه موجود است{% else %}Initial section available{% endif %}{% else %}{% if lang == "fa" %}در انتظار تکمیل{% else %}Integration pending{% endif %}{% endif %}</small></p></div>{% endfor %}</div></section><section class="card"><h2>{% if lang == "fa" %}آمار ثبت‌شده ایجنت‌ها{% else %}Recorded Agent Metrics{% endif %}</h2><p id="agent-metrics">{% if lang == "fa" %}در انتظار دریافت داده از پایگاه داده{% else %}Waiting for database snapshot{% endif %}</p><small>{% if lang == "fa" %}این اعداد نشان‌دهنده سلامت پردازش زنده نیستند.{% else %}These counts do not prove live worker health.{% endif %}</small></section>
 <div id="staff-agents">{% include "command_center/agent_directory.html" %}</div>
@@ -264,4 +277,23 @@ async function refreshStoryImages(storyId){
   area.append(textNode);
  }catch(e){area.textContent=isEn?"Image suggestions unavailable":"پیشنهاد تصاویر در دسترس نیست";}
 }
-</script></body></html>
+</script><script>
+(async function(){
+ const el=document.getElementById("workflow-evidence");
+ try{
+  const response=await fetch("{% url 'command_center_workflow_api' %}",{credentials:"same-origin",cache:"no-store"});
+  if(!response.ok)throw new Error("Unavailable");
+  const data=await response.json();
+  el.textContent="Recorded tasks (not live activity): "+data.total_tasks+" | Grouped: "+data.task_count_in_returned_groups+(data.complete?"":" (partial)")+" | Product progress: unknown";
+  const area=document.getElementById("workflow-records");area.replaceChildren();
+  for(const item of data.stages){
+    const card=document.createElement("article"),heading=document.createElement("strong"),info=document.createElement("p");
+    card.className="card";heading.textContent=item.action_type||"Unspecified task";
+    info.textContent="Status: "+item.status+" | Recorded: "+item.count;
+    card.append(heading,info);area.append(card);
+  }
+  if(!data.stages.length){area.textContent="No recorded tasks / وظیفه ثبت‌شده‌ای وجود ندارد";}
+ }catch(error){el.textContent="Workflow data unavailable / اطلاعات مراحل در دسترس نیست";}
+})();
+</script>
+</body></html>
