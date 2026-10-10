@@ -63,7 +63,7 @@ jobs:
           ssh -F "$d/config" saeit-host 'bash -s' <<'REMOTE'
           set -euo pipefail
           cd /home/zomorod2/Saeit-staging/var/factory/Saeit-Astra-Luna
-          tar --exclude='*.env' --exclude='*.key' --exclude='*.pem' --exclude='*secret*' --exclude='*credential*' --exclude='*token*' -czf /home/zomorod2/Saeit-staging/var/factory/operations/astra-architecture-export.tmp.tar.gz files docs README_FA.md manifest.json SHA256SUMS.json changes.patch
+          tar --exclude='*.env' --exclude='*.key' --exclude='*.pem' --exclude='*secret*' --exclude='*credential*' --exclude='*token*' -czf /home/zomorod2/Saeit-staging/var/factory/operations/astra-architecture-export.tmp.tar.gz files README_FA.md manifest.json SHA256SUMS.json changes.patch
           chmod 600 /home/zomorod2/Saeit-staging/var/factory/operations/astra-architecture-export.tmp.tar.gz
           REMOTE
           ssh -F "$d/config" saeit-host 'base64 /home/zomorod2/Saeit-staging/var/factory/operations/astra-architecture-export.tmp.tar.gz' | base64 -d > "$RUNNER_TEMP/astra-architecture.tar.gz"
