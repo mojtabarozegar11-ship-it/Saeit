@@ -114,6 +114,31 @@ jobs:
                       print("HANDLER_LINE",n+1,lines[n][:180])
           PY
           echo "FACTORY_DIAGNOSTIC_END"
+          echo "FACTORY_DISCOVERY_REASON_PROBE"
+          "$base/.venv/bin/python" - <<'PY'
+          import os
+          import django
+          from django.core.management import call_command
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+          django.setup()
+          try:
+              call_command("opportunity_discovery_tick", max_opportunities=1)
+              print("DISCOVERY_PROBE_RESULT success")
+          except Exception as exc:
+              known = {
+                  "Opportunity discovery is disabled in production.": "ENVIRONMENT_GUARD",
+                  "Research provider is not configured.": "PROVIDER_CONFIGURATION",
+                  "Discovery produced no evidence-backed opportunities.": "NO_EVIDENCE",
+              }
+              message = str(exc)
+              reason = known.get(message, "UNCLASSIFIED")
+              if message.startswith("PROVIDER_UNAVAILABLE:"):
+                  reason = "PROVIDER_UNAVAILABLE"
+              print("DISCOVERY_PROBE_EXCEPTION",type(exc).__name__,"reason",reason)
+              cause = exc.__cause__ or exc.__context__
+              if cause is not None:
+                  print("DISCOVERY_PROBE_CAUSE_TYPE",type(cause).__name__)
+          PY
           tick_log="$(mktemp)"
           set +e
           timeout 150 "$base/.venv/bin/python" manage.py factory_staging_tick --max-runs 1 --max-steps 2 > "$tick_log" 2>&1
