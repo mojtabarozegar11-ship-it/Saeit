@@ -85,7 +85,8 @@ jobs:
           remote_sha="$(timeout 45s ssh -F "$RUNNER_TEMP/ssh/config" saeit-host "sha256sum /home/zomorod2/Saeit-staging/releases/$release/source.tar.gz" | cut -d " " -f 1)"
           test "$local_sha" = "$remote_sha"
           timeout 45s ssh -F "$RUNNER_TEMP/ssh/config" saeit-host "cd /home/zomorod2/Saeit-staging/releases/$release && tar -tzf source.tar.gz | grep -qx passenger_wsgi.py && tar -tzf source.tar.gz | grep -qx manage.py && tar -xzf source.tar.gz && test -f passenger_wsgi.py && test -f manage.py"
-          echo "Staging source uploaded; production application unchanged."
+          timeout 45s ssh -F "$RUNNER_TEMP/ssh/config" saeit-host "cd /home/zomorod2/Saeit-staging/releases/$release && python3 -m compileall -q command_center config && test -f command_center/urls.py"
+          echo "Staging source verified; production application unchanged."
       - name: Remove temporary SSH credentials
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/ssh"
