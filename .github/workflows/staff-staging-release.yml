@@ -1,0 +1,93 @@
+name: Staff panel staging release
+on:
+  workflow_dispatch:
+    inputs:
+      revision:
+        description: Reviewed Git revision to stage
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: staff-staging-release
+  cancel-in-progress: false
+jobs:
+  stage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Require immutable revision
+        env:
+          REVISION: ${{ inputs.revision }}
+        run: |
+          [[ "$REVISION" =~ ^[a-f0-9]{40}$ ]] || { echo "Use full reviewed commit SHA"; exit 1; }
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.revision }}
+          persist-credentials: false
+      - name: Prepare archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${{ inputs.revision }}"
+          git archive --format=tar HEAD | gzip -n > "$RUNNER_TEMP/staff-release.tar.gz"
+          sha256sum "$RUNNER_TEMP/staff-release.tar.gz"
+      - name: Stage over existing SSH relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+          HOST_KNOWN: ${{ secrets.SAEIT_HOST_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p "$RUNNER_TEMP/ssh"
+          printf '%s\n' "$VPS_KEY" > "$RUNNER_TEMP/ssh/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$RUNNER_TEMP/ssh/host.key"
+          printf '%s\n' "$HOST_KNOWN" > "$RUNNER_TEMP/ssh/host.known"
+          python3 -c 'import os,pathlib; p=pathlib.Path(os.environ["RUNNER_TEMP"])/"ssh/host.key"; t=p.read_text().replace(chr(13)+chr(10),chr(10)).strip(); p.write_text(t.replace(chr(92)+"n",chr(10))+chr(10))'
+          chmod 600 "$RUNNER_TEMP/ssh/"*
+          test -n "$VPS_KEY" && test -n "$HOST_KEY" && test -n "$HOST_KNOWN"
+          ssh-keygen -y -P "" -f "$RUNNER_TEMP/ssh/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$RUNNER_TEMP/ssh/host.key" >/dev/null
+          cat > "$RUNNER_TEMP/ssh/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $RUNNER_TEMP/ssh/vps.key
+            StrictHostKeyChecking yes
+            UserKnownHostsFile $RUNNER_TEMP/ssh/vps.known
+          Host saeit-host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $RUNNER_TEMP/ssh/host.key
+            UserKnownHostsFile $RUNNER_TEMP/ssh/host.known
+            ProxyJump saeit-vps
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+          EOF
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$RUNNER_TEMP/ssh/vps.known"
+          test "$(ssh-keygen -lf "$RUNNER_TEMP/ssh/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          timeout 30s ssh -F "$RUNNER_TEMP/ssh/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$RUNNER_TEMP/ssh/host.candidate"
+          test "$(ssh-keygen -lf "$RUNNER_TEMP/ssh/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$RUNNER_TEMP/ssh/host.candidate" "$RUNNER_TEMP/ssh/host.known"
+          timeout 45s ssh -F "$RUNNER_TEMP/ssh/config" saeit-host 'test -d /home/zomorod2/Saeit-staging'
+          release="staff-$(git rev-parse --short=12 HEAD)"
+          timeout 45s ssh -F "$RUNNER_TEMP/ssh/config" saeit-host "mkdir -p /home/zomorod2/Saeit-staging/releases/$release"
+          timeout 120s scp -F "$RUNNER_TEMP/ssh/config" "$RUNNER_TEMP/staff-release.tar.gz" "saeit-host:/home/zomorod2/Saeit-staging/releases/$release/source.tar.gz"
+          local_sha="$(sha256sum "$RUNNER_TEMP/staff-release.tar.gz" | cut -d " " -f 1)"
+          remote_sha="$(timeout 45s ssh -F "$RUNNER_TEMP/ssh/config" saeit-host "sha256sum /home/zomorod2/Saeit-staging/releases/$release/source.tar.gz" | cut -d " " -f 1)"
+          test "$local_sha" = "$remote_sha"
+          timeout 45s ssh -F "$RUNNER_TEMP/ssh/config" saeit-host "cd /home/zomorod2/Saeit-staging/releases/$release && tar -tzf source.tar.gz > archive.list && grep -Fxq passenger_wsgi.py archive.list && grep -Fxq manage.py archive.list && ! grep -Eq '(^/|(^|/)\\.\\.(/|$))' archive.list && tar -xzf source.tar.gz && test -f passenger_wsgi.py && test -f manage.py"
+          timeout 45s ssh -F "$RUNNER_TEMP/ssh/config" saeit-host "cd /home/zomorod2/Saeit-staging/releases/$release && python3 -m compileall -q command_center config && test -f command_center/urls.py"
+          echo "Staging source verified; production application unchanged."
+      - name: Remove temporary SSH credentials
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/ssh"
