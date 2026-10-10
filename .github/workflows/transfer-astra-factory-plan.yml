@@ -62,13 +62,13 @@ jobs:
           d="$RUNNER_TEMP/factory-relay"
           mkdir -p "$RUNNER_TEMP/astra-plan"
           umask 077
-          for file in README_FA.md manifest.json SHA256SUMS.json changes.patch docs/ASTRA_LUNA_HANDOFF.md; do
+          for file in README_FA.md manifest.json SHA256SUMS.json changes.patch; do
             case "$file" in *..*|/*) exit 2;; esac
             mkdir -p "$RUNNER_TEMP/astra-plan/$(dirname "$file")"
             ssh -F "$d/config" saeit-host "test -f /home/zomorod2/Saeit-staging/var/factory/Saeit-Astra-Luna/$file && base64 /home/zomorod2/Saeit-staging/var/factory/Saeit-Astra-Luna/$file" | base64 -d > "$RUNNER_TEMP/astra-plan/$file"
             test -s "$RUNNER_TEMP/astra-plan/$file"
           done
-          tar -C "$RUNNER_TEMP/astra-plan" -czf "$RUNNER_TEMP/astra-plan.tar.gz" README_FA.md manifest.json SHA256SUMS.json changes.patch docs/ASTRA_LUNA_HANDOFF.md
+          tar -C "$RUNNER_TEMP/astra-plan" -czf "$RUNNER_TEMP/astra-plan.tar.gz" README_FA.md manifest.json SHA256SUMS.json changes.patch
           echo ASTRA_PLAN_SOURCE_SHA256
           sha256sum "$RUNNER_TEMP/astra-plan.tar.gz"
           ssh -F "$d/config" saeit-vps 'mkdir -p "$HOME/factory-transfer-incoming" && chmod 700 "$HOME/factory-transfer-incoming"'
