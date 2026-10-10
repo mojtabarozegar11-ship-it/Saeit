@@ -3,4 +3,6 @@
 <p>{% if lang == "fa" %}آمار واقعی مطالب و انتشارها از سامانه موجود{% else %}Recorded content and publication counts from the existing system{% endif %}</p>
 <div id="content-stats" aria-live="polite">{% if lang == "fa" %}در انتظار دریافت آمار{% else %}Loading editorial data{% endif %}</div>
 <small>{% if lang == "fa" %}انتشار مستقیم از این پنل هنوز فعال نیست.{% else %}Direct publishing from this panel is not enabled yet.{% endif %}</small>
+<h3>{% if lang == "fa" %}پیش‌نویس‌ها و مطالب زمان‌بندی‌شده{% else %}Drafts and Scheduled Stories{% endif %}</h3>
+<div id="editorial-queue" class="grid"></div><p id="editorial-queue-status" aria-live="polite"></p>
 </section>
