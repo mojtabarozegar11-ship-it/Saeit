@@ -11,13 +11,14 @@ def recommend_images(topic, *, limit=10):
     if not topic:
         return []
     limit = max(1, min(int(limit), 20))
+    terms = [part.strip() for part in topic.replace("،", " ").replace(",", " ").split() if len(part.strip()) >= 3]
+    terms = terms[:8] or [topic]
+    predicate = Q()
+    for term in terms:
+        predicate |= Q(project_label__icontains=term) | Q(title__icontains=term) | Q(description__icontains=term)
     matches = CompanyGalleryMedia.objects.filter(
         media_type="image",
-    ).exclude(image="").filter(
-        Q(project_label__icontains=topic)
-        | Q(title__icontains=topic)
-        | Q(description__icontains=topic)
-    ).order_by("-created_at")[:limit]
+    ).exclude(image="").filter(predicate).order_by("-created_at")[:limit]
     return [
         {
             "asset_id": media.pk,
