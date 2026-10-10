@@ -40,4 +40,36 @@ jobs:
           printf '%s\n' "$HOST_KEY" | sed 's/\\n/\n/g' > "$RUNNER_TEMP/ssh/host.key"
           printf '%s\n' "$HOST_KNOWN" > "$RUNNER_TEMP/ssh/host.known"
           chmod 600 "$RUNNER_TEMP/ssh/"*
-          echo "SSH relay configuration must be validated before enabling staging upload."
+          test -n "$VPS_KEY" && test -n "$HOST_KEY" && test -n "$HOST_KNOWN"
+          ssh-keygen -y -P "" -f "$RUNNER_TEMP/ssh/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$RUNNER_TEMP/ssh/host.key" >/dev/null
+          cat > "$RUNNER_TEMP/ssh/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $RUNNER_TEMP/ssh/vps.key
+            StrictHostKeyChecking yes
+            UserKnownHostsFile $RUNNER_TEMP/ssh/vps.known
+          Host saeit-host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $RUNNER_TEMP/ssh/host.key
+            UserKnownHostsFile $RUNNER_TEMP/ssh/host.known
+            ProxyJump saeit-vps
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+          EOF
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$RUNNER_TEMP/ssh/vps.known"
+          test "$(ssh-keygen -lf "$RUNNER_TEMP/ssh/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          timeout 45s ssh -F "$RUNNER_TEMP/ssh/config" saeit-host 'test -d /home/zomorod2/Saeit-staging'
+          echo "Verified relay and staging directory; no files transferred."
+      - name: Remove temporary SSH credentials
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/ssh"
