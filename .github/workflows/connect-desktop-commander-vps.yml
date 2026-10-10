@@ -34,7 +34,7 @@ jobs:
           else
             command -v node >/dev/null || { echo VPS_NODE_MISSING; exit 2; }
             command -v npx >/dev/null || { echo VPS_NPX_MISSING; exit 2; }
-            nohup npx --yes @wonderwhy-er/desktop-commander@latest remote </dev/null >"$state/remote.log" 2>&1 &
+            nohup env PATH="$HOME/.local/opt/node-current/bin:$PATH" npx --yes @wonderwhy-er/desktop-commander@latest remote </dev/null >"$state/remote.log" 2>&1 &
             echo $! > "$state/remote.pid"
             echo DESKTOP_COMMANDER_VPS_AGENT_START_REQUESTED
           fi
