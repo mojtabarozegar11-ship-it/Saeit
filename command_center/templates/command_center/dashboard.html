@@ -70,4 +70,26 @@ async function refreshAgentMetrics(){
 }
 refreshAgentMetrics();
 document.getElementById("refresh").addEventListener("click",refreshAgentMetrics);
+
+async function refreshDirectory(){
+ const area=document.getElementById("agent-directory");
+ const status=document.getElementById("agent-directory-status");
+ area.replaceChildren();
+ try{
+  const response=await fetch("{% url 'command_center_agent_directory_api' %}",{credentials:"same-origin",cache:"no-store"});
+  if(!response.ok)throw new Error("unavailable");
+  const data=await response.json();
+  data.agents.forEach(agent=>{
+   const card=document.createElement("article"),heading=document.createElement("h3"),mission=document.createElement("p"),meta=document.createElement("small");
+   card.className="card";
+   heading.textContent=agent.name+" ("+agent.code+")";
+   mission.textContent=agent.mission;
+   meta.textContent=(isEn?"Enabled: ":"فعال: ")+(agent.active?"Yes":"No")+" | "+agent.risk_level;
+   card.append(heading,mission,meta);area.append(card);
+  });
+  status.textContent=data.truncated?(isEn?"First 200 agents":"۲۰۰ ایجنت اول"):"";
+ }catch(e){status.textContent=isEn?"Agent directory unavailable":"فهرست ایجنت‌ها در دسترس نیست";}
+}
+refreshDirectory();
+document.getElementById("refresh").addEventListener("click",refreshDirectory);
 </script></body></html>
