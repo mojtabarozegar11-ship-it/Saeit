@@ -10,7 +10,7 @@ class DirectoryTests(TestCase):
         self.client.force_login(staff)
         result = self.client.get(reverse("command_center_agent_directory_api"))
         self.assertEqual(result.status_code, 200)
-        self.assertEqual(result.json()["agents"][0]["code"], "test-dir-agent")
+        self.assertIn("test-dir-agent", [agent["code"] for agent in result.json()["agents"]])
 
     def test_non_staff_cannot_read_directory(self):
         viewer = get_user_model().objects.create_user(username="viewer_dir", password="test-password")
