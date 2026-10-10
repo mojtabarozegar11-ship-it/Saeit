@@ -91,6 +91,8 @@ jobs:
           test "$local_sha" = "$remote_sha"
           timeout 45s ssh -F "$RUNNER_TEMP/ssh/config" saeit-host "cd /home/zomorod2/Saeit-staging/releases/$release && tar -tzf source.tar.gz > archive.list && grep -Fxq passenger_wsgi.py archive.list && grep -Fxq manage.py archive.list && ! grep -Eq '(^/|(^|/)\\.\\.(/|$))' archive.list && tar -xzf source.tar.gz && test -f passenger_wsgi.py && test -f manage.py"
           timeout 45s ssh -F "$RUNNER_TEMP/ssh/config" saeit-host "cd /home/zomorod2/Saeit-staging/releases/$release && python3 -m compileall -q command_center config && test -f command_center/urls.py"
+          echo "Discovering Passenger application candidates (read only):"
+          timeout 45s ssh -F "$RUNNER_TEMP/ssh/config" saeit-host 'for f in "$HOME"/passenger_wsgi.py "$HOME"/public_html/passenger_wsgi.py "$HOME"/Saeit/passenger_wsgi.py "$HOME"/saeit/passenger_wsgi.py "$HOME"/domains/*/public_html/passenger_wsgi.py; do if test -f "$f"; then printf "PASSENGER_CANDIDATE=%s\\n" "$f"; fi; done; for f in "$HOME"/public_html/.htaccess "$HOME"/.htaccess; do if test -f "$f"; then grep -E "Passenger(AppRoot|Python|StartupFile|BaseURI)" "$f" | sed -E "s#PassengerPython .*#PassengerPython [redacted]#" || true; fi; done'
           echo "Staging source verified; production application unchanged."
       - name: Remove temporary SSH credentials
         if: always()
