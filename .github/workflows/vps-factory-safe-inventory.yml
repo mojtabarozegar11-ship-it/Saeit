@@ -1,0 +1,30 @@
+name: VPS Factory Safe Read-only Inventory
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/vps-factory-safe-inventory.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: VPS SSH identity and capacity only
+        env:
+          SSH_HOST: ${{ secrets.SAEIT_VPS_SSH_HOST }}
+          SSH_USER: ${{ secrets.SAEIT_VPS_SSH_USER }}
+          SSH_PORT: ${{ secrets.SAEIT_VPS_SSH_PORT }}
+          SSH_KEY: ${{ secrets.SAEIT_VPS_SSH_PRIVATE_KEY }}
+          SSH_KNOWN: ${{ secrets.SAEIT_VPS_SSH_KNOWN_HOSTS }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$SSH_HOST" && test -n "$SSH_USER" && test -n "$SSH_KEY" && test -n "$SSH_KNOWN"
+          mkdir -p "$HOME/.ssh"
+          printf '%s\n' "$SSH_KEY" > "$HOME/.ssh/id_factory_inventory"
+          printf '%s\n' "$SSH_KNOWN" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/id_factory_inventory" "$HOME/.ssh/known_hosts"
+          ssh -i "$HOME/.ssh/id_factory_inventory" -p "${SSH_PORT:-22}" -o StrictHostKeyChecking=yes -o BatchMode=yes -o ConnectTimeout=10 "$SSH_USER@$SSH_HOST" 'echo VPS_IDENTITY; hostname; id -un; echo VPS_DISK; df -h /; echo VPS_MEMORY; free -m; echo VPS_FACTORY_PATHS; for p in /srv/factory /opt/factory /home/githubops/Saeit /home/githubops/factory; do if test -e "$p"; then du -sh "$p"; fi; done; echo VPS_SERVICES; systemctl list-units --type=service --all --no-pager | grep -Ei "factory|postgres|celery" | head -20 || true'
