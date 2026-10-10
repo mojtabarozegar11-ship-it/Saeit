@@ -7,7 +7,7 @@ class CatalogTests(unittest.TestCase):
 
     def test_both_languages_complete(self):
         for language in ("fa", "en"):
-            self.assertEqual(len(localized(MODULES, language)), 18)
+            self.assertEqual(len(localized(MODULES, language)), 19)
             self.assertEqual(len(localized(AGENT_SETTINGS, language)), 10)
             self.assertTrue(all(x["label"] for x in localized(MODULES, language)))
 
