@@ -45,7 +45,7 @@ jobs:
           done
           LOOP
           chmod 700 "$base/operations/vps-only-loop.sh"
-          if ! flock -n -o "$base/operations/vps-only-launch.lock" bash -c '
+          if ! flock -n -o "$base/operations/vps-only-launch-v2.lock" bash -c '
             if test -f "$1/operations/vps-only-loop.pid" && kill -0 "$(cat "$1/operations/vps-only-loop.pid")" 2>/dev/null; then
               echo FACTORY_VPS_ALREADY_RUNNING
             else
