@@ -91,4 +91,8 @@ jobs:
               if exc.__cause__:
                   print("VPS_PROVIDER_INNER_REASON",str(exc.__cause__)[:160])
           PY
+          if ! grep -q "FACTORY_TICK_OK.*processed_runs=[1-9]" "$base/operations/vps-only-factory.log"; then
+            echo "FACTORY_NOT_OPERATIONAL: no processed runs verified"
+            exit 1
+          fi
           REMOTE
