@@ -1,0 +1,84 @@
+name: Factory VPS Runtime Dependency and State Inventory
+on:
+  push:
+    branches: [chore/ssh-vps-relay-20261009]
+    paths: [.github/workflows/factory-vps-runtime-state-inventory.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Prepare pinned SSH relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+          HOST_KNOWN: ${{ secrets.SAEIT_HOST_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY" && test -n "$HOST_KNOWN"
+          d="$RUNNER_TEMP/factory-relay"; mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          printf '%s\n' "$HOST_KNOWN" > "$d/host.known"
+          chmod 600 "$d/"*
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            StrictHostKeyChecking yes
+            ConnectTimeout 10
+            ForwardAgent no
+          EOF
+          chmod 600 "$d/config"
+          ssh -F "$d/config" saeit-vps 'timeout 12 ssh-keyscan -T 7 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.scan" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.scan" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          cp "$d/host.scan" "$d/host.known"
+          ssh -F "$d/config" saeit-host 'id -un' | grep -qx zomorod2
+          ssh -F "$d/config" saeit-vps 'id -un' | grep -qx githubops
+      - name: Inspect factory state and runtime dependencies without secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/factory-relay"
+          timeout 80 ssh -F "$d/config" saeit-host 'bash -s' <<'REMOTE'
+          set -eu
+          cd /home/zomorod2/Saeit-staging
+          echo FACTORY_STATE_TOP_LEVEL
+          find var/factory -mindepth 1 -maxdepth 2 -type d ! -path '*/astra-backups*' | head -55
+          echo FACTORY_FILES_NONBACKUP
+          find var/factory -type f ! -path '*/astra-backups/*' -printf '%s %p\n' | sort -nr | head -35
+          echo FACTORY_WORKSPACE
+          du -sh factory-workspace 2>/dev/null || true
+          echo PYTHON_REQUIREMENTS
+          ls -1 requirements*.txt pyproject.toml Pipfile 2>/dev/null || true
+          echo DJANGO_AND_PYTHON
+          /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -c 'import sys,django;print(sys.version.split()[0],django.get_version())'
+          echo DATABASE_ENGINE_CONFIGURATION
+          grep -R -nE 'django.db.backends.(sqlite3|postgresql)|DATABASE_URL' config/settings* 2>/dev/null | head -12 || true
+          echo FACTORY_IMPORT_GRAPH
+          grep -hE '^(from|import) (core\.|moj|agents|factory)' core/factory*.py | sort -u | head -60 || true
+          REMOTE
+          timeout 35 ssh -F "$d/config" saeit-vps 'echo VPS_RUNTIME; cat /etc/os-release | grep -E "^(NAME|VERSION_ID)="; command -v python3.11 || true; command -v pip3 || true; command -v apt-get || true; command -v sudo || true; sudo -n true && echo PASSWORDLESS_SUDO_AVAILABLE || echo SUDO_REQUIRES_AUTH; echo TRANSFER_BUNDLE; ls -lh "$HOME/factory-transfer-incoming/factory-only-modules.tar.gz"'
+      - name: Cleanup
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/factory-relay"
