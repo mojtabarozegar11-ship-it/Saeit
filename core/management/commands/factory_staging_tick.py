@@ -1,6 +1,7 @@
 from django.core.management import call_command
 from django.core.management.base import BaseCommand
 from django.conf import settings
+from django.utils import timezone
 
 from core.models import FactoryRun
 from core.recovery_scheduler import RecoveryScheduler
@@ -22,13 +23,23 @@ class Command(BaseCommand):
         call_command("intake_discovered_opportunities", max_intake=10)
 
         limit = max(1, min(int(options["max_runs"]), 10))
+        from django.db.models import Exists, OuterRef, Q
+        from core.models import AgentTask
+        queued = AgentTask.objects.filter(factory_run_id=OuterRef("pk"), status="queued")
+        running = AgentTask.objects.filter(factory_run_id=OuterRef("pk"), status="running")
+        due = queued.filter(Q(next_retry_at__isnull=True) | Q(next_retry_at__lte=timezone.now()))
+        candidates = FactoryRun.objects.filter(status="active").annotate(
+            has_queued=Exists(queued), has_due=Exists(due), has_running=Exists(running)
+        ).filter(Q(has_queued=False) | Q(has_due=True), has_running=False).order_by("updated_at", "pk")
         runs = []
-        for run in FactoryRun.objects.filter(status="active").order_by("created_at", "pk"):
+        for run in candidates:
             if isinstance(run.constraints, dict) and run.constraints.get("source_stage") == "opportunity_discovery":
                 runs.append(run)
                 if len(runs) >= limit:
                     break
         for run in runs:
+            # Rotate waiting runs so other products get scheduled.
+            FactoryRun.objects.filter(pk=run.pk, status="active").update(updated_at=timezone.now())
             call_command(
                 "autonomous_master_loop",
                 factory=True,
@@ -37,5 +48,5 @@ class Command(BaseCommand):
                 max_steps=max(1, min(int(options["max_steps"]), 30)),
             )
         self.stdout.write(self.style.SUCCESS(
-            f"FACTORY_TICK_OK recovered={summary.recovered} failed={summary.failed} advanced_runs={len(runs)}"
+            f"FACTORY_TICK_OK recovered={summary.recovered} failed={summary.failed} processed_runs={len(runs)}"
         ))
