@@ -37,7 +37,7 @@ jobs:
           if test -s "$pidfile" && kill -0 "$(cat "$pidfile")" 2>/dev/null; then
             echo FACTORY_LOOP_ALIVE
           else
-            nohup "$script" </dev/null >> "$ops/vps-only-launch.log" 2>&1 &
+            nohup "$script" 9>&- </dev/null >> "$ops/vps-only-launch.log" 2>&1 &
             printf '%s\n' "$!" > "$pidfile"
             sleep 3
             kill -0 "$(cat "$pidfile")"
