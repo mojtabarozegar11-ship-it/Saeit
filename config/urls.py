@@ -2,6 +2,7 @@
 from django.contrib import admin
 from django.urls import include, path
 from django.views.generic import RedirectView
+from command_center.views import dashboard as staff_dashboard
 
 from core.views import home, platform_page
 from core.commerce_views import store_home, auctions_home
@@ -56,6 +57,7 @@ urlpatterns = [
     path("academy/", academy, name="academy"),
     path("services/", services, name="services"),
     path("staff/command-center/", include("command_center.urls")),
+    path("staff/", staff_dashboard, name="staff_management"),
     path("admin/", admin.site.urls),
     path("api/", include("core.urls")),
 ]
