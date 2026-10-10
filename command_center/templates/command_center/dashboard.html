@@ -11,17 +11,21 @@ h1{font-size:clamp(22px,3vw,34px);margin:0}p{color:#aabbd3}
 .label{font-size:14px;color:#c3d2e5}.state{display:inline-block;border-radius:24px;padding:6px 10px;margin-top:14px;background:#39465b;color:#e7edf7}
 .unknown{background:#39465b}.failed{background:#7f2525}.healthy{background:#145f49}.stale,.degraded{background:#70511c}
 #updated{font-size:12px}button{padding:10px 18px;background:#2775c9;color:white;border:0;border-radius:9px;cursor:pointer}
-section{margin-top:24px}#workstreams{display:grid;gap:12px}
+section{margin-top:24px;scroll-margin-top:24px}
+.staff-nav{display:flex;gap:10px;flex-wrap:wrap;margin-top:20px}
+.staff-nav a{display:inline-block;padding:10px 13px;border:1px solid #344c6a;border-radius:10px;color:#e8eef8;text-decoration:none}
+.staff-nav a:focus-visible{outline:3px solid #74b7fa}
+#workstreams{display:grid;gap:12px}
 .track{height:12px;border-radius:9px;background:#263953;overflow:hidden;margin-top:8px}
 .fill{height:100%;background:#3f9ccf}small{color:#aabbd3}
 </style></head><body>
 <header><div><h1>{% if lang == "fa" %}مرکز فرماندهی یکپارچه{% else %}Unified Command Center{% endif %}</h1><p>{% if lang == "fa" %}کارخانه، دو سایت، مستر ایجنت و زیرساخت — فقط داده مستند{% else %}Factory, websites, master agent and infrastructure — evidence only{% endif %}</p></div>
 <div><nav aria-label="Language"><a href="?lang=fa" lang="fa">فارسی</a> | <a href="?lang=en" lang="en">English</a></nav><button id="refresh" type="button">{% if lang == "fa" %}به‌روزرسانی{% else %}Refresh{% endif %}</button><p id="updated" aria-live="polite">در انتظار دریافت اطلاعات</p></div></header>
 <section class="card"><h2>{% if lang == "fa" %}بخش‌های مدیریتی{% else %}Management Modules{% endif %}</h2><div class="grid">{% for item in modules %}<div class="card"><span class="label">{{ item.label }}</span></div>{% endfor %}</div></section><section class="card"><h2>{% if lang == "fa" %}آمار ثبت‌شده ایجنت‌ها{% else %}Recorded Agent Metrics{% endif %}</h2><p id="agent-metrics">{% if lang == "fa" %}در انتظار دریافت داده از پایگاه داده{% else %}Waiting for database snapshot{% endif %}</p><small>{% if lang == "fa" %}این اعداد نشان‌دهنده سلامت پردازش زنده نیستند.{% else %}These counts do not prove live worker health.{% endif %}</small></section>
-{% include "command_center/agent_directory.html" %}
-{% include "command_center/approval_queue.html" %}
-{% include "command_center/content_studio.html" %}
-{% include "command_center/media_album.html" %}
+<div id="staff-agents">{% include "command_center/agent_directory.html" %}</div>
+<div id="staff-approvals">{% include "command_center/approval_queue.html" %}</div>
+<div id="staff-content">{% include "command_center/content_studio.html" %}</div>
+<div id="staff-album">{% include "command_center/media_album.html" %}</div>
 <section class="card"><h2>{% if lang == "fa" %}تنظیمات ایجنت‌ها{% else %}Agent Settings{% endif %}</h2><div class="grid">{% for item in agent_settings %}<div class="card"><span class="label">{{ item.label }}</span></div>{% endfor %}</div><p>{% if lang == "fa" %}این بخش‌ها هنوز به عملیات زنده متصل نشده‌اند.{% else %}These settings are not yet connected to live operations.{% endif %}</p></section><section><h2>{% if lang == "fa" %}نقشه سلامت سامانه‌ها{% else %}System Health Map{% endif %}</h2><div id="systems" class="grid">
 {% for component in components %}<article class="card" data-component="{{ component }}"><div class="label">{{ component }}</div><span class="state unknown">نامشخص</span><p><small>اتصال داده برقرار نیست</small></p></article>{% endfor %}
 </div></section>
