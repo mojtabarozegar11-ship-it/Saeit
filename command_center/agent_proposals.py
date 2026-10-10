@@ -10,6 +10,8 @@ ALLOWED_FIELDS = {"mission", "active", "risk_level"}
 @staff_member_required
 @require_POST
 def propose(request):
+    if not request.user.is_superuser:
+        return JsonResponse({'error': 'owner_only'}, status=403)
     try:
         payload = json.loads(request.body)
         agent_id = int(payload["agent_id"])
