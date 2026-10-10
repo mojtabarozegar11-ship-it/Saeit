@@ -114,6 +114,19 @@ jobs:
                       print("HANDLER_LINE",n+1,lines[n][:180])
           PY
           echo "FACTORY_DIAGNOSTIC_END"
+          echo "FACTORY_PROVIDER_SOURCE_INSPECTION"
+          "$base/.venv/bin/python" - <<'PY'
+          import ast
+          from pathlib import Path
+          root=Path.home()/"factory-runtime/django-app/core"
+          for relative in ("factory_agent_runtime.py","opportunity_discovery.py","management/commands/opportunity_discovery_tick.py"):
+              p=root/relative
+              src=p.read_text(encoding="utf-8")
+              lines=src.splitlines()
+              for i,line in enumerate(lines):
+                  if "PROVIDER_UNAVAILABLE" in line or "configured_research_provider" in line or "provider.search(" in line:
+                      print("PROVIDER_SOURCE",relative,i+1,line.strip()[:200])
+          PY
           echo "FACTORY_DISCOVERY_REASON_PROBE"
           "$base/.venv/bin/python" - <<'PY'
           import os
