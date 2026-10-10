@@ -63,7 +63,7 @@ jobs:
           ssh -F "$d/config" saeit-host 'bash -s' > "$RUNNER_TEMP/factory-state.tar.gz" <<'REMOTE'
           set -euo pipefail
           cd /home/zomorod2/Saeit-staging
-          tar --exclude='astra-backups' --exclude='Saeit-Astra-Luna' --exclude='*.key' --exclude='*.pem' --exclude='*.env' --exclude='*.sqlite*' --exclude='*.db' --exclude='*.bak' --exclude='*.log' --exclude='*.lock' --exclude='*secret*' --exclude='*credential*' --exclude='*token*' -czf - var/factory/discovery var/factory/research
+          tar --warning=no-file-changed --exclude='astra-backups' --exclude='Saeit-Astra-Luna' --exclude='*.key' --exclude='*.pem' --exclude='*.env' --exclude='*.sqlite*' --exclude='*.db' --exclude='*.bak' --exclude='*.log' --exclude='*.lock' --exclude='*secret*' --exclude='*credential*' --exclude='*token*' -czf - var/factory/discovery var/factory/research
           REMOTE
           test -s "$RUNNER_TEMP/factory-state.tar.gz"
           tar -tzf "$RUNNER_TEMP/factory-state.tar.gz" | grep -q '^var/factory/discovery/'
