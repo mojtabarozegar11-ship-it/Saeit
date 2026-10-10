@@ -21,6 +21,7 @@ section{margin-top:24px}#workstreams{display:grid;gap:12px}
 {% include "command_center/agent_directory.html" %}
 {% include "command_center/approval_queue.html" %}
 {% include "command_center/content_studio.html" %}
+{% include "command_center/media_album.html" %}
 <section class="card"><h2>{% if lang == "fa" %}تنظیمات ایجنت‌ها{% else %}Agent Settings{% endif %}</h2><div class="grid">{% for item in agent_settings %}<div class="card"><span class="label">{{ item.label }}</span></div>{% endfor %}</div><p>{% if lang == "fa" %}این بخش‌ها هنوز به عملیات زنده متصل نشده‌اند.{% else %}These settings are not yet connected to live operations.{% endif %}</p></section><section><h2>{% if lang == "fa" %}نقشه سلامت سامانه‌ها{% else %}System Health Map{% endif %}</h2><div id="systems" class="grid">
 {% for component in components %}<article class="card" data-component="{{ component }}"><div class="label">{{ component }}</div><span class="state unknown">نامشخص</span><p><small>اتصال داده برقرار نیست</small></p></article>{% endfor %}
 </div></section>
