@@ -20,6 +20,7 @@ def dashboard(request):
         "components": COMPONENTS, "lang": lang,
         "modules": localized(MODULES, lang),
         "agent_settings": localized(AGENT_SETTINGS, lang),
+        "workflow_stages": [{"label": name} for name in ("Research", "Design", "Development", "Quality assurance", "Packaging", "Publishing", "Delivery")],
         "staff_counts": {
             "agents": Agent.objects.count(),
             "staff": get_user_model().objects.filter(is_staff=True, is_active=True).count(),
