@@ -69,6 +69,47 @@ def atomic_write(path, value):
 
 try:
     shutil.copytree(release / "command_center", live / "command_center", symlinks=False)
+    # The production app predates the core.models contract in this release.
+    # Install a read-only compatibility surface rather than importing missing models.
+    if not (live / "core/models.py").is_file():
+        fallback_views = '''from django.contrib.admin.views.decorators import staff_member_required
+from django.http import JsonResponse
+from django.shortcuts import render
+from django.views.decorators.http import require_GET
+from .catalog import MODULES, AGENT_SETTINGS, localized
+
+@staff_member_required
+@require_GET
+def dashboard(request):
+    lang = request.GET.get("lang", "fa")
+    if lang not in ("fa", "en"):
+        lang = "fa"
+    response = render(request, "command_center/dashboard.html", {
+        "components": ("factory", "iran_site", "global_site", "master_agent", "agents", "bots", "vps", "cpanel", "github"),
+        "lang": lang, "modules": localized(MODULES, lang),
+        "agent_settings": localized(AGENT_SETTINGS, lang),
+        "staff_counts": {"agents": None, "staff": None, "approvals": None, "drafts": None},
+    })
+    response["Cache-Control"] = "no-store"
+    return response
+
+@staff_member_required
+@require_GET
+def overview_api(request):
+    response = JsonResponse({"components": [], "workstreams": [], "runtime_health": "unknown", "source": "unavailable", "reason": "production_models_not_integrated"})
+    response["Cache-Control"] = "no-store"
+    return response
+'''
+        fallback_urls = '''from django.urls import path
+from .views import dashboard, overview_api
+urlpatterns = [
+    path("", dashboard, name="command_center_dashboard"),
+    path("api/overview/", overview_api, name="command_center_overview_api"),
+]
+'''
+        atomic_write(live / "command_center/views.py", fallback_views)
+        atomic_write(live / "command_center/urls.py", fallback_urls)
+        print("COMPATIBILITY_MODE=read_only; unavailable model-backed features disabled", flush=True)
     atomic_write(urls, new_urls)
     atomic_write(settings, new_settings)
     env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1")
