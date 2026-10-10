@@ -25,16 +25,25 @@ old_urls = urls.read_text()
 old_settings = settings.read_text()
 assert "staff/" not in old_urls, "Existing staff route requires reconciliation"
 assert "command_center" not in old_settings, "Existing app registration requires reconciliation"
-assert "urlpatterns = [" in old_urls, "Unsupported URL layout"
-assert "INSTALLED_APPS = [" in old_settings, "Unsupported installed apps layout"
-
-# AST validation ensures inserted code goes into the expected module.
+# Append independent integration blocks: preserve arbitrary live URL/app layouts.
+# Syntax-check originals before writing anything; do not depend on list formatting.
 ast.parse(old_urls)
 ast.parse(old_settings)
-new_urls = ("from django.urls import include as staff_include\n"
-            "from command_center.views import dashboard as staff_dashboard\n" + old_urls)
-new_urls = new_urls.replace("urlpatterns = [", 'urlpatterns = [\n    path("staff/command-center/", staff_include("command_center.urls")),\n    path("staff/", staff_dashboard, name="staff_management"),', 1)
-new_settings = old_settings.replace("INSTALLED_APPS = [", 'INSTALLED_APPS = [\n    "command_center",', 1)
+new_urls = old_urls.rstrip() + """
+
+# Staff command center integration (managed by guarded release).
+from django.urls import path as staff_path, include as staff_include
+from command_center.views import dashboard as staff_dashboard
+urlpatterns = [
+    staff_path("staff/command-center/", staff_include("command_center.urls")),
+    staff_path("staff/", staff_dashboard, name="staff_management"),
+] + list(urlpatterns)
+"""
+new_settings = old_settings.rstrip() + """
+
+# Staff command center integration (managed by guarded release).
+INSTALLED_APPS = [*INSTALLED_APPS, "command_center"]
+"""
 ast.parse(new_urls)
 ast.parse(new_settings)
 
