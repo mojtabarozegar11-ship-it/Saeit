@@ -16,7 +16,7 @@ def read_values(path):
         if not line or line.startswith("#") or "=" not in line:
             continue
         key, value = line.split("=", 1)
-        result[key.strip()] = value.strip().strip("\\\"'")
+        result[key.strip()] = value.strip().strip(chr(34) + chr(39))
     return result
 
 
