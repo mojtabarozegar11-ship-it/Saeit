@@ -11,4 +11,7 @@
 </form>
 <p id="album-status" aria-live="polite"></p>
 <div id="album-items" class="grid"></div>
+<h3>{% if lang == "fa" %}یافتن عکس برای تولید محتوا{% else %}Find Images for Content{% endif %}</h3>
+<form id="album-search-form"><label for="album-search-topic">{% if lang == "fa" %}موضوع مقاله{% else %}Article topic{% endif %}</label><input id="album-search-topic" maxlength="120" required><button type="submit">{% if lang == "fa" %}جست‌وجوی تصاویر{% else %}Find images{% endif %}</button></form>
+<p id="album-search-status" aria-live="polite"></p><div id="album-search-results" class="grid"></div>
 </section>
