@@ -17,7 +17,7 @@ def album(request):
         items = [{
             "id": row.pk, "title": row.title, "topic": row.project_label,
             "description": row.description, "tags": row.tags,
-            "image_url": row.image.url if row.image else None,
+            "image_url": row.image.url if row.image and row.published else None,
             "approved_for_publication": row.published,
         } for row in rows]
         response = JsonResponse({"items": items, "read_only_for_agents": True})
@@ -42,7 +42,10 @@ def album(request):
             media_type="image", title=title, project_label=topic,
             description=description, tags=tags, image=image, published=False,
         )
-        item.full_clean()
+        try:
+            item.full_clean()
+        except ValidationError:
+            return JsonResponse({"error": "invalid_image_metadata"}, status=400)
         item.save()
         response = JsonResponse({"id": item.pk, "status": "private", "approved_for_publication": False}, status=201)
     response["Cache-Control"] = "no-store"
