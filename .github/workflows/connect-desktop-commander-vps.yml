@@ -32,8 +32,26 @@ jobs:
           if test -f "$state/remote.pid" && kill -0 "$(cat "$state/remote.pid")" 2>/dev/null; then
             echo DESKTOP_COMMANDER_VPS_AGENT_ALREADY_RUNNING
           else
-            command -v node >/dev/null || { echo VPS_NODE_MISSING; exit 2; }
-            command -v npx >/dev/null || { echo VPS_NPX_MISSING; exit 2; }
+            if ! command -v node >/dev/null || ! command -v npx >/dev/null; then
+              echo VPS_NODE_INSTALL_USER_LOCAL
+              command -v curl >/dev/null || { echo VPS_CURL_MISSING; exit 2; }
+              command -v tar >/dev/null || { echo VPS_TAR_MISSING; exit 2; }
+              arch="$(uname -m)"
+              case "$arch" in x86_64) arch=x64;; aarch64) arch=arm64;; *) echo VPS_UNSUPPORTED_ARCH; exit 2;; esac
+              version=v22.16.0
+              archive="node-${version}-linux-${arch}.tar.xz"
+              tmp="$(mktemp -d)"
+              trap 'rm -rf "$tmp"' EXIT
+              curl -fsSL --retry 2 "https://nodejs.org/dist/${version}/SHASUMS256.txt" -o "$tmp/SHASUMS256.txt"
+              curl -fsSL --retry 2 "https://nodejs.org/dist/${version}/${archive}" -o "$tmp/$archive"
+              (cd "$tmp" && grep "  ${archive}$" SHASUMS256.txt | sha256sum -c -)
+              mkdir -p "$HOME/.local/opt"
+              tar -xJf "$tmp/$archive" -C "$HOME/.local/opt"
+              ln -sfn "$HOME/.local/opt/node-${version}-linux-${arch}" "$HOME/.local/opt/node-current"
+              export PATH="$HOME/.local/opt/node-current/bin:$PATH"
+            fi
+            command -v node
+            command -v npx
             nohup env PATH="$HOME/.local/opt/node-current/bin:$PATH" npx --yes @wonderwhy-er/desktop-commander@latest remote </dev/null >"$state/remote.log" 2>&1 &
             echo $! > "$state/remote.pid"
             echo DESKTOP_COMMANDER_VPS_AGENT_START_REQUESTED
