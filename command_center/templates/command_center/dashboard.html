@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<html lang="{{ lang }}" dir="{% if lang == 'fa' %}rtl{% else %}ltr{% endif %}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>مرکز فرماندهی | زمرد ملل</title>
 <style>
 :root{color-scheme:dark;font-family:Tahoma,Arial,sans-serif;background:#0b1220;color:#e8eef8}
@@ -15,16 +15,17 @@ section{margin-top:24px}#workstreams{display:grid;gap:12px}
 .track{height:12px;border-radius:9px;background:#263953;overflow:hidden;margin-top:8px}
 .fill{height:100%;background:#3f9ccf}small{color:#aabbd3}
 </style></head><body>
-<header><div><h1>مرکز فرماندهی یکپارچه</h1><p>کارخانه، دو سایت، مستر ایجنت و زیرساخت — فقط داده مستند</p></div>
-<div><button id="refresh" type="button">به‌روزرسانی</button><p id="updated" aria-live="polite">در انتظار دریافت اطلاعات</p></div></header>
-<section><h2>نقشه سلامت سامانه‌ها</h2><div id="systems" class="grid">
+<header><div><h1>{% if lang == "fa" %}مرکز فرماندهی یکپارچه{% else %}Unified Command Center{% endif %}</h1><p>{% if lang == "fa" %}کارخانه، دو سایت، مستر ایجنت و زیرساخت — فقط داده مستند{% else %}Factory, websites, master agent and infrastructure — evidence only{% endif %}</p></div>
+<div><nav aria-label="Language"><a href="?lang=fa" lang="fa">فارسی</a> | <a href="?lang=en" lang="en">English</a></nav><button id="refresh" type="button">{% if lang == "fa" %}به‌روزرسانی{% else %}Refresh{% endif %}</button><p id="updated" aria-live="polite">در انتظار دریافت اطلاعات</p></div></header>
+<section class="card"><h2>{% if lang == "fa" %}بخش‌های مدیریتی{% else %}Management Modules{% endif %}</h2><div class="grid">{% for item in modules %}<div class="card"><span class="label">{{ item.label }}</span></div>{% endfor %}</div></section><section class="card"><h2>{% if lang == "fa" %}تنظیمات ایجنت‌ها{% else %}Agent Settings{% endif %}</h2><div class="grid">{% for item in agent_settings %}<div class="card"><span class="label">{{ item.label }}</span></div>{% endfor %}</div><p>{% if lang == "fa" %}این بخش‌ها هنوز به عملیات زنده متصل نشده‌اند.{% else %}These settings are not yet connected to live operations.{% endif %}</p></section><section><h2>{% if lang == "fa" %}نقشه سلامت سامانه‌ها{% else %}System Health Map{% endif %}</h2><div id="systems" class="grid">
 {% for component in components %}<article class="card" data-component="{{ component }}"><div class="label">{{ component }}</div><span class="state unknown">نامشخص</span><p><small>اتصال داده برقرار نیست</small></p></article>{% endfor %}
 </div></section>
-<section class="card"><h2>پیشرفت تأییدشده</h2><div id="workstreams"><p>تا اتصال معیارهای واقعی، درصدی نمایش داده نمی‌شود.</p></div></section>
-<section class="card"><h2>فرماندهی مستر ایجنت</h2><p>چت عملیاتی هنوز متصل نشده است. اجرای دستور از این صفحه عمداً غیرفعال است تا دستوری بدون احراز هویت، مجوز و ثبت ممیزی اجرا نشود.</p></section>
+<section class="card"><h2>{% if lang == "fa" %}پیشرفت تأییدشده{% else %}Verified Progress{% endif %}</h2><div id="workstreams"><p>تا اتصال معیارهای واقعی، درصدی نمایش داده نمی‌شود.</p></div></section>
+<section class="card"><h2>{% if lang == "fa" %}فرماندهی مستر ایجنت{% else %}Master Agent Control{% endif %}</h2><p>چت عملیاتی هنوز متصل نشده است. اجرای دستور از این صفحه عمداً غیرفعال است تا دستوری بدون احراز هویت، مجوز و ثبت ممیزی اجرا نشود.</p></section>
 <script>
 const endpoint="{% url 'command_center_overview_api' %}";
-const labels={healthy:"سالم",degraded:"اختلال",failed:"خراب",stale:"اطلاعات قدیمی",unknown:"نامشخص",unauthorized:"بدون دسترسی"};
+const isEn="{{ lang }}"==="en";
+const labels=isEn?{healthy:"Healthy",degraded:"Degraded",failed:"Failed",stale:"Stale",unknown:"Unknown",unauthorized:"Unauthorized"}:{healthy:"سالم",degraded:"اختلال",failed:"خراب",stale:"اطلاعات قدیمی",unknown:"نامشخص",unauthorized:"بدون دسترسی"};
 async function refresh(){
  document.getElementById("updated").textContent="در حال دریافت...";
  try{
