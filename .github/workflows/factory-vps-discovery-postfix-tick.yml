@@ -134,6 +134,16 @@ jobs:
               reason = known.get(message, "UNCLASSIFIED")
               if message.startswith("PROVIDER_UNAVAILABLE:"):
                   reason = "PROVIDER_UNAVAILABLE"
+                  if "authentication or policy rejected" in message:
+                      reason = "PROVIDER_AUTH_OR_POLICY"
+                  elif "failed after bounded retries" in message:
+                      reason = "PROVIDER_RETRIES_EXHAUSTED"
+                  elif "retry exceeded the research deadline" in message:
+                      reason = "PROVIDER_DEADLINE"
+              elif "snapshot" in message.lower():
+                  reason = "SOURCE_SNAPSHOT_VALIDATION"
+              elif "passage" in message.lower():
+                  reason = "SOURCE_PASSAGE_VALIDATION"
               print("DISCOVERY_PROBE_EXCEPTION",type(exc).__name__,"reason",reason)
               cause = exc.__cause__ or exc.__context__
               if cause is not None:
