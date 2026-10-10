@@ -28,9 +28,7 @@ section{margin-top:24px;scroll-margin-top:92px}
 <h2>{% if lang == 'fa' %}مراحل کارخانه و ایجنت‌ها{% else %}Factory and agent workflow{% endif %}</h2>
 <p>{% if lang == 'fa' %}درصد پیشرفت تنها پس از اتصال به رکوردهای معتبر تولید محاسبه می‌شود.{% else %}Progress is calculated only from verified production records.{% endif %}</p>
 <p id="workflow-evidence" role="status">در انتظار داده ثبت‌شده / Waiting for recorded tasks</p>
-<div class="grid">
-{% for stage in workflow_stages %}<article class="card"><strong>{{ stage.label }}</strong><p><span class="state unknown">{% if lang == 'fa' %}نامشخص{% else %}Unknown{% endif %}</span></p><progress max="100" aria-label="{{ stage.label }}"></progress><small>{% if lang == 'fa' %}منبع داده متصل نیست{% else %}No verified data source{% endif %}</small></article>{% endfor %}
-</div></section>
+<div id="workflow-records" class="grid" aria-live="polite"></div></section>
 <section id="staff-settings" class="card"><h2>{% if lang == 'fa' %}تنظیمات و اختیارات{% else %}Settings and permissions{% endif %}</h2>
 <p>{% if lang == 'fa' %}تغییر تنظیمات زیرساخت، هزینه، انتشار و اختیارات نیازمند مجوز مالک است.{% else %}Infrastructure, spending, publishing and permissions changes require owner approval.{% endif %}</p>
 <div class="grid">{% for item in agent_settings %}<article class="card"><strong>{{ item.label }}</strong><p><small>{% if lang == 'fa' %}تغییر مستقیم غیرفعال؛ اتصال و تأیید لازم است{% else %}Direct changes disabled pending integration and approval{% endif %}</small></p></article>{% endfor %}</div></section>
@@ -287,6 +285,14 @@ async function refreshStoryImages(storyId){
   if(!response.ok)throw new Error("Unavailable");
   const data=await response.json();
   el.textContent="Recorded tasks (not live activity): "+data.total_tasks+" | Grouped: "+data.task_count_in_returned_groups+(data.complete?"":" (partial)")+" | Product progress: unknown";
+  const area=document.getElementById("workflow-records");area.replaceChildren();
+  for(const item of data.stages){
+    const card=document.createElement("article"),heading=document.createElement("strong"),info=document.createElement("p");
+    card.className="card";heading.textContent=item.action_type||"Unspecified task";
+    info.textContent="Status: "+item.status+" | Recorded: "+item.count;
+    card.append(heading,info);area.append(card);
+  }
+  if(!data.stages.length){area.textContent="No recorded tasks / وظیفه ثبت‌شده‌ای وجود ندارد";}
  }catch(error){el.textContent="Workflow data unavailable / اطلاعات مراحل در دسترس نیست";}
 })();
 </script>
