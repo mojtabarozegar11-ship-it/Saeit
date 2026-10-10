@@ -17,7 +17,8 @@ section{margin-top:24px}#workstreams{display:grid;gap:12px}
 </style></head><body>
 <header><div><h1>{% if lang == "fa" %}مرکز فرماندهی یکپارچه{% else %}Unified Command Center{% endif %}</h1><p>{% if lang == "fa" %}کارخانه، دو سایت، مستر ایجنت و زیرساخت — فقط داده مستند{% else %}Factory, websites, master agent and infrastructure — evidence only{% endif %}</p></div>
 <div><nav aria-label="Language"><a href="?lang=fa" lang="fa">فارسی</a> | <a href="?lang=en" lang="en">English</a></nav><button id="refresh" type="button">{% if lang == "fa" %}به‌روزرسانی{% else %}Refresh{% endif %}</button><p id="updated" aria-live="polite">در انتظار دریافت اطلاعات</p></div></header>
-<section class="card"><h2>{% if lang == "fa" %}بخش‌های مدیریتی{% else %}Management Modules{% endif %}</h2><div class="grid">{% for item in modules %}<div class="card"><span class="label">{{ item.label }}</span></div>{% endfor %}</div></section><section class="card"><h2>{% if lang == "fa" %}تنظیمات ایجنت‌ها{% else %}Agent Settings{% endif %}</h2><div class="grid">{% for item in agent_settings %}<div class="card"><span class="label">{{ item.label }}</span></div>{% endfor %}</div><p>{% if lang == "fa" %}این بخش‌ها هنوز به عملیات زنده متصل نشده‌اند.{% else %}These settings are not yet connected to live operations.{% endif %}</p></section><section><h2>{% if lang == "fa" %}نقشه سلامت سامانه‌ها{% else %}System Health Map{% endif %}</h2><div id="systems" class="grid">
+<section class="card"><h2>{% if lang == "fa" %}بخش‌های مدیریتی{% else %}Management Modules{% endif %}</h2><div class="grid">{% for item in modules %}<div class="card"><span class="label">{{ item.label }}</span></div>{% endfor %}</div></section><section class="card"><h2>{% if lang == "fa" %}آمار ثبت‌شده ایجنت‌ها{% else %}Recorded Agent Metrics{% endif %}</h2><p id="agent-metrics">{% if lang == "fa" %}در انتظار دریافت داده از پایگاه داده{% else %}Waiting for database snapshot{% endif %}</p><small>{% if lang == "fa" %}این اعداد نشان‌دهنده سلامت پردازش زنده نیستند.{% else %}These counts do not prove live worker health.{% endif %}</small></section>
+<section class="card"><h2>{% if lang == "fa" %}تنظیمات ایجنت‌ها{% else %}Agent Settings{% endif %}</h2><div class="grid">{% for item in agent_settings %}<div class="card"><span class="label">{{ item.label }}</span></div>{% endfor %}</div><p>{% if lang == "fa" %}این بخش‌ها هنوز به عملیات زنده متصل نشده‌اند.{% else %}These settings are not yet connected to live operations.{% endif %}</p></section><section><h2>{% if lang == "fa" %}نقشه سلامت سامانه‌ها{% else %}System Health Map{% endif %}</h2><div id="systems" class="grid">
 {% for component in components %}<article class="card" data-component="{{ component }}"><div class="label">{{ component }}</div><span class="state unknown">نامشخص</span><p><small>اتصال داده برقرار نیست</small></p></article>{% endfor %}
 </div></section>
 <section class="card"><h2>{% if lang == "fa" %}پیشرفت تأییدشده{% else %}Verified Progress{% endif %}</h2><div id="workstreams"><p>تا اتصال معیارهای واقعی، درصدی نمایش داده نمی‌شود.</p></div></section>
@@ -53,4 +54,19 @@ async function refresh(){
  document.querySelectorAll(".state").forEach(x=>{x.textContent="نامشخص";x.className="state unknown";});}
 }
 document.getElementById("refresh").addEventListener("click",refresh);refresh();
+
+const agentEndpoint="{% url 'command_center_agent_metrics_api' %}";
+async function refreshAgentMetrics(){
+ const el=document.getElementById("agent-metrics");
+ try{
+  const res=await fetch(agentEndpoint,{credentials:"same-origin",cache:"no-store"});
+  if(!res.ok)throw new Error("Unavailable");
+  const data=await res.json();
+  el.textContent=isEn
+   ? "Agents: "+data.agents.total+" | Enabled: "+data.agents.enabled+" | Queued tasks: "+data.tasks.queued+" | Running tasks: "+data.tasks.running+" | Pending approvals: "+data.approvals.pending
+   : "ایجنت‌ها: "+data.agents.total+" | فعال‌شده: "+data.agents.enabled+" | وظایف در صف: "+data.tasks.queued+" | در حال اجرا: "+data.tasks.running+" | تأییدهای معلق: "+data.approvals.pending;
+ }catch(e){el.textContent=isEn?"Agent database unavailable":"داده‌های ایجنت‌ها در دسترس نیست";}
+}
+refreshAgentMetrics();
+document.getElementById("refresh").addEventListener("click",refreshAgentMetrics);
 </script></body></html>
