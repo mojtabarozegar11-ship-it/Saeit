@@ -158,7 +158,7 @@ async function refreshEditorialQueue(){
   const data=await res.json();
   for(const item of data.items){
    const card=document.createElement("article"),title=document.createElement("h3"),details=document.createElement("small");
-   card.className="card";title.textContent=item.title;
+   card.className="card";card.dataset.storyId=item.id;card.tabIndex=0;card.setAttribute("role","button");title.textContent=item.title;
    details.textContent=item.status+" | "+item.story_type+" | #"+item.id;
    card.append(title,details);area.append(card);
   }
@@ -167,4 +167,23 @@ async function refreshEditorialQueue(){
 }
 refreshEditorialQueue();
 document.getElementById("refresh").addEventListener("click",refreshEditorialQueue);
+
+async function showStory(storyId){
+ const target=document.getElementById("editorial-detail");
+ target.replaceChildren();
+ try{
+  const res=await fetch("{% url 'command_center_editorial_queue_api' %}".replace("api/content/queue/","api/content/stories/"+storyId+"/"),{credentials:"same-origin",cache:"no-store"});
+  if(!res.ok)throw new Error("unavailable");
+  const x=await res.json();
+  const title=document.createElement("h4"),summary=document.createElement("p"),body=document.createElement("pre"),keywords=document.createElement("small");
+  title.textContent=x.title;summary.textContent=x.summary;body.textContent=x.body;
+  body.style.whiteSpace="pre-wrap";body.style.overflowWrap="anywhere";
+  keywords.textContent=(isEn?"SEO: ":"سئو: ")+(x.seo_keywords||[]).join(", ");
+  target.append(title,summary,body,keywords);
+ }catch(e){target.textContent=isEn?"Story detail unavailable":"جزئیات مطلب در دسترس نیست";}
+}
+document.getElementById("editorial-queue").addEventListener("click",event=>{
+ const card=event.target.closest("[data-story-id]");
+ if(card)showStory(card.dataset.storyId);
+});
 </script></body></html>
