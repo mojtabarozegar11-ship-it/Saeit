@@ -7,6 +7,7 @@ from .approval_queue import pending
 from .content_stats import stats
 from .editorial_queue import queue
 from .editorial_detail import detail
+from .media_album import album
 
 urlpatterns = [
     path("", dashboard, name="command_center_dashboard"),
@@ -18,4 +19,5 @@ urlpatterns = [
     path("api/content/stats/", stats, name="command_center_content_stats_api"),
     path("api/content/queue/", queue, name="command_center_editorial_queue_api"),
     path("api/content/stories/<int:story_id>/", detail, name="command_center_editorial_detail_api"),
+    path("api/content/album/", album, name="command_center_media_album_api"),
 ]
