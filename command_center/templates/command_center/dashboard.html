@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>مرکز فرماندهی | زمرد ملل</title>
+<style>
+:root{color-scheme:dark;font-family:Tahoma,Arial,sans-serif;background:#0b1220;color:#e8eef8}
+*{box-sizing:border-box}body{margin:0;padding:24px;max-width:1320px;margin-inline:auto}
+header{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}
+h1{font-size:clamp(22px,3vw,34px);margin:0}p{color:#aabbd3}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-top:22px}
+.card{border:1px solid #263953;background:#142138;border-radius:16px;padding:18px}
+.label{font-size:14px;color:#c3d2e5}.state{display:inline-block;border-radius:24px;padding:6px 10px;margin-top:14px;background:#39465b;color:#e7edf7}
+.unknown{background:#39465b}.failed{background:#7f2525}.healthy{background:#145f49}.stale,.degraded{background:#70511c}
+#updated{font-size:12px}button{padding:10px 18px;background:#2775c9;color:white;border:0;border-radius:9px;cursor:pointer}
+section{margin-top:24px}#workstreams{display:grid;gap:12px}
+.track{height:12px;border-radius:9px;background:#263953;overflow:hidden;margin-top:8px}
+.fill{height:100%;background:#3f9ccf}small{color:#aabbd3}
+</style></head><body>
+<header><div><h1>مرکز فرماندهی یکپارچه</h1><p>کارخانه، دو سایت، مستر ایجنت و زیرساخت — فقط داده مستند</p></div>
+<div><button id="refresh" type="button">به‌روزرسانی</button><p id="updated" aria-live="polite">در انتظار دریافت اطلاعات</p></div></header>
+<section><h2>نقشه سلامت سامانه‌ها</h2><div id="systems" class="grid">
+{% for component in components %}<article class="card" data-component="{{ component }}"><div class="label">{{ component }}</div><span class="state unknown">نامشخص</span><p><small>اتصال داده برقرار نیست</small></p></article>{% endfor %}
+</div></section>
+<section class="card"><h2>پیشرفت تأییدشده</h2><div id="workstreams"><p>تا اتصال معیارهای واقعی، درصدی نمایش داده نمی‌شود.</p></div></section>
+<section class="card"><h2>فرماندهی مستر ایجنت</h2><p>چت عملیاتی هنوز متصل نشده است. اجرای دستور از این صفحه عمداً غیرفعال است تا دستوری بدون احراز هویت، مجوز و ثبت ممیزی اجرا نشود.</p></section>
+<script>
+const endpoint="{% url 'command_center_overview_api' %}";
+const labels={healthy:"سالم",degraded:"اختلال",failed:"خراب",stale:"اطلاعات قدیمی",unknown:"نامشخص",unauthorized:"بدون دسترسی"};
+async function refresh(){
+ document.getElementById("updated").textContent="در حال دریافت...";
+ try{
+  const res=await fetch(endpoint,{credentials:"same-origin",cache:"no-store"});
+  if(!res.ok)throw new Error("HTTP "+res.status);
+  const data=await res.json();
+  const map=new Map((data.health.components||[]).map(x=>[x.component,x]));
+  document.querySelectorAll("[data-component]").forEach(el=>{
+    const item=map.get(el.dataset.component);
+    const state=item?.state||"unknown";
+    const badge=el.querySelector(".state");badge.textContent=labels[state]||labels.unknown;badge.className="state "+state;
+    el.querySelector("small").textContent=item ? ("منبع: "+item.source+" | "+item.observed_at+" | شاهد: "+item.evidence_id) : "اتصال داده برقرار نیست";
+  });
+  const streams=document.getElementById("workstreams");streams.replaceChildren();
+  const entries=Object.entries(data.workstreams||{});
+  if(!entries.length){const p=document.createElement("p");p.textContent="هنوز پیشرفت مستندی دریافت نشده است.";streams.append(p);}
+  entries.forEach(([name,stats])=>{
+    const wrap=document.createElement("div"),label=document.createElement("div"),track=document.createElement("div"),fill=document.createElement("div");
+    label.textContent=name+" — "+(stats.verified_percent===null?"نامشخص":stats.verified_percent+"٪ تأییدشده");
+    track.className="track";fill.className="fill";fill.style.width=(stats.verified_percent||0)+"%";
+    track.append(fill);wrap.append(label,track);streams.append(wrap);
+  });
+  document.getElementById("updated").textContent="آخرین دریافت: "+new Date().toLocaleString("fa-IR");
+ }catch(e){document.getElementById("updated").textContent="دریافت اطلاعات ناموفق؛ وضعیت سامانه‌ها نامشخص است";
+ document.querySelectorAll(".state").forEach(x=>{x.textContent="نامشخص";x.className="state unknown";});}
+}
+document.getElementById("refresh").addEventListener("click",refresh);refresh();
+</script></body></html>
