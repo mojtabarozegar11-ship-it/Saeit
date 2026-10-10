@@ -185,7 +185,7 @@ async function showStory(storyId){
 }
 document.getElementById("editorial-queue").addEventListener("click",event=>{
  const card=event.target.closest("[data-story-id]");
- if(card)showStory(card.dataset.storyId);
+ if(card){showStory(card.dataset.storyId);refreshStoryImages(card.dataset.storyId);}
 });
 
 async function refreshAlbum(){
@@ -240,4 +240,20 @@ document.getElementById("album-search-form").addEventListener("submit",async eve
   status.textContent=data.assets.length?(isEn?"Recommendations require approval before publication":"تصاویر پیشنهادی برای انتشار نیازمند تأیید هستند"):(isEn?"No matching images":"تصویر مرتبط پیدا نشد");
  }catch(e){status.textContent=isEn?"Search unavailable":"جست‌وجو در دسترس نیست";}
 });
+
+async function refreshStoryImages(storyId){
+ const area=document.getElementById("story-image-suggestions");area.replaceChildren();
+ try{
+  const base="{% url 'command_center_story_image_suggestions_api' story_id=1 %}";
+  const endpoint=base.replace("/1/images/","/"+encodeURIComponent(storyId)+"/images/");
+  const res=await fetch(endpoint,{credentials:"same-origin",cache:"no-store"});
+  if(!res.ok)throw new Error("unavailable");
+  const data=await res.json();
+  const textNode=document.createElement("p");
+  textNode.textContent=data.suggestions.length
+   ?data.suggestions.map(x=>x.title+" (#"+x.asset_id+")").join(" | ")
+   :(isEn?"No matching album images":"تصویر مرتبط در آلبوم پیدا نشد");
+  area.append(textNode);
+ }catch(e){area.textContent=isEn?"Image suggestions unavailable":"پیشنهاد تصاویر در دسترس نیست";}
+}
 </script></body></html>
