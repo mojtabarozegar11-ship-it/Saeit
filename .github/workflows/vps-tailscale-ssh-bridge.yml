@@ -1,0 +1,54 @@
+name: Saeit VPS Tailscale SSH Bridge
+on:
+  issues:
+    types: [opened]
+permissions:
+  contents: read
+concurrency:
+  group: saeit-vps-tailscale-install
+  cancel-in-progress: false
+jobs:
+  install:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event.issue.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.issue.title == 'Ops: install Tailscale on Saeit VPS 2026-10-11'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: SSH transport to VPS only (no builds, tests or deployment on GitHub)
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/saeit-ts-ssh"
+          mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -i "$d/key" -p 22 -o BatchMode=yes -o ConnectTimeout=10 -o ConnectionAttempts=1 -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" githubops@178.239.147.150 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = githubops
+          command -v sudo >/dev/null || { echo "SUDO_NOT_AVAILABLE_NO_CHANGES"; exit 20; }
+          sudo -n true || { echo "PASSWORDLESS_SUDO_NOT_AVAILABLE_NO_CHANGES"; exit 21; }
+          if command -v tailscale >/dev/null 2>&1; then
+            echo TAILSCALE_ALREADY_INSTALLED
+          else
+            command -v curl >/dev/null
+            curl -fsSL --retry 2 --connect-timeout 10 --max-time 90 https://tailscale.com/install.sh | sudo -n sh
+            echo TAILSCALE_PACKAGE_INSTALLED
+          fi
+          sudo -n systemctl is-active --quiet tailscaled || sudo -n systemctl start tailscaled
+          sudo -n systemctl enable tailscaled >/dev/null
+          tailscale version | head -n 1
+          if sudo -n tailscale ip -4 2>/dev/null | grep -qE '^100\.'; then
+            echo TAILSCALE_TAILNET_CONNECTED
+            sudo -n tailscale ip -4
+          else
+            echo TAILSCALE_INSTALLED_AWAITING_PRIVATE_ACCOUNT_AUTHORIZATION
+          fi
+          REMOTE
