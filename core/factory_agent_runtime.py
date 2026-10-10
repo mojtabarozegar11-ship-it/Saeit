@@ -407,7 +407,7 @@ class FactoryAgentRuntime:
             raise FactoryAgentBlocked(
                 "NEEDS_MORE_EVIDENCE: research provider is not the configured real provider."
             )
-        if not is_fixture and len({record["source_identity"] for record in clean_records}) < 2:
+        if not is_fixture and len(seen_source_ids) < 2:
             raise FactoryAgentBlocked(
                 "NEEDS_MORE_EVIDENCE: fewer than two independent real sources."
             )
