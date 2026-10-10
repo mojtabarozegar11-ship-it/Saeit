@@ -5,6 +5,7 @@ from django.shortcuts import render
 from django.views.decorators.http import require_GET
 from .overview import build_overview
 from .catalog import MODULES, AGENT_SETTINGS, localized
+from core.models import Agent, ApprovalRequest, NewsletterStory
 
 COMPONENTS = ("factory", "iran_site", "global_site", "master_agent", "agents", "bots", "vps", "cpanel", "github")
 
@@ -18,6 +19,11 @@ def dashboard(request):
         "components": COMPONENTS, "lang": lang,
         "modules": localized(MODULES, lang),
         "agent_settings": localized(AGENT_SETTINGS, lang),
+        "staff_counts": {
+            "agents": Agent.objects.count(),
+            "approvals": ApprovalRequest.objects.filter(status="pending").count(),
+            "drafts": NewsletterStory.objects.filter(status="draft").count(),
+        },
     })
 
 @staff_member_required
