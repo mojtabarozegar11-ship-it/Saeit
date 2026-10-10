@@ -110,6 +110,8 @@ jobs:
           if grep -q 'command_center' "$APP/config/settings.py"; then echo "LIVE_APP_REGISTERED=yes"; else echo "LIVE_APP_REGISTERED=no"; fi
           if grep -q 'staff/' "$APP/config/urls.py"; then echo "LIVE_STAFF_ROUTE=yes"; else echo "LIVE_STAFF_ROUTE=no"; fi
           REMOTE
+          echo "Read-only production compatibility details:"
+          timeout 45s ssh -F "$RUNNER_TEMP/ssh/config" saeit-host 'set -eu; app=/home/zomorod2/Saeit; for p in command_center/urls.py command_center/views.py command_center/templates/command_center/dashboard.html core/models.py; do if test -f "$app/$p"; then printf "LIVE_FILE=%s sha256=" "$p"; sha256sum "$app/$p" | cut -d " " -f 1; else printf "LIVE_MISSING=%s\n" "$p"; fi; done'
           echo "Checking whether the existing staff panel requires manual reconciliation:"
           if timeout 45s ssh -F "$RUNNER_TEMP/ssh/config" saeit-host "test -d /home/zomorod2/Saeit/command_center"; then
             echo "STAFF_PANEL_EXISTS=yes; reconciliation_required=yes; activation_skipped=yes"
