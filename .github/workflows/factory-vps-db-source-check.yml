@@ -63,7 +63,7 @@ jobs:
           ssh -F "$d/config" saeit-host 'bash -s' <<'REMOTE'
           set -euo pipefail
           cd /home/zomorod2/Saeit-staging
-          export SAEIT_ENV=staging
+          export SAEIT_ENV=production
           /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python manage.py shell -c 'from django.db import connection; from django.conf import settings; from pathlib import Path; import sqlite3; print("DJANGO_DB_ENGINE",connection.vendor); print("DJANGO_DB_BASENAME",Path(str(settings.DATABASES["default"].get("NAME",""))).name if connection.vendor=="sqlite" else "NON_SQLITE"); print("FACTORY_TABLES",*[x for x in connection.introspection.table_names() if "factory" in x.lower()]); print("AGENT_TABLES",*[x for x in connection.introspection.table_names() if "agent" in x.lower()])'
           REMOTE
       - name: Cleanup
