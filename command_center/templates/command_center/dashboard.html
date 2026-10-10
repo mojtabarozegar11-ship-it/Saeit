@@ -27,6 +27,7 @@ section{margin-top:24px;scroll-margin-top:92px}
 <section id="staff-workflow" class="card" aria-label="Factory and agent workflow">
 <h2>{% if lang == 'fa' %}مراحل کارخانه و ایجنت‌ها{% else %}Factory and agent workflow{% endif %}</h2>
 <p>{% if lang == 'fa' %}درصد پیشرفت تنها پس از اتصال به رکوردهای معتبر تولید محاسبه می‌شود.{% else %}Progress is calculated only from verified production records.{% endif %}</p>
+<p id="workflow-evidence" role="status">در انتظار داده ثبت‌شده / Waiting for recorded tasks</p>
 <div class="grid">
 {% for stage in workflow_stages %}<article class="card"><strong>{{ stage.label }}</strong><p><span class="state unknown">{% if lang == 'fa' %}نامشخص{% else %}Unknown{% endif %}</span></p><progress max="100" aria-label="{{ stage.label }}"></progress><small>{% if lang == 'fa' %}منبع داده متصل نیست{% else %}No verified data source{% endif %}</small></article>{% endfor %}
 </div></section>
@@ -277,4 +278,15 @@ async function refreshStoryImages(storyId){
   area.append(textNode);
  }catch(e){area.textContent=isEn?"Image suggestions unavailable":"پیشنهاد تصاویر در دسترس نیست";}
 }
-</script></body></html>
+</script><script>
+(async function(){
+ const el=document.getElementById("workflow-evidence");
+ try{
+  const response=await fetch("{% url 'command_center_workflow_api' %}",{credentials:"same-origin",cache:"no-store"});
+  if(!response.ok)throw new Error("Unavailable");
+  const data=await response.json();
+  el.textContent="Recorded tasks: "+data.task_count+" | Product progress: unknown (no verified stage linkage)";
+ }catch(error){el.textContent="Workflow data unavailable / اطلاعات مراحل در دسترس نیست";}
+})();
+</script>
+</body></html>
