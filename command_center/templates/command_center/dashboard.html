@@ -286,7 +286,7 @@ async function refreshStoryImages(storyId){
   const response=await fetch("{% url 'command_center_workflow_api' %}",{credentials:"same-origin",cache:"no-store"});
   if(!response.ok)throw new Error("Unavailable");
   const data=await response.json();
-  el.textContent="Total recorded tasks: "+data.total_tasks+" | Grouped tasks: "+data.task_count_in_returned_groups+(data.complete?"":" (partial)")+" | Product progress: unknown";
+  el.textContent="Recorded tasks (not live activity): "+data.total_tasks+" | Grouped: "+data.task_count_in_returned_groups+(data.complete?"":" (partial)")+" | Product progress: unknown";
  }catch(error){el.textContent="Workflow data unavailable / اطلاعات مراحل در دسترس نیست";}
 })();
 </script>
