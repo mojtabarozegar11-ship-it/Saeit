@@ -62,7 +62,10 @@ jobs:
           else
             echo DESKTOP_COMMANDER_VPS_AGENT_EXITED
           fi
+          echo DESKTOP_COMMANDER_VPS_DIAGNOSTICS_BEGIN
+          ps -p "$(cat "$state/remote.pid")" -o pid=,stat=,etime=,comm= || true
+          if test -s "$state/remote.log"; then echo REMOTE_LOG_NONEMPTY; else echo REMOTE_LOG_EMPTY; fi
           echo DESKTOP_COMMANDER_VPS_LOG_TAIL_BEGIN
-          tail -n 30 "$state/remote.log" 2>/dev/null | sed -E 's/(token|secret|password|authorization|api[_-]?key)([=: ]+)[^ ]+/\1\2[REDACTED]/Ig' || true
+          grep -Eio "connected|registered|authenticated|unauthorized|login required|error|failed|disconnected|pairing|device|npm err|network|timeout|waiting" "$state/remote.log" 2>/dev/null | sort | uniq -c | tail -n 15 || true
           echo DESKTOP_COMMANDER_VPS_LOG_TAIL_END
           REMOTE
