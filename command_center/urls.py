@@ -9,6 +9,7 @@ from .editorial_queue import queue
 from .editorial_detail import detail
 from .media_album import album
 from .agent_media_catalog import search as media_search
+from .story_image_suggestions import suggestions as story_images
 
 urlpatterns = [
     path("", dashboard, name="command_center_dashboard"),
@@ -22,4 +23,5 @@ urlpatterns = [
     path("api/content/stories/<int:story_id>/", detail, name="command_center_editorial_detail_api"),
     path("api/content/album/", album, name="command_center_media_album_api"),
     path("api/content/album/search/", media_search, name="command_center_media_search_api"),
+    path("api/content/stories/<int:story_id>/images/", story_images, name="command_center_story_image_suggestions_api"),
 ]
