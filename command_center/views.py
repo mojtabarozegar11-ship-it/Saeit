@@ -15,7 +15,7 @@ def dashboard(request):
     lang = request.GET.get("lang", "fa")
     if lang not in ("fa", "en"):
         lang = "fa"
-    return render(request, "command_center/dashboard.html", {
+    response = render(request, "command_center/dashboard.html", {
         "components": COMPONENTS, "lang": lang,
         "modules": localized(MODULES, lang),
         "agent_settings": localized(AGENT_SETTINGS, lang),
@@ -25,6 +25,8 @@ def dashboard(request):
             "drafts": NewsletterStory.objects.filter(status="draft").count(),
         },
     })
+    response["Cache-Control"] = "no-store"
+    return response
 
 @staff_member_required
 @require_GET
