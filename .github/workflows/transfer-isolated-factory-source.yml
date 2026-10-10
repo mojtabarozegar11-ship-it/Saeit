@@ -67,7 +67,7 @@ jobs:
           # Exclude snapshots, credentials, databases, and any agent-like state until classification.
           find core -maxdepth 1 -type f -name 'factory*.py' -printf '%p\n' | sort > /tmp/factory-transfer-modules-$$
           test -s /tmp/factory-transfer-modules-$$
-          tar -czf - --files-from=/tmp/factory-transfer-modules-$$ --exclude='*.env' --exclude='*.key' --exclude='*.pem'
+          tar --exclude='*.env' --exclude='*.key' --exclude='*.pem' -czf - --files-from=/tmp/factory-transfer-modules-$
           rm -f /tmp/factory-transfer-modules-$$
           REMOTE
           tar -tzf "$RUNNER_TEMP/factory-only.tar.gz" | grep -q '^core/factory_stage4.py$'
