@@ -116,4 +116,36 @@ document.getElementById("agent-proposal-form").addEventListener("submit",async e
   output.textContent=(isEn?"Pending approval #":"در انتظار تأیید، شماره ")+data.approval_id;
  }catch(e){output.textContent=isEn?"Request failed":"ثبت درخواست ناموفق بود";}
 });
+
+async function refreshContent(){
+ const target=document.getElementById("content-stats");
+ try{
+  const res=await fetch("{% url 'command_center_content_stats_api' %}",{credentials:"same-origin",cache:"no-store"});
+  if(!res.ok)throw new Error("unavailable");
+  const x=await res.json();
+  target.textContent=isEn
+   ?"Blog pages: "+x.blog_pages+" | Active: "+x.active_blog_pages+" | Stories: "+x.stories+" | Published: "+x.published_stories+" | Publications: "+x.publications
+   :"صفحات وبلاگ: "+x.blog_pages+" | فعال: "+x.active_blog_pages+" | مطالب: "+x.stories+" | منتشرشده: "+x.published_stories+" | سوابق انتشار: "+x.publications;
+ }catch(e){target.textContent=isEn?"Editorial data unavailable":"آمار محتوا در دسترس نیست";}
+}
+refreshContent();
+document.getElementById("refresh").addEventListener("click",refreshContent);
+async function refreshApprovals(){
+ const area=document.getElementById("approval-queue"),status=document.getElementById("approval-status");
+ area.replaceChildren();
+ try{
+  const res=await fetch("{% url 'command_center_pending_approvals_api' %}",{credentials:"same-origin",cache:"no-store"});
+  if(!res.ok)throw new Error("unavailable");
+  const x=await res.json();
+  x.items.forEach(item=>{
+   const card=document.createElement("article"),heading=document.createElement("h3"),details=document.createElement("p");
+   card.className="card";heading.textContent="#"+item.id+" — "+item.action_type;
+   details.textContent=item.target_type+" #"+item.target_id+" | "+item.risk;
+   card.append(heading,details);area.append(card);
+  });
+  status.textContent=x.items.length===0?(isEn?"No pending approvals":"درخواست معلقی وجود ندارد"):(x.truncated?(isEn?"First 100 shown":"نمایش ۱۰۰ مورد اول"):"");
+ }catch(e){status.textContent=isEn?"Approvals unavailable":"صف تأییدها در دسترس نیست";}
+}
+refreshApprovals();
+document.getElementById("refresh").addEventListener("click",refreshApprovals);
 </script></body></html>
