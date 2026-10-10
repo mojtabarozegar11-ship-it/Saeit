@@ -110,7 +110,9 @@ jobs:
           if grep -q 'command_center' "$APP/config/settings.py"; then echo "LIVE_APP_REGISTERED=yes"; else echo "LIVE_APP_REGISTERED=no"; fi
           if grep -q 'staff/' "$APP/config/urls.py"; then echo "LIVE_STAFF_ROUTE=yes"; else echo "LIVE_STAFF_ROUTE=no"; fi
           REMOTE
-          echo "Staging source verified; production application unchanged."
+          echo "Activating staff panel with atomic config edits and rollback:"
+          timeout 150s ssh -F "$RUNNER_TEMP/ssh/config" saeit-host "python3 /home/zomorod2/Saeit-staging/releases/$release/scripts/activate_staff_panel.py /home/zomorod2/Saeit-staging/releases/$release /home/zomorod2/Saeit"
+          echo "Staff activation script completed."
       - name: Remove temporary SSH credentials
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/ssh"
