@@ -1,0 +1,56 @@
+name: Saeit Termux SSH Relay Bootstrap
+on:
+  issues:
+    types: [opened]
+permissions:
+  contents: read
+concurrency:
+  group: saeit-termux-relay-bootstrap
+  cancel-in-progress: false
+jobs:
+  bootstrap:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event.issue.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.issue.title == 'Ops: prepare private Termux SSH relay 2026-10-11'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Only send SSH bootstrap over existing VPS transport
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/saeit-termux-bootstrap"
+          mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -i "$d/key" -p 22 -o BatchMode=yes -o ConnectTimeout=10 -o ConnectionAttempts=1 -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" githubops@178.239.147.150 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          test "$(id -un)" = githubops
+          mkdir -p "$HOME/.ssh" "$HOME/.local/share/saeit-termux-bridge"
+          chmod 700 "$HOME/.ssh" "$HOME/.local/share/saeit-termux-bridge"
+          f="$HOME/.ssh/saeit_termux_operator_ed25519"
+          if test -f "$f"; then
+            test -f "$f.pub" && ssh-keygen -y -f "$f" >/dev/null
+            echo TERMUX_OPERATOR_KEY_EXISTS
+          else
+            ssh-keygen -q -t ed25519 -N '' -f "$f" -C 'saeit-termux-vps-localonly'
+            echo TERMUX_OPERATOR_KEY_CREATED
+          fi
+          chmod 600 "$f"
+          chmod 644 "$f.pub"
+          echo TERMUX_RELAY_PRIVATE_KEY_ON_VPS_ONLY
+          echo TERMUX_PUBLIC_KEY_READY
+          echo TERMUX_RELAY_PORT_18022_LOOPBACK_ONLY
+          if command -v ss >/dev/null 2>&1; then
+            if ss -ltn | grep -Eq '127\.0\.0\.1:18022[[:space:]]'; then echo TERMUX_RELAY_PORT_ALREADY_LISTENING; else echo TERMUX_RELAY_PORT_AVAILABLE; fi
+          fi
+          REMOTE
+          rm -rf "$d"
