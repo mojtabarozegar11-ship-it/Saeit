@@ -71,6 +71,9 @@ jobs:
           from core.factory_agent_runtime import configured_research_provider
           print("VPS_ENV",settings.SAEIT_ENV)
           print("VPS_PROVIDER_CONFIGURED",bool(getattr(settings,"FACTORY_RESEARCH_PROVIDER",None)))
+          import importlib.util
+          print("VPS_PROVIDER_MODULE_PRESENT",importlib.util.find_spec("core.self_hosted_research_provider") is not None)
+          print("VPS_ENV_PROVIDER_PRESENT",bool(os.environ.get("FACTORY_RESEARCH_PROVIDER")))
           try:
               p=configured_research_provider()
               print("VPS_PROVIDER_READY",type(p).__name__)
