@@ -60,17 +60,17 @@ jobs:
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/factory-relay"
-          timeout 480 ssh -F "$d/config" saeit-vps 'bash -s' <<'REMOTE'
+          timeout 480 ssh -o ServerAliveInterval=15 -o ServerAliveCountMax=20 -F "$d/config" saeit-vps 'bash -s' <<'REMOTE'
           set -euo pipefail
           umask 077
           mkdir -p "$HOME/factory-runtime" "$HOME/.local/bin"
           if ! test -x "$HOME/.local/bin/uv"; then
-            curl --fail --location --silent --show-error --retry 2 https://astral.sh/uv/install.sh -o "$HOME/factory-runtime/install-uv.sh"
+            curl --fail --location --silent --show-error --connect-timeout 12 --max-time 90 --retry 2 https://astral.sh/uv/install.sh -o "$HOME/factory-runtime/install-uv.sh"
             UV_INSTALL_DIR="$HOME/.local/bin" sh "$HOME/factory-runtime/install-uv.sh" >/dev/null
             rm -f "$HOME/factory-runtime/install-uv.sh"
           fi
           "$HOME/.local/bin/uv" --version
-          "$HOME/.local/bin/uv" python install 3.11
+          "$HOME/.local/bin/uv" python install 3.11 --quiet
           "$HOME/.local/bin/uv" venv --python 3.11 "$HOME/factory-runtime/.venv"
           "$HOME/factory-runtime/.venv/bin/python" --version
           "$HOME/factory-runtime/.venv/bin/python" -c 'import sys; assert sys.version_info[:2] == (3,11)'
