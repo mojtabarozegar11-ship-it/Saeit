@@ -14,22 +14,18 @@ jobs:
       - name: Backup and repair VPS research provider without touching cPanel
         shell: bash
         env:
-          SSH_HOST: ${{ secrets.SAEIT_VPS_SSH_HOST }}
-          SSH_USER: ${{ secrets.SAEIT_VPS_SSH_USER }}
-          SSH_PORT: ${{ secrets.SAEIT_VPS_SSH_PORT }}
-          SSH_KEY: ${{ secrets.SAEIT_VPS_SSH_PRIVATE_KEY }}
-          SSH_KNOWN: ${{ secrets.SAEIT_VPS_SSH_KNOWN_HOSTS }}
+          VPS_KEY: ${{ secrets.VPS_KEY }}
         run: |
           set -euo pipefail
           umask 077
-          test -n "$SSH_HOST" && test -n "$SSH_USER" && test -n "$SSH_KEY" && test -n "$SSH_KNOWN"
-          test "$SSH_HOST" = "178.239.147.150"
-          test "$SSH_USER" = "githubops"
+          test -n "$VPS_KEY"
           mkdir -p "$RUNNER_TEMP/factory-ssh"
-          printf '%s\n' "$SSH_KEY" > "$RUNNER_TEMP/factory-ssh/key"
-          printf '%s\n' "$SSH_KNOWN" > "$RUNNER_TEMP/factory-ssh/known"
-          chmod 600 "$RUNNER_TEMP/factory-ssh/"*
-          ssh -i "$RUNNER_TEMP/factory-ssh/key" -p "${SSH_PORT:-22}" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$RUNNER_TEMP/factory-ssh/known" -o BatchMode=yes "$SSH_USER@$SSH_HOST" 'bash -se' <<'REMOTE'
+          printf '%s\n' "$VPS_KEY" > "$RUNNER_TEMP/factory-ssh/key"
+          chmod 600 "$RUNNER_TEMP/factory-ssh/key"
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$RUNNER_TEMP/factory-ssh/known" 2>/dev/null
+          actual="$(ssh-keygen -lf "$RUNNER_TEMP/factory-ssh/known" -E sha256 | awk '{print $2}' | sort -u)"
+          test "$actual" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          ssh -i "$RUNNER_TEMP/factory-ssh/key" -p 22 -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$RUNNER_TEMP/factory-ssh/known" -o BatchMode=yes githubops@178.239.147.150 'bash -se' <<'REMOTE'
           set -euo pipefail
           umask 077
           base="$HOME/factory-runtime"
