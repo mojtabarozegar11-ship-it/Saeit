@@ -1,0 +1,68 @@
+name: VPS Factory Controlled Restart
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/vps-factory-controlled-restart.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: vps-factory-controlled-restart
+  cancel-in-progress: false
+jobs:
+  restart:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Restart existing VPS factory process using configured research provider
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/vps-factory"; mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -i "$d/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o BatchMode=yes githubops@178.239.147.150 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          base="$HOME/factory-runtime"
+          ops="$base/operations"
+          script="$ops/vps-only-loop.sh"
+          pidfile="$ops/vps-only-loop.pid"
+          test -x "$script"
+          grep -q 'FACTORY_RESEARCH_PROVIDER=core.self_hosted_research_provider.SelfHostedStagingResearchProvider' "$script"
+          test -f "$base/private/factory-fresh-isolated.sqlite3"
+          exec 9>"$ops/vps-only-launch-v2.lock"
+          flock -w 30 9
+          old=""
+          if test -s "$pidfile"; then
+            old="$(cat "$pidfile")"
+            case "$old" in *[!0-9]*|'') echo INVALID_PID; exit 1;; esac
+            if kill -0 "$old" 2>/dev/null; then
+              cmd="$(ps -p "$old" -o args= || true)"
+              case "$cmd" in *vps-only-loop.sh*) ;; *) echo PID_NOT_FACTORY_LOOP; exit 1;; esac
+              kill -TERM "$old"
+              for i in $(seq 1 20); do
+                kill -0 "$old" 2>/dev/null || break
+                sleep 1
+              done
+              if kill -0 "$old" 2>/dev/null; then
+                echo OLD_LOOP_DID_NOT_STOP
+                exit 1
+              fi
+              echo OLD_LOOP_STOPPED
+            fi
+          fi
+          nohup "$script" </dev/null >> "$ops/vps-only-launch.log" 2>&1 &
+          new=$!
+          printf '%s\n' "$new" > "$pidfile"
+          sleep 5
+          kill -0 "$new"
+          echo FACTORY_LOOP_RESTARTED
+          echo "FACTORY_PID=$new"
+          REMOTE
