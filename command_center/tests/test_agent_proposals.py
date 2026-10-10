@@ -11,6 +11,8 @@ class AgentProposalTests(TestCase):
         self.url = reverse("command_center_agent_proposals_api")
 
     def test_proposal_does_not_change_agent(self):
+        self.staff.is_superuser = True
+        self.staff.save(update_fields=["is_superuser"])
         self.client.force_login(self.staff)
         response = self.client.post(self.url, data=json.dumps({
             "agent_id": self.agent.pk, "field": "mission", "value": "New mission"
@@ -27,3 +29,11 @@ class AgentProposalTests(TestCase):
             "agent_id": self.agent.pk, "field": "active", "value": True
         }), content_type="application/json")
         self.assertNotEqual(response.status_code, 201)
+
+    def test_staff_without_owner_role_is_forbidden(self):
+        self.client.force_login(self.staff)
+        response = self.client.post(self.url, data=json.dumps({
+            "agent_id": self.agent.pk, "field": "mission", "value": "Other mission"
+        }), content_type="application/json")
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(ApprovalRequest.objects.exists())
