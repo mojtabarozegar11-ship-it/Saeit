@@ -400,6 +400,17 @@ class FactoryAgentRuntime:
             })
             seen_source_ids.add(source_identity)
             seen_snapshot_hashes.add(snapshot_hash)
+        # A successful provider call is not sufficient: independent, real
+        # source-backed records are mandatory before any database write.
+        # Fixture research remains usable in explicitly injected CI runs.
+        if not is_fixture and not real_research:
+            raise FactoryAgentBlocked(
+                "NEEDS_MORE_EVIDENCE: research provider is not the configured real provider."
+            )
+        if not is_fixture and len({record["source_identity"] for record in clean_records}) < 2:
+            raise FactoryAgentBlocked(
+                "NEEDS_MORE_EVIDENCE: fewer than two independent real sources."
+            )
         if not clean_records and not existing:
             raise FactoryAgentBlocked("NEEDS_MORE_EVIDENCE: retrieved sources were empty or duplicates.")
         if not clean_records and existing:
