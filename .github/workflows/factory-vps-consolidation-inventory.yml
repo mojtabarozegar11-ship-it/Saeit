@@ -1,0 +1,72 @@
+name: Factory VPS Consolidation Inventory
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  read-only-inventory:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+      HOST_KEY: ${{ secrets.HOST_SSH_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate inventory scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n scripts/vps_factory_inventory.sh
+          bash -n scripts/hosting_factory_inventory.sh
+      - name: Set up pinned SSH relay
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$VPS_KEY" && test -n "$HOST_KEY" || { echo 'Missing SSH credentials; configure existing secret names'; exit 2; }
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$VPS_KEY" > ~/.ssh/factory-vps.key
+          printf '%s\n' "$HOST_KEY" > ~/.ssh/factory-host.key
+          chmod 600 ~/.ssh/factory-*.key
+          ssh-keygen -y -P '' -f ~/.ssh/factory-vps.key >/dev/null
+          ssh-keygen -y -P '' -f ~/.ssh/factory-host.key >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > ~/.ssh/vps.known
+          test "$(ssh-keygen -lf ~/.ssh/vps.known -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > ~/.ssh/config <<'EOF'
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile ~/.ssh/factory-vps.key
+            UserKnownHostsFile ~/.ssh/vps.known
+          Host saeit-host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile ~/.ssh/factory-host.key
+            UserKnownHostsFile ~/.ssh/host.known
+            ProxyJump saeit-vps
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            StrictHostKeyChecking yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 ~/.ssh/config
+          ssh saeit-vps 'ssh-keyscan -T 10 -p 1396 -t ed25519 zohal.pws-dns.net' > ~/.ssh/host.known
+          test "$(ssh-keygen -lf ~/.ssh/host.known -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+      - name: Inventory VPS and cPanel staging (read only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo '=== VPS ==='
+          timeout 90 ssh saeit-vps 'bash -s' < scripts/vps_factory_inventory.sh
+          echo '=== CPANEL STAGING ==='
+          timeout 120 ssh saeit-host 'bash -s' < scripts/hosting_factory_inventory.sh
+      - name: Remove ephemeral SSH credentials
+        if: always()
+        shell: bash
+        run: rm -f ~/.ssh/factory-vps.key ~/.ssh/factory-host.key ~/.ssh/config ~/.ssh/vps.known ~/.ssh/host.known
