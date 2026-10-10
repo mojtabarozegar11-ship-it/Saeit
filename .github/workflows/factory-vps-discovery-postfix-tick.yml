@@ -127,6 +127,24 @@ jobs:
                   if "PROVIDER_UNAVAILABLE" in line or "configured_research_provider" in line or "provider.search(" in line:
                       print("PROVIDER_SOURCE",relative,i+1,line.strip()[:200])
           PY
+          echo "FACTORY_VPS_PROVIDER_GUARD_CHECK"
+          "$base/.venv/bin/python" - <<'PY'
+          import os
+          import django
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          django.setup()
+          from django.conf import settings
+          from core.factory_agent_runtime import configured_research_provider
+          print("FACTORY_ENVIRONMENT",settings.SAEIT_ENV)
+          try:
+              provider=configured_research_provider()
+              print("FACTORY_PROVIDER_READY",type(provider).__name__,getattr(provider,"real_research",False))
+          except Exception as exc:
+              print("FACTORY_PROVIDER_BLOCKED",type(exc).__name__)
+              cause=exc.__cause__
+              if cause:
+                  print("FACTORY_PROVIDER_CAUSE",type(cause).__name__)
+          PY
           echo "FACTORY_DISCOVERY_REASON_PROBE"
           "$base/.venv/bin/python" - <<'PY'
           import os
