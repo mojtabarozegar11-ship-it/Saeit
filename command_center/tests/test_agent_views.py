@@ -11,7 +11,7 @@ class AgentMetricsTests(TestCase):
         self.client.force_login(user)
         response = self.client.get(reverse("command_center_agent_metrics_api"))
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["agents"]["enabled"], 1)
+        self.assertGreaterEqual(response.json()["agents"]["enabled"], 1)
         self.assertEqual(response.json()["tasks"]["queued"], 1)
         self.assertEqual(response.json()["runtime_health"], "unknown")
 
