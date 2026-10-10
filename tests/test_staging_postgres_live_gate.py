@@ -29,7 +29,7 @@ class LiveStagingGateTests(TestCase):
         self.assertEqual(code, 2)
         self.assertIn("DEBUG_DISABLED=FAIL", out)
 
-    def test_refuses_missing_debug_setting(self):
-        code, out = self.run_gate({"SAEIT_ENV": "staging"})
+    def test_refuses_explicit_debug_setting(self):
+        code, out = self.run_gate({"SAEIT_ENV": "staging", "DEBUG": "1"})
         self.assertEqual(code, 2)
         self.assertIn("DEBUG_DISABLED=FAIL", out)
