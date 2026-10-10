@@ -60,11 +60,13 @@ jobs:
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/factory-relay"
-          ssh -F "$d/config" saeit-host 'bash -s' > "$RUNNER_TEMP/factory-state.tar.gz" <<'REMOTE'
+          ssh -F "$d/config" saeit-host 'bash -s' <<'REMOTE'
           set -euo pipefail
           cd /home/zomorod2/Saeit-staging
-          tar --warning=no-file-changed --exclude='astra-backups' --exclude='Saeit-Astra-Luna' --exclude='*.key' --exclude='*.pem' --exclude='*.env' --exclude='*.sqlite*' --exclude='*.db' --exclude='*.bak' --exclude='*.log' --exclude='*.lock' --exclude='*secret*' --exclude='*credential*' --exclude='*token*' -czf - var/factory/discovery var/factory/research
+          tar --warning=no-file-changed --exclude='astra-backups' --exclude='Saeit-Astra-Luna' --exclude='*.key' --exclude='*.pem' --exclude='*.env' --exclude='*.sqlite*' --exclude='*.db' --exclude='*.bak' --exclude='*.log' --exclude='*.lock' --exclude='*secret*' --exclude='*credential*' --exclude='*token*' -czf /home/zomorod2/Saeit-staging/var/factory/operations/vps-research-export.tmp.tar.gz var/factory/discovery var/factory/research
           REMOTE
+          ssh -F "$d/config" saeit-host 'cat /home/zomorod2/Saeit-staging/var/factory/operations/vps-research-export.tmp.tar.gz' > "$RUNNER_TEMP/factory-state.tar.gz"
+          ssh -F "$d/config" saeit-host 'rm -f /home/zomorod2/Saeit-staging/var/factory/operations/vps-research-export.tmp.tar.gz'
           test -s "$RUNNER_TEMP/factory-state.tar.gz"
           tar -tzf "$RUNNER_TEMP/factory-state.tar.gz" | grep -q '^var/factory/discovery/'
           echo SOURCE_STATE_HASH
