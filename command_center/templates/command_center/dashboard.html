@@ -148,4 +148,23 @@ async function refreshApprovals(){
 }
 refreshApprovals();
 document.getElementById("refresh").addEventListener("click",refreshApprovals);
+
+async function refreshEditorialQueue(){
+ const area=document.getElementById("editorial-queue"),status=document.getElementById("editorial-queue-status");
+ area.replaceChildren();
+ try{
+  const res=await fetch("{% url 'command_center_editorial_queue_api' %}",{credentials:"same-origin",cache:"no-store"});
+  if(!res.ok)throw new Error("unavailable");
+  const data=await res.json();
+  for(const item of data.items){
+   const card=document.createElement("article"),title=document.createElement("h3"),details=document.createElement("small");
+   card.className="card";title.textContent=item.title;
+   details.textContent=item.status+" | "+item.story_type+" | #"+item.id;
+   card.append(title,details);area.append(card);
+  }
+  status.textContent=data.items.length?(data.truncated?(isEn?"First 100 stories":"۱۰۰ مطلب اول"):""):(isEn?"No pending stories":"مطلبی در صف نیست");
+ }catch(e){status.textContent=isEn?"Editorial queue unavailable":"صف مطالب در دسترس نیست";}
+}
+refreshEditorialQueue();
+document.getElementById("refresh").addEventListener("click",refreshEditorialQueue);
 </script></body></html>
