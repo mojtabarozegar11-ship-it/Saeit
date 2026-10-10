@@ -4,13 +4,21 @@ from django.http import JsonResponse
 from django.shortcuts import render
 from django.views.decorators.http import require_GET
 from .overview import build_overview
+from .catalog import MODULES, AGENT_SETTINGS, localized
 
 COMPONENTS = ("factory", "iran_site", "global_site", "master_agent", "agents", "bots", "vps", "cpanel", "github")
 
 @staff_member_required
 @require_GET
 def dashboard(request):
-    return render(request, "command_center/dashboard.html", {"components": COMPONENTS})
+    lang = request.GET.get("lang", "fa")
+    if lang not in ("fa", "en"):
+        lang = "fa"
+    return render(request, "command_center/dashboard.html", {
+        "components": COMPONENTS, "lang": lang,
+        "modules": localized(MODULES, lang),
+        "agent_settings": localized(AGENT_SETTINGS, lang),
+    })
 
 @staff_member_required
 @require_GET
