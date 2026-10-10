@@ -1,0 +1,6 @@
+<section class="card">
+<h2>{% if lang == "fa" %}درخواست‌های در انتظار تأیید{% else %}Pending Approvals{% endif %}</h2>
+<p>{% if lang == "fa" %}تصمیم‌گیری فقط از طریق سازوکار تأیید مالک انجام می‌شود.{% else %}Only the designated owner can decide through the existing approval workflow.{% endif %}</p>
+<div id="approval-queue" class="grid"></div>
+<p id="approval-status" aria-live="polite"></p>
+</section>

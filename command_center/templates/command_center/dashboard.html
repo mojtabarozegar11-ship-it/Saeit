@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="{{ lang }}" dir="{% if lang == 'fa' %}rtl{% else %}ltr{% endif %}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% if lang == "fa" %}مدیریت پرسنل{% else %}Staff Management{% endif %} | زمرد ملل</title>
+<style>
+:root{color-scheme:dark;font-family:Tahoma,Arial,sans-serif;background:#0b1220;color:#e8eef8}
+*{box-sizing:border-box}body{margin:0;padding:24px;max-width:1320px;margin-inline:auto}
+header{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}
+h1{font-size:clamp(22px,3vw,34px);margin:0}p{color:#aabbd3}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-top:22px}
+.card{border:1px solid #263953;background:#142138;border-radius:16px;padding:18px}
+.label{font-size:14px;color:#c3d2e5}.state{display:inline-block;border-radius:24px;padding:6px 10px;margin-top:14px;background:#39465b;color:#e7edf7}
+.unknown{background:#39465b}.failed{background:#7f2525}.healthy{background:#145f49}.stale,.degraded{background:#70511c}
+#updated{font-size:12px}button{padding:10px 18px;background:#2775c9;color:white;border:0;border-radius:9px;cursor:pointer}
+section{margin-top:24px;scroll-margin-top:92px}
+[id^="staff-"]{scroll-margin-top:92px}
+.staff-nav{display:flex;gap:10px;flex-wrap:wrap;margin-top:20px;position:sticky;top:0;z-index:10;background:#0b1220;padding:10px 0}
+.staff-nav a{display:inline-block;padding:10px 13px;border:1px solid #344c6a;border-radius:10px;color:#e8eef8;text-decoration:none}
+.staff-nav a:focus-visible{outline:3px solid #74b7fa}
+@media(max-width:600px){.staff-nav{overflow-x:auto;flex-wrap:nowrap}.staff-nav a{white-space:nowrap;flex-shrink:0}}
+#workstreams{display:grid;gap:12px}
+.track{height:12px;border-radius:9px;background:#263953;overflow:hidden;margin-top:8px}
+.fill{height:100%;background:#3f9ccf}small{color:#aabbd3}
+</style></head><body>
+<header><div><h1>{% if lang == "fa" %}پنل جامع مدیریت پرسنل{% else %}Unified Staff Management{% endif %}</h1><p>{% if lang == "fa" %}کارخانه، دو سایت، مستر ایجنت و زیرساخت — فقط داده مستند{% else %}Factory, websites, master agent and infrastructure — evidence only{% endif %}</p></div>
+<div><nav aria-label="Language"><a href="?lang=fa" lang="fa">فارسی</a> | <a href="?lang=en" lang="en">English</a></nav><button id="refresh" type="button">{% if lang == "fa" %}به‌روزرسانی{% else %}Refresh{% endif %}</button><p id="updated" aria-live="polite">در انتظار دریافت اطلاعات</p></div></header>
+<nav class="staff-nav" aria-label="Staff navigation"><a href="#staff-summary">خلاصه / Summary</a><a href="#management-modules">بخش‌ها / Modules</a><a href="#staff-agents">ایجنت‌ها / Agents</a><a href="#staff-approvals">تأییدیه‌ها / Approvals</a><a href="#staff-content">محتوا / Content</a><a href="#staff-album">آلبوم / Album</a><a href="#staff-infrastructure">زیرساخت / Infrastructure</a></nav>
+<section id="staff-summary" class="grid" aria-label="Staff summary"><article class="card"><strong>{{ staff_counts.staff }}</strong><p>{% if lang == "fa" %}کاربر فعال پرسنل{% else %}Active staff accounts{% endif %}</p></article><article class="card"><strong>{{ staff_counts.agents }}</strong><p>{% if lang == "fa" %}ایجنت ثبت‌شده{% else %}Registered agents{% endif %}</p></article><article class="card"><strong>{{ staff_counts.approvals }}</strong><p>{% if lang == "fa" %}تأییدیه در انتظار{% else %}Pending approvals{% endif %}</p></article><article class="card"><strong>{{ staff_counts.drafts }}</strong><p>{% if lang == "fa" %}پیش‌نویس محتوا{% else %}Content drafts{% endif %}</p></article></section>
+<section id="management-modules" class="card"><h2>{% if lang == "fa" %}بخش‌های مدیریتی{% else %}Management Modules{% endif %}</h2><div class="grid">{% for item in modules %}<div class="card"><span class="label">{{ item.label }}</span><p><small>{% if item.connected %}{% if lang == "fa" %}بخش اولیه موجود است{% else %}Initial section available{% endif %}{% else %}{% if lang == "fa" %}در انتظار تکمیل{% else %}Integration pending{% endif %}{% endif %}</small></p></div>{% endfor %}</div></section><section class="card"><h2>{% if lang == "fa" %}آمار ثبت‌شده ایجنت‌ها{% else %}Recorded Agent Metrics{% endif %}</h2><p id="agent-metrics">{% if lang == "fa" %}در انتظار دریافت داده از پایگاه داده{% else %}Waiting for database snapshot{% endif %}</p><small>{% if lang == "fa" %}این اعداد نشان‌دهنده سلامت پردازش زنده نیستند.{% else %}These counts do not prove live worker health.{% endif %}</small></section>
+<div id="staff-agents">{% include "command_center/agent_directory.html" %}</div>
+<div id="staff-approvals">{% include "command_center/approval_queue.html" %}</div>
+<div id="staff-content">{% include "command_center/content_studio.html" %}</div>
+<div id="staff-album">{% include "command_center/media_album.html" %}</div>
+<section class="card"><h2>{% if lang == "fa" %}تنظیمات ایجنت‌ها{% else %}Agent Settings{% endif %}</h2><div class="grid">{% for item in agent_settings %}<div class="card"><span class="label">{{ item.label }}</span></div>{% endfor %}</div><p>{% if lang == "fa" %}این بخش‌ها هنوز به عملیات زنده متصل نشده‌اند.{% else %}These settings are not yet connected to live operations.{% endif %}</p></section><section id="staff-infrastructure"><h2>{% if lang == "fa" %}نقشه سلامت سامانه‌ها{% else %}System Health Map{% endif %}</h2><div id="systems" class="grid">
+{% for component in components %}<article class="card" data-component="{{ component }}"><div class="label">{{ component }}</div><span class="state unknown">نامشخص</span><p><small>اتصال داده برقرار نیست</small></p></article>{% endfor %}
+</div></section>
+<section class="card"><h2>{% if lang == "fa" %}پیشرفت تأییدشده{% else %}Verified Progress{% endif %}</h2><div id="workstreams"><p>تا اتصال معیارهای واقعی، درصدی نمایش داده نمی‌شود.</p></div></section>
+<section class="card"><h2>{% if lang == "fa" %}فرماندهی مستر ایجنت{% else %}Master Agent Control{% endif %}</h2><p>چت عملیاتی هنوز متصل نشده است. اجرای دستور از این صفحه عمداً غیرفعال است تا دستوری بدون احراز هویت، مجوز و ثبت ممیزی اجرا نشود.</p></section>
+<script>
+const endpoint="{% url 'command_center_overview_api' %}";
+const isEn="{{ lang }}"==="en";
+const labels=isEn?{healthy:"Healthy",degraded:"Degraded",failed:"Failed",stale:"Stale",unknown:"Unknown",unauthorized:"Unauthorized"}:{healthy:"سالم",degraded:"اختلال",failed:"خراب",stale:"اطلاعات قدیمی",unknown:"نامشخص",unauthorized:"بدون دسترسی"};
+async function refresh(){
+ document.getElementById("updated").textContent="در حال دریافت...";
+ try{
+  const res=await fetch(endpoint,{credentials:"same-origin",cache:"no-store"});
+  if(!res.ok)throw new Error("HTTP "+res.status);
+  const data=await res.json();
+  const map=new Map((data.health.components||[]).map(x=>[x.component,x]));
+  document.querySelectorAll("[data-component]").forEach(el=>{
+    const item=map.get(el.dataset.component);
+    const state=item?.state||"unknown";
+    const badge=el.querySelector(".state");badge.textContent=labels[state]||labels.unknown;badge.className="state "+state;
+    el.querySelector("small").textContent=item ? ("منبع: "+item.source+" | "+item.observed_at+" | شاهد: "+item.evidence_id) : "اتصال داده برقرار نیست";
+  });
+  const streams=document.getElementById("workstreams");streams.replaceChildren();
+  const entries=Object.entries(data.workstreams||{});
+  if(!entries.length){const p=document.createElement("p");p.textContent="هنوز پیشرفت مستندی دریافت نشده است.";streams.append(p);}
+  entries.forEach(([name,stats])=>{
+    const wrap=document.createElement("div"),label=document.createElement("div"),track=document.createElement("div"),fill=document.createElement("div");
+    label.textContent=name+" — "+(stats.verified_percent===null?"نامشخص":stats.verified_percent+"٪ تأییدشده");
+    track.className="track";fill.className="fill";fill.style.width=(stats.verified_percent||0)+"%";
+    track.append(fill);wrap.append(label,track);streams.append(wrap);
+  });
+  document.getElementById("updated").textContent="آخرین دریافت: "+new Date().toLocaleString("fa-IR");
+ }catch(e){document.getElementById("updated").textContent="دریافت اطلاعات ناموفق؛ وضعیت سامانه‌ها نامشخص است";
+ document.querySelectorAll(".state").forEach(x=>{x.textContent="نامشخص";x.className="state unknown";});}
+}
+document.getElementById("refresh").addEventListener("click",refresh);refresh();
+
+const agentEndpoint="{% url 'command_center_agent_metrics_api' %}";
+async function refreshAgentMetrics(){
+ const el=document.getElementById("agent-metrics");
+ try{
+  const res=await fetch(agentEndpoint,{credentials:"same-origin",cache:"no-store"});
+  if(!res.ok)throw new Error("Unavailable");
+  const data=await res.json();
+  el.textContent=isEn
+   ? "Agents: "+data.agents.total+" | Enabled: "+data.agents.enabled+" | Queued tasks: "+data.tasks.queued+" | Running tasks: "+data.tasks.running+" | Pending approvals: "+data.approvals.pending
+   : "ایجنت‌ها: "+data.agents.total+" | فعال‌شده: "+data.agents.enabled+" | وظایف در صف: "+data.tasks.queued+" | در حال اجرا: "+data.tasks.running+" | تأییدهای معلق: "+data.approvals.pending;
+ }catch(e){el.textContent=isEn?"Agent database unavailable":"داده‌های ایجنت‌ها در دسترس نیست";}
+}
+refreshAgentMetrics();
+document.getElementById("refresh").addEventListener("click",refreshAgentMetrics);
+
+async function refreshDirectory(){
+ const area=document.getElementById("agent-directory");
+ const status=document.getElementById("agent-directory-status");
+ area.replaceChildren();
+ try{
+  const response=await fetch("{% url 'command_center_agent_directory_api' %}",{credentials:"same-origin",cache:"no-store"});
+  if(!response.ok)throw new Error("unavailable");
+  const data=await response.json();
+  data.agents.forEach(agent=>{
+   const card=document.createElement("article"),heading=document.createElement("h3"),mission=document.createElement("p"),meta=document.createElement("small");
+   card.className="card";
+   heading.textContent=agent.name+" ("+agent.code+")";
+   mission.textContent=agent.mission;
+   meta.textContent=(isEn?"Enabled: ":"فعال: ")+(agent.active?"Yes":"No")+" | "+agent.risk_level;
+   card.append(heading,mission,meta);area.append(card);
+  });
+  status.textContent=data.truncated?(isEn?"First 200 agents":"۲۰۰ ایجنت اول"):"";
+ }catch(e){status.textContent=isEn?"Agent directory unavailable":"فهرست ایجنت‌ها در دسترس نیست";}
+}
+refreshDirectory();
+document.getElementById("refresh").addEventListener("click",refreshDirectory);
+
+function cookieValue(name){
+ const match=document.cookie.split("; ").find(row=>row.startsWith(name+"="));
+ return match?decodeURIComponent(match.slice(name.length+1)):"";
+}
+document.getElementById("agent-proposal-form").addEventListener("submit",async event=>{
+ event.preventDefault();
+ const output=document.getElementById("agent-proposal-status");
+ const field=document.getElementById("proposal-field").value;
+ const value=document.getElementById("proposal-value").value.trim();
+ output.textContent=isEn?"Submitting approval request...":"در حال ثبت درخواست تأیید...";
+ try{
+  const response=await fetch("{% url 'command_center_agent_proposals_api' %}",{
+   method:"POST",credentials:"same-origin",
+   headers:{"Content-Type":"application/json","X-CSRFToken":cookieValue("csrftoken")},
+   body:JSON.stringify({agent_id:Number(document.getElementById("proposal-agent").value),field,value})
+  });
+  if(!response.ok)throw new Error("rejected");
+  const data=await response.json();
+  output.textContent=(isEn?"Pending approval #":"در انتظار تأیید، شماره ")+data.approval_id;
+ }catch(e){output.textContent=isEn?"Request failed":"ثبت درخواست ناموفق بود";}
+});
+
+async function refreshContent(){
+ const target=document.getElementById("content-stats");
+ try{
+  const res=await fetch("{% url 'command_center_content_stats_api' %}",{credentials:"same-origin",cache:"no-store"});
+  if(!res.ok)throw new Error("unavailable");
+  const x=await res.json();
+  target.textContent=isEn
+   ?"Blog pages: "+x.blog_pages+" | Active: "+x.active_blog_pages+" | Stories: "+x.stories+" | Published: "+x.published_stories+" | Publications: "+x.publications
+   :"صفحات وبلاگ: "+x.blog_pages+" | فعال: "+x.active_blog_pages+" | مطالب: "+x.stories+" | منتشرشده: "+x.published_stories+" | سوابق انتشار: "+x.publications;
+ }catch(e){target.textContent=isEn?"Editorial data unavailable":"آمار محتوا در دسترس نیست";}
+}
+refreshContent();
+document.getElementById("refresh").addEventListener("click",refreshContent);
+async function refreshApprovals(){
+ const area=document.getElementById("approval-queue"),status=document.getElementById("approval-status");
+ area.replaceChildren();
+ try{
+  const res=await fetch("{% url 'command_center_pending_approvals_api' %}",{credentials:"same-origin",cache:"no-store"});
+  if(!res.ok)throw new Error("unavailable");
+  const x=await res.json();
+  x.items.forEach(item=>{
+   const card=document.createElement("article"),heading=document.createElement("h3"),details=document.createElement("p");
+   card.className="card";heading.textContent="#"+item.id+" — "+item.action_type;
+   details.textContent=item.target_type+" #"+item.target_id+" | "+item.risk;
+   card.append(heading,details);area.append(card);
+  });
+  status.textContent=x.items.length===0?(isEn?"No pending approvals":"درخواست معلقی وجود ندارد"):(x.truncated?(isEn?"First 100 shown":"نمایش ۱۰۰ مورد اول"):"");
+ }catch(e){status.textContent=isEn?"Approvals unavailable":"صف تأییدها در دسترس نیست";}
+}
+refreshApprovals();
+document.getElementById("refresh").addEventListener("click",refreshApprovals);
+
+async function refreshEditorialQueue(){
+ const area=document.getElementById("editorial-queue"),status=document.getElementById("editorial-queue-status");
+ area.replaceChildren();
+ try{
+  const res=await fetch("{% url 'command_center_editorial_queue_api' %}",{credentials:"same-origin",cache:"no-store"});
+  if(!res.ok)throw new Error("unavailable");
+  const data=await res.json();
+  for(const item of data.items){
+   const card=document.createElement("article"),title=document.createElement("h3"),details=document.createElement("small");
+   card.className="card";card.dataset.storyId=item.id;card.tabIndex=0;card.setAttribute("role","button");title.textContent=item.title;
+   details.textContent=item.status+" | "+item.story_type+" | #"+item.id;
+   card.append(title,details);area.append(card);
+  }
+  status.textContent=data.items.length?(data.truncated?(isEn?"First 100 stories":"۱۰۰ مطلب اول"):""):(isEn?"No pending stories":"مطلبی در صف نیست");
+ }catch(e){status.textContent=isEn?"Editorial queue unavailable":"صف مطالب در دسترس نیست";}
+}
+refreshEditorialQueue();
+document.getElementById("refresh").addEventListener("click",refreshEditorialQueue);
+
+async function showStory(storyId){
+ const target=document.getElementById("editorial-detail");
+ target.replaceChildren();
+ try{
+  const res=await fetch("{% url 'command_center_editorial_queue_api' %}".replace("api/content/queue/","api/content/stories/"+storyId+"/"),{credentials:"same-origin",cache:"no-store"});
+  if(!res.ok)throw new Error("unavailable");
+  const x=await res.json();
+  const title=document.createElement("h4"),summary=document.createElement("p"),body=document.createElement("pre"),keywords=document.createElement("small");
+  title.textContent=x.title;summary.textContent=x.summary;body.textContent=x.body;
+  body.style.whiteSpace="pre-wrap";body.style.overflowWrap="anywhere";
+  keywords.textContent=(isEn?"SEO: ":"سئو: ")+(x.seo_keywords||[]).join(", ");
+  target.append(title,summary,body,keywords);
+ }catch(e){target.textContent=isEn?"Story detail unavailable":"جزئیات مطلب در دسترس نیست";}
+}
+document.getElementById("editorial-queue").addEventListener("click",event=>{
+ const card=event.target.closest("[data-story-id]");
+ if(card){showStory(card.dataset.storyId);refreshStoryImages(card.dataset.storyId);}
+});
+
+async function refreshAlbum(){
+ const target=document.getElementById("album-items");
+ target.replaceChildren();
+ try{
+  const res=await fetch("{% url 'command_center_media_album_api' %}",{credentials:"same-origin",cache:"no-store"});
+  if(!res.ok)throw new Error("unavailable");
+  const data=await res.json();
+  data.items.forEach(item=>{
+   const card=document.createElement("article"),title=document.createElement("h3"),desc=document.createElement("p"),status=document.createElement("small");
+   card.className="card";title.textContent=item.title;
+   desc.textContent=item.topic+" — "+(item.tags||[]).join(", ");
+   status.textContent=item.approved_for_publication?(isEn?"Published":"منتشرشده"):(isEn?"Private":"خصوصی");
+   if(item.image_url){const img=document.createElement("img");img.src=item.image_url;img.alt=item.title;img.loading="lazy";img.style.maxWidth="100%";card.append(img);}
+   card.append(title,desc,status);target.append(card);
+  });
+ }catch(e){document.getElementById("album-status").textContent=isEn?"Album unavailable":"آلبوم در دسترس نیست";}
+}
+document.getElementById("album-form").addEventListener("submit",async event=>{
+ event.preventDefault();
+ const form=event.currentTarget,status=document.getElementById("album-status");
+ status.textContent=isEn?"Uploading...":"در حال بارگذاری...";
+ try{
+  const res=await fetch("{% url 'command_center_media_album_api' %}",{
+   method:"POST",credentials:"same-origin",headers:{"X-CSRFToken":cookieValue("csrftoken")},body:new FormData(form)
+  });
+  if(!res.ok)throw new Error("upload_failed");
+  form.reset();status.textContent=isEn?"Saved privately":"در آلبوم خصوصی ذخیره شد";
+  await refreshAlbum();
+ }catch(e){status.textContent=isEn?"Upload failed":"بارگذاری ناموفق بود";}
+});
+refreshAlbum();
+document.getElementById("refresh").addEventListener("click",refreshAlbum);
+
+document.getElementById("album-search-form").addEventListener("submit",async event=>{
+ event.preventDefault();
+ const topic=document.getElementById("album-search-topic").value.trim();
+ const area=document.getElementById("album-search-results"),status=document.getElementById("album-search-status");
+ area.replaceChildren();
+ try{
+  const endpoint="{% url 'command_center_media_search_api' %}"+"?topic="+encodeURIComponent(topic);
+  const res=await fetch(endpoint,{credentials:"same-origin",cache:"no-store"});
+  if(!res.ok)throw new Error("unavailable");
+  const data=await res.json();
+  for(const asset of data.assets){
+   const card=document.createElement("article"),title=document.createElement("h4"),desc=document.createElement("p");
+   card.className="card";title.textContent=asset.title;
+   desc.textContent=asset.topic+" | #"+asset.asset_id;
+   card.append(title,desc);area.append(card);
+  }
+  status.textContent=data.assets.length?(isEn?"Recommendations require approval before publication":"تصاویر پیشنهادی برای انتشار نیازمند تأیید هستند"):(isEn?"No matching images":"تصویر مرتبط پیدا نشد");
+ }catch(e){status.textContent=isEn?"Search unavailable":"جست‌وجو در دسترس نیست";}
+});
+
+async function refreshStoryImages(storyId){
+ const area=document.getElementById("story-image-suggestions");area.replaceChildren();
+ try{
+  const base="{% url 'command_center_story_image_suggestions_api' story_id=1 %}";
+  const endpoint=base.replace("/1/images/","/"+encodeURIComponent(storyId)+"/images/");
+  const res=await fetch(endpoint,{credentials:"same-origin",cache:"no-store"});
+  if(!res.ok)throw new Error("unavailable");
+  const data=await res.json();
+  const textNode=document.createElement("p");
+  textNode.textContent=data.suggestions.length
+   ?data.suggestions.map(x=>x.title+" (#"+x.asset_id+")").join(" | ")
+   :(isEn?"No matching album images":"تصویر مرتبط در آلبوم پیدا نشد");
+  area.append(textNode);
+ }catch(e){area.textContent=isEn?"Image suggestions unavailable":"پیشنهاد تصاویر در دسترس نیست";}
+}
+</script></body></html>

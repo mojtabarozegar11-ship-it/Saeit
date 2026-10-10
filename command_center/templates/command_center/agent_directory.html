@@ -1,0 +1,16 @@
+<section class="card" aria-labelledby="agents-heading">
+<h2 id="agents-heading">{% if lang == "fa" %}فهرست ایجنت‌ها{% else %}Agent Directory{% endif %}</h2>
+<p>{% if lang == "fa" %}مشاهده تنظیمات فعلی؛ تغییرات نیازمند تأیید هستند.{% else %}Current configuration; changes require approval.{% endif %}</p>
+<div id="agent-directory" class="grid"></div>
+<form id="agent-proposal-form" class="card">
+<label for="proposal-agent">{% if lang == "fa" %}شناسه عددی ایجنت{% else %}Agent ID{% endif %}</label>
+<input id="proposal-agent" type="number" min="1" required>
+<label for="proposal-field">{% if lang == "fa" %}تنظیم{% else %}Setting{% endif %}</label>
+<select id="proposal-field"><option value="mission">Mission</option><option value="risk_level">Risk level</option></select>
+<label for="proposal-value">{% if lang == "fa" %}مقدار پیشنهادی{% else %}Proposed value{% endif %}</label>
+<input id="proposal-value" maxlength="4000" required>
+<button type="submit">{% if lang == "fa" %}ثبت درخواست تأیید{% else %}Request approval{% endif %}</button>
+<p id="agent-proposal-status" aria-live="polite"></p>
+</form>
+<p id="agent-directory-status" aria-live="polite"></p>
+</section>

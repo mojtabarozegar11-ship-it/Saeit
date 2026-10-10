@@ -1,0 +1,17 @@
+<section class="card" aria-labelledby="album-title">
+<h2 id="album-title">{% if lang == "fa" %}آلبوم تصاویر ایجنت‌ها{% else %}Agent Image Album{% endif %}</h2>
+<p>{% if lang == "fa" %}عکس و موضوع را ثبت کنید تا ایجنت‌های محتوا بتوانند تصاویر مرتبط را پیدا کنند. بارگذاری به معنی اجازه انتشار نیست.{% else %}Upload an image with its topic so content agents can find relevant assets. Uploading does not authorize publication.{% endif %}</p>
+<form id="album-form" enctype="multipart/form-data">
+<label for="album-image">{% if lang == "fa" %}عکس{% else %}Image{% endif %}</label><input id="album-image" name="image" type="file" accept="image/jpeg,image/png,image/webp" required>
+<label for="album-title-input">{% if lang == "fa" %}عنوان{% else %}Title{% endif %}</label><input id="album-title-input" name="title" maxlength="300" required>
+<label for="album-topic">{% if lang == "fa" %}موضوع{% else %}Topic{% endif %}</label><input id="album-topic" name="topic" maxlength="200" required>
+<label for="album-tags">{% if lang == "fa" %}برچسب‌ها (با ویرگول){% else %}Tags (comma-separated){% endif %}</label><input id="album-tags" name="tags">
+<label for="album-description">{% if lang == "fa" %}توضیحات و راهنمای استفاده{% else %}Description and usage guidance{% endif %}</label><textarea id="album-description" name="description" maxlength="2000"></textarea>
+<button type="submit">{% if lang == "fa" %}افزودن به آلبوم{% else %}Add to Album{% endif %}</button>
+</form>
+<p id="album-status" aria-live="polite"></p>
+<div id="album-items" class="grid"></div>
+<h3>{% if lang == "fa" %}یافتن عکس برای تولید محتوا{% else %}Find Images for Content{% endif %}</h3>
+<form id="album-search-form"><label for="album-search-topic">{% if lang == "fa" %}موضوع مقاله{% else %}Article topic{% endif %}</label><input id="album-search-topic" maxlength="120" required><button type="submit">{% if lang == "fa" %}جست‌وجوی تصاویر{% else %}Find images{% endif %}</button></form>
+<p id="album-search-status" aria-live="polite"></p><div id="album-search-results" class="grid"></div>
+</section>
