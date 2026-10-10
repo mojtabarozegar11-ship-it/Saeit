@@ -1,0 +1,94 @@
+name: Factory VPS Runtime Dependency Audit
+on:
+  push:
+    branches: [chore/ssh-vps-relay-20261009]
+    paths: [.github/workflows/factory-vps-dependency-audit.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Prepare pinned SSH relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+          HOST_KNOWN: ${{ secrets.SAEIT_HOST_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY" && test -n "$HOST_KNOWN"
+          d="$RUNNER_TEMP/factory-relay"; mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          printf '%s\n' "$HOST_KNOWN" > "$d/host.known"
+          chmod 600 "$d/"*
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            StrictHostKeyChecking yes
+            ConnectTimeout 10
+            ForwardAgent no
+          EOF
+          chmod 600 "$d/config"
+          ssh -F "$d/config" saeit-vps 'timeout 12 ssh-keyscan -T 7 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.scan" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.scan" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          cp "$d/host.scan" "$d/host.known"
+          ssh -F "$d/config" saeit-host 'id -un' | grep -qx zomorod2
+          ssh -F "$d/config" saeit-vps 'id -un' | grep -qx githubops
+      - name: Inspect factory runtime dependency and Python interpreter path
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/factory-relay"
+          ssh -F "$d/config" saeit-vps 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          echo PYTHON_INTERPRETER
+          find "$HOME/factory-runtime/python311" -type f -name python3.11 -print | while read -r p; do if "$p" -c 'import sys,ssl,sqlite3; assert sys.version_info[:2]==(3,11)' >/dev/null 2>&1; then echo "$p"; fi; done
+          echo FACTORY_IMPORTS
+          python3 - <<'PY'
+          import ast,pathlib,collections
+          root=pathlib.Path.home()/"factory-runtime/source-isolated/core"
+          counter=collections.Counter()
+          for p in root.glob("*.py"):
+              try: tree=ast.parse(p.read_text())
+              except (SyntaxError,UnicodeError): continue
+              for n in ast.walk(tree):
+                  if isinstance(n,ast.Import):
+                      counter.update(x.name.split(".")[0] for x in n.names)
+                  elif isinstance(n,ast.ImportFrom) and n.module:
+                      counter.update([n.module.split(".")[0]])
+          print("MODULE_IMPORT_ROOTS",",".join(sorted(counter)))
+          PY
+          echo HOSTING_RUNTIME_FILES
+          REMOTE
+          ssh -F "$d/config" saeit-host 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          cd /home/zomorod2/Saeit-staging
+          echo REQUIREMENTS_CANDIDATES
+          find . -maxdepth 2 \( -name 'requirements*.txt' -o -name 'pyproject.toml' -o -name 'manage.py' \) -print | head -25
+          echo CONFIG_DEPENDENCIES
+          grep -nE '^(from |import )|INSTALLED_APPS|DATABASES|SAEIT_ENV' config/settings.py | head -55 || true
+          REMOTE
+      - name: Cleanup
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/factory-relay"
