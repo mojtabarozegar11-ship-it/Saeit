@@ -103,6 +103,16 @@ jobs:
                           if isinstance(node, (ast.Raise, ast.ExceptHandler)):
                               print("DIAG_CONTEXT", " ".join(lines[max(0,node.lineno-3):min(len(lines),node.lineno+2)])[:350].replace("\\n"," "))
           PY
+          echo "FACTORY_EXCEPTION_HANDLER_CONTEXT"
+          "$base/.venv/bin/python" - <<'PY'
+          from pathlib import Path
+          p=Path.home()/"factory-runtime/django-app/core/management/commands/factory_staging_tick.py"
+          lines=p.read_text(encoding="utf-8").splitlines()
+          for i,line in enumerate(lines):
+              if "FACTORY_DISCOVERY_ERROR" in line:
+                  for n in range(max(0,i-13),min(len(lines),i+6)):
+                      print("HANDLER_LINE",n+1,lines[n][:180])
+          PY
           echo "FACTORY_DIAGNOSTIC_END"
           tick_log="$(mktemp)"
           set +e
