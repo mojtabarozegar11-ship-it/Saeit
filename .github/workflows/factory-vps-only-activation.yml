@@ -1,0 +1,64 @@
+name: Factory VPS Only Activation
+on:
+  workflow_dispatch:
+  push:
+    branches: [chore/ssh-vps-relay-20261009]
+    paths: [.github/workflows/factory-vps-only-activation.yml]
+permissions:
+  contents: read
+jobs:
+  activate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - name: Activate isolated VPS factory without contacting cPanel
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/vps-only"; mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o BatchMode=yes -i "$d/key" githubops@178.239.147.150 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          base="$HOME/factory-runtime"
+          app="$base/django-app"
+          test -f "$app/manage.py"
+          test -x "$base/.venv/bin/python"
+          test -f "$base/private/factory-fresh-isolated.sqlite3"
+          mkdir -p "$base/operations"
+          cat > "$base/operations/vps-only-loop.sh" <<'LOOP'
+          #!/usr/bin/env bash
+          set -uo pipefail
+          base="$HOME/factory-runtime"
+          cd "$base/django-app" || exit 1
+          export SAEIT_ENV=production MOJ_FACTORY_LOCAL_MODE=1
+          export MOJ_PAID_LLM_ENABLED=0 MOJ_LLM_DAILY_CALL_BUDGET=0 MOJ_LLM_MAX_COST_MINOR=0
+          while :; do
+            timeout 100 "$base/.venv/bin/python" manage.py factory_staging_tick --max-runs 1 --max-steps 2 >> "$base/operations/vps-only-factory.log" 2>&1 || echo "TICK_EXIT_FAILURE" >> "$base/operations/vps-only-factory.log"
+            sleep 60
+          done
+          LOOP
+          chmod 700 "$base/operations/vps-only-loop.sh"
+          if ! flock -n "$base/operations/vps-only-launch.lock" bash -c '
+            if test -f "$1/operations/vps-only-loop.pid" && kill -0 "$(cat "$1/operations/vps-only-loop.pid")" 2>/dev/null; then
+              echo FACTORY_VPS_ALREADY_RUNNING
+            else
+              nohup "$1/operations/vps-only-loop.sh" </dev/null >/dev/null 2>&1 &
+              echo $! > "$1/operations/vps-only-loop.pid"
+              echo FACTORY_VPS_START_REQUESTED
+            fi
+          ' _ "$base"; then
+            echo FACTORY_VPS_LAUNCH_LOCK_BUSY; exit 1
+          fi
+          sleep 4
+          pid="$(cat "$base/operations/vps-only-loop.pid")"
+          kill -0 "$pid"
+          echo FACTORY_VPS_PROCESS_ALIVE
+          tail -n 12 "$base/operations/vps-only-factory.log" 2>/dev/null || true
+          REMOTE
