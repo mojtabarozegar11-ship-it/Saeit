@@ -187,4 +187,37 @@ document.getElementById("editorial-queue").addEventListener("click",event=>{
  const card=event.target.closest("[data-story-id]");
  if(card)showStory(card.dataset.storyId);
 });
+
+async function refreshAlbum(){
+ const target=document.getElementById("album-items");
+ target.replaceChildren();
+ try{
+  const res=await fetch("{% url 'command_center_media_album_api' %}",{credentials:"same-origin",cache:"no-store"});
+  if(!res.ok)throw new Error("unavailable");
+  const data=await res.json();
+  data.items.forEach(item=>{
+   const card=document.createElement("article"),title=document.createElement("h3"),desc=document.createElement("p"),status=document.createElement("small");
+   card.className="card";title.textContent=item.title;
+   desc.textContent=item.topic+" — "+(item.tags||[]).join(", ");
+   status.textContent=item.approved_for_publication?(isEn?"Published":"منتشرشده"):(isEn?"Private":"خصوصی");
+   if(item.image_url){const img=document.createElement("img");img.src=item.image_url;img.alt=item.title;img.loading="lazy";img.style.maxWidth="100%";card.append(img);}
+   card.append(title,desc,status);target.append(card);
+  });
+ }catch(e){document.getElementById("album-status").textContent=isEn?"Album unavailable":"آلبوم در دسترس نیست";}
+}
+document.getElementById("album-form").addEventListener("submit",async event=>{
+ event.preventDefault();
+ const form=event.currentTarget,status=document.getElementById("album-status");
+ status.textContent=isEn?"Uploading...":"در حال بارگذاری...";
+ try{
+  const res=await fetch("{% url 'command_center_media_album_api' %}",{
+   method:"POST",credentials:"same-origin",headers:{"X-CSRFToken":cookieValue("csrftoken")},body:new FormData(form)
+  });
+  if(!res.ok)throw new Error("upload_failed");
+  form.reset();status.textContent=isEn?"Saved privately":"در آلبوم خصوصی ذخیره شد";
+  await refreshAlbum();
+ }catch(e){status.textContent=isEn?"Upload failed":"بارگذاری ناموفق بود";}
+});
+refreshAlbum();
+document.getElementById("refresh").addEventListener("click",refreshAlbum);
 </script></body></html>
