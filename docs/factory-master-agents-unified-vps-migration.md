@@ -1,10 +1,10 @@
 # Unified VPS migration: factory + Master Agent copy + all subordinate agents
 
 ## Owner-approved target
-Move the **entire factory** to VPS `178.239.147.150` while **copying** (not moving) the website-host Master Agent and **all its subordinate agents** to the same VPS, as one coordinated deployment. The original Master Agent on the website host must remain untouched and operational.
+Move the **entire factory** to VPS `178.239.147.150` while **copying** (not moving) the website-host Master Agent and **all its subordinate agents** to the same VPS, as one coordinated deployment. The original Master Agent **and all existing subordinate agents** on the website host must remain untouched and operational. The VPS receives independent full copies of the Master Agent and every subordinate agent; do not relocate or disable any hosting agent.
 
 ## Non-negotiable
-- No destructive removal of hosting Master Agent, no source overwrite, no production DNS cutover without explicit go-live approval.
+- No destructive removal or disabling of **any hosting agent**, including the Master Agent and all subordinate agents; no source overwrite, no production DNS cutover without explicit go-live approval.
 - Preserve the rule: obtain owner approval before Master Agent actions. No silent autonomous external effects.
 - No duplicated scheduled/outbound tasks between host and VPS; isolate DBs, queues, worker identities, locks, webhooks, API credentials and cron.
 - Preserve all subordinate agents; inventory from the **live runtime** rather than assuming repo folders are complete.
@@ -25,7 +25,7 @@ Move the **entire factory** to VPS `178.239.147.150` while **copying** (not movi
 - Exact inventory and byte totals, with VPS free memory/disk.
 - SHA-256 manifests for each transferred component and explicit sub-agent count.
 - All required processes healthy and isolated; PostgreSQL reachable; real factory task passes with persisted evidence.
-- Host original Master Agent unchanged and healthy.
+- Host original Master Agent **and every subordinate agent** unchanged, present and healthy.
 - One coherent deployment report, rollback commands, and owner approval checkpoint.
 
 **Execution status:** specification committed; no claim that snapshots, transfer, VPS service deployment or acceptance have happened.
