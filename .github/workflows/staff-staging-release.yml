@@ -95,6 +95,21 @@ jobs:
           timeout 45s ssh -F "$RUNNER_TEMP/ssh/config" saeit-host 'for f in "$HOME"/passenger_wsgi.py "$HOME"/public_html/passenger_wsgi.py "$HOME"/Saeit/passenger_wsgi.py "$HOME"/saeit/passenger_wsgi.py "$HOME"/domains/*/public_html/passenger_wsgi.py; do if test -f "$f"; then printf "PASSENGER_CANDIDATE=%s\\n" "$f"; fi; done; for f in "$HOME"/public_html/.htaccess "$HOME"/.htaccess; do if test -f "$f"; then grep -E "Passenger(AppRoot|Python|StartupFile|BaseURI)" "$f" | sed -E "s#PassengerPython .*#PassengerPython [redacted]#" || true; fi; done'
           echo "Checking live app prerequisites without changing production:"
           timeout 60s ssh -F "$RUNNER_TEMP/ssh/config" saeit-host 'set -eu; app=/home/zomorod2/Saeit; test -f "$app/passenger_wsgi.py"; test -f "$app/manage.py"; for f in "$app/config/urls.py" "$app/config/settings.py" "$app/command_center/urls.py" "$app/command_center/views.py"; do if test -f "$f"; then echo "LIVE_PRESENT=$f"; else echo "LIVE_MISSING=$f"; fi; done; for v in "$app/venv/bin/python" "$app/.venv/bin/python" "$HOME/virtualenv/Saeit/3.11/bin/python" "$HOME/virtualenv/Saeit/3.10/bin/python" "$HOME/virtualenv/Saeit/3.9/bin/python"; do if test -x "$v"; then echo "PYTHON_CANDIDATE=$v"; fi; done; if test -f "$HOME/public_html/.htaccess"; then grep -E "^PassengerAppRoot|^PassengerStartupFile" "$HOME/public_html/.htaccess" || true; fi'
+          echo "Comparing production integration files to staged source (read only):"
+          timeout 65s ssh -F "$RUNNER_TEMP/ssh/config" saeit-host "APP=/home/zomorod2/Saeit RELEASE=/home/zomorod2/Saeit-staging/releases/$release /bin/bash -s" <<'REMOTE'
+          set -euo pipefail
+          for p in config/urls.py config/settings.py passenger_wsgi.py requirements.txt; do
+            if test -f "$APP/$p" && test -f "$RELEASE/$p"; then
+              if cmp -s "$APP/$p" "$RELEASE/$p"; then echo "MATCH=$p"; else echo "DIFFERENT=$p"; fi
+            else
+              echo "MISSING=$p"
+            fi
+          done
+          "$APP/.venv/bin/python" -c 'import django; print("LIVE_DJANGO_VERSION="+django.get_version())'
+          "$APP/.venv/bin/python" "$APP/manage.py" check --deploy 2>&1 | tail -15 || true
+          if grep -q 'command_center' "$APP/config/settings.py"; then echo "LIVE_APP_REGISTERED=yes"; else echo "LIVE_APP_REGISTERED=no"; fi
+          if grep -q 'staff/' "$APP/config/urls.py"; then echo "LIVE_STAFF_ROUTE=yes"; else echo "LIVE_STAFF_ROUTE=no"; fi
+          REMOTE
           echo "Staging source verified; production application unchanged."
       - name: Remove temporary SSH credentials
         if: always()
