@@ -10,7 +10,8 @@ from .media_matching import recommend_images
 @require_GET
 def suggestions(request, story_id):
     story = get_object_or_404(NewsletterStory, pk=story_id)
-    terms = [story.title] + [x for x in story.seo_keywords if isinstance(x, str)]
+    keywords = story.seo_keywords if isinstance(story.seo_keywords, list) else []
+    terms = [story.title] + [x for x in keywords if isinstance(x, str)]
     matches = {}
     for term in terms[:6]:
         for image in recommend_images(term, limit=10):
