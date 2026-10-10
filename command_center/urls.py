@@ -5,6 +5,7 @@ from .agent_directory import directory
 from .agent_proposals import propose
 from .approval_queue import pending
 from .content_stats import stats
+from .editorial_queue import queue
 
 urlpatterns = [
     path("", dashboard, name="command_center_dashboard"),
@@ -14,4 +15,5 @@ urlpatterns = [
     path("api/agents/proposals/", propose, name="command_center_agent_proposals_api"),
     path("api/approvals/pending/", pending, name="command_center_pending_approvals_api"),
     path("api/content/stats/", stats, name="command_center_content_stats_api"),
+    path("api/content/queue/", queue, name="command_center_editorial_queue_api"),
 ]
