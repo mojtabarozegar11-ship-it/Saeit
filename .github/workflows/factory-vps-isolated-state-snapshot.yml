@@ -68,7 +68,8 @@ jobs:
           ssh -F "$d/config" saeit-host 'cat /home/zomorod2/Saeit-staging/var/factory/operations/vps-research-export.tmp.tar.gz' > "$RUNNER_TEMP/factory-state.tar.gz"
           ssh -F "$d/config" saeit-host 'rm -f /home/zomorod2/Saeit-staging/var/factory/operations/vps-research-export.tmp.tar.gz'
           test -s "$RUNNER_TEMP/factory-state.tar.gz"
-          tar -tzf "$RUNNER_TEMP/factory-state.tar.gz" | grep -q '^var/factory/discovery/'
+          tar -tzf "$RUNNER_TEMP/factory-state.tar.gz" > "$RUNNER_TEMP/factory-state.list"
+          grep '^var/factory/discovery/' "$RUNNER_TEMP/factory-state.list" > /dev/null
           echo SOURCE_STATE_HASH
           sha256sum "$RUNNER_TEMP/factory-state.tar.gz"
           ssh -F "$d/config" saeit-vps 'mkdir -p "$HOME/factory-transfer-incoming" && chmod 700 "$HOME/factory-transfer-incoming"'
@@ -76,4 +77,4 @@ jobs:
           ssh -F "$d/config" saeit-vps 'echo DESTINATION_STATE_HASH; sha256sum "$HOME/factory-transfer-incoming/factory-state-snapshot.tar.gz"; echo STATE_FILE_COUNT; tar -tzf "$HOME/factory-transfer-incoming/factory-state-snapshot.tar.gz" | wc -l'
       - name: Cleanup
         if: always()
-        run: rm -rf "$RUNNER_TEMP/factory-relay" "$RUNNER_TEMP/factory-state.tar.gz"
+        run: rm -rf "$RUNNER_TEMP/factory-relay" "$RUNNER_TEMP/factory-state.tar.gz" "$RUNNER_TEMP/factory-state.list"
