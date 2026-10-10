@@ -92,4 +92,26 @@ async function refreshDirectory(){
 }
 refreshDirectory();
 document.getElementById("refresh").addEventListener("click",refreshDirectory);
+
+function cookieValue(name){
+ const match=document.cookie.split("; ").find(row=>row.startsWith(name+"="));
+ return match?decodeURIComponent(match.slice(name.length+1)):"";
+}
+document.getElementById("agent-proposal-form").addEventListener("submit",async event=>{
+ event.preventDefault();
+ const output=document.getElementById("agent-proposal-status");
+ const field=document.getElementById("proposal-field").value;
+ const value=document.getElementById("proposal-value").value.trim();
+ output.textContent=isEn?"Submitting approval request...":"در حال ثبت درخواست تأیید...";
+ try{
+  const response=await fetch("{% url 'command_center_agent_proposals_api' %}",{
+   method:"POST",credentials:"same-origin",
+   headers:{"Content-Type":"application/json","X-CSRFToken":cookieValue("csrftoken")},
+   body:JSON.stringify({agent_id:Number(document.getElementById("proposal-agent").value),field,value})
+  });
+  if(!response.ok)throw new Error("rejected");
+  const data=await response.json();
+  output.textContent=(isEn?"Pending approval #":"در انتظار تأیید، شماره ")+data.approval_id;
+ }catch(e){output.textContent=isEn?"Request failed":"ثبت درخواست ناموفق بود";}
+});
 </script></body></html>
