@@ -20,8 +20,8 @@ def search(request):
         "assets": [{
             "id": row.pk, "title": row.title, "topic": row.project_label,
             "tags": row.tags, "description": row.description,
-            "image_url": row.image.url,
-            "publication_authorized": False,
+            "image_url": row.image.url if row.published else None,
+            "publication_authorized": bool(row.published),
         } for row in matches],
         "requires_owner_approval_to_publish": True,
     })
