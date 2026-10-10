@@ -8,10 +8,10 @@ import os
 import sys
 
 def main():
-    if os.environ.get("SAEIT_ENV", "").lower() != "staging":
+    if os.environ.get("SAEIT_ENV", "staging").lower() != "staging":
         print("STAGING_IDENTITY=FAIL")
         return 2
-    if os.environ.get("DEBUG", "").lower() not in {"false", "0"}:
+    if os.environ.get("DEBUG", "false").lower() not in {"false", "0"}:
         print("DEBUG_DISABLED=FAIL")
         return 2
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
@@ -20,6 +20,11 @@ def main():
         django.setup()
         from django.conf import settings
         from django.db import connection
+        # Django loads staging .env from config/settings.py; it need not be exported.
+        if getattr(settings, "SAEIT_ENV", "") != "staging" or settings.DEBUG:
+            print("DJANGO_STAGING_SETTINGS=FAIL")
+            return 2
+        print("DJANGO_STAGING_SETTINGS=PASS")
         if connection.vendor != "postgresql":
             print("DATABASE_BACKEND=FAIL")
             return 2
@@ -27,8 +32,8 @@ def main():
         with connection.cursor() as cursor:
             cursor.execute("SELECT current_database(), 1")
             database_name, value = cursor.fetchone()
-        stage = os.environ.get("STAGING_DB_IDENTITY", "")
-        production = os.environ.get("PRODUCTION_DB_IDENTITY", "")
+        stage = str(getattr(settings, "STAGING_DB_IDENTITY", "") or "")
+        production = str(getattr(settings, "PRODUCTION_DB_IDENTITY", "") or "")
         if not stage or not production or stage == production or database_name != stage or value != 1:
             print("STAGING_DB_ISOLATION=FAIL")
             return 2
