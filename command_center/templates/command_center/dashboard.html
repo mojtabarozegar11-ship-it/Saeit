@@ -220,4 +220,24 @@ document.getElementById("album-form").addEventListener("submit",async event=>{
 });
 refreshAlbum();
 document.getElementById("refresh").addEventListener("click",refreshAlbum);
+
+document.getElementById("album-search-form").addEventListener("submit",async event=>{
+ event.preventDefault();
+ const topic=document.getElementById("album-search-topic").value.trim();
+ const area=document.getElementById("album-search-results"),status=document.getElementById("album-search-status");
+ area.replaceChildren();
+ try{
+  const endpoint="{% url 'command_center_media_search_api' %}"+"?topic="+encodeURIComponent(topic);
+  const res=await fetch(endpoint,{credentials:"same-origin",cache:"no-store"});
+  if(!res.ok)throw new Error("unavailable");
+  const data=await res.json();
+  for(const asset of data.assets){
+   const card=document.createElement("article"),title=document.createElement("h4"),desc=document.createElement("p");
+   card.className="card";title.textContent=asset.title;
+   desc.textContent=asset.topic+" | #"+asset.asset_id;
+   card.append(title,desc);area.append(card);
+  }
+  status.textContent=data.assets.length?(isEn?"Recommendations require approval before publication":"تصاویر پیشنهادی برای انتشار نیازمند تأیید هستند"):(isEn?"No matching images":"تصویر مرتبط پیدا نشد");
+ }catch(e){status.textContent=isEn?"Search unavailable":"جست‌وجو در دسترس نیست";}
+});
 </script></body></html>
