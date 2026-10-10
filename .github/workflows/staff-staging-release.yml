@@ -85,7 +85,7 @@ jobs:
           timeout 45s ssh -F "$RUNNER_TEMP/ssh/config" saeit-host 'test -d /home/zomorod2/Saeit-staging'
           release="staff-$(git rev-parse --short=12 HEAD)"
           timeout 45s ssh -F "$RUNNER_TEMP/ssh/config" saeit-host "mkdir -p /home/zomorod2/Saeit-staging/releases/$release"
-          timeout 120s scp -F "$RUNNER_TEMP/ssh/config" "$RUNNER_TEMP/staff-release.tar.gz" "saeit-host:/home/zomorod2/Saeit-staging/releases/$release/source.tar.gz"
+          timeout 120s ssh -F "$RUNNER_TEMP/ssh/config" saeit-host "cat > /home/zomorod2/Saeit-staging/releases/$release/source.tar.gz" < "$RUNNER_TEMP/staff-release.tar.gz"
           local_sha="$(sha256sum "$RUNNER_TEMP/staff-release.tar.gz" | cut -d " " -f 1)"
           remote_sha="$(timeout 45s ssh -F "$RUNNER_TEMP/ssh/config" saeit-host "sha256sum /home/zomorod2/Saeit-staging/releases/$release/source.tar.gz" | cut -d " " -f 1)"
           test "$local_sha" = "$remote_sha"
