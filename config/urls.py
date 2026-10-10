@@ -55,6 +55,7 @@ urlpatterns = [
     path("education/course/<slug:slug>/certificate/issue/", education_issue_certificate, name="education_issue_certificate"),
     path("academy/", academy, name="academy"),
     path("services/", services, name="services"),
+    path("staff/command-center/", include("command_center.urls")),
     path("admin/", admin.site.urls),
     path("api/", include("core.urls")),
 ]
