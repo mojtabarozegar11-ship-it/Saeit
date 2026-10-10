@@ -30,9 +30,9 @@ jobs:
           HOST_PORT: ${{ secrets.SAEIT_HOST_SSH_PORT }}
           HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
           HOST_KNOWN: ${{ secrets.SAEIT_HOST_SSH_KNOWN_HOSTS }}
-          VPS_HOST: ${{ secrets.VPS_HOST }}
-          VPS_USER: ${{ secrets.VPS_USER }}
-          VPS_PORT: ${{ secrets.SAEIT_VPS_SSH_PORT }}
+          VPS_HOST: 178.239.147.150
+          VPS_USER: githubops
+          VPS_PORT: "22"
           VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
           VPS_KNOWN: ${{ secrets.SAEIT_VPS_SSH_KNOWN_HOSTS }}
         shell: bash
@@ -44,7 +44,14 @@ jobs:
           else
             h="$VPS_HOST"; u="$VPS_USER"; p="$VPS_PORT"; k="$VPS_KEY"; known="$VPS_KNOWN"
           fi
-          [[ -n "$h" && -n "$u" && -n "$k" && -n "$known" ]] || { echo "Missing SSH secrets"; exit 1; }
+          [[ -n "$h" && -n "$u" && -n "$k" ]] || { echo "Missing SSH credentials for selected target"; exit 1; }
+          if [[ "$TARGET" == vps && -z "$known" ]]; then
+            known="$(ssh-keyscan -T 10 -t rsa "$h" 2>/dev/null)"
+            [[ -n "$known" ]] || { echo "VPS SSH host key unavailable"; exit 1; }
+            fingerprint="$(printf '%s\n' "$known" | ssh-keygen -lf - -E sha256 | awk '{print $2}' | sort -u)"
+            [[ "$fingerprint" == "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs" ]] || { echo "Unexpected VPS SSH host fingerprint"; exit 1; }
+          fi
+          [[ -n "$known" ]] || { echo "Missing pinned host key"; exit 1; }
           [[ "$u" =~ ^[a-zA-Z_][a-zA-Z0-9_.-]*$ ]] || exit 1
           [[ "$h" =~ ^[a-zA-Z0-9.:-]+$ ]] || exit 1
           p="${p:-22}"
