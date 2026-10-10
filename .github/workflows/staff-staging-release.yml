@@ -16,6 +16,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
+      - name: Require immutable revision
+        env:
+          REVISION: ${{ inputs.revision }}
+        run: |
+          [[ "$REVISION" =~ ^[a-f0-9]{40}$ ]] || { echo "Use full reviewed commit SHA"; exit 1; }
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.revision }}
@@ -24,6 +29,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${{ inputs.revision }}"
           git archive --format=tar HEAD | gzip -n > "$RUNNER_TEMP/staff-release.tar.gz"
           sha256sum "$RUNNER_TEMP/staff-release.tar.gz"
       - name: Stage over existing SSH relay
@@ -75,6 +81,9 @@ jobs:
           release="staff-$(git rev-parse --short=12 HEAD)"
           timeout 45s ssh -F "$RUNNER_TEMP/ssh/config" saeit-host "mkdir -p /home/zomorod2/Saeit-staging/releases/$release"
           timeout 120s scp -F "$RUNNER_TEMP/ssh/config" "$RUNNER_TEMP/staff-release.tar.gz" "saeit-host:/home/zomorod2/Saeit-staging/releases/$release/source.tar.gz"
+          local_sha="$(sha256sum "$RUNNER_TEMP/staff-release.tar.gz" | cut -d " " -f 1)"
+          remote_sha="$(timeout 45s ssh -F "$RUNNER_TEMP/ssh/config" saeit-host "sha256sum /home/zomorod2/Saeit-staging/releases/$release/source.tar.gz" | cut -d " " -f 1)"
+          test "$local_sha" = "$remote_sha"
           timeout 45s ssh -F "$RUNNER_TEMP/ssh/config" saeit-host "cd /home/zomorod2/Saeit-staging/releases/$release && tar -tzf source.tar.gz | grep -qx passenger_wsgi.py && tar -tzf source.tar.gz | grep -qx manage.py && tar -xzf source.tar.gz && test -f passenger_wsgi.py && test -f manage.py"
           echo "Staging source uploaded; production application unchanged."
       - name: Remove temporary SSH credentials
