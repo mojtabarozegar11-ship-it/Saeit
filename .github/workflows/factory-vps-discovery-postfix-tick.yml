@@ -73,7 +73,28 @@ jobs:
           "$base/.venv/bin/python" manage.py migrate --check
           test -f "$base/private/factory-fresh-isolated.sqlite3"
           export MOJ_FACTORY_LOCAL_MODE=1 MOJ_PAID_LLM_ENABLED=0 MOJ_LLM_DAILY_CALL_BUDGET=0 MOJ_LLM_MAX_COST_MINOR=0
-          timeout 150 "$base/.venv/bin/python" manage.py factory_staging_tick --max-runs 1 --max-steps 2
+          tick_log="$(mktemp)"
+          set +e
+          timeout 150 "$base/.venv/bin/python" manage.py factory_staging_tick --max-runs 1 --max-steps 2 > "$tick_log" 2>&1
+          tick_status=$?
+          set -e
+          cat "$tick_log"
+          if [ "$tick_status" -ne 0 ]; then
+            echo "FACTORY_GATE_FAILED: command_exit=$tick_status" >&2
+            rm -f "$tick_log"
+            exit 1
+          fi
+          if grep -q 'FACTORY_DISCOVERY_ERROR' "$tick_log"; then
+            echo "FACTORY_GATE_FAILED: discovery_error" >&2
+            rm -f "$tick_log"
+            exit 1
+          fi
+          if ! grep -Eq 'FACTORY_TICK_OK .*processed_runs=[1-9][0-9]*' "$tick_log"; then
+            echo "FACTORY_GATE_FAILED: no_product_runs_processed" >&2
+            rm -f "$tick_log"
+            exit 1
+          fi
+          rm -f "$tick_log"
           "$base/.venv/bin/python" - <<'PY'
           import sqlite3
           from pathlib import Path
