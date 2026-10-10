@@ -68,6 +68,9 @@ jobs:
           EOF
           ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$RUNNER_TEMP/ssh/vps.known"
           test "$(ssh-keygen -lf "$RUNNER_TEMP/ssh/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          timeout 30s ssh -F "$RUNNER_TEMP/ssh/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$RUNNER_TEMP/ssh/host.candidate"
+          test "$(ssh-keygen -lf "$RUNNER_TEMP/ssh/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$RUNNER_TEMP/ssh/host.candidate" "$RUNNER_TEMP/ssh/host.known"
           timeout 45s ssh -F "$RUNNER_TEMP/ssh/config" saeit-host 'test -d /home/zomorod2/Saeit-staging'
           echo "Verified relay and staging directory; no files transferred."
       - name: Remove temporary SSH credentials
