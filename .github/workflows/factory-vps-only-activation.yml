@@ -74,6 +74,12 @@ jobs:
           import importlib.util
           print("VPS_PROVIDER_MODULE_PRESENT",importlib.util.find_spec("core.self_hosted_research_provider") is not None)
           print("VPS_ENV_PROVIDER_PRESENT",bool(os.environ.get("FACTORY_RESEARCH_PROVIDER")))
+          from core.self_hosted_research_provider import SelfHostedStagingResearchProvider
+          try:
+              candidate=SelfHostedStagingResearchProvider()
+              print("VPS_PROVIDER_DIRECT_READY",getattr(candidate,"real_research",False) is True and callable(getattr(candidate,"search",None)))
+          except Exception as exc:
+              print("VPS_PROVIDER_DIRECT_ERROR",type(exc).__name__,str(exc)[:160])
           try:
               p=configured_research_provider()
               print("VPS_PROVIDER_READY",type(p).__name__)
