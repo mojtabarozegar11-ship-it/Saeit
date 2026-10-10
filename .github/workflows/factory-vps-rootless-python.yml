@@ -1,0 +1,81 @@
+name: Prepare Isolated VPS Python 3.11
+on:
+  push:
+    branches: [chore/ssh-vps-relay-20261009]
+    paths: [.github/workflows/factory-vps-rootless-python.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Prepare pinned SSH relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+          HOST_KNOWN: ${{ secrets.SAEIT_HOST_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY" && test -n "$HOST_KNOWN"
+          d="$RUNNER_TEMP/factory-relay"; mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          printf '%s\n' "$HOST_KNOWN" > "$d/host.known"
+          chmod 600 "$d/"*
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            StrictHostKeyChecking yes
+            ConnectTimeout 10
+            ForwardAgent no
+          EOF
+          chmod 600 "$d/config"
+          ssh -F "$d/config" saeit-vps 'timeout 12 ssh-keyscan -T 7 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.scan" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.scan" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          cp "$d/host.scan" "$d/host.known"
+          ssh -F "$d/config" saeit-host 'id -un' | grep -qx zomorod2
+          ssh -F "$d/config" saeit-vps 'id -un' | grep -qx githubops
+      - name: Install isolated user-owned Python 3.11 without sudo
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/factory-relay"
+          timeout 480 ssh -F "$d/config" saeit-vps 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          mkdir -p "$HOME/factory-runtime" "$HOME/.local/bin"
+          if ! test -x "$HOME/.local/bin/uv"; then
+            curl --fail --location --silent --show-error --retry 2 https://astral.sh/uv/install.sh -o "$HOME/factory-runtime/install-uv.sh"
+            UV_INSTALL_DIR="$HOME/.local/bin" sh "$HOME/factory-runtime/install-uv.sh" >/dev/null
+            rm -f "$HOME/factory-runtime/install-uv.sh"
+          fi
+          "$HOME/.local/bin/uv" --version
+          "$HOME/.local/bin/uv" python install 3.11
+          "$HOME/.local/bin/uv" venv --python 3.11 "$HOME/factory-runtime/.venv"
+          "$HOME/factory-runtime/.venv/bin/python" --version
+          "$HOME/factory-runtime/.venv/bin/python" -c 'import sys; assert sys.version_info[:2] == (3,11)'
+          echo ISOLATED_PYTHON_READY_NO_SYSTEM_CHANGES
+          REMOTE
+      - name: Cleanup
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/factory-relay"
