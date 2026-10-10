@@ -1,0 +1,118 @@
+name: Factory VPS Isolated Django Code Transfer
+on:
+  push:
+    branches: [chore/ssh-vps-relay-20261009]
+    paths: [.github/workflows/factory-vps-django-code-transfer.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  transfer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Prepare pinned SSH relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+          HOST_KNOWN: ${{ secrets.SAEIT_HOST_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY" && test -n "$HOST_KNOWN"
+          d="$RUNNER_TEMP/factory-relay"; mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          printf '%s\n' "$HOST_KNOWN" > "$d/host.known"
+          chmod 600 "$d/"*
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            StrictHostKeyChecking yes
+            ConnectTimeout 10
+            ForwardAgent no
+          EOF
+          chmod 600 "$d/config"
+          ssh -F "$d/config" saeit-vps 'timeout 12 ssh-keyscan -T 7 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.scan" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.scan" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          cp "$d/host.scan" "$d/host.known"
+          ssh -F "$d/config" saeit-host 'id -un' | grep -qx zomorod2
+          ssh -F "$d/config" saeit-vps 'id -un' | grep -qx githubops
+      - name: Transfer allowlisted Django source without secrets or user content
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/factory-relay"
+          ssh -F "$d/config" saeit-host 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          cd /home/zomorod2/Saeit-staging
+          umask 077
+          mkdir -p var/factory/operations/private-code-transfer
+          python3 - <<'PY'
+          import pathlib,tarfile
+          root=pathlib.Path.cwd()
+          out=root/"var/factory/operations/private-code-transfer/django-factory-runtime.tar.gz"
+          candidates=["manage.py","requirements.txt","config","core"]
+          exclusions={".env",".git","__pycache__","node_modules",".venv","venv","media","staticfiles","uploads","secrets","private","logs","var","db.sqlite3","mojplaywin.sqlite3"}
+          count=0
+          with tarfile.open(out,"w:gz") as t:
+              for rel in candidates:
+                  p=root/rel
+                  if not p.exists(): continue
+                  paths=([p] if p.is_file() else p.rglob("*"))
+                  for q in paths:
+                      if not q.is_file() or q.is_symlink(): continue
+                      rp=q.relative_to(root)
+                      if any(part in exclusions or part.startswith(".") for part in rp.parts): continue
+                      if q.suffix in {".sqlite3",".db",".pem",".key",".log",".zip",".tar",".gz",".jsonl",".csv"}: continue
+                      if q.stat().st_size>2_000_000: continue
+                      t.add(q,arcname=str(rp),recursive=False)
+                      count+=1
+          print("SOURCE_CODE_FILES_PACKAGED",count)
+          assert count>25
+          PY
+          REMOTE
+          ssh -F "$d/config" saeit-host 'base64 /home/zomorod2/Saeit-staging/var/factory/operations/private-code-transfer/django-factory-runtime.tar.gz' | base64 -d > "$RUNNER_TEMP/django-factory-runtime.tar.gz"
+          ssh -F "$d/config" saeit-host 'rm -f /home/zomorod2/Saeit-staging/var/factory/operations/private-code-transfer/django-factory-runtime.tar.gz'
+          python3 - "$RUNNER_TEMP/django-factory-runtime.tar.gz" <<'PY'
+          import sys,tarfile,pathlib
+          with tarfile.open(sys.argv[1],"r:gz") as t:
+              for m in t:
+                  p=pathlib.PurePosixPath(m.name)
+                  assert m.isfile() and not p.is_absolute() and ".." not in p.parts
+                  assert p.parts[0] in {"manage.py","requirements.txt","config","core"}
+                  assert not any(x.startswith(".") for x in p.parts)
+          print("CODE_ARCHIVE_PATHS_VALID")
+          PY
+          sha256sum "$RUNNER_TEMP/django-factory-runtime.tar.gz"
+          ssh -F "$d/config" saeit-vps 'mkdir -p "$HOME/factory-runtime/django-app"'
+          cat "$RUNNER_TEMP/django-factory-runtime.tar.gz" | ssh -F "$d/config" saeit-vps 'cat > "$HOME/factory-runtime/django-source.tar.gz"'
+          ssh -F "$d/config" saeit-vps 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          tar -xzf "$HOME/factory-runtime/django-source.tar.gz" -C "$HOME/factory-runtime/django-app" --no-same-owner --no-same-permissions
+          test -f "$HOME/factory-runtime/django-app/manage.py"
+          test -f "$HOME/factory-runtime/django-app/core/models.py"
+          test -f "$HOME/factory-runtime/django-app/config/settings.py"
+          echo DJANGO_CODE_STAGED_NO_EXECUTION
+          sha256sum "$HOME/factory-runtime/django-source.tar.gz"
+          REMOTE
+      - name: Cleanup
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/factory-relay" "$RUNNER_TEMP/django-factory-runtime.tar.gz"
