@@ -15,6 +15,7 @@ MODULES = (
     ("finance", "امور مالی", "Financial Management"),
     ("infrastructure", "زیرساخت", "Infrastructure"),
     ("staff", "پرسنل و دسترسی‌ها", "Staff & Permissions"),
+    ("audit", "سوابق عملیات", "Activity Audit"),
     ("approvals", "مرکز تأیید عملیات", "Approval Center"),
     ("alerts", "هشدارها", "Alerts & Incidents"),
     ("settings", "تنظیمات سامانه", "System Settings"),
