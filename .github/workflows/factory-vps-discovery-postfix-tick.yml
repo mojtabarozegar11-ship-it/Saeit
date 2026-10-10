@@ -73,6 +73,37 @@ jobs:
           "$base/.venv/bin/python" manage.py migrate --check
           test -f "$base/private/factory-fresh-isolated.sqlite3"
           export MOJ_FACTORY_LOCAL_MODE=1 MOJ_PAID_LLM_ENABLED=0 MOJ_LLM_DAILY_CALL_BUDGET=0 MOJ_LLM_MAX_COST_MINOR=0
+          echo "FACTORY_DIAGNOSTIC_START"
+          "$base/.venv/bin/python" - <<'PY'
+          import ast
+          from pathlib import Path
+          root = Path.home() / "factory-runtime/django-app/core"
+          targets = [
+              root / "factory_agent_runtime.py",
+              root / "opportunity_discovery.py",
+              root / "management/commands/opportunity_discovery_tick.py",
+              root / "management/commands/factory_staging_tick.py",
+          ]
+          for path in targets:
+              print("DIAG_FILE", path.relative_to(root), "exists", path.is_file())
+              if not path.is_file():
+                  continue
+              source = path.read_text(encoding="utf-8")
+              lines = source.splitlines()
+              try:
+                  tree = ast.parse(source)
+              except SyntaxError as exc:
+                  print("DIAG_SYNTAX_ERROR", type(exc).__name__, exc.lineno)
+                  continue
+              for node in ast.walk(tree):
+                  if isinstance(node, (ast.Raise, ast.ExceptHandler, ast.Call)):
+                      fragment = ast.get_source_segment(source, node) or ""
+                      if "FactoryAgentBlocked" in fragment or "configured_research_provider" in fragment:
+                          print("DIAG_SITE", path.name, getattr(node, "lineno", "?"), type(node).__name__)
+                          if isinstance(node, (ast.Raise, ast.ExceptHandler)):
+                              print("DIAG_CONTEXT", " ".join(lines[max(0,node.lineno-3):min(len(lines),node.lineno+2)])[:350].replace("\\n"," "))
+          PY
+          echo "FACTORY_DIAGNOSTIC_END"
           tick_log="$(mktemp)"
           set +e
           timeout 150 "$base/.venv/bin/python" manage.py factory_staging_tick --max-runs 1 --max-steps 2 > "$tick_log" 2>&1
