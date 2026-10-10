@@ -107,6 +107,14 @@ urlpatterns = [
     path("api/overview/", overview_api, name="command_center_overview_api"),
 ]
 '''
+        # The full dashboard references unavailable route names in compatibility mode.
+        fallback_template = """<!doctype html><html lang="{{ lang }}">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body><main><h1>Staff dashboard — read only</h1>
+<p>Operational data unavailable. Factory and site status: unknown.</p>
+<a href="{% url 'command_center_overview_api' %}">Overview API</a>
+</main></body></html>"""
+        atomic_write(live / "command_center/templates/command_center/dashboard.html", fallback_template)
         atomic_write(live / "command_center/views.py", fallback_views)
         atomic_write(live / "command_center/urls.py", fallback_urls)
         print("COMPATIBILITY_MODE=read_only; unavailable model-backed features disabled", flush=True)
