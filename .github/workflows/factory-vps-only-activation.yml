@@ -37,7 +37,7 @@ jobs:
           set -uo pipefail
           base="$HOME/factory-runtime"
           cd "$base/django-app" || exit 1
-          export SAEIT_ENV=production MOJ_FACTORY_LOCAL_MODE=1
+          export SAEIT_ENV=production MOJ_FACTORY_LOCAL_MODE=1 FACTORY_RESEARCH_PROVIDER=core.self_hosted_research_provider.SelfHostedStagingResearchProvider
           export MOJ_PAID_LLM_ENABLED=0 MOJ_LLM_DAILY_CALL_BUDGET=0 MOJ_LLM_MAX_COST_MINOR=0
           while :; do
             timeout 100 "$base/.venv/bin/python" manage.py factory_staging_tick --max-runs 1 --max-steps 2 >> "$base/operations/vps-only-factory.log" 2>&1 || echo "TICK_EXIT_FAILURE" >> "$base/operations/vps-only-factory.log"
