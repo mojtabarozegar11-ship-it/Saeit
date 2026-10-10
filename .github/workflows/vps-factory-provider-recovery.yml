@@ -14,7 +14,7 @@ jobs:
       - name: Backup and repair VPS research provider without touching cPanel
         shell: bash
         env:
-          VPS_KEY: ${{ secrets.VPS_KEY }}
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
         run: |
           set -euo pipefail
           umask 077
