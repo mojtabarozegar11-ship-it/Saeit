@@ -1,0 +1,54 @@
+name: Saeit Termux Private SSH Connectivity
+on:
+  issues:
+    types: [opened]
+permissions:
+  contents: read
+concurrency:
+  group: saeit-termux-connectivity
+  cancel-in-progress: false
+jobs:
+  connectivity:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event.issue.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.issue.title == 'Ops: check private Termux SSH connection 2026-10-11'
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Connect to VPS and probe local-only tunnel with read-only command
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/saeit-termux-connectivity"
+          mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -i "$d/key" -p 22 -o BatchMode=yes -o ConnectTimeout=10 -o ConnectionAttempts=1 -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" githubops@178.239.147.150 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          test "$(id -un)" = githubops
+          p="$HOME/.local/share/saeit-termux-bridge/phone_user"
+          k="$HOME/.ssh/saeit_termux_operator_ed25519"
+          test -r "$p" && test -r "$k" || { echo TERMUX_BRIDGE_METADATA_MISSING; exit 31; }
+          u="$(cat "$p")"
+          [[ "$u" =~ ^[a-zA-Z_][a-zA-Z0-9_-]{0,40}$ ]] || { echo TERMUX_BRIDGE_INVALID_USER; exit 32; }
+          if command -v ss >/dev/null 2>&1; then
+            ss -ltn | grep -Eq '127\.0\.0\.1:18022[[:space:]]' || { echo TERMUX_REVERSE_TUNNEL_NOT_LISTENING; exit 33; }
+          fi
+          known="$HOME/.local/share/saeit-termux-bridge/known_hosts"
+          if test ! -s "$known"; then
+            ssh-keyscan -T 6 -p 18022 -t ed25519 127.0.0.1 2>/dev/null > "$known" || true
+            chmod 600 "$known"
+          fi
+          test -s "$known" || { echo TERMUX_SSH_HOST_KEY_UNAVAILABLE; exit 34; }
+          echo TERMUX_REVERSE_TUNNEL_LISTENING
+          timeout 20s ssh -p 18022 -i "$k" -o BatchMode=yes -o ConnectTimeout=8 -o ConnectionAttempts=1 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$known" "$u@127.0.0.1" 'printf "TERMUX_REMOTE_EXEC_OK\n"; id -un; uname -o'
+          REMOTE
+          rm -rf "$d"
