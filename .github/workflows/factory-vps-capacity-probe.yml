@@ -1,0 +1,30 @@
+name: Factory VPS Capacity and Placement Probe
+on:
+  push:
+    branches: [chore/ssh-vps-relay-20261009]
+    paths: [.github/workflows/factory-vps-capacity-probe.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Verify pinned VPS and inspect capacity read-only
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" || { echo 'VPS SSH key secret unavailable'; exit 2; }
+          mkdir -p "$RUNNER_TEMP/factory-ssh"
+          printf '%s\n' "$VPS_KEY" > "$RUNNER_TEMP/factory-ssh/key"
+          chmod 600 "$RUNNER_TEMP/factory-ssh/key"
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$RUNNER_TEMP/factory-ssh/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$RUNNER_TEMP/factory-ssh/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          timeout 55 ssh -i "$RUNNER_TEMP/factory-ssh/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$RUNNER_TEMP/factory-ssh/known" -o ConnectTimeout=10 githubops@178.239.147.150 'echo IDENTITY; id -un; hostname; echo DISK; df -h /; echo MEMORY; free -m; echo PROCESSES; ps -eo comm,args | grep -Ei "[f]actory|[p]ostgres|[c]elery" | cut -c1-150 | head -15 || true; echo FACTORY_DIRS; for p in /srv/factory /opt/factory /home/githubops/Saeit /home/githubops/factory; do if test -e "$p"; then du -sh "$p"; fi; done'
+      - name: Cleanup
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/factory-ssh"
