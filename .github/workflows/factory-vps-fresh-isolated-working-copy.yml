@@ -1,0 +1,93 @@
+name: Factory VPS Fresh Isolated Working Copy
+on:
+  push:
+    branches: [chore/ssh-vps-relay-20261009]
+    paths: [.github/workflows/factory-vps-fresh-isolated-working-copy.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Prepare pinned SSH relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+          HOST_KNOWN: ${{ secrets.SAEIT_HOST_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY" && test -n "$HOST_KNOWN"
+          d="$RUNNER_TEMP/factory-relay"; mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          printf '%s\n' "$HOST_KNOWN" > "$d/host.known"
+          chmod 600 "$d/"*
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            StrictHostKeyChecking yes
+            ConnectTimeout 10
+            ForwardAgent no
+          EOF
+          chmod 600 "$d/config"
+          ssh -F "$d/config" saeit-vps 'timeout 12 ssh-keyscan -T 7 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.scan" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.scan" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          cp "$d/host.scan" "$d/host.known"
+          ssh -F "$d/config" saeit-host 'id -un' | grep -qx zomorod2
+          ssh -F "$d/config" saeit-vps 'id -un' | grep -qx githubops
+      - name: Verify independent factory runtime assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/factory-relay"
+          ssh -F "$d/config" saeit-vps 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          base="$HOME/factory-runtime"
+          test -f "$base/django-app/manage.py"
+          test -f "$base/django-app/core/models.py"
+          test -f "$base/django-app/config/settings.py"
+          test -x "$base/.venv/bin/python"
+          test -f "$HOME/factory-transfer-incoming/private-db/factory-migration-snapshot.sqlite3"
+          "$base/.venv/bin/python" -c 'import django,sqlite3; print("DJANGO",django.get_version())'
+          "$base/.venv/bin/python" - <<'PY'
+          from pathlib import Path
+          import sqlite3
+          root=Path.home()/"factory-runtime"
+          source=Path.home()/"factory-transfer-incoming/private-db/factory-fresh-20261010.sqlite3"
+          target=root/"private/factory-fresh-isolated.sqlite3"
+          assert source.is_file()
+          if target.exists(): raise SystemExit("TARGET_ALREADY_EXISTS")
+          target.parent.mkdir(parents=True,exist_ok=True)
+          with sqlite3.connect("file:"+str(source)+"?mode=ro",uri=True) as src:
+              with sqlite3.connect(str(target)) as dst:
+                  src.backup(dst,pages=200,sleep=0.1)
+                  assert dst.execute("pragma integrity_check").fetchone()[0]=="ok"
+                  assert dst.execute("pragma foreign_key_check").fetchall()==[]
+          target.chmod(0o600)
+          print("FRESH_ISOLATED_WORKING_COPY_CREATED",target.stat().st_size)
+          PY
+          echo FRESH_WORKING_COPY_COMPLETE
+          REMOTE
+      - name: Cleanup
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/factory-relay"
