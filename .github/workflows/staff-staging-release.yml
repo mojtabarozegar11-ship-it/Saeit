@@ -37,7 +37,7 @@ jobs:
           umask 077
           mkdir -p "$RUNNER_TEMP/ssh"
           printf '%s\n' "$VPS_KEY" > "$RUNNER_TEMP/ssh/vps.key"
-          printf '%s\n' "$HOST_KEY" | sed 's/\\n/\n/g' > "$RUNNER_TEMP/ssh/host.key"
+          printf '%s\n' "$HOST_KEY" > "$RUNNER_TEMP/ssh/host.key"
           printf '%s\n' "$HOST_KNOWN" > "$RUNNER_TEMP/ssh/host.known"
           chmod 600 "$RUNNER_TEMP/ssh/"*
           test -n "$VPS_KEY" && test -n "$HOST_KEY" && test -n "$HOST_KNOWN"
@@ -72,7 +72,11 @@ jobs:
           test "$(ssh-keygen -lf "$RUNNER_TEMP/ssh/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
           cp "$RUNNER_TEMP/ssh/host.candidate" "$RUNNER_TEMP/ssh/host.known"
           timeout 45s ssh -F "$RUNNER_TEMP/ssh/config" saeit-host 'test -d /home/zomorod2/Saeit-staging'
-          echo "Verified relay and staging directory; no files transferred."
+          release="staff-$(git rev-parse --short=12 HEAD)"
+          timeout 45s ssh -F "$RUNNER_TEMP/ssh/config" saeit-host "mkdir -p /home/zomorod2/Saeit-staging/releases/$release"
+          timeout 120s scp -F "$RUNNER_TEMP/ssh/config" "$RUNNER_TEMP/staff-release.tar.gz" "saeit-host:/home/zomorod2/Saeit-staging/releases/$release/source.tar.gz"
+          timeout 45s ssh -F "$RUNNER_TEMP/ssh/config" saeit-host "cd /home/zomorod2/Saeit-staging/releases/$release && tar -xzf source.tar.gz && test -f passenger_wsgi.py && test -f manage.py"
+          echo "Staging source uploaded; production application unchanged."
       - name: Remove temporary SSH credentials
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/ssh"
