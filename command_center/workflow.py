@@ -10,6 +10,6 @@ from core.models import AgentTask
 def stages(request):
     total = AgentTask.objects.count()
     rows = list(AgentTask.objects.values("action_type", "status").annotate(count=Count("id")).order_by("action_type", "status")[:100])
-    response = JsonResponse({"source": "core.AgentTask", "total_tasks": total, "stages": rows, "progress_percent": None, "progress_reason": "No verified product-stage linkage", "task_count_in_returned_groups": sum(row["count"] for row in rows), "group_limit": 100, "complete": len(rows) < 100})
+    response = JsonResponse({"source": "core.AgentTask", "total_tasks": total, "stages": rows, "progress_percent": None, "progress_reason": "No verified product-stage linkage", "task_count_in_returned_groups": sum(row["count"] for row in rows), "group_limit": 100, "complete": len(rows) < 100, "status": "recorded_tasks_only"})
     response["Cache-Control"] = "no-store"
     return response
