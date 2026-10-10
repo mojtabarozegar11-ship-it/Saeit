@@ -65,10 +65,7 @@ jobs:
           cd /home/zomorod2/Saeit-staging
           # Explicitly include only the factory Python modules and factory data, not entire app/agent trees.
           # Exclude snapshots, credentials, databases, and any agent-like state until classification.
-          find core -maxdepth 1 -type f -name 'factory*.py' -printf '%p\n' | sort > /tmp/factory-transfer-modules-$$
-          test -s /tmp/factory-transfer-modules-$$
-          tar --exclude='*.env' --exclude='*.key' --exclude='*.pem' -czf - --files-from=/tmp/factory-transfer-modules-$
-          rm -f /tmp/factory-transfer-modules-$$
+          find core -maxdepth 1 -type f -name 'factory*.py' -print | sort | tar --exclude='*.env' --exclude='*.key' --exclude='*.pem' -czf - -T -
           REMOTE
           tar -tzf "$RUNNER_TEMP/factory-only.tar.gz" | grep -q '^core/factory_stage4.py$'
           if tar -tzf "$RUNNER_TEMP/factory-only.tar.gz" | grep -Ei '(^|/)(master_agent|content_agents|agent_empire|\.env|.*\.key|.*\.pem)(/|$)'; then echo 'DENIED_AGENT_OR_SECRET_IN_ARCHIVE'; exit 3; fi
