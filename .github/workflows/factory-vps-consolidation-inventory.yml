@@ -6,6 +6,7 @@ on:
     paths:
       - .github/workflows/factory-vps-consolidation-inventory.yml
   workflow_dispatch:
+# Read-only inventory run; original hosting agents remain untouched.
 permissions:
   contents: read
 jobs:
