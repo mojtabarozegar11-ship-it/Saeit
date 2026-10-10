@@ -32,6 +32,10 @@ jobs:
           cache: pip
       - name: Install requirements
         run: python -m pip install -r requirements.txt
+      - name: Validate VPS inventory script syntax and read-only command surface
+        run: |
+          bash -n scripts/vps_factory_inventory.sh
+          ! grep -En '(^|[[:space:]])(rm|mv|mkfs|dd|systemctl[[:space:]]+(start|stop|restart)|apt(-get)?[[:space:]]+install|docker[[:space:]]+(rm|stop|run))([[:space:]]|$)' scripts/vps_factory_inventory.sh
       - name: Django checks
         run: python manage.py check
       - name: Migration consistency
