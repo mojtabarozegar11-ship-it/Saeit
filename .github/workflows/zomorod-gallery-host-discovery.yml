@@ -1,0 +1,104 @@
+name: Zomorod gallery host discovery (read only)
+on:
+  push:
+    branches: [ops/zomorod-gallery-publish-20261014]
+    paths: [.github/workflows/zomorod-gallery-host-discovery.yml]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - name: Inspect Django and Passenger application roots via pinned SSH relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-gallery-ssh"; mkdir -p "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          python3 - "$d/host.key" <<'PY'
+          import pathlib,sys
+          p=pathlib.Path(sys.argv[1]); t=p.read_text().replace('\r\n','\n').strip()
+          p.write_text(t.replace('\\n','\n')+'\n')
+          PY
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host saeit-host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            LogLevel ERROR
+          EOF
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          timeout 95s ssh -F "$d/config" saeit-host 'python3 -' <<'REMOTE'
+          from pathlib import Path
+          import os,re
+          h=Path('/home/zomorod2')
+          print('HOST_USER',os.getlogin() if False else os.environ.get('USER','unknown'))
+          checks=[
+            h/'public_html',h/'domains/zomorodmelal.ir/public_html',
+            h/'saeit_v91/zomorodmelal',h/'saeit_v91_runtime_stage_20261012/zomorodmelal',
+            h/'Saeit',h/'Saeit-staging',h/'Saeit-staging/zomorod_json_admin_stage'
+          ]
+          for p in checks:
+            print('ROOT',p,'exists',p.exists(),'realpath',p.resolve() if p.exists() else '-')
+            if not p.exists() or not p.is_dir():continue
+            for f in ['manage.py','passenger_wsgi.py','config/settings.py','config/urls.py','portal/urls.py','core/company_content_models.py','core/company_content_views.py','core/newsletter_models.py','core/admin.py']:
+              print('FILE',p.name,f,(p/f).is_file())
+            for fn in ['passenger_wsgi.py','.htaccess']:
+              f=p/fn
+              if f.is_file():
+                s=f.read_text(errors='replace')
+                if fn=='passenger_wsgi.py':
+                  for ln in s.splitlines():
+                    if 'DJANGO_SETTINGS_MODULE' in ln:print('WSGI_SETTINGS_REF',p.name,ln.strip()[:180])
+                    if ('sys.path' in ln or 'site.addsitedir' in ln) and len(ln)<300:print('WSGI_PATH_REF',p.name,ln.strip()[:180])
+                else:
+                  for ln in s.splitlines():
+                    if re.search(r'^\s*Passenger(AppRoot|BaseURI|StartupFile|Python|Enabled)',ln,re.I):
+                      print('PASSENGER',str(p),re.sub(r'PassengerPython\s+.*','PassengerPython [redacted]',ln.strip())[:240])
+            for ptn in ['core/company_content_models.py','core/newsletter_models.py','portal/models.py']:
+              f=p/ptn
+              if f.is_file():
+                t=f.read_text(errors='replace')
+                print('MODELS',p.name,ptn,'gallery',('CompanyGalleryMedia' in t),'story',('NewsletterStory' in t))
+          for f in [h/'.htaccess',h/'public_html/.htaccess',h/'domains/zomorodmelal.ir/public_html/.htaccess']:
+            if f.is_file():
+              for ln in f.read_text(errors='replace').splitlines():
+                if re.search(r'^\s*Passenger(AppRoot|BaseURI|StartupFile|Python|Enabled)',ln,re.I):
+                  print('WEBROOT_PASSENGER',str(f),re.sub(r'PassengerPython\s+.*','PassengerPython [redacted]',ln.strip())[:260])
+          print('READ_ONLY_DISCOVERY_COMPLETE')
+          REMOTE
+      - name: Remove SSH material
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/zomorod-gallery-ssh"
