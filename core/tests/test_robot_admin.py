@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.test import SimpleTestCase
 
-from core.models import Agent, AgentCapability, AgentTask, Robot
+from core.models import Agent, AgentCapability, AgentTask, ApprovalRequest, Robot
 
 
 class AgentAndRobotAdminTests(SimpleTestCase):
@@ -20,3 +20,19 @@ class AgentAndRobotAdminTests(SimpleTestCase):
     def test_robot_secret_field_is_reference_only(self):
         field = Robot._meta.get_field("credential_reference")
         self.assertIn("Never store a credential", field.help_text)
+
+    def test_robot_requires_explicit_runtime_qualification(self):
+        robot = Robot(code="draft-robot", name="Draft")
+        self.assertFalse(robot.runtime_enabled)
+        robot.agent_id = 1
+        robot.connector = "allowlisted_tool"
+        robot.autonomy_level = "sandbox"
+        robot.deployment_status = "sandbox"
+        self.assertTrue(robot.runtime_enabled)
+
+    def test_robot_admin_shows_linked_tasks_and_owner_approval_actions(self):
+        robot_admin = admin.site._registry[Robot]
+        self.assertEqual(len(robot_admin.inlines), 1)
+        approval_admin = admin.site._registry[ApprovalRequest]
+        self.assertIn("approve_owned_pending", approval_admin.actions)
+        self.assertIn("reject_owned_pending", approval_admin.actions)
