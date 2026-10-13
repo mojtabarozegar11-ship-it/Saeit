@@ -52,13 +52,11 @@ class MasterAgent:
             robot_risk = normalize_risk(robot.risk_level)
             if RISK_ORDER[robot_risk] > RISK_ORDER[effective_risk]:
                 effective_risk = robot_risk
-        requires_approval = requires_owner_approval(normalized_action, effective_risk) or bool(
-            robot
-            and (
-                robot.requires_owner_approval
-                or robot.autonomy_level == "owner_approved"
-            )
-        )
+        # Every robot operation needs an explicit owner decision, regardless
+        # of the robot's configured autonomy or the action's risk snapshot.
+        requires_approval = requires_owner_approval(
+            normalized_action, effective_risk
+        ) or robot is not None
         task = AgentTask.objects.create(
             agent=agent,
             project=project,
