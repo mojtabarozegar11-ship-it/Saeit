@@ -1,0 +1,104 @@
+name: Zomorod admin staging inventory (read-only)
+
+on:
+  push:
+    branches:
+      - feat/command-center-factory-readiness-20261014
+    paths:
+      - .github/workflows/zomorod-staging-admin-inventory.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: zomorod-admin-staging-inventory
+  cancel-in-progress: false
+
+jobs:
+  inventory:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify pinned SSH identities and prepare relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          VPS_KNOWN: ${{ secrets.SAEIT_VPS_SSH_KNOWN_HOSTS }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/zomorod-staging-ssh"
+          mkdir -p "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          python3 - "$d/host.key" <<'PY'
+          import pathlib, sys
+          p = pathlib.Path(sys.argv[1])
+          text = p.read_text().replace("\r\n", "\n").strip()
+          p.write_text(text.replace("\\n", "\n") + "\n")
+          PY
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          if [[ -n "$VPS_KNOWN" ]]; then
+            printf '%s\n' "$VPS_KNOWN" > "$d/vps.known"
+          else
+            ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          fi
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host saeit-host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            LogLevel ERROR
+          EOF
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          echo "SSH identities pinned to the previously confirmed fingerprints."
+          echo "No key material is printed."
+      - name: Inspect staging only; make no changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-staging-ssh"
+          timeout 70s ssh -F "$d/config" saeit-host 'bash -se' <<'REMOTE'
+          set -eu
+          test "$(id -un)" = "zomorod2"
+          printf 'HOST_USER='; id -un
+          printf 'HOST_NAME='; hostname
+          stage=/home/zomorod2/Saeit-staging
+          if test -d "$stage"; then
+            echo "STAGING_ROOT=PRESENT"
+            if test -w "$stage"; then echo "STAGING_ROOT_WRITABLE=yes"; else echo "STAGING_ROOT_WRITABLE=no"; fi
+            echo "DJANGO_PROJECTS_IN_STAGING:"
+            find "$stage" -maxdepth 6 -type f -name manage.py -print 2>/dev/null | head -30 || true
+            echo "PYTHON_EXECUTABLE_CANDIDATES_IN_STAGING:"
+            find "$stage" -maxdepth 7 -type f -path '*/bin/python*' -perm /111 -print 2>/dev/null | head -20 || true
+          else
+            echo "STAGING_ROOT=MISSING"
+            exit 3
+          fi
+          echo "READ_ONLY_STAGING_INVENTORY_COMPLETE"
+          REMOTE
