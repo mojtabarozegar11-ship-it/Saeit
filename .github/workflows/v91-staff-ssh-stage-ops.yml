@@ -86,14 +86,27 @@ jobs:
           mkdir -m 700 package
           python3 -m zipfile -e package.zip package
           cd package
-          echo '=== HOST SIDE PREFLIGHT, ORIGINALS READ-ONLY ==='
-          python3 prepare_v91_personnel_staging.py --home /home/zomorod2 --panel-zip SAEIT_V91_STAFF_PANEL_ONLY_2026-10-13.zip
-          echo '=== STAGE STAFF APP INTO ISOLATED COPIES ONLY ==='
-          python3 prepare_v91_personnel_staging.py --home /home/zomorod2 --panel-zip SAEIT_V91_STAFF_PANEL_ONLY_2026-10-13.zip --apply
-          echo '=== LOCATE STAGING RECEIPT ==='
-          find /home/zomorod2/Saeit-staging/v91_personnel_isolated -maxdepth 2 -name STAGING_RECEIPT.json -type f -print
           release="/home/zomorod2/Saeit-staging/v91_personnel_isolated/staff-$(sha256sum SAEIT_V91_STAFF_PANEL_ONLY_2026-10-13.zip | cut -c1-16)"
+          if test -f "$release/STAGING_RECEIPT.json"; then
+            echo 'EXISTING_STAGING_RELEASE_PRESERVED; no duplicate staging copy'
+          else
+            echo '=== HOST SIDE PREFLIGHT, ORIGINALS READ-ONLY ==='
+            python3 prepare_v91_personnel_staging.py --home /home/zomorod2 --panel-zip SAEIT_V91_STAFF_PANEL_ONLY_2026-10-13.zip
+            echo '=== STAGE STAFF APP INTO ISOLATED COPIES ONLY ==='
+            python3 prepare_v91_personnel_staging.py --home /home/zomorod2 --panel-zip SAEIT_V91_STAFF_PANEL_ONLY_2026-10-13.zip --apply
+          fi
           test -f "$release/STAGING_RECEIPT.json"
+          echo '=== CORRECT VENV ENTRYPOINT FOR STAGING-ONLY VERIFIER ==='
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('verify_v91_personnel_staging.py')
+          s=p.read_text()
+          old='python=Path(args.python).resolve(strict=True)'
+          new='python=Path(args.python).absolute(); assert python.is_file() and __import__("os").access(python,__import__("os").X_OK), "STAGING_INTERPRETER_UNAVAILABLE"'
+          if old not in s: raise SystemExit("Unexpected verifier version")
+          p.write_text(s.replace(old,new))
+          print("VERIFIER_VENV_PATH_PRESERVED")
+          PY
           if test -x /home/zomorod2/Saeit/.venv/bin/python; then
             interpreter=/home/zomorod2/Saeit/.venv/bin/python
           else
