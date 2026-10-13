@@ -110,6 +110,18 @@ jobs:
               stripped=line.strip()
               if stripped.startswith(('import ','from ','sys.path')):
                 print('WSGI_IMPORT_OR_PATH',n,stripped[:240])
+              if any(k in stripped for k in ('DJANGO_SETTINGS_MODULE','sys.path','os.chdir','__file__','config.wsgi')):
+                print('WSGI_RUNTIME_PATH_HINT',n,stripped[:240])
+          ini=mapped/'.user.ini'
+          if ini.is_file():
+            for n,line in enumerate(ini.read_text(errors='ignore').splitlines(),1):
+              if '=' in line:
+                key=line.split('=',1)[0].strip()
+                print('USER_INI_KEY',n,key)
+          for base in [root/'Saeit',root/'saeit_v91/mojplaywin_site',root/'saeit_v91_runtime_stage_20261012/mojplaywin_site']:
+            for rel in ['config/wsgi.py','config/settings.py','config/urls.py','sitecore/urls.py','sitecore/commerce_views.py','sitecore/commerce_gateway.py']:
+              q=base/rel
+              if q.is_file(): print('POSSIBLE_APP_MODULE',q,'bytes',q.stat().st_size)
           skip={'venv','.venv','node_modules','staticfiles','media','__pycache__','.git','backups','backup','tmp'}
           terms=('payment','crypto','tron','ethereum','wallet','invoice','checkout','commerce','gateway','webhook','order')
           shown=0
