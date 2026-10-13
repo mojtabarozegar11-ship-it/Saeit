@@ -522,7 +522,7 @@ class PlatformPageContent(T):
             isinstance(value, str)
             and value.startswith("/")
             and not value.startswith("//")
-            and not any(char in value for char in "\\r\\n")
+            and not any(char in value for char in "\r\n")
         )
 
     def clean(self):
