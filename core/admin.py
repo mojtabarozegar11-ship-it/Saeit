@@ -6,9 +6,7 @@ from django.urls import path, reverse
 
 from .chat_runtime import MasterAgentChat
 from .models import (
-    Agent,
-    AgentCapability,
-    AgentTask,
+    Robot,
     ApprovalRequest,
     AuditLog,
     ChatMessage,
@@ -88,6 +86,68 @@ class ChatSessionAdmin(ModelAdmin):
 
 
 admin.site.register(ChatSession, ChatSessionAdmin)
+
+
+@admin.register(Agent)
+class AgentAdmin(ModelAdmin):
+    list_display = ("code", "name", "active", "risk_level", "updated_at")
+    list_filter = ("active", "risk_level")
+    search_fields = ("code", "name", "mission")
+    readonly_fields = ("created_at", "updated_at")
+
+
+@admin.register(AgentCapability)
+class AgentCapabilityAdmin(ModelAdmin):
+    list_display = ("code", "name", "active", "risk_level", "updated_at")
+    list_filter = ("active", "risk_level")
+    search_fields = ("code", "name", "description")
+    filter_horizontal = ("agents",)
+    readonly_fields = ("created_at", "updated_at")
+
+
+@admin.register(AgentTask)
+class AgentTaskAdmin(ModelAdmin):
+    list_display = (
+        "id", "agent", "action_type", "status", "risk_snapshot",
+        "attempt_count", "cost", "updated_at",
+    )
+    list_filter = ("status", "risk_snapshot", "agent")
+    search_fields = ("execution_id", "capability_code", "agent__name")
+    readonly_fields = (
+        "agent", "project", "action_type", "capability_code", "risk_snapshot",
+        "execution_id", "attempt_count", "max_attempts", "input_data",
+        "output_data", "status", "cost", "created_at", "updated_at",
+    )
+    actions = None
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(Robot)
+class RobotAdmin(ModelAdmin):
+    list_display = (
+        "code", "name", "agent", "connector", "autonomy_level",
+        "risk_level", "deployment_status", "requires_owner_approval",
+    )
+    list_filter = (
+        "deployment_status", "autonomy_level", "risk_level",
+        "requires_owner_approval", "connector",
+    )
+    search_fields = ("code", "name", "mission", "connector", "credential_reference")
+    readonly_fields = ("created_at", "updated_at")
+    fieldsets = (
+        ("هویت و مأموریت", {"fields": ("code", "name", "agent", "mission", "connector")}),
+        ("کنترل و ایمنی", {"fields": (
+            "autonomy_level", "risk_level", "deployment_status",
+            "requires_owner_approval", "budget_limit", "credential_reference",
+        )}),
+        ("زمان‌ها", {"fields": ("created_at", "updated_at")}),
+    )
+
 
 admin.site.register([
     ResearchProject,
