@@ -121,4 +121,38 @@ jobs:
             p=app/name
             if not p.is_file(): print('CONFIG_MISSING',name);continue
             print('CONFIG_PRESENT',name,'bytes',p.stat().st_size)
+          import importlib.util,os,sys
+          def load_config(name):
+            path=app/'core'/name
+            if not path.is_file(): return None
+            try:
+              spec=importlib.util.spec_from_file_location('audit_'+name.replace('.py',''),path)
+              mod=importlib.util.module_from_spec(spec)
+              spec.loader.exec_module(mod)
+              return mod
+            except Exception as exc:
+              print('CONFIG_IMPORT_ERROR',name,type(exc).__name__)
+              return None
+          tron=load_config('cryptopay_tron_config.py')
+          if tron:
+            print('TRON_MAINNET_ENABLED',getattr(tron,'MAINNET_ENABLED',None) is True)
+            print('TRON_RECEIVER_MATCHES_SCREENSHOT',getattr(tron,'RECEIVING_ADDRESS',None)=='THFNU1iEXHd71WjEgjqUksd2UnMg2pUi73')
+            print('TRON_USDT_CONTRACT_CONFIGURED',bool(getattr(tron,'USDT_CONTRACT',None)))
+            print('TRON_EXPECTED_ATOMIC',getattr(tron,'EXPECTED_ATOMIC',None))
+          evm=load_config('cryptopay_mainnet_config.py')
+          if evm:
+            print('EVM_CONFIG_FLAGS',{k:(getattr(evm,k) if isinstance(getattr(evm,k),bool) else bool(getattr(evm,k))) for k in dir(evm) if k.isupper() and any(t in k for t in ('ENABLE','NETWORK','ASSET','CHAIN','ADDRESS','CONTRACT','RPC','CONFIRM'))})
+            print('EVM_RECEIVER_MATCHES_SCREENSHOT',getattr(evm,'RECEIVING_ADDRESS',None)=='0x89149b01f59115B86553561F12438D2ADF517E75')
+          private=root/'private_products'
+          files=[p for p in private.rglob('*') if p.is_file()] if private.is_dir() else []
+          print('PRIVATE_DELIVERY_ROOT',private.is_dir(),'file_count',len(files))
+          try:
+            os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+            sys.path.insert(0,str(app))
+            import django
+            django.setup()
+            from core.models import Product
+            print('PRODUCT_COUNTS','all',Product.objects.count(),'active',Product.objects.filter(active=True).count(),'active_usd_12',Product.objects.filter(active=True,currency='USD',price=12).count())
+          except Exception as exc:
+            print('PRODUCT_QUERY_ERROR',type(exc).__name__)
           REMOTE
