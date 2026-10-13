@@ -105,11 +105,7 @@ jobs:
               find -L "$HOME/virtualenv" -maxdepth 6 -type f -name 'python3*' -perm /111 -print 2>/dev/null | head -20
             fi
             echo "PYTHON_DEPENDENCY_AVAILABILITY:"
-            python3 - <<'PY'
-            import importlib.util
-            for module in ("django", "environ", "rest_framework", "whitenoise"):
-                print(f"{module}=" + ("available" if importlib.util.find_spec(module) else "missing"))
-            PY
+            python3 -c 'import importlib.util; names=("django","environ","rest_framework","whitenoise"); print("PYTHON_MODULES=" + ",".join(name+":"+("available" if importlib.util.find_spec(name) else "missing") for name in names))'
             for app in "$stage" "$stage/zomorod_json_admin_stage"; do
               if test -f "$app/manage.py"; then
                 printf 'SETTINGS_MODULE_SOURCE=%s ' "$app"
