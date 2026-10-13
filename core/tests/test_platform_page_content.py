@@ -81,7 +81,11 @@ class PlatformPageContentAdminTests(TestCase):
             Permission.objects.get(
                 content_type__app_label="core",
                 codename="change_platformpagecontent",
-            )
+            ),
+            Permission.objects.get(
+                content_type__app_label="core",
+                codename="delete_platformpagecontent",
+            ),
         )
         self.client.force_login(self.staff)
 
@@ -119,6 +123,9 @@ class PlatformPageContentAdminTests(TestCase):
         response = self.client.get(change_url)
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, 'name="title"')
-        self.assertFalse(self.client.get(
-            reverse("admin:core_platformpagecontent_delete", args=(page.pk,))
-        ).status_code == 200)
+        self.assertEqual(
+            self.client.get(
+                reverse("admin:core_platformpagecontent_delete", args=(page.pk,))
+            ).status_code,
+            403,
+        )
