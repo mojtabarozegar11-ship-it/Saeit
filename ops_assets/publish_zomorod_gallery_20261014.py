@@ -152,6 +152,14 @@ def preflight(rows):
         if out.is_symlink():fail('Gallery image path is a symbolic link')
         if out.exists() and sha256_bytes(out.read_bytes())!=sha256_bytes(row['image_bytes']):
             fail('Conflicting gallery media file')
+    # Validate prospective report content against live Article editorial rules, without writes.
+    from django.utils import timezone
+    for row in rows:
+        trial=Article(title=row['title'],slug=row['slug'],summary=row['summary'],body=row['body'],category=CATEGORY,
+                      language='fa',sources=['https://zomorodmelal.ir/company-gallery/photo/'+row['slug']+'/'],
+                      state='published',publication_mode='human',published_at=timezone.now())
+        trial.full_clean(exclude=['cover','approved_by','source_brief','origin_task'],validate_unique=False,validate_constraints=False)
+    print('ARTICLE_VALIDATION_OK',len(rows))
     for x in (GALLERY_PARTIAL,REPORT_TEMPLATE,REPORT_MODULE):
         if x.exists() and MARK not in x.read_text(encoding='utf-8'):
             fail('An unrelated file exists at the add-on path: '+x.name)
@@ -333,7 +341,7 @@ def save_database(rows,Article,GalleryPhoto):
             if article is None:
                 article=Article.objects.create(
                   title=row['title'],slug=row['slug'],summary=row['summary'],body=row['body'],
-                  language='fa',category=CATEGORY,sources=[],cover=photo,state='published',
+                  language='fa',category=CATEGORY,sources=['https://zomorodmelal.ir/company-gallery/photo/'+row['slug']+'/'],cover=photo,state='published',
                   publication_mode='human',published_at=timezone.now())
                 created_articles.append(article.pk)
             elif article.state!='published' or article.cover_id!=photo.pk:
