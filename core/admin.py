@@ -18,6 +18,7 @@ from .models import (
     KnowledgeArticle,
     Order,
     Product,
+    PlatformPageContent,
     Report,
     ResearchProject,
     ResearchSource,
@@ -275,3 +276,37 @@ class CompanyInquiryAdmin(admin.ModelAdmin):
     search_fields = ("name", "organization", "email", "subject", "message")
     readonly_fields = ("created_at", "updated_at")
     fieldsets = (("درخواست", {"fields": ("kind", "name", "organization", "email", "phone", "subject", "message")}), ("مدیریت", {"fields": ("status", "internal_note", "created_at", "updated_at")}))
+
+
+@admin.register(PlatformPageContent)
+class PlatformPageContentAdmin(ModelAdmin):
+    list_display = ("page_key", "title", "published", "updated_at")
+    list_filter = ("page_key", "published")
+    search_fields = ("title", "lead", "heading", "body")
+    ordering = ("page_key",)
+    actions = None
+    fieldsets = (
+        ("شناسه و انتشار", {"fields": ("page_key", "published", "created_at", "updated_at")}),
+        ("محتوا", {"fields": ("kicker", "title", "lead", "badge", "heading", "body")}),
+        ("کارت‌ها و پیوندها (JSON)", {"fields": ("items", "links")}),
+        ("دعوت به اقدام", {"fields": ("cta_title", "cta_text", "cta_label", "cta_url")}),
+        ("سئو", {"fields": ("seo_title", "meta_description")}),
+    )
+
+    def get_readonly_fields(self, request, obj=None):
+        readonly = list(super().get_readonly_fields(request, obj))
+        readonly.extend(("created_at", "updated_at"))
+        if not request.user.is_superuser:
+            readonly.append("published")
+            if obj and obj.published:
+                readonly.extend((
+                    "page_key", "kicker", "title", "lead", "badge", "heading", "body",
+                    "items", "links", "cta_title", "cta_text", "cta_label", "cta_url",
+                    "seo_title", "meta_description",
+                ))
+        return tuple(dict.fromkeys(readonly))
+
+    def has_delete_permission(self, request, obj=None):
+        if obj and obj.published and not request.user.is_superuser:
+            return False
+        return super().has_delete_permission(request, obj)
