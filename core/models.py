@@ -135,6 +135,61 @@ class AgentTask(T):
     cost = models.DecimalField(max_digits=12, decimal_places=4, default=0)
 
 
+class Robot(T):
+    """Registry entry for an execution bot; registration does not run code."""
+
+    AUTONOMY_CHOICES = [
+        ("observe", "Observe only"),
+        ("draft", "Draft and recommend"),
+        ("reversible", "Reversible non-financial actions"),
+        ("sandbox", "Sandbox execution"),
+        ("owner_approved", "Owner-approved bounded execution"),
+    ]
+    RISK_CHOICES = [
+        ("low", "Low"),
+        ("medium", "Medium"),
+        ("high", "High"),
+        ("critical", "Critical"),
+    ]
+    DEPLOYMENT_CHOICES = [
+        ("draft", "Draft"),
+        ("sandbox", "Sandbox"),
+        ("deployed", "Deployed"),
+        ("paused", "Paused"),
+        ("retired", "Retired"),
+    ]
+
+    code = models.SlugField(unique=True)
+    name = models.CharField(max_length=200)
+    agent = models.ForeignKey(
+        Agent, on_delete=models.PROTECT, null=True, blank=True, related_name="robots"
+    )
+    mission = models.TextField(blank=True)
+    connector = models.CharField(max_length=100, blank=True)
+    autonomy_level = models.CharField(
+        max_length=20, choices=AUTONOMY_CHOICES, default="observe"
+    )
+    risk_level = models.CharField(max_length=10, choices=RISK_CHOICES, default="low")
+    deployment_status = models.CharField(
+        max_length=20, choices=DEPLOYMENT_CHOICES, default="draft"
+    )
+    requires_owner_approval = models.BooleanField(default=True)
+    budget_limit = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    credential_reference = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="Reference to a secret manager entry only. Never store a credential here.",
+    )
+
+    class Meta:
+        ordering = ("code",)
+        verbose_name = "ربات اجرایی"
+        verbose_name_plural = "ربات‌های اجرایی"
+
+    def __str__(self):
+        return f"{self.name} ({self.code})"
+
+
 class ApprovalRequest(T):
     action_type = models.CharField(max_length=100)
     target_type = models.CharField(max_length=100)
