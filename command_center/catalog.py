@@ -25,6 +25,7 @@ MODULES = (
 # Links are additionally gated by the user's view/change permission in dashboard().
 MODULE_ADMIN_ROUTES = {
     "overview": ("command_center_dashboard", ()),
+    "sites": ("admin:core_platformpagecontent_changelist", ("core.view_platformpagecontent", "core.change_platformpagecontent")),
     "agents": ("admin:core_agent_changelist", ("core.view_agent", "core.change_agent")),
     "content": ("admin:core_newsletterstory_changelist", ("core.view_newsletterstory", "core.change_newsletterstory")),
     "publishing": ("admin:core_newsletterpublication_changelist", ("core.view_newsletterpublication", "core.change_newsletterpublication")),
