@@ -74,6 +74,7 @@ jobs:
             root/'saeit_v91_runtime_stage_20261012/mojplaywin_site',
             root/'Saeit',
             root/'Saeit-staging',
+            root/'mojplaywin.com',
           ]
           for p in roots:
             print('PROJECT',p,'exists',p.is_dir(),'manage', (p/'manage.py').is_file())
@@ -93,6 +94,29 @@ jobs:
                 if f.is_file(): print('  ',rel.as_posix(),f.stat().st_size);count+=1
               if count>=35:break
             print(' STAFFFILENAME_COUNT_SHOWN',count)
+          print('MAPPED_APP_PAYMENT_AUDIT')
+          mapped=root/'mojplaywin.com'
+          print('MAPPED_APP_ROOT',mapped,'exists',mapped.is_dir(),'manage', (mapped/'manage.py').is_file(),'passenger_wsgi',(mapped/'passenger_wsgi.py').is_file())
+          skip={'venv','.venv','node_modules','staticfiles','media','__pycache__','.git','backups','backup','tmp'}
+          terms=('payment','crypto','tron','ethereum','wallet','invoice','checkout','commerce','gateway','webhook','order')
+          shown=0
+          for f in mapped.rglob('*.py'):
+            try: rel=f.relative_to(mapped)
+            except: continue
+            if len(rel.parts)>7 or any(x.lower() in skip for x in rel.parts): continue
+            if not any(t in f.name.lower() for t in terms) and f.name!='urls.py' and 'settings' not in f.name.lower(): continue
+            print('PAYMENT_SOURCE',rel.as_posix(),'bytes',f.stat().st_size)
+            try: lines=f.read_text(errors='ignore').splitlines()
+            except: continue
+            for n,line in enumerate(lines,1):
+              stripped=line.strip()
+              if stripped.startswith(('def ','async def ','class ')):
+                print('  SYMBOL',n,stripped[:180])
+              if f.name=='urls.py' and any(t in stripped.lower() for t in ['path(','re_path(','include(','payment','crypto','checkout','order']):
+                print('  URL',n,stripped[:220])
+            shown+=1
+            if shown>=80: break
+          print('PAYMENT_SOURCE_COUNT_SHOWN',shown)
           print('HOST_ARCHIVES')
           for p in root.glob('*V91*zip'):
             if p.is_file():print('ZIP',p.name,p.stat().st_size)
