@@ -18,7 +18,7 @@ def dashboard(request):
     lang = request.GET.get("lang", "fa")
     if lang not in ("fa", "en"):
         lang = "fa"
-    modules = localized(MODULES, lang)
+    modules = localized(MODULES, lang, admin_links=True)
     for module in modules:
         route_name = module["route_name"]
         permissions = module["permissions"]
