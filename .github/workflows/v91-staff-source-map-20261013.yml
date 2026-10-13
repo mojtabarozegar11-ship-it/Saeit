@@ -9,7 +9,7 @@ jobs:
     if: >-
       github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
       github.event.issue.user.login == 'mojtabarozegar11-ship-it' &&
-      github.event.issue.title == 'Ops: MojPlayWin crypto payment source audit 2026-10-14'
+      github.event.issue.title == 'Ops: MojPlayWin live app mapping audit 2026-10-14'
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
@@ -128,5 +128,41 @@ jobs:
               for line in f.read_text(errors='ignore').splitlines():
                 if any(key in line for key in ['PassengerAppRoot','PassengerBaseURI','PassengerStartupFile']):
                   print(' ',line[:300])
+          # Audit only the root referenced by the cPanel web-root Passenger mapping.
+          live=root/'Saeit'
+          print('ACTIVE_MAPPED_ROOT',live,'exists',live.is_dir(),'manage', (live/'manage.py').is_file())
+          for f in sorted(root.glob('domains/*/public_html/.htaccess')):
+            print('DOMAIN_PASSENGER_CONFIG',f)
+            for line in f.read_text(errors='ignore').splitlines():
+              if any(key in line for key in ['PassengerAppRoot','PassengerBaseURI','PassengerStartupFile']):
+                print(' ',line[:300])
+          if live.is_dir():
+            import ast,re
+            skip={'venv','.venv','node_modules','staticfiles','media','__pycache__','.git'}
+            tokens=['crypto','ethereum','tron','wallet','payment','checkout','webhook']
+            scanned=0
+            for f in live.rglob('*.py'):
+              try: rel=f.relative_to(live)
+              except: continue
+              if any(part in skip for part in rel.parts) or len(rel.parts)>7: continue
+              scanned+=1
+              try:
+                if f.stat().st_size>1500000: continue
+                source=f.read_text(errors='ignore')
+              except Exception: continue
+              low=source.lower()
+              hits=[w for w in tokens if w in f.name.lower() or w in low]
+              if not hits: continue
+              try:
+                tree=ast.parse(source)
+                names=[n.name for n in ast.walk(tree) if isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef,ast.ClassDef))]
+              except Exception: names=[]
+              safe_names=[n for n in names if any(w in n.lower() for w in tokens)]
+              print('LIVE_PAYMENT_FILE',rel.as_posix(),'markers='+','.join(hits),'symbols='+','.join(safe_names[:30]))
+              if f.name=='settings.py':
+                for key in ['CRYPTO_EXECUTION_ENABLED','REAL_PAYMENTS_ENABLED','PAYMENT_WEBHOOK_SECRET','TRON','ETHEREUM','MOJPLAYWIN']:
+                  if key.lower() in low: print('LIVE_CONFIG_KEY_PRESENT',key)
+                if 'mojplaywin.com' in low: print('LIVE_DOMAIN_REFERENCE',f.as_posix(),'mojplaywin.com')
+            print('LIVE_PY_FILES_SCANNED',scanned)
           print('MAP_DONE')
           REMOTE
