@@ -134,6 +134,19 @@ jobs:
               p.write_text(s.replace(old,new,1))
           print("EN_HTTPS_TEST_CLIENT_CONFIGURED_IN_STAGING_ONLY")
           PY
+          echo '=== LIMIT HTTP REDIRECT OVERRIDE TO EN WORKBENCH TEST CLASS ==='
+          python3 - "$release/mojplaywin_site/workbench_v91/tests.py" <<'PY'
+          from pathlib import Path
+          import sys
+          p=Path(sys.argv[1])
+          s=p.read_text()
+          old='@override_settings(WORKBENCH_STAGING_ENABLED=True)'
+          new='@override_settings(WORKBENCH_STAGING_ENABLED=True, SECURE_SSL_REDIRECT=False)'
+          if new not in s:
+              if old not in s: raise SystemExit("English test decorator not found")
+              p.write_text(s.replace(old,new,1))
+          print("EN_TEST_ONLY_SSL_REDIRECT_OVERRIDE_READY")
+          PY
           echo '=== GUARDED DJANGO VALIDATION FA ==='
           python3 verify_v91_personnel_staging.py --release "$release" --site fa --python "$interpreter" --run
           echo '=== GUARDED DJANGO VALIDATION EN ==='
