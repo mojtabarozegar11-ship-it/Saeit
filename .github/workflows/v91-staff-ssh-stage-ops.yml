@@ -1,0 +1,108 @@
+name: V91 staff staging via cPanel SSH only
+on:
+  push:
+    branches: [ops-v91-staff-staging-20261013]
+    paths: [ops/relay-v91-staff-package.b64]
+permissions:
+  contents: read
+concurrency:
+  group: v91-staff-safe-staging
+  cancel-in-progress: false
+jobs:
+  stage-on-host:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/ops-v91-staff-staging-20261013'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Read transport payload only (no build or tests on GitHub)
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: SSH transfer and run isolated staging work on cPanel
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+          ATTEMPT: ${{ github.run_attempt }}
+          RID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          test -f ops/relay-v91-staff-package.b64
+          d="$RUNNER_TEMP/v91-host-ssh"
+          mkdir -m 700 -p "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          python3 - "$d/host.key" <<'PY'
+          import pathlib,sys
+          p=pathlib.Path(sys.argv[1])
+          v=p.read_text().replace('\r\n','\n').strip()
+          p.write_text(v.replace('\\n','\n')+'\n')
+          PY
+          chmod 600 "$d/vps.key" "$d/host.key"
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host saeit-host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+            ConnectionAttempts 1
+          EOF
+          timeout 35s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          target="/home/zomorod2/Saeit-staging/v91_transfer_${RID}_${ATTEMPT}"
+          timeout 45s ssh -F "$d/config" saeit-host "set -eu; test \"\$(id -un)\" = zomorod2; test -d /home/zomorod2/saeit_v91/zomorodmelal; test -d /home/zomorod2/saeit_v91/mojplaywin_site; umask 077; mkdir -m 700 \"$target\"; cat > \"$target/payload.b64\"" < ops/relay-v91-staff-package.b64
+          timeout 400s ssh -F "$d/config" saeit-host "STAGING_TRANSFER='$target' bash -se" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          t="$STAGING_TRANSFER"
+          case "$t" in /home/zomorod2/Saeit-staging/v91_transfer_[0-9]*_[0-9]*) ;; *) echo 'UNSAFE_TRANSFER_PATH'; exit 2;; esac
+          cd "$t"
+          base64 -d payload.b64 > package.zip
+          echo "239679756e238a30c32c257ece21f16b91176c52b5ce5085035220624d5c30e8  package.zip" | sha256sum -c -
+          python3 -m zipfile -t package.zip
+          mkdir -m 700 package
+          python3 -m zipfile -e package.zip package
+          cd package
+          echo '=== HOST SIDE PREFLIGHT, ORIGINALS READ-ONLY ==='
+          python3 prepare_v91_personnel_staging.py --home /home/zomorod2 --panel-zip SAEIT_V91_STAFF_PANEL_ONLY_2026-10-13.zip
+          echo '=== STAGE STAFF APP INTO ISOLATED COPIES ONLY ==='
+          python3 prepare_v91_personnel_staging.py --home /home/zomorod2 --panel-zip SAEIT_V91_STAFF_PANEL_ONLY_2026-10-13.zip --apply
+          echo '=== LOCATE STAGING RECEIPT ==='
+          find /home/zomorod2/Saeit-staging/v91_personnel_isolated -maxdepth 2 -name STAGING_RECEIPT.json -type f -print
+          release="/home/zomorod2/Saeit-staging/v91_personnel_isolated/staff-$(sha256sum SAEIT_V91_STAFF_PANEL_ONLY_2026-10-13.zip | cut -c1-16)"
+          test -f "$release/STAGING_RECEIPT.json"
+          if test -x /home/zomorod2/Saeit/.venv/bin/python; then
+            interpreter=/home/zomorod2/Saeit/.venv/bin/python
+          else
+            echo 'DJANGO_INTERPRETER_UNAVAILABLE; stage files prepared, tests not run'
+            exit 0
+          fi
+          echo '=== GUARDED DJANGO VALIDATION FA ==='
+          python3 verify_v91_personnel_staging.py --release "$release" --site fa --python "$interpreter" --run
+          echo '=== GUARDED DJANGO VALIDATION EN ==='
+          python3 verify_v91_personnel_staging.py --release "$release" --site en --python "$interpreter" --run
+          echo 'V91_STAFF_ISOLATED_STAGE_AND_BOTH_TESTS_SUCCESS'
+          REMOTE
