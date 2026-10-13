@@ -125,7 +125,25 @@ jobs:
           fi
           if command -v uapi >/dev/null 2>&1; then
             echo "CPANEL_UAPI_DOMAIN_MAP:"
-            uapi --output=json DomainInfo domains_data 2>/dev/null | python3 -c 'import json,sys; p=json.load(sys.stdin); r=p.get("result",{}); d=r.get("data",p.get("data",{})); d=d[0] if isinstance(d,list) and d else d; print("UAPI_STATUS="+str(r.get("status","unknown"))); print("MAIN="+str(d.get("main_domain","unknown")) if isinstance(d,dict) else "MAIN=unknown"); [print("DOMAIN="+str(x.get("domain",""))+" ROOT="+str(x.get("document_root",x.get("root_doc",x.get("dir",""))))) for k in ("addon_domains","sub_domains","parked_domains") for x in (d.get(k,[]) if isinstance(d,dict) else []) if isinstance(x,dict)]'
+            domain_json="$(uapi --output=json DomainInfo domains_data 2>/dev/null)"
+            printf '%s\n' "$domain_json" | python3 -c 'import json,sys; p=json.load(sys.stdin); r=p.get("result",{}); d=r.get("data",p.get("data",{})); d=d[0] if isinstance(d,list) and d else d; m=d.get("main_domain",{}) if isinstance(d,dict) else {}; print("UAPI_STATUS="+str(r.get("status","unknown"))); print("MAIN_DOMAIN="+str(m.get("domain","unknown"))+" ROOT="+str(m.get("documentroot","unknown"))); [print("DOMAIN="+str(x.get("domain",x.get("subdomain","")))+" ROOT="+str(x.get("documentroot",x.get("root_doc",x.get("dir",""))))) for k in ("addon_domains","sub_domains","parked_domains") for x in (d.get(k,[]) if isinstance(d,dict) else []) if isinstance(x,dict)]'
+            stage_root="$(printf '%s\n' "$domain_json" | python3 -c 'import json,sys; p=json.load(sys.stdin); r=p.get("result",{}); d=r.get("data",p.get("data",{})); d=d[0] if isinstance(d,list) and d else d; xs=[x for k in ("addon_domains","sub_domains") for x in (d.get(k,[]) if isinstance(d,dict) else []) if isinstance(x,dict)]; x=next((x for x in xs if x.get("domain")=="staging.zomorodmelal.ir" or x.get("subdomain")=="staging"),{}); print(x.get("documentroot",x.get("root_doc",x.get("dir",""))))')"
+            case "$stage_root" in
+              "$HOME"/*)
+                echo "STAGING_DOMAIN_DOCROOT=$stage_root"
+                for f in "$stage_root/.htaccess" "$stage_root/passenger_wsgi.py"; do
+                  if test -f "$f"; then
+                    echo "STAGING_CONFIG_FILE=$f"
+                    if [[ "$f" == */.htaccess ]]; then
+                      grep -Ei 'Passenger(AppRoot|BaseURI|Python)|RewriteRule|RewriteCond' "$f" | grep -Eiv 'password|secret|token|database_url|api[_-]?key' || true
+                    else
+                      grep -E 'sys\\.path|DJANGO_SETTINGS_MODULE|get_wsgi_application' "$f" || true
+                    fi
+                  fi
+                done
+                ;;
+              *) echo "STAGING_DOMAIN_DOCROOT=unresolved";;
+            esac
           else
             echo "CPANEL_UAPI=unavailable"
           fi
