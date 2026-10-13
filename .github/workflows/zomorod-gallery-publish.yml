@@ -1,4 +1,4 @@
-name: Zomorod gallery editorial validation preflight
+name: Zomorod six photo and six reports production release
 on:
   push:
     branches: [ops/zomorod-gallery-publish-20261014]
@@ -78,5 +78,5 @@ jobs:
           timeout 60s ssh -F "$d/config" saeit-host "cat > '$stage/publisher.py'" < ops_assets/publish_zomorod_gallery_20261014.py
           timeout 45s ssh -F "$d/config" saeit-host "echo 'a7c3390ffc1ba99bd72c4c10cdaa80bc6d541600258e7c861aa632a99fbc3f64  $stage/zomorod_gallery_6_images_6_posts_2026-10-14.zip' | sha256sum -c -"
           timeout 110s ssh -F "$d/config" saeit-host "cd /home/zomorod2/Saeit && .venv/bin/python '$stage/publisher.py' --preflight"
-          echo "Live publication awaits editorial validation gate"
-          echo "SIX_ARTICLE_EDITORIAL_VALIDATION_COMPLETED_NO_LIVE_WRITES"
+          timeout 195s ssh -F "$d/config" saeit-host "cd /home/zomorod2/Saeit && flock -n '$stage/publish.lock' .venv/bin/python '$stage/publisher.py' --publish"
+          echo "PRODUCTION_SIX_GALLERY_REPORTS_PUBLISHED_AND_SMOKE_TESTED"
