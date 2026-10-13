@@ -27,3 +27,12 @@ class AdminModuleLinkTests(TestCase):
         self.staff.user_permissions.add(permission)
         response = self.client.get(reverse("command_center_dashboard"))
         self.assertContains(response, 'href="/admin/core/agent/"')
+
+    def test_site_management_tile_opens_page_content_admin(self):
+        permission = Permission.objects.get(
+            content_type__app_label="core",
+            codename="view_platformpagecontent",
+        )
+        self.staff.user_permissions.add(permission)
+        response = self.client.get(reverse("command_center_dashboard"))
+        self.assertContains(response, 'href="/admin/core/platformpagecontent/"')
