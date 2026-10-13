@@ -174,6 +174,64 @@ jobs:
             shown+=1
             if shown>=80: break
           print('PAYMENT_SOURCE_COUNT_SHOWN',shown)
+          if active and active.is_dir():
+            audit_files=['config/urls.py','core/cryptopay_checkout.py','core/cryptopay_order.py','core/cryptopay_tron.py','core/cryptopay_rpc.py','core/cryptopay_v1.py','core/models.py','core/views.py']
+            print('PAYMENT_BEHAVIOR_AUDIT')
+            for relname in audit_files:
+              q=active/relname
+              if not q.is_file(): continue
+              src=q.read_text(errors='ignore').splitlines()
+              print('SAFE_SOURCE_BEGIN',relname,'lines',len(src))
+              for n,line in enumerate(src,1):
+                if relname.endswith('_config.py'):
+                  continue
+                clean=line.rstrip()
+                if re.search(r'(SECRET|API.?KEY|PRIVATE.?KEY|PASSWORD|MNEMONIC|SEED|WALLET|ADDRESS|DESTINATION|RPC.?URL|ENDPOINT)',clean,re.I) and re.search(r'(?<![=!<>])=(?!=)',clean):
+                  clean=re.sub(r'^(s*[^=]+?=).+          print('HOST_ARCHIVES')
+          for p in root.glob('*V91*zip'):
+            if p.is_file():print('ZIP',p.name,p.stat().st_size)
+          print('MOJPLAYWIN_DOMAIN_MAPPING_AUDIT')
+          candidates=[
+            root/'public_html',
+            root/'domains',
+            root/'domains/mojplaywin.com',
+            root/'domains/mojplaywin.com/public_html',
+            root/'mojplaywin.com',
+            root/'mojplaywin.com/public_html',
+            root/'public_html/mojplaywin',
+            root/'public_html/mojplaywin.com',
+            root/'mojplaywin_site',
+            root/'saeit_v91/mojplaywin_site',
+            root/'saeit_v91_runtime_stage_20261012/mojplaywin_site',
+          ]
+          for p in candidates:
+            if p.exists():
+              print('DOMAIN_PATH',p,'directory',p.is_dir(),'resolved',p.resolve())
+          for base in [root/'public_html',root/'domains',root/'mojplaywin.com']:
+            if not base.is_dir(): continue
+            for f in base.rglob('.htaccess'):
+              try: depth=len(f.relative_to(base).parts)
+              except: continue
+              if depth>5: continue
+              try: lines=f.read_text(errors='ignore').splitlines()
+              except: continue
+              relevant=[x.strip()[:300] for x in lines if any(k in x for k in ['PassengerAppRoot','PassengerBaseURI','PassengerStartupFile','ServerName','ServerAlias'])]
+              print('WEBROOT_CONFIG',f,'directives',' | '.join(relevant) if relevant else 'none')
+          print('HOME_MATCHING_DIRS',','.join(sorted(p.name for p in root.iterdir() if p.is_dir() and 'mojplaywin' in p.name.lower())))
+          print('MAP_DONE')
+          REMOTE
+,r'\1 [redacted]',clean)
+                clean=re.sub(r'0x[a-fA-F0-9]{40,}', '[address redacted]',clean)
+                clean=re.sub(r'https?://[^\s\'\"]+', '[endpoint redacted]',clean)
+                print(f'  CODE {n} {clean[:260]}')
+              print('SAFE_SOURCE_END',relname)
+            for relname in ['core/cryptopay_mainnet_config.py','core/cryptopay_tron_config.py']:
+              q=active/relname
+              if not q.is_file(): continue
+              src=q.read_text(errors='ignore')
+              keys=sorted(set(re.findall(r"os\.(?:getenv|environ\.get)\(\s*['\"]([A-Z0-9_]+)",src)))
+              names=re.findall(r'^\s*([A-Z][A-Z0-9_]+)\s*=',src,re.M)
+              print('CONFIG_NAMES_ONLY',relname,'env_keys',','.join(keys),'constants',','.join(names))
           print('HOST_ARCHIVES')
           for p in root.glob('*V91*zip'):
             if p.is_file():print('ZIP',p.name,p.stat().st_size)
