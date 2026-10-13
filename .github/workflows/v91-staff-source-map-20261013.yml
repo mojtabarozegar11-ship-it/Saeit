@@ -70,17 +70,23 @@ jobs:
           root=Path('/home/zomorod2')
           wrapper=root/'mojplaywin.com/passenger_wsgi.py'
           txt=wrapper.read_text(errors='ignore') if wrapper.is_file() else ''
-          match=re.search(r"^\\s*APP\\s*=\\s*['\\\"]([^'\\\"]+)['\\\"]",txt,re.M)
-          app=Path(match.group(1)).resolve() if match else None
+          app_path=None
+          for line in txt.splitlines():
+            stripped=line.strip()
+            if stripped.startswith('APP') and '=' in stripped:
+              app_path=stripped.split('=',1)[1].strip().strip('"').strip("'")
+              break
+          app=Path(app_path).resolve() if app_path else None
           print('ACTIVE_APP',app,'exists',bool(app and app.is_dir()))
           def safe(line):
             upper=line.upper()
             sensitive=('SECRET','API_KEY','APIKEY','PRIVATE_KEY','PASSWORD','MNEMONIC','SEED','WALLET','ADDRESS','DESTINATION','RPC_URL','ENDPOINT','TOKEN')
             if '=' in line and not any(op in line for op in ('==','!=','<=','>=')) and any(k in upper for k in sensitive):
               line=line.split('=',1)[0].rstrip()+' = [redacted]'
-            line=re.sub(r'https?://[^\\s]+','[endpoint redacted]',line)
-            line=re.sub(r'0x[a-fA-F0-9]{40,}','[address redacted]',line)
-            line=re.sub(r'\\bT[1-9A-HJ-NP-Za-km-z]{33}\\b','[address redacted]',line)
+            if '://' in line:
+              line=line.split('://',1)[0]+'://[endpoint redacted]'
+            if '0x' in line.lower():
+              line=line[:line.lower().find('0x')]+'[address redacted]'
             return line[:260]
           if not app or not app.is_dir(): raise SystemExit('active app root not resolved')
           for name in ['config/urls.py','core/urls.py']:
@@ -114,7 +120,5 @@ jobs:
           for name in ['core/cryptopay_mainnet_config.py','core/cryptopay_tron_config.py']:
             p=app/name
             if not p.is_file(): print('CONFIG_MISSING',name);continue
-            c=p.read_text(errors='ignore')
-            keys=sorted(set(m.group(1) for m in re.finditer(r"(?:getenv|environ\\.get)\\(\\s*['\\\"]([A-Z0-9_]+)['\\\"]",c)))
-            print('CONFIG_PRESENT',name,'environment_names',','.join(keys))
+            print('CONFIG_PRESENT',name,'bytes',p.stat().st_size)
           REMOTE
