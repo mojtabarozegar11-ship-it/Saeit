@@ -6,6 +6,9 @@ from django.urls import path, reverse
 
 from .chat_runtime import MasterAgentChat
 from .models import (
+    Agent,
+    AgentCapability,
+    AgentTask,
     Robot,
     ApprovalRequest,
     AuditLog,
