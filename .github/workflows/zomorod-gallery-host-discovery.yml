@@ -60,53 +60,55 @@ jobs:
           EOF
           timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
           test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
-          timeout 110s ssh -F "$d/config" saeit-host 'python3 -' <<'REMOTE'
+          timeout 100s ssh -F "$d/config" saeit-host 'cd /home/zomorod2/Saeit && .venv/bin/python -' <<'REMOTE'
           from pathlib import Path
-          import ast, re
+          import os,sys,ast,re
           h=Path('/home/zomorod2/Saeit')
-          for x in ['config/urls.py','portal/urls.py','portal/models.py','portal/views.py','config/settings.py','passenger_wsgi.py']:
+          print('PYTHON',sys.version.split()[0])
+          for x in ['config/urls.py','portal/urls.py','portal/gallery_media.py','portal/gallery_media_policy.py','portal/admin.py','templates/modern/pages/company-gallery.html','templates/core/company_gallery.html','portal/templates/portal/gallery.html','moj/modern_site.py','moj/site_views.py']:
             p=h/x
-            print('TOPFILE',x,'exists',p.exists(),'size',p.stat().st_size if p.exists() else 0)
+            print('SOURCE',x,'exists',p.exists(),'size',p.stat().st_size if p.exists() else 0)
             if not p.is_file():continue
-            s=p.read_text(errors='replace')
+            ls=p.read_text(errors='replace').splitlines()
             if x.endswith('urls.py'):
-              for n,ln in enumerate(s.splitlines(),1):
-                if re.search(r'gallery|blog|news|media|article|company|admin|portal',ln,re.I):
-                  print('ROUTE_LINE',x,n,ln.strip()[:230])
-            if x.endswith('models.py'):
+              for n,line in enumerate(ls,1):
+                if n<57 and x=='config/urls.py' or ('gallery' in line.lower() or 'article' in line.lower() or 'news' in line.lower()):
+                  print('ROUTE',x,n,line[:300])
+            elif 'gallery' in x.lower():
+              for n,line in enumerate(ls[:130],1):
+                if re.search(r'GalleryPhoto|photos|illustrations|<img|media|image|gallery|photo|url|article',line,re.I):print('GALLERY_SNIP',x,n,line[:260])
+            elif x=='portal/admin.py':
+              for n,line in enumerate(ls,1):
+                if 'GalleryPhoto' in line or 'ArticleAdmin' in line or re.search(r'@admin.register\(Article',line):print('ADMIN_LINE',n,line[:240])
+            elif x=='moj/site_views.py':
+              for n,line in enumerate(ls,1):
+                if re.search(r'gallery|articles|news|blog|_page',line,re.I):print('SITE_VIEW_LINE',n,line[:200])
+          try:
+            os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+            import django
+            django.setup()
+            from django.conf import settings
+            from django.urls import resolve,Resolver404
+            print('DJANGO',django.get_version(),'MEDIA_ROOT',str(getattr(settings,'MEDIA_ROOT',''))[:180],'MEDIA_URL',str(getattr(settings,'MEDIA_URL',''))[:180])
+            print('DATABASE_ENGINE',settings.DATABASES.get('default',{}).get('ENGINE','unknown'))
+            for u in ['/','/company-gallery/','/gallery/','/portal/gallery/','/knowledge/','/blog/','/news/','/admin/','/media/example.webp','/portal/media/example.webp']:
               try:
-                tree=ast.parse(s)
-                for node in tree.body:
-                  if isinstance(node,ast.ClassDef):
-                    fields=[(a.targets[0].id,a.value.func.attr if isinstance(a.value,ast.Call) and isinstance(a.value.func,ast.Attribute) else '') for a in node.body if isinstance(a,ast.Assign) and a.targets and isinstance(a.targets[0],ast.Name) and isinstance(a.value,ast.Call)]
-                    print('MODEL_CLASS',node.name,fields[:25])
-              except Exception as e:print('MODEL_AST_ERR',type(e).__name__)
-            if x.endswith('views.py'):
+                r=resolve(u)
+                print('RESOLVE',u,'module',getattr(r.func,'__module__',''),'name',getattr(r.func,'__name__',''), 'urlname',r.url_name)
+              except Resolver404: print('RESOLVE',u,'NOT_FOUND')
+            from portal.models import GalleryPhoto,Article
+            for model in [GalleryPhoto,Article]:
+              for f in model._meta.fields:
+                if f.name in ['image','cover','state','category','language','slug','publication_mode','is_approved','approved_by']:
+                  print('MODEL_FIELD',model.__name__,f.name,'null',f.null,'blank',f.blank,'upload_to',str(getattr(f,'upload_to',''))[:80],'default',str(f.get_default())[:80],'choices',str(list(f.choices))[:180] if f.choices else '')
+            for model in [GalleryPhoto,Article]:
               try:
-                tree=ast.parse(s)
-                for node in tree.body:
-                  if isinstance(node,(ast.FunctionDef,ast.AsyncFunctionDef)) and re.search(r'gallery|blog|news|media|company|post|article',node.name,re.I):
-                    print('VIEW_FN',node.name,'line',node.lineno,'end',node.end_lineno)
-                    for ln in s.splitlines()[node.lineno-1:min(node.end_lineno,node.lineno+34)]:
-                      if re.search(r'secret|password|token|api.key|authorization|DATABASES',ln,re.I):continue
-                      print(' VIEW',ln[:230])
-              except Exception as e:print('VIEW_AST_ERR',type(e).__name__)
-            if x=='config/settings.py':
-              print('SETTINGS_MEDIA',[(key,key in s) for key in ['MEDIA_ROOT','MEDIA_URL','STATIC_ROOT','DATABASES','INSTALLED_APPS']])
-          for sub in ['templates','portal/templates','static','portal/static']:
-            p=h/sub
-            if not p.exists():continue
-            names=[]
-            for f in p.rglob('*'):
-              if f.is_file() and len(f.relative_to(p).parts)<7 and re.search('gallery|blog|news|company|media|image',f.name,re.I):names.append(str(f.relative_to(h)))
-              if len(names)>30:break
-            print('RELATED_ASSETS',sub,names[:30])
-          for sub in ['core','portal','moj']:
-            p=h/sub
-            if p.is_dir():print('APPS',sub,sorted(f.name for f in p.iterdir() if f.is_file())[:55])
-          for f in [h/'.venv/bin/python',h/'venv/bin/python',Path('/home/zomorod2/virtualenv/Saeit/3.11/bin/python')]:
-            if f.exists():print('PYTHON_CANDIDATE',str(f))
-          print('LIVE_MAP_DONE')
+                print('MODEL_COUNT',model.__name__,model.objects.count())
+                if model is GalleryPhoto:print('APPROVED_PHOTOS',model.objects.filter(is_approved=True).count())
+                else:print('PUBLISHED_ARTICLES',model.objects.filter(state='published').count())
+              except Exception as e:print('DB_INSPECT_ERROR',model.__name__,type(e).__name__)
+          except Exception as e:print('DJANGO_INSPECT_ERROR',type(e).__name__,str(e)[:120])
+          print('PUBLICATION_READ_ONLY_READY')
           REMOTE
       - name: Remove SSH material
         if: always()
