@@ -121,6 +121,19 @@ jobs:
             "$interpreter" -m pip install --disable-pip-version-check --no-input --no-cache-dir --only-binary=:all: --no-deps --target "$deps" 'Pillow==11.3.0'
           fi
           export PYTHONPATH="$deps${PYTHONPATH:+:$PYTHONPATH}"
+          echo '=== EN TEST CLIENT: SIMULATE HTTPS WITHOUT ALTERING SITE SECURITY ==='
+          python3 - "$release/mojplaywin_site/workbench_v91/tests.py" <<'PY'
+          from pathlib import Path
+          import sys
+          p=Path(sys.argv[1])
+          s=p.read_text()
+          old="    def setUp(self):\n        U = get_user_model()"
+          new="    def setUp(self):\n        self.client.defaults['wsgi.url_scheme'] = 'https'\n        U = get_user_model()"
+          if new not in s:
+              if old not in s: raise SystemExit("Unexpected English workbench test class")
+              p.write_text(s.replace(old,new,1))
+          print("EN_HTTPS_TEST_CLIENT_CONFIGURED_IN_STAGING_ONLY")
+          PY
           echo '=== GUARDED DJANGO VALIDATION FA ==='
           python3 verify_v91_personnel_staging.py --release "$release" --site fa --python "$interpreter" --run
           echo '=== GUARDED DJANGO VALIDATION EN ==='
