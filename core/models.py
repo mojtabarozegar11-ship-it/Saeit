@@ -123,6 +123,13 @@ class AgentTask(T):
         blank=True,
         related_name="agent_tasks",
     )
+    robot = models.ForeignKey(
+        "Robot",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="tasks",
+    )
     action_type = models.CharField(max_length=100, default="")
     capability_code = models.CharField(max_length=100, default="")
     risk_snapshot = models.CharField(max_length=10, default="low")
@@ -185,6 +192,16 @@ class Robot(T):
         ordering = ("code",)
         verbose_name = "ربات اجرایی"
         verbose_name_plural = "ربات‌های اجرایی"
+
+    @property
+    def runtime_enabled(self):
+        """True only after explicit sandbox/live qualification and connector setup."""
+        return (
+            self.agent_id is not None
+            and bool(self.connector.strip())
+            and self.deployment_status in {"sandbox", "deployed"}
+            and self.autonomy_level in {"reversible", "sandbox", "owner_approved"}
+        )
 
     def __str__(self):
         return f"{self.name} ({self.code})"
