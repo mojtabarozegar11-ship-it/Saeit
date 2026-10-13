@@ -1,0 +1,100 @@
+name: V91 Staff Source Map via SSH (read-only)
+on:
+  issues:
+    types: [opened]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event.issue.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.issue.title == 'Ops: V91 staff source map 2026-10-13'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Read source layout on cPanel over VPS SSH, no writes
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/v91-ssh"
+          mkdir -p "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          python3 - "$d/host.key" <<'PY'
+          import pathlib,sys
+          p=pathlib.Path(sys.argv[1])
+          t=p.read_text().replace('\r\n','\n').strip()
+          p.write_text(t.replace('\\n','\n')+'\n')
+          PY
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host saeit-host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+            ConnectionAttempts 1
+          EOF
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          timeout 80s ssh -F "$d/config" saeit-host 'python3 -' <<'REMOTE'
+          from pathlib import Path
+          root=Path('/home/zomorod2')
+          roots=[
+            root/'saeit_v91/zomorodmelal',
+            root/'saeit_v91/mojplaywin_site',
+            root/'saeit_v91_runtime_stage_20261012/zomorodmelal',
+            root/'saeit_v91_runtime_stage_20261012/mojplaywin_site',
+            root/'Saeit',
+            root/'Saeit-staging',
+          ]
+          for p in roots:
+            print('PROJECT',p,'exists',p.is_dir(),'manage', (p/'manage.py').is_file())
+            if not p.is_dir(): continue
+            print(' TOPDIRS',','.join(sorted(x.name for x in p.iterdir() if x.is_dir() and not x.name.startswith('.'))[:42]))
+            for f in ['config/urls.py','config/settings.py','command_center/urls.py','portal/urls.py','sitecore/urls.py','staff/urls.py','workbench_v91/urls.py']:
+              if (p/f).is_file():
+                print(' FILE',f,'bytes',(p/f).stat().st_size)
+            print(' STAFF_PATHS')
+            count=0
+            for f in p.rglob('*'):
+              try: rel=f.relative_to(p)
+              except: continue
+              if len(rel.parts)>5: continue
+              if any(x in {'venv','.venv','node_modules','staticfiles','media','__pycache__','.git'} for x in rel.parts): continue
+              if any(w in f.name.lower() for w in ['staff','workbench','dashboard','builder','editor','admin_panel','admin_dashboard']):
+                if f.is_file(): print('  ',rel.as_posix(),f.stat().st_size);count+=1
+              if count>=35:break
+            print(' STAFFFILENAME_COUNT_SHOWN',count)
+          print('HOST_ARCHIVES')
+          for p in root.glob('*V91*zip'):
+            if p.is_file():print('ZIP',p.name,p.stat().st_size)
+          print('MAP_DONE')
+          REMOTE
