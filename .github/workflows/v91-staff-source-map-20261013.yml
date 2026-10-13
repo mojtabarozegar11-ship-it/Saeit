@@ -230,18 +230,6 @@ jobs:
           print('HOME_MATCHING_DIRS',','.join(sorted(p.name for p in root.iterdir() if p.is_dir() and 'mojplaywin' in p.name.lower())))
           print('MAP_DONE')
           REMOTE
-,r'\1 [redacted]',clean)
-                clean=re.sub(r'0x[a-fA-F0-9]{40,}', '[address redacted]',clean)
-                clean=re.sub(r'https?://[^\s\'\"]+', '[endpoint redacted]',clean)
-                print(f'  CODE {n} {clean[:260]}')
-              print('SAFE_SOURCE_END',relname)
-            for relname in ['core/cryptopay_mainnet_config.py','core/cryptopay_tron_config.py']:
-              q=active/relname
-              if not q.is_file(): continue
-              src=q.read_text(errors='ignore')
-              keys=sorted(set(re.findall(r"os\.(?:getenv|environ\.get)\(\s*['\"]([A-Z0-9_]+)",src)))
-              names=re.findall(r'^\s*([A-Z][A-Z0-9_]+)\s*=',src,re.M)
-              print('CONFIG_NAMES_ONLY',relname,'env_keys',','.join(keys),'constants',','.join(names))
           print('HOST_ARCHIVES')
           for p in root.glob('*V91*zip'):
             if p.is_file():print('ZIP',p.name,p.stat().st_size)
