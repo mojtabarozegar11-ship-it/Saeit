@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
-      - name: Read source layout on cPanel over VPS SSH, no writes
+      - name: Read active payment code through VPS relay, no writes
         shell: bash
         env:
           VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
@@ -66,200 +66,55 @@ jobs:
           test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
           timeout 80s ssh -F "$d/config" saeit-host 'python3 -' <<'REMOTE'
           from pathlib import Path
+          import ast,re
           root=Path('/home/zomorod2')
-          roots=[
-            root/'saeit_v91/zomorodmelal',
-            root/'saeit_v91/mojplaywin_site',
-            root/'saeit_v91_runtime_stage_20261012/zomorodmelal',
-            root/'saeit_v91_runtime_stage_20261012/mojplaywin_site',
-            root/'Saeit',
-            root/'Saeit-staging',
-            root/'mojplaywin.com',
-          ]
-          for p in roots:
-            print('PROJECT',p,'exists',p.is_dir(),'manage', (p/'manage.py').is_file())
-            if not p.is_dir(): continue
-            print(' TOPDIRS',','.join(sorted(x.name for x in p.iterdir() if x.is_dir() and not x.name.startswith('.'))[:42]))
-            for f in ['config/urls.py','config/settings.py','command_center/urls.py','portal/urls.py','sitecore/urls.py','staff/urls.py','workbench_v91/urls.py']:
-              if (p/f).is_file():
-                print(' FILE',f,'bytes',(p/f).stat().st_size)
-            print(' STAFF_PATHS')
-            count=0
-            for f in p.rglob('*'):
-              try: rel=f.relative_to(p)
-              except: continue
-              if len(rel.parts)>5: continue
-              if any(x in {'venv','.venv','node_modules','staticfiles','media','__pycache__','.git'} for x in rel.parts): continue
-              if any(w in f.name.lower() for w in ['staff','workbench','dashboard','builder','editor','admin_panel','admin_dashboard']):
-                if f.is_file(): print('  ',rel.as_posix(),f.stat().st_size);count+=1
-              if count>=35:break
-            print(' STAFFFILENAME_COUNT_SHOWN',count)
-          print('MAPPED_APP_PAYMENT_AUDIT')
-          mapped=root/'mojplaywin.com'
-          print('MAPPED_APP_ROOT',mapped,'exists',mapped.is_dir(),'manage', (mapped/'manage.py').is_file(),'passenger_wsgi',(mapped/'passenger_wsgi.py').is_file())
-          if mapped.is_dir():
-            for x in sorted(mapped.iterdir()):
-              try:
-                kind='dir' if x.is_dir() else 'file'
-                target=str(x.resolve()) if x.is_symlink() else ''
-                print('MAPPED_ENTRY',x.name,kind,'symlink_target',target)
-              except Exception as e: print('MAPPED_ENTRY_ERROR',x.name,type(e).__name__)
-          wsgi=mapped/'passenger_wsgi.py'
-          if wsgi.is_file():
-            for n,line in enumerate(wsgi.read_text(errors='ignore').splitlines(),1):
-              stripped=line.strip()
-              if stripped.startswith(('import ','from ','sys.path')):
-                print('WSGI_IMPORT_OR_PATH',n,stripped[:240])
-              if any(k in stripped for k in ('DJANGO_SETTINGS_MODULE','sys.path','os.chdir','__file__','config.wsgi')):
-                print('WSGI_RUNTIME_PATH_HINT',n,stripped[:240])
-          ini=mapped/'.user.ini'
-          if ini.is_file():
-            for n,line in enumerate(ini.read_text(errors='ignore').splitlines(),1):
-              if '=' in line:
-                key=line.split('=',1)[0].strip()
-                print('USER_INI_KEY',n,key)
-          for base in [root/'Saeit',root/'saeit_v91/mojplaywin_site',root/'saeit_v91_runtime_stage_20261012/mojplaywin_site']:
-            for rel in ['config/wsgi.py','config/settings.py','config/urls.py','sitecore/urls.py','sitecore/commerce_views.py','sitecore/commerce_gateway.py']:
-              q=base/rel
-              if q.is_file(): print('POSSIBLE_APP_MODULE',q,'bytes',q.stat().st_size)
-          import re
-          app_path=None
-          if wsgi.is_file():
-            for line in wsgi.read_text(errors='ignore').splitlines():
-              m=re.match(r"\s*APP\s*=\s*['\"]([^'\"]+)['\"]",line)
-              if m: app_path=m.group(1);break
-          print('PASSENGER_APP_PATH',app_path)
-          active=Path(app_path).resolve() if app_path else None
-          print('ACTIVE_APP_CHECK',active,'exists',bool(active and active.is_dir()),'manage',bool(active and (active/'manage.py').is_file()))
-          if active and active.is_dir():
-            terms=('payment','crypto','tron','ethereum','wallet','invoice','checkout','commerce','gateway','webhook','order','coin','usdt','token')
-            skipparts=('venv','.venv','node_modules','static','staticfiles','media','__pycache__','.git','backup','archive','old','stage','release','restore','lab','demo','snap','copy','tmp')
-            found=[]
-            for f in active.rglob('*.py'):
-              try: rel=f.relative_to(active)
-              except: continue
-              if len(rel.parts)>7 or any(any(k in x.lower() for k in skipparts) for x in rel.parts): continue
-              try:
-                if f.stat().st_size>1000000: continue
-                src=f.read_text(errors='ignore')
-              except: continue
-              marks=[t for t in terms if t in f.name.lower() or t in src.lower()]
-              if marks: found.append((f,rel,src,marks))
-            print('ACTIVE_PAYMENT_SOURCE_COUNT',len(found))
-            for f,rel,src,marks in found[:80]:
-              print('ACTIVE_PAYMENT_SOURCE',rel.as_posix(),'bytes',f.stat().st_size,'markers',','.join(marks[:12]))
-              for n,line in enumerate(src.splitlines(),1):
-                stripped=line.strip()
-                if stripped.startswith(('def ','async def ','class ')):
-                  print('  SYMBOL',n,stripped[:180])
-                if f.name=='urls.py' and any(t in stripped.lower() for t in ['path(','re_path(','include(','payment','crypto','checkout','order']):
-                  print('  URL',n,stripped[:220])
-          skip={'venv','.venv','node_modules','staticfiles','media','__pycache__','.git','backups','backup','tmp'}
-          terms=('payment','crypto','tron','ethereum','wallet','invoice','checkout','commerce','gateway','webhook','order')
-          shown=0
-          for f in mapped.rglob('*.py'):
-            try: rel=f.relative_to(mapped)
-            except: continue
-            if len(rel.parts)>7 or any(x.lower() in skip for x in rel.parts): continue
-            if not any(t in f.name.lower() for t in terms) and f.name!='urls.py' and 'settings' not in f.name.lower(): continue
-            print('PAYMENT_SOURCE',rel.as_posix(),'bytes',f.stat().st_size)
-            try: lines=f.read_text(errors='ignore').splitlines()
-            except: continue
-            for n,line in enumerate(lines,1):
-              stripped=line.strip()
-              if stripped.startswith(('def ','async def ','class ')):
-                print('  SYMBOL',n,stripped[:180])
-              if f.name=='urls.py' and any(t in stripped.lower() for t in ['path(','re_path(','include(','payment','crypto','checkout','order']):
-                print('  URL',n,stripped[:220])
-            shown+=1
-            if shown>=80: break
-          print('PAYMENT_SOURCE_COUNT_SHOWN',shown)
-          if active and active.is_dir():
-            audit_files=['config/urls.py','core/cryptopay_checkout.py','core/cryptopay_order.py','core/cryptopay_tron.py','core/cryptopay_rpc.py','core/cryptopay_v1.py','core/models.py','core/views.py']
-            print('PAYMENT_BEHAVIOR_AUDIT')
+          wrapper=root/'mojplaywin.com/passenger_wsgi.py'
+          txt=wrapper.read_text(errors='ignore') if wrapper.is_file() else ''
+          match=re.search(r"^\\s*APP\\s*=\\s*['\\\"]([^'\\\"]+)['\\\"]",txt,re.M)
+          app=Path(match.group(1)).resolve() if match else None
+          print('ACTIVE_APP',app,'exists',bool(app and app.is_dir()))
+          def safe(line):
+            upper=line.upper()
             sensitive=('SECRET','API_KEY','APIKEY','PRIVATE_KEY','PASSWORD','MNEMONIC','SEED','WALLET','ADDRESS','DESTINATION','RPC_URL','ENDPOINT','TOKEN')
-            for relname in audit_files:
-              q=active/relname
-              if not q.is_file(): continue
-              src=q.read_text(errors='ignore').splitlines()
-              print('SAFE_SOURCE_BEGIN',relname,'lines',len(src))
-              for n,line in enumerate(src,1):
-                clean=line.rstrip()
-                upper=clean.upper()
-                if '=' in clean and not any(op in clean for op in ('==','!=','<=','>=')) and any(word in upper for word in sensitive):
-                  clean=clean.split('=',1)[0].rstrip()+' = [redacted]'
-                if 'http://' in clean or 'https://' in clean:
-                  clean=clean.split('http',1)[0]+'[endpoint redacted]'
-                if '0x' in clean.lower():
-                  clean=clean.split('0x',1)[0]+'[address redacted]'
-                print('  CODE',n,clean[:260])
-              print('SAFE_SOURCE_END',relname)
-            for relname in ['core/cryptopay_mainnet_config.py','core/cryptopay_tron_config.py']:
-              q=active/relname
-              print('CONFIG_SOURCE_PRESENT',relname,q.is_file(),'bytes',q.stat().st_size if q.is_file() else 0)
-          print('HOST_ARCHIVES')
-          for p in root.glob('*V91*zip'):
-            if p.is_file():print('ZIP',p.name,p.stat().st_size)
-          print('MOJPLAYWIN_DOMAIN_MAPPING_AUDIT')
-          candidates=[
-            root/'public_html',
-            root/'domains',
-            root/'domains/mojplaywin.com',
-            root/'domains/mojplaywin.com/public_html',
-            root/'mojplaywin.com',
-            root/'mojplaywin.com/public_html',
-            root/'public_html/mojplaywin',
-            root/'public_html/mojplaywin.com',
-            root/'mojplaywin_site',
-            root/'saeit_v91/mojplaywin_site',
-            root/'saeit_v91_runtime_stage_20261012/mojplaywin_site',
-          ]
-          for p in candidates:
-            if p.exists():
-              print('DOMAIN_PATH',p,'directory',p.is_dir(),'resolved',p.resolve())
-          for base in [root/'public_html',root/'domains',root/'mojplaywin.com']:
-            if not base.is_dir(): continue
-            for f in base.rglob('.htaccess'):
-              try: depth=len(f.relative_to(base).parts)
-              except: continue
-              if depth>5: continue
-              try: lines=f.read_text(errors='ignore').splitlines()
-              except: continue
-              relevant=[x.strip()[:300] for x in lines if any(k in x for k in ['PassengerAppRoot','PassengerBaseURI','PassengerStartupFile','ServerName','ServerAlias'])]
-              print('WEBROOT_CONFIG',f,'directives',' | '.join(relevant) if relevant else 'none')
-          print('HOME_MATCHING_DIRS',','.join(sorted(p.name for p in root.iterdir() if p.is_dir() and 'mojplaywin' in p.name.lower())))
-          print('MAP_DONE')
-          REMOTE
-          print('HOST_ARCHIVES')
-          for p in root.glob('*V91*zip'):
-            if p.is_file():print('ZIP',p.name,p.stat().st_size)
-          print('MOJPLAYWIN_DOMAIN_MAPPING_AUDIT')
-          candidates=[
-            root/'public_html',
-            root/'domains',
-            root/'domains/mojplaywin.com',
-            root/'domains/mojplaywin.com/public_html',
-            root/'mojplaywin.com',
-            root/'mojplaywin.com/public_html',
-            root/'public_html/mojplaywin',
-            root/'public_html/mojplaywin.com',
-            root/'mojplaywin_site',
-            root/'saeit_v91/mojplaywin_site',
-            root/'saeit_v91_runtime_stage_20261012/mojplaywin_site',
-          ]
-          for p in candidates:
-            if p.exists():
-              print('DOMAIN_PATH',p,'directory',p.is_dir(),'resolved',p.resolve())
-          for base in [root/'public_html',root/'domains',root/'mojplaywin.com']:
-            if not base.is_dir(): continue
-            for f in base.rglob('.htaccess'):
-              try: depth=len(f.relative_to(base).parts)
-              except: continue
-              if depth>5: continue
-              try: lines=f.read_text(errors='ignore').splitlines()
-              except: continue
-              relevant=[x.strip()[:300] for x in lines if any(k in x for k in ['PassengerAppRoot','PassengerBaseURI','PassengerStartupFile','ServerName','ServerAlias'])]
-              print('WEBROOT_CONFIG',f,'directives',' | '.join(relevant) if relevant else 'none')
-          print('HOME_MATCHING_DIRS',','.join(sorted(p.name for p in root.iterdir() if p.is_dir() and 'mojplaywin' in p.name.lower())))
-          print('MAP_DONE')
+            if '=' in line and not any(op in line for op in ('==','!=','<=','>=')) and any(k in upper for k in sensitive):
+              line=line.split('=',1)[0].rstrip()+' = [redacted]'
+            line=re.sub(r'https?://[^\\s]+','[endpoint redacted]',line)
+            line=re.sub(r'0x[a-fA-F0-9]{40,}','[address redacted]',line)
+            line=re.sub(r'\\bT[1-9A-HJ-NP-Za-km-z]{33}\\b','[address redacted]',line)
+            return line[:260]
+          if not app or not app.is_dir(): raise SystemExit('active app root not resolved')
+          for name in ['config/urls.py','core/urls.py']:
+            p=app/name
+            if not p.is_file(): continue
+            print('ROUTES_BEGIN',name)
+            for n,line in enumerate(p.read_text(errors='ignore').splitlines(),1):
+              if any(k in line.lower() for k in ('path(','re_path(','include(','checkout','crypto','payment','order')):
+                print('ROUTE',n,safe(line.strip()))
+            print('ROUTES_END',name)
+          for name in ['core/cryptopay_checkout.py','core/cryptopay_order.py','core/cryptopay_tron.py','core/cryptopay_rpc.py','core/cryptopay_v1.py']:
+            p=app/name
+            if not p.is_file(): print('SOURCE_MISSING',name);continue
+            print('SOURCE_BEGIN',name)
+            for n,line in enumerate(p.read_text(errors='ignore').splitlines(),1):
+              print('CODE',n,safe(line.rstrip()))
+            print('SOURCE_END',name)
+          models=app/'core/models.py'
+          if models.is_file():
+            tree=ast.parse(models.read_text(errors='ignore'))
+            print('MODEL_FIELDS')
+            for node in tree.body:
+              if isinstance(node,ast.ClassDef) and any(k in node.name.lower() for k in ('product','order','payment','ledger','webhook')):
+                fields=[]
+                for child in node.body:
+                  if isinstance(child,ast.Assign):
+                    for target in child.targets:
+                      if isinstance(target,ast.Name): fields.append(target.id)
+                  elif isinstance(child,ast.AnnAssign) and isinstance(child.target,ast.Name): fields.append(child.target.id)
+                print('MODEL',node.name,','.join(fields))
+          for name in ['core/cryptopay_mainnet_config.py','core/cryptopay_tron_config.py']:
+            p=app/name
+            if not p.is_file(): print('CONFIG_MISSING',name);continue
+            c=p.read_text(errors='ignore')
+            keys=sorted(set(m.group(1) for m in re.finditer(r"(?:getenv|environ\\.get)\\(\\s*['\\\"]([A-Z0-9_]+)['\\\"]",c)))
+            print('CONFIG_PRESENT',name,'environment_names',','.join(keys))
           REMOTE
