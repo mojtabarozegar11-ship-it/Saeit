@@ -230,3 +230,23 @@ class PlatformPageBlockTests(TestCase):
         )
         request.user = owner
         self.assertTrue(inline.has_add_permission(request, page))
+
+
+class SiteNavigationTests(TestCase):
+    def test_seeded_navigation_is_available_and_tracks_current_path(self):
+        from core.templatetags.site_navigation import site_navigation
+
+        main = site_navigation("main", "/company/")
+        self.assertTrue(any(item["title"] == "شرکت" and item["is_current"] for item in main))
+        footer = site_navigation("footer_services", "/")
+        self.assertEqual(
+            [item["title"] for item in footer],
+            ["کشاورزی", "صنعت", "بازار", "همه خدمات"],
+        )
+
+    def test_navigation_model_rejects_external_urls(self):
+        from core.models import SiteNavigationItem
+
+        item = SiteNavigationItem(area="main", title="External", url="//evil.example/")
+        with self.assertRaises(ValidationError):
+            item.full_clean()

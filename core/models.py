@@ -657,3 +657,36 @@ class PlatformPageBlock(T):
             errors["cta_url"] = "نشانی دکمه باید مسیر داخلی سایت باشد."
         if errors:
             raise ValidationError(errors)
+
+
+class SiteNavigationItem(T):
+    AREA_CHOICES = (
+        ("main", "منوی اصلی"),
+        ("footer_platform", "پاورقی ـ پلتفرم"),
+        ("footer_services", "پاورقی ـ خدمات"),
+        ("footer_access", "پاورقی ـ دسترسی"),
+    )
+
+    area = models.CharField(max_length=30, choices=AREA_CHOICES, default="main")
+    title = models.CharField(max_length=120)
+    url = models.CharField(max_length=500)
+    active_prefix = models.CharField(max_length=300, blank=True)
+    sort_order = models.PositiveIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ("area", "sort_order", "id")
+        verbose_name = "پیوند ناوبری سایت"
+        verbose_name_plural = "پیوندهای ناوبری سایت"
+
+    def __str__(self):
+        return f"{self.get_area_display()} · {self.title}"
+
+    def clean(self):
+        errors = {}
+        for field in ("url", "active_prefix"):
+            value = getattr(self, field)
+            if value and not PlatformPageContent._is_internal_path(value):
+                errors[field] = "نشانی باید مسیر داخلی سایت باشد."
+        if errors:
+            raise ValidationError(errors)

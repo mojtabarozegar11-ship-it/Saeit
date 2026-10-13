@@ -20,6 +20,7 @@ from .models import (
     Product,
     PlatformPageContent,
     PlatformPageBlock,
+    SiteNavigationItem,
     Report,
     ResearchProject,
     ResearchSource,
@@ -340,3 +341,19 @@ class PlatformPageContentAdmin(ModelAdmin):
         if obj and obj.published and not request.user.is_superuser:
             return False
         return super().has_delete_permission(request, obj)
+
+
+@admin.register(SiteNavigationItem)
+class SiteNavigationItemAdmin(ModelAdmin):
+    list_display = ("area", "sort_order", "title", "url", "is_active", "updated_at")
+    list_filter = ("area", "is_active")
+    search_fields = ("title", "url")
+    list_editable = ("sort_order", "is_active")
+    ordering = ("area", "sort_order", "id")
+    actions = None
+    fields = ("area", "title", "url", "active_prefix", "sort_order", "is_active", "created_at", "updated_at")
+    readonly_fields = ("created_at", "updated_at")
+
+    def save_model(self, request, obj, form, change):
+        obj.full_clean()
+        super().save_model(request, obj, form, change)
