@@ -123,6 +123,12 @@ jobs:
           if test -d "$HOME/domains"; then
             find "$HOME/domains" -maxdepth 3 -type d -name public_html -print 2>/dev/null | sort | head -40 || true
           fi
+          if command -v uapi >/dev/null 2>&1; then
+            echo "CPANEL_UAPI_DOMAIN_MAP:"
+            uapi --output=json DomainInfo domains_data 2>/dev/null | python3 -c 'import json,sys; d=json.load(sys.stdin).get("data",{}); print("MAIN="+str(d.get("main_domain","unknown"))); [print("DOMAIN="+str(x.get("domain",""))+" ROOT="+str(x.get("document_root",x.get("root_doc","")))) for k in ("addon_domains","sub_domains") for x in d.get(k,[]) if isinstance(x,dict)]'
+          else
+            echo "CPANEL_UAPI=unavailable"
+          fi
           echo "READ_ONLY_WEB_MAPPING_INVENTORY_COMPLETE"
           MAP
           timeout 30s ssh -F "$d/config" saeit-host "mkdir -p '$release' && test ! -e '$archive'"
