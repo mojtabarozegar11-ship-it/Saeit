@@ -127,6 +127,7 @@ jobs:
           "$python" manage.py check
           "$python" manage.py makemigrations --check --dry-run
           "$python" manage.py migrate --noinput
+          "$python" manage.py collectstatic --noinput
           "$python" manage.py test
           echo "ISOLATED_STAGING_DJANGO_SMOKE=PASS"
           echo "SOURCE_SHA=$source_sha"
