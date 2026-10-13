@@ -1,0 +1,88 @@
+name: V91 Staff SSH Inventory (host read-only)
+on:
+  issues:
+    types: [opened]
+permissions:
+  contents: read
+concurrency:
+  group: v91-staff-ssh-inventory
+  cancel-in-progress: false
+jobs:
+  inventory:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event.issue.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.issue.title == 'Ops: V91 personnel readonly SSH inventory 2026-10-13'
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - name: Authenticated SSH relay to cPanel; no deployment, no writes
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/v91-staff-ssh"
+          mkdir -p "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          python3 - "$d/host.key" <<'PY'
+          import pathlib,sys
+          p=pathlib.Path(sys.argv[1])
+          t=p.read_text().replace('\r\n','\n').strip()
+          p.write_text(t.replace('\\n','\n')+'\n')
+          PY
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host saeit-host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+            ConnectionAttempts 1
+          EOF
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          timeout 70s ssh -F "$d/config" saeit-host 'bash -se' <<'REMOTE'
+          set -eu
+          printf 'USER='; id -un
+          printf 'HOST='; hostname
+          echo 'EXISTING_PROJECT_DIRS'
+          for p in "$HOME/Saeit" "$HOME/saeit_v91" "$HOME/Saeit-staging" "$HOME/MojPlayWin" "$HOME/mojplaywin" "$HOME/zomorodmelal" "$HOME/saeit-v91"; do
+            if test -d "$p"; then echo "PRESENT=$p"; fi
+          done
+          echo 'DJANGO_PROJECTS'
+          find "$HOME" -maxdepth 3 -type f -name manage.py -print 2>/dev/null | head -50 || true
+          echo 'EXISTING_WORKBENCH_DIRECTORIES'
+          find "$HOME" -maxdepth 4 -type d -name workbench_v91 -print 2>/dev/null | head -30 || true
+          echo 'EXISTING_STAFF_FILES'
+          for p in "$HOME/Saeit/command_center/urls.py" "$HOME/Saeit/config/urls.py" "$HOME/saeit_v91/manage.py" "$HOME/Saeit-staging"; do
+            if test -e "$p"; then echo "PRESENT=$p"; else echo "MISSING=$p"; fi
+          done
+          if test -d "$HOME/Saeit-staging" && test -w "$HOME/Saeit-staging"; then echo STAGING_WRITABLE=yes; else echo STAGING_WRITABLE=no; fi
+          echo READ_ONLY_INVENTORY_COMPLETE
+          REMOTE
