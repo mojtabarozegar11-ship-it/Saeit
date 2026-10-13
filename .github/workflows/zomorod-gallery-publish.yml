@@ -1,4 +1,4 @@
-name: Zomorod six-image host publication staging gate
+name: Zomorod six-image host gallery LIVE publisher
 on:
   push:
     branches: [ops/zomorod-gallery-publish-20261014]
@@ -11,7 +11,7 @@ concurrency:
 jobs:
   stage_and_preflight:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with:
@@ -22,7 +22,7 @@ jobs:
           echo "a7c3390ffc1ba99bd72c4c10cdaa80bc6d541600258e7c861aa632a99fbc3f64  ops_assets/zomorod_gallery_6_images_6_posts_2026-10-14.zip" | sha256sum -c -
           unzip -tq ops_assets/zomorod_gallery_6_images_6_posts_2026-10-14.zip
           python3 -m py_compile ops_assets/publish_zomorod_gallery_20261014.py
-      - name: Stage exact six photos/reports on cPanel and preflight live Django with zero production writes
+      - name: Publish six original photos and six reports to existing Django production with preflight and backups
         shell: bash
         env:
           VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
@@ -78,4 +78,5 @@ jobs:
           timeout 60s ssh -F "$d/config" saeit-host "cat > '$stage/publisher.py'" < ops_assets/publish_zomorod_gallery_20261014.py
           timeout 45s ssh -F "$d/config" saeit-host "echo 'a7c3390ffc1ba99bd72c4c10cdaa80bc6d541600258e7c861aa632a99fbc3f64  $stage/zomorod_gallery_6_images_6_posts_2026-10-14.zip' | sha256sum -c -"
           timeout 110s ssh -F "$d/config" saeit-host "cd /home/zomorod2/Saeit && .venv/bin/python '$stage/publisher.py' --preflight"
-          echo "STAGING_SIX_ASSETS_VERIFIED_PRODUCTION_UNMODIFIED"
+          timeout 195s ssh -F "$d/config" saeit-host "cd /home/zomorod2/Saeit && flock -n '$stage/publish.lock' .venv/bin/python '$stage/publisher.py' --publish"
+          echo "PRODUCTION_SIX_GALLERY_REPORTS_PUBLISHED_AND_SMOKE_TESTED"
