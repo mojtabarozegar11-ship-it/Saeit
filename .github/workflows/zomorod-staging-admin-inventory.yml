@@ -6,6 +6,7 @@ on:
       - feat/command-center-factory-readiness-20261014
     paths:
       - .github/workflows/zomorod-staging-admin-inventory.yml
+      - core/**
 
 permissions:
   contents: read
