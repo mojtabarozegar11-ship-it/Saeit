@@ -133,6 +133,27 @@ class PlatformPageContentAdminTests(TestCase):
 
 
 class PlatformPageBlockTests(TestCase):
+    def setUp(self):
+        self.staff = get_user_model().objects.create_user(
+            username="block_editor",
+            password="test-pass",
+            is_staff=True,
+        )
+        self.staff.user_permissions.add(
+            Permission.objects.get(
+                content_type__app_label="core",
+                codename="add_platformpageblock",
+            ),
+            Permission.objects.get(
+                content_type__app_label="core",
+                codename="change_platformpageblock",
+            ),
+            Permission.objects.get(
+                content_type__app_label="core",
+                codename="delete_platformpageblock",
+            ),
+        )
+
     def test_published_page_renders_active_blocks_in_order(self):
         page = make_page()
         from core.models import PlatformPageBlock
