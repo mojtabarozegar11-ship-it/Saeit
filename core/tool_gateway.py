@@ -65,13 +65,7 @@ class ToolGateway:
             if task.robot.connector != spec.code:
                 raise ToolGatewayError("Robot connector does not match the registered tool")
 
-        robot_requires_approval = bool(
-            task.robot_id
-            and (
-                task.robot.requires_owner_approval
-                or task.robot.autonomy_level == "owner_approved"
-            )
-        )
+        robot_requires_approval = bool(task.robot_id)
         if requires_owner_approval(spec.code, spec.risk) or robot_requires_approval:
             approved = ApprovalRequest.objects.filter(
                 target_type="AgentTask",
