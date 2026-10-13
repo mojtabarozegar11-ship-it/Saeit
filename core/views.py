@@ -1,5 +1,6 @@
 from django.conf import settings
 from .company_content_models import CompanyContentLink
+from .models import PlatformPageContent
 from django.db import connection
 from django.http import Http404
 from django.shortcuts import render
@@ -158,6 +159,13 @@ def platform_page(request, section):
     page = pages.get(section)
     if page is None:
         raise Http404
+    if section in {key for key, _label in PlatformPageContent.PAGE_CHOICES}:
+        managed_page = PlatformPageContent.objects.filter(
+            page_key=section,
+            published=True,
+        ).first()
+        if managed_page:
+            page.update(managed_page.public_context())
     if section == "company":
         from collections import OrderedDict
         categories = OrderedDict()
