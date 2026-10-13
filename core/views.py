@@ -159,6 +159,7 @@ def platform_page(request, section):
     page = pages.get(section)
     if page is None:
         raise Http404
+    page_builder_blocks = []
     if section in {key for key, _label in PlatformPageContent.PAGE_CHOICES}:
         managed_page = PlatformPageContent.objects.filter(
             page_key=section,
@@ -166,6 +167,9 @@ def platform_page(request, section):
         ).first()
         if managed_page:
             page.update(managed_page.public_context())
+            page_builder_blocks = list(
+                managed_page.blocks.filter(active=True).order_by("sort_order", "id")
+            )
     if section == "company":
         from collections import OrderedDict
         categories = OrderedDict()
@@ -507,4 +511,13 @@ def platform_page(request, section):
             "breadcrumb":{"@id":"https://zomorodmelal.ir/company/#breadcrumb"}
         }, ensure_ascii=False)
         page["company_breadcrumb_jsonld"] = _json.dumps({"@context":"https://schema.org","@type":"BreadcrumbList","@id":"https://zomorodmelal.ir/company/#breadcrumb","itemListElement":[{"@type":"ListItem","position":1,"name":"شرکت","item":"https://zomorodmelal.ir/company/"}]}, ensure_ascii=False)
-    return render(request, "core/platform_page.html", {"page": page, "company_page_jsonld": page.get("company_page_jsonld", ""), "company_breadcrumb_jsonld": page.get("company_breadcrumb_jsonld", "")})
+    return render(
+        request,
+        "core/platform_page.html",
+        {
+            "page": page,
+            "page_builder_blocks": page_builder_blocks,
+            "company_page_jsonld": page.get("company_page_jsonld", ""),
+            "company_breadcrumb_jsonld": page.get("company_breadcrumb_jsonld", ""),
+        },
+    )

@@ -19,6 +19,7 @@ from .models import (
     Order,
     Product,
     PlatformPageContent,
+    PlatformPageBlock,
     Report,
     ResearchProject,
     ResearchSource,
@@ -278,8 +279,37 @@ class CompanyInquiryAdmin(admin.ModelAdmin):
     fieldsets = (("درخواست", {"fields": ("kind", "name", "organization", "email", "phone", "subject", "message")}), ("مدیریت", {"fields": ("status", "internal_note", "created_at", "updated_at")}))
 
 
+class PlatformPageBlockInline(admin.StackedInline):
+    model = PlatformPageBlock
+    extra = 0
+    fields = (
+        "active", "sort_order", "kind", "title", "body", "items",
+        "cta_label", "cta_url",
+    )
+    ordering = ("sort_order", "id")
+
+    def _locked_published_page(self, request, obj):
+        return bool(obj and obj.published and not request.user.is_superuser)
+
+    def has_add_permission(self, request, obj=None):
+        if self._locked_published_page(request, obj):
+            return False
+        return super().has_add_permission(request, obj)
+
+    def has_change_permission(self, request, obj=None):
+        if self._locked_published_page(request, obj):
+            return False
+        return super().has_change_permission(request, obj)
+
+    def has_delete_permission(self, request, obj=None):
+        if self._locked_published_page(request, obj):
+            return False
+        return super().has_delete_permission(request, obj)
+
+
 @admin.register(PlatformPageContent)
 class PlatformPageContentAdmin(ModelAdmin):
+    inlines = (PlatformPageBlockInline,)
     list_display = ("page_key", "title", "published", "updated_at")
     list_filter = ("page_key", "published")
     search_fields = ("title", "lead", "heading", "body")

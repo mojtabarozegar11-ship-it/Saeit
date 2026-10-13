@@ -572,3 +572,85 @@ class PlatformPageContent(T):
             "meta_description": self.meta_description,
         }
 
+
+
+class PlatformPageBlock(T):
+    """A safe, ordered content block attached to an owner-published platform page."""
+
+    KIND_CHOICES = (
+        ("text", "متن"),
+        ("cards", "کارت‌ها"),
+        ("links", "پیوندها"),
+        ("callout", "دعوت به اقدام"),
+        ("faq", "پرسش‌های پرتکرار"),
+    )
+
+    page = models.ForeignKey(
+        PlatformPageContent,
+        on_delete=models.CASCADE,
+        related_name="blocks",
+        verbose_name="صفحه",
+    )
+    kind = models.CharField(max_length=20, choices=KIND_CHOICES, default="text")
+    title = models.CharField(max_length=250, blank=True)
+    body = models.TextField(blank=True)
+    items = models.JSONField(
+        default=list,
+        blank=True,
+        help_text=(
+            "برای کارت و پیوند: فهرست JSON شامل title و text؛ "
+            "برای پرسش پرتکرار: question و answer."
+        ),
+    )
+    cta_label = models.CharField(max_length=100, blank=True)
+    cta_url = models.CharField(max_length=300, blank=True)
+    sort_order = models.PositiveIntegerField(default=0)
+    active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ("sort_order", "id")
+        verbose_name = "بلوک صفحه"
+        verbose_name_plural = "بلوک‌های صفحه"
+
+    def __str__(self):
+        return f"{self.page} · {self.get_kind_display()} · {self.sort_order}"
+
+    def clean(self):
+        errors = {}
+        if self.kind in {"text", "callout"} and not self.body.strip():
+            errors["body"] = "متن این بلوک را وارد کنید."
+
+        required_by_kind = {
+            "cards": ("title", "text"),
+            "links": ("title", "text", "url"),
+            "faq": ("question", "answer"),
+        }
+        required = required_by_kind.get(self.kind)
+        if required is not None:
+            if not isinstance(self.items, list):
+                errors["items"] = "مقدار باید فهرستی از آبجکت‌های JSON باشد."
+            else:
+                for index, row in enumerate(self.items):
+                    if not isinstance(row, dict) or any(
+                        not isinstance(row.get(key), str) or not row[key].strip()
+                        for key in required
+                    ):
+                        errors["items"] = (
+                            f"ردیف {index + 1} باید فیلدهای "
+                            f"{', '.join(required)} را داشته باشد."
+                        )
+                        break
+                    if self.kind == "links" and not PlatformPageContent._is_internal_path(
+                        row["url"]
+                    ):
+                        errors["items"] = (
+                            f"نشانی ردیف {index + 1} باید مسیر داخلی سایت باشد."
+                        )
+                        break
+        elif not isinstance(self.items, list):
+            errors["items"] = "مقدار باید فهرستی از آبجکت‌های JSON باشد."
+
+        if self.cta_url and not PlatformPageContent._is_internal_path(self.cta_url):
+            errors["cta_url"] = "نشانی دکمه باید مسیر داخلی سایت باشد."
+        if errors:
+            raise ValidationError(errors)

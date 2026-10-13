@@ -129,3 +129,76 @@ class PlatformPageContentAdminTests(TestCase):
             ).status_code,
             403,
         )
+
+
+
+class PlatformPageBlockTests(TestCase):
+    def test_published_page_renders_active_blocks_in_order(self):
+        page = make_page()
+        from core.models import PlatformPageBlock
+
+        PlatformPageBlock.objects.create(
+            page=page, kind="text", title="Second block", body="Ordered content second",
+            sort_order=20,
+        )
+        PlatformPageBlock.objects.create(
+            page=page, kind="text", title="First block", body="Ordered content first",
+            sort_order=10,
+        )
+        PlatformPageBlock.objects.create(
+            page=page, kind="text", title="Hidden block", body="Inactive content",
+            sort_order=5, active=False,
+        )
+
+        response = self.client.get("/agriculture/")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "First block")
+        self.assertContains(response, "Second block")
+        self.assertNotContains(response, "Inactive content")
+        self.assertLess(
+            response.content.index(b"First block"),
+            response.content.index(b"Second block"),
+        )
+
+    def test_draft_page_blocks_are_not_public(self):
+        page = make_page(published=False)
+        from core.models import PlatformPageBlock
+
+        PlatformPageBlock.objects.create(
+            page=page, kind="text", title="Draft-only block", body="Not public",
+        )
+        response = self.client.get("/agriculture/")
+        self.assertNotContains(response, "Draft-only block")
+        self.assertNotContains(response, "Not public")
+
+    def test_block_rejects_external_links(self):
+        from core.models import PlatformPageBlock
+
+        page = make_page(published=False)
+        block = PlatformPageBlock(
+            page=page,
+            kind="links",
+            items=[{"title": "External", "text": "Unsafe", "url": "https://example.com"}],
+        )
+        with self.assertRaises(ValidationError):
+            block.full_clean()
+
+    def test_staff_cannot_edit_blocks_on_published_page(self):
+        from django.contrib import admin
+        from django.test import RequestFactory
+        from core.admin import PlatformPageBlockInline
+        from core.models import PlatformPageBlock
+
+        page = make_page()
+        request = RequestFactory().get("/admin/")
+        request.user = self.staff
+        inline = PlatformPageBlockInline(PlatformPageContent, admin.site)
+        self.assertFalse(inline.has_add_permission(request, page))
+        self.assertFalse(inline.has_change_permission(request, page))
+        self.assertFalse(inline.has_delete_permission(request, page))
+
+        owner = get_user_model().objects.create_superuser(
+            username="site_owner", email="owner@example.com", password="test-pass"
+        )
+        request.user = owner
+        self.assertTrue(inline.has_add_permission(request, page))
