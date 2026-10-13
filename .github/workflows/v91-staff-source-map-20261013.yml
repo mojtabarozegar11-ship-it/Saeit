@@ -122,6 +122,38 @@ jobs:
             for rel in ['config/wsgi.py','config/settings.py','config/urls.py','sitecore/urls.py','sitecore/commerce_views.py','sitecore/commerce_gateway.py']:
               q=base/rel
               if q.is_file(): print('POSSIBLE_APP_MODULE',q,'bytes',q.stat().st_size)
+          import re
+          app_path=None
+          if wsgi.is_file():
+            for line in wsgi.read_text(errors='ignore').splitlines():
+              m=re.match(r"\s*APP\s*=\s*['\"]([^'\"]+)['\"]",line)
+              if m: app_path=m.group(1);break
+          print('PASSENGER_APP_PATH',app_path)
+          active=Path(app_path).resolve() if app_path else None
+          print('ACTIVE_APP_CHECK',active,'exists',bool(active and active.is_dir()),'manage',bool(active and (active/'manage.py').is_file()))
+          if active and active.is_dir():
+            terms=('payment','crypto','tron','ethereum','wallet','invoice','checkout','commerce','gateway','webhook','order','coin','usdt','token')
+            skipparts=('venv','.venv','node_modules','static','staticfiles','media','__pycache__','.git','backup','archive','old','stage','release','restore','lab','demo','snap','copy','tmp')
+            found=[]
+            for f in active.rglob('*.py'):
+              try: rel=f.relative_to(active)
+              except: continue
+              if len(rel.parts)>7 or any(any(k in x.lower() for k in skipparts) for x in rel.parts): continue
+              try:
+                if f.stat().st_size>1000000: continue
+                src=f.read_text(errors='ignore')
+              except: continue
+              marks=[t for t in terms if t in f.name.lower() or t in src.lower()]
+              if marks: found.append((f,rel,src,marks))
+            print('ACTIVE_PAYMENT_SOURCE_COUNT',len(found))
+            for f,rel,src,marks in found[:80]:
+              print('ACTIVE_PAYMENT_SOURCE',rel.as_posix(),'bytes',f.stat().st_size,'markers',','.join(marks[:12]))
+              for n,line in enumerate(src.splitlines(),1):
+                stripped=line.strip()
+                if stripped.startswith(('def ','async def ','class ')):
+                  print('  SYMBOL',n,stripped[:180])
+                if f.name=='urls.py' and any(t in stripped.lower() for t in ['path(','re_path(','include(','payment','crypto','checkout','order']):
+                  print('  URL',n,stripped[:220])
           skip={'venv','.venv','node_modules','staticfiles','media','__pycache__','.git','backups','backup','tmp'}
           terms=('payment','crypto','tron','ethereum','wallet','invoice','checkout','commerce','gateway','webhook','order')
           shown=0
