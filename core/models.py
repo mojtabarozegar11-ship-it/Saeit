@@ -473,10 +473,13 @@ class PlatformPageContent(T):
     """Owner-published editable copy for existing Zomorod platform pages."""
 
     PAGE_CHOICES = (
+        ("about", "درباره ما"),
         ("agriculture", "کشاورزی"),
         ("industry", "صنعت"),
         ("research", "پژوهش"),
         ("knowledge", "دانشنامه"),
+        ("company", "معرفی شرکت"),
+        ("contact", "تماس با ما"),
         ("economy", "اقتصاد"),
         ("studio", "استودیو"),
         ("market", "بازار"),

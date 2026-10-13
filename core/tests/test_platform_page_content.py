@@ -47,6 +47,13 @@ class PlatformPageContentPublicTests(TestCase):
         self.assertContains(response, "کشاورزی و زنجیره ارزش")
         self.assertNotContains(response, "Draft title must stay private")
 
+    def test_company_profile_can_use_managed_copy_without_losing_live_sections(self):
+        make_page(page_key="company", title="مدیریت‌شده شرکت", heading="معرفی مدیریت‌شده")
+        response = self.client.get("/company/")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "مدیریت‌شده شرکت")
+        self.assertContains(response, "company-request")
+
     def test_published_links_must_be_internal_paths(self):
         page = PlatformPageContent(
             **{
