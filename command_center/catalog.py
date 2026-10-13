@@ -49,13 +49,13 @@ AGENT_SETTINGS = (
 )
 
 
-def localized(rows, lang):
+def localized(rows, lang, admin_links=False):
     if lang not in ("fa", "en"):
         raise ValueError("Unsupported language")
     index = 1 if lang == "fa" else 2
     result = []
     for row in rows:
-        route = MODULE_ADMIN_ROUTES.get(row[0])
+        route = MODULE_ADMIN_ROUTES.get(row[0]) if admin_links else None
         result.append({
             "id": row[0],
             "label": row[index],
