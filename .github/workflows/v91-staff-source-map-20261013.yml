@@ -102,6 +102,8 @@ jobs:
             root/'domains',
             root/'domains/mojplaywin.com',
             root/'domains/mojplaywin.com/public_html',
+            root/'mojplaywin.com',
+            root/'mojplaywin.com/public_html',
             root/'public_html/mojplaywin',
             root/'public_html/mojplaywin.com',
             root/'mojplaywin_site',
@@ -111,7 +113,7 @@ jobs:
           for p in candidates:
             if p.exists():
               print('DOMAIN_PATH',p,'directory',p.is_dir(),'resolved',p.resolve())
-          for base in [root/'public_html',root/'domains']:
+          for base in [root/'public_html',root/'domains',root/'mojplaywin.com']:
             if not base.is_dir(): continue
             for f in base.rglob('.htaccess'):
               try: depth=len(f.relative_to(base).parts)
