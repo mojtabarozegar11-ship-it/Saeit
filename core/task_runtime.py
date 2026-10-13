@@ -2,11 +2,12 @@ from decimal import Decimal, InvalidOperation
 import uuid
 
 from django.db import transaction
+from django.db.models import Sum
 from django.utils import timezone
 from datetime import timedelta
 
 from .agent_registry import AgentRegistry
-from .models import AgentTask, ApprovalRequest, AuditLog
+from .models import AgentTask, ApprovalRequest, AuditLog, Robot
 from .services import normalize_risk, requires_owner_approval
 
 
@@ -22,13 +23,20 @@ class TaskRuntime:
 
     @transaction.atomic
     def claim(self, task_id):
-        task = AgentTask.objects.select_for_update().select_related("agent").get(pk=task_id)
+        task = AgentTask.objects.select_for_update().select_related("agent", "robot").get(pk=task_id)
         if task.status != "queued":
             if task.status == "failed" and task.attempt_count >= task.max_attempts:
                 raise TaskExecutionError("Task retry budget exhausted")
             raise TaskExecutionError(f"Task is not executable from status: {task.status}")
         if not task.agent.active:
             raise TaskExecutionError("Task agent is inactive")
+        if task.robot_id:
+            if task.robot.agent_id != task.agent_id:
+                raise TaskExecutionError("Robot must be assigned to the task agent")
+            if not task.robot.runtime_enabled:
+                raise TaskExecutionError(
+                    "Robot is not qualified: enable a sandbox/deployed connector with execution autonomy"
+                )
 
         registry = AgentRegistry()
         capability = registry.capability_for(task.agent, task.action_type)
@@ -44,7 +52,14 @@ class TaskRuntime:
         effective_risk = registry.effective_risk(capability, snapshot_risk)
         if effective_risk != snapshot_risk:
             raise TaskExecutionError("Task risk policy has changed since planning; owner approval is required before execution")
-        if requires_owner_approval(task.action_type, effective_risk):
+        robot_requires_approval = bool(
+            task.robot_id
+            and (
+                task.robot.requires_owner_approval
+                or task.robot.autonomy_level == "owner_approved"
+            )
+        )
+        if requires_owner_approval(task.action_type, effective_risk) or robot_requires_approval:
             approved = ApprovalRequest.objects.filter(
                 target_type="AgentTask", target_id=str(task.pk), status="approved"
             ).exists()
@@ -141,6 +156,15 @@ class TaskRuntime:
             raise TaskExecutionError("Task cost must be finite")
         if normalized_cost < 0:
             raise TaskExecutionError("Task cost cannot be negative")
+        if task.robot_id:
+            robot = Robot.objects.select_for_update().get(pk=task.robot_id)
+            if not robot.runtime_enabled or robot.agent_id != task.agent_id:
+                raise TaskExecutionError("Robot was paused or changed during execution")
+            spent = AgentTask.objects.filter(robot=robot, status="completed").exclude(
+                pk=task.pk
+            ).aggregate(total=Sum("cost"))["total"] or Decimal("0")
+            if spent + normalized_cost > robot.budget_limit:
+                raise TaskExecutionError("Robot budget limit would be exceeded")
         normalized_output = output_data or {}
         # Economic work is not complete merely because a handler returned. It must
         # prove an observable effect. This prevents report-only/no-op cycles from
