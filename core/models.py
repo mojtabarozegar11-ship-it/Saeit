@@ -475,15 +475,15 @@ class PlatformPageContent(T):
     PAGE_CHOICES = (
         ("about", "درباره ما"),
         ("agriculture", "کشاورزی"),
-        ("industry", "صنعت"),
-        ("research", "پژوهش"),
-        ("knowledge", "دانشنامه"),
+        ("agents", "خدمات هوشمند"),
         ("company", "معرفی شرکت"),
         ("contact", "تماس با ما"),
         ("economy", "اقتصاد"),
-        ("studio", "استودیو"),
+        ("industry", "صنعت"),
+        ("knowledge", "دانشنامه"),
         ("market", "بازار"),
-        ("agents", "خدمات هوشمند"),
+        ("research", "پژوهش"),
+        ("studio", "استودیو"),
     )
 
     page_key = models.CharField(max_length=30, choices=PAGE_CHOICES, unique=True)
