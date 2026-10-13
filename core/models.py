@@ -468,3 +468,107 @@ class EducationCertificate(T):
     title = models.CharField(max_length=300)
     verification_note = models.TextField(blank=True)
     issued_at = models.DateTimeField(auto_now_add=True)
+
+class PlatformPageContent(T):
+    """Owner-published editable copy for existing Zomorod platform pages."""
+
+    PAGE_CHOICES = (
+        ("agriculture", "کشاورزی"),
+        ("industry", "صنعت"),
+        ("research", "پژوهش"),
+        ("knowledge", "دانشنامه"),
+        ("economy", "اقتصاد"),
+        ("studio", "استودیو"),
+        ("market", "بازار"),
+        ("agents", "خدمات هوشمند"),
+    )
+
+    page_key = models.CharField(max_length=30, choices=PAGE_CHOICES, unique=True)
+    kicker = models.CharField(max_length=200, blank=True)
+    title = models.CharField(max_length=250)
+    lead = models.TextField()
+    badge = models.CharField(max_length=100, blank=True)
+    heading = models.CharField(max_length=250)
+    body = models.TextField()
+    items = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="JSON list of cards: [{\"title\": \"...\", \"text\": \"...\"}]",
+    )
+    links = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="JSON list of internal links: [{\"title\": \"...\", \"text\": \"...\", \"url\": \"/path/\"}]",
+    )
+    cta_title = models.CharField(max_length=250, blank=True)
+    cta_text = models.TextField(blank=True)
+    cta_label = models.CharField(max_length=100, blank=True)
+    cta_url = models.CharField(max_length=300, blank=True)
+    seo_title = models.CharField(max_length=250, blank=True)
+    meta_description = models.CharField(max_length=320, blank=True)
+    published = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ("page_key",)
+        verbose_name = "محتوای صفحه اصلی"
+        verbose_name_plural = "محتوای صفحات اصلی"
+
+    def __str__(self):
+        return f"{self.get_page_key_display()} — {self.title}"
+
+    @staticmethod
+    def _is_internal_path(value):
+        return (
+            isinstance(value, str)
+            and value.startswith("/")
+            and not value.startswith("//")
+            and not any(char in value for char in "\\r\\n")
+        )
+
+    def clean(self):
+        errors = {}
+        if self.published:
+            for field in (
+                "kicker", "title", "lead", "badge", "heading", "body",
+                "cta_title", "cta_text", "cta_label", "cta_url",
+            ):
+                value = getattr(self, field)
+                if not isinstance(value, str) or not value.strip():
+                    errors[field] = "برای انتشار، این بخش باید کامل باشد."
+
+        for field, required in (("items", ("title", "text")), ("links", ("title", "text", "url"))):
+            rows = getattr(self, field)
+            if not isinstance(rows, list):
+                errors[field] = "مقدار باید فهرستی از آبجکت‌های JSON باشد."
+                continue
+            for index, row in enumerate(rows):
+                if not isinstance(row, dict) or any(not isinstance(row.get(key), str) or not row[key].strip() for key in required):
+                    errors[field] = f"ردیف {index + 1} باید فیلدهای {', '.join(required)} را داشته باشد."
+                    break
+                if field == "links" and not self._is_internal_path(row["url"]):
+                    errors[field] = f"نشانی ردیف {index + 1} باید مسیر داخلی سایت باشد."
+                    break
+
+        if self.cta_url and not self._is_internal_path(self.cta_url):
+            errors["cta_url"] = "نشانی دکمه باید مسیر داخلی سایت باشد."
+        if errors:
+            raise ValidationError(errors)
+
+    def public_context(self):
+        return {
+            "kicker": self.kicker,
+            "title": self.title,
+            "lead": self.lead,
+            "badge": self.badge,
+            "heading": self.heading,
+            "body": self.body,
+            "items": self.items,
+            "links": self.links,
+            "cta_title": self.cta_title,
+            "cta_text": self.cta_text,
+            "cta_label": self.cta_label,
+            "cta_url": self.cta_url,
+            "seo_title": self.seo_title,
+            "meta_description": self.meta_description,
+        }
+
