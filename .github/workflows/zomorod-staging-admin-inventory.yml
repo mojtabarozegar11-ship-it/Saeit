@@ -1,4 +1,4 @@
-name: Zomorod admin staging inventory (read-only)
+name: Zomorod admin isolated staging smoke test
 
 on:
   push:
@@ -11,14 +11,17 @@ permissions:
   contents: read
 
 concurrency:
-  group: zomorod-admin-staging-inventory
+  group: zomorod-admin-staging-smoke
   cancel-in-progress: false
 
 jobs:
-  inventory:
+  smoke:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
     steps:
+      - name: Checkout the reviewed PR source
+        uses: actions/checkout@v4
+
       - name: Verify pinned SSH identities and prepare relay
         shell: bash
         env:
@@ -31,19 +34,19 @@ jobs:
           d="$RUNNER_TEMP/zomorod-staging-ssh"
           mkdir -p "$d"
           test -n "$VPS_KEY" && test -n "$HOST_KEY"
-          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
-          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          printf '%s\\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\\n' "$HOST_KEY" > "$d/host.key"
           python3 - "$d/host.key" <<'PY'
           import pathlib, sys
           p = pathlib.Path(sys.argv[1])
-          text = p.read_text().replace("\r\n", "\n").strip()
-          p.write_text(text.replace("\\n", "\n") + "\n")
+          text = p.read_text().replace("\\r\\n", "\\n").strip()
+          p.write_text(text.replace("\\\\n", "\\n") + "\\n")
           PY
           chmod 600 "$d/"*.key
           ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
           ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
           if [[ -n "$VPS_KNOWN" ]]; then
-            printf '%s\n' "$VPS_KNOWN" > "$d/vps.known"
+            printf '%s\\n' "$VPS_KNOWN" > "$d/vps.known"
           else
             ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
           fi
@@ -76,48 +79,61 @@ jobs:
           timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
           test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
           echo "SSH identities pinned to the previously confirmed fingerprints."
-          echo "No key material is printed."
-      - name: Inspect staging only; make no changes
+
+      - name: Package only the reviewed Django project
         shell: bash
         run: |
           set -euo pipefail
+          tar --exclude='__pycache__' --exclude='*.pyc' --exclude='.env' --exclude='.env.*' \
+            -czf "$RUNNER_TEMP/saeit-admin-smoke.tar.gz" \
+            manage.py requirements.txt config core command_center financial_core templates tests conftest.py pytest.ini
+          test -s "$RUNNER_TEMP/saeit-admin-smoke.tar.gz"
+          echo "Packaged Django source paths only; no V-version bundles, secrets, or databases."
+
+      - name: Run isolated Django checks on staging
+        shell: bash
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+          ACTION_RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
           d="$RUNNER_TEMP/zomorod-staging-ssh"
-          timeout 70s ssh -F "$d/config" saeit-host 'bash -se' <<'REMOTE'
+          short_sha="${SOURCE_SHA:0:12}"
+          case "$short_sha" in (*[!a-f0-9]*|'') echo "Invalid source SHA"; exit 2;; esac
+          release="/home/zomorod2/Saeit-staging/admin-smoke/$short_sha-$ACTION_RUN_ID"
+          archive="$release/source.tar.gz"
+          timeout 30s ssh -F "$d/config" saeit-host "mkdir -p '$release' && test ! -e '$archive'"
+          scp -F "$d/config" "$RUNNER_TEMP/saeit-admin-smoke.tar.gz" "saeit-host:$archive"
+          timeout 240s ssh -F "$d/config" saeit-host "bash -se -- '$release' '$short_sha'" <<'REMOTE'
           set -eu
-          test "$(id -un)" = "zomorod2"
-          printf 'HOST_USER='; id -un
-          printf 'HOST_NAME='; hostname
+          release="$1"
+          source_sha="$2"
           stage=/home/zomorod2/Saeit-staging
-          if test -d "$stage"; then
-            echo "STAGING_ROOT=PRESENT"
-            if test -w "$stage"; then echo "STAGING_ROOT_WRITABLE=yes"; else echo "STAGING_ROOT_WRITABLE=no"; fi
-            echo "DJANGO_PROJECTS_IN_STAGING:"
-            find "$stage" -maxdepth 6 -type f -name manage.py -print 2>/dev/null | head -30 || true
-            echo "PYTHON_EXECUTABLE_CANDIDATES_IN_STAGING:"
-            find "$stage" -maxdepth 7 -type f -path '*/bin/python*' -perm /111 -print 2>/dev/null | head -20 || true
-            echo "STAGING_ROOT_CHILDREN:"
-            find "$stage" -mindepth 1 -maxdepth 1 -printf '%f %y\n' 2>/dev/null | sort
-            echo "KNOWN_STAGING_VENV_CANDIDATES:"
-            for candidate in "$stage/venv/bin/python" "$stage/.venv/bin/python" "$HOME/virtualenv/Saeit-staging/3.11/bin/python" "$HOME/virtualenv/Saeit-staging/3.10/bin/python"; do
-              if test -x "$candidate"; then echo "PYTHON_PRESENT=$candidate"; fi
-            done
-            if test -d "$HOME/virtualenv"; then
-              find -L "$HOME/virtualenv" -maxdepth 6 -type f -name 'python3*' -perm /111 -print 2>/dev/null | head -20
-            fi
-            echo "PYTHON_DEPENDENCY_AVAILABILITY:"
-            python3 -c 'import importlib.util; names=("django","environ","rest_framework","whitenoise"); print("PYTHON_MODULES=" + ",".join(name+":"+("available" if importlib.util.find_spec(name) else "missing") for name in names))'
-            for app in "$stage" "$stage/zomorod_json_admin_stage"; do
-              if test -f "$app/manage.py"; then
-                printf 'SETTINGS_MODULE_SOURCE=%s ' "$app"
-                grep -Eo 'DJANGO_SETTINGS_MODULE[^,)]*' "$app/manage.py" | head -1 || true
-              fi
-            done
-          else
-            echo "STAGING_ROOT=MISSING"
-            exit 3
-          fi
-          echo "READ_ONLY_STAGING_INVENTORY_COMPLETE"
+          case "$release" in "$stage"/admin-smoke/*) ;; *) echo "Refusing path outside isolated staging"; exit 20;; esac
+          test "$(id -un)" = "zomorod2"
+          test -d "$release"
+          test -s "$release/source.tar.gz"
+          tar -xzf "$release/source.tar.gz" -C "$release"
+          rm -f "$release/source.tar.gz"
+          test -f "$release/manage.py"
+          python="$HOME/virtualenv/Saeit-staging/3.11/bin/python"
+          test -x "$python"
+          "$python" -c 'import django, environ; print("DJANGO_VERSION=" + django.get_version()); print("DJANGO_ENVIRON=available")'
+          export SECRET_KEY="staging-smoke-$source_sha"
+          export DEBUG=0
+          export ALLOWED_HOSTS=localhost
+          export DATABASE_URL="sqlite:///$release/isolated-smoke.sqlite3"
+          cd "$release"
+          "$python" manage.py check
+          "$python" manage.py makemigrations --check --dry-run
+          "$python" manage.py migrate --noinput
+          "$python" manage.py test
+          echo "ISOLATED_STAGING_DJANGO_SMOKE=PASS"
+          echo "SOURCE_SHA=$source_sha"
+          echo "ISOLATED_RELEASE=$release"
+          echo "DATABASE=private SQLite under this release directory"
           REMOTE
-      - name: Remove temporary SSH credentials
+
+      - name: Remove temporary SSH credentials and local archive
         if: always()
-        run: rm -rf -- "$RUNNER_TEMP/zomorod-staging-ssh"
+        run: rm -rf -- "$RUNNER_TEMP/zomorod-staging-ssh" "$RUNNER_TEMP/saeit-admin-smoke.tar.gz"
