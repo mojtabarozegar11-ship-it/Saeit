@@ -9,7 +9,7 @@ jobs:
     if: >-
       github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
       github.event.issue.user.login == 'mojtabarozegar11-ship-it' &&
-      github.event.issue.title == 'Ops: MojPlayWin live app mapping audit 2026-10-14'
+      github.event.issue.title == 'Ops: MojPlayWin domain mapping check 2026-10-14'
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
@@ -96,73 +96,31 @@ jobs:
           print('HOST_ARCHIVES')
           for p in root.glob('*V91*zip'):
             if p.is_file():print('ZIP',p.name,p.stat().st_size)
-          print('MOJPLAYWIN_PAYMENT_SOURCE_AUDIT')
-          # Report only path names and boolean feature markers; never print file contents.
-          audit_roots=[
+          print('MOJPLAYWIN_DOMAIN_MAPPING_AUDIT')
+          candidates=[
+            root/'public_html',
+            root/'domains',
+            root/'domains/mojplaywin.com',
+            root/'domains/mojplaywin.com/public_html',
+            root/'public_html/mojplaywin',
+            root/'public_html/mojplaywin.com',
+            root/'mojplaywin_site',
             root/'saeit_v91/mojplaywin_site',
             root/'saeit_v91_runtime_stage_20261012/mojplaywin_site',
           ]
-          for app in audit_roots:
-            print('APP_AUDIT_ROOT',app,'exists',app.is_dir(),'manage', (app/'manage.py').is_file(),'passenger', (app/'passenger_wsgi.py').is_file())
-            if not app.is_dir(): continue
-            skip={'venv','.venv','node_modules','staticfiles','media','__pycache__','.git'}
-            tokens=['crypto','ethereum','tron','wallet','payment','transaction','webhook']
-            scanned=0
-            for f in app.rglob('*'):
-              if not f.is_file() or f.suffix.lower() not in {'.py','.html','.yml','.yaml'}: continue
-              try: rel=f.relative_to(app)
+          for p in candidates:
+            if p.exists():
+              print('DOMAIN_PATH',p,'directory',p.is_dir(),'resolved',p.resolve())
+          for base in [root/'public_html',root/'domains']:
+            if not base.is_dir(): continue
+            for f in base.rglob('.htaccess'):
+              try: depth=len(f.relative_to(base).parts)
               except: continue
-              if any(part in skip for part in rel.parts): continue
-              scanned+=1
-              try:
-                if f.stat().st_size>1500000: continue
-                source=f.read_text(errors='ignore').lower()
-              except Exception: continue
-              hits=[word for word in tokens if word in f.name.lower() or word in source]
-              if hits: print('PAYMENT_MARKER_FILE',rel.as_posix(),','.join(hits))
-            print('APP_AUDIT_FILES_SCANNED',scanned)
-          print('PASSENGER_MAPPINGS')
-          for f in [root/'public_html/.htaccess',root/'domains/mojplaywin.com/public_html/.htaccess',root/'saeit_v91/mojplaywin_site/.htaccess',root/'saeit_v91_runtime_stage_20261012/mojplaywin_site/.htaccess']:
-            if f.is_file():
-              print('PASSENGER_CONFIG',f)
-              for line in f.read_text(errors='ignore').splitlines():
-                if any(key in line for key in ['PassengerAppRoot','PassengerBaseURI','PassengerStartupFile']):
-                  print(' ',line[:300])
-          # Audit only the root referenced by the cPanel web-root Passenger mapping.
-          live=root/'Saeit'
-          print('ACTIVE_MAPPED_ROOT',live,'exists',live.is_dir(),'manage', (live/'manage.py').is_file())
-          for f in sorted(root.glob('domains/*/public_html/.htaccess')):
-            print('DOMAIN_PASSENGER_CONFIG',f)
-            for line in f.read_text(errors='ignore').splitlines():
-              if any(key in line for key in ['PassengerAppRoot','PassengerBaseURI','PassengerStartupFile']):
-                print(' ',line[:300])
-          if live.is_dir():
-            import ast,re
-            skip={'venv','.venv','node_modules','staticfiles','media','__pycache__','.git'}
-            tokens=['crypto','ethereum','tron','wallet','payment','checkout','webhook']
-            scanned=0
-            for f in live.rglob('*.py'):
-              try: rel=f.relative_to(live)
+              if depth>5: continue
+              try: lines=f.read_text(errors='ignore').splitlines()
               except: continue
-              if any(part in skip for part in rel.parts) or len(rel.parts)>7: continue
-              scanned+=1
-              try:
-                if f.stat().st_size>1500000: continue
-                source=f.read_text(errors='ignore')
-              except Exception: continue
-              low=source.lower()
-              hits=[w for w in tokens if w in f.name.lower() or w in low]
-              if not hits: continue
-              try:
-                tree=ast.parse(source)
-                names=[n.name for n in ast.walk(tree) if isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef,ast.ClassDef))]
-              except Exception: names=[]
-              safe_names=[n for n in names if any(w in n.lower() for w in tokens)]
-              print('LIVE_PAYMENT_FILE',rel.as_posix(),'markers='+','.join(hits),'symbols='+','.join(safe_names[:30]))
-              if f.name=='settings.py':
-                for key in ['CRYPTO_EXECUTION_ENABLED','REAL_PAYMENTS_ENABLED','PAYMENT_WEBHOOK_SECRET','TRON','ETHEREUM','MOJPLAYWIN']:
-                  if key.lower() in low: print('LIVE_CONFIG_KEY_PRESENT',key)
-                if 'mojplaywin.com' in low: print('LIVE_DOMAIN_REFERENCE',f.as_posix(),'mojplaywin.com')
-            print('LIVE_PY_FILES_SCANNED',scanned)
+              relevant=[x.strip()[:300] for x in lines if any(k in x for k in ['PassengerAppRoot','PassengerBaseURI','PassengerStartupFile','ServerName','ServerAlias'])]
+              print('WEBROOT_CONFIG',f,'directives',' | '.join(relevant) if relevant else 'none')
+          print('HOME_MATCHING_DIRS',','.join(sorted(p.name for p in root.iterdir() if p.is_dir() and 'mojplaywin' in p.name.lower())))
           print('MAP_DONE')
           REMOTE
