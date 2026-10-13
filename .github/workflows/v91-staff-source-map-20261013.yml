@@ -177,17 +177,27 @@ jobs:
           if active and active.is_dir():
             audit_files=['config/urls.py','core/cryptopay_checkout.py','core/cryptopay_order.py','core/cryptopay_tron.py','core/cryptopay_rpc.py','core/cryptopay_v1.py','core/models.py','core/views.py']
             print('PAYMENT_BEHAVIOR_AUDIT')
+            sensitive=('SECRET','API_KEY','APIKEY','PRIVATE_KEY','PASSWORD','MNEMONIC','SEED','WALLET','ADDRESS','DESTINATION','RPC_URL','ENDPOINT','TOKEN')
             for relname in audit_files:
               q=active/relname
               if not q.is_file(): continue
               src=q.read_text(errors='ignore').splitlines()
               print('SAFE_SOURCE_BEGIN',relname,'lines',len(src))
               for n,line in enumerate(src,1):
-                if relname.endswith('_config.py'):
-                  continue
                 clean=line.rstrip()
-                if re.search(r'(SECRET|API.?KEY|PRIVATE.?KEY|PASSWORD|MNEMONIC|SEED|WALLET|ADDRESS|DESTINATION|RPC.?URL|ENDPOINT)',clean,re.I) and re.search(r'(?<![=!<>])=(?!=)',clean):
-                  clean=re.sub(r'^(s*[^=]+?=).+          print('HOST_ARCHIVES')
+                upper=clean.upper()
+                if '=' in clean and not any(op in clean for op in ('==','!=','<=','>=')) and any(word in upper for word in sensitive):
+                  clean=clean.split('=',1)[0].rstrip()+' = [redacted]'
+                if 'http://' in clean or 'https://' in clean:
+                  clean=clean.split('http',1)[0]+'[endpoint redacted]'
+                if '0x' in clean.lower():
+                  clean=clean.split('0x',1)[0]+'[address redacted]'
+                print('  CODE',n,clean[:260])
+              print('SAFE_SOURCE_END',relname)
+            for relname in ['core/cryptopay_mainnet_config.py','core/cryptopay_tron_config.py']:
+              q=active/relname
+              print('CONFIG_SOURCE_PRESENT',relname,q.is_file(),'bytes',q.stat().st_size if q.is_file() else 0)
+          print('HOST_ARCHIVES')
           for p in root.glob('*V91*zip'):
             if p.is_file():print('ZIP',p.name,p.stat().st_size)
           print('MOJPLAYWIN_DOMAIN_MAPPING_AUDIT')
