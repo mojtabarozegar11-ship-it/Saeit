@@ -205,6 +205,105 @@ jobs:
           echo "DATABASE=private SQLite under this release directory"
           REMOTE
 
+      - name: Connect the tested admin to staging.zomorodmelal.ir
+        shell: bash
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+          ACTION_RUN_ID: ${{ github.run_id }}
+          STAGING_ADMIN_PASSWORD_HASH: pbkdf2_sha256$1000000$9b9f0f016ae4a03a4543a986$E9ubOZPT4k/WeOswk3jnDn9xzI49V+aPIHE6w9qGE0U=
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-staging-ssh"
+          short_sha="${SOURCE_SHA:0:12}"
+          case "$short_sha" in (*[!a-f0-9]*|'') echo "Invalid source SHA"; exit 2;; esac
+          release="/home/zomorod2/Saeit-staging/admin-smoke/$short_sha-$ACTION_RUN_ID"
+          docroot=/home/zomorod2/Saeit-staging-web
+          backup="/home/zomorod2/Saeit-staging/backups/staging-web-admin-$short_sha-$ACTION_RUN_ID"
+          timeout 30s ssh -F "$d/config" saeit-host "STAGE_ADMIN_PASSWORD_HASH='$STAGING_ADMIN_PASSWORD_HASH' bash -se -- '$release' '$docroot' '$backup' '$short_sha'" <<'REMOTE'
+          set -eu
+          release="$1"
+          docroot="$2"
+          backup="$3"
+          source_sha="$4"
+          stage=/home/zomorod2/Saeit-staging
+          case "$release" in "$stage"/admin-smoke/*) ;; *) echo "Refusing release outside Saeit-staging"; exit 30;; esac
+          test "$docroot" = /home/zomorod2/Saeit-staging-web
+          test "$(id -un)" = zomorod2
+          test -f "$release/manage.py"
+          test -s "$release/isolated-smoke.sqlite3"
+          test -f "$docroot/.htaccess"
+          test -f "$docroot/passenger_wsgi.py"
+          test "$(grep -c '^PassengerAppRoot ' "$docroot/.htaccess")" = 1
+          test "$(grep '^PassengerAppRoot ' "$docroot/.htaccess" | awk '{print $2}')" = "$docroot"
+          test "$(grep '^PassengerBaseURI ' "$docroot/.htaccess" | awk '{print $2}')" = /
+          python="$HOME/virtualenv/Saeit-staging/3.11/bin/python"
+          test -x "$python"
+          mkdir -p "$backup"
+          cp -p "$docroot/.htaccess" "$backup/.htaccess"
+          cp -p "$docroot/passenger_wsgi.py" "$backup/passenger_wsgi.py"
+          secret="$("$python" -c 'import secrets; print(secrets.token_urlsafe(48))')"
+          {
+            printf 'SECRET_KEY=%s\n' "$secret"
+            printf 'DEBUG=False\n'
+            printf 'ALLOWED_HOSTS=staging.zomorodmelal.ir,localhost\n'
+            printf 'CSRF_TRUSTED_ORIGINS=https://staging.zomorodmelal.ir\n'
+            printf 'DATABASE_URL=sqlite:///%s/isolated-smoke.sqlite3\n' "$release"
+          } > "$release/.env"
+          chmod 600 "$release/.env" "$release/isolated-smoke.sqlite3"
+          cat > "$release/passenger_wsgi.py" <<'PY'
+          import os
+          import sys
+          BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+          if BASE_DIR not in sys.path:
+              sys.path.insert(0, BASE_DIR)
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+          from django.core.wsgi import get_wsgi_application
+          application = get_wsgi_application()
+          PY
+          chmod 644 "$release/passenger_wsgi.py"
+          export STAGE_ADMIN_PASSWORD_HASH
+          cd "$release"
+          "$python" manage.py check
+          "$python" manage.py migrate --noinput
+          "$python" manage.py shell -c 'import os; from django.contrib.auth import get_user_model; User=get_user_model(); u,created=User.objects.get_or_create(username="09175814408"); u.email="admin@zomorodmelal.ir"; u.password=os.environ["STAGE_ADMIN_PASSWORD_HASH"]; u.is_active=True; u.is_staff=True; u.is_superuser=True; u.save(); print("STAGING_OWNER_SUPERUSER=ready")'
+          unset STAGE_ADMIN_PASSWORD_HASH secret
+          mkdir -p "$release/tmp"
+          sed "s#^PassengerAppRoot .*#PassengerAppRoot $release#" "$backup/.htaccess" > "$docroot/.htaccess.next"
+          test "$(grep -c "^PassengerAppRoot $release$" "$docroot/.htaccess.next")" = 1
+          chmod --reference="$backup/.htaccess" "$docroot/.htaccess.next"
+          mv "$docroot/.htaccess.next" "$docroot/.htaccess"
+          touch "$release/tmp/restart.txt" "$docroot/tmp/restart.txt"
+          "$python" manage.py check
+          echo "STAGING_ADMIN_CONNECTED=1"
+          echo "STAGING_URL=https://staging.zomorodmelal.ir/admin/"
+          echo "STAGING_APP_ROOT=$release"
+          echo "STAGING_BACKUP=$backup"
+          echo "PRODUCTION_PATH_UNCHANGED=yes"
+          REMOTE
+          response="$RUNNER_TEMP/staging-admin-login.html"
+          code="$(curl --silent --show-error --connect-timeout 15 --max-time 45 --retry 4 --retry-delay 2 --resolve staging.zomorodmelal.ir:443:178.239.147.125 -o "$response" -w '%{http_code}' https://staging.zomorodmelal.ir/admin/login/)"
+          if [[ "$code" != "200" ]] || ! grep -Eqi 'name="username"|id="login-form"' "$response"; then
+            echo "Staging admin login route did not return the expected Django login form (HTTP $code); restoring the previous staging Passenger root."
+            timeout 30s ssh -F "$d/config" saeit-host "cp -p '$backup/.htaccess' '$docroot/.htaccess' && touch '$docroot/tmp/restart.txt'"
+            exit 1
+          fi
+          css_url="$(python3 - "$response" <<'PY'
+          import re, sys
+          page = open(sys.argv[1], encoding="utf-8").read()
+          match = re.search(r'href=["\x27]([^"\x27]*static/admin/css/base[^"\x27]*\.css)', page)
+          print(match.group(1) if match else "/static/admin/css/base.css")
+          PY
+          )"
+          css_code="$(curl --silent --show-error --connect-timeout 15 --max-time 30 --resolve staging.zomorodmelal.ir:443:178.239.147.125 -o /dev/null -w '%{http_code}' "https://staging.zomorodmelal.ir$css_url")"
+          if [[ "$css_code" != "200" ]]; then
+            echo "Staging admin CSS failed (HTTP $css_code); restoring the previous staging Passenger root."
+            timeout 30s ssh -F "$d/config" saeit-host "cp -p '$backup/.htaccess' '$docroot/.htaccess' && touch '$docroot/tmp/restart.txt'"
+            exit 1
+          fi
+          echo "STAGING_ADMIN_HTTP=200"
+          echo "STAGING_ADMIN_CSS_HTTP=200"
+          rm -f "$response"
+
       - name: Remove temporary SSH credentials and local archive
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/zomorod-staging-ssh" "$RUNNER_TEMP/saeit-admin-smoke.tar.gz"
