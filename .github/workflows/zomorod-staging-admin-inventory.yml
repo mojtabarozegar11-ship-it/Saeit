@@ -125,7 +125,7 @@ jobs:
           fi
           if command -v uapi >/dev/null 2>&1; then
             echo "CPANEL_UAPI_DOMAIN_MAP:"
-            uapi --output=json DomainInfo domains_data 2>/dev/null | python3 -c 'import json,sys; d=json.load(sys.stdin).get("data",{}); print("MAIN="+str(d.get("main_domain","unknown"))); [print("DOMAIN="+str(x.get("domain",""))+" ROOT="+str(x.get("document_root",x.get("root_doc","")))) for k in ("addon_domains","sub_domains") for x in d.get(k,[]) if isinstance(x,dict)]'
+            uapi --output=json DomainInfo domains_data 2>/dev/null | python3 -c 'import json,sys; p=json.load(sys.stdin); r=p.get("result",{}); d=r.get("data",p.get("data",{})); d=d[0] if isinstance(d,list) and d else d; print("UAPI_STATUS="+str(r.get("status","unknown"))); print("MAIN="+str(d.get("main_domain","unknown")) if isinstance(d,dict) else "MAIN=unknown"); [print("DOMAIN="+str(x.get("domain",""))+" ROOT="+str(x.get("document_root",x.get("root_doc",x.get("dir",""))))) for k in ("addon_domains","sub_domains","parked_domains") for x in (d.get(k,[]) if isinstance(d,dict) else []) if isinstance(x,dict)]'
           else
             echo "CPANEL_UAPI=unavailable"
           fi
