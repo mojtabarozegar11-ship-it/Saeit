@@ -11,6 +11,7 @@ from .models import (
     AgentCapability,
     AgentTask,
     Robot,
+    ApprovalRequest,
     AuditLog,
     ChatMessage,
     ChatSession,
@@ -164,7 +165,7 @@ class RobotAdmin(ModelAdmin):
         ("هویت و مأموریت", {"fields": ("code", "name", "agent", "mission", "connector")}),
         ("کنترل و ایمنی", {"fields": (
             "autonomy_level", "risk_level", "deployment_status",
-            "requires_owner_approval", "budget_limit", "credential_reference",
+            "requires_owner_approval", "budget_limit", "credential_reference", "runtime_enabled",
         )}),
         ("زمان‌ها", {"fields": ("created_at", "updated_at")}),
     )
@@ -234,7 +235,6 @@ admin.site.register([
     Finding,
     Report,
     ChatMessage,
-    ApprovalRequest,
     AuditLog,
     KnowledgeArticle,
     Product,
