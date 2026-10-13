@@ -113,6 +113,14 @@ jobs:
             echo 'DJANGO_INTERPRETER_UNAVAILABLE; stage files prepared, tests not run'
             exit 0
           fi
+          echo '=== ISOLATED PILLOW DEPENDENCY (NO LIVE VENV MODIFICATION) ==='
+          deps="$release/private/staff-python-deps"
+          mkdir -m 700 -p "$deps"
+          if ! PYTHONPATH="$deps${PYTHONPATH:+:$PYTHONPATH}" "$interpreter" -c 'from PIL import Image; print("PIL_AVAILABLE")'; then
+            echo 'INSTALL_PILLOW_TO_STAGING_PRIVATE_ONLY'
+            "$interpreter" -m pip install --disable-pip-version-check --no-input --no-cache-dir --only-binary=:all: --no-deps --target "$deps" 'Pillow==11.3.0'
+          fi
+          export PYTHONPATH="$deps${PYTHONPATH:+:$PYTHONPATH}"
           echo '=== GUARDED DJANGO VALIDATION FA ==='
           python3 verify_v91_personnel_staging.py --release "$release" --site fa --python "$interpreter" --run
           echo '=== GUARDED DJANGO VALIDATION EN ==='
