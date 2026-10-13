@@ -102,6 +102,29 @@ jobs:
           case "$short_sha" in (*[!a-f0-9]*|'') echo "Invalid source SHA"; exit 2;; esac
           release="/home/zomorod2/Saeit-staging/admin-smoke/$short_sha-$ACTION_RUN_ID"
           archive="$release/source.tar.gz"
+          timeout 30s ssh -F "$d/config" saeit-host 'bash -se' <<'MAP'
+          set -eu
+          test "$(id -un)" = "zomorod2"
+          stage=/home/zomorod2/Saeit-staging
+          echo "READ_ONLY_STAGING_WEB_MAPPING:"
+          for base in "$stage" "$HOME/public_html" "$HOME/domains/zomorodmelal.ir/public_html"; do
+            test -d "$base" || continue
+            echo "ROOT=$base"
+            if test -f "$base/.htaccess"; then
+              grep -Ei 'Passenger(AppRoot|BaseURI|Python)|RewriteRule|RewriteCond' "$base/.htaccess" | grep -Eiv 'password|secret|token|database_url|api[_-]?key' || true
+            fi
+            if test -f "$base/passenger_wsgi.py"; then
+              grep -E 'sys\.path|DJANGO_SETTINGS_MODULE|get_wsgi_application' "$base/passenger_wsgi.py" || true
+            fi
+          done
+          echo "STAGING_PASSENGER_ENTRYPOINTS:"
+          find "$stage" -maxdepth 5 -type f \( -name passenger_wsgi.py -o -name .htaccess -o -name .cpanel.yml \) -print 2>/dev/null | sort | head -60 || true
+          echo "CPANEL_DOMAIN_DOCUMENT_ROOTS:"
+          if test -d "$HOME/domains"; then
+            find "$HOME/domains" -maxdepth 3 -type d -name public_html -print 2>/dev/null | sort | head -40 || true
+          fi
+          echo "READ_ONLY_WEB_MAPPING_INVENTORY_COMPLETE"
+          MAP
           timeout 30s ssh -F "$d/config" saeit-host "mkdir -p '$release' && test ! -e '$archive'"
           scp -F "$d/config" "$RUNNER_TEMP/saeit-admin-smoke.tar.gz" "saeit-host:$archive"
           timeout 240s ssh -F "$d/config" saeit-host "bash -se -- '$release' '$short_sha'" <<'REMOTE'
