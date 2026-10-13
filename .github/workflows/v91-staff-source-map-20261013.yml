@@ -97,6 +97,19 @@ jobs:
           print('MAPPED_APP_PAYMENT_AUDIT')
           mapped=root/'mojplaywin.com'
           print('MAPPED_APP_ROOT',mapped,'exists',mapped.is_dir(),'manage', (mapped/'manage.py').is_file(),'passenger_wsgi',(mapped/'passenger_wsgi.py').is_file())
+          if mapped.is_dir():
+            for x in sorted(mapped.iterdir()):
+              try:
+                kind='dir' if x.is_dir() else 'file'
+                target=str(x.resolve()) if x.is_symlink() else ''
+                print('MAPPED_ENTRY',x.name,kind,'symlink_target',target)
+              except Exception as e: print('MAPPED_ENTRY_ERROR',x.name,type(e).__name__)
+          wsgi=mapped/'passenger_wsgi.py'
+          if wsgi.is_file():
+            for n,line in enumerate(wsgi.read_text(errors='ignore').splitlines(),1):
+              stripped=line.strip()
+              if stripped.startswith(('import ','from ','sys.path')):
+                print('WSGI_IMPORT_OR_PATH',n,stripped[:240])
           skip={'venv','.venv','node_modules','staticfiles','media','__pycache__','.git','backups','backup','tmp'}
           terms=('payment','crypto','tron','ethereum','wallet','invoice','checkout','commerce','gateway','webhook','order')
           shown=0
