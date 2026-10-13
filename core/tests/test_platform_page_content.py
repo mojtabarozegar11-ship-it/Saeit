@@ -238,6 +238,12 @@ class SiteNavigationTests(TestCase):
 
         main = site_navigation("main", "/company/")
         self.assertTrue(any(item["title"] == "شرکت" and item["is_current"] for item in main))
+        self.assertTrue(
+            any(
+                item["title"] == "شرکت" and item["is_current"]
+                for item in site_navigation("main", "/contact/")
+            )
+        )
         footer = site_navigation("footer_services", "/")
         self.assertEqual(
             [item["title"] for item in footer],

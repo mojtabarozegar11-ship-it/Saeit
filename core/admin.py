@@ -351,7 +351,7 @@ class SiteNavigationItemAdmin(ModelAdmin):
     list_editable = ("sort_order", "is_active")
     ordering = ("area", "sort_order", "id")
     actions = None
-    fields = ("area", "title", "url", "active_prefix", "sort_order", "is_active", "created_at", "updated_at")
+    fields = ("area", "title", "url", "active_prefixes", "sort_order", "is_active", "created_at", "updated_at")
     readonly_fields = ("created_at", "updated_at")
 
     def save_model(self, request, obj, form, change):

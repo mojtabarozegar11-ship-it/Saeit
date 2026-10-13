@@ -23,7 +23,7 @@ def site_navigation(area, path="/"):
         {
             "title": row.title,
             "url": row.url,
-            "is_current": _is_current(path, row.active_prefix),
+            "is_current": any(_is_current(path, prefix) for prefix in row.active_prefixes),
         }
         for row in rows
     ]

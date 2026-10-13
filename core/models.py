@@ -670,7 +670,7 @@ class SiteNavigationItem(T):
     area = models.CharField(max_length=30, choices=AREA_CHOICES, default="main")
     title = models.CharField(max_length=120)
     url = models.CharField(max_length=500)
-    active_prefix = models.CharField(max_length=300, blank=True)
+    active_prefixes = models.JSONField(default=list, blank=True)
     sort_order = models.PositiveIntegerField(default=0)
     is_active = models.BooleanField(default=True)
 
@@ -684,9 +684,14 @@ class SiteNavigationItem(T):
 
     def clean(self):
         errors = {}
-        for field in ("url", "active_prefix"):
-            value = getattr(self, field)
-            if value and not PlatformPageContent._is_internal_path(value):
-                errors[field] = "نشانی باید مسیر داخلی سایت باشد."
+        if not isinstance(self.active_prefixes, list):
+            errors["active_prefixes"] = "مسیرهای فعال باید فهرستی از مسیرهای داخلی باشند."
+        elif any(
+            not PlatformPageContent._is_internal_path(value)
+            for value in self.active_prefixes
+        ):
+            errors["active_prefixes"] = "همه مسیرهای فعال باید مسیر داخلی سایت باشند."
+        if self.url and not PlatformPageContent._is_internal_path(self.url):
+            errors["url"] = "نشانی باید مسیر داخلی سایت باشد."
         if errors:
             raise ValidationError(errors)
