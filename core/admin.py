@@ -1,16 +1,16 @@
-from django.contrib import admin
+from django.contrib import admin, messages
 from django.contrib.admin import ModelAdmin
 from django.http import HttpResponseRedirect
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
 
 from .chat_runtime import MasterAgentChat
+from .approval import ApprovalService
 from .models import (
     Agent,
     AgentCapability,
     AgentTask,
     Robot,
-    ApprovalRequest,
     AuditLog,
     ChatMessage,
     ChatSession,
@@ -111,13 +111,14 @@ class AgentCapabilityAdmin(ModelAdmin):
 @admin.register(AgentTask)
 class AgentTaskAdmin(ModelAdmin):
     list_display = (
-        "id", "agent", "action_type", "status", "risk_snapshot",
+        "id", "agent", "robot", "action_type", "status", "risk_snapshot",
         "attempt_count", "cost", "updated_at",
     )
-    list_filter = ("status", "risk_snapshot", "agent")
-    search_fields = ("execution_id", "capability_code", "agent__name")
+    list_filter = ("status", "risk_snapshot", "agent", "robot")
+    search_fields = ("execution_id", "capability_code", "agent__name", "robot__name", "robot__code")
+    list_select_related = ("agent", "robot", "project")
     readonly_fields = (
-        "agent", "project", "action_type", "capability_code", "risk_snapshot",
+        "agent", "robot", "project", "action_type", "capability_code", "risk_snapshot",
         "execution_id", "attempt_count", "max_attempts", "input_data",
         "output_data", "status", "cost", "created_at", "updated_at",
     )
@@ -130,18 +131,35 @@ class AgentTaskAdmin(ModelAdmin):
         return False
 
 
+class RobotTaskInline(admin.TabularInline):
+    model = AgentTask
+    extra = 0
+    max_num = 0
+    can_delete = False
+    fields = (
+        "id", "agent", "action_type", "status", "risk_snapshot",
+        "execution_id", "attempt_count", "cost", "created_at",
+    )
+    readonly_fields = fields
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+
 @admin.register(Robot)
 class RobotAdmin(ModelAdmin):
     list_display = (
         "code", "name", "agent", "connector", "autonomy_level",
-        "risk_level", "deployment_status", "requires_owner_approval",
+        "risk_level", "deployment_status", "requires_owner_approval", "runtime_enabled",
     )
     list_filter = (
         "deployment_status", "autonomy_level", "risk_level",
         "requires_owner_approval", "connector",
     )
     search_fields = ("code", "name", "mission", "connector", "credential_reference")
-    readonly_fields = ("created_at", "updated_at")
+    readonly_fields = ("runtime_enabled", "created_at", "updated_at")
+    inlines = (RobotTaskInline,)
+    list_select_related = ("agent",)
     fieldsets = (
         ("هویت و مأموریت", {"fields": ("code", "name", "agent", "mission", "connector")}),
         ("کنترل و ایمنی", {"fields": (
@@ -150,6 +168,63 @@ class RobotAdmin(ModelAdmin):
         )}),
         ("زمان‌ها", {"fields": ("created_at", "updated_at")}),
     )
+
+
+@admin.register(ApprovalRequest)
+class ApprovalRequestAdmin(ModelAdmin):
+    list_display = ("id", "action_type", "target_type", "target_id", "risk", "status", "requested_by", "created_at")
+    list_filter = ("status", "risk", "action_type")
+    search_fields = ("target_type", "target_id", "action_type", "reason", "requested_by__username")
+    readonly_fields = (
+        "action_type", "target_type", "target_id", "reason", "decision_note",
+        "risk", "status", "requested_by", "created_at", "updated_at",
+    )
+    actions = ("approve_owned_pending", "reject_owned_pending")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    @admin.action(description="تأیید درخواست‌های انتخاب‌شده (فقط مالک درخواست)")
+    def approve_owned_pending(self, request, queryset):
+        self._decide_owned(request, queryset, approved=True)
+
+    @admin.action(description="رد درخواست‌های انتخاب‌شده (فقط مالک درخواست)")
+    def reject_owned_pending(self, request, queryset):
+        self._decide_owned(request, queryset, approved=False)
+
+    def _decide_owned(self, request, queryset, *, approved):
+        completed = 0
+        rejected = 0
+        for approval in queryset:
+            if approval.status != "pending" or approval.requested_by_id != request.user.pk:
+                rejected += 1
+                continue
+            try:
+                ApprovalService().decide(
+                    approval_id=approval.pk,
+                    approved=approved,
+                    actor_id=request.user.pk,
+                    actor_type="owner",
+                    note="Decision recorded through Django Admin.",
+                )
+                completed += 1
+            except ValueError:
+                rejected += 1
+        if completed:
+            self.message_user(
+                request,
+                f"{completed} درخواست {'تأیید' if approved else 'رد'} شد.",
+                level=messages.SUCCESS,
+            )
+        if rejected:
+            self.message_user(
+                request,
+                f"{rejected} درخواست تغییر نکرد؛ فقط مالکِ درخواستِ در انتظار می‌تواند تصمیم بگیرد.",
+                level=messages.WARNING,
+            )
 
 
 admin.site.register([
