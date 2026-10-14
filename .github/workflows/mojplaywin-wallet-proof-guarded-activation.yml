@@ -111,3 +111,4 @@ jobs:
         run: rm -rf -- "$RUNNER_TEMP/mpw-proof-preflight"
 # Retry the isolated owner proof page after safe diagnostics; checkout stays disabled.
 # Safe render diagnostic rerun; payment endpoints remain disabled.
+# Safe render retry after confirmed MojPlayWin host allowlist.
