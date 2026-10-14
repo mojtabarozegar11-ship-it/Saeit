@@ -48,7 +48,8 @@ def get_pending_mode(marker, *, now=None):
         st = marker.lstat()
         if not marker.is_file() or marker.is_symlink():
             return None
-        if now < st.st_mtime or now - st.st_mtime > MAX_MARKER_AGE_SECONDS:
+        # Permit subsecond clock / filesystem timestamp jitter, not stale signals.
+        if st.st_mtime - now > 1 or now - st.st_mtime > MAX_MARKER_AGE_SECONDS:
             return None
         if st.st_size > 16 or st.st_size < 3:
             return None
