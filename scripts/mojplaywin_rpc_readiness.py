@@ -47,12 +47,18 @@ def eth_check(post=post_json):
 
 
 def tron_check(post=post_json):
-    data = post(TRON_RPC + "/wallet/getnowblock", {})
-    block = data.get("block_header", {}).get("raw_data", {})
-    number = block.get("number")
-    if not isinstance(number, int) or number < 1 or not data.get("blockID"):
-        raise ValueError("No valid Tron mainnet block")
-    return {"chain": "tron-mainnet", "status": "READ_ONLY_RPC_OK", "block_number": number}
+    # getnodeinfo is bounded in size; getnowblock can exceed 200k because it
+    # contains all transactions from a recent block.
+    import re
+    data = post(TRON_RPC + "/wallet/getnodeinfo", {})
+    solidity = data.get("solidityBlock")
+    if not isinstance(solidity, str):
+        raise ValueError("TRON solidity-node height was not reported")
+    match = re.fullmatch(r"Num:(\d+),ID:([0-9a-fA-F]{64})", solidity)
+    if not match or int(match.group(1)) < 1:
+        raise ValueError("No valid TRON solidified block height")
+    return {"chain": "tron-mainnet", "status": "READ_ONLY_RPC_OK",
+            "block_number": int(match.group(1))}
 
 
 def main():
