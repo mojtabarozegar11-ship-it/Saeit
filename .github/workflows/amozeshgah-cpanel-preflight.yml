@@ -26,9 +26,9 @@ jobs:
           test -n "$VPS_KEY" && test -n "$HOST_KEY" && test -n "$HOST_KNOWN"
           d="$RUNNER_TEMP/amozeshgah-preflight"
           install -d -m 700 "$d"
-          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\\r\\n","\\n").replace("\\r","").replace("\\n","\\n").rstrip()+"\\n",end="")' > "$d/vps.key"
-          printf '%s' "$HOST_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\\r\\n","\\n").replace("\\r","").replace("\\n","\\n").rstrip()+"\\n",end="")' > "$d/host.key"
-          printf '%s\\n' "$HOST_KNOWN" > "$d/host.known"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          cat > "$d/host.known" <<< "$HOST_KNOWN"
           chmod 600 "$d/"*
           ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
           ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
