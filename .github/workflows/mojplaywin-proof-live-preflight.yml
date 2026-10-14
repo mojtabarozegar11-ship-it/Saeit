@@ -113,6 +113,27 @@ jobs:
           except Exception as exc:
             print('DJANGO_PREFLIGHT_FAILED',type(exc).__name__)
           PY
+          "$venv" - <<'PY'
+          import os
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          import django
+          django.setup()
+          from django.conf import settings
+          from django.db import connection
+          from django.db.migrations.recorder import MigrationRecorder
+          from django.core.management import get_commands
+          import shutil
+          checks = {
+              "core_0039_applied": ("core","0039_educationassessment_educationattempt_and_more") in MigrationRecorder(connection).applied_migrations(),
+              "native_app_installed": "mpw_native_checkout" in settings.INSTALLED_APPS,
+              "has_one_active_admin": __import__("django.contrib.auth",fromlist=["get_user_model"]).get_user_model().objects.filter(is_superuser=True,is_active=True).count()==1,
+              "django_runs_with_mysql": connection.vendor=="mysql",
+              "mysqldump_available": bool(shutil.which("mysqldump") or shutil.which("mariadb-dump")),
+              "merchant_proof_flag_default_off": not bool(getattr(settings,"MPW_MERCHANT_WALLET_PROOF_ENABLED",False)),
+          }
+          for key,val in checks.items():
+              print("PROOF_RELEASE_READINESS",key,str(bool(val)).lower())
+          PY
           echo READ_ONLY_NO_SCHEMA_OR_LIVE_FILE_CHANGES
           REMOTE
       - name: Remove temporary SSH credentials
