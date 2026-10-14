@@ -172,7 +172,7 @@ def verify_trx_transfer(
         _fail("TRON transaction is not solidified")
     if tx.get("txID", "").lower() != tx_hash.lower() or info.get("id", "").lower() != tx_hash.lower():
         _fail("TRON transaction ID mismatch")
-    if info.get("receipt", {}).get("result", "SUCCESS") != "SUCCESS":
+    if info.get("receipt", {}).get("result") != "SUCCESS":
         _fail("TRON receipt failed")
     results = tx.get("ret")
     if not isinstance(results, list) or not results or any(r.get("contractRet") != "SUCCESS" for r in results):
