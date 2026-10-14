@@ -71,7 +71,8 @@ def verify_event(body, signature, key, *, now_epoch=None):
         raise EventRejected("Invalid message size")
     if not isinstance(signature, str) or not re.fullmatch(r"sha256=[0-9a-f]{64}", signature):
         raise EventRejected("Invalid event authentication")
-    _, correct_signature = signed_message({"v":1}, key)  # validate key first
+    if not isinstance(key, bytes) or len(key) < 32:
+        raise EventRejected("Notification key unavailable")
     correct_signature = "sha256=" + hmac.new(key, body, sha256).hexdigest()
     if not hmac.compare_digest(signature, correct_signature):
         raise EventRejected("Event signature mismatch")
@@ -101,8 +102,11 @@ def verify_event(body, signature, key, *, now_epoch=None):
 
 
 def _safe_directory(home):
-    home = Path(home).resolve()
-    if not home.is_dir() or home.is_symlink():
+    raw_home = Path(home)
+    if raw_home.is_symlink():
+        raise EventRejected("Symlink watcher directory")
+    home = raw_home.resolve()
+    if not home.is_dir():
         raise EventRejected("Unsafe watcher directory")
     if home.stat().st_mode & 0o022:
         raise EventRejected("Watcher directory is group/world writable")
@@ -139,7 +143,8 @@ def handle_verified_event(body, signature, key, home, *, now_epoch=None):
     lock = directory / "event-watch.lock"
     if lock.is_symlink():
         raise EventRejected("Unsafe lock path")
-    with open(lock, "a+b") as fp:
+    lock_fd = os.open(str(lock), os.O_CREAT | os.O_RDWR, 0o600)
+    with os.fdopen(lock_fd, "a+b") as fp:
         fcntl.flock(fp.fileno(), fcntl.LOCK_EX)
         if state_file.exists():
             if state_file.stat().st_size > 200_000:
