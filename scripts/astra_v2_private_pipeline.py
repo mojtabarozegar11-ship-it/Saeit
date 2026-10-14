@@ -205,7 +205,7 @@ def _make_artifact(root, job_id):
         data = destination.read_bytes()
         report = {
             "schema_version": 1,
-            "job_id": job_id,
+            "source_builder": BUILDER,
             "product_slug": "orchard_decision_audit",
             "prototype_name": "Orchard Investment Decision Audit",
             "development_scope": "private_reference_prototype",
