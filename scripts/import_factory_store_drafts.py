@@ -59,12 +59,12 @@ def verify_target(app, document_root):
     return app
 
 
-def import_receipts(root, app, document_root, owner_username, *, apply=False):
+def import_receipts(root, app, document_root, owner_username=None, *, apply=False, sole_owner=False):
     root = Path(root).expanduser().resolve()
     app = verify_target(app, document_root)
     if not root.is_dir() or root.is_symlink():
         raise RuntimeError("PRIVATE_INBOX_NOT_VERIFIED")
-    if not owner_username or not isinstance(owner_username, str):
+    if not owner_username and not sole_owner:
         raise RuntimeError("OWNER_IDENTITY_REQUIRED")
     import django
     from django.conf import settings
@@ -75,9 +75,13 @@ def import_receipts(root, app, document_root, owner_username, *, apply=False):
     from django.apps import apps
     from django.db import transaction
     User = get_user_model()
-    owner = User.objects.filter(
-        is_active=True, is_staff=True, is_superuser=True, **{User.USERNAME_FIELD: owner_username}
-    ).first()
+    eligible = User.objects.filter(is_active=True, is_staff=True, is_superuser=True)
+    if owner_username:
+        owner = eligible.filter(**{User.USERNAME_FIELD: owner_username}).first()
+    else:
+        if eligible.count() != 1:
+            raise RuntimeError("SOLE_ACTIVE_SUPERUSER_NOT_UNIQUE")
+        owner = eligible.first()
     if owner is None:
         raise RuntimeError("IDENTIFIED_STORE_OWNER_NOT_PRESENT")
     Product = apps.get_model("core", "Product")
@@ -143,12 +147,14 @@ def main(argv=None):
     p.add_argument("--inbox", required=True)
     p.add_argument("--app", required=True)
     p.add_argument("--document-root", required=True)
-    p.add_argument("--owner-username", required=True)
+    p.add_argument("--owner-username")
+    p.add_argument("--sole-active-superuser", action="store_true")
     p.add_argument("--apply", action="store_true")
     options = p.parse_args(argv)
     result = import_receipts(
         options.inbox, options.app, options.document_root,
-        options.owner_username, apply=options.apply
+        options.owner_username, apply=options.apply,
+        sole_owner=options.sole_active_superuser
     )
     for key, value in result.items():
         print("STORE_DRAFT_" + key.upper() + "=" + str(value))
