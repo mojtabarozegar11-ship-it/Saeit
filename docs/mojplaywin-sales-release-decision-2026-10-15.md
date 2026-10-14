@@ -1,5 +1,8 @@
 # MojPlayWin sales release decision — 2026-10-15
 
+> **Latest stage 7 update (2026-10-15):** The `mpw_commerce` package is now installed and registered on the live cPanel Django runtime and its two migrations are applied. All commerce feature switches are **OFF**, all commerce tables have no recorded sale, no public invoice route is enabled, and checkout remains HTTP 404. The older “not deployed” findings below are **historical pre-deployment baselines**. Live tests, backup/restore evidence, and precise rollback details are in [stages 3–7 evidence](mojplaywin-stages3-7-live-deployment-evidence.md). **Public paid sales are not live.**
+
+
 **Decision: NO-GO for public paid checkout.** The live website is reachable,
 but live merchandise publication, secure paid settlement, and real transfer
 fulfillment have not all been independently proven.
