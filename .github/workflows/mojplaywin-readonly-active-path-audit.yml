@@ -94,12 +94,15 @@ jobs:
           from django.conf import settings
           from django.urls import URLResolver, get_resolver
           names = []
-          def scan(patterns):
+          def scan(patterns, prefix=""):
               for p in patterns:
                   if isinstance(p, URLResolver):
+                      route = prefix + str(p.pattern)
                       if p.namespace:
                           names.append(p.namespace)
-                      scan(p.url_patterns)
+                          if p.namespace == "admin":
+                              print("MPW_ADMIN_NAMESPACE_ROUTE", route)
+                      scan(p.url_patterns, route)
           scan(get_resolver().url_patterns)
           counts = Counter(names)
           print("MPW_ADMIN_NAMESPACE_INSTANCES", counts.get("admin", 0))
