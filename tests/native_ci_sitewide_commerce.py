@@ -223,6 +223,20 @@ class SitewideCommerceTests(TestCase):
                                   quote=stale,now=self.now)
 
     @override_settings(**LIVE)
+    def test_two_identical_price_orders_receive_distinct_payable_coin_amounts(self):
+        first,_=self.order([(self.digital,1)])
+        second,_=self.order([(self.digital,1)])
+        first_invoice=self.invoice(first)
+        second_invoice=self.invoice(second)
+        self.assertEqual(first_invoice.total_usd,second_invoice.total_usd)
+        self.assertNotEqual(first_invoice.amount_atomic,second_invoice.amount_atomic)
+        self.assertEqual(first_invoice.recipient,second_invoice.recipient)
+        base=int((Decimal("5.00")/Decimal("3000.00")*Decimal(10)**18)
+                 .to_integral_value(rounding="ROUND_CEILING"))
+        self.assertLessEqual(int(first_invoice.amount_atomic)-base,100000)
+        self.assertLessEqual(int(second_invoice.amount_atomic)-base,100000)
+
+    @override_settings(**LIVE)
     def test_second_invoice_same_order_is_rejected(self):
         order,_=self.order()
         self.invoice(order)
