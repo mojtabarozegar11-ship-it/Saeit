@@ -25,7 +25,7 @@ jobs:
           d="$RUNNER_TEMP/factory-persistence"; mkdir -m 700 -p "$d"
           printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
           chmod 600 "$d/key"
-          ssh-keygen -y -f "$d/key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null
           scan="$(ssh-keyscan -T 10 -t rsa 178.239.147.150 2>/dev/null)"
           test -n "$scan"
           actual="$(printf '%s\n' "$scan" | ssh-keygen -lf - -E sha256 | awk '{print $2}' | sort -u)"
