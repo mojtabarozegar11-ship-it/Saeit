@@ -1,0 +1,36 @@
+name: MojPlayWin wallet preflight safety (isolated, no VPS)
+on:
+  push:
+    branches: [fix/mpw-wallet-host-preflight-before-migration-20261014]
+    paths:
+      - scripts/mpw_activate_wallet_proof.py
+      - tests/native_ci_wallet_preflight_guard.py
+      - .github/workflows/mojplaywin-wallet-preflight-safety.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  isolated-safety:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      DJANGO_SETTINGS_MODULE: tests.native_checkout_settings
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install disposable Django test dependencies
+        run: |
+          python -m pip install -q --disable-pip-version-check 'Django>=5.2,<6' 'eth-account>=0.13,<0.14'
+      - name: Verify script syntax and isolate migration ordering
+        run: |
+          python -m py_compile scripts/mpw_activate_wallet_proof.py tests/native_ci_wallet_preflight_guard.py
+          python -m django check
+      - name: Run real Django render and fail-closed host tests
+        run: |
+          python -m django test tests.native_ci_wallet_preflight_guard --verbosity 2
+          echo MPW_WALLET_PREFLIGHT_CI_PASS_NO_LIVE_DB_OR_SSH_USED
