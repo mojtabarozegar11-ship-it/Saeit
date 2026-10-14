@@ -55,7 +55,7 @@
       <h3>{{ course.title }}</h3>
       <p>{{ course.summary }}</p>
       <div><b>{% if course.is_free %}رایگان{% else %}دوره حرفه‌ای{% endif %}</b><strong>{% if course.is_free %}بدون هزینه{% else %}{{ course.price }} {{ course.currency }}{% endif %}</strong></div>
-      <a href="/education/course/{{ course.slug }}/">مشاهده دوره ↗</a>
+      <a href="/amozeshgah/course/{{ course.slug }}/">مشاهده دوره ↗</a>
     </article>
     {% endfor %}
   </div>
