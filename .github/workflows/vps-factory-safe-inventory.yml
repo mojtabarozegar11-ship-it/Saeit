@@ -108,5 +108,60 @@ jobs:
                   print("FACTORY_MODEL_QUERY_ERROR_"+name.upper()+"="+type(exc).__name__)
           PY
           else echo FACTORY_DJANGO_NOT_AVAILABLE; fi
+          if test -f "$app/manage.py" && test -x "$base/.venv/bin/python"; then
+            cd "$app"
+            export SAEIT_ENV=production MOJ_FACTORY_LOCAL_MODE=1
+            export FACTORY_RESEARCH_PROVIDER=core.self_hosted_research_provider.SelfHostedStagingResearchProvider
+            "$base/.venv/bin/python" - <<'PY'
+          import os,re,collections
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          import django
+          django.setup()
+          from django.apps import apps
+          from django.db.models import Count
+          for name in ("FactoryRun","AgentTask","Product","Order"):
+              try: model=apps.get_model("core",name)
+              except LookupError: continue
+              fields={f.name for f in model._meta.fields}
+              print("FACTORY_SCHEMA_FIELDS_"+name.upper()+"="+",".join(sorted(fields)))
+              for field in ("action_type","capability_code","approval_status","stage","product_type","format","category"):
+                  if field not in fields: continue
+                  try:
+                      for row in model.objects.values(field).annotate(n=Count("pk")).order_by("-n")[:10]:
+                          key=str(row[field])
+                          if re.fullmatch(r"[A-Za-z0-9_.:-]{1,60}",key):
+                              print("FACTORY_CATEGORY_"+name.upper()+"_"+field.upper()+"="+key+":"+str(row["n"]))
+                  except Exception as exc: print("FACTORY_AGGREGATE_ERROR_"+name.upper()+"_"+field.upper()+"="+type(exc).__name__)
+              if name in ("FactoryRun","AgentTask") and "status" in fields:
+                  reasons=collections.Counter()
+                  candidates=("blocked_reason","failure_reason","error_message","last_error","error","reason","output_summary","notes","result_summary")
+                  use=[n for n in candidates if n in fields]
+                  for obj in model.objects.filter(status="blocked").only(*use).iterator(chunk_size=100):
+                      message=" ".join(str(getattr(obj,n,"") or "") for n in use).lower()
+                      matches=[tag for tag,pattern in (
+                          ("owner_approval",r"approv|owner|permission|grant|تأیید|مجوز"),
+                          ("evidence",r"evidence|source|proof|شواهد|مدرک"),
+                          ("provider",r"provider|api|model|research"),
+                          ("budget",r"budget|cost|token|quota|429|اعتبار"),
+                          ("identity",r"identity|owner_id|user|auth"),
+                          ("quality",r"quality|review|validation|qa"),
+                      ) if re.search(pattern,message)]
+                      reasons.update(matches if matches else ["unclassified_or_no_reason_field"])
+                  for tag,n in reasons.most_common():
+                      print("FACTORY_BLOCKER_CATEGORY_"+name.upper()+"_"+tag.upper()+"="+str(n))
+          for model in apps.get_app_config("core").get_models():
+              if "Approval" not in model.__name__: continue
+              try:
+                  names={f.name for f in model._meta.fields}
+                  print("FACTORY_APPROVAL_MODEL="+model.__name__+" COUNT="+str(model.objects.count()))
+                  for field in ("status","decision"):
+                      if field in names:
+                          for row in model.objects.values(field).annotate(n=Count("pk")).order_by("-n")[:8]:
+                              value=str(row[field])
+                              if re.fullmatch(r"[A-Za-z0-9_.:-]{1,60}",value):
+                                  print("FACTORY_APPROVAL_"+field.upper()+"="+value+":"+str(row["n"]))
+              except Exception as exc: print("FACTORY_APPROVAL_QUERY_ERROR="+type(exc).__name__)
+          PY
+          fi
           echo FACTORY_INVENTORY_READ_ONLY_DONE
           REMOTE
