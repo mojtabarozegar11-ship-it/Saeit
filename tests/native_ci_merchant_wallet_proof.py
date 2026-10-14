@@ -63,6 +63,7 @@ class MerchantWalletProofTests(TestCase):
         gate.enable()
         self.addCleanup(gate.disable)
         self.client.defaults["wsgi.url_scheme"] = "https"
+        self.client.defaults["HTTP_HOST"] = "mojplaywin.com"
 
     def test_fake_ethereum_signer_controls_only_its_own_address(self):
         with patch.dict(MERCHANT_ADDRESSES, {"ETH":self.eth.address}):
