@@ -1,4 +1,4 @@
-name: Zomorod gallery six report editorial correction
+name: Zomorod six corrected company activity reports release
 on:
   push:
     branches: [ops/zomorod-gallery-publish-20261014]
