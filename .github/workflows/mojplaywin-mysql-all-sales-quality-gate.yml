@@ -67,6 +67,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          set +e
           python -m django test \
             tests.native_ci_payment_release_preflight \
             tests.native_ci_sitewide_commerce \
@@ -80,5 +81,13 @@ jobs:
             tests.native_ci_sitewide_full_purchase_cycle \
             tests.native_ci_sitewide_course_fulfillment \
             --verbosity 2
+          suite_status=$?
+          set -e
+          if [ "$suite_status" -ne 0 ]; then
+            echo MPW_FULL_SUITE_FAILED_CHECKING_ISOLATED_TEST_CLASSES
+            python -m django test tests.native_ci_sitewide_full_purchase --verbosity 2 || true
+            python -m django test tests.native_ci_sitewide_full_purchase_cycle --verbosity 2 || true
+            exit "$suite_status"
+          fi
           echo MPW_MYSQL8_FULL_BUYER_CHAIN_SUCCESS
           echo MPW_NO_LIVE_MONEY_NO_LIVE_SITE_CHANGES_NO_PRODUCTION_DB
