@@ -12,7 +12,11 @@ import time
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-from mojplaywin_native_chain_verify import tron_address_to_hex
+try:
+    from scripts.mojplaywin_native_chain_verify import tron_address_to_hex
+except ModuleNotFoundError:
+    # CLI invoked as python scripts/mojplaywin_direct_wallet_discovery.py
+    from mojplaywin_native_chain_verify import tron_address_to_hex
 
 ETH_WALLET = "0x89149b01f59115B86553561F12438D2ADF517E75"
 TRX_WALLET = "THFNU1iEXHd71WjEgjqUksd2UnMg2pUi73"
@@ -186,6 +190,20 @@ def discover_trx(*, load=fetch_indexer, now_ms=None, lookback_s=3600, max_pages=
     raise IncompleteDiscovery("TRON scan exceeded maximum pages")
 
 
+def _canonical_address(network, address):
+    if not isinstance(address, str):
+        raise IncompleteDiscovery("Missing invoice wallet address")
+    if network == "tron-mainnet":
+        if re.fullmatch(r"41[0-9a-fA-F]{40}", address):
+            return address.lower()
+        return tron_address_to_hex(address).lower()
+    if network == "ethereum-mainnet":
+        if not re.fullmatch(r"0x[0-9a-fA-F]{40}", address):
+            raise IncompleteDiscovery("Invalid Ethereum invoice address")
+        return address.lower()
+    raise IncompleteDiscovery("Unsupported invoice network")
+
+
 def match_unpaid_invoices(invoices, candidates):
     """Candidate matching only; a separate trusted RPC must confirm each match.
 
@@ -196,8 +214,8 @@ def match_unpaid_invoices(invoices, candidates):
     for inv in invoices:
         if not inv.verified_sender_address or not inv.merchant_address:
             raise IncompleteDiscovery("Unverified invoice sender or recipient")
-        key = (inv.network, inv.verified_sender_address.lower(),
-               inv.merchant_address.lower(), str(inv.amount_atomic))
+        key = (inv.network, _canonical_address(inv.network, inv.verified_sender_address),
+               _canonical_address(inv.network, inv.merchant_address), str(inv.amount_atomic))
         if key in table: raise IncompleteDiscovery("Ambiguous matching invoices")
         table[key] = inv.pk
     matches = {}
