@@ -187,7 +187,15 @@ jobs:
             echo ASTRA_STAGING_HYPOTHESES_SEED_OK
           else
             echo ASTRA_STAGING_HYPOTHESES_SEED_FAILED
-            grep -E '(Error|Exception|error|missing|hypothes)' "$scratch/seed.log" | tail -n 6 | cut -c 1-180 || true
+            "$python" - "$scratch/seed.log" <<'PY'
+          import sys,re
+          from pathlib import Path
+          lines=Path(sys.argv[1]).read_text(encoding='utf-8',errors='replace').splitlines()
+          for i,line in enumerate(lines[-20:],max(1,len(lines)-19)):
+              if re.search(r'(password|secret|private.key|access.token|credential)',line,re.I):continue
+              line=re.sub(r'(?:\d{1,3}\.){3}\d{1,3}','[HOST]',line)
+              print('ASTRA_SEED_FAILURE_LINE_%03d=%s'%(i,line[:180]))
+          PY
             exit 1
           fi
           if timeout 50 "$python" manage.py factory_staging_tick --settings=config.astra_qa_settings > "$scratch/tick.log" 2>&1; then
