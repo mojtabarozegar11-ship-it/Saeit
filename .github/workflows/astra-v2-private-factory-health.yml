@@ -51,8 +51,8 @@ jobs:
           con.execute("PRAGMA query_only=ON")
           values=con.execute("SELECT builder,stage,COUNT(*) FROM jobs GROUP BY builder,stage ORDER BY builder,stage").fetchall()
           rows={}
-          for builder,stage,count in values:
-              rows.setdefault(builder,{})[stage]=count
+          for builder,job_stage,count in values:
+              rows.setdefault(builder,{})[job_stage]=count
           print("ASTRA_V2_HEALTH_PRODUCT_FAMILIES_WITH_PRIVATE_QA="+str(len([
               b for b,s in rows.items() if s.get("PRIVATE_QA_PASSED",0)>0])))
           print("ASTRA_V2_HEALTH_DISTINCT_ARTIFACT_SHAS="+str(
