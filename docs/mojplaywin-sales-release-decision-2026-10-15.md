@@ -37,11 +37,12 @@ Draft PR #103: https://github.com/mojtabarozegar11-ship-it/Saeit/pull/103
 
 1. Additional fail-closed release/receipt tests, all 30 isolated SQLite tests
    passed: https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/38652431495 .
-2. Disposable MySQL 8 integration of account signatures, ETH/TRX verification
-   adapters, replay protection, ledger, and private downloads; product and core
-   migrations fully applied in a disposable CI database. Investigated
-   cross-backend test-infrastructure failures; only a final green full run
-   counts as passing the MySQL release gate.
+2. **68/68 comprehensive tests PASSED on disposable real MySQL 8** after
+   correcting MySQL test-fixture assumptions and exercising true committed
+   transactions in end-to-end classes. Buyer signatures, ETH/TRX verifier
+   adapters with synthetic receipts, replay protection, ledger, courses and
+   private file delivery all passed. Core/product/commerce migrations applied.
+   Evidence: https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/38654218472 .
 3. Runtime nonintrusive checks and a true Django URL resolver check; corrected
    a misleading earlier file-text heuristic.
 4. **No live database changes, orders, crypto broadcasts, payment activations
@@ -55,9 +56,12 @@ All of these must be independently green before public activation:
   completeness, usable length, seller rights, fair substantiated price, refund
   policy, support terms, non-broken access, and merchant publication permission.
   Do not claim a prior selling price without actual price-history evidence.
-- [ ] **Schema**: full MySQL 8 E2E suite green on fresh disposable database;
-  staging based on a restored privately held real production snapshot; abort on
-  any unrelated migration, schema mismatch or transaction/locking error.
+- [x] **Disposable MySQL E2E**: all 68 checkout, ledger, delivery and release
+  preflight tests passed on clean MySQL 8; no production access.
+- [ ] **Restored-site compatibility and rollback**: verify complete application
+  behavior on a privately restored production snapshot on the actual hosting
+  runtime. Prior shadow migration-only check succeeded but does not establish
+  a complete release rehearsal.
 - [ ] **Wallets**: prove merchant control of receiving addresses using
   nonspending signed challenges; never place wallet private keys in GitHub.
 - [ ] **Settlement**: verify an actual independently observed ETH/TRX mainnet
