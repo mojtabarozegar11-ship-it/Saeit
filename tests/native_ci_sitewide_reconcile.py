@@ -10,6 +10,7 @@ from io import StringIO
 from django.core.management import call_command
 
 from django.contrib.auth import get_user_model
+from django.db import IntegrityError
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
@@ -152,6 +153,47 @@ class ReconciliationTests(TestCase):
         result=reconcile_pending_orders(now=self.now,eth_scanner=eth)
         self.assertEqual(result["state"],"idle")
         eth.assert_not_called()
+
+    @override_settings(**FLAGS)
+    def test_database_uniqueness_conflict_never_marks_order_paid(self):
+        invoice=self.invoice()
+        settlement=Mock(side_effect=IntegrityError("duplicate on-chain tx"))
+        result=reconcile_pending_orders(
+            now=self.now,
+            eth_scanner=lambda **_: [self.eth_candidate(invoice)],
+            settler=settlement,
+        )
+        self.assertEqual(result["matched"],1)
+        self.assertEqual(result["paid"],0)
+        self.assertEqual(result["rejected"],1)
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.status,"pending")
+
+    @override_settings(**FLAGS)
+    def test_more_than_one_batch_never_silently_skips_invoices(self):
+        buyer=self.order.customer
+        orders=Order.objects.bulk_create([
+            Order(customer=buyer,status="pending",total=Decimal("21.00"),
+                  currency="USD")
+            for _ in range(101)
+        ])
+        CommerceInvoice.objects.bulk_create([
+            CommerceInvoice(
+                order=o,asset="ETH",network="ethereum-mainnet",
+                recipient=ETH,expected_sender=SENDER,
+                amount_atomic=str(1000000000000+i),
+                total_usd=Decimal("21.00"),
+                quote_usd_per_asset=Decimal("3000"),
+                quote_source="coingecko",quote_observed_at=self.now,
+                sender_challenge_id="sample-challenge",
+                sender_signature_verified_at=self.now,
+                issued_at=self.now,expires_at=self.now+timedelta(minutes=10),
+            ) for i,o in enumerate(orders)
+        ])
+        eth_scanner=Mock(side_effect=AssertionError("Do not skip overflow silently"))
+        with self.assertRaises(ReconciliationUnavailable):
+            reconcile_pending_orders(now=self.now,eth_scanner=eth_scanner)
+        eth_scanner.assert_not_called()
 
     @override_settings(**FLAGS)
     def test_invalid_asset_filter_rejected_before_chain_network(self):
