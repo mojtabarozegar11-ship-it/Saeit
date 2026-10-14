@@ -295,5 +295,45 @@ jobs:
               print("FACTORY_RESEARCH_"+name.upper()+"_RELATIONAL_COLUMNS="+",".join(k for k in cols if k.endswith("_id") or k in ("project","product","factory_run","source_report","owner","status")))
           PY
           fi
+          if test -f "$app/manage.py" && test -x "$base/.venv/bin/python"; then
+            cd "$app"
+            export SAEIT_ENV=production MOJ_FACTORY_LOCAL_MODE=1
+            "$base/.venv/bin/python" - <<'PY'
+          import os,collections
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          import django
+          django.setup()
+          from django.apps import apps
+          P=apps.get_model("core","Product")
+          totals=collections.defaultdict(list)
+          reasons=collections.Counter()
+          for p in P.objects.all():
+              m=p.metadata if isinstance(p.metadata,dict) else {}
+              research=m.get("research") or {}
+              validation=m.get("validation") or {}
+              for field,obj in (
+                  ("research_sources",research.get("sources") if isinstance(research,dict) else None),
+                  ("research_evidence",research.get("evidence") if isinstance(research,dict) else None),
+                  ("validation_references",validation.get("evidence_references") if isinstance(validation,dict) else None),
+                  ("validation_missing_factors",validation.get("missing_factors") if isinstance(validation,dict) else None),
+                  ("validation_conflicts",validation.get("conflicts") if isinstance(validation,dict) else None),
+              ):
+                  totals[field].append(len(obj) if isinstance(obj,(list,tuple,dict)) else 0)
+              if isinstance(research,dict):
+                  totals["real_research_truthy"].append(int(bool(research.get("real_research"))))
+              if isinstance(validation,dict):
+                  s=str(validation.get("reason","")).lower()
+                  for key,words in (
+                      ("insufficient_evidence",("evidence","source","citation","research","منبع","شواهد")),
+                      ("pricing",("price","cost","pricing","قیمت")),
+                      ("identity",("owner","identity","مالک")),
+                      ("quality",("quality","validation","تایید","اعتبار")),
+                  ):
+                      if any(w in s for w in words): reasons[key]+=1
+          for key,values in totals.items():
+              print("FACTORY_EVIDENCE_"+key.upper()+"_TOTAL="+str(sum(values))+" MIN="+str(min(values) if values else 0)+" MAX="+str(max(values) if values else 0))
+          print("FACTORY_VALIDATION_REASON_CATEGORIES="+",".join(k+":"+str(v) for k,v in reasons.items()))
+          PY
+          fi
           echo FACTORY_INVENTORY_READ_ONLY_DONE
           REMOTE
