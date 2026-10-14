@@ -132,7 +132,7 @@ jobs:
           [[ "$(curl -sS -o /dev/null -w '%{http_code}' https://mojplaywin.com/admin/login/)" == "200" ]]
           WORK="$RUNNER_TEMP/mojplaywin-ssh"
           timeout 45s ssh -F "$WORK/config" saeit-host \
-            'test -d /home/zomorod2/mojplaywin.com && test ! -L /home/zomorod2/mojplaywin.com && test -f /home/zomorod2/mojplaywin.com/passenger_wsgi.py && test -f /home/zomorod2/mojplaywin.com/.htaccess && test -f /home/zomorod2/mojplaywin.com/config/urls.py && test -f /home/zomorod2/mojplaywin.com/core/views.py'
+            'test -d /home/zomorod2/mojplaywin.com && test ! -L /home/zomorod2/mojplaywin.com && test -f /home/zomorod2/mojplaywin.com/passenger_wsgi.py && test -f /home/zomorod2/mojplaywin.com/.htaccess && test -d /home/zomorod2/Saeit-staging && test ! -L /home/zomorod2/Saeit-staging && grep -Fq "Saeit-staging" /home/zomorod2/mojplaywin.com/passenger_wsgi.py && test -f /home/zomorod2/Saeit-staging/config/urls.py && test -f /home/zomorod2/Saeit-staging/core/views.py'
           timeout 20s ssh -F "$WORK/config" saeit-host "install -d -m 700 /home/zomorod2/.mojplaywin-taniya-$GITHUB_RUN_ID"
 
       - name: Package only Taniya deployment files
