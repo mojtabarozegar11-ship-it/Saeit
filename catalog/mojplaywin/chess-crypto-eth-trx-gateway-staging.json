@@ -1,0 +1,38 @@
+{
+  "product_id": 72,
+  "currency": "USD",
+  "amount": "7.50",
+  "checkout_enabled": false,
+  "live_payment_verified": false,
+  "delivery_enabled": false,
+  "allowed_assets": [
+    {
+      "asset": "ETH",
+      "network": "ethereum-mainnet",
+      "address": "0x89149b01f59115B86553561F12438D2ADF517E75",
+      "address_format_verified": false,
+      "ownership_verified": false
+    },
+    {
+      "asset": "TRX",
+      "network": "tron-mainnet",
+      "address": "THFNU1iEXHd71WjEgjqUksd2UnMg2pUi73",
+      "address_format_verified": false,
+      "ownership_verified": false
+    }
+  ],
+  "controls": {
+    "unique_order_reference": true,
+    "verified_quote_required": true,
+    "quote_ttl_seconds": 600,
+    "chain_confirmation_required": true,
+    "exact_amount_required": true,
+    "chain_rpc_independent_verification_required": true,
+    "chain_tx_unique_per_order": true,
+    "never_trust_screenshot_or_unverified_webhook": true,
+    "delivery_only_after_settled_payment": true,
+    "rate_provider_required": true,
+    "disallow_arbitrary_wallet_substitution": true
+  },
+  "status": "staging_only_pending_validated_provider_and_live_payment_test"
+}
