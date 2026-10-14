@@ -85,6 +85,10 @@ def run(args, *, cwd=SITE, env=None, stdout=None):
         stderr=subprocess.PIPE,check=False,timeout=150,
     )
     if result.returncode:
+        output=(result.stdout or b"").decode("utf-8",errors="replace")
+        for line in output.splitlines():
+            if line.startswith("MPW_PREFLIGHT_"):
+                print(line)
         fail("Guarded subprocess failed: " + Path(str(args[0])).name)
     return result
 
@@ -299,11 +303,19 @@ from mpw_native_checkout.wallet_ownership import proven_assets
 u=get_user_model().objects.filter(is_superuser=True,is_active=True).get()
 r=RequestFactory().get('/merchant/wallet-proof/',secure=True,HTTP_HOST='mojplaywin.com')
 r.user=u
-assert resolve('/merchant/wallet-proof/').url_name=='page'
+route=resolve('/merchant/wallet-proof/')
+print('MPW_PREFLIGHT_ROUTE='+str(route.url_name))
+assert route.url_name=='page'
 response=merchant_wallet_page(r)
+print('MPW_PREFLIGHT_HTTP='+str(response.status_code))
 assert response.status_code==200
-assert b'ETH' in response.content and b'TRX' in response.content
-assert proven_assets()=={'ETH':False,'TRX':False}
+has_eth=b'ETH' in response.content
+has_trx=b'TRX' in response.content
+print('MPW_PREFLIGHT_ASSET_MARKERS='+str(has_eth)+','+str(has_trx))
+assert has_eth and has_trx
+proofs=proven_assets()
+print('MPW_PREFLIGHT_PROOFS='+repr(proofs))
+assert proofs=={'ETH':False,'TRX':False}
 print('MERCHANT_ADMIN_PAGE_HTTPS_DJANGO_RENDER_OK')
 """
         run((VENV,"-c",
