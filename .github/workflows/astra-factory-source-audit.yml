@@ -149,6 +149,20 @@ jobs:
                   for word in ("DJANGO_SECRET_KEY","SECRET_KEY","DATABASE_URL","SAEIT_ENV","MOJ_FACTORY_LOCAL_MODE"):
                       print("ASTRA_DEPLOYED_CONFIG_HAS_"+word+"="+str(word in body))
           PY
+          python3 - "$HOME/factory-transfer-incoming/astra-factory-full-architecture.tar.gz" "$HOME/factory-runtime/django-app" <<'PY'
+          import tarfile,sys,re,pathlib
+          with tarfile.open(sys.argv[1],"r:gz") as tf:
+              for name in ("files/core/management/commands/factory_seed_hypotheses.py","files/core/factory_queue.py"):
+                  data=tf.extractfile(name).read().decode("utf-8","replace").splitlines()
+                  print("ASTRA_INPUT_SOURCE="+name)
+                  for n,line in enumerate(data,1):
+                      if name.endswith("factory_seed_hypotheses.py") or re.search("hypothes|seed_hypotheses|factory_hypotheses",line,re.I):
+                          if re.search("PASSWORD|SECRET|PRIVATE KEY|TOKEN|CREDENTIAL",line,re.I):continue
+                          print("ASTRA_INPUT_CODE_%d=%s"%(n,line[:170]))
+              for p in (pathlib.Path(sys.argv[2])/"var/factory/hypotheses.json",
+                        pathlib.Path(sys.argv[2])/"var/factory/discovery/hypotheses.json"):
+                  print("ASTRA_INPUT_EXISTING="+str(p.relative_to(sys.argv[2]))+" IS_FILE="+str(p.is_file()))
+          PY
           echo ASTRA_DESIGN_COMPARISON_DONE
           echo ASTRA_AUDIT_READ_ONLY_COMPLETE
           REMOTE
