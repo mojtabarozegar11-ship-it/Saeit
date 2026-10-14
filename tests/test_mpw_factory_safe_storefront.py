@@ -140,3 +140,16 @@ class FactoryStorefrontTests(TestCase):
         self.assertEqual(context["products"],[])
         with self.assertRaises(ValueError):
             safe_brand_store_context(SimpleNamespace(code="zomorodmelal"), [product])
+
+    def test_additive_partial_only_renders_approved_cards(self):
+        from django.template.loader import render_to_string
+        from types import SimpleNamespace
+        from core.brand_store_integration import safe_brand_store_context
+        product=self.create("Factory Free Edition", "0.00", True, farm_meta())
+        ctx=safe_brand_store_context(SimpleNamespace(code="mojplaywin"), [product])
+        html=render_to_string("core/includes/mpw_verified_factory_cards.html",ctx)
+        self.assertIn("Factory Free Edition",html)
+        self.assertIn("Free download",html)
+        self.assertNotIn("Proceed to secure checkout",html)
+        html_empty=render_to_string("core/includes/mpw_verified_factory_cards.html",{"factory_cards":[]})
+        self.assertNotIn("mpw-verified-factory",html_empty)
