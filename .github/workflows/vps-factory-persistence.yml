@@ -100,3 +100,4 @@ jobs:
       - name: Remove temporary SSH material
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/factory-persistence"
+# Reverify VPS-local factory watchdog following operator activation request 2026-10-14.
