@@ -31,7 +31,7 @@ class BrandStorePatchSafetyTests(unittest.TestCase):
         self.assertEqual(result.count("def branded_store(request):"),1)
         self.assertEqual(result.count("mpw_verified_factory_cards.html"),1)
         self.assertIn('render(request,"brands/mojplaywin/store.html",context)',result)
-        self.assertIn("SAFE_INSERTION_MARKER_MISSING",result)
+        self.assertIn("if marker in raw and raw.count(marker)==1:",result)
         self.assertNotIn("factory_publication_permission = True",result)
         compile(result,"brand_views.py","exec")
 
