@@ -2,7 +2,7 @@ name: ComfyUI CPU Image Production Proof
 on:
   push:
     branches: [feature/comfyui-final-audit-20261015]
-    paths: [.github/workflows/comfyui-cpu-production-proof.yml]
+    paths: [.github/workflows/comfyui-cpu-production-proof.yml, ops/comfyui-vps/render_bounded.py]
   workflow_dispatch:
 permissions:
   contents: read
