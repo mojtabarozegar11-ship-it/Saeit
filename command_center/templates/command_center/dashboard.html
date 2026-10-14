@@ -25,6 +25,12 @@ section{margin-top:24px;scroll-margin-top:92px}
 <div><nav aria-label="Language"><a href="?lang=fa" lang="fa">فارسی</a> | <a href="?lang=en" lang="en">English</a></nav><button id="refresh" type="button">{% if lang == "fa" %}به‌روزرسانی{% else %}Refresh{% endif %}</button><p id="updated" aria-live="polite">در انتظار دریافت اطلاعات</p></div></header>
 <nav class="staff-nav" aria-label="Staff navigation"><a href="#staff-summary">خلاصه / Summary</a><a href="#management-modules">بخش‌ها / Modules</a><a href="#staff-agents">ایجنت‌ها / Agents</a><a href="#staff-approvals">تأییدیه‌ها / Approvals</a><a href="#staff-content">محتوا / Content</a><a href="#staff-album">آلبوم / Album</a><a href="#staff-infrastructure">زیرساخت / Infrastructure</a></nav>
 <section id="staff-summary" class="grid" aria-label="Staff summary"><article class="card"><strong>{{ staff_counts.staff }}</strong><p>{% if lang == "fa" %}کاربر فعال پرسنل{% else %}Active staff accounts{% endif %}</p></article><article class="card"><strong>{{ staff_counts.agents }}</strong><p>{% if lang == "fa" %}ایجنت ثبت‌شده{% else %}Registered agents{% endif %}</p></article><article class="card"><strong>{{ staff_counts.approvals }}</strong><p>{% if lang == "fa" %}تأییدیه در انتظار{% else %}Pending approvals{% endif %}</p></article><article class="card"><strong>{{ staff_counts.drafts }}</strong><p>{% if lang == "fa" %}پیش‌نویس محتوا{% else %}Content drafts{% endif %}</p></article></section>
+<section id="staff-commerce" class="card" aria-label="Live database facts">
+<h2>{% if lang == 'fa' %}آمار مستند سفارش و درآمد{% else %}Verified Commerce Records{% endif %}</h2>
+<p>{% if lang == 'fa' %}شمارش مستقیم رکوردهای دیتابیس فعال؛ ممکن است داده‌ها میان چند سرویس مشترک باشند. این اعداد فروش، درآمد یا تولید کارخانه را تأیید نمی‌کنند.{% else %}Read-only counts from the active shared database. These do not establish sales, earned revenue, or factory output.{% endif %}</p>
+<div id="commerce-facts" class="grid" aria-live="polite"><p>{% if lang == 'fa' %}در انتظار دریافت داده مستند{% else %}Waiting for verified database counts{% endif %}</p></div>
+<p id="commerce-finance" aria-live="polite">{% if lang == 'fa' %}درآمد تأییدشده: نامشخص (تسویه مستقل بررسی نشده){% else %}Verified revenue: Unknown (external settlement not reconciled){% endif %}</p>
+<small id="commerce-provenance"></small></section>
 <section id="management-modules" class="card"><h2>{% if lang == "fa" %}بخش‌های مدیریتی{% else %}Management Modules{% endif %}</h2><div class="grid">{% for item in modules %}<div class="card"><span class="label">{{ item.label }}</span><p><small>{% if item.connected %}{% if lang == "fa" %}بخش اولیه موجود است{% else %}Initial section available{% endif %}{% else %}{% if lang == "fa" %}در انتظار تکمیل{% else %}Integration pending{% endif %}{% endif %}</small></p></div>{% endfor %}</div></section><section class="card"><h2>{% if lang == "fa" %}آمار ثبت‌شده ایجنت‌ها{% else %}Recorded Agent Metrics{% endif %}</h2><p id="agent-metrics">{% if lang == "fa" %}در انتظار دریافت داده از پایگاه داده{% else %}Waiting for database snapshot{% endif %}</p><small>{% if lang == "fa" %}این اعداد نشان‌دهنده سلامت پردازش زنده نیستند.{% else %}These counts do not prove live worker health.{% endif %}</small></section>
 <div id="staff-agents">{% include "command_center/agent_directory.html" %}</div>
 <div id="staff-approvals">{% include "command_center/approval_queue.html" %}</div>
@@ -36,6 +42,38 @@ section{margin-top:24px;scroll-margin-top:92px}
 <section class="card"><h2>{% if lang == "fa" %}پیشرفت تأییدشده{% else %}Verified Progress{% endif %}</h2><div id="workstreams"><p>تا اتصال معیارهای واقعی، درصدی نمایش داده نمی‌شود.</p></div></section>
 <section class="card"><h2>{% if lang == "fa" %}فرماندهی مستر ایجنت{% else %}Master Agent Control{% endif %}</h2><p>چت عملیاتی هنوز متصل نشده است. اجرای دستور از این صفحه عمداً غیرفعال است تا دستوری بدون احراز هویت، مجوز و ثبت ممیزی اجرا نشود.</p></section>
 <script>
+const commerceEndpoint="{% url 'command_center_evidence_metrics_api' %}";
+async function refreshCommerceEvidence(){
+ const host=document.getElementById("commerce-facts"),finance=document.getElementById("commerce-finance"),proof=document.getElementById("commerce-provenance");
+ try{
+  const response=await fetch(commerceEndpoint,{credentials:"same-origin",cache:"no-store"});
+  if(!response.ok)throw new Error("HTTP "+response.status);
+  const d=await response.json();
+  if(d.scope!=="shared_core_models_not_proven_exclusive_to_mojplaywin")throw new Error("unverified scope");
+  const rows=[
+   [isEn?"Registered agents":"ایجنت‌های ثبت‌شده",d.agents.registered],
+   [isEn?"Completed task records":"وظایف ثبت‌شده به‌عنوان تکمیل‌شده",d.agents.tasks.by_status.completed||0],
+   [isEn?"Queued task records":"وظایف در صف",d.agents.tasks.by_status.queued||0],
+   [isEn?"Product records":"محصولات ثبت‌شده",d.catalog.products],
+   [isEn?"Active product records":"محصولات فعال در دیتابیس",d.catalog.active_products],
+   [isEn?"Order records":"سفارش‌های ثبت‌شده",d.orders.total],
+   [isEn?"Payment intents":"درخواست‌های پرداخت",d.payments.intents],
+   [isEn?"Course enrollment records":"ثبت‌نام‌های آموزشی",d.education.enrollment_records]
+  ];
+  host.replaceChildren();
+  for(const [label,value] of rows){
+   const card=document.createElement("article"),amount=document.createElement("strong"),desc=document.createElement("p");
+   card.className="card";amount.textContent=String(value);desc.textContent=label;card.append(amount,desc);host.append(card);
+  }
+  finance.textContent=isEn?"Verified revenue: Unknown — external settlement not reconciled. VPS factory runtime: Unknown.":"درآمد تأییدشده: نامشخص — تطبیق با تسویه مستقل انجام نشده است. وضعیت اجرای کارخانه VPS: نامشخص.";
+  proof.textContent=(isEn?"Source: ":"منبع: ")+d.source+" | "+d.captured_at+" | "+(isEn?"Shared database, not solely this site":"دیتابیس مشترک، بدون اثبات انتساب انحصاری به این سایت");
+ }catch(e){
+  host.replaceChildren();
+  const p=document.createElement("p");p.textContent=isEn?"No verified counts available":"آمار قابل تأیید در دسترس نیست";host.append(p);
+  finance.textContent=isEn?"Revenue: Unknown":"درآمد: نامشخص";
+  proof.textContent=isEn?"Evidence API unavailable":"دریافت منبع داده ناموفق";
+ }
+}
 const endpoint="{% url 'command_center_overview_api' %}";
 const isEn="{{ lang }}"==="en";
 const labels=isEn?{healthy:"Healthy",degraded:"Degraded",failed:"Failed",stale:"Stale",unknown:"Unknown",unauthorized:"Unauthorized"}:{healthy:"سالم",degraded:"اختلال",failed:"خراب",stale:"اطلاعات قدیمی",unknown:"نامشخص",unauthorized:"بدون دسترسی"};
@@ -66,6 +104,8 @@ async function refresh(){
  document.querySelectorAll(".state").forEach(x=>{x.textContent="نامشخص";x.className="state unknown";});}
 }
 document.getElementById("refresh").addEventListener("click",refresh);refresh();
+refreshCommerceEvidence();
+document.getElementById("refresh").addEventListener("click",refreshCommerceEvidence);
 
 const agentEndpoint="{% url 'command_center_agent_metrics_api' %}";
 async function refreshAgentMetrics(){

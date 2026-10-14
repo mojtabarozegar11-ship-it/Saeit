@@ -1,0 +1,134 @@
+name: MojPlayWin evidence snapshot private shadow QA
+on:
+  push:
+    branches: [feature/mpw-command-center-evidence-metrics-20261014]
+    paths:
+      - .github/workflows/mpw-evidence-private-shadow-qa.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Stage evidence code privately and test read-only API on active MySQL
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/mpw-readonly-host"
+          mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          python3 - "$d/vps.key" "$d/host.key" <<'PY'
+          from pathlib import Path
+          import sys
+          for name in sys.argv[1:]:
+              p = Path(name)
+              p.write_text(p.read_text().replace("\r\n", "\n").strip().replace("\\n", "\n") + "\n")
+          PY
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host relay
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host host
+            HostName zohal.pws-dns.net
+            Port 1396
+            User zomorod2
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump relay
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+          EOF
+          timeout 30s ssh -F "$d/config" relay 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          timeout 50s ssh -F "$d/config" host 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = zomorod2
+          umask 077
+          private="$HOME/.mpw-evidence-shadow-qa-20261014"
+          test ! -e "$private" && test ! -L "$private"
+          mkdir -m 700 "$private"
+          REMOTE
+          tar -C "$GITHUB_WORKSPACE" -cf - command_center | timeout 95s ssh -F "$d/config" host 'tar -xf - -C "$HOME/.mpw-evidence-shadow-qa-20261014"'
+          timeout 130s ssh -F "$d/config" host 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          cd "$HOME/Saeit-staging"
+          export PYTHONDONTWRITEBYTECODE=1
+          export DJANGO_SETTINGS_MODULE=config.settings
+          "$HOME/virtualenv/Saeit-staging/3.11/bin/python" - <<'PY'
+          from pathlib import Path
+          import sys,json
+          base=Path.home()/".mpw-evidence-shadow-qa-20261014"
+          sys.path.insert(0,str(base))
+          import django
+          django.setup()
+          import command_center
+          assert Path(command_center.__file__).resolve().is_relative_to(base.resolve())
+          from django.contrib.auth.models import AnonymousUser
+          from django.test import RequestFactory
+          from django.urls import resolve,reverse
+          from django.core.checks import run_checks,Tags
+          from types import SimpleNamespace
+          from command_center.evidence_metrics import evidence_metrics
+          from command_center.views import dashboard
+          from core.models import Agent,AgentTask,Product,Order,PaymentIntent
+          assert resolve("/staff/command-center/api/evidence/").view_name=="command_center_evidence_metrics_api"
+          assert reverse("command_center_evidence_metrics_api")=="/staff/command-center/api/evidence/"
+          assert not any(m.id=="urls.W005" for m in run_checks(tags=[Tags.urls]))
+          factory=RequestFactory()
+          guest=factory.get("/staff/command-center/api/evidence/",HTTP_HOST="mojplaywin.com")
+          guest.user=AnonymousUser()
+          assert evidence_metrics(guest).status_code==302
+          user=SimpleNamespace(is_authenticated=True,is_active=True,is_staff=True,is_superuser=True)
+          req=factory.get("/staff/command-center/api/evidence/",HTTP_HOST="mojplaywin.com")
+          req.user=user
+          response=evidence_metrics(req)
+          assert response.status_code==200
+          payload=json.loads(response.content)
+          assert payload["agents"]["registered"]==Agent.objects.count()
+          assert payload["agents"]["tasks"]["total"]==AgentTask.objects.count()
+          assert payload["catalog"]["products"]==Product.objects.count()
+          assert payload["orders"]["total"]==Order.objects.count()
+          assert payload["payments"]["intents"]==PaymentIntent.objects.count()
+          assert payload["revenue"]["verified_amounts_by_currency"] is None
+          assert payload["factory"]["state"]=="unknown"
+          assert "no-store" in response["Cache-Control"]
+          dash=factory.get("/staff/command-center/",HTTP_HOST="mojplaywin.com")
+          dash.user=user
+          html=dashboard(dash)
+          assert html.status_code==200
+          assert b"staff-commerce" in html.content
+          assert b"/staff/command-center/api/evidence/" in html.content
+          print("MPW_EVIDENCE_SHADOW_TEST_SUCCESS=True")
+          print("MPW_EVIDENCE_AUTH_REQUIRES_STAFF=True")
+          print("MPW_EVIDENCE_ACTIVE_DATABASE_COUNTS_VERIFIED=True")
+          print("MPW_EVIDENCE_EARNED_REVENUE_UNVERIFIED=True")
+          print("MPW_EVIDENCE_SITE_FILES_NOT_CHANGED=True")
+          PY
+          REMOTE
+      - name: Erase runner-only transient SSH keys
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/mpw-readonly-host"
