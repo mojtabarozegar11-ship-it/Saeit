@@ -1,0 +1,96 @@
+name: MojPlayWin commerce isolated MySQL migration verification
+on:
+  push:
+    branches: [qa/mpw-commerce-mysql-20261014]
+    paths:
+      - .github/workflows/mojplaywin-commerce-mysql-ephemeral.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  ephemeral-mysql:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: ci-root-only
+          MYSQL_DATABASE: mpw_commerce_ci
+          MYSQL_USER: mpw_ci
+          MYSQL_PASSWORD: ci-only-not-production
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -pci-root-only"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Apply, reverse, and reapply commerce migrations on disposable MySQL
+        shell: bash
+        env:
+          MPW_CI_MYSQL_PASSWORD: ci-only-not-production
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq pkg-config default-libmysqlclient-dev
+          python -m pip install --disable-pip-version-check -q 'Django>=5.2,<6' 'mysqlclient>=2.2,<3' 'eth-account>=0.13,<0.14'
+          cat > "$RUNNER_TEMP/mpw_mysql_ci_settings.py" <<'PY'
+          import os
+          from tests.native_checkout_settings import *  # noqa: F401,F403
+          DATABASES = {
+              "default": {
+                  "ENGINE": "django.db.backends.mysql",
+                  "NAME": "mpw_commerce_ci",
+                  "USER": "mpw_ci",
+                  "PASSWORD": os.environ["MPW_CI_MYSQL_PASSWORD"],
+                  "HOST": "127.0.0.1",
+                  "PORT": "3306",
+                  "OPTIONS": {"charset": "utf8mb4"},
+              }
+          }
+          PY
+          export PYTHONPATH="$RUNNER_TEMP:$GITHUB_WORKSPACE"
+          export DJANGO_SETTINGS_MODULE=mpw_mysql_ci_settings
+          python -m django check
+          python -m django makemigrations mpw_commerce --check --dry-run
+          python -m django migrate --noinput
+          python - <<'PY'
+          import django
+          django.setup()
+          from django.db import connection
+          from django.db.migrations.recorder import MigrationRecorder
+          assert connection.vendor == "mysql"
+          tables = set(connection.introspection.table_names())
+          required = {"mpw_commerce_commerceinvoice", "mpw_commerce_commercereceipt",
+                      "mpw_commerce_commercefulfillment", "mpw_commerce_buyerwalletchallenge"}
+          assert required <= tables, required - tables
+          applied = MigrationRecorder(connection).applied_migrations()
+          assert ("mpw_commerce", "0001_initial") in applied
+          assert ("mpw_commerce", "0002_buyerwalletchallenge") in applied
+          print("MPW_EPHEMERAL_MYSQL_0001_0002_APPLIED")
+          PY
+          python -m django migrate mpw_commerce zero --noinput
+          python - <<'PY'
+          import django
+          django.setup()
+          from django.db import connection
+          assert not any(t.startswith("mpw_commerce_") for t in connection.introspection.table_names())
+          print("MPW_EPHEMERAL_MYSQL_ROLLBACK_VERIFIED")
+          PY
+          python -m django migrate mpw_commerce --noinput
+          python - <<'PY'
+          import django
+          django.setup()
+          from django.db import connection
+          assert {"mpw_commerce_commerceinvoice", "mpw_commerce_buyerwalletchallenge"} <= set(connection.introspection.table_names())
+          print("MPW_EPHEMERAL_MYSQL_REAPPLY_VERIFIED")
+          print("MPW_NO_VPS_CPANEL_OR_PRODUCTION_DATABASE_CONNECTION")
+          PY
