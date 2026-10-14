@@ -109,4 +109,4 @@ jobs:
       - name: Remove temporary SSH credentials
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/mpw-proof-preflight"
-# Release this private ownership page only after CI; public checkout remains disabled.
+# Prioritize the private proof route above the homepage; public checkout remains disabled.
