@@ -158,7 +158,7 @@ class MerchantWalletProofTests(TestCase):
         self.client.force_login(self.owner)
         result=self.client.get(page)
         self.assertEqual(result.status_code,200)
-        self.assertContains(result,"No token transfer")
+        self.assertContains(result,"هیچ پولی منتقل")
         self.assertContains(result,"TRON (TRX)")
 
     def test_post_challenge_uses_only_fixed_receiving_wallet(self):
