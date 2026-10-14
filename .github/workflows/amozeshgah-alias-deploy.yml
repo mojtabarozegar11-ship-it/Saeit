@@ -10,7 +10,7 @@ concurrency:
   group: amozeshgah-publication
   cancel-in-progress: false
 jobs:
-  publish-alias:
+  publish-education-page:
     runs-on: ubuntu-latest
     timeout-minutes: 6
     steps:
@@ -61,7 +61,7 @@ jobs:
           printf '%s\n' "$scan" > "$d/host.candidate"
           test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
           cp "$d/host.candidate" "$d/host.known"
-      - name: Verify current home and education page before deployment
+      - name: Prepare a canonical copy of the live education page
         shell: bash
         run: |
           set -euo pipefail
@@ -70,70 +70,78 @@ jobs:
           education_code="$(curl -sS --max-time 25 -o "$work/education-before.html" -w '%{http_code}' https://zomorodmelal.ir/education/)"
           test "$home_code" = "200"
           test "$education_code" = "200"
-          grep -Eiq '<title>[^<]*آموزش' "$work/education-before.html"
+          python3 - "$work/education-before.html" "$work/index.html" <<'PY'
+          import re,sys
+          source=open(sys.argv[1],encoding="utf-8").read()
+          html=source.replace("https://zomorodmelal.ir/education/","https://zomorodmelal.ir/amozeshgah/")
+          html=html.replace("http://zomorodmelal.ir/education/","https://zomorodmelal.ir/amozeshgah/")
+          html=html.replace("/education/","/amozeshgah/")
+          if not re.search(r"<title>[^<]*آموزش",html,re.I):
+              raise SystemExit("Education page title was not found")
+          if 'rel="canonical"' not in html and "rel='canonical'" not in html:
+              html=re.sub(r"(<head\\b[^>]*>)",r'\\1\n<link rel="canonical" href="https://zomorodmelal.ir/amozeshgah/">',html,count=1,flags=re.I)
+          if "https://zomorodmelal.ir/amozeshgah/" not in html:
+              raise SystemExit("Canonical education URL was not set")
+          open(sys.argv[2],"w",encoding="utf-8").write(html)
+          print(f"EDUCATION_SNAPSHOT_BYTES={len(html.encode('utf-8'))}")
+          print("EDUCATION_SNAPSHOT_TITLE=verified")
+          PY
           echo "PRE_DEPLOY_HOME_HTTP=$home_code"
           echo "PRE_DEPLOY_EDUCATION_HTTP=$education_code"
-      - name: Add reversible canonical-path rewrite
+      - name: Publish the snapshot into the empty public path
         id: publish
         shell: bash
         run: |
           set -euo pipefail
-          result="$(ssh -F "$RUNNER_TEMP/amozeshgah-publish/config" saeit-cpanel 'bash -se' <<'REMOTE'
+          work="$RUNNER_TEMP/amozeshgah-publish"
+          target="/home/zomorod2/public_html/amozeshgah"
+          stage="/home/zomorod2/public_html/.amozeshgah-stage-$GITHUB_SHA"
+          ssh -F "$work/config" saeit-cpanel 'bash -se' <<'REMOTE'
           set -euo pipefail
           root=/home/zomorod2/public_html
-          file="$root/.htaccess"
-          marker="# BEGIN ZM AMOZESHGHAH PATH"
-          test -d "$root" && test -w "$root" && test -f "$file" && ! test -L "$file"
-          if grep -Fq "$marker" "$file"; then
-            echo "ALIAS_ALREADY_PRESENT"
+          target="$root/amozeshgah"
+          test -d "$root" && test -w "$root"
+          if test -e "$target" || test -L "$target"; then
+            test -f "$target/index.html"
+            grep -Fq 'https://zomorodmelal.ir/amozeshgah/' "$target/index.html"
+            echo ALREADY_PUBLISHED=yes
+          fi
+          REMOTE
+          if ssh -F "$work/config" saeit-cpanel "test -e '$target' || test -L '$target'"; then
+            echo "PUBLISH_STATE=already-present"
             exit 0
           fi
-          backup_dir="$HOME/.backups/zomorodmelal-amozeshgah"
-          install -d -m 700 "$backup_dir"
-          backup="$backup_dir/htaccess.$(date -u +%Y%m%dT%H%M%SZ)"
-          cp -p "$file" "$backup"
-          chmod 600 "$backup"
-          cat >> "$file" <<'RULES'
-
-          # BEGIN ZM AMOZESHGHAH PATH
-          <IfModule mod_rewrite.c>
-          RewriteEngine On
-          RewriteRule ^amozeshgah/?$ /education/ [L]
-          </IfModule>
-          # END ZM AMOZESHGHAH PATH
-          RULES
-          echo "BACKUP_FILE=$backup"
-          echo "ALIAS_RULE_WRITTEN=yes"
-          REMOTE
-          )"
-          printf '%s\n' "$result"
-          backup="$(printf '%s\n' "$result" | sed -n 's/^BACKUP_FILE=//p')"
-          if ! printf '%s\n' "$result" | grep -q '^ALIAS_RULE_WRITTEN=yes$' && ! printf '%s\n' "$result" | grep -q '^ALIAS_ALREADY_PRESENT$'; then
+          ssh -F "$work/config" saeit-cpanel "set -euo pipefail; test ! -e '$stage'; mkdir -m 700 '$stage'"
+          if ! ssh -F "$work/config" saeit-cpanel "cat > '$stage/index.html' && chmod 644 '$stage/index.html' && chmod 755 '$stage'" < "$work/index.html"; then
+            ssh -F "$work/config" saeit-cpanel "rm -rf '$stage'"
             exit 1
           fi
-          printf 'backup=%s\n' "$backup" >> "$GITHUB_OUTPUT"
-      - name: Verify canonical URL and existing site health
+          sha="$(sha256sum "$work/index.html" | awk '{print $1}')"
+          remote_sha="$(ssh -F "$work/config" saeit-cpanel "sha256sum '$stage/index.html' | awk '{print \\$1}')"
+          test "$sha" = "$remote_sha"
+          ssh -F "$work/config" saeit-cpanel "set -euo pipefail; test ! -e '$target' && mv '$stage' '$target'; echo PUBLISH_STATE=created"
+          printf 'sha=%s\n' "$sha" >> "$GITHUB_OUTPUT"
+      - name: Verify public URL and preserve existing site health
         shell: bash
         run: |
           set -euo pipefail
           work="$RUNNER_TEMP/amozeshgah-publish"
           set +e
-          alias_code="$(curl -sS --max-time 25 -o "$work/amozeshgah-after.html" -w '%{http_code}' https://zomorodmelal.ir/amozeshgah/)"
-          education_code="$(curl -sS --max-time 25 -o "$work/education-after.html" -w '%{http_code}' https://zomorodmelal.ir/education/)"
-          home_code="$(curl -sS --max-time 25 -o "$work/home-after.html" -w '%{http_code}' https://zomorodmelal.ir/)"
+          alias_code="$(curl -sS --max-time 25 -H 'Cache-Control: no-cache' -H 'Pragma: no-cache' -o "$work/amozeshgah-after.html" -w '%{http_code}' https://zomorodmelal.ir/amozeshgah/)"
+          education_code="$(curl -sS --max-time 25 -H 'Cache-Control: no-cache' -o "$work/education-after.html" -w '%{http_code}' https://zomorodmelal.ir/education/)"
+          home_code="$(curl -sS --max-time 25 -H 'Cache-Control: no-cache' -o "$work/home-after.html" -w '%{http_code}' https://zomorodmelal.ir/)"
           set -e
-          if [ "$alias_code" != "200" ] || [ "$education_code" != "200" ] || [ "$home_code" != "200" ] || ! grep -Eiq '<title>[^<]*آموزش' "$work/amozeshgah-after.html"; then
+          if [ "$alias_code" != "200" ] || [ "$education_code" != "200" ] || [ "$home_code" != "200" ] || ! grep -Eiq '<title>[^<]*آموزش' "$work/amozeshgah-after.html" || ! grep -Fq 'https://zomorodmelal.ir/amozeshgah/' "$work/amozeshgah-after.html"; then
             echo "POST_DEPLOY_CHECK_FAILED alias=$alias_code education=$education_code home=$home_code"
-            backup="${{ steps.publish.outputs.backup }}"
-            if [ -n "$backup" ]; then
-              ssh -F "$work/config" saeit-cpanel "set -euo pipefail; cp -p '$backup' /home/zomorod2/public_html/.htaccess; echo ROLLBACK_COMPLETED=yes"
-            fi
+            backup="/home/zomorod2/.backups/zomorodmelal-amozeshgah/failed-$GITHUB_SHA"
+            ssh -F "$work/config" saeit-cpanel "if test -d /home/zomorod2/public_html/amozeshgah; then install -d -m 700 /home/zomorod2/.backups/zomorodmelal-amozeshgah; mv /home/zomorod2/public_html/amozeshgah '$backup'; fi; echo ROLLBACK_COMPLETED=yes"
             exit 1
           fi
           echo "AMOZESHGHAH_HTTP=$alias_code"
           echo "EDUCATION_HTTP=$education_code"
           echo "HOME_HTTP=$home_code"
           grep -Eio '<title>[^<]*</title>' "$work/amozeshgah-after.html" | head -1
+          grep -Eio '<link rel="canonical"[^>]*>' "$work/amozeshgah-after.html" | head -1
       - name: Remove temporary SSH material
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/amozeshgah-publish"
