@@ -170,10 +170,17 @@ jobs:
               "/saman/partners/": "saman_section_page",
               "/saman/about/": "saman_section_page",
           }
+          from django.test import Client
+          client = Client(raise_request_exception=False)
           for path, expected in routes.items():
               match = resolve(path)
               print("SAMAN_RUNTIME_ROUTE=" + path + " -> " + match.func.__name__)
               assert match.func.__name__ == expected, path
+              response = client.get(path, HTTP_HOST="mojplaywin.com")
+              print("SAMAN_TEST_CLIENT=" + path + " -> HTTP " + str(response.status_code))
+              if response.status_code != 200:
+                  print(response.content[:1000].decode("utf-8", errors="replace"))
+                  raise AssertionError(path)
           PY
               exit 0
             fi
