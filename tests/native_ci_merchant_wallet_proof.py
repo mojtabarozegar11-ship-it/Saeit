@@ -226,6 +226,7 @@ class MerchantWalletProofTests(TestCase):
     def test_csrf_required_even_when_authenticated(self):
         c=Client(enforce_csrf_checks=True)
         c.defaults["wsgi.url_scheme"] = "https"
+        c.defaults["HTTP_HOST"] = "mojplaywin.com"
         c.force_login(self.owner)
         response=c.post(reverse("mpw_wallet_proof:challenge"),
                  data='{"asset":"ETH"}',content_type="application/json",secure=True)
