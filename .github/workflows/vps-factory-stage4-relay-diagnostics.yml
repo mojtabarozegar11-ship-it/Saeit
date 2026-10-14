@@ -133,6 +133,9 @@ jobs:
           echo OPERATIONS_SCRIPT_NAMES
           echo LEGACY_RECOVERY_SOURCE
           if test -f "$app/core/factory_legacy_recovery.py"; then sed -n '1,220p' "$app/core/factory_legacy_recovery.py"; fi
+          echo TASK_RUNTIME_RECOVERY_SOURCE
+          sed -n '300,425p' "$app/core/task_runtime.py"
+          grep -RIn "resume_blocked" "$app/core" --include='*.py' | head -40 || true
           echo VPS_LOOP_SOURCE
           sed -n '1,180p' "$ops/vps-only-loop.sh"
           find "$ops" -maxdepth 1 -type f -name '*.sh' -printf '%f\n' | sort
