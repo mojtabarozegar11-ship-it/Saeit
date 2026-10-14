@@ -1,0 +1,32 @@
+name: MojPlayWin free factory listing isolated approval gate tests
+on:
+  push:
+    branches: [qa/mpw-native-free-listing-approval-20261014]
+    paths:
+      - qa_mpstore_settings.py
+      - qa_mpstore_urls.py
+      - .github/workflows/mpw-free-store-release-gates-ci.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  isolated-release-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Simulate authorized factory listing and block unsafe activation
+        env:
+          DJANGO_SETTINGS_MODULE: qa_mpstore_settings
+        run: |
+          set -euo pipefail
+          python -m pip install -q -r requirements.txt
+          python -m django check
+          python -m pytest -q tests/test_publish_verified_factory_store_listing.py
+          echo 'MPW_FREE_STORE_RELEASE_APPROVAL_GATES_PASSED=True'
+          echo 'MPW_LIVE_DATABASE_AND_SITE_UNTOUCHED=True'
