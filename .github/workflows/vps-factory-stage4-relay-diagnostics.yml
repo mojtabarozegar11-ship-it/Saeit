@@ -177,6 +177,7 @@ jobs:
           if target:
               print("STAGE4_TASK96_STATE="+str(target.status))
               print("STAGE4_RUN96_STATE="+str(target.factory_run.status if target.factory_run_id else "NO_RUN"))
+              print("STAGE4_RUN96_TASKS="+",".join(f"{row.id}:{row.action_type}:{row.status}" for row in target.factory_run.tasks.order_by("pk")))
           print("USER_TOTAL_COUNT="+str(User.objects.count()))
           print("USER_ACTIVE_COUNT="+str(User.objects.filter(is_active=True).count()))
           print("USER_ACTIVE_STAFF_COUNT="+str(User.objects.filter(is_active=True,is_staff=True).count()))
