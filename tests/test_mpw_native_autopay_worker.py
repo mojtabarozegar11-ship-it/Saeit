@@ -1,14 +1,17 @@
 """Unattended payment worker tests, with ALL external indexers and RPCs mocked."""
 from datetime import timedelta
 from decimal import Decimal
+from io import StringIO
 from unittest.mock import patch
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
+from django.core.management import call_command
 from django.utils import timezone
 
-from core.models import Order, OrderItem, Product
+from core.models import Order, OrderItem, Product, LedgerEntry
+from mpw_native_checkout.entitlements import can_download_paid_native_order
 from mpw_native_checkout.models import NativeInvoice
 from mpw_native_checkout.autopay_worker import reconcile_once, AutoPayUnavailable
 from scripts.mojplaywin_direct_wallet_discovery import Candidate, IndexerUnavailable
@@ -168,3 +171,52 @@ class AutoPayWorkerTests(TestCase):
         self.assertEqual(invoice.order.status,"pending")
 
 
+
+
+    @override_settings(MPW_NATIVE_AUTOPAY_ENABLED=False)
+    def test_scheduled_command_wont_credit_when_disabled(self):
+        sink=StringIO()
+        call_command("mpw_native_autopay",stdout=sink)
+        self.assertIn("NO_PAID_STATE_CHANGES_FEATURE_FLAG_DISABLED",sink.getvalue())
+
+    @override_settings(**ON)
+    def test_full_eth_worker_to_django_order_and_download_entitlement(self):
+        invoice=self.new_invoice()
+        candidate=self.eth_candidate()
+        proof={
+            "network":"ethereum-mainnet","order_id":invoice.order_id,
+            "transaction_hash":ETH_TX,"amount_smallest_units":int(invoice.amount_atomic),
+            "sender":invoice.verified_sender_address.lower(),
+            "recipient":invoice.merchant_address.lower(),
+        }
+        with patch("mpw_native_checkout.settlement.verify_eth_transfer",return_value=proof):
+            result=reconcile_once(
+                now=self.now,eth_scanner=lambda **opts:[candidate],
+                eth_chain_rpc=lambda *args:{},
+            )
+        invoice.order.refresh_from_db()
+        self.assertEqual(result["paid"],1)
+        self.assertEqual(invoice.order.status,"paid")
+        self.assertEqual(LedgerEntry.objects.filter(order=invoice.order).count(),1)
+        self.assertTrue(can_download_paid_native_order(invoice.order_id,self.owner.pk))
+
+    @override_settings(**ON)
+    def test_full_trx_worker_to_django_order_and_download_entitlement(self):
+        invoice=self.new_invoice(asset="TRX")
+        candidate=self.tron_candidate()
+        proof={
+            "network":"tron-mainnet","order_id":invoice.order_id,
+            "transaction_hash":TRX_TX,"amount_smallest_units":int(invoice.amount_atomic),
+            "sender":tron_address_to_hex(invoice.verified_sender_address).lower(),
+            "recipient":tron_address_to_hex(invoice.merchant_address).lower(),
+        }
+        with patch("mpw_native_checkout.settlement.verify_trx_transfer",return_value=proof):
+            result=reconcile_once(
+                now=self.now,trx_scanner=lambda **opts:[candidate],
+                trx_chain_rpc=lambda *args:{},
+            )
+        invoice.order.refresh_from_db()
+        self.assertEqual(result["paid"],1)
+        self.assertEqual(invoice.order.status,"paid")
+        self.assertEqual(LedgerEntry.objects.filter(order=invoice.order).count(),1)
+        self.assertTrue(can_download_paid_native_order(invoice.order_id,self.owner.pk))
