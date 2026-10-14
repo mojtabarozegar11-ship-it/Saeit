@@ -107,7 +107,7 @@ class PaidCourseFulfillmentTests(TestCase):
         )
         self.assertEqual(enrollment.status,"active")
         self.assertEqual(enrollment.source,"mpw_commerce")
-        self.assertEqual(self.item.mpw_fulfillment.status,"complete")
+        self.assertEqual(CommerceFulfillment.objects.get(item=self.item).status,"complete")
         self.assertEqual(fulfill_paid_course_item(self.item.pk),"already_completed")
         self.assertEqual(EducationEnrollment.objects.count(),1)
         self.assertFalse(EducationEnrollment.objects.filter(
