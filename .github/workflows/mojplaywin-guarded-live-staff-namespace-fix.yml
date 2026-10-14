@@ -1,0 +1,187 @@
+name: MojPlayWin atomic staff admin namespace correction with rollback
+on:
+  push:
+    branches: [fix/mpw-active-staff-namespace-20261014]
+    paths:
+      - .github/workflows/mojplaywin-guarded-live-staff-namespace-fix.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Apply one-line staff namespace patch with private backup, smoke and rollback
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/mpw-readonly-host"
+          mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          python3 - "$d/vps.key" "$d/host.key" <<'PY'
+          from pathlib import Path
+          import sys
+          for name in sys.argv[1:]:
+              p = Path(name)
+              p.write_text(p.read_text().replace("\r\n", "\n").strip().replace("\\n", "\n") + "\n")
+          PY
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host relay
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host host
+            HostName zohal.pws-dns.net
+            Port 1396
+            User zomorod2
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump relay
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+          EOF
+          timeout 30s ssh -F "$d/config" relay 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          timeout 360s ssh -F "$d/config" host 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = "zomorod2"
+          umask 077
+          export PYTHONDONTWRITEBYTECODE=1
+          export DJANGO_SETTINGS_MODULE=config.settings
+          cd "$HOME/Saeit-staging"
+          "$HOME/virtualenv/Saeit-staging/3.11/bin/python" - <<'PY'
+          import ast, datetime, hashlib, importlib.util, os, pathlib, secrets, shutil, stat, subprocess, tempfile, time
+          from pathlib import Path
+          home=Path.home()
+          site=home/"Saeit-staging"
+          web=home/"mojplaywin.com"
+          urls=site/"config/urls.py"
+          python=home/"virtualenv/Saeit-staging/3.11/bin/python"
+          restart=web/"tmp/restart.txt"
+          assert site.is_dir() and web.is_dir() and urls.is_file() and python.is_file()
+          assert not urls.is_symlink() and not restart.is_symlink()
+          assert restart.parent.is_dir() and not restart.parent.is_symlink(), "Passenger restart path missing"
+          assert "Saeit-staging" in (web/"passenger_wsgi.py").read_text(), "WSGI site tree mismatch"
+          assert shutil.which("curl"), "HTTP smoke capability unavailable"
+          source=urls.read_bytes()
+          digest=hashlib.sha256(source).hexdigest()
+          original_stat=urls.stat()
+          before='path("staff/", admin.site.urls, name="staff_admin")'
+          after='path("staff/", include((admin.site.get_urls(), "admin"), namespace="staff_admin"))'
+          assert source.count(before.encode())==1, "Unexpected active staff URL; refuse patch"
+          tree=ast.parse(source.decode("utf-8"))
+          assert any(isinstance(n,ast.ImportFrom) and n.module=="django.urls" and any(x.name=="include" for x in n.names) for n in tree.body), "The active URL source does not import include"
+          assert importlib.util.find_spec("command_center") is None, "Unexpected command_center deployment; review before editing"
+          revised=source.decode("utf-8").replace(before,after)
+          compile(revised,str(urls),"exec")
+          def smoke():
+              statuses={}
+              for route in ("/","/admin/","/staff/","/staff/login/","/store/"):
+                  url="https://mojplaywin.com"+route
+                  p=subprocess.run(["curl","-sS","--connect-timeout","8","--max-time","14","-o","/dev/null","-w","%{http_code}",url],stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,text=True,timeout=19)
+                  assert p.returncode==0 and p.stdout.strip().isdigit(), "Public HTTP baseline unavailable"
+                  statuses[route]=int(p.stdout.strip())
+                  assert 100<=statuses[route]<500, "Public endpoint failed health baseline"
+              return statuses
+          baseline=smoke()
+          print("MPW_ADMIN_ALIAS_BASELINE_HTTP_CHECK_OK=True")
+          backup_root=home/".mpw-admin-url-backups"
+          assert not backup_root.is_symlink()
+          backup_root.mkdir(mode=0o700,exist_ok=True)
+          backup_root.chmod(0o700)
+          checkpoint=backup_root/(datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")+"-"+secrets.token_hex(4))
+          checkpoint.mkdir(mode=0o700)
+          copy=checkpoint/"urls.py"
+          copy.write_bytes(source)
+          copy.chmod(0o600)
+          assert hashlib.sha256(copy.read_bytes()).hexdigest()==digest
+          print("MPW_URLS_ORIGINAL_BACKUP_VERIFIED=True")
+          def atomic_write(payload):
+              fd,name=tempfile.mkstemp(prefix="urls.mpw.",suffix=".tmp",dir=str(urls.parent))
+              try:
+                  with os.fdopen(fd,"wb") as dest:
+                      dest.write(payload)
+                      dest.flush()
+                      os.fsync(dest.fileno())
+                  os.chmod(name,stat.S_IMODE(original_stat.st_mode))
+                  os.replace(name,urls)
+              finally:
+                  if os.path.exists(name):
+                      os.unlink(name)
+          def test_routes():
+              code=__import__("textwrap").dedent("""
+              import django
+              django.setup()
+              from django.core.checks import run_checks,Tags
+              from django.urls import reverse,resolve
+              bad=[m for m in run_checks(tags=[Tags.urls]) if m.id=='urls.W005']
+              assert not bad, 'Duplicate namespace warning'
+              assert resolve('/admin/').view_name=='admin:index'
+              assert resolve('/staff/').view_name=='staff_admin:index'
+              assert resolve('/staff/login/').view_name=='staff_admin:login'
+              assert reverse('admin:index')=='/admin/'
+              assert reverse('staff_admin:index')=='/staff/'
+              print('MPW_ADMIN_STAFF_POSTPATCH_DJANGO_URLS_OK=True')
+              """)
+              process=subprocess.run([str(python),"-c",code],cwd=site,env=dict(os.environ,DJANGO_SETTINGS_MODULE="config.settings",PYTHONDONTWRITEBYTECODE="1"),stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,timeout=55)
+              if process.returncode!=0:
+                  print("MPW_URL_TEST_FAILED=True")
+                  raise RuntimeError("Django isolated URL smoke failed")
+              for line in process.stdout.splitlines():
+                  if line.startswith("MPW_ADMIN_"):
+                      print(line)
+          assert urls.read_bytes()==source, "Active source changed since inspection"
+          applied=False
+          try:
+              atomic_write(revised.encode("utf-8"))
+              applied=True
+              test_routes()
+              restart.touch()
+              passed=False
+              for _ in range(6):
+                  time.sleep(3)
+                  try:
+                      got=smoke()
+                      if all(v<500 and (baseline[k]>=400 or v<400) for k,v in got.items()):
+                          passed=True
+                          break
+                  except Exception:
+                      continue
+              if not passed:
+                  raise RuntimeError("Passenger public HTTP smoke failed")
+              print("MPW_ADMIN_ALIAS_PUBLIC_HTTP_SMOKE_OK=True")
+              print("MPW_ADMIN_ALIAS_ONE_LINE_PATCH_APPLIED=True")
+              print("MPW_ADMIN_ALIAS_LIVE_DATABASE_UNTOUCHED=True")
+          except BaseException:
+              if applied:
+                  atomic_write(copy.read_bytes())
+                  restart.touch()
+                  print("MPW_ADMIN_ALIAS_ORIGINAL_URLS_ROLLED_BACK=True")
+              raise
+          PY
+          REMOTE
+      - name: Erase runner-only transient SSH keys
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/mpw-readonly-host"
