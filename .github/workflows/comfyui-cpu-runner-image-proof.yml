@@ -1,0 +1,63 @@
+name: CPU Model Independent Image Proof (Ephemeral Runner)
+on:
+  push:
+    branches: [feature/comfyui-final-audit-20261015]
+    paths: [.github/workflows/comfyui-cpu-runner-image-proof.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  render:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Download verified official CPU renderer and public test model
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/saeit-image-proof"
+          mkdir -p "$d"
+          curl -fsSL --retry 2 --max-time 180 \
+            https://github.com/leejet/stable-diffusion.cpp/releases/download/master-964-1d0a58a/sd-master-1d0a58a-bin-Linux-Ubuntu-24.04-x86_64.zip \
+            -o "$d/engine.zip"
+          echo '2c2e6d4c0ad6a183283bda586e6e42c946eebfd9019278405d31763920ac36fa  '"$d/engine.zip" | sha256sum -c
+          unzip -q "$d/engine.zip" -d "$d/engine"
+          exe="$(find "$d/engine" -type f -name sd-cli -print -quit)"
+          test -n "$exe"
+          chmod +x "$exe"
+          echo "CPU_EXE=$exe" >> "$GITHUB_ENV"
+          echo "CPU_LIB_DIR=$(dirname "$exe")" >> "$GITHUB_ENV"
+          curl -fsSL --retry 2 --connect-timeout 20 --max-time 500 \
+            https://huggingface.co/turingevo/tiny-sd-safetensors/resolve/main/segmind_tiny-sd.safetensors \
+            -o "$d/model.safetensors"
+          echo '92e00b860c409f8cfc521a94f779009c6ebd28bf07670bf50e747682ab7b3b72  '"$d/model.safetensors" | sha256sum -c
+          echo "CPU_MODEL=$d/model.safetensors" >> "$GITHUB_ENV"
+          echo "CPU_RENDER_OUTPUT=$d/smoke.png" >> "$GITHUB_ENV"
+          echo CPU_RUNNER_SOURCES_SHA256_VERIFIED
+      - name: Generate a real 512px image on the isolated 7 GB runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          export LD_LIBRARY_PATH="$CPU_LIB_DIR"
+          export OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2
+          timeout 320s nice -n 10 "$CPU_EXE" \
+            -m "$CPU_MODEL" -p "green shoots in a sunny farm field, painterly landscape" \
+            -W 512 -H 512 --steps 4 --seed 42 --cfg-scale 7 \
+            --sampling-method euler_a --diffusion-fa -o "$CPU_RENDER_OUTPUT"
+          python3 - "$CPU_RENDER_OUTPUT" <<'PY'
+          import hashlib,struct,sys
+          from pathlib import Path
+          data=Path(sys.argv[1]).read_bytes()
+          assert data.startswith(b"\x89PNG\r\n\x1a\n") and len(data)>1000
+          assert struct.unpack(">II", data[16:24]) == (512,512)
+          print("ISOLATED_REAL_IMAGE_PNG_VERIFIED")
+          print("ISOLATED_IMAGE_BYTES="+str(len(data)))
+          print("ISOLATED_IMAGE_SHA256="+hashlib.sha256(data).hexdigest())
+          PY
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: comfyui-cpu-companion-512px-proof
+          path: ${{ runner.temp }}/saeit-image-proof/smoke.png
+          retention-days: 7
+          if-no-files-found: error
