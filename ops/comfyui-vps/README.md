@@ -40,3 +40,24 @@ Only authenticated GitHub collaborators with workflow execution rights can run t
 - No production factory process is stopped or restarted.
 - No public listener; do not advertise a ComfyUI URL until an authenticated private gateway has been tested.
 - CPU-only generation may be slow; only small test workflows should be attempted until memory and speed are measured.
+
+
+## Oct 15, 2026: audited lightweight model, deployment QA
+
+A reproducible candidate was installed and independently checked using GitHub Actions:
+- Source: `turingevo/tiny-sd-safetensors`, `segmind_tiny-sd.safetensors`, derived from `segmind/tiny-sd`.
+- Local candidate: `~/comfyui-isolated/source-v0.40.0/models/checkpoints/segmind_tiny_sd_candidate.safetensors`.
+- SHA-256: `92e00b860c409f8cfc521a94f779009c6ebd28bf07670bf50e747682ab7b3b72`.
+- 802 safetensors keys (358 UNet, 196 text encoder, 248 VAE), header verified without tensor loading.
+- Real `/object_info/CheckpointLoaderSimple` and `/system_stats` returned HTTP 200 and the checkpoint was listed.
+- Factory loop remained alive before/after model installation; no factory files were edited.
+- Source model's usage restrictions should be checked against the original `segmind/tiny-sd` CreativeML OpenRAIL-M license. Do not rely on the mirror's Apache license tag as superseding upstream terms.
+- The trial model is intended to prove functionality, **not** professional-quality or 8K production. The VPS has 3 logical CPUs and 3.8 GiB RAM with no verified NVIDIA GPU.
+
+New isolated actions:
+- `ComfyUI Model Readiness Audit` only reads the VPS, verifies model structure, current SHA-256 and factory presence.
+- `ComfyUI Install Verified Tiny CPU Model` downloads one pinned-hash model on demand, with RAM/disk and factory-liveness preflight and atomic final placement.
+- `ComfyUI Private Model API Integration` temporarily starts local ComfyUI, verifies the installed model is recognized, then stops.
+- `ComfyUI CPU Image Production Proof` is a *low-resolution demonstration*, max 3 sampler steps, with a separate process, reduced CPU scheduling priority, soft data memory cap and RAM watchdog; on success uploads a single benign image as a GitHub Actions artifact. Never treat this smoke test as a high-quality production render.
+
+No generated images, user prompts, or private credentials should be committed to this public repository. The actual graphical ComfyUI UI remains local-only; a private authenticated tailnet authorization is still required to browse it remotely.
