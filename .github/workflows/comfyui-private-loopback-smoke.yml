@@ -1,0 +1,104 @@
+name: ComfyUI Private Loopback Startup Smoke
+on:
+  push:
+    branches: [audit/vps-comfyui-hardware-20261014]
+    paths: [.github/workflows/comfyui-private-loopback-smoke.yml]
+permissions:
+  contents: read
+concurrency:
+  group: saeit-comfyui-private-smoke
+  cancel-in-progress: false
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Temporarily run CPU-only ComfyUI on 127.0.0.1 and shut it down
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/comfy-loopback"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test -s "$d/known"
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          timeout 190s ssh -i "$d/key" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 githubops@178.239.147.150 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          test "$(id -un)" = githubops
+          root="$HOME/comfyui-isolated"
+          app="$root/source-v0.40.0"
+          py="$root/env-cpu/bin/python"
+          test -d "$root" && test ! -L "$root" && test -f "$app/main.py" && test -x "$py"
+          command -v curl >/dev/null || { echo COMFY_SMOKE_BLOCKED_NO_CURL; exit 1; }
+          command -v timeout >/dev/null || { echo COMFY_SMOKE_BLOCKED_NO_TIMEOUT; exit 1; }
+          ram="$(awk '/^MemAvailable:/{print $2}' /proc/meminfo)"
+          disk="$(df -Pk "$HOME" | awk 'NR==2{print $4}')"
+          echo "PRECHECK_RAM_AVAILABLE_KIB=$ram"
+          echo "PRECHECK_DISK_FREE_KIB=$disk"
+          ((ram >= 2800000 && disk >= 10000000)) || { echo COMFY_SMOKE_BLOCKED_FACTORY_RESOURCE_GUARD; exit 1; }
+          if timeout 3s curl -fsS --connect-timeout 1 --max-time 2 http://127.0.0.1:18188/system_stats >/dev/null 2>&1; then
+            echo COMFY_SMOKE_PORT_ALREADY_IN_USE
+            exit 1
+          fi
+          factory="$HOME/factory-runtime/operations/vps-only-loop.pid"
+          factory_check() {
+            if test -f "$factory"; then
+              p="$(cat "$factory")"
+              if [[ "$p" =~ ^[0-9]+$ ]] && kill -0 "$p" 2>/dev/null; then echo "FACTORY_LOOP_ALIVE_$1"; else echo "FACTORY_LOOP_NOT_VERIFIED_$1"; fi
+            else echo "FACTORY_LOOP_PIDFILE_MISSING_$1"; fi
+          }
+          factory_check BEFORE
+          scratch="$(mktemp -d "$root/loopback-smoke.XXXXXXXX")"
+          pid=""
+          cleanup() {
+            if test -n "$pid"; then
+              kill -TERM "$pid" 2>/dev/null || true
+              wait "$pid" 2>/dev/null || true
+            fi
+            if test -d "$scratch"; then rm -f "$scratch/server.log" "$scratch/stats.json"; rmdir "$scratch" || true; fi
+            factory_check AFTER
+          }
+          trap cleanup EXIT
+          cd "$app"
+          export PYTHONNOUSERSITE=1 OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1
+          export PYTHONDONTWRITEBYTECODE=1
+          echo COMFY_LOCALHOST_CPU_STARTING
+          timeout -k 5s 125s nice -n 18 "$py" -u main.py --cpu --listen 127.0.0.1 --port 18188 --disable-auto-launch --disable-all-custom-nodes >"$scratch/server.log" 2>&1 &
+          pid=$!
+          started=0
+          for i in $(seq 1 95); do
+            if curl -fsS --connect-timeout 1 --max-time 2 http://127.0.0.1:18188/system_stats -o "$scratch/stats.json" 2>/dev/null; then
+              started=1
+              break
+            fi
+            if ! kill -0 "$pid" 2>/dev/null; then
+              echo COMFY_SERVER_EXITED_BEFORE_READY
+              tail -n 35 "$scratch/server.log" || true
+              exit 1
+            fi
+            sleep 1
+          done
+          if ((started != 1)); then
+            echo COMFY_LOCALHOST_STARTUP_TIMEOUT
+            tail -n 35 "$scratch/server.log" || true
+            exit 1
+          fi
+          "$py" - "$scratch/stats.json" <<'PY'
+          import json,sys
+          with open(sys.argv[1],encoding="utf-8") as f: d=json.load(f)
+          assert isinstance(d,dict) and isinstance(d.get("system"),dict)
+          print("COMFY_LOOPBACK_HTTP_SYSTEM_STATS_OK")
+          print("COMFY_SYSTEM_DEVICE_COUNT="+str(len(d.get("devices",[]))))
+          PY
+          echo COMFY_BOUND_LOOPBACK_ONLY_127_0_0_1_PORT_18188
+          echo COMFY_TEMPORARY_SMOKE_SUCCEEDED
+          REMOTE
