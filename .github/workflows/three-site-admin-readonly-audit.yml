@@ -115,10 +115,14 @@ jobs:
           personal=/home/zomorod2/mojtaba_personal/mojtaba_roozegar_personal_v17
           personal_python=/home/zomorod2/mojtaba_personal/.venv_personal_test/bin/python
           inspect_admin MOJTABA_PERSONAL "$personal" "$personal_python"
+          grep -nE 'admin|personnel|login|staff' "$personal/config/urls.py" | head -25 || true
           if test -x "$personal_python"; then
             cd "$personal"
-            "$personal_python" manage.py shell -c 'from django.urls import resolve, Resolver404; paths=["/admin/login/","/staff/login/","/personnel/login/","/login/","/mojtaba.roozegar/admin/login/"]; [(lambda p: print("PERSONAL_RESOLVE",p,"=>",resolve(p).view_name,resolve(p).route) if not isinstance((lambda: resolve(p))(), Resolver404) else None)(p) for p in []]' 2>&1 || true
-            "$personal_python" manage.py shell -c 'from django.urls import resolve, Resolver404; paths=["/admin/login/","/staff/login/","/personnel/login/","/login/","/mojtaba.roozegar/admin/login/"]; exec("for p in paths:\\n try:\\n  r=resolve(p); print(\"PERSONAL_RESOLVE\",p,\"=>\",r.view_name,r.route)\\n except Resolver404: print(\"PERSONAL_RESOLVE\",p,\"=> NOT_FOUND\")")' 2>&1 || true
+            "$personal_python" manage.py shell -c 'from django.urls import resolve; r=resolve("/admin/login/"); print("PERSONAL_RESOLVE_ADMIN_LOGIN",r.view_name,r.route)' 2>&1 || true
+            "$personal_python" manage.py shell -c 'from django.urls import resolve; r=resolve("/admin/"); print("PERSONAL_RESOLVE_ADMIN",r.view_name,r.route)' 2>&1 || true
+          fi
+          if test -x "$personal_python"; then
+            cd "$personal"
           fi
           for f in /home/zomorod2/mojplaywin.com/.htaccess /home/zomorod2/mojplaywin.com/mojtaba.roozegar/.htaccess; do
             if test -f "$f"; then
