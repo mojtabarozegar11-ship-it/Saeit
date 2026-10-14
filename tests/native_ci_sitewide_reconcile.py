@@ -172,11 +172,15 @@ class ReconciliationTests(TestCase):
     @override_settings(**FLAGS)
     def test_more_than_one_batch_never_silently_skips_invoices(self):
         buyer=self.order.customer
-        orders=Order.objects.bulk_create([
-            Order(customer=buyer,status="pending",total=Decimal("21.00"),
-                  currency="USD")
+        # MySQL does not guarantee PKs on returned bulk_create objects;
+        # persist orders individually to produce valid FK IDs across backends.
+        orders=[
+            Order.objects.create(
+                customer=buyer,status="pending",total=Decimal("21.00"),
+                currency="USD",
+            )
             for _ in range(101)
-        ])
+        ]
         CommerceInvoice.objects.bulk_create([
             CommerceInvoice(
                 order=o,asset="ETH",network="ethereum-mainnet",
