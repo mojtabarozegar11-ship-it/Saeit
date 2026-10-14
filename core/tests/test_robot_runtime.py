@@ -76,8 +76,6 @@ def test_robot_must_be_qualified_before_claim(robot_setup):
 @pytest.mark.django_db
 def test_master_planning_links_robot_and_requires_owner_approval(robot_setup):
     owner, project, agent, capability, robot = robot_setup
-    robot.requires_owner_approval = False
-    robot.save(update_fields=["requires_owner_approval", "updated_at"])
     client = APIClient()
     client.force_authenticate(user=owner)
 
@@ -121,7 +119,7 @@ def test_robot_task_uses_registered_connector_and_respects_budget(robot_setup):
         input_data={"topic": "soil"},
         status="blocked",
     )
-    approval = ApprovalRequest.objects.create(
+    ApprovalRequest.objects.create(
         action_type="research",
         target_type="AgentTask",
         target_id=str(task.pk),
