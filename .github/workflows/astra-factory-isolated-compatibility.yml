@@ -122,7 +122,12 @@ jobs:
             grep -E '(Error|Exception|Conflicting|InconsistentMigrationHistory|Traceback|not found|could not|missing|LookupError)' "$scratch/migrate.log" | tail -n 8 | cut -c 1-220 || true
             exit 1
           fi
-          if timeout 100 "$python" manage.py test core.tests.test_factory_durable_runtime --settings=config.astra_qa_settings --verbosity 1 > "$scratch/tests.log" 2>&1; then
+          if "$python" -c 'import pytest' >/dev/null 2>&1; then
+            test_command=( "$python" -m pytest -q core/tests/test_factory_durable_runtime.py )
+          else
+            test_command=( "$python" -m unittest discover -s core/tests -p test_factory_durable_runtime.py )
+          fi
+          if timeout 100 "${test_command[@]}" > "$scratch/tests.log" 2>&1; then
             echo ASTRA_STAGING_DURABLE_TESTS_OK
             grep -E '^(Ran [0-9]+ tests|OK)$' "$scratch/tests.log" || true
           else
