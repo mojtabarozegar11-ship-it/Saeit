@@ -1,7 +1,7 @@
 {
   "protocol_version": 1,
-  "command_id": "termux-whoami-readonly-20261014",
-  "action": "whoami_check",
-  "issued_at": "2026-10-14T18:19:03Z",
-  "expires_at": "2026-10-16T18:20:03Z"
+  "command_id": "termux-background-check-20261014",
+  "action": "python_check",
+  "issued_at": "2026-10-14T18:40:41Z",
+  "expires_at": "2026-10-16T18:41:41Z"
 }
