@@ -70,11 +70,11 @@ jobs:
         run: |
           set -euo pipefail
           [[ -n "$VPS_KEY" && -n "$HOST_HOST" && -n "$HOST_USER" && -n "$HOST_KEY" ]] || { echo "Missing SSH configuration"; exit 1; }
-          [[ "$HOST_HOST" =~ ^[A-Za-z0-9.:-]+$$${0,1}$$ && "$HOST_USER" =~ ^[A-Za-z_][A-Za-z0-9_.-]*$$ ]] || exit 1
-          HOST_PORT="$${HOST_PORT:-1396}"
-          [[ "$HOST_PORT" =~ ^[0-9]{1,5}$$ ]] && ((HOST_PORT >= 1 && HOST_PORT <= 65535)) || exit 1
-          VPS_KEY="$${VPS_KEY//$$n/$'\n'}"
-          HOST_KEY="$${HOST_KEY//$$n/$'\n'}"
+          [[ "$HOST_HOST" =~ ^[A-Za-z0-9.:-]+$${0,1}$ && "$HOST_USER" =~ ^[A-Za-z_][A-Za-z0-9_.-]*$ ]] || exit 1
+          HOST_PORT="${HOST_PORT:-1396}"
+          [[ "$HOST_PORT" =~ ^[0-9]{1,5}$ ]] && ((HOST_PORT >= 1 && HOST_PORT <= 65535)) || exit 1
+          VPS_KEY="${VPS_KEY//$n/$'\n'}"
+          HOST_KEY="${HOST_KEY//$n/$'\n'}"
           WORK="$RUNNER_TEMP/mojplaywin-ssh"
           install -d -m 700 "$WORK"
           printf '%s\n' "$VPS_KEY" > "$WORK/vps.key"
