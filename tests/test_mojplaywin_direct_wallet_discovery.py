@@ -119,6 +119,31 @@ class DiscoverTests(unittest.TestCase):
                          "1234568",NOW-20000)
         ]),[])
 
+    def test_tron_base58_invoice_matches_hex41_indexer_candidate(self):
+        tron_hex=tron_address_to_hex(d.TRX_WALLET).lower()
+        invoice=SimpleNamespace(
+            pk=93,network="tron-mainnet",
+            verified_sender_address=d.TRX_WALLET,
+            merchant_address=d.TRX_WALLET,
+            amount_atomic="999",
+        )
+        found=d.Candidate(
+            "tron-mainnet",TRX_TX,tron_hex,tron_hex,"999",NOW-20000,
+        )
+        self.assertEqual(d.match_unpaid_invoices([invoice],[found]),[(93,TRX_TX)])
+
+    def test_wrong_tron_wallet_does_not_match_invoice(self):
+        tron_hex=tron_address_to_hex(d.TRX_WALLET).lower()
+        invoice=SimpleNamespace(
+            pk=93,network="tron-mainnet",
+            verified_sender_address=d.TRX_WALLET,
+            merchant_address=d.TRX_WALLET,amount_atomic="999",
+        )
+        found=d.Candidate(
+            "tron-mainnet",TRX_TX,"41"+"f"*40,tron_hex,"999",NOW-20000,
+        )
+        self.assertEqual(d.match_unpaid_invoices([invoice],[found]),[])
+
     def test_ambiguous_invoices_fail_closed(self):
         a=SimpleNamespace(pk=3,network="ethereum-mainnet",verified_sender_address=SENDER,
                           merchant_address=d.ETH_WALLET,amount_atomic="999")
