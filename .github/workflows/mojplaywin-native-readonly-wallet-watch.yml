@@ -1,0 +1,30 @@
+name: MojPlayWin ETH TRX wallet watch (read-only)
+on:
+  schedule:
+    - cron: '17,47 * * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/mojplaywin-native-readonly-wallet-watch.yml'
+permissions:
+  contents: read
+concurrency:
+  group: mojplaywin-native-wallet-watch-readonly
+  cancel-in-progress: false
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fa37cbba6d699ccd29fa9e83bb50cb8211dfc138
+          persist-credentials: false
+      - name: Public chain checks (no keys or payment changes)
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=scripts python3 scripts/mojplaywin_rpc_readiness.py
+          PYTHONPATH=scripts python3 scripts/mojplaywin_direct_wallet_discovery.py
+          echo 'READ_ONLY_SCAN_NO_PAYMENT_SETTLEMENT'
