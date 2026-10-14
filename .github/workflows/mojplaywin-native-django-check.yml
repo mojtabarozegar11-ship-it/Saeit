@@ -28,7 +28,7 @@ jobs:
           persist-credentials: false
       - name: Install minimal Django CI requirements
         shell: bash
-        run: python3 -m pip install --disable-pip-version-check -q 'Django>=5.2,<6'
+        run: python3 -m pip install --disable-pip-version-check -q 'Django>=5.2,<6' 'eth-account>=0.13,<0.14'
       - name: Validate isolated model definitions
         shell: bash
         env:
