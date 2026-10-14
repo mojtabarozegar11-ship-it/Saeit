@@ -19,4 +19,4 @@ jobs:
           pip install -r requirements.txt
           DJANGO_SETTINGS_MODULE=tests.mpw_evidence_ci_settings python -m django check
           DJANGO_SETTINGS_MODULE=tests.mpw_evidence_ci_settings python -m django test tests.test_mpw_evidence_metrics tests.test_mpw_factory_status --noinput -v 2
-          python -m unittest tests.test_mpw_factory_telemetry_transport -v
+          python -m unittest tests.test_mpw_factory_telemetry_transport tests.test_mpw_factory_telemetry_integration -v
