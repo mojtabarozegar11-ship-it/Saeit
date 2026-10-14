@@ -89,6 +89,11 @@ def run(args, *, cwd=SITE, env=None, stdout=None):
         for line in output.splitlines():
             if line.startswith("MPW_PREFLIGHT_"):
                 print(line)
+        error_lines=(result.stderr or b"").decode("utf-8",errors="replace").splitlines()
+        if error_lines:
+            kind=error_lines[-1].split(":",1)[0].strip().split()[-1]
+            if kind.endswith(("Error","Exception")):
+                print("MPW_PREFLIGHT_ERROR_TYPE="+kind)
         fail("Guarded subprocess failed: " + Path(str(args[0])).name)
     return result
 
