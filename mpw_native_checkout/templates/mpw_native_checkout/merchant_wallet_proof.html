@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow,noarchive">
+  <title>تأیید مالکیت کیف پول | MojPlayWin</title>
+  <style>
+    :root{color-scheme:dark}
+    *{box-sizing:border-box}
+    body{background:#111c17;color:#f2eee3;font-family:Tahoma,Arial,sans-serif;margin:0}
+    main{max-width:720px;margin:auto;padding:32px 20px 65px}
+    h1{font-size:1.5rem;color:#f5d58f}
+    p{line-height:1.9;color:#d9e3d7}
+    .card{background:#1e3028;border:2px solid #a98b4e;border-radius:16px;margin:20px 0;padding:22px;overflow-wrap:anywhere}
+    .symbol{font-size:1.35rem;font-weight:bold;color:#f9dea3}
+    .address{direction:ltr;text-align:left;word-break:break-all;font-family:monospace;padding:13px;background:#101b17;border-radius:9px;margin:12px 0;font-size:.88rem}
+    button{background:#ddbc74;color:#1d271d;border:0;border-radius:9px;padding:13px 20px;font-weight:bold;font-size:1rem;cursor:pointer}
+    button:disabled{opacity:.45;cursor:wait}
+    .state{color:#ddd;font-size:.93rem;line-height:1.8;margin-top:10px}
+    .warning{border-right:4px solid #cf9a43;padding-right:14px}
+    .ok{color:#92e6b2}
+  </style>
+</head>
+<body>
+<main>
+  <h1>تأیید امن کیف پول‌های دریافت MojPlayWin</h1>
+  <p>برای فعال‌سازی فروش خودکار، یک پیام کوتاه و یک‌بارمصرف را با کیف پول امضا کنید. این کار <strong>هیچ پولی منتقل نمی‌کند</strong>، اجازه خرج‌کردن نمی‌دهد و نیازی به عبارت بازیابی یا کلید خصوصی ندارد.</p>
+  <form style="display:none">{% csrf_token %}</form>
+  <section class="card">
+    <div class="symbol">Ethereum (ETH)</div>
+    <div class="address" id="eth-address">{{ addresses.ETH }}</div>
+    <p id="eth-proof" class="state">{% if proofs.ETH %}مالکیت با امضای رمزنگاری‌شده تأیید شده است.{% else %}تأیید رمزنگاری‌شده انجام نشده است.{% endif %}</p>
+    <button type="button" id="eth-button">اتصال و امضای پیام ETH</button>
+    <div role="status" aria-live="polite" class="state" id="eth-status"></div>
+  </section>
+  <section class="card">
+    <div class="symbol">TRON (TRX)</div>
+    <div class="address" id="trx-address">{{ addresses.TRX }}</div>
+    <p class="state">{% if proofs.TRX %}مالکیت با امضای رمزنگاری‌شده تأیید شده است.{% else %}تأیید رمزنگاری‌شده انجام نشده است.{% endif %}</p>
+    <button type="button" id="trx-button">اتصال و امضای پیام TRX</button>
+    <div role="status" aria-live="polite" class="state" id="trx-status"></div>
+  </section>
+  <p class="warning">این صفحه فقط در حساب مدیر اصلی قابل استفاده است. برای ETH به کیف پول سازگار با personal_sign و برای TRX به کیف پول سازگار با signMessageV2 نیاز دارید. پشتیبانی از این قابلیت در نسخه موبایل Trust Wallet باید هنگام اتصال آزموده شود.</p>
+  <p>پس از امضای معتبر هر دو شبکه، وضعیت مالکیت تأیید می‌شود؛ اما فروش زنده تا پایان آزمون تراکنش واقعی به‌طور مستقل غیرفعال می‌ماند.</p>
+</main>
+<script>
+"use strict";
+const csrf=document.querySelector("[name=csrfmiddlewaretoken]").value;
+const challengeUrl="{% url 'mpw_wallet_proof:challenge' %}";
+const verifyUrl="{% url 'mpw_wallet_proof:verify' %}";
+async function send(url,body){
+  const response=await fetch(url,{method:"POST",credentials:"same-origin",
+    headers:{"Content-Type":"application/json","X-CSRFToken":csrf},
+    body:JSON.stringify(body)});
+  const data=await response.json();
+  if(!response.ok)throw new Error(data.error||"درخواست پذیرفته نشد");
+  return data;
+}
+async function signEth(message,expected){
+  const provider=window.ethereum||window.trustwallet?.ethereum;
+  if(!provider||typeof provider.request!=="function")
+    throw new Error("کیف پول ETH در این مرورگر شناسایی نشد؛ مرورگر داخل کیف پول یا اتصال سازگار را باز کنید.");
+  const accounts=await provider.request({method:"eth_requestAccounts"});
+  const actual=(accounts?.[0]||"").toLowerCase();
+  if(actual!==expected.toLowerCase())
+    throw new Error("حساب متصل با آدرس دریافت ETH مطابقت ندارد.");
+  const chain=await provider.request({method:"eth_chainId"});
+  if(chain!=="0x1")throw new Error("شبکه Ethereum Mainnet را در کیف پول انتخاب کنید.");
+  return provider.request({method:"personal_sign",params:[message,accounts[0]]});
+}
+async function signTrx(message,expected){
+  const wallet=window.tronWeb||window.tron?.tronWeb;
+  if(!wallet||typeof wallet.trx?.signMessageV2!=="function")
+    throw new Error("کیف پول TRON با قابلیت signMessageV2 شناسایی نشد. ممکن است به کیف پول سازگار دیگری نیاز باشد.");
+  if(window.tronLink&&typeof window.tronLink.request==="function")
+    await window.tronLink.request({method:"tron_requestAccounts"});
+  const account=wallet.defaultAddress?.base58;
+  if(account!==expected)throw new Error("حساب TRON متصل با آدرس دریافت تطابق ندارد.");
+  return wallet.trx.signMessageV2(message);
+}
+async function attest(asset){
+  const key=asset.toLowerCase();
+  const button=document.getElementById(key+"-button");
+  const status=document.getElementById(key+"-status");
+  button.disabled=true;status.textContent="در حال ساخت پیام اختصاصی...";
+  try{
+    const record=await send(challengeUrl,{asset});
+    status.textContent="پیام را فقط پس از بررسی آدرس و دامنه داخل کیف پول تأیید کنید.";
+    const signature=asset==="ETH"
+      ?await signEth(record.message,record.address)
+      :await signTrx(record.message,record.address);
+    status.textContent="در حال بررسی رمزنگاری‌شده امضا روی سرور...";
+    const result=await send(verifyUrl,{
+      challenge_id:record.challenge_id,signature});
+    if(result.verified_asset!==asset)throw new Error("پاسخ تأیید مطابق انتظار نیست.");
+    status.classList.add("ok");
+    status.textContent="مالکیت "+asset+" با موفقیت تأیید شد. دریافت وجه هنوز فعال نشده است.";
+  }catch(err){status.textContent=err.message||"تأیید ناموفق بود؛ هیچ پرداختی انجام نشد.";}
+  finally{button.disabled=false;}
+}
+document.getElementById("eth-button").addEventListener("click",()=>attest("ETH"));
+document.getElementById("trx-button").addEventListener("click",()=>attest("TRX"));
+</script>
+</body>
+</html>
