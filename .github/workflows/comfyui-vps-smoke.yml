@@ -1,0 +1,75 @@
+name: ComfyUI VPS Bounded CPU Smoke
+on:
+  push:
+    branches:
+      - feature/comfyui-vps-control-20261014
+    paths:
+      - .github/workflows/comfyui-vps-smoke.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: comfyui-vps-bounded-smoke
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Inspect VPS safely using proven Saeit SSH credentials
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/comfyui-ssh"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          test -n "$VPS_KEY" || { echo "VPS_SSH_PRIVATE_KEY missing"; exit 1; }
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs' || {
+            echo "Unexpected VPS SSH fingerprint"; exit 1;
+          }
+          ssh -i "$d/key" -p 22 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$d/known" -o BatchMode=yes -o ConnectTimeout=15 \
+            githubops@178.239.147.150 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          root="$HOME/comfyui-isolated"
+          src="$root/source-v0.40.0"
+          py="$root/env-cpu/bin/python"
+          [[ -f "$src/main.py" && -x "$py" ]] || { echo "SMOKE_MISSING_EXISTING_RUNTIME"; exit 1; }
+          if ss -ltn '( sport = :18188 )' | grep -q LISTEN; then echo "SMOKE_PORT_OCCUPIED_REFUSE"; exit 1; fi
+          log="$(mktemp /tmp/comfyui-smoke.XXXXXXXX)"
+          pid=''
+          cleanup() {
+            if [[ -n "$pid" ]]; then kill "$pid" 2>/dev/null || :; wait "$pid" 2>/dev/null || :; fi
+            rm -f "$log"
+          }
+          trap cleanup EXIT
+          cd "$src"
+          nice -n 12 timeout --signal=TERM --kill-after=8s 75s "$py" main.py --cpu --listen 127.0.0.1 --port 18188 --disable-auto-launch >"$log" 2>&1 &
+          pid=$!
+          ok=0
+          for i in $(seq 1 60); do
+            if curl --fail --silent --show-error --max-time 2 http://127.0.0.1:18188/system_stats -o /dev/null 2>/dev/null; then
+              echo "COMFYUI_CPU_LOCAL_HTTP_200"
+              ok=1
+              break
+            fi
+            if ! kill -0 "$pid" 2>/dev/null; then break; fi
+            sleep 1
+          done
+          if [[ "$ok" != 1 ]]; then
+            echo "COMFYUI_CPU_SMOKE_FAILED"
+            tail -n 18 "$log" | sed -E 's#(/home/[^ /]+/)[^ :]+#\\1[REDACTED]#g' || true
+            exit 1
+          fi
+          echo "COMFYUI_CPU_SMOKE_OK"
+          echo "COMFYUI_BOUND_TO_LOOPBACK_ONLY"
+          echo "COMFYUI_SMOKE_TERMINATING"
+          REMOTE
