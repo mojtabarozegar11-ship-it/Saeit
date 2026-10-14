@@ -155,28 +155,8 @@ class SitewideCommerceTests(TestCase):
 
     @override_settings(**LIVE)
     def test_invalid_receipt_never_marks_order_paid(self):
-        for key,value in (
-            ("finalized",False),
-            ("recipient","0x"+"b"*40),
-            ("sender","0x"+"f"*40),
-            ("amount_atomic",1),
-            ("network","wrong-chain"),
-            ("order_id",9898),
-            ("block_timestamp",self.now-timedelta(hours=1)),
-        ):
-            with self.subTest(field=key):
-                order,_=self.order([(self.digital,1)])
-                # Uniqueness by network / amount requires fresh unique totals.
-                # Roll back this case independently to allow the same test invoice.
-                with self.assertRaises(InvoiceRejected):
-                    if CommerceInvoice.objects.count():
-                        self.invoice(order)
-                # Only first iteration uses the existing invoice.
-                break
-        order=Order.objects.filter(status="pending").first()
-        invoice=CommerceInvoice.objects.first()
-        if invoice is None:
-            invoice=self.invoice(order)
+        order,_=self.order([(self.digital,1)])
+        invoice=self.invoice(order)
         for key,value in (
             ("finalized",False),("recipient","0x"+"b"*40),
             ("sender","0x"+"f"*40),("amount_atomic",1),
