@@ -21,6 +21,10 @@ RECIPES = {
         "Farm Enterprise Economics Toolkit",
         ("calculator.py", "test_calculator.py", "README.md", "example_inputs.json"),
     ),
+    "water_budget_economics": (
+        "Agricultural Water Budget Economics Planner",
+        ("calculator.py", "test_calculator.py", "README.md", "example_inputs.json"),
+    ),
 }
 
 

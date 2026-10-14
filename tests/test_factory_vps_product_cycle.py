@@ -25,6 +25,8 @@ class FactoryVPSCycleTests(unittest.TestCase):
         self.output = self.home / "factory-private"
         shutil.copytree(ROOT / "product_recipes" / "farm_enterprise_economics",
                         self.recipes / "farm_enterprise_economics")
+        shutil.copytree(ROOT / "product_recipes" / "water_budget_economics",
+                        self.recipes / "water_budget_economics")
         with sqlite3.connect(str(self.db)) as connection:
             connection.executescript("""
                 CREATE TABLE core_product(
@@ -46,10 +48,10 @@ class FactoryVPSCycleTests(unittest.TestCase):
         first = cycle.run_cycle(self.db, self.output, self.recipes)
         self.assertEqual(first["status"], "ok")
         self.assertEqual(first["processed"], 1)
-        self.assertEqual(first["manufactured"], 1)
+        self.assertEqual(first["manufactured"], 2)
         state = json.loads((self.output / "production-state.json").read_text(encoding="utf-8"))
         self.assertFalse(state["depends_on_orders"])
-        self.assertEqual(state["built_product_count"], 1)
+        self.assertEqual(state["built_product_count"], 2)
         self.assertTrue(state["artifact_qa_passed"])
         self.assertFalse(state["publishable_product_count"])
         self.assertTrue((self.output / "digital-products" /

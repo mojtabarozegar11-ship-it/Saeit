@@ -25,6 +25,7 @@ test -f "$repo/scripts/factory_autonomous_portfolio.py"
 test -f "$repo/scripts/factory_first_product_pilot.py"
 test -f "$repo/scripts/factory_vps_product_cycle.py"
 test -f "$repo/product_recipes/farm_enterprise_economics/test_calculator.py"
+test -f "$repo/product_recipes/water_budget_economics/test_calculator.py"
 command -v flock >/dev/null
 command -v crontab >/dev/null
 if ! systemctl is-active --quiet cron 2>/dev/null &&
@@ -36,8 +37,8 @@ if ! systemctl is-enabled --quiet cron 2>/dev/null &&
   echo "CRON_NOT_BOOT_ENABLED"; exit 1
 fi
 
-mkdir -p "$ops/backups" "$scripts" "$recipes/farm_enterprise_economics" "$private"
-chmod 700 "$stage" "$scripts" "$recipes" "$recipes/farm_enterprise_economics" "$private"
+mkdir -p "$ops/backups" "$scripts" "$recipes/farm_enterprise_economics" "$recipes/water_budget_economics" "$private"
+chmod 700 "$stage" "$scripts" "$recipes" "$recipes/farm_enterprise_economics" "$recipes/water_budget_economics" "$private"
 
 # Back up existing code if present; source control remains the source of truth.
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
@@ -49,21 +50,25 @@ for f in factory_product_maker.py factory_autonomous_portfolio.py \
          factory_first_product_pilot.py factory_vps_product_cycle.py; do
   install -m 600 "$repo/scripts/$f" "$scripts/$f"
 done
-for f in calculator.py test_calculator.py README.md example_inputs.json; do
-  install -m 600 "$repo/product_recipes/farm_enterprise_economics/$f" \
-    "$recipes/farm_enterprise_economics/$f"
+for recipe in farm_enterprise_economics water_budget_economics; do
+  for f in calculator.py test_calculator.py README.md example_inputs.json; do
+    install -m 600 "$repo/product_recipes/$recipe/$f" "$recipes/$recipe/$f"
+  done
 done
 
 # Product QA is mandatory BEFORE changes to the local scheduler.
-(
-  cd "$recipes/farm_enterprise_economics"
-  "$python" -m unittest -v test_calculator.py
-)
+for recipe in farm_enterprise_economics water_budget_economics; do
+  (
+    cd "$recipes/$recipe"
+    "$python" -m unittest -v test_calculator.py
+  )
+done
 "$python" "$scripts/factory_vps_product_cycle.py" \
   --db "$db" --out "$private" --recipes "$recipes" \
   --max-products 25 --max-recipes 2
 test -s "$private/production-state.json"
 test -s "$private/digital-products/farm_enterprise_economics/farm_enterprise_economics-internal-qa.zip"
+test -s "$private/digital-products/water_budget_economics/water_budget_economics-internal-qa.zip"
 
 cat > "$stage/run-local-cycle.sh" <<EOF
 #!/usr/bin/env bash
