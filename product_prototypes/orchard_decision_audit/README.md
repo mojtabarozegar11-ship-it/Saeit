@@ -14,7 +14,7 @@ From the repository root, run:
 python3 product_prototypes/orchard_decision_audit/decision_audit.py \
   --input product_prototypes/orchard_decision_audit/example_synthetic.json \
   --out /tmp/orchard-decision-audit-private-report.json
-python3 -m unittest -v tests.test_astra_orchard_decision_audit
+python3 -m unittest discover -s tests -p 'test_astra_orchard_decision_audit.py' -v
 ```
 
 Choose an output path that does not already exist. The report is local and private by default (0600). The tool intentionally refuses to overwrite any file.
