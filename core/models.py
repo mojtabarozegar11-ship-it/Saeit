@@ -180,7 +180,10 @@ class Robot(T):
     deployment_status = models.CharField(
         max_length=20, choices=DEPLOYMENT_CHOICES, default="draft"
     )
-    requires_owner_approval = models.BooleanField(default=True)
+    requires_owner_approval = models.BooleanField(
+        default=False,
+        help_text="Require owner approval for every robot task. Sensitive and high-risk actions remain approval-gated even when disabled.",
+    )
     budget_limit = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     credential_reference = models.CharField(
         max_length=255,
