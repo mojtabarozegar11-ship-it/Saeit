@@ -1,0 +1,131 @@
+name: MojPlayWin verified private factory inbox and Django catalog audit
+on:
+  push:
+    branches: [audit/mpw-factory-private-inbox-20261014]
+    paths:
+      - .github/workflows/mpw-factory-private-inbox-readonly.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Read cPanel verified receipts and catalog references without any site write
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/mpw-readonly-host"
+          mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          python3 - "$d/vps.key" "$d/host.key" <<'PY'
+          from pathlib import Path
+          import sys
+          for name in sys.argv[1:]:
+              p = Path(name)
+              p.write_text(p.read_text().replace("\r\n", "\n").strip().replace("\\n", "\n") + "\n")
+          PY
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host relay
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host host
+            HostName zohal.pws-dns.net
+            Port 1396
+            User zomorod2
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump relay
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+          EOF
+          timeout 30s ssh -F "$d/config" relay 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          timeout 110s ssh -F "$d/config" host 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = zomorod2
+          export PYTHONDONTWRITEBYTECODE=1
+          export DJANGO_SETTINGS_MODULE=config.settings
+          cd "$HOME/Saeit-staging"
+          "$HOME/virtualenv/Saeit-staging/3.11/bin/python" - <<'PY'
+          import importlib.util,json,os
+          from pathlib import Path
+          import django
+          django.setup()
+          from core.models import Product,KnowledgeArticle,Order,PaymentIntent
+          root=Path.home()/".saeit-factory-inbox"
+          script=root/"bin/store_receiver.py"
+          print("MPW_INBOX_ROOT_PRESENT="+str(root.is_dir() and not root.is_symlink()))
+          print("MPW_INBOX_RECEIVER_PRESENT="+str(script.is_file() and not script.is_symlink()))
+          if not script.is_file() or script.is_symlink():
+              raise RuntimeError("Private receiver not installed")
+          spec=importlib.util.spec_from_file_location("private_inbox_status_reader",script)
+          module=importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(module)
+          prefix=root/"receipts"
+          recipes=("farm_enterprise_economics","water_budget_economics")
+          for recipe in recipes:
+              folder=prefix/recipe
+              receipts=sorted(folder.glob("*.json")) if folder.is_dir() and not folder.is_symlink() else []
+              receipts=[p for p in receipts if not p.is_symlink() and len(p.stem)==64]
+              print("MPW_INBOX_RECEIPT_COUNT_"+recipe.upper()+"="+str(len(receipts)))
+              for receipt in receipts:
+                  digest=receipt.stem
+                  ok=module.status(root,recipe,digest)
+                  print("MPW_INBOX_RECEIPT_INTEGRITY_"+recipe.upper()+"="+str(ok))
+                  obj=json.loads(receipt.read_text())
+                  print("MPW_INBOX_PRIVATE_ONLY_"+recipe.upper()+"="+str(obj.get("public_store_listing") is False))
+                  print("MPW_INBOX_OWNER_APPROVAL_REQUIRED_"+recipe.upper()+"="+str(obj.get("owner_approval_required") is True))
+                  print("MPW_INBOX_ARCHIVE_SHA_PREFIX_"+recipe.upper()+"="+digest[:12])
+                  assert ok, "Installed store receiver could not validate receipt"
+                  matches=Product.objects.filter(metadata__factory_bridge_sha256=digest)
+                  print("MPW_INBOX_MATCHING_DB_PRODUCTS_"+recipe.upper()+"="+str(matches.count()))
+                  for prod in matches[:4]:
+                      m=prod.metadata if isinstance(prod.metadata,dict) else {}
+                      print("MPW_INBOX_CATALOG_RECORD_"+recipe.upper()+"="+str(prod.pk))
+                      print("MPW_INBOX_CATALOG_ACTIVE_"+recipe.upper()+"="+str(bool(prod.active)))
+                      print("MPW_INBOX_CATALOG_PRICE_ZERO_"+recipe.upper()+"="+str(prod.price==0))
+                      print("MPW_INBOX_CATALOG_FACTORY_STATUS_"+recipe.upper()+"="+str(m.get("factory_status","unknown"))[:60])
+                      print("MPW_INBOX_CATALOG_PUBLICATION_PERMISSION_"+recipe.upper()+"="+str(m.get("factory_publication_permission")))
+                      print("MPW_INBOX_CATALOG_PUBLIC_URL_"+recipe.upper()+"="+str(m.get("factory_public_url","none"))[:120])
+          print("MPW_INBOX_DJANGO_PRODUCT_RECORDS="+str(Product.objects.count()))
+          print("MPW_INBOX_ACTIVE_PRODUCT_RECORDS="+str(Product.objects.filter(active=True).count()))
+          print("MPW_INBOX_ORDERS="+str(Order.objects.count()))
+          print("MPW_INBOX_PAYMENT_INTENTS="+str(PaymentIntent.objects.count()))
+          doc=Path.home()/"mojplaywin.com"
+          for label,rel in (
+              ("FREE_FACTORY_INDEX","factory-releases/farm-enterprise-economics-v1/index.html"),
+              ("FREE_FACTORY_DOWNLOAD","factory-releases/farm-enterprise-economics-v1/Farm_Enterprise_Economics_Toolkit_Free_v1.zip")):
+              p=doc/rel
+              print("MPW_INBOX_PUBLIC_"+label+"_PRESENT="+str(p.is_file() and not p.is_symlink()))
+              if p.is_file() and not p.is_symlink():
+                  print("MPW_INBOX_PUBLIC_"+label+"_BYTES="+str(p.stat().st_size))
+          print("MPW_INBOX_DJANGO_CATALOG_AUDIT_READ_ONLY=True")
+          PY
+          REMOTE
+      - name: Erase runner-only transient SSH keys
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/mpw-readonly-host"

@@ -1,0 +1,47 @@
+name: MojPlayWin actual public farm toolkit executable self-test
+on:
+  push:
+    branches: [audit/mpw-factory-private-inbox-20261014]
+    paths:
+      - .github/workflows/mpw-public-free-toolkit-functional-qa.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  product-qa:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - name: Download, authenticate digest prefix and run packaged unittest suite
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$(mktemp -d)"
+          trap 'rm -rf -- "$work"' EXIT
+          curl -fLsS --connect-timeout 10 --max-time 30             -o "$work/release.zip"             "https://mojplaywin.com/factory-releases/farm-enterprise-economics-v1/Farm_Enterprise_Economics_Toolkit_Free_v1.zip"
+          python3 - "$work/release.zip" "$work" <<'PY'
+          import hashlib, pathlib, sys, zipfile
+          f=pathlib.Path(sys.argv[1]); out=pathlib.Path(sys.argv[2])
+          digest=hashlib.sha256(f.read_bytes()).hexdigest()
+          assert digest=="06fdb7667cde55279a4f97d0adfa35ca9d2e7155f6740ff3b2588816300d1d13","Release changed since public audit"
+          required={
+           "farm_enterprise_economics/calculator.py",
+           "farm_enterprise_economics/README.md",
+           "farm_enterprise_economics/example_inputs.json",
+           "farm_enterprise_economics/test_calculator.py",
+          }
+          with zipfile.ZipFile(f) as z:
+              assert {m.filename for m in z.infolist() if not m.is_dir()} == required
+              assert z.testzip() is None
+              for m in z.infolist():
+                  if m.is_dir(): continue
+                  if (m.external_attr >> 16) & 0o170000 == 0o120000:
+                      raise ValueError("Symbolic link forbidden")
+                  target=out / m.filename
+                  target.parent.mkdir(exist_ok=True,parents=True)
+                  target.write_bytes(z.read(m))
+          print("MPW_PACKAGED_RELEASE_SHA256_MATCHED=True")
+          PY
+          cd "$work/farm_enterprise_economics"
+          timeout 30s python3 -B -m unittest discover -s . -p 'test_calculator.py' -v
+          echo "MPW_PACKAGED_RELEASE_UNIT_TESTS_PASSED=True"

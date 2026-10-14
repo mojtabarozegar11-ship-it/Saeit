@@ -1,0 +1,46 @@
+name: MojPlayWin public release HTTP audit only
+on:
+  push:
+    branches: [audit/mpw-factory-private-inbox-20261014]
+    paths:
+      - .github/workflows/mpw-public-release-http-readonly.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  http-readonly:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check real publicly accessible pages and free ZIP
+        shell: bash
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          trap 'rm -rf -- "$tmp"' EXIT
+          base="https://mojplaywin.com"
+          for entry in "store|/store/" "free_page|/factory-releases/farm-enterprise-economics-v1/" "free_zip|/factory-releases/farm-enterprise-economics-v1/Farm_Enterprise_Economics_Toolkit_Free_v1.zip"; do
+            label="${entry%%|*}"
+            path="${entry#*|}"
+            status="$(curl -sS -L --connect-timeout 10 --max-time 25 --output "$tmp/$label" --write-out '%{http_code}' "$base$path" || true)"
+            echo "MPW_PUBLIC_${label^^}_HTTP=$status"
+            if [[ -f "$tmp/$label" ]]; then
+              echo "MPW_PUBLIC_${label^^}_BYTES=$(wc -c < "$tmp/$label")"
+            fi
+          done
+          python3 - "$tmp" <<'PY'
+          import hashlib, pathlib, sys, zipfile
+          root=pathlib.Path(sys.argv[1])
+          for label in ("store","free_page"):
+              path=root/label
+              text=path.read_text("utf-8","replace") if path.is_file() else ""
+              print("MPW_PUBLIC_"+label.upper()+"_CONTAINS_TOOLKIT="+str("Farm Enterprise Economics" in text))
+          f=root/"free_zip"
+          if f.is_file():
+              digest=hashlib.sha256(f.read_bytes()).hexdigest()
+              print("MPW_PUBLIC_FREE_ZIP_SHA256_PREFIX="+digest[:12])
+              print("MPW_PUBLIC_FREE_ZIP_MATCHES_PRIOR_RECEIPT_PREFIX="+str(digest.startswith("06fdb7667cde")))
+              print("MPW_PUBLIC_FREE_ZIP_FORMAT_VALID="+str(zipfile.is_zipfile(f)))
+          else:
+              print("MPW_PUBLIC_FREE_ZIP_MISSING=True")
+          PY
