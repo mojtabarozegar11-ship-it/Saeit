@@ -23,7 +23,8 @@ jobs:
           set -euo pipefail
           python3 -m unittest discover -s tests -p 'test_mojplaywin_chess_asset_installer.py' -v
           python3 -m unittest discover -s tests -p 'test_mojplaywin_native_chain_verify.py' -v
-          python3 -m py_compile scripts/mojplaywin_chess_assets.py scripts/mojplaywin_native_chain_verify.py core/chess_ebook_delivery.py
+          python3 -m unittest discover -s tests -p 'test_mojplaywin_direct_wallet_invoice.py' -v
+          python3 -m py_compile scripts/mojplaywin_chess_assets.py scripts/mojplaywin_native_chain_verify.py scripts/mojplaywin_direct_wallet_invoice.py core/chess_ebook_delivery.py
           echo VERIFIED_CODE_TESTS_PASSED
       - name: Stage only isolated inactive code on cPanel through pinned SSH relay
         shell: bash
@@ -81,10 +82,12 @@ jobs:
           tar -czf "$RUNNER_TEMP/chess-prep.tar.gz" \
             scripts/mojplaywin_chess_assets.py \
             scripts/mojplaywin_native_chain_verify.py \
+            scripts/mojplaywin_direct_wallet_invoice.py \
             core/chess_ebook_delivery.py \
             catalog/mojplaywin/chess-improvement-2026.json \
             tests/test_mojplaywin_chess_asset_installer.py \
             tests/test_mojplaywin_native_chain_verify.py \
+            tests/test_mojplaywin_direct_wallet_invoice.py \
             catalog/mojplaywin/chess-crypto-eth-trx-gateway-staging.json
           target=/home/zomorod2/Saeit-staging/mojplaywin-chess-product-prep-20261014
           timeout 45s ssh -F "$base/config" saeit-host "umask 077; mkdir -p '$target' && test -d '$target'"
