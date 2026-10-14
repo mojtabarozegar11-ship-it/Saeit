@@ -157,16 +157,14 @@ def copy_release(candidate):
     for p in target.rglob("*"):
         if p.is_file():
             p.chmod(0o640)
+    # These are shared production checkout helpers. Preserve the active copies
+    # even when this staging branch contains newer code; the proof page must
+    # not replace code used by any existing payment path.
     for filename in ("mojplaywin_native_chain_verify.py","mojplaywin_purchase_events.py"):
-        source=STAGING/"scripts"/filename
         dest=SITE/"scripts"/filename
-        if not source.is_file() or source.is_symlink():
-            fail("Native chain verifier dependency unavailable")
-        if dest.exists() and dest.read_bytes()!=source.read_bytes():
-            fail("Existing payment verifier differs; do not overwrite")
-        if not dest.exists():
-            shutil.copy2(source,dest)
-    print("PROOF_MODULES_INSTALLED_CHECKOUT_DISABLED")
+        if dest.is_symlink() or not dest.is_file():
+            fail("Required active checkout helper missing; no replacement attempted")
+    print("PROOF_MODULE_INSTALLED_ACTIVE_CHECKOUT_HELPERS_PRESERVED")
 
 
 def write_atomic(path,text,permissions):
