@@ -9,6 +9,7 @@ on:
       - 'mpw_native_checkout/purchase_notify.py'
       - 'mpw_native_checkout/migrations/0002_nativewatchoutbox.py'
       - 'mpw_native_checkout/management/commands/mpw_native_flush_events.py'
+      - 'mpw_native_checkout/management/commands/mpw_native_event_loop.py'
       - 'tests/test_mojplaywin_cpanel_local_event_worker.py'
       - 'scripts/mojplaywin_direct_wallet_invoice.py'
       - 'tests/test_mojplaywin_direct_wallet_invoice.py'
@@ -127,6 +128,7 @@ jobs:
             mpw_native_checkout/management/commands/__init__.py \
             mpw_native_checkout/management/commands/mpw_native_autopay.py \
             mpw_native_checkout/management/commands/mpw_native_flush_events.py \
+            mpw_native_checkout/management/commands/mpw_native_event_loop.py \
             mpw_native_checkout/migrations/__init__.py \
             mpw_native_checkout/migrations/0001_initial.py \
             mpw_native_checkout/migrations/0002_nativewatchoutbox.py \
@@ -155,6 +157,7 @@ jobs:
           echo AUTOMATIC_NATIVE_WORKER_STAGED_DISABLED_BY_DEFAULT
           echo LOCAL_PURCHASE_EVENT_PROCESSOR_STAGED_NOT_ENABLED
           echo DURABLE_PURCHASE_NOTIFICATION_OUTBOX_STAGED_UNMIGRATED
+          echo PURCHASE_TO_CHAIN_EVENT_RECONCILIATION_STAGED_DISABLED
           echo CPANEL_STAGING_LISTENER_INSTALLER_AVAILABLE_NOT_YET_EXECUTED
           echo LIVE_SITE_FILES_UNCHANGED
           echo CHESS_PAYMENT_NOT_ACTIVATED
