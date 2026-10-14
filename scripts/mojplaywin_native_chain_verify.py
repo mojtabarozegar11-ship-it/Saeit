@@ -10,6 +10,7 @@ user and a cryptographically proven sender address. It must enforce unique
 import hashlib
 import hmac
 import re
+from decimal import Decimal, InvalidOperation
 from dataclasses import dataclass
 from typing import Callable, Mapping, Any
 
@@ -94,8 +95,18 @@ def _validate_quote(q: LockedQuote, chain: str):
     _uint(q.expires_at_ms, "quote expiry")
     if q.smallest_units <= 0 or q.created_at_ms >= q.expires_at_ms:
         _fail("Invalid quoted amount or time window")
-    if q.quote_currency != "USD" or q.quote_amount != "7.50":
-        _fail("Wrong item or fiat quote")
+    # Every authorized USD product/order amount is accepted. The checkout
+    # database (not a buyer or this stateless library) locks the price.
+    if q.quote_currency != "USD" or type(q.quote_amount) is not str:
+        _fail("Invalid fiat quote")
+    if re.fullmatch(r"(?:0|[1-9][0-9]{0,11})\\.[0-9]{2}", q.quote_amount) is None:
+        _fail("Noncanonical USD amount")
+    try:
+        total=Decimal(q.quote_amount)
+    except InvalidOperation:
+        _fail("Invalid fiat total")
+    if not total.is_finite() or total<=0:
+        _fail("Invalid fiat total")
 
 
 def verify_eth_transfer(
@@ -148,6 +159,7 @@ def verify_eth_transfer(
         "transaction_hash": tx_hash.lower(),
         "amount_smallest_units": q.smallest_units,
         "confirmed_blocks": head - block + 1,
+        "mined_timestamp_ms": timestamp_ms,
         "sender": q.expected_sender.lower(),
         "recipient": ETH_RECEIVER.lower(),
     }
@@ -202,6 +214,7 @@ def verify_trx_transfer(
         "transaction_hash": tx_hash.lower(),
         "amount_smallest_units": q.smallest_units,
         "finality": "tron-solidity",
+        "mined_timestamp_ms": timestamp_ms,
         "sender": q.expected_sender,
         "recipient": TRX_RECEIVER,
     }
