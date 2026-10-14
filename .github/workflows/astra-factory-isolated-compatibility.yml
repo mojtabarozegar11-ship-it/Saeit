@@ -94,7 +94,7 @@ jobs:
               # Bounded acceptance test: seed ten real entries from the 200-entry
               # versioned candidate; production release may then stage the full set.
               safe_sample=dict(payload, opportunities=entries[:10])
-              destination_hypotheses.write_text(json.dumps(safe_sample,ensure_ascii=False,indent=2)+"\\n",encoding="utf-8")
+              destination_hypotheses.write_text(json.dumps(safe_sample,ensure_ascii=False,indent=2),encoding="utf-8")
               print("ASTRA_STAGING_VERSIONED_HYPOTHESES_SAMPLE=10_OF_200")
           with tarfile.open(arch,"r:gz") as tf:
               count=0
