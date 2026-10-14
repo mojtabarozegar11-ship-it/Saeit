@@ -1,0 +1,32 @@
+name: MojPlayWin native ETH TRX Django isolated schema checks
+on:
+  push:
+    paths:
+      - '.github/workflows/mojplaywin-native-django-check.yml'
+      - 'mpw_native_checkout/**'
+      - 'tests/native_checkout_settings.py'
+      - 'tests/native_checkout_urls.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  isolated-schema:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install minimal Django CI requirements
+        shell: bash
+        run: python3 -m pip install --disable-pip-version-check -q 'Django>=5.2,<6'
+      - name: Validate isolated model definitions
+        shell: bash
+        env:
+          DJANGO_SETTINGS_MODULE: tests.native_checkout_settings
+        run: |
+          set -euo pipefail
+          python3 -m django check
+          python3 -m django makemigrations mpw_native_checkout --check --dry-run
+          echo NATIVE_DJANGO_SCHEMA_NO_DRIFT
+          echo PRODUCTION_APPS_AND_DATABASE_UNCHANGED
