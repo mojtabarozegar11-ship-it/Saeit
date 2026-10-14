@@ -18,10 +18,15 @@ for category in categories:
     models = []
     if folder.is_dir():
         for p in folder.rglob("*"):
-            if p.is_file() and not p.is_symlink() and p.stat().st_size > 200000:
+            if (p.is_file() and not p.is_symlink() and not p.name.startswith(".")
+                and p.suffix.lower() in (".safetensors", ".ckpt")
+                and p.stat().st_size > 200000):
                 models.append(p)
     checks["models"][category] = len(models)
 checks["model_total"] = sum(checks["models"].values())
+checks["temporary_download_present"] = bool(list((src / "models/checkpoints").glob(".candidate-download.*")))
+checks["tiny_model_final_present"] = (src / "models/checkpoints/segmind_tiny_sd_candidate.safetensors").is_file()
+
 factory_pid = home / "factory-runtime/operations/vps-only-loop.pid"
 checks["factory_loop_running"] = False
 if factory_pid.is_file():
