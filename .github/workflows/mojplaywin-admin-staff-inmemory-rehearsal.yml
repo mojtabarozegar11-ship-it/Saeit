@@ -1,0 +1,141 @@
+name: MojPlayWin no-write admin and staff route repair rehearsal
+on:
+  push:
+    branches: [audit/mpw-live-staff-url-20261014]
+    paths:
+      - .github/workflows/mojplaywin-admin-staff-inmemory-rehearsal.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Rehearse route-only namespacing and command center restoration in Django memory
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/mpw-readonly-host"
+          mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          python3 - "$d/vps.key" "$d/host.key" <<'PY'
+          from pathlib import Path
+          import sys
+          for name in sys.argv[1:]:
+              p = Path(name)
+              p.write_text(p.read_text().replace("\r\n", "\n").strip().replace("\\n", "\n") + "\n")
+          PY
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host relay
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host host
+            HostName zohal.pws-dns.net
+            Port 1396
+            User zomorod2
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump relay
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+          EOF
+          timeout 30s ssh -F "$d/config" relay 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          timeout 125s ssh -F "$d/config" host 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = "zomorod2"
+          export PYTHONDONTWRITEBYTECODE=1
+          export DJANGO_SETTINGS_MODULE=config.settings
+          cd "$HOME/Saeit-staging"
+          "$HOME/virtualenv/Saeit-staging/3.11/bin/python" - <<'PY'
+          import sys
+          import types
+          import django
+          django.setup()
+          from django.conf import settings
+          from django.contrib import admin
+          from django.core.checks import run_checks, Tags
+          from django.test.utils import override_settings
+          from django.urls import path, include, get_resolver, reverse, resolve, URLResolver, clear_url_caches
+          import config.urls as live
+          old = tuple(live.urlpatterns)
+          staff = [p for p in old if str(p.pattern) == 'staff/']
+          admins = [p for p in old if str(p.pattern) == 'admin/']
+          assert len(staff)==1 and len(admins)==1, 'Unexpected site URL shape'
+          assert isinstance(staff[0], URLResolver) and staff[0].namespace=='admin', 'Staff URL not the expected duplicate admin'
+          assert admins[0].namespace == 'admin', 'Canonical admin not present'
+          assert not any(str(p.pattern)=='staff/command-center/' for p in old), 'Command-center already routed'
+          import command_center.urls
+          assert len(command_center.urls.urlpatterns)>0
+          replacement = path('staff/',include((admin.site.get_urls(),'admin'),namespace='staff_admin'))
+          command = path('staff/command-center/',include('command_center.urls'))
+          candidate=[]
+          for entry in old:
+              if entry is staff[0]:
+                  candidate.extend([command,replacement])
+              else:
+                  candidate.append(entry)
+          assert len(candidate)==len(old)+1
+          synthetic=types.ModuleType('mpw_admin_staff_candidate_only_in_memory')
+          synthetic.urlpatterns=candidate
+          sys.modules[synthetic.__name__]=synthetic
+          try:
+              with override_settings(ROOT_URLCONF=synthetic.__name__):
+                  clear_url_caches()
+                  messages = run_checks(tags=[Tags.urls])
+                  print('MPW_CANDIDATE_URL_CHECK_WARNING_COUNT',len(messages))
+                  for m in messages:
+                      print('MPW_CANDIDATE_URL_CHECK_CODE',m.id)
+                  assert not any(getattr(m,'id',None)=='urls.W005' for m in messages), 'Admin namespace still duplicated'
+                  expected={
+                      '/admin/': 'admin:index',
+                      '/admin/login/':'admin:login',
+                      '/staff/':'staff_admin:index',
+                      '/staff/login/':'staff_admin:login',
+                      '/staff/command-center/':'command_center_dashboard',
+                      '/staff/command-center/api/overview/':'command_center_overview_api',
+                  }
+                  for url,viewname in expected.items():
+                      match=resolve(url)
+                      assert match.view_name==viewname,(url,match.view_name)
+                      print('MPW_INMEMORY_ROUTE_OK',url)
+                  assert reverse('admin:index')=='/admin/'
+                  assert reverse('staff_admin:index')=='/staff/'
+                  assert reverse('command_center_dashboard')=='/staff/command-center/'
+                  assert reverse('command_center_overview_api')=='/staff/command-center/api/overview/'
+                  assert get_resolver().namespace_dict.get('admin') and get_resolver().namespace_dict.get('staff_admin')
+                  print('MPW_INMEMORY_ADMIN_STAFF_NAMESPACE_COLLISION_FIXED=True')
+                  print('MPW_INMEMORY_STAFF_COMMAND_CENTER_ROUTE_FIXED=True')
+          finally:
+              sys.modules.pop(synthetic.__name__,None)
+              clear_url_caches()
+          print('MPW_LIVE_URLS_FILE_UNCHANGED=True')
+          print('MPW_LIVE_DATABASE_UNTOUCHED=True')
+          PY
+          REMOTE
+      - name: Erase runner-only transient SSH keys
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/mpw-readonly-host"
