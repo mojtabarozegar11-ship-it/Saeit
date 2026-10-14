@@ -19,6 +19,12 @@ FILES = (
     Path("config/urls.py"),
     Path("core/views.py"),
     Path("templates/saman/index.html"),
+    Path("templates/saman/learn.html"),
+    Path("templates/saman/play.html"),
+    Path("templates/saman/products.html"),
+    Path("templates/saman/membership.html"),
+    Path("templates/saman/partners.html"),
+    Path("templates/saman/about.html"),
 )
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from saman_patch import patch_urls, patch_views  # noqa: E402
@@ -99,13 +105,32 @@ def deploy(run_id, commit_sha):
             raise RuntimeError(f"Missing active Saeit application file: {required}")
 
     stage = HOME / f".mojplaywin-saman-{run_id}"
-    template_source = stage / "templates" / "saman" / "index.html"
-    if not template_source.is_file() or template_source.is_symlink():
-        raise RuntimeError("Staged SAMAN page is missing or unsafe")
-    html = template_source.read_text(encoding="utf-8")
-    required_markers = ("<html lang=\"en\">", "<title>SAMAN", "SAMAN collection", "Explore MojPlayWin")
-    if any(marker not in html for marker in required_markers):
-        raise RuntimeError("Staged page failed English content validation")
+    section_titles = {
+        "learn": "Learning that moves with you.",
+        "play": "More than one way to play.",
+        "products": "Useful resources, made to keep.",
+        "membership": "More depth for committed learners.",
+        "partners": "Good work grows through collaboration.",
+        "about": "A broader home for curiosity.",
+    }
+    staged_templates = {}
+    for relative in FILES[2:]:
+        template_source = stage / relative
+        if not template_source.is_file() or template_source.is_symlink():
+            raise RuntimeError(f"Staged SAMAN page is missing or unsafe: {relative}")
+        html = template_source.read_text(encoding="utf-8")
+        required = ('<html lang="en">', "<title>SAMAN", "MojPlayWin")
+        if any(marker not in html for marker in required):
+            raise RuntimeError(f"Staged page failed English validation: {relative}")
+        section = relative.stem
+        if section != "index":
+            if (f'data-saman-page="{section}"' not in html
+                    or section_titles[section] not in html
+                    or 'aria-current="page"' not in html):
+                raise RuntimeError(f"Staged page is missing its unique content: {relative}")
+        elif "SAMAN collection" not in html or "Explore MojPlayWin" not in html:
+            raise RuntimeError("SAMAN home content validation failed")
+        staged_templates[relative] = html
 
     template_dir = APP_ROOT / "templates" / "saman"
     if (APP_ROOT / "templates").is_symlink() or template_dir.is_symlink():
@@ -121,7 +146,7 @@ def deploy(run_id, commit_sha):
     patched = {
         FILES[0]: patch_urls(url_target.read_text(encoding="utf-8")),
         FILES[1]: patch_views(view_target.read_text(encoding="utf-8")),
-        FILES[2]: html,
+        **staged_templates,
     }
     ast.parse(patched[FILES[0]], filename=str(FILES[0]))
     ast.parse(patched[FILES[1]], filename=str(FILES[1]))
