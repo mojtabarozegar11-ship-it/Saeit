@@ -311,7 +311,11 @@ r.user=u
 route=resolve('/merchant/wallet-proof/')
 print('MPW_PREFLIGHT_ROUTE='+str(route.url_name))
 assert route.url_name=='page'
-response=merchant_wallet_page(r)
+try:
+    response=merchant_wallet_page(r)
+except BaseException as exc:
+    print('MPW_PREFLIGHT_VIEW_EXCEPTION='+type(exc).__name__)
+    raise
 print('MPW_PREFLIGHT_HTTP='+str(response.status_code))
 assert response.status_code==200
 has_eth=b'ETH' in response.content
