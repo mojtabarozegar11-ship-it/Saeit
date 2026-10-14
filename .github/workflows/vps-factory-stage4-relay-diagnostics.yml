@@ -173,6 +173,10 @@ jobs:
           print("USER_REQUIRED_FIELDS="+",".join(User.REQUIRED_FIELDS))
           print("USER_MODEL_FIELDS="+",".join(field.name for field in User._meta.fields))
           qs=User.objects.filter(is_active=True,is_superuser=True)
+          target=apps.get_model("core","AgentTask").objects.select_related("factory_run").filter(pk=96).first()
+          if target:
+              print("STAGE4_TASK96_STATE="+str(target.status))
+              print("STAGE4_RUN96_STATE="+str(target.factory_run.status if target.factory_run_id else "NO_RUN"))
           print("USER_TOTAL_COUNT="+str(User.objects.count()))
           print("USER_ACTIVE_COUNT="+str(User.objects.filter(is_active=True).count()))
           print("USER_ACTIVE_STAFF_COUNT="+str(User.objects.filter(is_active=True,is_staff=True).count()))
