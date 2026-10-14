@@ -133,6 +133,32 @@ jobs:
                       print('PDF_COUNT',len(pdfs),'POTENTIAL_BOOKS',[x for x in pdfs if 400000<=x[1]<=500000 or 'improvement' in x[0].lower()][:12])
           PY
           echo "MODEL_AND_PAYMENT_DISCOVERY_END"
+          echo "DJANGO_PRODUCT_GATE_AUDIT_START"
+          cd /home/zomorod2/Saeit-staging
+          if test -x /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python; then
+            PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python manage.py shell <<'PY' || true
+          from django.apps import apps
+          from django.conf import settings
+          from pathlib import Path
+          print('DJANGO_MEDIA_ROOT',str(getattr(settings,'MEDIA_ROOT', 'not_set')))
+          print('DJANGO_MEDIA_URL',str(getattr(settings,'MEDIA_URL', 'not_set')))
+          for m in apps.get_models():
+              if any(k in m.__name__.lower() for k in ['product','payment','order','purchase','fulfill']):
+                  print('DJANGO_MODEL',m._meta.label,'FIELDS',[f.name for f in m._meta.fields])
+          product = next((m for m in apps.get_models() if m.__name__=='Product' and m._meta.app_label=='core'),None)
+          if product:
+              try:
+                  print('PRODUCT_RECORD_COUNT',product.objects.count())
+                  for p in product.objects.filter(title__icontains='chess').order_by('-pk')[:12]:
+                      print('CHESS_PRODUCT_EXISTING',p.pk,p.title,getattr(p,'active','unknown'),str(getattr(p,'price','unknown')),str(getattr(p,'currency','unknown')))
+              except Exception as exc:
+                  print('PRODUCT_QUERY_ERROR',type(exc).__name__)
+          print('PAYMENT_FLAGS_PRESENT',sorted([k for k in vars(settings) if k.isupper() and any(w in k for w in ['PAYMENT','NOWPAY','CRYPTO','BANKSHAHR']) and getattr(settings,k) is not None])[:45])
+          PY
+          else
+            echo DJANGO_PYTHON_MISSING
+          fi
+          echo "DJANGO_PRODUCT_GATE_AUDIT_END"
           REMOTE
           for url in https://mojplaywin.com/ https://mojplaywin.com/admin/login/ https://mojplaywin.com/store/ https://mojplaywin.com/shop/; do
             code="$(curl -sS -L --connect-timeout 10 --max-time 20 -o /dev/null -w '%{http_code}' "$url" || true)"
