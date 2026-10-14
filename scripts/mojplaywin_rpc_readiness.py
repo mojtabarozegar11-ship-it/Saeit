@@ -62,7 +62,7 @@ def main():
             result = check()
             print(label, result["status"], "block", result["block_number"])
         except (URLError, OSError, ValueError, KeyError, TypeError, json.JSONDecodeError) as exc:
-            print(label, "RPC_UNAVAILABLE", type(exc).__name__)
+            print(label, "RPC_UNAVAILABLE", type(exc).__name__, str(exc)[:160])
             failed += 1
     print("NO_PAYMENTS_CREATED")
     if failed:
