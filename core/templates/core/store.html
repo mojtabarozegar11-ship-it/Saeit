@@ -14,7 +14,7 @@
     <header><span>REGISTERED PRODUCTS</span><h2 id="store-products-title">محصولات فعال</h2></header>
     <div class="store-product-grid">
       {% for product in products %}
-      <article class="store-product-card"><small>{{ product.product_type }}</small><h3>{{ product.title }}</h3><strong>{{ product.price }} {{ product.currency }}</strong></article>
+      <article class="store-product-card"><small>{{ product.product_type }}</small><h3>{{ product.title }}</h3><strong>{{ product.price }} {{ product.currency }}</strong>{% if product.metadata.factory_recipe == "farm_enterprise_economics" and product.metadata.factory_status == "published_free" %}<p><a href="/factory-releases/farm-enterprise-economics-v1/" rel="noopener">Download free toolkit and view details</a></p>{% endif %}</article>
       {% empty %}<div class="store-empty" role="status">در حال حاضر محصول فعالی برای نمایش در فروشگاه ثبت نشده است.</div>
       {% endfor %}
     </div>
