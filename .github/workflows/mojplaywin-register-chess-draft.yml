@@ -125,6 +125,7 @@ jobs:
                   print('DRAFT_PRODUCT_CREATED',p.pk,'ACTIVE',p.active,'PRICE',p.price,p.currency)
           print('DRAFT_PRODUCT_GATE_OK')
           PY
+          timeout 40s ssh -F "$d/config" saeit-host 'install -d -m 700 /home/zomorod2/MojPlayWin_Private_Uploads && test -d /home/zomorod2/MojPlayWin_Private_Uploads && echo PRIVATE_UPLOAD_FOLDER_READY'
           code="$(curl -sSL --connect-timeout 12 --max-time 30 -o /dev/null -w '%{http_code}' https://mojplaywin.com/store/)"
           echo "STORE_HTTP=$code"
           test "$code" = 200
