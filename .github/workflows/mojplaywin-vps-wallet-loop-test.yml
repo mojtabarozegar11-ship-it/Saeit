@@ -1,0 +1,59 @@
+name: MojPlayWin VPS 15s live-loop verification (read-only)
+on:
+  push:
+    branches:
+      - release/mojplaywin-chess-product-20261014
+    paths:
+      - '.github/workflows/mojplaywin-vps-wallet-loop-test.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify-readonly-loop:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify active ETH check cadence on isolated watch marker
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-wallet-loop"
+          mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/id"
+          chmod 600 "$d/id"
+          ssh-keygen -y -P '' -f "$d/id" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -i "$d/id" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o BatchMode=yes -o ConnectTimeout=12 githubops@178.239.147.150 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          root="$HOME/mojplaywin-wallet-watch"
+          marker="$root/pending-orders.mode"
+          test -s "$root/watch.pid"
+          pid="$(cat "$root/watch.pid")"
+          kill -0 "$pid"
+          test ! -e "$marker"
+          test -f "$root/watcher.log"
+          if command -v crontab >/dev/null; then
+            crontab -l | grep -Fq '# MPW_WALLET_READONLY_SUPERVISOR_V1'
+            echo MPW_SUPERVISOR_CRONTAB_VERIFIED
+          fi
+          before="$(wc -l < "$root/watcher.log")"
+          testfile="$root/.pending-orders-test"
+          printf 'ETH\n' > "$testfile"
+          mv -Tf "$testfile" "$marker"
+          trap 'rm -f "$marker" "$testfile"' EXIT
+          sleep 42
+          count="$(tail -n "+$((before+1))" "$root/watcher.log" | grep -c 'scan_ok active=True' || true)"
+          echo "MPW_ACTIVE_ETH_SCANS_IN_42_SECONDS=$count"
+          test "$count" -ge 2
+          test -s "$root/watch.pid"
+          kill -0 "$(cat "$root/watch.pid")"
+          echo MPW_VPS_REAL_LOOP_VERIFIED_15_SECOND_ACTIVE
+          echo MPW_ORDER_SETTLEMENT_DISABLED
+          REMOTE
+      - name: Erase credentials
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/mpw-wallet-loop"
