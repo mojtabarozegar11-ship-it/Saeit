@@ -131,6 +131,40 @@ jobs:
           print("MPW_RUNTIME_READONLY_PROBE_COMPLETE_NO_DB_OR_MUTATION")
           PY
           REMOTE
+      - name: Read only merchant proof and commerce readiness, without DB writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 55s ssh -F "$RUNNER_TEMP/mpw-host-readonly-probe/config" host 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = "zomorod2"
+          cd /home/zomorod2/Saeit-staging
+          DJANGO_SETTINGS_MODULE=config.settings PYTHONDONTWRITEBYTECODE=1 "$HOME/virtualenv/Saeit-staging/3.11/bin/python" - <<'PY'
+          import django
+          django.setup()
+          from django.conf import settings
+          print("MPW_LIVE_COMMERCE_INSTALLED="+str("mpw_commerce" in settings.INSTALLED_APPS))
+          print("MPW_LIVE_COMMERCE_RELEASE_READY="+str(bool(getattr(settings,"MPW_COMMERCE_RELEASE_READY",False))))
+          print("MPW_LIVE_PROOF_APP_INSTALLED="+str("mpw_native_checkout" in settings.INSTALLED_APPS))
+          if "mpw_native_checkout" in settings.INSTALLED_APPS:
+              from mpw_native_checkout.wallet_ownership import proven_assets
+              # SELECT-only ORM queries. Never issue a challenge, signature,
+              # migration, balance transfer or payment settlement.
+              proofs=proven_assets()
+              print("MPW_LIVE_MERCHANT_ETH_PROVEN="+str(proofs.get("ETH") is True))
+              print("MPW_LIVE_MERCHANT_TRX_PROVEN="+str(proofs.get("TRX") is True))
+          print("MPW_LIVE_READONLY_SELECTS_COMPLETE")
+          PY
+          REMOTE
+      - name: Check anonymous public HTTP responses (GET only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          home="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 https://mojplaywin.com/ || true)"
+          page="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 https://mojplaywin.com/merchant/wallet-proof/ || true)"
+          echo "MPW_PUBLIC_HOME_HTTP=$home"
+          echo "MPW_PUBLIC_WALLET_PROOF_ANONYMOUS_HTTP=$page"
+          # Values are diagnostic; never trigger a production rollback or mutation.
       - name: Erase temporary credentials
         if: always()
         shell: bash
