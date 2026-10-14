@@ -58,3 +58,16 @@ Choose an output path that does not already exist. The report is local and priva
 ## Safety/provenance
 
 All reference educational material is cited only in the research dossier. No competing tools' source code, worksheets or proprietary text have been used or reproduced. The program implements conventional arithmetic independently. You may inspect every output with `input_sha256` and year-by-year cashflow traces. Do not assert it has passed commercial QA without the independent review steps.
+
+## Local browser interface (no external account or server)
+
+On a machine with Python 3.8+ and a browser, from the extracted `orchard_decision_audit` directory run:
+
+```bash
+python3 self_test.py
+python3 serve_local.py --port 8765
+```
+
+Open `http://127.0.0.1:8765/` on **that same machine**, choose *Load fictional example*, replace all numbers with real operator inputs, then *Calculate NPV and compare options*. Import and export JSON data locally. The app binds to **127.0.0.1 only**, does not upload your figures, has no account and contains no external scripts/fonts. It is not an internet-hosted store application; hosting on a public endpoint would require separate reviewed security and deployment controls.
+
+The UI is a technical reference interface, not independently user-tested. It runs the same Python calculation core as the CLI. The bundled `self_test.py` checks baseline arithmetic and safely rejects any claims of verified demand or authorization. All sample numbers are fictional and must never be mistaken for field data.
