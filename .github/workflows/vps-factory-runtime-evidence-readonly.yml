@@ -1,0 +1,114 @@
+name: VPS Factory read-only runtime PID and production evidence
+on:
+  push:
+    branches: [audit/vps-factory-runtime-evidence-20261014]
+    paths: [.github/workflows/vps-factory-runtime-evidence-readonly.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  ensure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Inspect factory loop PID and recent production counters without changing VPS
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/vps-factory"; mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -i "$d/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o BatchMode=yes githubops@178.239.147.150 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          python3 - <<'PY'
+          import os,stat,sqlite3,datetime,time,re
+          from pathlib import Path
+          home=Path.home()
+          base=home/"factory-runtime"
+          ops=base/"operations"
+          loop=ops/"vps-only-loop.sh"
+          pidfile=ops/"vps-only-loop.pid"
+          db=base/"private/factory-fresh-isolated.sqlite3"
+          now=time.time()
+          print("FACTORY_OBSERVED_UTC="+datetime.datetime.now(datetime.timezone.utc).isoformat())
+          print("FACTORY_AUDIT_ACCOUNT="+os.environ.get("USER","unknown"))
+          for label,path in [("RUNTIME_DIR",base),("OPERATIONS_DIR",ops),("LOOP_SCRIPT",loop),
+                              ("PIDFILE",pidfile),("DJANGO_APP",base/"django-app/manage.py"),
+                              ("PYTHON",base/".venv/bin/python"),("PRIVATE_DB",db),
+                              ("ACTIVITY_LOG",ops/"vps-only-factory.log"),("LAUNCH_LOG",ops/"vps-only-launch.log")]:
+              exists=path.exists() and not path.is_symlink()
+              print("FACTORY_PATH_"+label+"_PRESENT="+str(bool(exists)))
+              if exists and path.is_file():
+                  st=path.stat()
+                  print("FACTORY_FILE_"+label+"_AGE_SECONDS="+str(max(0,int(now-st.st_mtime))))
+                  print("FACTORY_FILE_"+label+"_BYTES="+str(st.st_size))
+          if loop.is_file() and not loop.is_symlink():
+              configured=b"FACTORY_RESEARCH_PROVIDER=core.self_hosted_research_provider.SelfHostedStagingResearchProvider" in loop.read_bytes()
+              print("FACTORY_EXPECTED_PROVIDER_IN_LOOP="+str(configured))
+          pid=None
+          if pidfile.is_file() and not pidfile.is_symlink():
+              raw=pidfile.read_text().strip()
+              if raw.isdecimal() and 1<int(raw)<4194304: pid=int(raw)
+          print("FACTORY_PIDFILE_VALID="+str(pid is not None))
+          def process_info(n):
+              try:
+                  p=Path("/proc")/str(n)
+                  cmd=(p/"cmdline").read_bytes().replace(b"\x00",b" ")
+                  alive=bool(cmd)
+                  match=b"vps-only-loop.sh" in cmd
+                  uid=(p/"status").read_text().split("Uid:",1)[1].splitlines()[0].split()[0]
+                  own=int(uid)==os.getuid()
+                  return alive,match,own
+              except (OSError,IndexError,ValueError):
+                  return False,False,False
+          pid_status=process_info(pid) if pid is not None else (False,False,False)
+          print("FACTORY_PID_PROCESS_EXISTS="+str(pid_status[0]))
+          print("FACTORY_PID_MATCHES_LOOP="+str(pid_status[1] and pid_status[2]))
+          candidates=[]
+          for name in os.listdir("/proc"):
+              if not name.isdigit():continue
+              n=int(name)
+              alive,match,own=process_info(n)
+              if match and own:candidates.append(n)
+          print("FACTORY_OWNED_LOOP_PROCESS_COUNT="+str(len(candidates)))
+          print("FACTORY_PIDFILE_MATCHES_OWNED_LOOP="+str(pid in candidates if pid else False))
+          print("FACTORY_PID_AND_LOOP_SUPPORTED_RUNNING="+str(bool(pid_status[0] and pid_status[1] and pid_status[2])))
+          for label,path in [("ACTIVITY_LOG",ops/"vps-only-factory.log"),("LAUNCH_LOG",ops/"vps-only-launch.log")]:
+              if path.is_file() and not path.is_symlink():
+                  with path.open("rb") as stream:
+                      stream.seek(max(0,path.stat().st_size-262144))
+                      end=stream.read().decode("utf8","replace").splitlines()
+                  print("FACTORY_LOG_"+label+"_RECENT_LINE_COUNT="+str(len(end)))
+                  print("FACTORY_LOG_"+label+"_ERROR_LINE_COUNT="+str(sum(bool(re.search(r"\b(error|exception|traceback|failed)\b",row,re.I)) for row in end)))
+          if db.is_file() and not db.is_symlink():
+              try:
+                  con=sqlite3.connect("file:"+str(db)+"?mode=ro",uri=True,timeout=6)
+                  con.execute("PRAGMA query_only = ON")
+                  tables={name for (name,) in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+                  print("FACTORY_DB_TABLES="+str(len(tables)))
+                  for name in ("core_agent","core_agenttask","core_product","core_order","core_paymentintent",
+                               "core_factoryjob","core_factoryproduct","core_generatedasset"):
+                      if name not in tables:continue
+                      count=con.execute('SELECT COUNT(*) FROM "'+name+'"').fetchone()[0]
+                      print("FACTORY_DB_"+name.upper()+"_RECORDS="+str(count))
+                      cols={col[1] for col in con.execute('PRAGMA table_info("'+name+'")')}
+                      if "created_at" in cols:
+                          recent=con.execute('SELECT COUNT(*) FROM "'+name+'" WHERE created_at >= datetime("now","-1 day")').fetchone()[0]
+                          print("FACTORY_DB_"+name.upper()+"_LAST_24H="+str(recent))
+                      if "status" in cols:
+                          for status in ("completed","running","queued","failed","blocked","published","pending"):
+                              v=con.execute('SELECT COUNT(*) FROM "'+name+'" WHERE status=?',(status,)).fetchone()[0]
+                              if v:print("FACTORY_DB_"+name.upper()+"_STATUS_"+status.upper()+"="+str(v))
+                  con.close()
+              except (sqlite3.Error,OSError) as exc:
+                  print("FACTORY_DB_READABLE=False")
+                  print("FACTORY_DB_READ_ERROR_TYPE="+type(exc).__name__)
+          print("FACTORY_AUDIT_READ_ONLY_COMPLETE=True")
+          PY
+          REMOTE
