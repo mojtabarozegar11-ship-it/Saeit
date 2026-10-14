@@ -1,0 +1,102 @@
+name: VPS Factory Persistence
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/vps-factory-persistence.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: vps-factory-persistence
+  cancel-in-progress: false
+jobs:
+  configure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Install VPS-local factory watchdog
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/factory-persistence"; mkdir -m 700 -p "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\\r","").replace("\\\\n","\\n"),end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -f "$d/key" >/dev/null
+          scan="$(ssh-keyscan -T 10 -t rsa 178.239.147.150 2>/dev/null)"
+          test -n "$scan"
+          actual="$(printf '%s\\n' "$scan" | ssh-keygen -lf - -E sha256 | awk '{print $2}' | sort -u)"
+          test "$actual" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          printf '%s\\n' "$scan" > "$d/known"
+          ssh -i "$d/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o BatchMode=yes -o ConnectTimeout=15 githubops@178.239.147.150 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          base="$HOME/factory-runtime"
+          ops="$base/operations"
+          loop="$ops/vps-only-loop.sh"
+          pidfile="$ops/vps-only-loop.pid"
+          test -x "$loop"
+          command -v crontab >/dev/null
+          if ! systemctl is-active --quiet cron 2>/dev/null && ! systemctl is-active --quiet crond 2>/dev/null; then
+            echo CRON_DAEMON_NOT_ACTIVE
+            exit 1
+          fi
+          if ! systemctl is-enabled --quiet cron 2>/dev/null && ! systemctl is-enabled --quiet crond 2>/dev/null; then
+            echo CRON_DAEMON_NOT_ENABLED_AT_BOOT
+            exit 1
+          fi
+          mkdir -p "$ops/backups"
+          stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+          old_cron="$ops/backups/crontab-before-factory-watchdog-$stamp.txt"
+          if crontab -l > "$old_cron" 2>/dev/null; then chmod 600 "$old_cron"; else rm -f "$old_cron"; : > "$old_cron"; chmod 600 "$old_cron"; fi
+          tmp="$ops/ensure-vps-only-loop.sh.tmp"
+          cat > "$tmp" <<'SH'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          umask 077
+          base="$HOME/factory-runtime"
+          ops="$base/operations"
+          script="$ops/vps-only-loop.sh"
+          pidfile="$ops/vps-only-loop.pid"
+          test -x "$script"
+          exec 9>"$ops/vps-only-launch-v2.lock"
+          if ! flock -n 9; then exit 0; fi
+          current_pid="$(cat "$pidfile" 2>/dev/null || true)"
+          if [[ "$current_pid" =~ ^[0-9]+$ ]] && kill -0 "$current_pid" 2>/dev/null && ps -p "$current_pid" -o args= | grep -Fq -- "$script"; then
+            exit 0
+          fi
+          if [[ "$current_pid" =~ ^[0-9]+$ ]] && kill -0 "$current_pid" 2>/dev/null; then
+            echo "FACTORY_PID_NOT_VERIFIED" >> "$ops/vps-only-launch.log"
+            exit 1
+          fi
+          nohup "$script" 9>&- </dev/null >> "$ops/vps-only-launch.log" 2>&1 &
+          printf '%s\\n' "$!" > "$pidfile"
+          sleep 2
+          new_pid="$(cat "$pidfile")"
+          kill -0 "$new_pid"
+          ps -p "$new_pid" -o args= | grep -Fq -- "$script"
+          SH
+          chmod 700 "$tmp"
+          mv -f "$tmp" "$ops/ensure-vps-only-loop.sh"
+          current="$(crontab -l 2>/dev/null || true)"
+          printf '%s\\n' "$current" | grep -v 'SAEIT_FACTORY_AUTOSTART' > "$ops/factory-crontab.tmp" || true
+          printf '%s\\n' '@reboot /bin/bash /home/githubops/factory-runtime/operations/ensure-vps-only-loop.sh >> /home/githubops/factory-runtime/operations/vps-only-watchdog.log 2>&1 # SAEIT_FACTORY_AUTOSTART' '*/5 * * * * /bin/bash /home/githubops/factory-runtime/operations/ensure-vps-only-loop.sh >> /home/githubops/factory-runtime/operations/vps-only-watchdog.log 2>&1 # SAEIT_FACTORY_AUTOSTART' >> "$ops/factory-crontab.tmp"
+          chmod 600 "$ops/factory-crontab.tmp"
+          crontab "$ops/factory-crontab.tmp"
+          rm -f "$ops/factory-crontab.tmp"
+          /bin/bash "$ops/ensure-vps-only-loop.sh"
+          count="$(crontab -l | grep -c 'SAEIT_FACTORY_AUTOSTART')"
+          test "$count" -eq 2
+          pid="$(cat "$pidfile")"
+          kill -0 "$pid"
+          ps -p "$pid" -o args= | grep -Fq -- "$loop"
+          echo FACTORY_VPS_WATCHDOG_INSTALLED
+          echo FACTORY_CRON_REBOOT_AND_FIVE_MINUTE_WATCHDOG_VERIFIED
+          echo FACTORY_LOOP_SINGLE_INSTANCE_VERIFIED
+          REMOTE
+      - name: Remove temporary SSH material
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/factory-persistence"
