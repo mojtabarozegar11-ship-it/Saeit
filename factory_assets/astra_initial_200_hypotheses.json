@@ -1,0 +1,1408 @@
+{
+  "schema_version": 1,
+  "origin": "Astra factory 200-hypothesis seed compatibility update",
+  "evidence_policy": "unverified research questions only; not findings, sources, validated opportunities, or products",
+  "commercial_publication_allowed": false,
+  "opportunities": [
+    {
+      "hypothesis_id": "ASTRA-H001",
+      "research_query": "For almond orchard enterprise budgeting, what independently documented customer problems and primary-source evidence exist for useful offline or web-based software?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H002",
+      "research_query": "For almond orchard enterprise budgeting, which verifiable datasets, units, methods, and independent quality checks would be needed before developing a reliable digital tool?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H003",
+      "research_query": "For almond orchard enterprise budgeting, what actual competing software, published prices, buyer adoption barriers, and distribution channels can be verified?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H004",
+      "research_query": "For almond orchard enterprise budgeting, which relevant legal, privacy, scientific, operational, and localization constraints must a prospective software tool satisfy?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H005",
+      "research_query": "For orchard deficit-irrigation water allocation, what independently documented customer problems and primary-source evidence exist for useful offline or web-based software?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H006",
+      "research_query": "For orchard deficit-irrigation water allocation, which verifiable datasets, units, methods, and independent quality checks would be needed before developing a reliable digital tool?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H007",
+      "research_query": "For orchard deficit-irrigation water allocation, what actual competing software, published prices, buyer adoption barriers, and distribution channels can be verified?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H008",
+      "research_query": "For orchard deficit-irrigation water allocation, which relevant legal, privacy, scientific, operational, and localization constraints must a prospective software tool satisfy?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H009",
+      "research_query": "For pistachio orchard risk and margin planning, what independently documented customer problems and primary-source evidence exist for useful offline or web-based software?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H010",
+      "research_query": "For pistachio orchard risk and margin planning, which verifiable datasets, units, methods, and independent quality checks would be needed before developing a reliable digital tool?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H011",
+      "research_query": "For pistachio orchard risk and margin planning, what actual competing software, published prices, buyer adoption barriers, and distribution channels can be verified?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H012",
+      "research_query": "For pistachio orchard risk and margin planning, which relevant legal, privacy, scientific, operational, and localization constraints must a prospective software tool satisfy?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H013",
+      "research_query": "For date palm enterprise cash-flow modeling, what independently documented customer problems and primary-source evidence exist for useful offline or web-based software?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H014",
+      "research_query": "For date palm enterprise cash-flow modeling, which verifiable datasets, units, methods, and independent quality checks would be needed before developing a reliable digital tool?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H015",
+      "research_query": "For date palm enterprise cash-flow modeling, what actual competing software, published prices, buyer adoption barriers, and distribution channels can be verified?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H016",
+      "research_query": "For date palm enterprise cash-flow modeling, which relevant legal, privacy, scientific, operational, and localization constraints must a prospective software tool satisfy?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H017",
+      "research_query": "For peach and nectarine orchard profit planning, what independently documented customer problems and primary-source evidence exist for useful offline or web-based software?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H018",
+      "research_query": "For peach and nectarine orchard profit planning, which verifiable datasets, units, methods, and independent quality checks would be needed before developing a reliable digital tool?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H019",
+      "research_query": "For peach and nectarine orchard profit planning, what actual competing software, published prices, buyer adoption barriers, and distribution channels can be verified?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H020",
+      "research_query": "For peach and nectarine orchard profit planning, which relevant legal, privacy, scientific, operational, and localization constraints must a prospective software tool satisfy?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H021",
+      "research_query": "For citrus orchard farm-input budgeting, what independently documented customer problems and primary-source evidence exist for useful offline or web-based software?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H022",
+      "research_query": "For citrus orchard farm-input budgeting, which verifiable datasets, units, methods, and independent quality checks would be needed before developing a reliable digital tool?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H023",
+      "research_query": "For citrus orchard farm-input budgeting, what actual competing software, published prices, buyer adoption barriers, and distribution channels can be verified?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H024",
+      "research_query": "For citrus orchard farm-input budgeting, which relevant legal, privacy, scientific, operational, and localization constraints must a prospective software tool satisfy?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H025",
+      "research_query": "For olive orchard and oil processing economics, what independently documented customer problems and primary-source evidence exist for useful offline or web-based software?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H026",
+      "research_query": "For olive orchard and oil processing economics, which verifiable datasets, units, methods, and independent quality checks would be needed before developing a reliable digital tool?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H027",
+      "research_query": "For olive orchard and oil processing economics, what actual competing software, published prices, buyer adoption barriers, and distribution channels can be verified?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H028",
+      "research_query": "For olive orchard and oil processing economics, which relevant legal, privacy, scientific, operational, and localization constraints must a prospective software tool satisfy?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H029",
+      "research_query": "For saffron production cost analysis, what independently documented customer problems and primary-source evidence exist for useful offline or web-based software?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H030",
+      "research_query": "For saffron production cost analysis, which verifiable datasets, units, methods, and independent quality checks would be needed before developing a reliable digital tool?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H031",
+      "research_query": "For saffron production cost analysis, what actual competing software, published prices, buyer adoption barriers, and distribution channels can be verified?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H032",
+      "research_query": "For saffron production cost analysis, which relevant legal, privacy, scientific, operational, and localization constraints must a prospective software tool satisfy?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H033",
+      "research_query": "For greenhouse tomato production profitability, what independently documented customer problems and primary-source evidence exist for useful offline or web-based software?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H034",
+      "research_query": "For greenhouse tomato production profitability, which verifiable datasets, units, methods, and independent quality checks would be needed before developing a reliable digital tool?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H035",
+      "research_query": "For greenhouse tomato production profitability, what actual competing software, published prices, buyer adoption barriers, and distribution channels can be verified?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H036",
+      "research_query": "For greenhouse tomato production profitability, which relevant legal, privacy, scientific, operational, and localization constraints must a prospective software tool satisfy?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H037",
+      "research_query": "For greenhouse cucumber production scheduling, what independently documented customer problems and primary-source evidence exist for useful offline or web-based software?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H038",
+      "research_query": "For greenhouse cucumber production scheduling, which verifiable datasets, units, methods, and independent quality checks would be needed before developing a reliable digital tool?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H039",
+      "research_query": "For greenhouse cucumber production scheduling, what actual competing software, published prices, buyer adoption barriers, and distribution channels can be verified?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H040",
+      "research_query": "For greenhouse cucumber production scheduling, which relevant legal, privacy, scientific, operational, and localization constraints must a prospective software tool satisfy?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H041",
+      "research_query": "For hydroponic lettuce unit economics, what independently documented customer problems and primary-source evidence exist for useful offline or web-based software?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H042",
+      "research_query": "For hydroponic lettuce unit economics, which verifiable datasets, units, methods, and independent quality checks would be needed before developing a reliable digital tool?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H043",
+      "research_query": "For hydroponic lettuce unit economics, what actual competing software, published prices, buyer adoption barriers, and distribution channels can be verified?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H044",
+      "research_query": "For hydroponic lettuce unit economics, which relevant legal, privacy, scientific, operational, and localization constraints must a prospective software tool satisfy?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H045",
+      "research_query": "For greenhouse energy demand forecasting, what independently documented customer problems and primary-source evidence exist for useful offline or web-based software?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H046",
+      "research_query": "For greenhouse energy demand forecasting, which verifiable datasets, units, methods, and independent quality checks would be needed before developing a reliable digital tool?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H047",
+      "research_query": "For greenhouse energy demand forecasting, what actual competing software, published prices, buyer adoption barriers, and distribution channels can be verified?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H048",
+      "research_query": "For greenhouse energy demand forecasting, which relevant legal, privacy, scientific, operational, and localization constraints must a prospective software tool satisfy?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H049",
+      "research_query": "For honeybee colony and honey production budgeting, what independently documented customer problems and primary-source evidence exist for useful offline or web-based software?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H050",
+      "research_query": "For honeybee colony and honey production budgeting, which verifiable datasets, units, methods, and independent quality checks would be needed before developing a reliable digital tool?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H051",
+      "research_query": "For honeybee colony and honey production budgeting, what actual competing software, published prices, buyer adoption barriers, and distribution channels can be verified?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H052",
+      "research_query": "For honeybee colony and honey production budgeting, which relevant legal, privacy, scientific, operational, and localization constraints must a prospective software tool satisfy?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H053",
+      "research_query": "For egg-laying poultry feed and output economics, what independently documented customer problems and primary-source evidence exist for useful offline or web-based software?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H054",
+      "research_query": "For egg-laying poultry feed and output economics, which verifiable datasets, units, methods, and independent quality checks would be needed before developing a reliable digital tool?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H055",
+      "research_query": "For egg-laying poultry feed and output economics, what actual competing software, published prices, buyer adoption barriers, and distribution channels can be verified?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H056",
+      "research_query": "For egg-laying poultry feed and output economics, which relevant legal, privacy, scientific, operational, and localization constraints must a prospective software tool satisfy?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H057",
+      "research_query": "For duck egg enterprise profitability, what independently documented customer problems and primary-source evidence exist for useful offline or web-based software?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H058",
+      "research_query": "For duck egg enterprise profitability, which verifiable datasets, units, methods, and independent quality checks would be needed before developing a reliable digital tool?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H059",
+      "research_query": "For duck egg enterprise profitability, what actual competing software, published prices, buyer adoption barriers, and distribution channels can be verified?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H060",
+      "research_query": "For duck egg enterprise profitability, which relevant legal, privacy, scientific, operational, and localization constraints must a prospective software tool satisfy?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H061",
+      "research_query": "For goose production and veterinary cost planning, what independently documented customer problems and primary-source evidence exist for useful offline or web-based software?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H062",
+      "research_query": "For goose production and veterinary cost planning, which verifiable datasets, units, methods, and independent quality checks would be needed before developing a reliable digital tool?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H063",
+      "research_query": "For goose production and veterinary cost planning, what actual competing software, published prices, buyer adoption barriers, and distribution channels can be verified?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H064",
+      "research_query": "For goose production and veterinary cost planning, which relevant legal, privacy, scientific, operational, and localization constraints must a prospective software tool satisfy?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H065",
+      "research_query": "For sheep herd enterprise economics, what independently documented customer problems and primary-source evidence exist for useful offline or web-based software?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H066",
+      "research_query": "For sheep herd enterprise economics, which verifiable datasets, units, methods, and independent quality checks would be needed before developing a reliable digital tool?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H067",
+      "research_query": "For sheep herd enterprise economics, what actual competing software, published prices, buyer adoption barriers, and distribution channels can be verified?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H068",
+      "research_query": "For sheep herd enterprise economics, which relevant legal, privacy, scientific, operational, and localization constraints must a prospective software tool satisfy?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H069",
+      "research_query": "For land-based aquaculture and tilapia cash-flow planning, what independently documented customer problems and primary-source evidence exist for useful offline or web-based software?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H070",
+      "research_query": "For land-based aquaculture and tilapia cash-flow planning, which verifiable datasets, units, methods, and independent quality checks would be needed before developing a reliable digital tool?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H071",
+      "research_query": "For land-based aquaculture and tilapia cash-flow planning, what actual competing software, published prices, buyer adoption barriers, and distribution channels can be verified?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H072",
+      "research_query": "For land-based aquaculture and tilapia cash-flow planning, which relevant legal, privacy, scientific, operational, and localization constraints must a prospective software tool satisfy?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H073",
+      "research_query": "For poultry biosecurity cost-benefit analysis, what independently documented customer problems and primary-source evidence exist for useful offline or web-based software?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H074",
+      "research_query": "For poultry biosecurity cost-benefit analysis, which verifiable datasets, units, methods, and independent quality checks would be needed before developing a reliable digital tool?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H075",
+      "research_query": "For poultry biosecurity cost-benefit analysis, what actual competing software, published prices, buyer adoption barriers, and distribution channels can be verified?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H076",
+      "research_query": "For poultry biosecurity cost-benefit analysis, which relevant legal, privacy, scientific, operational, and localization constraints must a prospective software tool satisfy?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H077",
+      "research_query": "For livestock manure and compost resource planning, what independently documented customer problems and primary-source evidence exist for useful offline or web-based software?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H078",
+      "research_query": "For livestock manure and compost resource planning, which verifiable datasets, units, methods, and independent quality checks would be needed before developing a reliable digital tool?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H079",
+      "research_query": "For livestock manure and compost resource planning, what actual competing software, published prices, buyer adoption barriers, and distribution channels can be verified?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H080",
+      "research_query": "For livestock manure and compost resource planning, which relevant legal, privacy, scientific, operational, and localization constraints must a prospective software tool satisfy?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H081",
+      "research_query": "For drip irrigation leak detection economics, what independently documented customer problems and primary-source evidence exist for useful offline or web-based software?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H082",
+      "research_query": "For drip irrigation leak detection economics, which verifiable datasets, units, methods, and independent quality checks would be needed before developing a reliable digital tool?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H083",
+      "research_query": "For drip irrigation leak detection economics, what actual competing software, published prices, buyer adoption barriers, and distribution channels can be verified?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H084",
+      "research_query": "For drip irrigation leak detection economics, which relevant legal, privacy, scientific, operational, and localization constraints must a prospective software tool satisfy?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H085",
+      "research_query": "For irrigation pump energy and maintenance budgeting, what independently documented customer problems and primary-source evidence exist for useful offline or web-based software?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H086",
+      "research_query": "For irrigation pump energy and maintenance budgeting, which verifiable datasets, units, methods, and independent quality checks would be needed before developing a reliable digital tool?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H087",
+      "research_query": "For irrigation pump energy and maintenance budgeting, what actual competing software, published prices, buyer adoption barriers, and distribution channels can be verified?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H088",
+      "research_query": "For irrigation pump energy and maintenance budgeting, which relevant legal, privacy, scientific, operational, and localization constraints must a prospective software tool satisfy?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H089",
+      "research_query": "For agricultural groundwater and water-rights accounting, what independently documented customer problems and primary-source evidence exist for useful offline or web-based software?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H090",
+      "research_query": "For agricultural groundwater and water-rights accounting, which verifiable datasets, units, methods, and independent quality checks would be needed before developing a reliable digital tool?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H091",
+      "research_query": "For agricultural groundwater and water-rights accounting, what actual competing software, published prices, buyer adoption barriers, and distribution channels can be verified?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H092",
+      "research_query": "For agricultural groundwater and water-rights accounting, which relevant legal, privacy, scientific, operational, and localization constraints must a prospective software tool satisfy?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H093",
+      "research_query": "For farm weather-event financial risk analysis, what independently documented customer problems and primary-source evidence exist for useful offline or web-based software?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H094",
+      "research_query": "For farm weather-event financial risk analysis, which verifiable datasets, units, methods, and independent quality checks would be needed before developing a reliable digital tool?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H095",
+      "research_query": "For farm weather-event financial risk analysis, what actual competing software, published prices, buyer adoption barriers, and distribution channels can be verified?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H096",
+      "research_query": "For farm weather-event financial risk analysis, which relevant legal, privacy, scientific, operational, and localization constraints must a prospective software tool satisfy?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H097",
+      "research_query": "For agricultural microinsurance decision support, what independently documented customer problems and primary-source evidence exist for useful offline or web-based software?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H098",
+      "research_query": "For agricultural microinsurance decision support, which verifiable datasets, units, methods, and independent quality checks would be needed before developing a reliable digital tool?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H099",
+      "research_query": "For agricultural microinsurance decision support, what actual competing software, published prices, buyer adoption barriers, and distribution channels can be verified?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H100",
+      "research_query": "For agricultural microinsurance decision support, which relevant legal, privacy, scientific, operational, and localization constraints must a prospective software tool satisfy?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H101",
+      "research_query": "For precision agriculture sensor investment appraisal, what independently documented customer problems and primary-source evidence exist for useful offline or web-based software?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H102",
+      "research_query": "For precision agriculture sensor investment appraisal, which verifiable datasets, units, methods, and independent quality checks would be needed before developing a reliable digital tool?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H103",
+      "research_query": "For precision agriculture sensor investment appraisal, what actual competing software, published prices, buyer adoption barriers, and distribution channels can be verified?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H104",
+      "research_query": "For precision agriculture sensor investment appraisal, which relevant legal, privacy, scientific, operational, and localization constraints must a prospective software tool satisfy?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H105",
+      "research_query": "For farm soil testing and crop input budgeting, what independently documented customer problems and primary-source evidence exist for useful offline or web-based software?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H106",
+      "research_query": "For farm soil testing and crop input budgeting, which verifiable datasets, units, methods, and independent quality checks would be needed before developing a reliable digital tool?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H107",
+      "research_query": "For farm soil testing and crop input budgeting, what actual competing software, published prices, buyer adoption barriers, and distribution channels can be verified?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H108",
+      "research_query": "For farm soil testing and crop input budgeting, which relevant legal, privacy, scientific, operational, and localization constraints must a prospective software tool satisfy?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H109",
+      "research_query": "For crop disease observation and loss recording, what independently documented customer problems and primary-source evidence exist for useful offline or web-based software?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H110",
+      "research_query": "For crop disease observation and loss recording, which verifiable datasets, units, methods, and independent quality checks would be needed before developing a reliable digital tool?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H111",
+      "research_query": "For crop disease observation and loss recording, what actual competing software, published prices, buyer adoption barriers, and distribution channels can be verified?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H112",
+      "research_query": "For crop disease observation and loss recording, which relevant legal, privacy, scientific, operational, and localization constraints must a prospective software tool satisfy?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H113",
+      "research_query": "For agricultural organic certification cost planning, what independently documented customer problems and primary-source evidence exist for useful offline or web-based software?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H114",
+      "research_query": "For agricultural organic certification cost planning, which verifiable datasets, units, methods, and independent quality checks would be needed before developing a reliable digital tool?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H115",
+      "research_query": "For agricultural organic certification cost planning, what actual competing software, published prices, buyer adoption barriers, and distribution channels can be verified?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H116",
+      "research_query": "For agricultural organic certification cost planning, which relevant legal, privacy, scientific, operational, and localization constraints must a prospective software tool satisfy?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H117",
+      "research_query": "For agricultural export traceability and compliance, what independently documented customer problems and primary-source evidence exist for useful offline or web-based software?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H118",
+      "research_query": "For agricultural export traceability and compliance, which verifiable datasets, units, methods, and independent quality checks would be needed before developing a reliable digital tool?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H119",
+      "research_query": "For agricultural export traceability and compliance, what actual competing software, published prices, buyer adoption barriers, and distribution channels can be verified?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H120",
+      "research_query": "For agricultural export traceability and compliance, which relevant legal, privacy, scientific, operational, and localization constraints must a prospective software tool satisfy?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H121",
+      "research_query": "For farm machinery preventive maintenance scheduling, what independently documented customer problems and primary-source evidence exist for useful offline or web-based software?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H122",
+      "research_query": "For farm machinery preventive maintenance scheduling, which verifiable datasets, units, methods, and independent quality checks would be needed before developing a reliable digital tool?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H123",
+      "research_query": "For farm machinery preventive maintenance scheduling, what actual competing software, published prices, buyer adoption barriers, and distribution channels can be verified?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H124",
+      "research_query": "For farm machinery preventive maintenance scheduling, which relevant legal, privacy, scientific, operational, and localization constraints must a prospective software tool satisfy?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H125",
+      "research_query": "For agricultural inventory and expiry forecasting, what independently documented customer problems and primary-source evidence exist for useful offline or web-based software?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H126",
+      "research_query": "For agricultural inventory and expiry forecasting, which verifiable datasets, units, methods, and independent quality checks would be needed before developing a reliable digital tool?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H127",
+      "research_query": "For agricultural inventory and expiry forecasting, what actual competing software, published prices, buyer adoption barriers, and distribution channels can be verified?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H128",
+      "research_query": "For agricultural inventory and expiry forecasting, which relevant legal, privacy, scientific, operational, and localization constraints must a prospective software tool satisfy?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H129",
+      "research_query": "For perishable cold-chain loss accounting, what independently documented customer problems and primary-source evidence exist for useful offline or web-based software?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H130",
+      "research_query": "For perishable cold-chain loss accounting, which verifiable datasets, units, methods, and independent quality checks would be needed before developing a reliable digital tool?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H131",
+      "research_query": "For perishable cold-chain loss accounting, what actual competing software, published prices, buyer adoption barriers, and distribution channels can be verified?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H132",
+      "research_query": "For perishable cold-chain loss accounting, which relevant legal, privacy, scientific, operational, and localization constraints must a prospective software tool satisfy?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H133",
+      "research_query": "For farm post-harvest food waste analytics, what independently documented customer problems and primary-source evidence exist for useful offline or web-based software?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H134",
+      "research_query": "For farm post-harvest food waste analytics, which verifiable datasets, units, methods, and independent quality checks would be needed before developing a reliable digital tool?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H135",
+      "research_query": "For farm post-harvest food waste analytics, what actual competing software, published prices, buyer adoption barriers, and distribution channels can be verified?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H136",
+      "research_query": "For farm post-harvest food waste analytics, which relevant legal, privacy, scientific, operational, and localization constraints must a prospective software tool satisfy?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H137",
+      "research_query": "For agritourism enterprise unit economics, what independently documented customer problems and primary-source evidence exist for useful offline or web-based software?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H138",
+      "research_query": "For agritourism enterprise unit economics, which verifiable datasets, units, methods, and independent quality checks would be needed before developing a reliable digital tool?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H139",
+      "research_query": "For agritourism enterprise unit economics, what actual competing software, published prices, buyer adoption barriers, and distribution channels can be verified?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H140",
+      "research_query": "For agritourism enterprise unit economics, which relevant legal, privacy, scientific, operational, and localization constraints must a prospective software tool satisfy?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H141",
+      "research_query": "For farm water-footprint accounting, what independently documented customer problems and primary-source evidence exist for useful offline or web-based software?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H142",
+      "research_query": "For farm water-footprint accounting, which verifiable datasets, units, methods, and independent quality checks would be needed before developing a reliable digital tool?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H143",
+      "research_query": "For farm water-footprint accounting, what actual competing software, published prices, buyer adoption barriers, and distribution channels can be verified?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H144",
+      "research_query": "For farm water-footprint accounting, which relevant legal, privacy, scientific, operational, and localization constraints must a prospective software tool satisfy?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H145",
+      "research_query": "For farm cooperative joint procurement optimization, what independently documented customer problems and primary-source evidence exist for useful offline or web-based software?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H146",
+      "research_query": "For farm cooperative joint procurement optimization, which verifiable datasets, units, methods, and independent quality checks would be needed before developing a reliable digital tool?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H147",
+      "research_query": "For farm cooperative joint procurement optimization, what actual competing software, published prices, buyer adoption barriers, and distribution channels can be verified?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H148",
+      "research_query": "For farm cooperative joint procurement optimization, which relevant legal, privacy, scientific, operational, and localization constraints must a prospective software tool satisfy?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H149",
+      "research_query": "For agricultural marketplace seller analytics, what independently documented customer problems and primary-source evidence exist for useful offline or web-based software?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H150",
+      "research_query": "For agricultural marketplace seller analytics, which verifiable datasets, units, methods, and independent quality checks would be needed before developing a reliable digital tool?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H151",
+      "research_query": "For agricultural marketplace seller analytics, what actual competing software, published prices, buyer adoption barriers, and distribution channels can be verified?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H152",
+      "research_query": "For agricultural marketplace seller analytics, which relevant legal, privacy, scientific, operational, and localization constraints must a prospective software tool satisfy?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H153",
+      "research_query": "For farm wholesale order and delivery management, what independently documented customer problems and primary-source evidence exist for useful offline or web-based software?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H154",
+      "research_query": "For farm wholesale order and delivery management, which verifiable datasets, units, methods, and independent quality checks would be needed before developing a reliable digital tool?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H155",
+      "research_query": "For farm wholesale order and delivery management, what actual competing software, published prices, buyer adoption barriers, and distribution channels can be verified?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H156",
+      "research_query": "For farm wholesale order and delivery management, which relevant legal, privacy, scientific, operational, and localization constraints must a prospective software tool satisfy?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H157",
+      "research_query": "For multilingual agricultural product catalog localization, what independently documented customer problems and primary-source evidence exist for useful offline or web-based software?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H158",
+      "research_query": "For multilingual agricultural product catalog localization, which verifiable datasets, units, methods, and independent quality checks would be needed before developing a reliable digital tool?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H159",
+      "research_query": "For multilingual agricultural product catalog localization, what actual competing software, published prices, buyer adoption barriers, and distribution channels can be verified?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H160",
+      "research_query": "For multilingual agricultural product catalog localization, which relevant legal, privacy, scientific, operational, and localization constraints must a prospective software tool satisfy?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H161",
+      "research_query": "For subscription pricing for agricultural SaaS, what independently documented customer problems and primary-source evidence exist for useful offline or web-based software?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H162",
+      "research_query": "For subscription pricing for agricultural SaaS, which verifiable datasets, units, methods, and independent quality checks would be needed before developing a reliable digital tool?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H163",
+      "research_query": "For subscription pricing for agricultural SaaS, what actual competing software, published prices, buyer adoption barriers, and distribution channels can be verified?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H164",
+      "research_query": "For subscription pricing for agricultural SaaS, which relevant legal, privacy, scientific, operational, and localization constraints must a prospective software tool satisfy?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H165",
+      "research_query": "For agricultural research evidence provenance tracking, what independently documented customer problems and primary-source evidence exist for useful offline or web-based software?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H166",
+      "research_query": "For agricultural research evidence provenance tracking, which verifiable datasets, units, methods, and independent quality checks would be needed before developing a reliable digital tool?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H167",
+      "research_query": "For agricultural research evidence provenance tracking, what actual competing software, published prices, buyer adoption barriers, and distribution channels can be verified?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H168",
+      "research_query": "For agricultural research evidence provenance tracking, which relevant legal, privacy, scientific, operational, and localization constraints must a prospective software tool satisfy?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H169",
+      "research_query": "For farm capital budgeting and investment appraisal, what independently documented customer problems and primary-source evidence exist for useful offline or web-based software?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H170",
+      "research_query": "For farm capital budgeting and investment appraisal, which verifiable datasets, units, methods, and independent quality checks would be needed before developing a reliable digital tool?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H171",
+      "research_query": "For farm capital budgeting and investment appraisal, what actual competing software, published prices, buyer adoption barriers, and distribution channels can be verified?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H172",
+      "research_query": "For farm capital budgeting and investment appraisal, which relevant legal, privacy, scientific, operational, and localization constraints must a prospective software tool satisfy?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H173",
+      "research_query": "For SME farm cash-flow stress-testing, what independently documented customer problems and primary-source evidence exist for useful offline or web-based software?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H174",
+      "research_query": "For SME farm cash-flow stress-testing, which verifiable datasets, units, methods, and independent quality checks would be needed before developing a reliable digital tool?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H175",
+      "research_query": "For SME farm cash-flow stress-testing, what actual competing software, published prices, buyer adoption barriers, and distribution channels can be verified?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H176",
+      "research_query": "For SME farm cash-flow stress-testing, which relevant legal, privacy, scientific, operational, and localization constraints must a prospective software tool satisfy?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H177",
+      "research_query": "For agricultural education course engagement analytics, what independently documented customer problems and primary-source evidence exist for useful offline or web-based software?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H178",
+      "research_query": "For agricultural education course engagement analytics, which verifiable datasets, units, methods, and independent quality checks would be needed before developing a reliable digital tool?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H179",
+      "research_query": "For agricultural education course engagement analytics, what actual competing software, published prices, buyer adoption barriers, and distribution channels can be verified?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H180",
+      "research_query": "For agricultural education course engagement analytics, which relevant legal, privacy, scientific, operational, and localization constraints must a prospective software tool satisfy?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H181",
+      "research_query": "For restaurant menu engineering and ingredient cost modeling, what independently documented customer problems and primary-source evidence exist for useful offline or web-based software?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H182",
+      "research_query": "For restaurant menu engineering and ingredient cost modeling, which verifiable datasets, units, methods, and independent quality checks would be needed before developing a reliable digital tool?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H183",
+      "research_query": "For restaurant menu engineering and ingredient cost modeling, what actual competing software, published prices, buyer adoption barriers, and distribution channels can be verified?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H184",
+      "research_query": "For restaurant menu engineering and ingredient cost modeling, which relevant legal, privacy, scientific, operational, and localization constraints must a prospective software tool satisfy?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H185",
+      "research_query": "For small catering production scheduling, what independently documented customer problems and primary-source evidence exist for useful offline or web-based software?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H186",
+      "research_query": "For small catering production scheduling, which verifiable datasets, units, methods, and independent quality checks would be needed before developing a reliable digital tool?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H187",
+      "research_query": "For small catering production scheduling, what actual competing software, published prices, buyer adoption barriers, and distribution channels can be verified?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H188",
+      "research_query": "For small catering production scheduling, which relevant legal, privacy, scientific, operational, and localization constraints must a prospective software tool satisfy?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H189",
+      "research_query": "For jewelry and gemstone inventory profitability, what independently documented customer problems and primary-source evidence exist for useful offline or web-based software?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H190",
+      "research_query": "For jewelry and gemstone inventory profitability, which verifiable datasets, units, methods, and independent quality checks would be needed before developing a reliable digital tool?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H191",
+      "research_query": "For jewelry and gemstone inventory profitability, what actual competing software, published prices, buyer adoption barriers, and distribution channels can be verified?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H192",
+      "research_query": "For jewelry and gemstone inventory profitability, which relevant legal, privacy, scientific, operational, and localization constraints must a prospective software tool satisfy?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H193",
+      "research_query": "For handwoven carpet provenance and inventory records, what independently documented customer problems and primary-source evidence exist for useful offline or web-based software?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H194",
+      "research_query": "For handwoven carpet provenance and inventory records, which verifiable datasets, units, methods, and independent quality checks would be needed before developing a reliable digital tool?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H195",
+      "research_query": "For handwoven carpet provenance and inventory records, what actual competing software, published prices, buyer adoption barriers, and distribution channels can be verified?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H196",
+      "research_query": "For handwoven carpet provenance and inventory records, which relevant legal, privacy, scientific, operational, and localization constraints must a prospective software tool satisfy?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H197",
+      "research_query": "For fuel station operational cost tracking, what independently documented customer problems and primary-source evidence exist for useful offline or web-based software?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H198",
+      "research_query": "For fuel station operational cost tracking, which verifiable datasets, units, methods, and independent quality checks would be needed before developing a reliable digital tool?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H199",
+      "research_query": "For fuel station operational cost tracking, what actual competing software, published prices, buyer adoption barriers, and distribution channels can be verified?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    },
+    {
+      "hypothesis_id": "ASTRA-H200",
+      "research_query": "For fuel station operational cost tracking, which relevant legal, privacy, scientific, operational, and localization constraints must a prospective software tool satisfy?",
+      "status": "hypothesis_unverified",
+      "customer_order_required": false,
+      "approved_product": false
+    }
+  ]
+}
