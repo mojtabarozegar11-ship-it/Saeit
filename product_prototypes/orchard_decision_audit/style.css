@@ -24,3 +24,30 @@ h1{font-size:clamp(38px,5.2vw,72px);line-height:1.06;font-weight:750;letter-spac
 @media(max-width:1100px){.grid{grid-template-columns:1fr}.rightcolumn{display:grid;grid-template-columns:1fr 1fr}.hero{align-items:flex-start}.statuspanel{width:220px}.fields{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:690px){.sitehead{padding:14px 18px}.topbadge{font-size:9px;max-width:124px;text-align:center}.container{padding:24px 14px 42px}.hero{display:block;margin:0 0 25px}.statuspanel{width:auto;margin-top:16px}.panel{padding:18px}.fields{grid-template-columns:1fr 1fr}.stressgrid,.rightcolumn{display:grid;grid-template-columns:1fr}.toolbar{margin:18px 0}.toolbar-left .button{flex:1}h1{font-size:43px}.option{padding:10px}.optionhead{flex-wrap:wrap}}
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{transition:none!important}}
+
+.annual-detail{margin-top:12px;border:1px solid var(--line);border-radius:9px;padding:11px;background:#fbfcfa}
+.annual-detail summary{cursor:pointer;font-size:12px;font-weight:800;color:var(--forest)}
+.annual-detail[open] summary{margin-bottom:10px}
+.annual-table{min-width:570px;font-size:10px}
+.annual-table th,.annual-table td{padding:7px 4px}
+.result-actions{display:flex;gap:8px;flex-wrap:wrap}
+@media print{
+  @page{margin:12mm;size:A4}
+  body{background:#fff;color:#111;font-size:10pt}
+  .sitehead{color:#111;background:white;border-bottom:2px solid #222}
+  .topbadge,.statuspanel,.warning,.toolbar,.inputpanel,.methodology,
+  .result-actions,#result-empty,footer{display:none!important}
+  .container{padding:0;margin:0;max-width:none}
+  .hero{display:block;margin:8px 0 12px}
+  .hero h1{font-size:25pt;margin:0}
+  .lede{font-size:9pt;max-width:none}
+  .grid,.rightcolumn{display:block}
+  .summarypanel{border:0;box-shadow:none;padding:0;background:white}
+  .paneltitle{margin:6px 0}
+  #annual-audit details{display:block;break-inside:avoid}
+  #annual-audit summary{font-size:9pt}
+  .year-scroll{overflow:visible}
+  .annual-table{min-width:0;font-size:7pt}
+  .annual-table th,.annual-table td{padding:3px}
+  .resulttable{width:100%;font-size:8pt}
+}
