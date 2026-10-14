@@ -1,4 +1,4 @@
-name: V91 and live Zomorod forensic read only audit
+name: V91 and live Zomorod bounded forensic read only audit
 on:
   push:
     branches: [audit/v91-live-20261014-readonly]
@@ -63,7 +63,7 @@ jobs:
           EOF
           timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
           test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
-          timeout 230s ssh -F "$d/config" saeit-host 'cd /home/zomorod2 && PYTHONDONTWRITEBYTECODE=1 python3 -B -' < audits/v91_live_readonly_compare.py
+          timeout 170s ssh -F "$d/config" saeit-host 'cd /home/zomorod2 && PYTHONDONTWRITEBYTECODE=1 python3 -B -' < audits/v91_live_readonly_compare.py
           echo V91_FILESYSTEM_READONLY_AUDIT_COMPLETE
       - name: Remove SSH material
         if: always()
