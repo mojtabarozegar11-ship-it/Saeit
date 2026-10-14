@@ -95,3 +95,25 @@ This addendum supersedes prior statements within this document that a **private 
 - [Operations, observability, safe disable steps](ASTRA_V2_PRIVATE_SCHEDULER_OPERATIONS_20261015.md).
 
 **Current goal completion:** 5-minute bounded *private queue processing* installed and initially checked; generation of genuinely new commercially qualified products, market-price evidence, independent score of >=90 and verified end-to-end store settlement remain unproven. Do not use private heartbeat, one repeated product family or successful CI as a sales KPI.
+
+## 2026-10-15 additional verified implementation — SECOND INDEPENDENT PRODUCT AND LIVE PRIVATE INBOX
+
+This section supersedes the former "only one specialized builder" and "no automated private intake" status. It does NOT lift the market/release quality gates.
+
+### Delivered and tested
+
+- **Specialist builder #2**: `farm_procurement_audit_v1` in `product_prototypes/farm_procurement_audit/`, distinct from the orchard long-term NPV tool. Normalizes usable agricultural input quantity for waste, delivery deadlines, supplier capacity and minimum orders; computes exact Decimal landed costs, explicit tax convention, discounts and adverse stress; produces a local printer-friendly HTML report and bundled self-check. Quote and supplier assertions remain operator-supplied, unverified.
+- **Competition audit**: `docs/research/ASTRA_V2_FARM_PROCUREMENT_COMPETITION_AUDIT_20261015.md` compares with public university extension resources and existing free tools, explicitly warning that demand/paid differentiation is **NOT proven**.
+- **Pluggable allowlisted registry** in `scripts/astra_v2_private_pipeline.py`: individual folder/file/test per specialist; refuses paid/unregistered builders and self-asserted market validation; existing orchid builder still supported.
+- **Independent family/version counters**: distinct source hashes are not distinct saleable products; private QA reports have `quality_score=null` and false paid/store approval.
+- **Bounded local inbox auto-intake**: each private five-minute tick scans `.../astra-v2-canary-products/incoming/*.json`, validates seven exact private-only fields, rejects malformed/paid/out-of-scope briefs, SHA-deduplicates and processes new allowed jobs. This is *supply-led without orders*, but it does not fabricate new eligible incoming briefs.
+
+### Live VPS evidence / observations
+
+- [Two genuinely distinct reference products on independently isolated VPS staging, run 38656383213](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/38656383213): 17 procurement, 23 investment and 24 pipeline tests, two standalone ZIP self-tests and two distinct builder families. No public commercial product claimed.
+- [418 CI tests passed, run 38656536247](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/38656536247) and corresponding Django CI 38656536316 after the bounded inbox upgrade.
+- [Private code upgrade through shared cron file lock, run 38656644371](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/38656644371): staged/tests-run new two-builder code, retained old scoped-code backup and unchanged crontab, prepared one private procurement intake manifest, confirmed two private families. Follow-up safer rollback-enabled installation run 38656684527 also succeeded.
+- [Read-only VPS health audit, run 38656970682](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/38656970682) at UTC 2026-10-14 23:55:18: **1** private scheduler cron row, **2** families with accepted private QA, **3** distinct private ZIP content SHAs, **0** pending jobs, **0** failed-review jobs, **1** private inbox request file, **16 seconds** since latest private cron log update; active private code has 2 registered builder specialists. No evidence of public listing/paid sales.
+- Live existing factory cron, cPanel, production websites, payment providers and financial ledgers were not modified by this scoped upgrade.
+
+**Commercial result remains zero**: No independently confirmed buyer willingness-to-pay, no competitive user trial, no expert financial/procurement audit, no accepted 90/100 quality rating, no owner release authorization, no storefront/payment settlement. A 24-hour soak with monitored results is still NOT complete. Original Astra migration 0049 and Stage 4→5 market-provider cutover are NOT complete. Two families alone do not imply general autonomous content creation.
