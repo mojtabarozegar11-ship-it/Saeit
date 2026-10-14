@@ -46,6 +46,26 @@ if checks["cgroup_v2"] and cgroup.is_file():
             checks["user_cgroup_delegation"] = os.access(active, os.W_OK)
 checks["private_tailscale_binary"] = (home / ".local/opt/comfyui-tailnet/binaries-1.104.1/tailscale").exists()
 
+candidate = src / "models/checkpoints/segmind_tiny_sd_candidate.safetensors"
+if candidate.is_file():
+    import hashlib
+    expected = "92e00b860c409f8cfc521a94f779009c6ebd28bf07670bf50e747682ab7b3b72"
+    h = hashlib.sha256()
+    with candidate.open("rb") as inp:
+        for chunk in iter(lambda: inp.read(4 * 1024 * 1024), b""):
+            h.update(chunk)
+    checks["tiny_model_hash_verified"] = h.hexdigest() == expected
+    with candidate.open("rb") as inp:
+        length = int.from_bytes(inp.read(8), "little")
+        assert length < 3000000, "INVALID_SAFETENSORS_HEADER"
+        metadata = json.loads(inp.read(length))
+    keys = [str(k) for k in metadata if k != "__metadata__"]
+    checks["checkpoint_key_count"] = len(keys)
+    checks["checkpoint_structure"] = {
+        "unet": sum(k.startswith("model.diffusion_model.") for k in keys),
+        "clip": sum(k.startswith("cond_stage_model.") for k in keys),
+        "vae": sum(k.startswith("first_stage_model.") for k in keys),
+    }
 print("COMFYUI_QUALITY_GATE=" + json.dumps(checks, sort_keys=True))
 if not checks["runtime_present"] or not checks["private_dir"] or not checks["python_present"]:
     raise SystemExit(1)
