@@ -42,7 +42,7 @@ def _json_payload(request):
     return doc
 
 
-@login_required
+@login_required(login_url="/admin/login/")
 @csrf_protect
 @never_cache
 @require_GET
@@ -55,7 +55,7 @@ def merchant_wallet_page(request):
     })
 
 
-@login_required
+@login_required(login_url="/admin/login/")
 @csrf_protect
 @never_cache
 @require_POST
@@ -78,7 +78,7 @@ def merchant_challenge(request):
     })
 
 
-@login_required
+@login_required(login_url="/admin/login/")
 @csrf_protect
 @never_cache
 @require_POST
