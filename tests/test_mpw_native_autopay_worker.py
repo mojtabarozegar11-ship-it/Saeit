@@ -207,8 +207,8 @@ class AutoPayWorkerTests(TestCase):
         proof={
             "network":"tron-mainnet","order_id":invoice.order_id,
             "transaction_hash":TRX_TX,"amount_smallest_units":int(invoice.amount_atomic),
-            "sender":tron_address_to_hex(invoice.verified_sender_address).lower(),
-            "recipient":tron_address_to_hex(invoice.merchant_address).lower(),
+            "sender":invoice.verified_sender_address,
+            "recipient":invoice.merchant_address,
         }
         with patch("mpw_native_checkout.settlement.verify_trx_transfer",return_value=proof):
             result=reconcile_once(
