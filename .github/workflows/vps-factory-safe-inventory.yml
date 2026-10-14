@@ -163,5 +163,54 @@ jobs:
               except Exception as exc: print("FACTORY_APPROVAL_QUERY_ERROR="+type(exc).__name__)
           PY
           fi
+          if test -f "$app/manage.py" && test -x "$base/.venv/bin/python"; then
+            cd "$app"
+            export SAEIT_ENV=production MOJ_FACTORY_LOCAL_MODE=1
+            "$base/.venv/bin/python" - <<'PY'
+          import os,re,collections
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          import django
+          django.setup()
+          from django.apps import apps
+          Product=apps.get_model("core","Product")
+          Task=apps.get_model("core","AgentTask")
+          def keys(d):
+              return list(d) if isinstance(d,dict) else []
+          for name,qs in (("INPUT",Task.objects.filter(status="blocked")),("OUTPUT",Task.objects.filter(status="blocked")),("PREREQUISITE",Task.objects.filter(status="blocked"))):
+              attr={"INPUT":"input_data","OUTPUT":"output_data","PREREQUISITE":"prerequisite_snapshot"}[name]
+              freq=collections.Counter()
+              reasons=collections.Counter()
+              for t in qs.only(attr).iterator(chunk_size=200):
+                  d=getattr(t,attr,None)
+                  if not isinstance(d,dict): continue
+                  freq.update(k for k in d if re.fullmatch(r"[A-Za-z0-9_.:-]{1,80}",str(k)))
+                  for k,v in d.items():
+                      if not re.search(r"block|fail|error|reason|detail|approval|prerequisite|status",str(k),re.I): continue
+                      text=str(v).lower()[:1000]
+                      for tag,p in (
+                          ("owner_or_approval",r"owner|approv|permission|grant"),
+                          ("missing_evidence",r"evidence|source|proof|citation"),
+                          ("provider_issue",r"provider|model|offline|network"),
+                          ("budget_or_api",r"budget|quota|token|429|api.key"),
+                          ("missing_project",r"project|identity|user"),
+                          ("review",r"quality|review|validation"),
+                      ):
+                          if re.search(p,text): reasons[tag]+=1
+              print("FACTORY_BLOCKED_TASK_"+name+"_KEYS="+",".join(k+":"+str(v) for k,v in freq.most_common(25)))
+              print("FACTORY_BLOCKED_TASK_"+name+"_REASON_CATEGORIES="+",".join(k+":"+str(v) for k,v in reasons.most_common()))
+          product_keys=collections.Counter()
+          ready=collections.Counter()
+          for p in Product.objects.all().iterator(chunk_size=100):
+              m=p.metadata if isinstance(p.metadata,dict) else {}
+              product_keys.update(str(k) for k in m if re.fullmatch(r"[A-Za-z0-9_.:-]{1,80}",str(k)))
+              ready["priced"]+=int(p.price>0)
+              ready["owner_attached"]+=int(p.owner_id is not None)
+              ready["knowledge_article_attached"]+=int(p.knowledge_article_id is not None)
+              ready["metadata_nonempty"]+=int(bool(m))
+              ready["active"]+=int(bool(p.active))
+          print("FACTORY_PRODUCT_METADATA_KEYS="+",".join(k+":"+str(v) for k,v in product_keys.most_common(30)))
+          print("FACTORY_PRODUCT_READINESS_COUNTS="+",".join(k+":"+str(v) for k,v in ready.items()))
+          PY
+          fi
           echo FACTORY_INVENTORY_READ_ONLY_DONE
           REMOTE
