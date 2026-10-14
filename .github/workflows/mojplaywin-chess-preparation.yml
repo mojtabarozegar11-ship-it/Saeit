@@ -98,6 +98,7 @@ jobs:
             mpw_native_checkout/apps.py \
             mpw_native_checkout/models.py \
             mpw_native_checkout/entitlements.py \
+            mpw_native_checkout/settlement.py \
             mpw_native_checkout/migrations/__init__.py \
             mpw_native_checkout/migrations/0001_initial.py \
             catalog/mojplaywin/chess-improvement-2026.json \
@@ -116,6 +117,7 @@ jobs:
           timeout 45s ssh -F "$base/config" saeit-host "cd '$target' && tar -tzf prep.tar.gz | grep -Fxq scripts/mojplaywin_chess_assets.py && tar -tzf prep.tar.gz | grep -Fxq core/chess_ebook_delivery.py && tar -xzf prep.tar.gz && test -f scripts/mojplaywin_chess_assets.py && test -f core/chess_ebook_delivery.py && chmod 700 scripts && chmod 600 scripts/mojplaywin_chess_assets.py && echo PRIVATE_PREPARATION_STAGED"
           echo ETH_TRX_VERIFIERS_STAGED_OFFLINE
           echo DJANGO_NATIVE_INVOICE_APP_STAGED_OFFLINE
+          echo AUTOMATIC_ORDER_SETTLEMENT_ENGINE_STAGED_UNROUTED
           echo LIVE_SITE_FILES_UNCHANGED
           echo CHESS_PAYMENT_NOT_ACTIVATED
       - name: Scrub runner credentials
