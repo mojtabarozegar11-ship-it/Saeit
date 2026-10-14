@@ -41,6 +41,26 @@ jobs:
           print("MPW_PUBLIC_STORE_HTML_END_COUNT="+str(store.lower().count("</html>")))
           print("MPW_PUBLIC_STORE_SAFE_FRAGMENT_ANCHOR="+str(store.lower().count("</main>")==1 or store.lower().count("</body>")==1))
           print("MPW_PUBLIC_STORE_HAS_WATER_BUDGET="+str("Water Budget Economics" in store))
+          from html.parser import HTMLParser
+          class CatalogScanner(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.nodes=[]
+                  self.texts=[]
+              def handle_starttag(self,tag,attrs):
+                  attrs=dict(attrs)
+                  if tag in ("article","section","a","h1","h2","h3") or "product" in attrs.get("class","").lower():
+                      self.nodes.append((tag,attrs.get("class","")[:120],attrs.get("id","")[:100],attrs.get("href","")[:160]))
+              def handle_data(self,data):
+                  value=" ".join(data.strip().split())
+                  if value and len(value)>3:
+                      self.texts.append(value[:200])
+          scanner=CatalogScanner()
+          scanner.feed(store)
+          cues=[s for s in scanner.texts if any(k in s.lower() for k in ("product","store","catalog","coming","available","no items","no digital","free toolkit","nothing","shop"))]
+          print("MPW_PUBLIC_STORE_SECTION_CLASSES="+repr(scanner.nodes[:25]))
+          print("MPW_PUBLIC_STORE_VISIBLE_CUES="+repr(cues[:22]))
+          print("MPW_PUBLIC_STORE_CONTAINS_NO_PRODUCTS_MESSAGE="+str(any(("no products" in s.lower() or "no items" in s.lower() or "coming soon" in s.lower()) for s in scanner.texts)))
           print("MPW_PUBLIC_FARM_FREE_PAGE_HAS_TITLE="+str("Farm Enterprise Economics Toolkit" in farm))
           if zip_file.exists():
               digest=hashlib.sha256(zip_file.read_bytes()).hexdigest()
