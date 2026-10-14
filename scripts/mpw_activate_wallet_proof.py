@@ -121,12 +121,29 @@ def backup_mysql(destination, connection_settings):
     env=os.environ.copy()
     env["MYSQL_PWD"]=str(db.get("PASSWORD",""))
     path=destination/"full-mysql-before-wallet-page.sql.gz"
-    with gzip.open(path,"wb",compresslevel=5) as archive:
-        run(cmd,env=env,stdout=archive)
+    # Stream the dump through Python's compressor (passing a gzip fd straight
+    # to mysqldump would silently bypass gzip, producing an invalid backup).
+    with tempfile.TemporaryFile() as errors:
+        proc=subprocess.Popen(
+            cmd,stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,
+            stderr=errors,env=env,cwd=SITE,
+        )
+        try:
+            with gzip.open(path,"wb",compresslevel=5) as archive:
+                shutil.copyfileobj(proc.stdout,archive,length=1024*1024)
+            exit_code=proc.wait(timeout=120)
+        except Exception:
+            proc.kill()
+            proc.wait()
+            raise
     path.chmod(0o600)
-    if path.stat().st_size < 512:
-        fail("Database backup empty or incomplete")
-    print("MYSQL_BACKUP_WRITTEN_PRIVATE")
+    if exit_code != 0 or path.stat().st_size < 512:
+        fail("Database backup failed or incomplete")
+    with gzip.open(path,"rb") as archived:
+        head=archived.read(512)
+    if b"--" not in head and b"CREATE" not in head:
+        fail("SQL backup content is not recognizable")
+    print("MYSQL_BACKUP_WRITTEN_PRIVATE_AND_GZIP_VERIFIED")
 
 
 def copy_release(candidate):
@@ -269,7 +286,6 @@ def activate():
         run((VENV,"-m","django","check"),env=env)
         # Process-local request test: authenticated owner only, HTTPS and
         # host-restricted. Does not save login state or make blockchain calls.
-        request_test=String.raw if False else ""
         code = """
 from django.test import RequestFactory
 from django.contrib.auth import get_user_model
