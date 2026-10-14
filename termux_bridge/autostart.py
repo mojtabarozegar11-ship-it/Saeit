@@ -158,6 +158,7 @@ def boot_addon_status():
 def main(argv=None):
     parser = argparse.ArgumentParser()
     options = parser.add_mutually_exclusive_group(required=True)
+    options.add_argument("--setup", action="store_true")
     options.add_argument("--install", action="store_true")
     options.add_argument("--start", action="store_true")
     options.add_argument("--run", action="store_true")
@@ -165,9 +166,11 @@ def main(argv=None):
     args = parser.parse_args(argv)
     home = Path.home()
     try:
-        if args.install:
+        if args.install or args.setup:
             print(install(home))
             print(boot_addon_status())
+            if args.setup:
+                print(start(home))
             return 0
         if args.status:
             state, _, script = paths(home)
