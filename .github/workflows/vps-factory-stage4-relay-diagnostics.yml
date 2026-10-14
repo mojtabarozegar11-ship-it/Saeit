@@ -128,6 +128,21 @@ jobs:
           echo STAGE4_SOURCE_SNIPPETS
           if test -f "$app/core/factory_stage4.py"; then sed -n '1,130p' "$app/core/factory_stage4.py" | sed -E 's/(SECRET|TOKEN|PASSWORD|API_KEY|PRIVATE_KEY|DATABASE_URL)[^=]*=.*/[REDACTED_CONFIG_LINE]/I'; fi
           if test -f "$app/core/factory_agent_runtime.py"; then sed -n '235,275p;475,520p' "$app/core/factory_agent_runtime.py" | sed -E 's/(SECRET|TOKEN|PASSWORD|API_KEY|PRIVATE_KEY|DATABASE_URL)[^=]*=.*/[REDACTED_CONFIG_LINE]/I'; fi
+          echo FACTORY_OWNER_CODE
+          sed -n '90,112p' "$app/core/factory_stage4.py" 2>/dev/null || true
+          sed -n '210,240p' "$app/core/factory_agent_runtime.py" 2>/dev/null || true
+          "$base/.venv/bin/python" - "$app/core/models.py" <<'PY'
+          import sys
+          lines=open(sys.argv[1],encoding="utf-8").read().splitlines()
+          start=next((i for i,line in enumerate(lines) if line.startswith("class ResearchProject")),None)
+          if start is None:
+              print("RESEARCH_PROJECT_MODEL_NOT_FOUND")
+          else:
+              for line in lines[start:min(start+60,len(lines))]:
+                  if line.startswith("class ") and line != lines[start]:
+                      break
+                  print(line)
+          PY
           echo FACTORY_OWNER_READ_ONLY_COUNTS
           cd "$app"
           export SAEIT_ENV=production MOJ_FACTORY_LOCAL_MODE=1
@@ -140,8 +155,13 @@ jobs:
           from django.apps import apps
           User=get_user_model()
           qs=User.objects.filter(is_active=True,is_superuser=True)
+          from django.conf import settings
+          print("USER_TOTAL_COUNT="+str(User.objects.count()))
+          print("USER_ACTIVE_COUNT="+str(User.objects.filter(is_active=True).count()))
+          print("USER_ACTIVE_STAFF_COUNT="+str(User.objects.filter(is_active=True,is_staff=True).count()))
           print("ACTIVE_SUPERUSER_COUNT="+str(qs.count()))
           print("ACTIVE_SUPERUSER_IDS="+",".join(map(str,qs.values_list("pk",flat=True)[:20])))
+          print("FACTORY_OWNER_SETTING_NAMES="+",".join(sorted(k for k in dir(settings) if "OWNER" in k.upper() and "FACTORY" in k.upper())))
           for model in apps.get_app_config("core").get_models():
               if model.__name__ in ("ResearchProject","FactoryTask","FactoryRun","AgentTask"):
                   print("MODEL="+model._meta.label+" COUNT="+str(model.objects.count()))
