@@ -58,7 +58,7 @@ class NativeEventLoopReleaseGateTests(SimpleTestCase):
                     call_command("mpw_native_event_loop")
                 runner.assert_not_called()
 
-    def test_approved_worker_has_zero_merchant_signature_dependency(self):
+    def test_deprecated_worker_requires_existing_signed_receiver_record(self):
         with tempfile.TemporaryDirectory() as path:
             root = Path(path)
             key = root / "secret"
@@ -76,9 +76,12 @@ class NativeEventLoopReleaseGateTests(SimpleTestCase):
                 MPW_NATIVE_EVENT_ENABLED=True,
                 MPW_NATIVE_AUTOPAY_ENABLED=True,
                 MPW_NATIVE_RELEASE_APPROVED=True,
-                MPW_NATIVE_MERCHANT_PROOFS={},  # intentionally no owner proof
+                MPW_NATIVE_MERCHANT_PROOFS={"ETH":True,"TRX":True},
                 MPW_NATIVE_EVENT_HOME=str(root),
                 MPW_NATIVE_EVENT_SECRET_FILE=str(key),
+            ), patch(
+                "mpw_native_checkout.management.commands.mpw_native_event_loop.proven_assets",
+                return_value={"ETH":True,"TRX":True},
             ), patch(
                 "mpw_native_checkout.management.commands.mpw_native_event_loop.run_local_worker",
                 side_effect=fake_loop,
