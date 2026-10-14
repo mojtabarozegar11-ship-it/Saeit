@@ -166,6 +166,7 @@ jobs:
           print("USER_ACTIVE_STAFF_COUNT="+str(User.objects.filter(is_active=True,is_staff=True).count()))
           print("ACTIVE_SUPERUSER_COUNT="+str(qs.count()))
           print("ACTIVE_SUPERUSER_IDS="+",".join(map(str,qs.values_list("pk",flat=True)[:20])))
+          print("ACTIVE_SUPERUSER_USERNAMES="+",".join(qs.values_list("username",flat=True)[:20]))
           print("FACTORY_OWNER_SETTING_NAMES="+",".join(sorted(k for k in dir(settings) if "OWNER" in k.upper() and "FACTORY" in k.upper())))
           for model in apps.get_app_config("core").get_models():
               if model.__name__ in ("ResearchProject","FactoryTask","FactoryRun","AgentTask"):
