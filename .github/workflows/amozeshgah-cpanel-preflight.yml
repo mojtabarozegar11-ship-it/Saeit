@@ -1,0 +1,89 @@
+name: Amuzeshgah cPanel target preflight
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/amozeshgah-cpanel-preflight.yml"
+permissions:
+  contents: read
+concurrency:
+  group: amozeshgah-cpanel-preflight
+  cancel-in-progress: false
+jobs:
+  inspect-target:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Configure pinned VPS relay and cPanel connection
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+          HOST_KNOWN: ${{ secrets.SAEIT_HOST_SSH_KNOWN_HOSTS }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY" && test -n "$HOST_KNOWN"
+          d="$RUNNER_TEMP/amozeshgah-preflight"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\\r\\n","\\n").replace("\\r","").replace("\\n","\\n").rstrip()+"\\n",end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\\r\\n","\\n").replace("\\r","").replace("\\n","\\n").rstrip()+"\\n",end="")' > "$d/host.key"
+          printf '%s\\n' "$HOST_KNOWN" > "$d/host.known"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+      - name: Verify cPanel account and target paths without writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -F "$RUNNER_TEMP/amozeshgah-preflight/config" saeit-cpanel 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          echo CPANEL_AUTHENTICATED_USER="$(id -un)"
+          echo CPANEL_HOST="$(hostname)"
+          if test -r /etc/userdomains; then
+            owner="$(awk -F: '$1=="zomorodmelal.ir" {gsub(/[[:space:]]/,"",$2); print $2; exit}' /etc/userdomains)"
+            echo COMPANY_DOMAIN_OWNER="${owner:-NOT_FOUND_IN_MAP}"
+          else
+            echo COMPANY_DOMAIN_OWNER_MAP=NOT_READABLE
+          fi
+          for p in /home/zomorodm/repositories/Saeit /home/zomorodm/zomorodmelal-app/django_project /home/zomorod2/Saeit-staging; do
+            if test -d "$p"; then
+              echo "PATH_PRESENT=$p"
+              if test -f "$p/manage.py"; then echo "DJANGO_PROJECT_PRESENT=$p"; fi
+              if test -f "$p/config/urls.py" && grep -q 'path("amozeshgah/", education' "$p/config/urls.py"; then
+                echo "AMOZESHGHAH_ROUTE_PRESENT=$p"
+              fi
+            else
+              echo "PATH_ABSENT=$p"
+            fi
+          done
+          REMOTE
+      - name: Remove temporary SSH material
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/amozeshgah-preflight"
