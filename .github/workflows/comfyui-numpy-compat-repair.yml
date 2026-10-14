@@ -1,0 +1,22 @@
+name: ComfyUI NumPy Compatibility Repair
+on:
+  push:
+    branches: [audit/vps-comfyui-hardware-20261014]
+    paths: [.github/workflows/comfyui-numpy-compat-repair.yml]
+permissions:
+  contents: read
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Download NumPy legacy-compatible wheel
+        run: |
+          mkdir -p "$RUNNER_TEMP/numpy"
+          python -m pip download --no-deps --only-binary=:all: -d "$RUNNER_TEMP/numpy" numpy==1.26.4
+      - name: Inspect wheel metadata
+        run: |
+          ls -lh "$RUNNER_TEMP/numpy"
