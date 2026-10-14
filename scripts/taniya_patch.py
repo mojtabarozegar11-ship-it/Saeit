@@ -8,10 +8,10 @@ STUDIO_PATH_NEW = STUDIO_PATH_OLD + '\n    path("taniya/", taniya_studio, name="
 STUDIO_LINK_OLD = '"links":[{"title":"هوش مصنوعی","text":"ابزارهای AI برای تولید","url":"/agents/"},{"title":"اقتصاد","text":"اقتصاد محصولات دیجیتال","url":"/economy/"},{"title":"آموزش","text":"آموزش و مهارت","url":"/education/"}]'
 STUDIO_LINK_NEW = '"links":[{"title":"Taniya Studio","text":"20 playful browser games","url":"/taniya/"},{"title":"هوش مصنوعی","text":"ابزارهای AI برای تولید","url":"/agents/"},{"title":"اقتصاد","text":"اقتصاد محصولات دیجیتال","url":"/economy/"},{"title":"آموزش","text":"آموزش و مهارت","url":"/education/"}]'
 VIEW_BLOCK = (
-    "@never_cache\\n"
-    "def taniya_studio(request):\\n"
-    '    return render(request, "taniya_studio/index.html")\\n'
-    "\\n\\n"
+    "@never_cache\n"
+    "def taniya_studio(request):\n"
+    '    return render(request, "taniya_studio/index.html")\n'
+    "\n\n"
 )
 
 def _ensure(text, old, new, label):
