@@ -1,30 +1,112 @@
 name: VPS Factory Safe Read-only Inventory
+
 on:
   push:
     branches: [main]
     paths: [.github/workflows/vps-factory-safe-inventory.yml]
   workflow_dispatch:
+
 permissions:
   contents: read
+
+concurrency:
+  group: vps-factory-readonly-inventory
+  cancel-in-progress: false
+
 jobs:
   inspect:
     runs-on: ubuntu-latest
-    timeout-minutes: 6
+    timeout-minutes: 8
     steps:
-      - name: VPS SSH identity and capacity only
-        env:
-          SSH_HOST: \${{ secrets.SAEIT_VPS_SSH_HOST }}
-          SSH_USER: \${{ secrets.SAEIT_VPS_SSH_USER }}
-          SSH_PORT: \${{ secrets.SAEIT_VPS_SSH_PORT }}
-          SSH_KEY: \${{ secrets.SAEIT_VPS_SSH_PRIVATE_KEY }}
-          SSH_KNOWN: \${{ secrets.SAEIT_VPS_SSH_KNOWN_HOSTS }}
+      - name: Inspect standalone VPS factory without modifying anything
         shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
         run: |
           set -euo pipefail
           umask 077
-          test -n "$SSH_HOST" && test -n "$SSH_USER" && test -n "$SSH_KEY" && test -n "$SSH_KNOWN"
-          mkdir -p "$HOME/.ssh"
-          printf '%s\\n' "$SSH_KEY" > "$HOME/.ssh/id_factory_inventory"
-          printf '%s\\n' "$SSH_KNOWN" > "$HOME/.ssh/known_hosts"
-          chmod 600 "$HOME/.ssh/id_factory_inventory" "$HOME/.ssh/known_hosts"
-          ssh -i "$HOME/.ssh/id_factory_inventory" -p "\${SSH_PORT:-22}" -o StrictHostKeyChecking=yes -o BatchMode=yes -o ConnectTimeout=10 "$SSH_USER@$SSH_HOST" 'echo VPS_IDENTITY; hostname; id -un; echo VPS_DISK; df -h /; echo VPS_MEMORY; free -m; echo VPS_FACTORY_PATHS; for p in /srv/factory /opt/factory /home/githubops/Saeit /home/githubops/factory; do if test -e "$p"; then du -sh "$p"; fi; done; echo VPS_SERVICES; systemctl list-units --type=service --all --no-pager | grep -Ei "factory|postgres|celery" | head -20 || true'
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/factory-inventory"
+          mkdir -m 700 -p "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null
+          scan="$(ssh-keyscan -T 10 -t rsa 178.239.147.150 2>/dev/null)"
+          test -n "$scan"
+          actual="$(printf '%s\n' "$scan" | ssh-keygen -lf - -E sha256 | awk '{print $2}' | sort -u)"
+          test "$actual" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          printf '%s\n' "$scan" > "$d/known"
+          ssh -i "$d/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o BatchMode=yes -o ConnectTimeout=15 githubops@178.239.147.150 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          base="$HOME/factory-runtime"
+          ops="$base/operations"
+          app="$base/django-app"
+          echo FACTORY_INVENTORY_BEGIN
+          echo "VPS_USER=$(id -un)"
+          echo "VPS_HOSTNAME=$(hostname)"
+          echo "VPS_UPTIME=$(uptime -p)"
+          df -h "$HOME" | tail -n 1 | awk '{print "VPS_DISK_USED=" $5 " VPS_DISK_FREE=" $4}'
+          free -m | awk '/^Mem:/ {print "VPS_MEMORY_TOTAL_MB=" $2 " VPS_MEMORY_AVAILABLE_MB=" $7}'
+          for p in "$base" "$ops" "$app" "$base/.venv/bin/python" "$ops/vps-only-loop.sh" "$base/private/factory-fresh-isolated.sqlite3"; do
+            if test -e "$p"; then echo "FACTORY_PATH_PRESENT=$(basename "$p")"; else echo "FACTORY_PATH_MISSING=$(basename "$p")"; fi
+          done
+          if test -f "$ops/vps-only-loop.pid"; then
+            pid="$(cat "$ops/vps-only-loop.pid")"
+            if [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null && ps -p "$pid" -o args= | grep -Fq 'vps-only-loop.sh'; then
+              echo FACTORY_LOOP_ALIVE
+              ps -p "$pid" -o etime= | awk '{print "FACTORY_PROCESS_ELAPSED=" $1}'
+            else echo FACTORY_LOOP_NOT_VERIFIED; fi
+          else echo FACTORY_PIDFILE_MISSING; fi
+          if systemctl is-active --quiet cron 2>/dev/null || systemctl is-active --quiet crond 2>/dev/null; then
+            echo FACTORY_CRON_ACTIVE
+          else echo FACTORY_CRON_INACTIVE; fi
+          if systemctl is-enabled --quiet cron 2>/dev/null || systemctl is-enabled --quiet crond 2>/dev/null; then
+            echo FACTORY_CRON_BOOT_ENABLED
+          else echo FACTORY_CRON_BOOT_NOT_ENABLED; fi
+          crontab -l 2>/dev/null | grep -c 'SAEIT_FACTORY_AUTOSTART' | awk '{print "FACTORY_AUTOSTART_ENTRIES=" $1}' || true
+          if test -f "$ops/vps-only-factory.log"; then
+            echo FACTORY_LOG_LAST_DIAGNOSTICS
+            grep -E 'FACTORY_(DAILY_PROBES_SCHEDULED|DISCOVERY_WAITING_FOR_EVIDENCE|TICK_OK|LOOP_|PROVIDER_|RESEARCH_)' "$ops/vps-only-factory.log" | tail -n 15 || true
+          else echo FACTORY_LOG_MISSING; fi
+          if test -f "$app/var/factory/discovery/latest.json"; then
+            "$base/.venv/bin/python" - "$app/var/factory/discovery/latest.json" <<'PY'
+          import json,sys
+          data=json.load(open(sys.argv[1],encoding="utf-8"))
+          for k in ("status","stage","next_stage","opportunity_count","evidence_count","pending_evidence_count","waiting_for_evidence"):
+              v=data.get(k)
+              if isinstance(v,(str,int,float,bool)) or v is None:
+                  print("FACTORY_DISCOVERY_"+k.upper()+"="+str(v))
+          PY
+          else echo FACTORY_DISCOVERY_MISSING; fi
+          if test -f "$app/manage.py" && test -x "$base/.venv/bin/python"; then
+            cd "$app"
+            export SAEIT_ENV=production MOJ_FACTORY_LOCAL_MODE=1
+            export FACTORY_RESEARCH_PROVIDER=core.self_hosted_research_provider.SelfHostedStagingResearchProvider
+            "$base/.venv/bin/python" - <<'PY'
+          import os
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          import django
+          django.setup()
+          from django.apps import apps
+          from django.db.models import Count
+          names=("FactoryRun","AgentTask","ResearchProject","Product","Order","KnowledgeArticle","KnowledgeBook","Evidence","Finding","Report")
+          for name in names:
+              try:
+                  model=apps.get_model("core",name)
+              except LookupError:
+                  print("FACTORY_MODEL_NOT_INSTALLED="+name)
+                  continue
+              try:
+                  print("FACTORY_MODEL_COUNT_"+name.upper()+"="+str(model.objects.count()))
+                  if any(f.name=="status" for f in model._meta.fields):
+                      for row in model.objects.values("status").annotate(n=Count("pk")).order_by("-n")[:8]:
+                          print("FACTORY_MODEL_STATUS_"+name.upper()+"="+str(row["status"])+":"+str(row["n"]))
+                  if name=="Product" and any(f.name=="active" for f in model._meta.fields):
+                      print("FACTORY_ACTIVE_PRODUCTS="+str(model.objects.filter(active=True).count()))
+              except Exception as exc:
+                  print("FACTORY_MODEL_QUERY_ERROR_"+name.upper()+"="+type(exc).__name__)
+          PY
+          else echo FACTORY_DJANGO_NOT_AVAILABLE; fi
+          echo FACTORY_INVENTORY_READ_ONLY_DONE
+          REMOTE
