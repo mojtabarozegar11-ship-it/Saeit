@@ -182,6 +182,24 @@ jobs:
           print(inspect.getsource(saman_page))
           print("SAMAN_SECTION_VIEW_SOURCE_BEGIN")
           print(inspect.getsource(saman_section_page))
+          from django.test import Client, override_settings
+          checks = {
+              "/saman/": "The SAMAN collection",
+              "/saman/learn-saman/": "Learning that moves with you.",
+              "/saman/play-saman/": "More than one way to play.",
+              "/saman/products-saman/": "Useful resources, made to keep.",
+              "/saman/membership-saman/": "More depth for committed learners.",
+              "/saman/partners-saman/": "Good work grows through collaboration.",
+              "/saman/about-saman/": "A broader home for curiosity.",
+          }
+          with override_settings(ALLOWED_HOSTS=["*"]):
+              client = Client(raise_request_exception=False)
+              for path, marker in checks.items():
+                  response = client.get(path)
+                  print("SAMAN_TEST_CLIENT=" + path + " -> HTTP " + str(response.status_code))
+                  if response.status_code != 200 or marker.encode() not in response.content:
+                      print(response.content[:1000].decode("utf-8", errors="replace"))
+                      raise AssertionError(path)
           PY
               exit 0
             fi
