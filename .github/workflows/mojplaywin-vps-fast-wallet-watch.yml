@@ -1,0 +1,72 @@
+name: MojPlayWin VPS 15-second native wallet watch (read-only)
+on:
+  push:
+    branches:
+      - release/mojplaywin-chess-product-20261014
+    paths:
+      - '.github/workflows/mojplaywin-vps-fast-wallet-watch.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: mpw-vps-readonly-watch-install
+  cancel-in-progress: false
+jobs:
+  verify-and-install:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Test 15-second watcher and isolate installer
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p 'test_mojplaywin_vps_readonly_watch.py' -v
+          bash -n scripts/install_mpw_vps_readonly_watch.sh
+          python3 -m py_compile scripts/mojplaywin_native_chain_verify.py scripts/mojplaywin_direct_wallet_discovery.py scripts/mojplaywin_vps_readonly_watch.py
+          echo MPW_VPS_WATCH_UNIT_TESTS_OK
+      - name: Install user-only watcher over pinned VPS SSH
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/mpw-vps-wallet-ssh"
+          mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          connect() {
+            timeout 90s ssh -i "$d/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o BatchMode=yes -o ConnectTimeout=12 githubops@178.239.147.150 "$@"
+          }
+          version="$GITHUB_SHA"
+          [[ "$version" =~ ^[0-9a-f]{40}$ ]]
+          tar -czf "$RUNNER_TEMP/mpw-vps-wallet.tar.gz" \
+            scripts/mojplaywin_native_chain_verify.py \
+            scripts/mojplaywin_direct_wallet_discovery.py \
+            scripts/mojplaywin_vps_readonly_watch.py \
+            scripts/install_mpw_vps_readonly_watch.sh
+          local_sha="$(sha256sum "$RUNNER_TEMP/mpw-vps-wallet.tar.gz" | awk '{print $1}')"
+          connect "set -eu; test \"\$(id -un)\" = githubops; umask 077; mkdir -p \"\$HOME/mojplaywin-wallet-watch/releases/$version\"; cat > \"\$HOME/mojplaywin-wallet-watch/incoming-$version.tar.gz\"" < "$RUNNER_TEMP/mpw-vps-wallet.tar.gz"
+          remote_sha="$(connect "sha256sum \"\$HOME/mojplaywin-wallet-watch/incoming-$version.tar.gz\"" | awk '{print $1}')"
+          test "$local_sha" = "$remote_sha"
+          connect "MPW_VERSION='$version' bash -se" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          root="$HOME/mojplaywin-wallet-watch"
+          release="$root/releases/$MPW_VERSION"
+          tar -tzf "$root/incoming-$MPW_VERSION.tar.gz" | grep -F 'scripts/mojplaywin_vps_readonly_watch.py' >/dev/null
+          tar -xzf "$root/incoming-$MPW_VERSION.tar.gz" -C "$release"
+          rm -f "$root/incoming-$MPW_VERSION.tar.gz"
+          bash "$release/scripts/install_mpw_vps_readonly_watch.sh" "$MPW_VERSION"
+          REMOTE
+      - name: Clear ephemeral SSH credentials
+        shell: bash
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/mpw-vps-wallet-ssh"
