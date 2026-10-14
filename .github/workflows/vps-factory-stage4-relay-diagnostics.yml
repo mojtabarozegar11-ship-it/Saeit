@@ -131,6 +131,10 @@ jobs:
           echo RECOVERY_ENTRYPOINTS
           grep -nE "def .*retry|def .*resume|def .*process|def .*recover|def .*run|blocked|requeue" "$app/core/factory_agent_runtime.py" "$app/core/factory_stage4.py" | head -100 || true
           echo OPERATIONS_SCRIPT_NAMES
+          echo LEGACY_RECOVERY_SOURCE
+          if test -f "$app/core/factory_legacy_recovery.py"; then sed -n '1,220p' "$app/core/factory_legacy_recovery.py"; fi
+          echo VPS_LOOP_SOURCE
+          sed -n '1,180p' "$ops/vps-only-loop.sh"
           find "$ops" -maxdepth 1 -type f -name '*.sh' -printf '%f\n' | sort
           grep -RInE 'def .*retry|def .*resume|def .*process|def .*recover|status[[:space:]]*=[[:space:]]*["'\''"]blocked|blocked.*status' "$app/core" --include='*.py' | head -120 || true
           echo FACTORY_OWNER_CODE
