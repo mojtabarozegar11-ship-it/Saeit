@@ -85,25 +85,14 @@ class AutoPayWorkerTests(TestCase):
         self.assertEqual(result["state"],"disabled")
         settlement.assert_not_called()
 
-    def test_merchant_approval_is_never_required_for_a_paid_book(self):
-        invoice=self.new_invoice()
-        invoice.merchant_ownership_verified_at=None
-        invoice.save(update_fields=["merchant_ownership_verified_at","updated_at"])
+    def test_legacy_wallet_attestation_must_remain_fail_closed(self):
+        self.new_invoice()
         with override_settings(MPW_NATIVE_AUTOPAY_ENABLED=True,
                                MPW_NATIVE_MERCHANT_PROOFS={}):
-            with patch("mpw_native_checkout.autopay_worker.settle_native_invoice",
-                       return_value="paid") as settle:
-                result=reconcile_once(
-                    now=self.now, asset_filter="ETH",
-                    eth_scanner=lambda **kwargs:[self.eth_candidate()],
-                    trx_scanner=lambda **kwargs: (_ for _ in ()).throw(
-                        AssertionError("No TRON lookup for ETH order")),
-                )
-        self.assertEqual(result["paid"],1)
-        settle.assert_called_once_with(
-            invoice.pk,ETH_TX,ethereum_rpc=settle.call_args.kwargs["ethereum_rpc"],
-            tron_solidity_rpc=settle.call_args.kwargs["tron_solidity_rpc"],
-        )
+            with patch("mpw_native_checkout.autopay_worker.settle_native_invoice") as settlement:
+                with self.assertRaises(AutoPayUnavailable):
+                    reconcile_once(now=self.now)
+                settlement.assert_not_called()
 
     @override_settings(**ON)
     def test_no_invoices_skip_network(self):
