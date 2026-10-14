@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Orchard Decision Audit | Private Research Workspace</title>
+<link rel="stylesheet" href="/style.css">
+<script src="/app.js" defer></script>
+</head>
+<body>
+<header class="sitehead">
+  <div class="brand"><span class="mark" aria-hidden="true">◆</span><span>ASTRA <small>RESEARCH LAB / V2</small></span></div>
+  <span class="topbadge">PRIVATE · LOCAL ONLY</span>
+</header>
+<main class="container">
+  <div class="hero">
+    <div><p class="eyebrow">CAPITAL ALLOCATION / AGRICULTURAL ECONOMICS</p>
+      <h1>Orchard <em>Decision Audit</em></h1>
+      <p class="lede">Compare the present value of alternative farm investments, understand what changes your conclusion, and surface unsupported assumptions before spending capital.</p></div>
+    <div class="statuspanel"><span class="statusdot"></span> OFFLINE CALCULATION <p>No market feeds, buyer tracking, cloud uploads or investment recommendations.</p></div>
+  </div>
+  <div class="warning"><strong>Methodology preview · not commercially validated.</strong> All example values are synthetic. Replace them with your own verified farm records. These calculations omit taxes, financing and inflation conversion.</div>
+  <section class="toolbar" aria-label="Scenario workspace">
+    <div class="toolbar-left"><button id="load-sample" class="button subtle" type="button">Load fictional example</button><button id="download-input" class="button subtle" type="button">Export inputs</button><label class="button subtle filebutton" for="import-file">Import JSON<input id="import-file" type="file" accept=".json,application/json"></label></div>
+    <span class="muted">Values never leave this computer.</span>
+  </section>
+  <div class="grid">
+    <section class="panel inputpanel">
+      <div class="paneltitle"><span class="step">01</span><h2>Configure comparison</h2></div>
+      <div class="fields">
+        <label>Currency code<input id="currency" maxlength="3" value="USD" aria-label="Three-letter currency code"></label>
+        <label>Accounting unit<select id="unit"><option value="per_hectare">Per hectare</option><option value="per_acre">Per acre</option><option value="whole_farm">Whole farm</option></select></label>
+        <label>Money basis<select id="money-basis"><option value="real">Real (constant money)</option><option value="nominal">Nominal (current money)</option></select></label>
+        <label>Years 1–30<input id="horizon" type="number" min="1" max="30" step="1" value="3"></label>
+        <label>Discount rate (%)<input id="discount" type="number" min="0" max="100" step=".1" value="10"></label>
+        <label>Reference option<select id="reference"></select></label>
+      </div>
+      <div class="editorbar"><strong>Annual input ledger</strong><button class="button small" id="add-option" type="button">+ Add option</button></div>
+      <p class="muted">Every annual row contains revenue, variable cost, fixed cost, capital outlay, and terminal value. Enter non-negative amounts; year 0 is immediate.</p>
+      <div id="option-editors" class="options"></div>
+      <div class="paneltitle narrow"><span class="step">02</span><h2>Test uncertain assumptions</h2></div>
+      <div id="stress-editor" class="stressgrid"></div>
+      <div class="actions"><button class="button primary" type="button" id="analyze">Calculate NPV and compare options →</button><span id="editor-message" role="status" aria-live="polite"></span></div>
+    </section>
+    <aside class="rightcolumn">
+      <section class="panel summarypanel">
+        <div class="paneltitle"><span class="step">03</span><h2>Decision evidence</h2></div>
+        <div id="result-empty"><div class="emptyicon" aria-hidden="true">∑</div><p>Complete your assumptions and calculate to compare discounted cash flows.</p></div>
+        <div id="result-area" hidden>
+          <p class="eyebrow">HIGHEST NPV / UNDER YOUR ASSUMPTIONS</p>
+          <p class="winner" id="winner"></p><p class="muted">This is an arithmetic ranking, not an investment recommendation.</p>
+          <div id="result-grid"></div>
+          <div class="result-actions"><button class="button subtle" id="download-report" type="button">Export audit report (JSON)</button></div>
+        </div>
+      </section>
+      <section class="panel methodology"><div class="paneltitle"><span class="step">04</span><h2>Verification notes</h2></div>
+        <ul><li>Scenario stress is deterministic; no likelihood is implied.</li><li>Discounting uses annual end-of-year flows and year-zero cash at face value.</li><li>Every estimate needs independent documentation before investment or product sale.</li><li>Only your inputs drive the outputs; we never assume current crop prices.</li></ul>
+        <p class="muted" id="warnings">Audit warnings appear after calculation.</p></section>
+    </aside>
+  </div>
+  <footer>ASTRA / Zomorod Melal research prototype · local-only · Not an approved commercial product · Financial review required</footer>
+</main>
+</body></html>
