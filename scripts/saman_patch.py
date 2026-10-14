@@ -93,21 +93,22 @@ def patch_views(text):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
         and node.name == "saman_section_page"
     ]
-    if existing:
-        if len(existing) != 1:
-            raise ValueError("Found duplicate SAMAN section views")
-        source = ast.get_source_segment(text, existing[0]) or ""
-        if 'render(request, "saman/index.html", {"saman_section": section})' not in source:
-            raise ValueError("Existing SAMAN section view has an unexpected body")
-        return text
+    if len(existing) > 1:
+        raise ValueError("Found duplicate SAMAN section views")
 
-    if not any(
+    render_imported = any(
         isinstance(node, ast.ImportFrom) and node.module == "django.shortcuts"
         and any((alias.asname or alias.name) == "render" for alias in node.names)
         for node in tree.body
-    ):
+    )
+    if not render_imported:
         raise ValueError("Expected render import from django.shortcuts")
-
+    never_cache_imported = any(
+        isinstance(node, ast.ImportFrom) and node.module == "django.views.decorators.cache"
+        and any((alias.asname or alias.name) == "never_cache" for alias in node.names)
+        for node in tree.body
+    )
+    decorator = "@never_cache\n" if never_cache_imported else ""
     block = (
         "def saman_section_page(request, section):\n"
         "    from django.http import Http404\n"
@@ -116,6 +117,21 @@ def patch_views(text):
         "        raise Http404\n"
         "    return render(request, \"saman/index.html\", {\"saman_section\": section_map[section]})\n\n\n"
     )
+
+    if existing:
+        node = existing[0]
+        source = ast.get_source_segment(text, node) or ""
+        if 'section_map = {' in source and 'section_map[section]' in source:
+            return text
+        if 'render(request, "saman/index.html", {"saman_section": section})' not in source:
+            raise ValueError("Existing SAMAN section view has an unexpected body")
+        first_line = min([node.lineno] + [item.lineno for item in node.decorator_list])
+        lines = text.splitlines(keepends=True)
+        lines[first_line - 1:node.end_lineno] = [decorator + block]
+        patched = "".join(lines)
+        ast.parse(patched)
+        return patched
+
     platform = [
         node for node in tree.body
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == "platform_page"
@@ -123,7 +139,7 @@ def patch_views(text):
     if len(platform) != 1:
         raise ValueError("Expected exactly one platform_page view")
     lines = text.splitlines(keepends=True)
-    lines.insert(platform[0].lineno - 1, block)
+    lines.insert(platform[0].lineno - 1, decorator + block)
     patched = "".join(lines)
     ast.parse(patched)
     return patched
