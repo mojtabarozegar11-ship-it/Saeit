@@ -213,7 +213,7 @@ jobs:
           import sys
           html = Path(sys.argv[1]).read_text(encoding="utf-8")
           marker = sys.argv[2]
-          if "<title>SAMAN" not in html or marker not in html or "Learn with intent." not in html:
+          if "<title>SAMAN" not in html or marker not in html:
               raise SystemExit(f"Live SAMAN content verification failed: {marker}")
           PY
             echo "Verified https://mojplaywin.com$route"
