@@ -32,3 +32,37 @@ The only owned cron row has marker `ASTRA_V2_PRIVATE_RND_TICK`. To disable *only
 - New paid network APIs, extra builders, any live production cutover and public storefront changes need their own validated control path, including rollback.
 
 **Operationally truthful summary:** continuous **queue checking** was enabled; continuous **creation of unique, high-quality, saleable products** was NOT achieved. Report separate counts for queue heartbeat, qualified opportunities, accepted private versions, public listings and settled revenue.
+
+## 2026-10-15 live two-builder/inbox addendum
+
+[Successful VPS code upgrade 38656684527](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/38656684527) added the second *private only* specialist builder and queue inbox ingestion while preserving cron content exactly and testing both applications under the same cron lock. Current private product source is versioned in branch code; original site/factory has not been cut over.
+
+### Independent read-only production verification
+
+[Health run 38656970682](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/38656970682), UTC 2026-10-14 23:55:18:
+- One `ASTRA_V2_PRIVATE_RND_TICK` cron marker; log modified 16 seconds before inspection — a subsequent scheduled tick was observed.
+- Two distinct QA-accepted product families and three distinct SHA-version ZIPs (orchard versions + procurement), **not three paid consumer products**.
+- Zero queued/building jobs, zero FAILED_REVIEW jobs, one private inbox JSON brief.
+- Active private script contains both builder types; no public store publishing.
+- Evidence covers an initial observation; uptime, customer value and 24-hour soak are not proven.
+
+### Private auto-intake contract
+
+The 5-minute tick now scans only `/home/githubops/factory-runtime/private/astra-v2-canary-products/incoming/`. Place **reviewed** JSON in that folder (not in website uploads and never in a public repository) with these exact fields:
+```json
+{
+  "brief_id": "example_private_reference_001",
+  "builder": "farm_procurement_audit_v1",
+  "development_scope": "private_reference_prototype",
+  "publication_allowed": false,
+  "market_demand_verified": false,
+  "paid_api_budget": 0,
+  "problem": "Independently test farm input procurement cost, quantity, fees and delivery decisions using operator-entered data."
+}
+```
+
+Allowed builders: `orchard_decision_audit_v2` or `farm_procurement_audit_v1`. A new filename or brief ID using an unchanged builder source creates a new **job** but not a falsely counted new product *version*. Source file and SHA define distinct version accounting. Malformed/malicious/paid/market-verified-claiming inputs are rejected without stopping processing of valid private work.
+
+All incoming manifests are development requests, NEVER authoritative market research, legal release approvals, checkout triggers, pricing decisions or authorization to operate other agents.
+
+**Future operations:** inspect separate cron heartbeat freshness, count of distinct content SHA and product families, count of truly qualified evidence-sourced briefs, actual public listings and actually reconciled revenue individually. Existing QA reports are separate from the commercial certification that remains blocked.
