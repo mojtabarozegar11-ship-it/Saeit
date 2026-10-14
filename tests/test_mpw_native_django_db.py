@@ -31,7 +31,7 @@ class NativeInvoiceDatabaseTests(TestCase):
             asset="TRX", network="tron-mainnet",
             merchant_address="THFNU1iEXHd71WjEgjqUksd2UnMg2pUi73",
             verified_sender_address="TMadeUpSenderForSchemaTestsOnly",
-            amount_atomic=Decimal(amount),
+            amount_atomic=str(amount),
             usd_amount=Decimal("7.50"), usd_per_asset=Decimal("0.300000000000"),
             price_source="coingecko",
             price_observed_at=self.now,
