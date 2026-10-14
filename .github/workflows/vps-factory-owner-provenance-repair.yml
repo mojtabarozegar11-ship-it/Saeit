@@ -1,8 +1,5 @@
 name: VPS Factory Owner Provenance Repair
 on:
-  push:
-    branches: [main]
-    paths: [.github/workflows/vps-factory-owner-provenance-repair.yml]
   workflow_dispatch:
 permissions:
   contents: read
