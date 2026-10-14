@@ -70,8 +70,8 @@ jobs:
               scripts/mojplaywin_direct_wallet_discovery.py \
               scripts/mojplaywin_direct_wallet_rates.py \
               scripts/mojplaywin_direct_wallet_invoice.py
-          tar -tzf "$RUNNER_TEMP/mpw-commerce-shadow.tgz" | \
-            grep -q '^mpw_commerce/migrations/0002_buyerwalletchallenge.py$'
+          tar -tzf "$RUNNER_TEMP/mpw-commerce-shadow.tgz" > "$RUNNER_TEMP/mpw-commerce-shadow-files.txt"
+          grep -qx 'mpw_commerce/migrations/0002_buyerwalletchallenge.py' "$RUNNER_TEMP/mpw-commerce-shadow-files.txt"
           checksum="$(sha256sum "$RUNNER_TEMP/mpw-commerce-shadow.tgz" | cut -d' ' -f1)"
           timeout 60s ssh -F "$d/config" host \
               'set -e; umask 077; mkdir -p "$HOME/.mpw-commerce-shadow"; chmod 700 "$HOME/.mpw-commerce-shadow"; cat > "$HOME/.mpw-commerce-shadow/source.tgz"' \
