@@ -16,7 +16,9 @@ class NativeEventLoopReleaseGateTests(SimpleTestCase):
             MPW_NATIVE_EVENT_ENABLED=False,
             MPW_NATIVE_AUTOPAY_ENABLED=False,
             MPW_NATIVE_RELEASE_APPROVED=False,
-        ), patch("mpw_native_checkout.management.commands.mpw_native_event_loop.run_local_worker") as runner:
+        ), patch("mpw_native_checkout.management.commands.mpw_native_event_loop.proven_assets",
+                     return_value={"ETH":True,"TRX":True}), patch(
+                "mpw_native_checkout.management.commands.mpw_native_event_loop.run_local_worker") as runner:
             with self.assertRaises(CommandError):
                 call_command("mpw_native_event_loop")
             runner.assert_not_called()
@@ -70,7 +72,9 @@ class NativeEventLoopReleaseGateTests(SimpleTestCase):
                 MPW_NATIVE_MERCHANT_PROOFS={"ETH":True,"TRX":True},
                 MPW_NATIVE_EVENT_HOME=str(root),
                 MPW_NATIVE_EVENT_SECRET_FILE=str(key),
-            ), patch("mpw_native_checkout.management.commands.mpw_native_event_loop.run_local_worker",side_effect=fake_loop), patch(
+            ), patch("mpw_native_checkout.management.commands.mpw_native_event_loop.proven_assets",
+                     return_value={"ETH":True,"TRX":True}), patch(
+                "mpw_native_checkout.management.commands.mpw_native_event_loop.run_local_worker",side_effect=fake_loop), patch(
                 "mpw_native_checkout.management.commands.mpw_native_event_loop.reconcile_once",
                 side_effect=lambda asset_filter: {"matched":1 if asset_filter=="ETH" else 0},
             ) as reconcile:
@@ -79,3 +83,26 @@ class NativeEventLoopReleaseGateTests(SimpleTestCase):
             self.assertEqual([x.kwargs for x in reconcile.call_args_list],[
                 {"asset_filter":"ETH"},{"asset_filter":"TRX"},
             ])
+
+    def test_fake_settings_cannot_replace_signed_wallet_proofs(self):
+        with tempfile.TemporaryDirectory() as path:
+            root=Path(path)
+            key=root/"secret"
+            key.write_bytes(SECRET)
+            key.chmod(0o600)
+            with override_settings(
+                MPW_NATIVE_EVENT_ENABLED=True,
+                MPW_NATIVE_AUTOPAY_ENABLED=True,
+                MPW_NATIVE_RELEASE_APPROVED=True,
+                MPW_NATIVE_MERCHANT_PROOFS={"ETH":True,"TRX":True},
+                MPW_NATIVE_EVENT_HOME=str(root),
+                MPW_NATIVE_EVENT_SECRET_FILE=str(key),
+            ), patch(
+                "mpw_native_checkout.management.commands.mpw_native_event_loop.proven_assets",
+                return_value={"ETH":False,"TRX":False},
+            ), patch(
+                "mpw_native_checkout.management.commands.mpw_native_event_loop.run_local_worker"
+            ) as runner:
+                with self.assertRaises(CommandError):
+                    call_command("mpw_native_event_loop")
+                runner.assert_not_called()
