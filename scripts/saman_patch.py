@@ -1,4 +1,4 @@
-"""Fail-closed Django route edits for the MojPlayWin SAMAN page."""
+"""Fail-closed Django route edits for the MojPlayWin SAMAN site."""
 
 import ast
 
@@ -22,22 +22,48 @@ def _routes(tree):
     return routes
 
 
+def _route_target(route, name):
+    return (
+        len(route.args) >= 2
+        and isinstance(route.args[1], ast.Name)
+        and route.args[1].id == name
+    )
+
+
+def _insert_route(text, route, line_anchor):
+    lines = text.splitlines(keepends=True)
+    line = lines[line_anchor.lineno - 1]
+    indent = line[:len(line) - len(line.lstrip())]
+    lines.insert(line_anchor.end_lineno, f"{indent}{route}\n")
+    return "".join(lines)
+
+
 def patch_urls(text):
     tree = ast.parse(text)
     routes = _routes(tree)
-    saman = [route for route in routes if route.args[0].value == "saman/"]
-    if len(saman) > 1:
-        raise ValueError("Found duplicate SAMAN routes")
-    if saman:
-        route = saman[0]
-        if not (len(route.args) >= 2 and isinstance(route.args[1], ast.Name)
-                and route.args[1].id == "saman_page"):
-            raise ValueError("Existing SAMAN route has an unexpected target")
-        return text
+    if not routes:
+        raise ValueError("Expected at least one existing route")
 
-    imports = [node for node in tree.body if isinstance(node, ast.ImportFrom) and node.module == "core.views"]
+    base_routes = [route for route in routes if route.args[0].value == "saman/"]
+    section_routes = [
+        route for route in routes
+        if route.args[0].value == "saman/<slug:section>/"
+    ]
+    if len(base_routes) > 1 or len(section_routes) > 1:
+        raise ValueError("Found duplicate SAMAN routes")
+    if base_routes and not _route_target(base_routes[0], "saman_page"):
+        raise ValueError("Existing SAMAN route has an unexpected target")
+    if section_routes and not _route_target(section_routes[0], "saman_section_page"):
+        raise ValueError("Existing SAMAN section route has an unexpected target")
+
+    required_imports = {"saman_page", "saman_section_page"}
+    imports = [
+        node for node in tree.body
+        if isinstance(node, ast.ImportFrom) and node.module == "core.views"
+    ]
     bound_names = {alias.asname or alias.name for node in imports for alias in node.names}
-    if "saman_page" not in bound_names:
+    missing_imports = sorted(required_imports - bound_names)
+    if missing_imports:
         assignment = next(
             (node for node in tree.body
              if isinstance(node, (ast.Assign, ast.AnnAssign))
@@ -48,38 +74,53 @@ def patch_urls(text):
         if assignment is None:
             raise ValueError("Expected urlpatterns")
         lines = text.splitlines(keepends=True)
-        lines.insert(assignment.lineno - 1, "from core.views import saman_page\n")
+        for name in missing_imports:
+            lines.insert(assignment.lineno - 1, f"from core.views import {name}\n")
         text = "".join(lines)
         tree = ast.parse(text)
         routes = _routes(tree)
+        base_routes = [route for route in routes if route.args[0].value == "saman/"]
+        section_routes = [route for route in routes if route.args[0].value == "saman/<slug:section>/"]
 
-    candidates = [route for route in routes if route.args[0].value in {"studio/", "taniya/"}]
-    anchor = candidates[-1] if candidates else (routes[-1] if routes else None)
-    if anchor is None:
-        raise ValueError("Expected at least one existing route to anchor SAMAN")
-    lines = text.splitlines(keepends=True)
-    line = lines[anchor.lineno - 1]
-    indent = line[:len(line) - len(line.lstrip())]
-    lines.insert(anchor.end_lineno, f'{indent}path("saman/", saman_page, name="saman_page"),\n')
-    patched = "".join(lines)
-    ast.parse(patched)
-    return patched
+    if not base_routes:
+        candidates = [route for route in routes if route.args[0].value in {"studio/", "taniya/"}]
+        anchor = candidates[-1] if candidates else routes[-1]
+        text = _insert_route(text, 'path("saman/", saman_page, name="saman_page"),', anchor)
+        tree = ast.parse(text)
+        routes = _routes(tree)
+        base_routes = [route for route in routes if route.args[0].value == "saman/"]
+
+    if not section_routes:
+        text = _insert_route(
+            text,
+            'path("saman/<slug:section>/", saman_section_page, name="saman_section"),',
+            base_routes[0],
+        )
+
+    ast.parse(text)
+    return text
 
 
 def patch_views(text):
     tree = ast.parse(text)
-    existing = [node for node in tree.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-                and node.name == "saman_page"]
+    existing = [
+        node for node in tree.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        and node.name == "saman_section_page"
+    ]
     if existing:
         if len(existing) != 1:
-            raise ValueError("Found duplicate SAMAN views")
+            raise ValueError("Found duplicate SAMAN section views")
         source = ast.get_source_segment(text, existing[0]) or ""
-        if 'render(request, "saman/index.html")' not in source:
-            raise ValueError("Existing SAMAN view has an unexpected body")
+        if 'render(request, "saman/index.html", {"saman_section": section})' not in source:
+            raise ValueError("Existing SAMAN section view has an unexpected body")
         return text
 
-    platform = [node for node in tree.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-                and node.name == "platform_page"]
+    platform = [
+        node for node in tree.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        and node.name == "platform_page"
+    ]
     if len(platform) != 1:
         raise ValueError("Expected exactly one platform_page view")
     render_imported = any(
@@ -90,14 +131,15 @@ def patch_views(text):
     )
     if not render_imported:
         raise ValueError("Expected render import from django.shortcuts")
-    never_cache = any(
-        isinstance(node, ast.ImportFrom)
-        and node.module == "django.views.decorators.cache"
-        and any((alias.asname or alias.name) == "never_cache" for alias in node.names)
-        for node in tree.body
+
+    block = (
+        "def saman_section_page(request, section):\n"
+        "    from django.http import Http404\n"
+        "    allowed = {\"learn\", \"play\", \"shop\", \"membership\", \"partners\", \"about\"}\n"
+        "    if section not in allowed:\n"
+        "        raise Http404\n"
+        "    return render(request, \"saman/index.html\", {\"saman_section\": section})\n\n\n"
     )
-    decorator = "@never_cache\n" if never_cache else ""
-    block = f'{decorator}def saman_page(request):\n    return render(request, "saman/index.html")\n\n\n'
     lines = text.splitlines(keepends=True)
     lines.insert(platform[0].lineno - 1, block)
     patched = "".join(lines)
