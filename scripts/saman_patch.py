@@ -135,7 +135,7 @@ def patch_views(text):
     block = (
         "def saman_section_page(request, section):\n"
         "    from django.http import Http404\n"
-        "    allowed = {\"learn\", \"play\", \"shop\", \"membership\", \"partners\", \"about\"}\n"
+        "    allowed = {\"learn\", \"play\", \"products\", \"membership\", \"partners\", \"about\"}\n"
         "    if section not in allowed:\n"
         "        raise Http404\n"
         "    return render(request, \"saman/index.html\", {\"saman_section\": section})\n\n\n"
