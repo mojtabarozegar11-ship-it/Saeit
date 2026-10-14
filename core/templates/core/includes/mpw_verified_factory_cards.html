@@ -1,5 +1,7 @@
-{# Scoped optional insertion inside the EXISTING brands/mojplaywin/store.html.
-   Never includes payment controls for non-verified factory products. #}
+{% comment %}
+Scoped optional insertion inside the existing branded MojPlayWin store.
+No checkout for products without verified release and payment evidence.
+{% endcomment %}
 {% if factory_cards %}
 <section id="mpw-verified-factory" aria-label="Verified factory releases" style="padding:24px 0">
   <h2>Verified Factory Releases</h2>
