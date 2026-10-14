@@ -125,6 +125,30 @@ jobs:
               migration=pathlib.Path(base)/"core/migrations"
               print("ASTRA_CURRENT_MIGRATION_MAX="+max((x.name for x in migration.glob("[0-9][0-9][0-9][0-9]*.py")),default="none"))
           PY
+          python3 - "$HOME/factory-transfer-incoming/astra-factory-full-architecture.tar.gz" "$HOME/factory-runtime/django-app" <<'PY'
+          import tarfile,sys,ast,re,os
+          archive,site=sys.argv[1:]
+          with tarfile.open(archive,"r:gz") as tf:
+              for name in ("files/config/factory_local_settings.py","files/core/management/commands/factory_staging_tick.py","files/core/factory_queue.py"):
+                  body=tf.extractfile(name).read().decode("utf-8","replace")
+                  print("ASTRA_COMPAT_FILE="+name)
+                  if name.endswith("settings.py"):
+                      for i,line in enumerate(body.splitlines(),1):
+                          if re.search(r"(SECRET|PASSWORD|KEY|TOKEN|CREDENTIAL)",line,re.I):
+                              print("ASTRA_COMPAT_SETTING_REDACTED_LINE="+str(i))
+                          else:
+                              print("ASTRA_COMPAT_SETTING_LINE_%d=%s"%(i,line[:180]))
+                  else:
+                      tree=ast.parse(body)
+                      for node in ast.walk(tree):
+                          if isinstance(node,(ast.FunctionDef,ast.ClassDef)):
+                              print("ASTRA_COMPAT_SYMBOL="+node.name)
+              current=os.path.join(site,"config","settings.py")
+              if os.path.isfile(current):
+                  body=open(current,encoding="utf-8").read()
+                  for word in ("DJANGO_SECRET_KEY","SECRET_KEY","DATABASE_URL","SAEIT_ENV","MOJ_FACTORY_LOCAL_MODE"):
+                      print("ASTRA_DEPLOYED_CONFIG_HAS_"+word+"="+str(word in body))
+          PY
           echo ASTRA_DESIGN_COMPARISON_DONE
           echo ASTRA_AUDIT_READ_ONLY_COMPLETE
           REMOTE
