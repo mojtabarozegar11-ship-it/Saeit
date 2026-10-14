@@ -96,3 +96,33 @@ class NativeWatchOutbox(models.Model):
     next_attempt_at = models.DateTimeField(null=True, blank=True)
     delivered_at = models.DateTimeField(null=True, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+
+
+class MerchantWalletChallenge(models.Model):
+    """One-time signed challenge for merchant address control; no wallet secrets."""
+    class Asset(models.TextChoices):
+        ETH = "ETH", "Ethereum"
+        TRX = "TRX", "TRON"
+
+    asset = models.CharField(max_length=3, choices=Asset.choices)
+    address = models.CharField(max_length=100)
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
+    nonce = models.CharField(max_length=64, unique=True)
+    issued_at = models.DateTimeField()
+    expires_at = models.DateTimeField()
+    used_at = models.DateTimeField(null=True, blank=True)
+    verified_at = models.DateTimeField(null=True, blank=True)
+    failed_attempts = models.PositiveSmallIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+class MerchantWalletProof(models.Model):
+    """Durable verified record. Screenshots cannot populate this table."""
+    asset = models.CharField(max_length=3, unique=True, choices=MerchantWalletChallenge.Asset.choices)
+    address = models.CharField(max_length=100)
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
+    challenge = models.OneToOneField(MerchantWalletChallenge, on_delete=models.PROTECT)
+    verified_at = models.DateTimeField()
+    signature_scheme = models.CharField(max_length=48)
+    signature_sha256 = models.CharField(max_length=64)
