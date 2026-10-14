@@ -41,7 +41,7 @@ URL_SNIPPET = """
 # MPW_MERCHANT_WALLET_ROUTE_ONLY_V1
 from django.conf import settings as mpw_wallet_settings
 if getattr(mpw_wallet_settings, "MPW_MERCHANT_WALLET_PROOF_ENABLED", False) is True:
-    urlpatterns += [path("", include("mpw_native_checkout.merchant_wallet_urls"))]
+    urlpatterns.insert(0, path("", include("mpw_native_checkout.merchant_wallet_urls")))
 """
 
 
