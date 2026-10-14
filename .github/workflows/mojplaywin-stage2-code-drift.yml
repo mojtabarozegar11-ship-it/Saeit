@@ -1,0 +1,118 @@
+name: MojPlayWin stage 2 safe live-code drift audit
+on:
+  push:
+    branches: [qa/mpw-payment-release-preflight-20261015]
+    paths: ['.github/workflows/mojplaywin-stage2-code-drift.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  compare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compare a strict allowlist of released code with live cPanel using pinned VPS relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/mpw-stage2-drift"
+          mkdir -m 700 -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          python3 - "$d/vps.key" "$d/host.key" <<'PY'
+          from pathlib import Path
+          import sys
+          for name in sys.argv[1:]:
+              p=Path(name)
+              p.write_text(p.read_text().replace("\r\n","\n").replace("\\n","\n").strip()+"\n")
+          PY
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host relay
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump relay
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" relay 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          timeout 80s ssh -F "$d/config" host 'python3 -' > "$d/remote-sha256.txt" <<'REMOTE'
+          from pathlib import Path
+          import hashlib
+          root=Path("/home/zomorod2/Saeit-staging")
+          assert root.is_dir() and not root.is_symlink()
+          paths=("config/settings.py","config/urls.py","core/models.py",
+                 "core/commerce_views.py","core/urls.py","core/views.py")
+          for rel in paths:
+              p=root/rel
+              if p.is_symlink():
+                  print(rel,"SYMLINK")
+              elif p.is_file():
+                  print(rel,hashlib.sha256(p.read_bytes()).hexdigest())
+              else:
+                  print(rel,"MISSING")
+          REMOTE
+          python3 - "$d/remote-sha256.txt" <<'PY'
+          from pathlib import Path
+          import hashlib
+          import sys
+          records={}
+          for row in Path(sys.argv[1]).read_text().splitlines():
+              parts=row.split()
+              assert len(parts)==2 and parts[0] not in records
+              records[parts[0]]=parts[1]
+          assert len(records)==6, "Incomplete remote code inventory"
+          differing=0
+          for rel,remote in records.items():
+              local=Path(rel)
+              if not local.is_file():
+                  state="MISSING_FROM_RELEASE"
+                  differing+=1
+              elif remote=="MISSING":
+                  state="MISSING_ON_LIVE"
+                  differing+=1
+              elif remote=="SYMLINK":
+                  state="UNSAFE_LIVE_SYMLINK"
+                  differing+=1
+              elif hashlib.sha256(local.read_bytes()).hexdigest()==remote:
+                  state="MATCH"
+              else:
+                  state="DRIFT"
+                  differing+=1
+              print("MPW_STAGE2_CODE_FILE",rel,state)
+          print("MPW_STAGE2_DIFFERING_OR_MISSING_FILES",differing)
+          print("MPW_STAGE2_FULL_REPOSITORY_OVERWRITE_APPROVED=False")
+          print("MPW_STAGE2_LIVE_SOURCE_UNCHANGED=True")
+          PY
+      - name: Remove temporary credentials and remote source hashes
+        if: always()
+        shell: bash
+        run: rm -rf -- "$RUNNER_TEMP/mpw-stage2-drift"
