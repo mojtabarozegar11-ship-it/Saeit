@@ -102,6 +102,29 @@ jobs:
                       row=re.sub(r"https?://[^\s)]+","[LINK]",row)
                       print("ASTRA_PLAN_LINE_"+str(n)+"="+row[:220])
           PY
+          python3 - "$HOME/factory-transfer-incoming/astra-factory-full-architecture.tar.gz" "$HOME/factory-runtime/django-app" <<'PY'
+          import tarfile,sys,re,pathlib
+          f,base=sys.argv[1:]
+          with tarfile.open(f,"r:gz") as tf:
+              lines=tf.extractfile("files/docs/ASTRA_LUNA_HANDOFF.md").read().decode("utf-8","replace").splitlines()
+              for n,line in enumerate(lines,1):
+                  if not (14<=n<=137):continue
+                  line=line.strip()
+                  if not line:continue
+                  if re.search(r"(PRIVATE KEY|SECRET_KEY\s*[=:]|PASSWORD\s*[=:]|TOKEN\s*[=:]|API[_-]?KEY\s*[=:])",line,re.I): continue
+                  line=re.sub(r"(?:\d{1,3}\.){3}\d{1,3}","[HOST]",line)
+                  line=re.sub(r"https?://[^\s)]+","[LINK]",line)
+                  print("ASTRA_DOC_%03d=%s"%(n,line[:250]))
+              for file in ("core/migrations/0049_factory_durable_queues.py","core/management/commands/factory_health.py","core/management/commands/factory_recover.py"):
+                  body=tf.extractfile("files/"+file).read().decode("utf-8","replace")
+                  print("ASTRA_SOURCE_FILE="+file)
+                  for n,line in enumerate(body.splitlines(),1):
+                      if len(line)>200:continue
+                      if re.search(r"dependencies|class Command|class Migration|class Factory|def handle|def add_arguments|^\s*\(|^\s*\)|migrations\.|^\s*name=|^\s*options=",line):
+                          print("ASTRA_CODE_%d=%s"%(n,line.strip()[:200]))
+              migration=pathlib.Path(base)/"core/migrations"
+              print("ASTRA_CURRENT_MIGRATION_MAX="+max((x.name for x in migration.glob("[0-9][0-9][0-9][0-9]*.py")),default="none"))
+          PY
           echo ASTRA_DESIGN_COMPARISON_DONE
           echo ASTRA_AUDIT_READ_ONLY_COMPLETE
           REMOTE
