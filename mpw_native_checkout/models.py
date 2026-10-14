@@ -36,6 +36,7 @@ class NativeInvoice(models.Model):
     expires_at = models.DateTimeField()
     wallet_challenge_id = models.CharField(max_length=128)
     sender_signature_verified_at = models.DateTimeField()
+    merchant_ownership_verified_at = models.DateTimeField(null=True, blank=True)
     status = models.CharField(max_length=24, choices=Status.choices, default=Status.AWAITING)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
