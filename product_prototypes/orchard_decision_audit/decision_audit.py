@@ -199,16 +199,17 @@ def analyze(payload):
                         display(be, Decimal("0.0001")) if be is not None else None),
                     "years": yearly,
                 })
+        base_all_negative = all(Decimal(x["npv_unrounded"]) < 0 for x in summary["base"])
         for label, outputs in summary.items():
+            outputs.sort(key=lambda x: (-Decimal(x["npv_unrounded"]), x["option"]))
             reference = next(Decimal(x["npv_unrounded"]) for x in outputs
                              if x["option"] == baseline)
             for item in outputs:
                 delta = Decimal(item["npv_unrounded"]) - reference
                 item["delta_npv_vs_reference"] = display(delta)
                 del item["npv_unrounded"]
-            outputs.sort(key=lambda a: (-Decimal(a["npv"]), a["option"]))
     base_winner = summary["base"][0]
-    all_negative = all(Decimal(x["npv"]) < 0 for x in summary["base"])
+    all_negative = base_all_negative
     return {
         "schema_version": 1,
         "tool": "orchard_decision_audit_private_reference_mvp",
