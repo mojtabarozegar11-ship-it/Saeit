@@ -157,7 +157,24 @@ jobs:
           for python in "${candidates[@]}"; do
             if [[ -x "$python" ]] && "$python" -c 'import django' >/dev/null 2>&1; then
               cd "$APP"
-              DJANGO_SETTINGS_MODULE=config.settings "$python" -c 'import django; django.setup(); from django.urls import resolve; match=resolve("/saman/"); print("SAMAN_RUNTIME_ROUTE=" + match.func.__name__); assert match.func.__name__ == "saman_page"'
+              DJANGO_SETTINGS_MODULE=config.settings "$python" - <<'PY'
+          import django
+          django.setup()
+          from django.urls import resolve
+          routes = {
+              "/saman/": "saman_page",
+              "/saman/learn/": "saman_section_page",
+              "/saman/play/": "saman_section_page",
+              "/saman/shop/": "saman_section_page",
+              "/saman/membership/": "saman_section_page",
+              "/saman/partners/": "saman_section_page",
+              "/saman/about/": "saman_section_page",
+          }
+          for path, expected in routes.items():
+              match = resolve(path)
+              print("SAMAN_RUNTIME_ROUTE=" + path + " -> " + match.func.__name__)
+              assert match.func.__name__ == expected, path
+          PY
               exit 0
             fi
           done
@@ -177,14 +194,30 @@ jobs:
             sleep 3
           done
           [[ "$status" == "200" ]] || { echo "Live SAMAN route returned HTTP $status"; exit 1; }
-          python3 - "$RUNNER_TEMP/saman-live.html" <<'PY'
+          routes=(
+            "/saman/:The SAMAN collection"
+            "/saman/learn/:Learning that moves with you."
+            "/saman/play/:More than one way to play."
+            "/saman/shop/:Useful resources, made to keep."
+            "/saman/membership/:More depth for committed learners."
+            "/saman/partners/:Good work grows through collaboration."
+            "/saman/about/:A broader home for curiosity."
+          )
+          for entry in "${routes[@]}"; do
+            route="${entry%%:*}"
+            marker="${entry#*:}"
+            status="$(curl -sS -o "$RUNNER_TEMP/saman-live.html" -w '%{http_code}' "https://mojplaywin.com$route" || true)"
+            [[ "$status" == "200" ]] || { echo "SAMAN page $route returned HTTP $status"; exit 1; }
+            python3 - "$RUNNER_TEMP/saman-live.html" "$marker" <<'PY'
           from pathlib import Path
           import sys
           html = Path(sys.argv[1]).read_text(encoding="utf-8")
-          if "<title>SAMAN" not in html or "The SAMAN collection" not in html or "Learn with intent." not in html:
-              raise SystemExit("Live SAMAN content verification failed")
-          print("Live SAMAN page verified.")
+          marker = sys.argv[2]
+          if "<title>SAMAN" not in html or marker not in html or "Learn with intent." not in html:
+              raise SystemExit(f"Live SAMAN content verification failed: {marker}")
           PY
+            echo "Verified https://mojplaywin.com$route"
+          done
 
       - name: Roll back failed live check
         if: failure() && steps.deploy.outcome == 'success' && (steps.route_check.outcome == 'failure' || steps.smoke.outcome == 'failure')
