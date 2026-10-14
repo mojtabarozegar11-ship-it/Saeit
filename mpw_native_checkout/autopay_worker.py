@@ -46,12 +46,19 @@ def reconcile_once(
         raise AutoPayUnavailable("Unexpected asset-specific reconciliation request")
     if getattr(settings, "MPW_NATIVE_AUTOPAY_ENABLED", False) is not True:
         return {"state":"disabled","scanned":0,"matched":0,"paid":0,"rejected":0}
+    # Only the retired product-72 processor retains one-time receiving-wallet
+    # attestation; mpw_commerce is the ownerless sitewide checkout.
+    proofs=getattr(settings,"MPW_NATIVE_MERCHANT_PROOFS",{})
+    if (not isinstance(proofs,dict) or
+            proofs.get("ETH") is not True or proofs.get("TRX") is not True):
+        raise AutoPayUnavailable("Legacy receiving wallet evidence unavailable")
     if now is None:
         now=timezone.now()
     earliest=now-timedelta(seconds=MAX_LOOKBACK_SECONDS)
     qs=(NativeInvoice.objects.select_related("order","product")
         .filter(status=NativeInvoice.Status.AWAITING,
                 order__status="pending",product_id=72,
+                merchant_ownership_verified_at__isnull=False,
                 sender_signature_verified_at__isnull=False,
                 issued_at__gte=earliest)
         .order_by("id"))
