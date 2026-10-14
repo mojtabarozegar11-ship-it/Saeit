@@ -73,5 +73,5 @@ urlpatterns += [path("blog/", blog_home, name="blog"), path("blog/<path:slug>/",
 from django.conf import settings
 if getattr(settings, "MPW_MERCHANT_WALLET_PROOF_ENABLED", False) is True:
     urlpatterns += [
-        path("_merchant/", include("mpw_native_checkout.merchant_wallet_urls")),
+        path("", include("mpw_native_checkout.merchant_wallet_urls")),
     ]
