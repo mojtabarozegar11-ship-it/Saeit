@@ -38,7 +38,30 @@ jobs:
           grep -q 'FACTORY_RESEARCH_PROVIDER=core.self_hosted_research_provider.SelfHostedStagingResearchProvider' "$script"
           echo VPS_FACTORY_PREFLIGHT_OK
           exec 9>"$ops/vps-only-launch-v2.lock"
-          flock -w 30 9
+          if ! flock -n 9; then
+            echo FACTORY_LAUNCH_LOCK_BUSY
+            current_pid="$(cat "$pidfile" 2>/dev/null || true)"
+            if [[ "$current_pid" =~ ^[0-9]+$ ]] && kill -0 "$current_pid" 2>/dev/null; then
+              current_cmd="$(ps -p "$current_pid" -o args= || true)"
+              case "$current_cmd" in
+                *"$script"*)
+                  echo FACTORY_LOOP_ALIVE
+                  echo "FACTORY_PID=$current_pid"
+                  echo FACTORY_RECENT_ACTIVITY
+                  tail -n 35 "$ops/vps-only-factory.log" || true
+                  exit 0
+                  ;;
+                *)
+                  echo FACTORY_PID_NOT_VERIFIED
+                  printf 'PID_COMMAND=%s\n' "$current_cmd"
+                  exit 1
+                  ;;
+              esac
+            fi
+            echo FACTORY_LOCK_BUSY_NO_VERIFIED_PID
+            ps -eo pid,ppid,args | grep -F 'vps-only-loop' | grep -v grep || true
+            exit 1
+          fi
           if test -s "$pidfile" && kill -0 "$(cat "$pidfile")" 2>/dev/null; then
             echo FACTORY_LOOP_ALIVE
           else
