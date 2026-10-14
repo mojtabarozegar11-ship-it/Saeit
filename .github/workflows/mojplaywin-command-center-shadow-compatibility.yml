@@ -149,7 +149,7 @@ jobs:
                     '/staff/command-center/api/content/album/search/',
                   ):
                       resolved=resolve(route)
-                      req=rf.get(route,HTTP_HOST='mojplaywin.com')
+                      req=rf.get(route,{'topic':'agriculture'} if route.endswith('/search/') else {},HTTP_HOST='mojplaywin.com')
                       req.user=staff
                       rsp=resolved.func(req,**resolved.kwargs)
                       assert rsp.status_code==200, (route,rsp.status_code)
