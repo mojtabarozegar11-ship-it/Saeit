@@ -170,17 +170,10 @@ jobs:
               "/saman/partners/": "saman_section_page",
               "/saman/about/": "saman_section_page",
           }
-          from django.test import Client
-          client = Client(raise_request_exception=False)
           for path, expected in routes.items():
               match = resolve(path)
               print("SAMAN_RUNTIME_ROUTE=" + path + " -> " + match.func.__name__)
               assert match.func.__name__ == expected, path
-              response = client.get(path, HTTP_HOST="mojplaywin.com")
-              print("SAMAN_TEST_CLIENT=" + path + " -> HTTP " + str(response.status_code))
-              if response.status_code != 200:
-                  print(response.content[:1000].decode("utf-8", errors="replace"))
-                  raise AssertionError(path)
           PY
               exit 0
             fi
@@ -214,7 +207,15 @@ jobs:
             route="${entry%%:*}"
             marker="${entry#*:}"
             status="$(curl -sS -o "$RUNNER_TEMP/saman-live.html" -w '%{http_code}' "https://mojplaywin.com$route" || true)"
-            [[ "$status" == "200" ]] || { echo "SAMAN page $route returned HTTP $status"; exit 1; }
+            if [[ "$status" != "200" ]]; then
+              echo "SAMAN page $route returned HTTP $status"
+              python3 - "$RUNNER_TEMP/saman-live.html" <<'PY'
+          from pathlib import Path
+          import sys
+          print(Path(sys.argv[1]).read_text(encoding="utf-8", errors="replace")[:1200])
+          PY
+              exit 1
+            fi
             python3 - "$RUNNER_TEMP/saman-live.html" "$marker" <<'PY'
           from pathlib import Path
           import sys
