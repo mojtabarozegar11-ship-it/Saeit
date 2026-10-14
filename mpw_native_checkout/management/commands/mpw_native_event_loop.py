@@ -18,6 +18,7 @@ from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
 from mpw_native_checkout.autopay_worker import reconcile_once
+from mpw_native_checkout.wallet_ownership import proven_assets
 from scripts.mojplaywin_cpanel_local_event_worker import run_local_worker
 
 
@@ -56,6 +57,10 @@ class Command(BaseCommand):
         root=getattr(settings,"MPW_NATIVE_EVENT_HOME",None)
         if not isinstance(root,str) or not Path(root).is_absolute():
             raise CommandError("Approved private local event directory missing")
+        # Settings/screenshot flags are NOT ownership evidence.
+        # Production execution requires the signed database attestations.
+        if proven_assets() != {"ETH": True, "TRX": True}:
+            raise CommandError("Actual cryptographic receiver ownership is missing")
         secret=_load_secret()
 
         def scan_eth():
