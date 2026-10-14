@@ -72,6 +72,24 @@ if candidate.is_file():
         "clip": sum(k.startswith("cond_stage_model.") for k in keys),
         "vae": sum(k.startswith("first_stage_model.") for k in keys),
     }
+runtime = root / ".control/sd-cpp-runtime"
+checks["sd_cpp_binary_exists"] = (runtime / "bin/sd-cli").is_file()
+if (runtime / "version.log").is_file():
+    lines = (runtime / "version.log").read_text(encoding="utf-8", errors="replace").splitlines()
+    diagnostic = [l.strip()[:170] for l in lines
+                  if any(word in l.lower() for word in ("error", "not found", "glibc", "libstd", "usage", "failed"))]
+    print("CPU_CPP_VERSION_DIAGNOSTICS=" + json.dumps(diagnostic[:5]))
+if checks["sd_cpp_binary_exists"]:
+    import subprocess
+    try:
+        p = subprocess.run([str(runtime / "bin/sd-cli"), "-h"],
+                           stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                           timeout=12, check=False,
+                           env=dict(os.environ, LD_LIBRARY_PATH=str(runtime / "bin")))
+        checks["sd_cpp_help_exit_code"] = p.returncode
+        checks["sd_cpp_help_stderr"] = p.stderr.decode("utf-8", errors="replace").strip()[:200]
+    except Exception as exc:
+        checks["sd_cpp_launch_exception"] = type(exc).__name__
 print("COMFYUI_QUALITY_GATE=" + json.dumps(checks, sort_keys=True))
 if not checks["runtime_present"] or not checks["private_dir"] or not checks["python_present"]:
     raise SystemExit(1)
