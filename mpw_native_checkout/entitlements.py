@@ -5,8 +5,9 @@ Actual blockchain validation and atomic transaction reservation belong to
 the settlement service, not to the customer-facing download view.
 """
 from decimal import Decimal
+import re
 
-from core.models import Order
+from core.models import Order, LedgerEntry
 from .models import NativeInvoice, NativeChainTransfer
 
 PRODUCT_ID = 72
@@ -72,12 +73,35 @@ def can_download_paid_native_order(order_id, customer_id):
         transfer=invoice.chain_transfer
     except NativeChainTransfer.DoesNotExist:
         return False
-    return (
-        transfer.network==invoice.network
-        and transfer.recipient_address.lower()==invoice.merchant_address.lower()
-        and transfer.sender_address.lower()==invoice.verified_sender_address.lower()
-        and transfer.amount_atomic==invoice.amount_atomic
-        and len(transfer.evidence_digest)==64
-        and len(transfer.tx_hash) in (64,66)
-        and transfer.verification_backend not in ("", "demo", "ci-simulation")
+    expected_backend = (
+        "ethereum-mainnet-verified" if invoice.network == "ethereum-mainnet"
+        else "tron-solidity-verified"
     )
+    expected_hash = (
+        r"0x[0-9a-f]{64}" if invoice.asset == "ETH"
+        else r"[0-9a-f]{64}"
+    )
+    valid_proof = (
+        transfer.network == invoice.network
+        and transfer.recipient_address.lower() == invoice.merchant_address.lower()
+        and transfer.sender_address.lower() == invoice.verified_sender_address.lower()
+        and transfer.amount_atomic == invoice.amount_atomic
+        and re.fullmatch(r"[0-9a-f]{64}", transfer.evidence_digest or "") is not None
+        and re.fullmatch(expected_hash, transfer.tx_hash or "") is not None
+        and transfer.verification_backend == expected_backend
+    )
+    if not valid_proof:
+        return False
+    ledger_ref = "native-crypto:" + invoice.network + ":" + transfer.tx_hash
+    return LedgerEntry.objects.filter(
+        order=order,
+        payment_intent__isnull=True,
+        entry_type="payment",
+        currency="USD",
+        amount=PRICE_USD,
+        reference=ledger_ref,
+        metadata__native_invoice_id=invoice.pk,
+        metadata__network=invoice.network,
+        metadata__tx_hash=transfer.tx_hash,
+        metadata__evidence_digest=transfer.evidence_digest,
+    ).exists()
