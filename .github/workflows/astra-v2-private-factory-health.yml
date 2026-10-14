@@ -1,0 +1,81 @@
+name: Astra V2 Private Factory Health Read-Only
+
+on:
+  push:
+    branches: [feature/astra-factory-v2-architecture-20261014]
+    paths: [.github/workflows/astra-v2-private-factory-health.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect-private-factory:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - name: Read-only inspect isolated factory heartbeat, product families and actual queue
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          temp="$RUNNER_TEMP/astra-v2-health"
+          install -d -m 700 "$temp"
+          trap 'rm -rf -- "$temp"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$temp/key"
+          chmod 600 "$temp/key"
+          ssh-keygen -y -P '' -f "$temp/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$temp/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$temp/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -i "$temp/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$temp/known" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=15 githubops@178.239.147.150 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          test "$(id -un)" = githubops
+          base="$HOME/factory-runtime/private/astra-v2-canary-products"
+          stage="$HOME/factory-runtime/operations/astra-v2-vps-canary-source"
+          test -d "$base" && test -f "$base/queue.sqlite3"
+          test -f "$stage/scripts/astra_v2_private_pipeline.py"
+          count="$(crontab -l | grep -F -c ASTRA_V2_PRIVATE_RND_TICK || true)"
+          echo ASTRA_V2_HEALTH_PRIVATE_CRON_ROWS="$count"
+          test "$count" -eq 1
+          python3 - "$base" "$stage" <<'PY'
+          import pathlib,sqlite3,sys,time,datetime
+          base=pathlib.Path(sys.argv[1])
+          stage=pathlib.Path(sys.argv[2])
+          db=base/"queue.sqlite3"
+          assert not db.is_symlink()
+          con=sqlite3.connect(db.resolve().as_uri()+"?mode=ro",uri=True,timeout=10)
+          con.execute("PRAGMA query_only=ON")
+          values=con.execute("SELECT builder,stage,COUNT(*) FROM jobs GROUP BY builder,stage ORDER BY builder,stage").fetchall()
+          rows={}
+          for builder,stage,count in values:
+              rows.setdefault(builder,{})[stage]=count
+          print("ASTRA_V2_HEALTH_PRODUCT_FAMILIES_WITH_PRIVATE_QA="+str(len([
+              b for b,s in rows.items() if s.get("PRIVATE_QA_PASSED",0)>0])))
+          print("ASTRA_V2_HEALTH_DISTINCT_ARTIFACT_SHAS="+str(
+              con.execute("SELECT COUNT(DISTINCT artifact_sha) FROM jobs WHERE stage='PRIVATE_QA_PASSED'").fetchone()[0]))
+          print("ASTRA_V2_HEALTH_PENDING_JOBS="+str(
+              con.execute("SELECT COUNT(*) FROM jobs WHERE stage IN ('QUEUED','BUILDING')").fetchone()[0]))
+          print("ASTRA_V2_HEALTH_FAILED_REVIEW_JOBS="+str(
+              con.execute("SELECT COUNT(*) FROM jobs WHERE stage='FAILED_REVIEW'").fetchone()[0]))
+          print("ASTRA_V2_HEALTH_CODE_HAS_TWO_SPECIALISTS="+str(
+              "PROCUREMENT_BUILDER" in (stage/"scripts/astra_v2_private_pipeline.py").read_text()).lower())
+          inbox=base/"incoming"
+          print("ASTRA_V2_HEALTH_PRIVATE_INBOX_PRESENT="+str(inbox.is_dir() and not inbox.is_symlink()).lower())
+          print("ASTRA_V2_HEALTH_PRIVATE_INBOX_REQUESTS="+str(
+              len(list(inbox.glob("*.json"))) if inbox.is_dir() and not inbox.is_symlink() else 0))
+          logfile=base/"private-tick.log"
+          if logfile.exists():
+              age=max(0,int(time.time()-logfile.stat().st_mtime))
+              print("ASTRA_V2_HEALTH_CRON_LOG_AGE_SECONDS="+str(age))
+              print("ASTRA_V2_HEALTH_CRON_LOG_BYTES="+str(logfile.stat().st_size))
+          else:
+              print("ASTRA_V2_HEALTH_CRON_LOG_PRESENT=false")
+          print("ASTRA_V2_HEALTH_OBSERVED_AT_UTC="+datetime.datetime.utcnow().isoformat()+"Z")
+          print("ASTRA_V2_HEALTH_STORE_PUBLISHING_OWNED=false")
+          print("ASTRA_V2_HEALTH_REAL_SALES_CANNOT_BE_INFERRED=true")
+          PY
+          REMOTE
