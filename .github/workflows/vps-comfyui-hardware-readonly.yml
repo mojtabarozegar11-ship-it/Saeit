@@ -1,0 +1,60 @@
+name: ComfyUI VPS Hardware Read-only Audit
+on:
+  push:
+    branches: [audit/vps-comfyui-hardware-20261014]
+    paths: [.github/workflows/vps-comfyui-hardware-readonly.yml]
+permissions:
+  contents: read
+concurrency:
+  group: vps-comfyui-hardware-readonly
+  cancel-in-progress: false
+jobs:
+  hardware:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Verify known SSH identity and run bounded read-only inspection
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" || { echo "VPS_SSH_KEY_UNAVAILABLE"; exit 1; }
+          d="$RUNNER_TEMP/vps-hardware-audit"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test -s "$d/known"
+          actual="$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)"
+          test "$actual" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs' || { echo "VPS_HOST_KEY_MISMATCH"; exit 1; }
+          timeout 60s ssh -i "$d/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=15 githubops@178.239.147.150 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          echo "AUDIT_BEGIN"
+          echo "USER=$(id -un)"
+          echo "HOSTNAME=$(hostname)"
+          echo "OS=$(uname -srm)"
+          echo "CPU_LOGICAL=$(nproc)"
+          awk -F: '/^model name[[:space:]]*:/{gsub(/^[[:space:]]+/,"",$2);print "CPU_MODEL="$2;exit}' /proc/cpuinfo
+          awk '/^MemTotal:/{print "RAM_TOTAL_KIB="$2} /^MemAvailable:/{print "RAM_AVAILABLE_KIB="$2} /^SwapTotal:/{print "SWAP_TOTAL_KIB="$2}' /proc/meminfo
+          df -Pk "$HOME" | awk 'NR==2{print "HOME_DISK_TOTAL_KIB="$2;print "HOME_DISK_FREE_KIB="$4}'
+          if command -v nvidia-smi >/dev/null 2>&1; then
+            echo GPU_NVIDIA_SMI_PRESENT
+            timeout 8s nvidia-smi --query-gpu=name,memory.total,memory.free --format=csv,noheader,nounits || true
+          else
+            echo GPU_NVIDIA_SMI_UNAVAILABLE
+          fi
+          if command -v lspci >/dev/null 2>&1; then
+            echo GPU_PCI_DEVICES_BEGIN
+            lspci | grep -Ei '(vga|3d controller|display controller|nvidia|amd)' | head -n 8 || true
+            echo GPU_PCI_DEVICES_END
+          else
+            echo GPU_LSPCI_UNAVAILABLE
+          fi
+          echo FACTORY_PROCESS_CANDIDATES
+          ps -eo comm= | grep -E '^(python|python3|gunicorn|celery|redis-server|postgres|mysqld)$' | sort | uniq -c || true
+          echo AUDIT_END
+          REMOTE
