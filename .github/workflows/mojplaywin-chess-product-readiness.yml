@@ -1,0 +1,106 @@
+name: MojPlayWin chess product readiness (read-only)
+on:
+  push:
+    paths:
+      - '.github/workflows/mojplaywin-chess-product-readiness.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - name: Check app root, product models, existing book and checkout safely
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/ssh"; mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          python3 - "$d/vps.key" "$d/host.key" <<'PY'
+          import pathlib,sys
+          for f in sys.argv[1:]:
+              p=pathlib.Path(f)
+              x=p.read_text().replace("\r\n","\n").strip().replace("\\n","\n")
+              p.write_text(x+"\n")
+          PY
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host saeit-host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+          EOF
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          timeout 120s ssh -F "$d/config" saeit-host 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          echo "REMOTE_USER=$(id -un)"
+          test "$(id -un)" = zomorod2
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          home=Path('/home/zomorod2')
+          wrapper=home/'mojplaywin.com/passenger_wsgi.py'
+          print('WRAPPER_PRESENT',wrapper.is_file())
+          if wrapper.is_file():
+              raw=wrapper.read_text(errors='replace')
+              paths=sorted(set(re.findall(r'/home/zomorod2/[A-Za-z0-9._/-]+',raw)))
+              print('WRAPPER_REFERENCED_PATHS',paths[:18])
+          for root in [home/'mojplaywin.com', home/'Saeit-staging', home/'Saeit']:
+              print('ROOT',str(root),'EXISTS',root.is_dir())
+              candidates=[]
+              if root.is_dir():
+                  for p in root.glob('manage.py'):
+                      candidates.append(str(p))
+                  for p in root.glob('*/manage.py'):
+                      candidates.append(str(p))
+                  for p in root.glob('*/*/manage.py'):
+                      candidates.append(str(p))
+              print('MANAGE_CANDIDATES',sorted(set(candidates))[:20])
+          for root in [home/'mojplaywin.com', home/'Saeit-staging']:
+              matches=[]
+              if root.is_dir():
+                  for p in root.glob('**/*chess*'):
+                      if p.is_file() and p.suffix.lower()=='.pdf':
+                          matches.append((str(p),p.stat().st_size))
+                          if len(matches)>=15: break
+              print('CHESS_PDFS',str(root),matches)
+          PY
+          REMOTE
+          for url in https://mojplaywin.com/ https://mojplaywin.com/admin/login/ https://mojplaywin.com/store/ https://mojplaywin.com/shop/; do
+            code="$(curl -sS -L --connect-timeout 10 --max-time 20 -o /dev/null -w '%{http_code}' "$url" || true)"
+            printf 'HTTP_CHECK %s %s\n' "$url" "$code"
+          done
+          echo READ_ONLY_AUDIT_COMPLETE
+      - name: Clean runner SSH keys
+        if: always()
+        shell: bash
+        run: rm -rf -- "$RUNNER_TEMP/ssh"
