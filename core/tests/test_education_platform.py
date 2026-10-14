@@ -152,7 +152,7 @@ class EducationPlatformTests(TestCase):
         self.client.force_login(user)
         response = self.client.post("/education/course/test-course/certificate/issue/")
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, "/education/dashboard/")
+        self.assertEqual(response.url, "/amozeshgah/dashboard/")
         self.assertEqual(EducationCertificate.objects.filter(enrollment__user=user).count(), 1)
 
     def test_education_catalog_filters_published_courses(self):
