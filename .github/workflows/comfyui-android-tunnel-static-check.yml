@@ -1,0 +1,33 @@
+name: ComfyUI Android Tunnel Static Safety Check
+on:
+  push:
+    branches: [audit/vps-comfyui-hardware-20261014]
+    paths:
+      - ops/comfyui/android-tunnel.sh
+      - ops/comfyui/private-control.sh
+      - .github/workflows/comfyui-android-tunnel-static-check.yml
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check scripts syntax and privacy properties
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n ops/comfyui/android-tunnel.sh
+          bash -n ops/comfyui/private-control.sh
+          grep -Fq -- '-L 127.0.0.1:18188:127.0.0.1:18188' ops/comfyui/android-tunnel.sh
+          grep -Fq -- 'StrictHostKeyChecking=yes' ops/comfyui/android-tunnel.sh
+          grep -Fq -- 'ExitOnForwardFailure=yes' ops/comfyui/android-tunnel.sh
+          grep -Fq -- 'PasswordAuthentication=no' ops/comfyui/android-tunnel.sh
+          grep -Fq -- 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs' ops/comfyui/android-tunnel.sh
+          grep -Fq -- '--listen 127.0.0.1 --port 18188' ops/comfyui/private-control.sh
+          grep -Fq -- 'factory_check' ops/comfyui/private-control.sh
+          ! grep -Fq -- '--listen 0.0.0.0' ops/comfyui/private-control.sh
+          echo COMFY_ANDROID_TUNNEL_STATIC_SAFETY_CHECK_OK
