@@ -136,7 +136,7 @@ class WatcherTests(unittest.TestCase):
                     max_cycles=3)
             finally:
                 watcher.STOP=old
-            self.assertEqual(counter[0],3)
+            self.assertEqual(counter[0],2)  # first loop is idle and makes zero API calls
 
     def test_no_order_never_calls_eth_or_tron_even_after_many_cycles(self):
         with tempfile.TemporaryDirectory() as root:
