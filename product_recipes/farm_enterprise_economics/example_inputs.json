@@ -1,0 +1,21 @@
+{
+  "currency": "USD",
+  "enterprises": [
+    {
+      "name": "Illustrative Orchard",
+      "units_sold": 1000,
+      "unit_price": 10,
+      "variable_cost_per_unit": 4,
+      "allocated_fixed_cost": 3000,
+      "selling_fee_percent": 5
+    },
+    {
+      "name": "Illustrative Greenhouse",
+      "units_sold": 750,
+      "unit_price": 8,
+      "variable_cost_per_unit": 3.5,
+      "allocated_fixed_cost": 2400,
+      "selling_fee_percent": 3
+    }
+  ]
+}
