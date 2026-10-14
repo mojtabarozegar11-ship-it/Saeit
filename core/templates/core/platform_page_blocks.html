@@ -1,0 +1,24 @@
+{% for block in page_builder_blocks %}
+<section class="managed-content-block managed-content-block--{{ block.kind }}">
+  {% if block.title %}<h2>{{ block.title }}</h2>{% endif %}
+  {% if block.kind == "text" %}
+    <p>{{ block.body|linebreaksbr }}</p>
+  {% elif block.kind == "cards" %}
+    {% if block.body %}<p>{{ block.body|linebreaksbr }}</p>{% endif %}
+    <div class="managed-content-block__items">
+      {% for item in block.items %}<article><h3>{{ item.title }}</h3><p>{{ item.text|linebreaksbr }}</p></article>{% endfor %}
+    </div>
+  {% elif block.kind == "links" %}
+    {% if block.body %}<p>{{ block.body|linebreaksbr }}</p>{% endif %}
+    <div class="managed-content-block__items">
+      {% for item in block.items %}<a href="{{ item.url }}"><strong>{{ item.title }}</strong><span>{{ item.text }}</span></a>{% endfor %}
+    </div>
+  {% elif block.kind == "callout" %}
+    <p>{{ block.body|linebreaksbr }}</p>
+  {% elif block.kind == "faq" %}
+    {% if block.body %}<p>{{ block.body|linebreaksbr }}</p>{% endif %}
+    {% for item in block.items %}<details><summary>{{ item.question }}</summary><p>{{ item.answer|linebreaksbr }}</p></details>{% endfor %}
+  {% endif %}
+  {% if block.cta_label and block.cta_url %}<a class="managed-content-block__cta" href="{{ block.cta_url }}">{{ block.cta_label }} ↗</a>{% endif %}
+</section>
+{% endfor %}

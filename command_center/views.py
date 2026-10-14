@@ -2,6 +2,7 @@
 from django.contrib.admin.views.decorators import staff_member_required
 from django.http import JsonResponse
 from django.shortcuts import render
+from django.urls import reverse
 from django.views.decorators.http import require_GET
 from .overview import build_overview
 from .catalog import MODULES, AGENT_SETTINGS, localized
@@ -10,15 +11,25 @@ from django.contrib.auth import get_user_model
 
 COMPONENTS = ("factory", "iran_site", "global_site", "master_agent", "agents", "bots", "vps", "cpanel", "github")
 
+
 @staff_member_required
 @require_GET
 def dashboard(request):
     lang = request.GET.get("lang", "fa")
     if lang not in ("fa", "en"):
         lang = "fa"
+    modules = localized(MODULES, lang, admin_links=True)
+    for module in modules:
+        route_name = module["route_name"]
+        permissions = module["permissions"]
+        if route_name and (not permissions or any(request.user.has_perm(p) for p in permissions)):
+            module["url"] = reverse(route_name)
+        else:
+            module["url"] = ""
+
     response = render(request, "command_center/dashboard.html", {
         "components": COMPONENTS, "lang": lang,
-        "modules": localized(MODULES, lang),
+        "modules": modules,
         "agent_settings": localized(AGENT_SETTINGS, lang),
         "staff_counts": {
             "agents": Agent.objects.count(),
@@ -29,6 +40,7 @@ def dashboard(request):
     })
     response["Cache-Control"] = "no-store"
     return response
+
 
 @staff_member_required
 @require_GET

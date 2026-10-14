@@ -1,12 +1,14 @@
 from django.core.management.base import BaseCommand
 from django.db import transaction
+
 from core.autonomous_brain import AutonomousBrain
-from core.models import Agent, AgentTask
+from core.models import Agent, AgentTask, Robot
 
 MASTER_AGENT_CODE = "economic-master-agent"
 
+
 class Command(BaseCommand):
-    help = "Let the master agent observe state and autonomously choose its next work."
+    help = "Let the master agent observe state and autonomously choose its next robot task."
 
     def add_arguments(self, parser):
         parser.add_argument("--dry-run", action="store_true")
@@ -19,7 +21,7 @@ class Command(BaseCommand):
             return
 
         active = AgentTask.objects.filter(
-            agent=agent, status__in=("queued","running","blocked")
+            agent=agent, status__in=("queued", "running", "blocked")
         ).order_by("created_at").first()
         if active:
             self.stdout.write(
@@ -41,8 +43,20 @@ class Command(BaseCommand):
             self.stdout.write(f"BRAIN_DECISION action={action} reason={chosen['reason']} score={chosen['score']}")
             return
 
+        robot = Robot.objects.filter(
+            agent=agent,
+            connector=action,
+            autonomy_level="sandbox",
+            deployment_status="sandbox",
+            requires_owner_approval=False,
+        ).first()
+        if not robot or not robot.runtime_enabled:
+            self.stderr.write(f"BRAIN_BLOCKED no eligible sandbox robot for capability={action}")
+            return
+
         task = AgentTask.objects.create(
             agent=agent,
+            robot=robot,
             action_type=action,
             capability_code=action,
             risk_snapshot=capability.risk_level,
@@ -58,5 +72,5 @@ class Command(BaseCommand):
             status="queued",
         )
         self.stdout.write(self.style.SUCCESS(
-            f"BRAIN_DECISION task={task.pk} action={action} score={chosen['score']} reason={chosen['reason']}"
+            f"BRAIN_DECISION task={task.pk} robot={robot.code} action={action} score={chosen['score']} reason={chosen['reason']}"
         ))

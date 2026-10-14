@@ -18,7 +18,7 @@ import json
 
 from .models import (
     Agent, AgentCapability, AgentTask, ApprovalRequest, AuditLog, ChatMessage, ChatSession, Evidence, Finding,
-    KnowledgeArticle, LedgerEntry, Order, OrderItem, PaymentIntent, PaymentWebhookEvent, Product, Report, ResearchProject, ResearchSource,
+    KnowledgeArticle, LedgerEntry, Order, OrderItem, PaymentIntent, PaymentWebhookEvent, Product, Report, ResearchProject, ResearchSource, Robot,
 )
 from .serializers import (
     AgentCapabilitySerializer, AgentSerializer, AgentTaskSerializer, ApprovalRequestSerializer, ChatMessageSerializer, ChatSessionSerializer,
@@ -622,7 +622,10 @@ class MasterAgentChatViewSet(viewsets.ModelViewSet):
             return Response({"detail": "project_id and action_type are required."}, status=status.HTTP_400_BAD_REQUEST)
         try:
             project = ResearchProject.objects.get(pk=project_id)
-            task = MasterAgent().plan(project, action_type, payload, risk=risk)
+            task = MasterAgent().plan(
+                project, action_type, payload, risk=risk,
+                robot_id=request.data.get("robot_id"),
+            )
         except ResearchProject.DoesNotExist:
             return Response({"detail": "Research project not found."}, status=status.HTTP_404_NOT_FOUND)
         except (RuntimeError, ValueError) as exc:

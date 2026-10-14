@@ -123,6 +123,13 @@ class AgentTask(T):
         blank=True,
         related_name="agent_tasks",
     )
+    robot = models.ForeignKey(
+        "Robot",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="tasks",
+    )
     action_type = models.CharField(max_length=100, default="")
     capability_code = models.CharField(max_length=100, default="")
     risk_snapshot = models.CharField(max_length=10, default="low")
@@ -133,6 +140,74 @@ class AgentTask(T):
     output_data = models.JSONField(default=dict)
     status = models.CharField(max_length=20, default="queued")
     cost = models.DecimalField(max_digits=12, decimal_places=4, default=0)
+
+
+class Robot(T):
+    """Registry entry for an execution bot; registration does not run code."""
+
+    AUTONOMY_CHOICES = [
+        ("observe", "Observe only"),
+        ("draft", "Draft and recommend"),
+        ("reversible", "Reversible non-financial actions"),
+        ("sandbox", "Sandbox execution"),
+        ("owner_approved", "Owner-approved bounded execution"),
+    ]
+    RISK_CHOICES = [
+        ("low", "Low"),
+        ("medium", "Medium"),
+        ("high", "High"),
+        ("critical", "Critical"),
+    ]
+    DEPLOYMENT_CHOICES = [
+        ("draft", "Draft"),
+        ("sandbox", "Sandbox"),
+        ("deployed", "Deployed"),
+        ("paused", "Paused"),
+        ("retired", "Retired"),
+    ]
+
+    code = models.SlugField(unique=True)
+    name = models.CharField(max_length=200)
+    agent = models.ForeignKey(
+        Agent, on_delete=models.PROTECT, null=True, blank=True, related_name="robots"
+    )
+    mission = models.TextField(blank=True)
+    connector = models.CharField(max_length=100, blank=True)
+    autonomy_level = models.CharField(
+        max_length=20, choices=AUTONOMY_CHOICES, default="observe"
+    )
+    risk_level = models.CharField(max_length=10, choices=RISK_CHOICES, default="low")
+    deployment_status = models.CharField(
+        max_length=20, choices=DEPLOYMENT_CHOICES, default="draft"
+    )
+    requires_owner_approval = models.BooleanField(
+        default=False,
+        help_text="Require owner approval for every robot task. Sensitive and high-risk actions remain approval-gated even when disabled.",
+    )
+    budget_limit = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    credential_reference = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="Reference to a secret manager entry only. Never store a credential here.",
+    )
+
+    class Meta:
+        ordering = ("code",)
+        verbose_name = "ربات اجرایی"
+        verbose_name_plural = "ربات‌های اجرایی"
+
+    @property
+    def runtime_enabled(self):
+        """True only after explicit sandbox/live qualification and connector setup."""
+        return (
+            self.agent_id is not None
+            and bool(self.connector.strip())
+            and self.deployment_status in {"sandbox", "deployed"}
+            and self.autonomy_level in {"reversible", "sandbox", "owner_approved"}
+        )
+
+    def __str__(self):
+        return f"{self.name} ({self.code})"
 
 
 class ApprovalRequest(T):
@@ -468,3 +543,230 @@ class EducationCertificate(T):
     title = models.CharField(max_length=300)
     verification_note = models.TextField(blank=True)
     issued_at = models.DateTimeField(auto_now_add=True)
+
+class PlatformPageContent(T):
+    """Owner-published editable copy for existing Zomorod platform pages."""
+
+    PAGE_CHOICES = (
+        ("about", "درباره ما"),
+        ("agriculture", "کشاورزی"),
+        ("agents", "خدمات هوشمند"),
+        ("company", "معرفی شرکت"),
+        ("contact", "تماس با ما"),
+        ("economy", "اقتصاد"),
+        ("industry", "صنعت"),
+        ("knowledge", "دانشنامه"),
+        ("market", "بازار"),
+        ("research", "پژوهش"),
+        ("studio", "استودیو"),
+    )
+
+    page_key = models.CharField(max_length=30, choices=PAGE_CHOICES, unique=True)
+    kicker = models.CharField(max_length=200, blank=True)
+    title = models.CharField(max_length=250)
+    lead = models.TextField()
+    badge = models.CharField(max_length=100, blank=True)
+    heading = models.CharField(max_length=250)
+    body = models.TextField()
+    items = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="JSON list of cards: [{\"title\": \"...\", \"text\": \"...\"}]",
+    )
+    links = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="JSON list of internal links: [{\"title\": \"...\", \"text\": \"...\", \"url\": \"/path/\"}]",
+    )
+    cta_title = models.CharField(max_length=250, blank=True)
+    cta_text = models.TextField(blank=True)
+    cta_label = models.CharField(max_length=100, blank=True)
+    cta_url = models.CharField(max_length=300, blank=True)
+    seo_title = models.CharField(max_length=250, blank=True)
+    meta_description = models.CharField(max_length=320, blank=True)
+    published = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ("page_key",)
+        verbose_name = "محتوای صفحه اصلی"
+        verbose_name_plural = "محتوای صفحات اصلی"
+
+    def __str__(self):
+        return f"{self.get_page_key_display()} — {self.title}"
+
+    @staticmethod
+    def _is_internal_path(value):
+        return (
+            isinstance(value, str)
+            and value.startswith("/")
+            and not value.startswith("//")
+            and not any(char in value for char in "\r\n")
+        )
+
+    def clean(self):
+        errors = {}
+        if self.published:
+            for field in (
+                "kicker", "title", "lead", "badge", "heading", "body",
+                "cta_title", "cta_text", "cta_label", "cta_url",
+            ):
+                value = getattr(self, field)
+                if not isinstance(value, str) or not value.strip():
+                    errors[field] = "برای انتشار، این بخش باید کامل باشد."
+
+        for field, required in (("items", ("title", "text")), ("links", ("title", "text", "url"))):
+            rows = getattr(self, field)
+            if not isinstance(rows, list):
+                errors[field] = "مقدار باید فهرستی از آبجکت‌های JSON باشد."
+                continue
+            for index, row in enumerate(rows):
+                if not isinstance(row, dict) or any(not isinstance(row.get(key), str) or not row[key].strip() for key in required):
+                    errors[field] = f"ردیف {index + 1} باید فیلدهای {', '.join(required)} را داشته باشد."
+                    break
+                if field == "links" and not self._is_internal_path(row["url"]):
+                    errors[field] = f"نشانی ردیف {index + 1} باید مسیر داخلی سایت باشد."
+                    break
+
+        if self.cta_url and not self._is_internal_path(self.cta_url):
+            errors["cta_url"] = "نشانی دکمه باید مسیر داخلی سایت باشد."
+        if errors:
+            raise ValidationError(errors)
+
+    def public_context(self):
+        return {
+            "kicker": self.kicker,
+            "title": self.title,
+            "lead": self.lead,
+            "badge": self.badge,
+            "heading": self.heading,
+            "body": self.body,
+            "items": self.items,
+            "links": self.links,
+            "cta_title": self.cta_title,
+            "cta_text": self.cta_text,
+            "cta_label": self.cta_label,
+            "cta_url": self.cta_url,
+            "seo_title": self.seo_title,
+            "meta_description": self.meta_description,
+        }
+
+
+
+class PlatformPageBlock(T):
+    """A safe, ordered content block attached to an owner-published platform page."""
+
+    KIND_CHOICES = (
+        ("text", "متن"),
+        ("cards", "کارت‌ها"),
+        ("links", "پیوندها"),
+        ("callout", "دعوت به اقدام"),
+        ("faq", "پرسش‌های پرتکرار"),
+    )
+
+    page = models.ForeignKey(
+        PlatformPageContent,
+        on_delete=models.CASCADE,
+        related_name="blocks",
+        verbose_name="صفحه",
+    )
+    kind = models.CharField(max_length=20, choices=KIND_CHOICES, default="text")
+    title = models.CharField(max_length=250, blank=True)
+    body = models.TextField(blank=True)
+    items = models.JSONField(
+        default=list,
+        blank=True,
+        help_text=(
+            "برای کارت و پیوند: فهرست JSON شامل title و text؛ "
+            "برای پرسش پرتکرار: question و answer."
+        ),
+    )
+    cta_label = models.CharField(max_length=100, blank=True)
+    cta_url = models.CharField(max_length=300, blank=True)
+    sort_order = models.PositiveIntegerField(default=0)
+    active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ("sort_order", "id")
+        verbose_name = "بلوک صفحه"
+        verbose_name_plural = "بلوک‌های صفحه"
+
+    def __str__(self):
+        return f"{self.page} · {self.get_kind_display()} · {self.sort_order}"
+
+    def clean(self):
+        errors = {}
+        if self.kind in {"text", "callout"} and not self.body.strip():
+            errors["body"] = "متن این بلوک را وارد کنید."
+
+        required_by_kind = {
+            "cards": ("title", "text"),
+            "links": ("title", "text", "url"),
+            "faq": ("question", "answer"),
+        }
+        required = required_by_kind.get(self.kind)
+        if required is not None:
+            if not isinstance(self.items, list):
+                errors["items"] = "مقدار باید فهرستی از آبجکت‌های JSON باشد."
+            else:
+                for index, row in enumerate(self.items):
+                    if not isinstance(row, dict) or any(
+                        not isinstance(row.get(key), str) or not row[key].strip()
+                        for key in required
+                    ):
+                        errors["items"] = (
+                            f"ردیف {index + 1} باید فیلدهای "
+                            f"{', '.join(required)} را داشته باشد."
+                        )
+                        break
+                    if self.kind == "links" and not PlatformPageContent._is_internal_path(
+                        row["url"]
+                    ):
+                        errors["items"] = (
+                            f"نشانی ردیف {index + 1} باید مسیر داخلی سایت باشد."
+                        )
+                        break
+        elif not isinstance(self.items, list):
+            errors["items"] = "مقدار باید فهرستی از آبجکت‌های JSON باشد."
+
+        if self.cta_url and not PlatformPageContent._is_internal_path(self.cta_url):
+            errors["cta_url"] = "نشانی دکمه باید مسیر داخلی سایت باشد."
+        if errors:
+            raise ValidationError(errors)
+
+
+class SiteNavigationItem(T):
+    AREA_CHOICES = (
+        ("main", "منوی اصلی"),
+        ("footer_platform", "پاورقی ـ پلتفرم"),
+        ("footer_services", "پاورقی ـ خدمات"),
+        ("footer_access", "پاورقی ـ دسترسی"),
+    )
+
+    area = models.CharField(max_length=30, choices=AREA_CHOICES, default="main")
+    title = models.CharField(max_length=120)
+    url = models.CharField(max_length=500)
+    active_prefixes = models.JSONField(default=list, blank=True)
+    sort_order = models.PositiveIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ("area", "sort_order", "id")
+        verbose_name = "پیوند ناوبری سایت"
+        verbose_name_plural = "پیوندهای ناوبری سایت"
+
+    def __str__(self):
+        return f"{self.get_area_display()} · {self.title}"
+
+    def clean(self):
+        errors = {}
+        if not isinstance(self.active_prefixes, list):
+            errors["active_prefixes"] = "مسیرهای فعال باید فهرستی از مسیرهای داخلی باشند."
+        elif any(
+            not PlatformPageContent._is_internal_path(value)
+            for value in self.active_prefixes
+        ):
+            errors["active_prefixes"] = "همه مسیرهای فعال باید مسیر داخلی سایت باشند."
+        if self.url and not PlatformPageContent._is_internal_path(self.url):
+            errors["url"] = "نشانی باید مسیر داخلی سایت باشد."
+        if errors:
+            raise ValidationError(errors)

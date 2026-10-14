@@ -36,7 +36,7 @@ class WorkerRunner:
         execution_id = task.execution_id
         try:
             self.runtime.heartbeat(task.pk, execution_id=execution_id)
-            tool_code = self._resolve_tool(task.action_type)
+            tool_code = self._resolve_tool(task)
             payload = task.input_data or {}
             if not isinstance(payload, dict):
                 raise WorkerRunnerError("Task input must be an object")
@@ -68,10 +68,15 @@ class WorkerRunner:
                 pass
             raise
 
-    def _resolve_tool(self, action_type):
-        action = normalize_action(action_type)
+    def _resolve_tool(self, task):
+        action = normalize_action(task.action_type)
         if not action:
             raise WorkerRunnerError("Task action_type is required")
+        if task.robot_id:
+            connector = normalize_action(task.robot.connector)
+            if not connector:
+                raise WorkerRunnerError("Robot connector is not configured")
+            return connector
         tool_code = self.tool_map.get(action, action)
         if not tool_code:
             raise WorkerRunnerError("No tool is mapped to the task action")

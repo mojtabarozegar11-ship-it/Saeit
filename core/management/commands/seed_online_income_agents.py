@@ -1,7 +1,7 @@
 from django.core.management.base import BaseCommand
 from django.db import transaction
 
-from core.models import Agent, AgentCapability
+from core.models import Agent, AgentCapability, Robot
 
 
 CAPABILITIES = [
@@ -24,7 +24,7 @@ ASSIGNMENTS = [code for code, *_ in CAPABILITIES]
 
 
 class Command(BaseCommand):
-    help = "Seed online-income agents and capabilities idempotently."
+    help = "Seed online-income agents, capabilities, and bounded sandbox robots idempotently."
 
     @transaction.atomic
     def handle(self, *args, **options):
@@ -43,8 +43,40 @@ class Command(BaseCommand):
         )
         agent.capabilities.set([capabilities[c] for c in ASSIGNMENTS])
 
+        for capability_code, robot_name, description, risk in CAPABILITIES:
+            robot_code = f"{capability_code.replace('_', '-')}-robot"
+            robot, created = Robot.objects.get_or_create(
+                code=robot_code,
+                defaults={
+                    "name": robot_name,
+                    "agent": agent,
+                    "mission": description,
+                    "connector": capability_code,
+                    "autonomy_level": "sandbox",
+                    "risk_level": risk,
+                    "deployment_status": "sandbox",
+                    "requires_owner_approval": False,
+                    "budget_limit": "25.00",
+                },
+            )
+            if not created:
+                # Refresh registry metadata while preserving an operator's pause/retire switch.
+                robot.name = robot_name
+                robot.agent = agent
+                robot.mission = description
+                robot.connector = capability_code
+                robot.autonomy_level = "sandbox"
+                robot.risk_level = risk
+                robot.requires_owner_approval = False
+                robot.budget_limit = "25.00"
+                if robot.deployment_status not in {"paused", "retired"}:
+                    robot.deployment_status = "sandbox"
+                robot.save()
+
         # The runtime has one operational economic agent. Legacy split income agents
         # are retained only as historical records and must never receive new work.
         Agent.objects.filter(code__startswith="income-").exclude(code=code).update(active=False)
 
-        self.stdout.write(self.style.SUCCESS("Economic Master Agent and online-income capabilities are seeded; legacy income agents are inactive."))
+        self.stdout.write(self.style.SUCCESS(
+            "Economic Master Agent, capabilities, and seven bounded sandbox robots are seeded; legacy income agents are inactive."
+        ))

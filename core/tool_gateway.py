@@ -49,7 +49,7 @@ class ToolGateway:
             )
 
         try:
-            task = AgentTask.objects.select_related("agent").get(pk=task_id)
+            task = AgentTask.objects.select_related("agent", "robot").get(pk=task_id)
         except AgentTask.DoesNotExist as exc:
             raise ToolGatewayError("Agent task was not found") from exc
 
@@ -59,8 +59,20 @@ class ToolGateway:
             raise ToolGatewayError(
                 "Execution identity does not match the active task execution"
             )
+        if task.robot_id:
+            if task.robot.agent_id != task.agent_id or not task.robot.runtime_enabled:
+                raise ToolGatewayError("Robot is no longer qualified for execution")
+            if task.robot.connector != spec.code:
+                raise ToolGatewayError("Robot connector does not match the registered tool")
 
-        if requires_owner_approval(spec.code, spec.risk):
+        robot_requires_approval = bool(
+            task.robot_id
+            and (
+                task.robot.requires_owner_approval
+                or task.robot.autonomy_level == "owner_approved"
+            )
+        )
+        if requires_owner_approval(spec.code, spec.risk) or robot_requires_approval:
             approved = ApprovalRequest.objects.filter(
                 target_type="AgentTask",
                 target_id=str(task.pk),

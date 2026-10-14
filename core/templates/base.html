@@ -1,5 +1,5 @@
 
-{% load static %}<!doctype html>
+{% load static site_navigation %}<!doctype html>
 <html lang="fa" dir="rtl">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -46,15 +46,9 @@
 <span class="brand-copy"><b>Zomorodmelal</b><small>Services · Knowledge · AI</small></span>
 </a>
 <button class="menu-toggle" type="button" aria-label="باز کردن منو" aria-expanded="false">☰</button>
+{% site_navigation "main" request.path as main_navigation %}
 <nav class="nav" aria-label="ناوبری اصلی">
-<a class="{% if request.path == "/" or request.path|slice:":9" == "/services/" %}active{% endif %}" href="/">خدمات</a>
-<a class="{% if request.path|slice:":11" == "/education/" %}active{% endif %}" href="/education/">آموزش</a>
-<a class="{% if request.path|slice:":8" == "/agents/" %}active{% endif %}" href="/agents/">هوش مصنوعی</a>
-<a class="{% if request.path|slice:":9" == "/weather/" %}active{% endif %}" href="/weather/">آب‌وهوا</a>
-<a class="{% if request.path|slice:":9" == "/economy/" %}active{% endif %}" href="/economy/">اقتصاد</a>
-<a class="{% if request.path|slice:":8" == "/studio/" %}active{% endif %}" href="/studio/">استودیو</a>
-<a class="{% if request.path|slice:":10" == "/knowledge/" %}active{% endif %}" href="/knowledge/">دانشنامه</a>
-<a class="{% if request.path|slice:":9" == "/company/" or request.path|slice:":7" == "/about/" or request.path|slice:":9" == "/contact/" %}active{% endif %}" href="/company/">شرکت</a>
+{% for item in main_navigation %}<a class="{% if item.is_current %}active{% endif %}" href="{{ item.url }}">{{ item.title }}</a>{% endfor %}
 </nav>
 <div class="header-actions"><a class="icon-btn" href="/search/" title="جستجوی سایت" aria-label="جستجوی سایت">⌕</a>{% if user.is_authenticated %}<a class="header-cta" href="/education/dashboard/">یادگیری من</a>{% endif %}<a class="header-cta" href="/company/">شرکت</a></div>
 </header>
@@ -62,9 +56,9 @@
 <footer class="site-footer">
 <div class="footer-grid">
 <div><div class="footer-brand"><img class="footer-logo" src="{% static 'site/company/company-logo.png' %}" alt=""> <span>Zomorodmelal</span></div><p>پلتفرم خدماتی یکپارچه؛ خدمات، آموزش، هوش مصنوعی، آب‌وهوا، اقتصاد، استودیو، دانشنامه و شرکت.</p></div>
-<div><strong>پلتفرم</strong><a href="/">خدمات</a><a href="/education/">آموزش</a><a href="/agents/">هوش مصنوعی</a><a href="/weather/">آب‌وهوا</a><a href="/economy/">اقتصاد</a><a href="/studio/">استودیو</a><a href="/knowledge/">دانشنامه</a><a href="/company/">شرکت</a></div>
-<div><strong>درون خدمات</strong><a href="/agriculture/">کشاورزی</a><a href="/industry/">صنعت</a><a href="/market/">بازار</a><a href="/services/">همه خدمات</a></div>
-<div><strong>دسترسی</strong><a href="/company/#company-content-ecosystem">رسانه و وبلاگ شرکت</a><a href="/company/">شرکت</a><a href="/contact/">تماس و همکاری</a></div>
+<div><strong>پلتفرم</strong>{% site_navigation "footer_platform" request.path as platform_navigation %}{% for item in platform_navigation %}<a href="{{ item.url }}">{{ item.title }}</a>{% endfor %}</div>
+<div><strong>درون خدمات</strong>{% site_navigation "footer_services" request.path as services_navigation %}{% for item in services_navigation %}<a href="{{ item.url }}">{{ item.title }}</a>{% endfor %}</div>
+<div><strong>دسترسی</strong>{% site_navigation "footer_access" request.path as access_navigation %}{% for item in access_navigation %}<a href="{{ item.url }}">{{ item.title }}</a>{% endfor %}</div>
 </div>
 <div class="footer-legal"><strong>تمامی حقوق مادی و معنوی سایت برای شرکت کشت و صنعت زمرد ملل و مجتبی روزگار محفوظ است.</strong><span>آبان ۱۳۹۸</span></div><div class="footer-bottom"><span>© شرکت کشت و صنعت زمرد ملل</span><span>تمامی حقوق محفوظ است.</span></div>
 </footer>
