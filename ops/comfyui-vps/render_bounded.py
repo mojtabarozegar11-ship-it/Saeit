@@ -148,6 +148,17 @@ def main():
                         record = history[str(prompt_id)]
                         files = record.get("outputs", {}).get("9", {}).get("images", [])
                         if not files:
+                            status = record.get("status", {})
+                            print("QA_EXECUTION_STATUS=" + str(status.get("status_str", "unknown"))[:60], flush=True)
+                            for event, info in status.get("messages", [])[-10:]:
+                                if event == "execution_error" and isinstance(info, dict):
+                                    print("QA_EXECUTION_EXCEPTION_CLASS=" +
+                                          str(info.get("exception_type", "unknown"))[:90], flush=True)
+                                    print("QA_EXECUTION_ERROR_NODE=" +
+                                          str(info.get("node_type", "unknown"))[:90], flush=True)
+                                    detail = str(info.get("exception_message", "unknown"))
+                                    print("QA_EXECUTION_ERROR_CODE=" +
+                                          detail.split("\\n")[0][:180], flush=True)
                             raise RuntimeError("COMFYUI_JOB_FINISHED_NO_OUTPUT")
                         record_file = files[0]
                         params = urlencode({"filename": record_file["filename"],
