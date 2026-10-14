@@ -1,0 +1,201 @@
+name: VPS Factory to cPanel Private Store Bridge
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/vps-store-bridge-install.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: saeit-vps-cpanel-store-bridge
+  cancel-in-progress: false
+jobs:
+  install:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test secure private delivery
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p 'test_store_bridge.py' -v
+          python3 -m py_compile scripts/store_receiver.py scripts/factory_store_sender.py
+      - name: Configure pinned GitHub to VPS to cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/saeit-store"
+          install -d -m 700 "$d"
+          for field in VPS_KEY HOST_KEY; do
+            dest="$d/$field.key"
+            printf '%s' "${!field}" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$dest"
+            chmod 600 "$dest"
+            ssh-keygen -y -P '' -f "$dest" >/dev/null
+          done
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          ssh -i "$d/VPS_KEY.key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/vps.known" -o BatchMode=yes githubops@178.239.147.150 'ssh-keyscan -T 10 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/VPS_KEY.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/HOST_KEY.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 12
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+      - name: Install private cPanel receiving endpoint
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/saeit-store"
+          ssh -F "$d/config" saeit-cpanel 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          test "$(id -un)" = zomorod2
+          test -d "$HOME/Saeit-staging"
+          test ! -L "$HOME/.saeit-factory-inbox"
+          mkdir -p "$HOME/.saeit-factory-inbox/bin"
+          chmod 700 "$HOME/.saeit-factory-inbox" "$HOME/.saeit-factory-inbox/bin"
+          REMOTE
+          scp -F "$d/config" scripts/store_receiver.py saeit-cpanel:/home/zomorod2/.saeit-factory-inbox/bin/store_receiver.py.tmp
+          ssh -F "$d/config" saeit-cpanel 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          test -s "$HOME/.saeit-factory-inbox/bin/store_receiver.py.tmp"
+          python3 -m py_compile "$HOME/.saeit-factory-inbox/bin/store_receiver.py.tmp"
+          chmod 600 "$HOME/.saeit-factory-inbox/bin/store_receiver.py.tmp"
+          mv -f "$HOME/.saeit-factory-inbox/bin/store_receiver.py.tmp" "$HOME/.saeit-factory-inbox/bin/store_receiver.py"
+          echo PRIVATE_CPANEL_RECEIVER_INSTALLED
+          REMOTE
+      - name: Set up dedicated restricted VPS to cPanel SSH identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/saeit-store"
+          ssh -F "$d/config" saeit-vps 'bash -se' > "$d/factory-pubkey" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          test "$(id -un)" = githubops
+          mkdir -p "$HOME/.ssh"
+          chmod 700 "$HOME/.ssh"
+          key="$HOME/.ssh/saeit_factory_store_ed25519"
+          if test ! -f "$key"; then
+            test ! -e "$key.pub"
+            ssh-keygen -q -t ed25519 -N '' -C saeit-factory-private-store -f "$key"
+          fi
+          chmod 600 "$key"
+          chmod 644 "$key.pub"
+          ssh-keygen -y -P '' -f "$key" >/dev/null
+          cat "$key.pub"
+          REMOTE
+          grep -Eq '^ssh-ed25519 [A-Za-z0-9+/=]+ saeit-factory-private-store$' "$d/factory-pubkey"
+          scp -F "$d/config" "$d/factory-pubkey" saeit-cpanel:/home/zomorod2/.saeit-factory-inbox/bin/factory-public-key.tmp
+          ssh -F "$d/config" saeit-cpanel 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          mkdir -p "$HOME/.ssh"
+          chmod 700 "$HOME/.ssh"
+          test ! -L "$HOME/.ssh/authorized_keys"
+          touch "$HOME/.ssh/authorized_keys"
+          chmod 600 "$HOME/.ssh/authorized_keys"
+          exec 9>"$HOME/.ssh/saeit-factory-key.lock"
+          flock -w 10 9
+          pub="$HOME/.saeit-factory-inbox/bin/factory-public-key.tmp"
+          test -s "$pub"
+          grep -Eq '^ssh-ed25519 [A-Za-z0-9+/=]+ saeit-factory-private-store$' "$pub"
+          fingerprint="$(awk '{print $2}' "$pub")"
+          if ! grep -Fq "$fingerprint" "$HOME/.ssh/authorized_keys"; then
+            cp -p "$HOME/.ssh/authorized_keys" "$HOME/.ssh/authorized_keys.pre-saeit-$(date -u +%Y%m%dT%H%M%SZ)"
+            printf 'from="178.239.147.150",restrict %s\n' "$(cat "$pub")" >> "$HOME/.ssh/authorized_keys"
+          fi
+          chmod 600 "$HOME/.ssh/authorized_keys"
+          rm -f "$pub"
+          echo RESTRICTED_FACTORY_KEY_REGISTERED
+          REMOTE
+          scp -F "$d/config" "$d/host.known" saeit-vps:/home/githubops/.ssh/saeit_factory_store_hosts.tmp
+          ssh -F "$d/config" saeit-vps 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          known="$HOME/.ssh/saeit_factory_store_hosts.tmp"
+          test "$(ssh-keygen -lf "$known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          chmod 600 "$known"
+          mv -f "$known" "$HOME/.ssh/saeit_factory_store_hosts"
+          ssh -i "$HOME/.ssh/saeit_factory_store_ed25519" -p 1396 -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$HOME/.ssh/saeit_factory_store_hosts" -o BatchMode=yes zomorod2@zohal.pws-dns.net 'test "$(id -un)" = zomorod2'
+          echo DIRECT_VPS_TO_CPANEL_AUTH_VERIFIED
+          REMOTE
+      - name: Install independent VPS sender and transmit first private package
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/saeit-store"
+          scp -F "$d/config" scripts/factory_store_sender.py saeit-vps:/home/githubops/factory-runtime/operations/factory_store_sender.py.tmp
+          ssh -F "$d/config" saeit-vps 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          ops="$HOME/factory-runtime/operations"
+          source="$HOME/factory-runtime/private/autonomous-product-cycle/digital-products"
+          script="$ops/factory_store_sender.py"
+          test -s "$ops/factory_store_sender.py.tmp"
+          python3 -m py_compile "$ops/factory_store_sender.py.tmp"
+          chmod 600 "$ops/factory_store_sender.py.tmp"
+          mv -f "$ops/factory_store_sender.py.tmp" "$script"
+          python3 "$script" --products "$source" --ssh-key "$HOME/.ssh/saeit_factory_store_ed25519" --known-hosts "$HOME/.ssh/saeit_factory_store_hosts" --max-products 3
+          echo PRIVATE_PRODUCT_TRANSFER_VERIFIED
+          REMOTE
+      - name: Install idempotent VPS-only scheduled store delivery
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/saeit-store"
+          ssh -F "$d/config" saeit-vps 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          ops="$HOME/factory-runtime/operations"
+          mkdir -p "$ops/backups"
+          old="$ops/backups/crontab-before-store-$(date -u +%Y%m%dT%H%M%SZ).txt"
+          crontab -l > "$old" 2>/dev/null || : > "$old"
+          chmod 600 "$old"
+          grep -v 'SAEIT_FACTORY_STORE_SYNC' "$old" > "$ops/store-cron.tmp" || true
+          printf '%s\n' "37 * * * * /usr/bin/flock -n $ops/factory-store-sync.lock /usr/bin/python3 $ops/factory_store_sender.py --products $HOME/factory-runtime/private/autonomous-product-cycle/digital-products --ssh-key $HOME/.ssh/saeit_factory_store_ed25519 --known-hosts $HOME/.ssh/saeit_factory_store_hosts --max-products 3 >> $ops/factory-store-sync.log 2>&1 # SAEIT_FACTORY_STORE_SYNC" >> "$ops/store-cron.tmp"
+          chmod 600 "$ops/store-cron.tmp"
+          crontab "$ops/store-cron.tmp"
+          rm -f "$ops/store-cron.tmp"
+          test "$(crontab -l | grep -c SAEIT_FACTORY_STORE_SYNC)" = 1
+          echo VPS_FACTORY_STORE_SYNC_HOURLY
+          REMOTE
+      - name: Verify persisted private receipt on cPanel
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/saeit-store"
+          ssh -F "$d/config" saeit-cpanel 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          root="$HOME/.saeit-factory-inbox"
+          test -d "$root/receipts/farm_enterprise_economics"
+          count="$(find "$root/receipts/farm_enterprise_economics" -maxdepth 1 -type f -name '*.json' | wc -l)"
+          test "$count" -ge 1
+          echo CPANEL_PRIVATE_PRODUCT_RECEIPT_COUNT="$count"
+          echo CPANEL_PRIVATE_STORE_BRIDGE_OK
+          echo CPANEL_PUBLIC_LISTING_UNMODIFIED
+          REMOTE
+      - name: Remove runner SSH material
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/saeit-store"
