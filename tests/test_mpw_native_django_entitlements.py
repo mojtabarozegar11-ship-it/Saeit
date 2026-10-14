@@ -16,6 +16,7 @@ class NativeEntitlementTests(TestCase):
         self.user = get_user_model().objects.create_user(username="native-entitle-buyer",password="test-password")
         self.now = timezone.now()
         self.product = Product.objects.create(
+            id=72,
             title="The Science and Practice of Chess Improvement",
             product_type="digital_book", currency="USD", price=Decimal("7.50"),
             active=False,
