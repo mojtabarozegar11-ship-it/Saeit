@@ -43,8 +43,9 @@ jobs:
           curl --fail --location --silent --show-error --retry 2 --connect-timeout 15 --max-time 120 \
             "https://pkgs.tailscale.com/stable/${prefix}.tgz" -o "$d/ts.tgz"
           test "$(stat -c %s "$d/ts.tgz")" -lt 100000000
-          tar -tzf "$d/ts.tgz" | grep -Fxq "$prefix/tailscale"
-          tar -tzf "$d/ts.tgz" | grep -Fxq "$prefix/tailscaled"
+          tar -tzf "$d/ts.tgz" > "$d/archive-list.txt"
+          grep -Fxq "$prefix/tailscale" "$d/archive-list.txt"
+          grep -Fxq "$prefix/tailscaled" "$d/archive-list.txt"
           tar -xzf "$d/ts.tgz" -C "$d" "$prefix/tailscale" "$prefix/tailscaled"
           tar -cf - -C "$d/$prefix" tailscale tailscaled | "${SSH[@]}" 'set -euo pipefail; umask 077; root="$HOME/.local/opt/comfyui-tailnet"; target="$root/binaries-1.104.1"; install -d -m 700 "$root"; if [[ -d "$target" ]]; then tar -tf - >/dev/null; echo TAILSCALE_ALREADY_STAGED; exit 0; fi; tmp="$(mktemp -d "$root/.new-XXXXXXXX")"; trap '\''rm -rf -- "$tmp"'\'' EXIT; tar -xf - -C "$tmp"; test -x "$tmp/tailscale" && test -x "$tmp/tailscaled"; chmod 700 "$tmp/tailscale" "$tmp/tailscaled"; mv "$tmp" "$target"; echo TAILSCALE_PRIVATE_BINARIES_STAGED'
           "${SSH[@]}" 'bash -se' <<'REMOTE'
