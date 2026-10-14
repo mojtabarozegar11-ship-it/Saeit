@@ -7,6 +7,7 @@ on:
       - 'tests/native_checkout_settings.py'
       - 'tests/native_checkout_urls.py'
       - 'tests/test_mpw_native_django_db.py'
+      - 'tests/test_mpw_native_django_entitlements.py'
   workflow_dispatch:
 permissions:
   contents: read
@@ -29,6 +30,6 @@ jobs:
           set -euo pipefail
           python3 -m django check
           python3 -m django makemigrations mpw_native_checkout --check --dry-run
-          python3 -m django test tests.test_mpw_native_django_db --verbosity 1
+          python3 -m django test tests.test_mpw_native_django_db tests.test_mpw_native_django_entitlements --verbosity 1
           echo NATIVE_DJANGO_SCHEMA_NO_DRIFT
           echo PRODUCTION_APPS_AND_DATABASE_UNCHANGED
