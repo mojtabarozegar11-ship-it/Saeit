@@ -125,6 +125,30 @@ jobs:
           fi
           echo STAGE4_REFERENCES
           grep -RInE 'stage.?4|stage_four|stage4|step.?4|STAGE_4|FACTORY_STAGE' "$ops" "$app/core" --include='*.sh' --include='*.py' 2>/dev/null | cut -d: -f1-2 | head -80 || true
+          echo STAGE4_SOURCE_SNIPPETS
+          if test -f "$app/core/factory_stage4.py"; then sed -n '1,130p' "$app/core/factory_stage4.py" | sed -E 's/(SECRET|TOKEN|PASSWORD|API_KEY|PRIVATE_KEY|DATABASE_URL)[^=]*=.*/[REDACTED_CONFIG_LINE]/I'; fi
+          if test -f "$app/core/factory_agent_runtime.py"; then sed -n '235,275p;475,520p' "$app/core/factory_agent_runtime.py" | sed -E 's/(SECRET|TOKEN|PASSWORD|API_KEY|PRIVATE_KEY|DATABASE_URL)[^=]*=.*/[REDACTED_CONFIG_LINE]/I'; fi
+          echo FACTORY_OWNER_READ_ONLY_COUNTS
+          cd "$app"
+          export SAEIT_ENV=production MOJ_FACTORY_LOCAL_MODE=1
+          "$base/.venv/bin/python" - <<'PY'
+          import os
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          import django
+          django.setup()
+          from django.contrib.auth import get_user_model
+          from django.apps import apps
+          User=get_user_model()
+          qs=User.objects.filter(is_active=True,is_superuser=True)
+          print("ACTIVE_SUPERUSER_COUNT="+str(qs.count()))
+          print("ACTIVE_SUPERUSER_IDS="+",".join(map(str,qs.values_list("pk",flat=True)[:20])))
+          for model in apps.get_app_config("core").get_models():
+              if model.__name__ in ("ResearchProject","FactoryTask","FactoryRun","AgentTask"):
+                  print("MODEL="+model._meta.label+" COUNT="+str(model.objects.count()))
+                  names={field.name for field in model._meta.get_fields()}
+                  if "owner" in names:
+                      print("OWNER_NULL_COUNT="+str(model.objects.filter(owner__isnull=True).count()))
+          PY
           if test -f "$app/var/factory/discovery/latest.json"; then
             "$base/.venv/bin/python" - "$app/var/factory/discovery/latest.json" <<'PY'
           import json,sys
