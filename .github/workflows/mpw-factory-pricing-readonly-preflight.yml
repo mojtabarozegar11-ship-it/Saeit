@@ -1,0 +1,135 @@
+name: MojPlayWin factory priced listing release read-only preflight
+on:
+  push:
+    branches: [feature/factory-fair-90pct-pricing-20261014]
+    paths:
+      - .github/workflows/mpw-factory-pricing-readonly-preflight.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify owner, factory source, payment gates and safe catalog release preflight read-only
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/mpw-readonly-host"
+          mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          python3 - "$d/vps.key" "$d/host.key" <<'PY'
+          from pathlib import Path
+          import sys
+          for name in sys.argv[1:]:
+              p = Path(name)
+              p.write_text(p.read_text().replace("\r\n", "\n").strip().replace("\\n", "\n") + "\n")
+          PY
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host relay
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host host
+            HostName zohal.pws-dns.net
+            Port 1396
+            User zomorod2
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump relay
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+          EOF
+          timeout 30s ssh -F "$d/config" relay 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          timeout 115s ssh -F "$d/config" host 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = zomorod2
+          export DJANGO_SETTINGS_MODULE=config.settings
+          export PYTHONDONTWRITEBYTECODE=1
+          cd "$HOME/Saeit-staging"
+          "$HOME/virtualenv/Saeit-staging/3.11/bin/python" - <<'PY'
+          import hashlib,importlib.util,json,os
+          from pathlib import Path
+          import django
+          django.setup()
+          from django.conf import settings
+          from django.contrib.auth import get_user_model
+          from django.db import connection
+          from core.models import Product,Order,PaymentIntent
+          root=Path.home()/".saeit-factory-inbox"
+          assert root.is_dir() and not root.is_symlink()
+          receiver=root/"bin/store_receiver.py"
+          assert receiver.is_file() and not receiver.is_symlink()
+          spec=importlib.util.spec_from_file_location("factory_audit_receiver",receiver)
+          r=importlib.util.module_from_spec(spec);spec.loader.exec_module(r)
+          User=get_user_model()
+          superusers=User.objects.filter(is_active=True,is_staff=True,is_superuser=True)
+          print("MPW_PRICE_PREFLIGHT_ACTIVE_SUPERUSER_COUNT="+str(superusers.count()))
+          print("MPW_PRICE_PREFLIGHT_ACTIVE_OWNER_UNIQUE="+str(superusers.count()==1))
+          print("MPW_PRICE_PREFLIGHT_DEBUG_FALSE="+str(settings.DEBUG is False))
+          print("MPW_PRICE_PREFLIGHT_DB_ENGINE_MYSQL="+str(connection.vendor=="mysql"))
+          for recipe in ("farm_enterprise_economics","water_budget_economics"):
+              folder=root/"receipts"/recipe
+              receipts=list(folder.glob("*.json")) if folder.is_dir() else []
+              valid=[p.stem for p in receipts if len(p.stem)==64 and not p.is_symlink() and r.status(root,recipe,p.stem)]
+              print("MPW_PRICE_PREFLIGHT_"+recipe.upper()+"_RECEIPTS="+str(len(valid)))
+              if len(valid)!=1:continue
+              digest=valid[0]
+              entries=Product.objects.filter(metadata__factory_bridge_sha256=digest)
+              print("MPW_PRICE_PREFLIGHT_"+recipe.upper()+"_MATCHING_PRODUCTS="+str(entries.count()))
+              for obj in entries:
+                  meta=obj.metadata if isinstance(obj.metadata,dict) else {}
+                  print("MPW_PRICE_PREFLIGHT_"+recipe.upper()+"_ID="+str(obj.pk))
+                  print("MPW_PRICE_PREFLIGHT_"+recipe.upper()+"_ACTIVE="+str(bool(obj.active)))
+                  print("MPW_PRICE_PREFLIGHT_"+recipe.upper()+"_OWNER_IS_UNIQUE_SUPERUSER="+str(superusers.count()==1 and obj.owner_id==superusers.first().pk))
+                  print("MPW_PRICE_PREFLIGHT_"+recipe.upper()+"_CURRENT_PRICE="+str(obj.price)+"_"+obj.currency)
+                  print("MPW_PRICE_PREFLIGHT_"+recipe.upper()+"_ORIGIN="+str(meta.get("factory_origin","unknown")))
+                  print("MPW_PRICE_PREFLIGHT_"+recipe.upper()+"_QA="+str(meta.get("factory_software_qa","unknown")))
+                  print("MPW_PRICE_PREFLIGHT_"+recipe.upper()+"_PUBLISH_PERMISSION="+str(meta.get("factory_publication_permission")))
+          for filename in ("publish_verified_factory_store_listing.py","import_factory_store_drafts.py","publish_factory_free_tool.py"):
+              helper=root/"bin"/filename
+              print("MPW_PRICE_PREFLIGHT_HELPER_"+filename.replace(".py","").upper()+"_PRESENT="+str(helper.is_file()))
+          doc=Path.home()/"mojplaywin.com"
+          free=doc/"factory-releases/farm-enterprise-economics-v1/Farm_Enterprise_Economics_Toolkit_Free_v1.zip"
+          if free.is_file() and not free.is_symlink():
+              h=hashlib.sha256(free.read_bytes()).hexdigest()
+              print("MPW_PRICE_PREFLIGHT_FREE_PUBLIC_SHA256="+h)
+              print("MPW_PRICE_PREFLIGHT_FREE_PUBLIC_MATCHES_VERIFIED="+str(h=="06fdb7667cde55279a4f97d0adfa35ca9d2e7155f6740ff3b2588816300d1d13"))
+          template=Path.home()/"Saeit-staging/core/templates/core/store.html"
+          print("MPW_PRICE_PREFLIGHT_LIVE_STORE_TEMPLATE_PRESENT="+str(template.is_file()))
+          if template.is_file() and not template.is_symlink():
+              t=template.read_text()
+              print("MPW_PRICE_PREFLIGHT_LIVE_STORE_ACTIVE_ONLY="+str("for product in products" in t))
+              print("MPW_PRICE_PREFLIGHT_LIVE_STORE_FACTORY_FREE_LINK_PRESENT="+str("farm_enterprise_economics" in t))
+          print("MPW_PRICE_PREFLIGHT_CHECKOUT_PROVIDER_ENABLED_IN_PROD_UNKNOWN=True")
+          print("MPW_PRICE_PREFLIGHT_ORDERS="+str(Order.objects.count()))
+          print("MPW_PRICE_PREFLIGHT_PAYMENT_INTENTS="+str(PaymentIntent.objects.count()))
+          print("MPW_PRICE_PREFLIGHT_READONLY=True")
+          PY
+          REMOTE
+      - name: Erase runner-only transient SSH keys
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/mpw-readonly-host"
