@@ -28,9 +28,9 @@ jobs:
           ssh-keygen -y -f "$d/key" >/dev/null
           scan="$(ssh-keyscan -T 10 -t rsa 178.239.147.150 2>/dev/null)"
           test -n "$scan"
-          actual="$(printf '%s\\n' "$scan" | ssh-keygen -lf - -E sha256 | awk '{print $2}' | sort -u)"
+          actual="$(printf '%s\n' "$scan" | ssh-keygen -lf - -E sha256 | awk '{print $2}' | sort -u)"
           test "$actual" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
-          printf '%s\\n' "$scan" > "$d/known"
+          printf '%s\n' "$scan" > "$d/known"
           ssh -i "$d/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o BatchMode=yes -o ConnectTimeout=15 githubops@178.239.147.150 'bash -se' <<'REMOTE'
           set -euo pipefail
           umask 077
@@ -73,7 +73,7 @@ jobs:
             exit 1
           fi
           nohup "$script" 9>&- </dev/null >> "$ops/vps-only-launch.log" 2>&1 &
-          printf '%s\\n' "$!" > "$pidfile"
+          printf '%s\n' "$!" > "$pidfile"
           sleep 2
           new_pid="$(cat "$pidfile")"
           kill -0 "$new_pid"
@@ -82,8 +82,8 @@ jobs:
           chmod 700 "$tmp"
           mv -f "$tmp" "$ops/ensure-vps-only-loop.sh"
           current="$(crontab -l 2>/dev/null || true)"
-          printf '%s\\n' "$current" | grep -v 'SAEIT_FACTORY_AUTOSTART' > "$ops/factory-crontab.tmp" || true
-          printf '%s\\n' '@reboot /bin/bash /home/githubops/factory-runtime/operations/ensure-vps-only-loop.sh >> /home/githubops/factory-runtime/operations/vps-only-watchdog.log 2>&1 # SAEIT_FACTORY_AUTOSTART' '*/5 * * * * /bin/bash /home/githubops/factory-runtime/operations/ensure-vps-only-loop.sh >> /home/githubops/factory-runtime/operations/vps-only-watchdog.log 2>&1 # SAEIT_FACTORY_AUTOSTART' >> "$ops/factory-crontab.tmp"
+          printf '%s\n' "$current" | grep -v 'SAEIT_FACTORY_AUTOSTART' > "$ops/factory-crontab.tmp" || true
+          printf '%s\n' '@reboot /bin/bash /home/githubops/factory-runtime/operations/ensure-vps-only-loop.sh >> /home/githubops/factory-runtime/operations/vps-only-watchdog.log 2>&1 # SAEIT_FACTORY_AUTOSTART' '*/5 * * * * /bin/bash /home/githubops/factory-runtime/operations/ensure-vps-only-loop.sh >> /home/githubops/factory-runtime/operations/vps-only-watchdog.log 2>&1 # SAEIT_FACTORY_AUTOSTART' >> "$ops/factory-crontab.tmp"
           chmod 600 "$ops/factory-crontab.tmp"
           crontab "$ops/factory-crontab.tmp"
           rm -f "$ops/factory-crontab.tmp"
