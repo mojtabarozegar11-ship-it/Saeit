@@ -1,8 +1,5 @@
 name: MojPlayWin protected merchant wallet proof page guarded activation
 on:
-  push:
-    branches: [release/mojplaywin-chess-product-20261014]
-    paths: ['.github/workflows/mojplaywin-wallet-proof-guarded-activation.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -105,7 +102,6 @@ jobs:
           fi
           echo MPW_PRIVATE_ADMIN_PROOF_URL_SMOKE_OK
           echo MPW_PAYMENTS_STILL_DISABLED
-          REMOTE
       - name: Remove temporary SSH credentials
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/mpw-proof-preflight"
