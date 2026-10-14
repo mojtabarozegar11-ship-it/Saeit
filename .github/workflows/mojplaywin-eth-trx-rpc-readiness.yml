@@ -3,6 +3,7 @@ on:
   push:
     paths:
       - '.github/workflows/mojplaywin-eth-trx-rpc-readiness.yml'
+      - 'scripts/mojplaywin_rpc_readiness.py'
   workflow_dispatch:
 permissions:
   contents: read
