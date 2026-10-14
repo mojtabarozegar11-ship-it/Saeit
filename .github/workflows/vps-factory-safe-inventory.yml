@@ -212,5 +212,51 @@ jobs:
           print("FACTORY_PRODUCT_READINESS_COUNTS="+",".join(k+":"+str(v) for k,v in ready.items()))
           PY
           fi
+          if test -f "$app/manage.py" && test -x "$base/.venv/bin/python"; then
+            cd "$app"
+            export SAEIT_ENV=production MOJ_FACTORY_LOCAL_MODE=1
+            "$base/.venv/bin/python" - <<'PY'
+          import os,re,collections
+          from datetime import datetime,timezone
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          import django
+          django.setup()
+          from django.contrib.auth import get_user_model
+          from django.apps import apps
+          U=get_user_model()
+          print("FACTORY_OWNER_ACTIVE_SUPERUSER_COUNT="+str(U.objects.filter(is_active=True,is_superuser=True).count()))
+          print("FACTORY_OWNER_USER_TOTAL_COUNT="+str(U.objects.count()))
+          Task=apps.get_model("core","AgentTask")
+          blocked=Task.objects.filter(status="blocked")
+          patterns={
+              "owner":r"owner","approval":r"approv","permission":r"permission",
+              "provenance":r"provenance","project":r"project","not_found":r"not found|missing|unavailable",
+              "research":r"research","retry":r"retry|attempt","policy":r"policy|risk",
+          }
+          counters=collections.Counter()
+          for t in blocked.only("output_data","created_at").iterator(chunk_size=100):
+              error=str((t.output_data or {}).get("error","")).lower()
+              for tag,pattern in patterns.items():
+                  if re.search(pattern,error): counters[tag]+=1
+              if t.created_at:
+                  counters["blocked_before_2026_10_10"]+=int(t.created_at.date().isoformat()<"2026-10-10")
+                  counters["blocked_on_or_after_2026_10_10"]+=int(t.created_at.date().isoformat()>="2026-10-10")
+          print("FACTORY_BLOCKER_SIGNAL_COUNTS="+",".join(k+":"+str(v) for k,v in counters.items()))
+          P=apps.get_model("core","Product")
+          values=collections.Counter()
+          for p in P.objects.all().iterator(chunk_size=100):
+              m=p.metadata if isinstance(p.metadata,dict) else {}
+              v=m.get("factory_state")
+              if isinstance(v,str) and re.fullmatch(r"[A-Za-z_]{1,40}",v):
+                  values[v]+=1
+              else: values["unclassified"]+=1
+              validation=m.get("validation")
+              if isinstance(validation,dict):
+                  for k in validation:
+                      if re.fullmatch(r"[A-Za-z_]{1,40}",str(k)):
+                          values["validation_key_"+k]+=1
+          print("FACTORY_PRODUCT_STATE_COUNTS="+",".join(k+":"+str(v) for k,v in values.items()))
+          PY
+          fi
           echo FACTORY_INVENTORY_READ_ONLY_DONE
           REMOTE
