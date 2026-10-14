@@ -1,6 +1,6 @@
 {
-  "last_command_id": "initial-ping-20261014",
-  "last_result": "pong",
+  "last_command_id": "termux-whoami-readonly-20261014",
+  "last_result": "whoami_check_passed",
   "protocol_version": 1,
   "state": "idle"
 }

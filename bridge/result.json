@@ -1,8 +1,8 @@
 {
-  "action": "ping",
-  "code": "pong",
-  "command_id": "initial-ping-20261014",
-  "completed_at": "2026-10-14T17:23:18Z",
+  "action": "whoami_check",
+  "code": "whoami_check_passed",
+  "command_id": "termux-whoami-readonly-20261014",
+  "completed_at": "2026-10-14T18:25:24Z",
   "ok": true,
   "protocol_version": 1
 }
