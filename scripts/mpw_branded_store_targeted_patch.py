@@ -38,9 +38,9 @@ REPLACEMENT = '''def branded_store(request):
     if fragment.strip():
         raw=response.content
         marker=b"</main>" if b"</main>" in raw else b"</body>"
-    # The customer-facing page must remain available even on unfamiliar markup.
-    if marker in raw and raw.count(marker)==1:
-        response.content=raw.replace(marker,fragment.encode("utf-8")+marker,1)
+        # Keep the old page intact if its HTML has no recognized insertion point.
+        if marker in raw and raw.count(marker)==1:
+            response.content=raw.replace(marker,fragment.encode("utf-8")+marker,1)
     return response
 '''
 
