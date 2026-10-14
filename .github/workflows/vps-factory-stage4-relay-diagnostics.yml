@@ -16,9 +16,9 @@ jobs:
     steps:
       - name: Configure pinned VPS and cPanel SSH relay
         env:
-          VPS_KEY: \${{ secrets.VPS_SSH_PRIVATE_KEY }}
-          HOST_KEY: \${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
-          HOST_KNOWN: \${{ secrets.SAEIT_HOST_SSH_KNOWN_HOSTS }}
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+          HOST_KNOWN: ${{ secrets.SAEIT_HOST_SSH_KNOWN_HOSTS }}
         shell: bash
         run: |
           set -euo pipefail
