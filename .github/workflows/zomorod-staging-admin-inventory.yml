@@ -384,14 +384,22 @@ jobs:
           fi
           trap 'rmdir "$lock"' EXIT
           cd "$release"
-          echo "ROBOT_CYCLE_START=$(date -u +%FT%TZ) RELEASE=$release"
+          case "${1:-}" in
+            --bootstrap) iterations=7;;
+            "") iterations=1;;
+            *) echo "Unknown robot runner option: $1"; exit 42;;
+          esac
+          echo "ROBOT_CYCLE_START=$(date -u +%FT%TZ) RELEASE=$release ITERATIONS=$iterations"
           "$python" manage.py seed_online_income_agents
-          "$python" manage.py online_income_cycle
-          "$python" manage.py run_economic_worker
+          for ((iteration=1; iteration<=iterations; iteration++)); do
+            echo "ROBOT_CYCLE_ITERATION=$iteration"
+            "$python" manage.py online_income_cycle
+            "$python" manage.py run_economic_worker
+          done
           echo "ROBOT_CYCLE_DONE=$(date -u +%FT%TZ)"
           SH
           chmod 700 "$runner"
-          "$runner" >> "$log" 2>&1
+          "$runner" --bootstrap >> "$log" 2>&1
           tail -n 40 "$log"
           crontab_tmp="$(mktemp "$stage/crontab.XXXXXX")"
           trap 'rm -f "$crontab_tmp"' EXIT
