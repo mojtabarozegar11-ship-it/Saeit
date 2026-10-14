@@ -134,10 +134,20 @@ def checkout_status(request,order_id):
     ).first()
     if invoice is None:
         return JsonResponse({"error":"Order not found"},status=404)
+    # Never claim a buyer can download merely because an invoice row says
+    # 'paid'. Every digital entitlement still needs the verified receipt,
+    # one-to-one ledger evidence and an assigned fulfillment record.
+    can_download=False
+    if invoice.status==CommerceInvoice.Status.PAID and invoice.order.status=="paid":
+        from .entitlements import can_access_purchased_digital_item
+        can_download=any(
+            can_access_purchased_digital_item(item_id,request.user.pk)
+            for item_id in invoice.order.items.values_list("id",flat=True)[:100]
+        )
     return JsonResponse({
         "order_id":order_id,
         "state":invoice.status,
         "network":invoice.network,
         "asset":invoice.asset,
-        "can_access_purchased_items":invoice.status==CommerceInvoice.Status.PAID,
+        "can_access_purchased_items":can_download,
     })
