@@ -42,11 +42,16 @@ if [[ "$old_pid" =~ ^[0-9]+$ ]] && kill -0 "$old_pid" 2>/dev/null; then
   old_cmd="$(ps -p "$old_pid" -o args= 2>/dev/null || true)"
   if [[ "$old_cmd" == *"$root/current/scripts/mojplaywin_vps_readonly_watch.py"* ]]; then
     kill -TERM "$old_pid"
-    for attempt in 1 2 3 4 5 6 7 8 9 10; do
+    # Python may be waiting on an in-flight indexer request (up to 15s per
+    # network). Wait for graceful shutdown, never kill unrelated processes.
+    for attempt in $(seq 1 120); do
       kill -0 "$old_pid" 2>/dev/null || break
+      old_stat="$(ps -p "$old_pid" -o stat= 2>/dev/null || true)"
+      if [[ "$old_stat" == Z* ]]; then break; fi
       sleep 0.5
     done
-    if kill -0 "$old_pid" 2>/dev/null; then
+    old_stat="$(ps -p "$old_pid" -o stat= 2>/dev/null || true)"
+    if kill -0 "$old_pid" 2>/dev/null && [[ "$old_stat" != Z* ]]; then
       echo "MPW_OLD_WATCHER_DID_NOT_STOP"
       exit 1
     fi
