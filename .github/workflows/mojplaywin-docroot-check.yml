@@ -1,0 +1,126 @@
+name: MojPlayWin cPanel document root check
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/mojplaywin-docroot-check.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mojplaywin-docroot-check
+  cancel-in-progress: false
+
+jobs:
+  inspect-domain-root:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Configure pinned SSH relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_HOST: ${{ secrets.SAEIT_HOST_SSH_HOST }}
+          HOST_USER: ${{ secrets.SAEIT_HOST_SSH_USER }}
+          HOST_PORT: ${{ secrets.SAEIT_HOST_SSH_PORT }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          [[ -n "$VPS_KEY" && -n "$HOST_HOST" && -n "$HOST_USER" && -n "$HOST_KEY" ]] || { echo "Missing SSH configuration"; exit 1; }
+          [[ "$HOST_HOST" =~ ^[A-Za-z0-9.:-]+$ && "$HOST_USER" =~ ^[A-Za-z_][A-Za-z0-9_.-]*$ ]] || exit 1
+          HOST_PORT="${HOST_PORT:-1396}"
+          [[ "$HOST_PORT" =~ ^[0-9]{1,5}$ ]] && ((HOST_PORT >= 1 && HOST_PORT <= 65535)) || exit 1
+          WORK="$RUNNER_TEMP/mojplaywin-ssh"
+          install -d -m 700 "$WORK"
+          printf '%s\n' "$VPS_KEY" > "$WORK/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$WORK/host.key"
+          chmod 600 "$WORK/"*.key
+          ssh-keygen -y -P "" -f "$WORK/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$WORK/host.key" >/dev/null
+
+          VPS_SCAN="$(ssh-keyscan -T 10 -t rsa 178.239.147.150 2>/dev/null)"
+          [[ -n "$VPS_SCAN" ]]
+          printf '%s\n' "$VPS_SCAN" > "$WORK/vps.known"
+          VPS_FP="$(ssh-keygen -lf "$WORK/vps.known" -E sha256 | awk '{print $2}' | sort -u)"
+          [[ "$VPS_FP" == "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs" ]] || { echo "VPS host key pin mismatch"; exit 1; }
+
+          cat > "$WORK/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $WORK/vps.key
+            UserKnownHostsFile $WORK/vps.known
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ForwardAgent no
+          EOF
+          chmod 600 "$WORK/config"
+
+          HOST_SCAN="$(ssh -F "$WORK/config" saeit-vps "timeout 15s ssh-keyscan -T 8 -p $HOST_PORT -t ed25519 $HOST_HOST" 2>/dev/null)"
+          [[ -n "$HOST_SCAN" ]]
+          printf '%s\n' "$HOST_SCAN" > "$WORK/host.known"
+          HOST_FP="$(ssh-keygen -lf "$WORK/host.known" -E sha256 | awk '{print $2}' | sort -u)"
+          [[ "$HOST_FP" == "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04" ]] || { echo "cPanel host key pin mismatch"; exit 1; }
+
+          cat >> "$WORK/config" <<EOF
+          Host saeit-host
+            HostName $HOST_HOST
+            User $HOST_USER
+            Port $HOST_PORT
+            IdentityFile $WORK/host.key
+            UserKnownHostsFile $WORK/host.known
+            ProxyJump saeit-vps
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ForwardAgent no
+          EOF
+          chmod 600 "$WORK/config"
+          echo "Pinned SSH relay is ready."
+      - name: Read MojPlayWin document root from cPanel
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORK="$RUNNER_TEMP/mojplaywin-ssh"
+          RAW="$WORK/domain-info.json"
+          timeout 45s ssh -F "$WORK/config" saeit-host \
+            'command -v uapi >/dev/null && uapi --output=json DomainInfo domains_data' \
+            > "$RAW"
+          chmod 600 "$RAW"
+          python3 - "$RAW" <<'PY'
+          import json
+          import sys
+
+          target = {"mojplaywin.com", "www.mojplaywin.com"}
+          with open(sys.argv[1], encoding="utf-8") as stream:
+              data = json.load(stream)
+          found = []
+
+          def visit(value):
+              if isinstance(value, dict):
+                  domain = value.get("domain") or value.get("servername")
+                  root = value.get("documentroot") or value.get("document_root") or value.get("docroot")
+                  if isinstance(domain, str) and domain.rstrip(".").lower() in target and isinstance(root, str):
+                      found.append((domain, root))
+                  for child in value.values():
+                      visit(child)
+              elif isinstance(value, list):
+                  for child in value:
+                      visit(child)
+
+          visit(data)
+          if not found:
+              print("MOJPLAYWIN_DOMAIN_NOT_FOUND_IN_CPANEL")
+              raise SystemExit(2)
+          for domain, root in found:
+              print(f"{domain} document root: {root}")
+          PY
+
+      - name: Remove temporary SSH credentials and cPanel response
+        if: always()
+        shell: bash
+        run: rm -rf -- "$RUNNER_TEMP/mojplaywin-ssh"
