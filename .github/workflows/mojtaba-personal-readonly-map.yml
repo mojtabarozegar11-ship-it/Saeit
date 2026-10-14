@@ -92,11 +92,11 @@ jobs:
                   */.htaccess) grep -E '^[[:space:]]*Passenger(AppRoot|StartupFile|BaseURI)' "$f" | head -6 || true ;;
                   */passenger_wsgi.py)
                     python3 - "$f" <<'PYREAD'
-import pathlib,re,sys
-txt=pathlib.Path(sys.argv[1]).read_text(errors="replace")
-for p in sorted(set(re.findall(r"/home/zomorod2/[A-Za-z0-9_./-]+",txt)))[:8]:
-    print("WRAPPER_PATH="+p)
-PYREAD
+          import pathlib,re,sys
+          txt=pathlib.Path(sys.argv[1]).read_text(errors="replace")
+          for p in sorted(set(re.findall(r"/home/zomorod2/[A-Za-z0-9_./-]+",txt)))[:8]:
+              print("WRAPPER_PATH="+p)
+          PYREAD
                     ;;
                 esac
               ;;
