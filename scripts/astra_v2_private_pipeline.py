@@ -31,6 +31,23 @@ FILES = (
 )
 TEST_NAME = "test_astra_orchard_decision_audit.py"
 BUILDER = "orchard_decision_audit_v2"
+PROCUREMENT_BUILDER = "farm_procurement_audit_v1"
+PROCUREMENT_ROOT = ROOT / "product_prototypes" / "farm_procurement_audit"
+PROCUREMENT_FILES = (
+    "procurement_audit.py", "render_report.py", "example_synthetic.json",
+    "self_test.py", "README.md",
+)
+BUILDERS = {
+    BUILDER: {
+        "root": PROTOTYPE, "files": FILES, "test": TEST_NAME,
+        "slug": "orchard_decision_audit", "title": "Orchard Investment Decision Audit",
+    },
+    PROCUREMENT_BUILDER: {
+        "root": PROCUREMENT_ROOT, "files": PROCUREMENT_FILES,
+        "test": "test_astra_farm_procurement_audit.py",
+        "slug": "farm_procurement_audit", "title": "Farm Input Procurement Quote Audit",
+    },
+}
 MAX_BRIEFS = 1000
 
 SCHEMA = """
@@ -88,7 +105,7 @@ def check_brief(obj):
     key = obj["brief_id"]
     if not isinstance(key, str) or not re.fullmatch("[a-z][a-z0-9_-]{2,63}", key):
         raise ValueError("invalid brief_id")
-    if obj["builder"] != BUILDER:
+    if obj["builder"] not in BUILDERS:
         raise ValueError("no verified builder registered")
     if obj["development_scope"] != "private_reference_prototype":
         raise ValueError("only private reference prototype builds permitted")
@@ -151,21 +168,23 @@ def enqueue(root, obj):
         return {"job_id": cur.lastrowid, "status": "QUEUED", "new_job": True}
 
 
-def _validate_sources():
-    for f in FILES:
-        path = PROTOTYPE / f
+def _validate_sources(builder=BUILDER):
+    config = BUILDERS[builder]
+    for f in config["files"]:
+        path = config["root"] / f
         if path.is_symlink() or not path.is_file() or path.stat().st_size == 0:
             raise ValueError("missing or unsafe product source " + f)
-    test = ROOT / "tests" / TEST_NAME
+    test = ROOT / "tests" / config["test"]
     if test.is_symlink() or not test.is_file():
         raise ValueError("required independent QA tests missing")
     return test
 
 
-def _test_reference():
-    _validate_sources()
+def _test_reference(builder=BUILDER):
+    _validate_sources(builder)
+    config = BUILDERS[builder]
     cmd = [sys.executable, "-m", "unittest", "discover",
-           "-s", str(ROOT / "tests"), "-p", TEST_NAME, "-v"]
+           "-s", str(ROOT / "tests"), "-p", config["test"], "-v"]
     process = subprocess.run(cmd, cwd=str(ROOT), timeout=100,
                              capture_output=True, text=True,
                              env={**os.environ,"PYTHONDONTWRITEBYTECODE":"1"})
@@ -174,10 +193,12 @@ def _test_reference():
     return process
 
 
-def _make_artifact(root, job_id):
-    _test_reference()
-    versions = [(name, (PROTOTYPE / name).read_bytes()) for name in FILES]
-    source_sha = digest(b"".join(
+def _make_artifact(root, job_id, builder=BUILDER):
+    _test_reference(builder)
+    config = BUILDERS[builder]
+    versions = [(name, (config["root"] / name).read_bytes())
+                for name in config["files"]]
+    source_sha = digest(builder.encode() + b"".join(
         name.encode() + b"\x00" + digest(blob).encode() for name, blob in versions))
     staged_fd, staged_path = tempfile.mkstemp(prefix=".prototype-", suffix=".zip", dir=root)
     os.close(staged_fd)
@@ -188,13 +209,13 @@ def _make_artifact(root, job_id):
     try:
         with zipfile.ZipFile(temp, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as z:
             for name, data in sorted(versions):
-                member = zipfile.ZipInfo("orchard_decision_audit/" + name,
+                member = zipfile.ZipInfo(config["slug"] + "/" + name,
                                           date_time=(2020,1,1,0,0,0))
                 member.compress_type=zipfile.ZIP_DEFLATED
                 member.external_attr=0o100644 << 16
                 z.writestr(member, data)
         with zipfile.ZipFile(temp) as z:
-            if z.testzip() is not None or len(z.namelist()) != len(FILES):
+            if z.testzip() is not None or len(z.namelist()) != len(config["files"]):
                 raise ValueError("ZIP_INTEGRITY_FAILURE")
         os.chmod(temp, 0o600)
         if destination.exists():
@@ -205,13 +226,13 @@ def _make_artifact(root, job_id):
         data = destination.read_bytes()
         report = {
             "schema_version": 1,
-            "source_builder": BUILDER,
-            "product_slug": "orchard_decision_audit",
-            "prototype_name": "Orchard Investment Decision Audit",
+            "source_builder": builder,
+            "product_slug": config["slug"],
+            "prototype_name": config["title"],
             "development_scope": "private_reference_prototype",
             "artifact_sha256": digest(data),
             "source_digest": source_sha,
-            "included_files": sorted(FILES),
+            "included_files": sorted(config["files"]),
             "technical_regression": "PASSED",
             "integrity_check": "PASSED",
             "quality_score": None,
@@ -281,14 +302,14 @@ def tick(root):
             return {"status":"NO_ELIGIBLE_WORK", "new_products":0,
                     "note":"a clock tick is not manufacturing"}
         job_id, brief_id, builder, _, attempts = row
-        if builder != BUILDER:
+        if builder not in BUILDERS:
             raise ValueError("job builder not allowlisted")
         with conn:
             conn.execute(
                 "UPDATE jobs SET stage='BUILDING',attempts=attempts+1 WHERE id=?",
                 (job_id,))
         try:
-            artifact_sha, manifest_sha, version = _make_artifact(root, job_id)
+            artifact_sha, manifest_sha, version = _make_artifact(root, job_id, builder)
             with conn:
                 conn.execute(
                     """UPDATE jobs SET stage='PRIVATE_QA_PASSED',artifact_sha=?,
@@ -318,7 +339,12 @@ def status(root):
         count=conn.execute(
             "SELECT COUNT(DISTINCT artifact_sha) FROM jobs WHERE stage='PRIVATE_QA_PASSED'"
         ).fetchone()[0]
+        family_count=conn.execute(
+            "SELECT COUNT(DISTINCT builder) FROM jobs WHERE stage='PRIVATE_QA_PASSED'"
+        ).fetchone()[0]
         return {"queues":dict(rows),"distinct_private_qa_artifact_versions":count,
+                "distinct_private_product_families":family_count,
+                "available_specialist_builders":sorted(BUILDERS),
                 "published_products":0,"verified_revenue":None,
                 "autonomous_supply_from_real_sources_enabled":False}
 
