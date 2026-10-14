@@ -48,8 +48,10 @@ def _validate(invoice):
         raise SettlementRejected("Coin-network mismatch")
     if invoice.merchant_address.lower() != RECEIVERS[invoice.asset].lower():
         raise SettlementRejected("Wrong receiving wallet")
-    if invoice.sender_signature_verified_at is None:
-        raise SettlementRejected("Customer sender proof has not been independently verified")
+    # Retired product-72 legacy module keeps its original one-time
+    # recipient attestation. New ownerless per-sale flow uses mpw_commerce.
+    if invoice.merchant_ownership_verified_at is None or invoice.sender_signature_verified_at is None:
+        raise SettlementRejected("Legacy receiving and buyer wallet proofs are required")
     if not invoice.wallet_challenge_id or not invoice.verified_sender_address:
         raise SettlementRejected("Buyer proof missing")
     if not (invoice.issued_at < invoice.expires_at <= invoice.issued_at + timedelta(minutes=10)):
