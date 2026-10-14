@@ -3,6 +3,7 @@
 No web routes or cron are enabled by including these models. The receiving
 wallet is never asked to approve an order or sign a spending transaction.
 """
+from django.conf import settings
 from django.db import models
 from django.db.models import Q
 
@@ -105,3 +106,29 @@ class CommerceFulfillment(models.Model):
         indexes = [
             models.Index(fields=["status"],name="mpw_fulfill_status_idx"),
         ]
+
+
+class BuyerWalletChallenge(models.Model):
+    """Short-lived one-time wallet-link authorization for an authenticated buyer.
+
+    This is a signed message only. It never authorizes fund transfers, spending
+    allowances, merchant operations or order settlement.
+    """
+    order = models.ForeignKey(
+        "core.Order", on_delete=models.PROTECT,related_name="wallet_link_challenges",
+    )
+    customer = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT,
+        related_name="mpw_wallet_link_challenges",
+    )
+    asset = models.CharField(
+        max_length=3, choices=[("ETH","ETH"),("TRX","TRX")],
+    )
+    sender_address = models.CharField(max_length=100)
+    nonce = models.CharField(max_length=64,unique=True)
+    issued_at = models.DateTimeField()
+    expires_at = models.DateTimeField()
+    verified_at = models.DateTimeField(null=True,blank=True)
+    used_at = models.DateTimeField(null=True,blank=True)
+    failed_attempts = models.PositiveSmallIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
