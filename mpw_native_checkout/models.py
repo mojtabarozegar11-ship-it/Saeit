@@ -71,3 +71,28 @@ class NativeChainTransfer(models.Model):
             models.UniqueConstraint(fields=["network", "tx_hash"], name="mpw_native_unique_chain_tx"),
             models.CheckConstraint(condition=Q(amount_atomic__regex=r"^[1-9][0-9]*$"), name="mpw_native_transfer_positive"),
         ]
+
+
+
+class NativeWatchOutbox(models.Model):
+    """Durable newest desired watch state for an individual native invoice.
+
+    An invoice close supersedes its pending open event. Network delivery must
+    never be assumed until the local receiver acknowledges it.
+    """
+    invoice = models.OneToOneField(
+        NativeInvoice, on_delete=models.PROTECT, related_name="watch_outbox",
+    )
+    action = models.CharField(
+        max_length=16,
+        choices=[("invoice_open", "Open"), ("invoice_closed", "Closed")],
+    )
+    state = models.CharField(
+        max_length=16,
+        choices=[("pending", "Pending"), ("delivered", "Delivered")],
+        default="pending",
+    )
+    attempts = models.PositiveSmallIntegerField(default=0)
+    next_attempt_at = models.DateTimeField(null=True, blank=True)
+    delivered_at = models.DateTimeField(null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
