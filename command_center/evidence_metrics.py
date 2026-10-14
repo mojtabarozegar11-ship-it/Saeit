@@ -9,6 +9,8 @@ from django.http import JsonResponse
 from django.utils import timezone
 from django.views.decorators.http import require_GET
 
+from .factory_status import read_factory_status
+
 from core.models import (
     Agent, AgentTask, ApprovalRequest, EducationEnrollment, Order, PaymentIntent, Product,
 )
@@ -58,10 +60,7 @@ def evidence_metrics(request):
             "state": "unknown",
             "reason": "no_independent_merchant_settlement_reconciliation",
         },
-        "factory": {
-            "state": "unknown",
-            "reason": "no_authenticated_fresh_vps_runtime_adapter",
-        },
+        "factory": read_factory_status(),
     }
     response = JsonResponse(result, json_dumps_params={"ensure_ascii": False})
     response["Cache-Control"] = "private, no-store, max-age=0"
