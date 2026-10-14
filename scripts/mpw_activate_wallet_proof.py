@@ -264,9 +264,10 @@ def activate():
         env["DJANGO_SETTINGS_MODULE"]="shadow_settings"
         env["PYTHONPATH"]=str(shadow)+os.pathsep+str(SITE)
         run((VENV,"-m","django","check","--settings=shadow_settings"),env=env)
-        run((VENV,"-m","django","migrate",PROOF_APP,
-             "--settings=shadow_settings","--noinput"),env=env)
-        print("PROOF_DATABASE_SCHEMA_CREATED_OWN_APP_ONLY")
+        # Do NOT run migrations using shadow settings. Its database may
+        # point at the live production database. Only the guarded migration
+        # below, after the owner-page preflight, may alter proof tables.
+        print("PROOF_SHADOW_SYSTEM_CHECK_OK_NO_SCHEMA_WRITES")
 
         config=SITE/"config/settings.py"
         urls=SITE/"config/urls.py"
