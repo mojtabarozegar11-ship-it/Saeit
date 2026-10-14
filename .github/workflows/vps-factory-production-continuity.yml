@@ -34,44 +34,64 @@ jobs:
           ops="$base/operations"
           script="$ops/vps-only-loop.sh"
           pidfile="$ops/vps-only-loop.pid"
+          log="$ops/vps-only-factory.log"
           test -x "$script"
           grep -q 'FACTORY_RESEARCH_PROVIDER=core.self_hosted_research_provider.SelfHostedStagingResearchProvider' "$script"
           echo VPS_FACTORY_PREFLIGHT_OK
+          pid_is_factory() {
+            [[ "$1" =~ ^[0-9]+$ ]] &&
+              kill -0 "$1" 2>/dev/null &&
+              ps -p "$1" -o args= | grep -Fq -- "$script"
+          }
+          report_factory() {
+            local fpid="$1"
+            echo FACTORY_LOOP_ALIVE
+            echo "FACTORY_PID=$fpid"
+            ps -p "$fpid" -o etime=,args= | sed 's/^/FACTORY_PROCESS=/'
+            if test -f "$log"; then
+              printf 'FACTORY_LOG_MTIME=%s\n' "$(stat -c %y "$log")"
+              echo FACTORY_RECENT_ACTIVITY
+              tail -n 35 "$log" || true
+            else
+              echo FACTORY_LOG_MISSING
+            fi
+          }
           exec 9>"$ops/vps-only-launch-v2.lock"
           if ! flock -n 9; then
             echo FACTORY_LAUNCH_LOCK_BUSY
             current_pid="$(cat "$pidfile" 2>/dev/null || true)"
+            if pid_is_factory "$current_pid"; then
+              report_factory "$current_pid"
+              exit 0
+            fi
             if [[ "$current_pid" =~ ^[0-9]+$ ]] && kill -0 "$current_pid" 2>/dev/null; then
-              current_cmd="$(ps -p "$current_pid" -o args= || true)"
-              case "$current_cmd" in
-                *"$script"*)
-                  echo FACTORY_LOOP_ALIVE
-                  echo "FACTORY_PID=$current_pid"
-                  echo FACTORY_RECENT_ACTIVITY
-                  tail -n 35 "$ops/vps-only-factory.log" || true
-                  exit 0
-                  ;;
-                *)
-                  echo FACTORY_PID_NOT_VERIFIED
-                  printf 'PID_COMMAND=%s\n' "$current_cmd"
-                  exit 1
-                  ;;
-              esac
+              echo FACTORY_PID_NOT_VERIFIED
+              ps -p "$current_pid" -o args= || true
+              exit 1
             fi
             echo FACTORY_LOCK_BUSY_NO_VERIFIED_PID
             ps -eo pid,ppid,args | grep -F 'vps-only-loop' | grep -v grep || true
             exit 1
           fi
-          if test -s "$pidfile" && kill -0 "$(cat "$pidfile")" 2>/dev/null; then
-            echo FACTORY_LOOP_ALIVE
+          current_pid="$(cat "$pidfile" 2>/dev/null || true)"
+          if pid_is_factory "$current_pid"; then
+            report_factory "$current_pid"
+          elif [[ "$current_pid" =~ ^[0-9]+$ ]] && kill -0 "$current_pid" 2>/dev/null; then
+            echo FACTORY_PID_NOT_VERIFIED
+            ps -p "$current_pid" -o args= || true
+            exit 1
           else
             nohup "$script" 9>&- </dev/null >> "$ops/vps-only-launch.log" 2>&1 &
             printf '%s\n' "$!" > "$pidfile"
             sleep 3
-            kill -0 "$(cat "$pidfile")"
+            current_pid="$(cat "$pidfile")"
+            kill -0 "$current_pid"
+            if ! pid_is_factory "$current_pid"; then
+              echo FACTORY_START_NOT_VERIFIED
+              ps -p "$current_pid" -o args= || true
+              exit 1
+            fi
             echo FACTORY_LOOP_RECOVERED
+            report_factory "$current_pid"
           fi
-          echo "FACTORY_PID=$(cat "$pidfile")"
-          echo FACTORY_RECENT_ACTIVITY
-          tail -n 35 "$ops/vps-only-factory.log" || true
           REMOTE
