@@ -168,7 +168,24 @@ jobs:
           print("ACTIVE_SUPERUSER_IDS="+",".join(map(str,qs.values_list("pk",flat=True)[:20])))
           print("ACTIVE_SUPERUSER_USERNAMES="+",".join(qs.values_list("username",flat=True)[:20]))
           print("FACTORY_OWNER_SETTING_NAMES="+",".join(sorted(k for k in dir(settings) if "OWNER" in k.upper() and "FACTORY" in k.upper())))
-          for model in apps.get_app_config("core").get_models():
+          for name in ("AgentTask","FactoryRun"):
+              model=apps.get_model("core",name)
+              fields={field.name for field in model._meta.fields}
+              print("RUNTIME_MODEL_FIELDS="+name+":"+",".join(sorted(fields)))
+              for field_name in ("status","state","error","attempt_count","retry_count","run_id","id"):
+                  if field_name in fields:
+                      print("RUNTIME_FIELD_TYPE="+name+":"+field_name+":"+str(model._meta.get_field(field_name).get_internal_type()))
+              qs=model.objects.order_by("-pk")
+              for row in qs[:5]:
+                  values=[]
+                  for key in ("pk","status","state","error","attempt_count","retry_count","run_id"):
+                      if key in fields:
+                          value=getattr(row,key)
+                          if key=="error" and value is not None:
+                              value=str(value)[:240]
+                          values.append(key+"="+str(value))
+                  print("RECENT_"+name+" "+" ".join(values))
+                    for model in apps.get_app_config("core").get_models():
               if model.__name__ in ("ResearchProject","FactoryTask","FactoryRun","AgentTask"):
                   print("MODEL="+model._meta.label+" COUNT="+str(model.objects.count()))
                   names={field.name for field in model._meta.get_fields()}
