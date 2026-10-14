@@ -98,6 +98,36 @@ jobs:
           print("MPW_RUNTIME_PROOF_URLS_MARKER="+str("# MPW_MERCHANT_WALLET_ROUTE_ONLY_V1" in urls))
           passenger=Path("/home/zomorod2/mojplaywin.com/passenger_wsgi.py").read_text()
           print("MPW_RUNTIME_PASSENGER_TARGET_IS_SAEIT="+str("/home/zomorod2/Saeit-staging" in passenger))
+          # Import the real live URL/router and render only an HTTPS GET.
+          # A fake authenticated principal and mocked proof read mean that this
+          # needs NO SQL query, saved session, blockchain call, or mutation.
+          import django
+          from types import SimpleNamespace
+          from unittest.mock import patch
+          django.setup()
+          from django.urls import resolve
+          from mpw_native_checkout.merchant_wallet_views import merchant_wallet_page
+          owner_id = getattr(settings, "MPW_WALLET_PROOF_OWNER_ID", 0)
+          print("MPW_RUNTIME_OWNER_ID_CONFIGURED="+str(type(owner_id) is int and owner_id > 0))
+          assert type(owner_id) is int and owner_id > 0
+          page_route = resolve("/merchant/wallet-proof/")
+          print("MPW_RUNTIME_PROOF_ROUTE_RESOLVES="+str(page_route.url_name == "page"))
+          request = RequestFactory().get("/merchant/wallet-proof/", secure=True,
+                                         HTTP_HOST="mojplaywin.com")
+          request.user = SimpleNamespace(
+              pk=owner_id, is_authenticated=True, is_active=True, is_superuser=True
+          )
+          try:
+              with patch("mpw_native_checkout.merchant_wallet_views.proven_assets",
+                         return_value={"ETH": False, "TRX": False}):
+                  response = merchant_wallet_page(request)
+          except Exception as exc:
+              print("MPW_RUNTIME_PROOF_RENDER_ERROR_TYPE="+type(exc).__name__)
+              raise
+          print("MPW_RUNTIME_PROOF_RENDER_HTTP="+str(response.status_code))
+          print("MPW_RUNTIME_PROOF_TEMPLATE_ASSETS="+str(b"Ethereum" in response.content and b"TRON" in response.content))
+          assert page_route.url_name == "page" and response.status_code == 200
+          assert b"Ethereum" in response.content and b"TRON" in response.content
           print("MPW_RUNTIME_READONLY_PROBE_COMPLETE_NO_DB_OR_MUTATION")
           PY
           REMOTE
