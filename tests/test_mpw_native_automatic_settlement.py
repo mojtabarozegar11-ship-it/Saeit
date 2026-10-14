@@ -69,6 +69,7 @@ class NativeAutoSettlementTests(TestCase):
             "transaction_hash": tx_hash,
             "amount_smallest_units": int(invoice.amount_atomic),
             "recipient": invoice.merchant_address,
+            "sender": invoice.verified_sender_address,
         }
 
     def check_unpaid(self, invoice, order):
@@ -119,6 +120,24 @@ class NativeAutoSettlementTests(TestCase):
         with self.assertRaises(SettlementRejected):
             settle_native_invoice(invoice.pk,"0x"+"e"*64)
         self.assertEqual(LedgerEntry.objects.filter(order=order).count(),1)
+
+    def test_receipt_for_other_order_cannot_pay(self):
+        invoice, order=self.invoice()
+        proof=self.expected_proof(invoice,ETH_TX)
+        proof["order_id"]=999
+        with patch("mpw_native_checkout.settlement.verify_eth_transfer",return_value=proof):
+            with self.assertRaises(SettlementRejected):
+                settle_native_invoice(invoice.pk, ETH_TX, ethereum_rpc=lambda *args:{})
+        self.check_unpaid(invoice,order)
+
+    def test_receipt_for_wrong_sender_cannot_pay(self):
+        invoice, order=self.invoice()
+        proof=self.expected_proof(invoice,ETH_TX)
+        proof["sender"]="0x"+"f"*40
+        with patch("mpw_native_checkout.settlement.verify_eth_transfer",return_value=proof):
+            with self.assertRaises(SettlementRejected):
+                settle_native_invoice(invoice.pk, ETH_TX, ethereum_rpc=lambda *args:{})
+        self.check_unpaid(invoice,order)
 
     def test_missing_trusted_rpc_blocks_payment(self):
         invoice, order=self.invoice()
