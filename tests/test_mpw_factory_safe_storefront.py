@@ -129,3 +129,14 @@ class FactoryStorefrontTests(TestCase):
     def test_nonfactory_products_do_not_disappear_from_mojplaywin(self):
         self.create("Independent partner course","9.00",True,{})
         self.assertContains(self.store(),"Independent partner course")
+
+    def test_real_branded_route_context_scoped_to_mojplaywin(self):
+        from types import SimpleNamespace
+        from core.brand_store_integration import safe_brand_store_context
+        from core.factory_storefront import presentation
+        product=self.create("Approved free", "0.00", True, farm_meta())
+        context=safe_brand_store_context(SimpleNamespace(code="mojplaywin"), [product])
+        self.assertEqual(len(context["factory_cards"]),1)
+        self.assertEqual(context["products"],[])
+        with self.assertRaises(ValueError):
+            safe_brand_store_context(SimpleNamespace(code="zomorodmelal"), [product])
