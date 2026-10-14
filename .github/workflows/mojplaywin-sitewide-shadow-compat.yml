@@ -62,7 +62,8 @@ jobs:
             ConnectTimeout 10
           EOF
           timeout 30s ssh -F "$d/config" relay 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
-          test "$(ssh-keygen -lf "$d/host.known          # Ship only audited code, without a private key, DB dump or .env.
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          # Ship only audited code, without a private key, DB dump or .env.
           tar -czf "$RUNNER_TEMP/mpw-commerce-shadow.tgz" \
               mpw_commerce scripts/mojplaywin_native_chain_verify.py \
               scripts/mojplaywin_native_rpc_clients.py \
@@ -133,9 +134,6 @@ jobs:
           print("MPW_SHADOW_DJANGO_AND_SQL_PREVIEW_OK")
           print("MPW_LIVE_DATABASE_AND_SETTINGS_UNCHANGED")
           print("MPW_NO_PAYMENT_OR_CUSTOMER_REQUESTS_PROCESSED")
-          PY
-          REMOTE     ).lower())
-          print("MPW_SITEWIDE_READ_ONLY_NO_CHANGES")
           PY
           REMOTE
       - name: Remove transient keys
