@@ -241,6 +241,33 @@ jobs:
               print('CRYPTO_MODULE',filename.name,names[:40])
           PY
           echo "CRYPTO_MODEL_FIELDS_AND_IMPORTS_END"
+          echo "CHECKOUT_SETTLEMENT_AUDIT_START"
+          python3 - <<'PY'
+          import ast
+          from pathlib import Path
+          base=Path('/home/zomorod2/Saeit-staging/core')
+          for name in ['cryptopay_order.py','cryptopay_tron.py','cryptopay_rpc.py','cryptopay_tron_config.py']:
+              p=base/name
+              if not p.exists():continue
+              tree=ast.parse(p.read_text(errors='replace'))
+              print('SETTLEMENT_MODULE',name)
+              for n in tree.body:
+                  if isinstance(n,ast.ImportFrom):
+                      print('  IMPORTS',n.module,[x.name for x in n.names])
+                  if isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef)):
+                      calls=[]
+                      flags=[]
+                      for sub in ast.walk(n):
+                          if isinstance(sub,ast.Call):
+                              fn=sub.func
+                              calls.append(fn.id if isinstance(fn,ast.Name) else fn.attr if isinstance(fn,ast.Attribute) else 'dynamic')
+                          if isinstance(sub,ast.Name) and any(t in sub.id.upper() for t in ('PRODUCTION','MAINNET','VERIFY','ALLOW','ENABLE','CONFIRM','RECEIVING','PENDING')):
+                              flags.append(sub.id)
+                      print('  FUNC',n.name,'args',[x.arg for x in n.args.args])
+                      print('  CALLS',sorted(set(calls))[:45])
+                      print('  FLAGS',sorted(set(flags))[:40])
+          print('CHECKOUT_SETTLEMENT_AUDIT_END')
+          PY
           REMOTE
           for url in https://mojplaywin.com/ https://mojplaywin.com/admin/login/ https://mojplaywin.com/store/ https://mojplaywin.com/shop/; do
             code="$(curl -sS -L --connect-timeout 10 --max-time 20 -o /dev/null -w '%{http_code}' "$url" || true)"
