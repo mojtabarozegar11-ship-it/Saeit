@@ -1,0 +1,35 @@
+name: ComfyUI Source Transfer Diagnostic
+on:
+  push:
+    branches: [audit/vps-comfyui-hardware-20261014]
+    paths: [.github/workflows/vps-comfyui-source-transfer.yml]
+permissions:
+  contents: read
+jobs:
+  transfer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: Comfy-Org/ComfyUI
+          ref: v0.40.0
+          path: comfy-source
+          persist-credentials: false
+      - name: Transfer official ComfyUI release tarball over verified VPS SSH
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          mkdir -p "$RUNNER_TEMP/keys"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;print(sys.stdin.read().replace("\\n","\n").rstrip()+"\n",end="")' > "$RUNNER_TEMP/keys/key"
+          chmod 600 "$RUNNER_TEMP/keys/key"
+          ssh-keygen -y -P '' -f "$RUNNER_TEMP/keys/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$RUNNER_TEMP/keys/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$RUNNER_TEMP/keys/known" -E sha256 | awk '{print $2}')" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          tar -czf "$RUNNER_TEMP/comfy-source.tar.gz" --exclude='.git' -C comfy-source .
+          scp -i "$RUNNER_TEMP/keys/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$RUNNER_TEMP/keys/known" -o BatchMode=yes "$RUNNER_TEMP/comfy-source.tar.gz" githubops@178.239.147.150:/home/githubops/comfyui-isolated/
+          ssh -i "$RUNNER_TEMP/keys/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$RUNNER_TEMP/keys/known" -o BatchMode=yes githubops@178.239.147.150 "test -f /home/githubops/comfyui-isolated/comfy-source.tar.gz && echo COMFY_SOURCE_BUNDLE_TRANSFERRED"
