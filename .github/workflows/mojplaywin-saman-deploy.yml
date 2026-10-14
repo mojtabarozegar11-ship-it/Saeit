@@ -162,19 +162,11 @@ jobs:
           import django
           django.setup()
           from django.urls import resolve
-          routes = {
-              "/saman/": "saman_page",
-              "/saman/learn/": "saman_section_page",
-              "/saman/play/": "saman_section_page",
-              "/saman/products/": "saman_section_page",
-              "/saman/membership/": "saman_section_page",
-              "/saman/partners/": "saman_section_page",
-              "/saman/about/": "saman_section_page",
-          }
-          for path, expected in routes.items():
-              match = resolve(path)
-              print("SAMAN_RUNTIME_ROUTE=" + path + " -> " + match.func.__name__)
-              assert match.func.__name__ == expected, path
+          section_urls = ["/saman/", "/saman/?section=learn", "/saman/?section=play", "/saman/?section=products", "/saman/?section=membership", "/saman/?section=partners", "/saman/?section=about"]
+          for url in section_urls:
+              match = resolve("/saman/")
+              print("SAMAN_RUNTIME_ROUTE=" + url + " -> " + match.func.__name__)
+              assert match.func.__name__ == "saman_page", url
           PY
               exit 0
             fi
@@ -197,12 +189,12 @@ jobs:
           [[ "$status" == "200" ]] || { echo "Live SAMAN route returned HTTP $status"; exit 1; }
           routes=(
             "/saman/:The SAMAN collection"
-            "/saman/learn/:Learning that moves with you."
-            "/saman/play/:More than one way to play."
-            "/saman/products/:Useful resources, made to keep."
-            "/saman/membership/:More depth for committed learners."
-            "/saman/partners/:Good work grows through collaboration."
-            "/saman/about/:A broader home for curiosity."
+            "/saman/?section=learn:Learning that moves with you."
+            "/saman/?section=play:More than one way to play."
+            "/saman/?section=products:Useful resources, made to keep."
+            "/saman/?section=membership:More depth for committed learners."
+            "/saman/?section=partners:Good work grows through collaboration."
+            "/saman/?section=about:A broader home for curiosity."
           )
           for entry in "${routes[@]}"; do
             route="${entry%%:*}"
