@@ -1,0 +1,57 @@
+name: ComfyUI Offline Preflight No Changes
+on:
+  push:
+    branches: [audit/vps-comfyui-hardware-20261014]
+    paths: [.github/workflows/comfyui-offline-preflight.yml]
+permissions:
+  contents: read
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Validate Python, archive indexes and factory health without writes
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/cpreflight"; install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          test -n "$VPS_KEY"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;print(sys.stdin.read().replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test -s "$d/known"
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          timeout 90s ssh -i "$d/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o BatchMode=yes githubops@178.239.147.150 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          root="$HOME/comfyui-isolated"
+          echo "HOST=$(hostname)"
+          for py in python3.11 "$HOME/factory-runtime/.venv/bin/python"; do
+            if command -v "$py" >/dev/null 2>&1; then
+              "$py" -c 'import sys;print("PYTHON_CANDIDATE="+sys.executable+" VERSION="+sys.version.split()[0]);print("PYTHON_SUPPORTED="+str((3,11)<=sys.version_info[:2]<(3,15)))'
+            fi
+          done
+          if test -f "$root/comfy-source.tar.gz"; then
+            echo "SOURCE_ARCHIVE_PRESENT"
+            timeout 40s tar -tzf "$root/comfy-source.tar.gz" | awk 'END{print "SOURCE_ENTRIES="NR}'
+          else echo "SOURCE_ARCHIVE_MISSING"; fi
+          if test -f "$root/comfy-wheelhouse.tar"; then
+            echo "WHEEL_ARCHIVE_PRESENT"
+            timeout 50s tar -tf "$root/comfy-wheelhouse.tar" | awk 'END{print "WHEEL_ARCHIVE_ENTRIES="NR}'
+          else echo "WHEEL_ARCHIVE_MISSING"; fi
+          if test -x "$root/env-cpu/bin/python"; then
+            "$root/env-cpu/bin/python" -c 'import sys;print("COMFY_ENV_PRESENT="+sys.version.split()[0])'
+          else echo "COMFY_ENV_NOT_YET_CREATED"; fi
+          pidfile="$HOME/factory-runtime/operations/vps-only-loop.pid"
+          if test -f "$pidfile"; then
+            pid="$(cat "$pidfile")"
+            if [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null; then echo "FACTORY_LOOP_ALIVE"; else echo "FACTORY_LOOP_NOT_VERIFIED"; fi
+          else echo "FACTORY_PIDFILE_MISSING"; fi
+          free -m | awk '/^Mem:/ {print "RAM_AVAILABLE_MB="$7}'
+          df -Pm "$HOME" | awk 'NR==2{print "DISK_AVAILABLE_MB="$4}'
+          echo "PREFLIGHT_READ_ONLY_COMPLETE"
+          REMOTE
