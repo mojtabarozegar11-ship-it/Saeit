@@ -1,0 +1,102 @@
+name: VPS First Product Private Pilot
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/vps-first-product-private-pilot.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: saeit-vps-first-product-private-pilot
+  cancel-in-progress: false
+
+jobs:
+  install-and-stage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Test first-product staging offline
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/factory_first_product_pilot.py
+          python3 -m unittest discover -s tests -p 'test_factory_first_product_pilot.py' -v
+
+      - name: Install isolated VPS-local pilot and prepare private research draft
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/first-product-pilot-ssh"
+          mkdir -m 700 -p "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null
+          scan="$(ssh-keyscan -T 10 -t rsa 178.239.147.150 2>/dev/null)"
+          test -n "$scan"
+          actual="$(printf '%s\n' "$scan" | ssh-keygen -lf - -E sha256 | awk '{print $2}' | sort -u)"
+          test "$actual" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          printf '%s\n' "$scan" > "$d/known"
+          ssh -i "$d/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o BatchMode=yes -o ConnectTimeout=15 githubops@178.239.147.150 \
+            'set -eu; umask 077; test -d "$HOME/factory-runtime/operations"; cat > "$HOME/factory-runtime/operations/first-product-pilot.py.tmp"' \
+            < scripts/factory_first_product_pilot.py
+          ssh -i "$d/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o BatchMode=yes -o ConnectTimeout=15 githubops@178.239.147.150 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          base="$HOME/factory-runtime"
+          ops="$base/operations"
+          db="$base/private/factory-fresh-isolated.sqlite3"
+          script="$ops/first-product-pilot.py"
+          temp="$script.tmp"
+          output="$base/private/first-product-pilot"
+          python="$base/.venv/bin/python"
+          test -x "$python"
+          test -f "$db"
+          test -s "$temp"
+          test -d "$ops"
+          test -d "$base/private"
+          "$python" -m py_compile "$temp" || {
+            echo PILOT_SOURCE_COMPILE_FAILED
+            rm -f "$temp"
+            exit 1
+          }
+          if test -f "$script"; then
+            mkdir -p "$ops/backups"
+            cp -p "$script" "$ops/backups/first-product-pilot-$(date -u +%Y%m%dT%H%M%SZ).py"
+          fi
+          chmod 700 "$temp"
+          mv -f "$temp" "$script"
+          mkdir -p "$output"
+          chmod 700 "$output"
+          exec 9>"$ops/first-product-pilot.lock"
+          flock -w 15 9
+          "$python" "$script" --db "$db" --out "$output" --prepare
+          echo FIRST_PRODUCT_PILOT_PRIVATE_STAGING_OK
+          if command -v crontab >/dev/null &&
+             (systemctl is-active --quiet cron 2>/dev/null ||
+              systemctl is-active --quiet crond 2>/dev/null); then
+            mkdir -p "$ops/backups"
+            existing="$(crontab -l 2>/dev/null || true)"
+            printf '%s\n' "$existing" > "$ops/backups/crontab-before-first-product-$(date -u +%Y%m%dT%H%M%SZ).txt"
+            printf '%s\n' "$existing" | grep -v 'SAEIT_FIRST_PRODUCT_PILOT' > "$ops/first-product-crontab.tmp" || true
+            printf '%s\n' "17 */6 * * * /usr/bin/flock -n $ops/first-product-pilot.lock $python $script --db $db --out $output --prepare >> $ops/first-product-pilot.log 2>&1 # SAEIT_FIRST_PRODUCT_PILOT" >> "$ops/first-product-crontab.tmp"
+            chmod 600 "$ops/first-product-crontab.tmp"
+            crontab "$ops/first-product-crontab.tmp"
+            rm -f "$ops/first-product-crontab.tmp"
+            test "$(crontab -l | grep -c 'SAEIT_FIRST_PRODUCT_PILOT')" -eq 1
+            echo FIRST_PRODUCT_PILOT_VPS_LOCAL_SCHEDULE_VERIFIED
+          else
+            echo FIRST_PRODUCT_PILOT_CRON_NOT_AVAILABLE
+          fi
+          echo FIRST_PRODUCT_PILOT_COMMERCE_UNMODIFIED
+          REMOTE
