@@ -22,7 +22,7 @@ jobs:
           set -euo pipefail
           export DEBIAN_FRONTEND=noninteractive
           apt-get update -qq
-          apt-get install -y -qq ca-certificates git g++ make cmake pkg-config tar openssh-client
+          apt-get install -y -qq ca-certificates git g++ make cmake pkg-config tar openssh-client python3
           git clone -q --depth 1 --branch master-964-1d0a58a --recurse-submodules \
             https://github.com/leejet/stable-diffusion.cpp "$RUNNER_TEMP/sd-cpp"
           test "$(git -C "$RUNNER_TEMP/sd-cpp" rev-parse --short=7 HEAD)" = "1d0a58a"
@@ -64,7 +64,9 @@ jobs:
           root="$HOME/comfyui-isolated/.control/sd-cpp-runtime"
           test ! -L "$root"
           test -f "$root/archive.tar"
-          tar -tf "$root/archive.tar" | grep -Fq 'bin/sd-cli'
+          tar -tf "$root/archive.tar" > "$root/archive.list"
+          grep -Fxq 'bin/sd-cli' "$root/archive.list"
+          rm -f -- "$root/archive.list"
           tar -xf "$root/archive.tar" -C "$root"
           test -x "$root/bin/sd-cli"
           chmod -R go-rwx "$root"
