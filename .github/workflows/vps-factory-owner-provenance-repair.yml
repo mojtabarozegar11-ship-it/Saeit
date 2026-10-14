@@ -1,0 +1,98 @@
+name: VPS Factory Owner Provenance Repair
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/vps-factory-owner-provenance-repair.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: vps-factory-owner-provenance-repair
+  cancel-in-progress: false
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Back up factory database and seed the verified owner identity
+        env:
+          VPS_KEY: \${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/vps-owner-repair"; mkdir -m 700 -p "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null
+          scan="$(ssh-keyscan -T 10 -t rsa 178.239.147.150 2>/dev/null)"
+          test -n "$scan"
+          actual="$(printf '%s\n' "$scan" | ssh-keygen -lf - -E sha256 | awk '{print $2}' | sort -u)"
+          test "$actual" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          printf '%s\n' "$scan" > "$d/known"
+          ssh -i "$d/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o BatchMode=yes -o ConnectTimeout=15 githubops@178.239.147.150 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          base="$HOME/factory-runtime"
+          ops="$base/operations"
+          app="$base/django-app"
+          db="$base/private/factory-fresh-isolated.sqlite3"
+          test -f "$app/manage.py" && test -f "$db"
+          mkdir -p "$ops/backups"
+          chmod 700 "$ops/backups"
+          exec 9>"$ops/stage4-owner-repair.lock"
+          flock -n 9
+          cd "$app"
+          export SAEIT_ENV=production MOJ_FACTORY_LOCAL_MODE=1
+          "$base/.venv/bin/python" - "$db" "$ops/backups" <<'PY'
+          import os, sqlite3, sys, time
+          from pathlib import Path
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+          import django
+          django.setup()
+          from django.conf import settings
+          from django.contrib.auth import get_user_model
+          from django.db import transaction
+          db=Path(sys.argv[1]).resolve()
+          backup_dir=Path(sys.argv[2]).resolve()
+          expected=Path.home()/"factory-runtime/private/factory-fresh-isolated.sqlite3"
+          if db != expected.resolve() or not db.is_file():
+              raise SystemExit("FACTORY_DATABASE_PATH_MISMATCH")
+          stamp=time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+          backup=backup_dir/f"factory-before-owner-{stamp}.sqlite3"
+          source=sqlite3.connect(f"file:{db}?mode=ro",uri=True,timeout=10)
+          target=sqlite3.connect(backup,timeout=10)
+          source.backup(target)
+          result=target.execute("PRAGMA integrity_check").fetchone()[0]
+          target.close(); source.close()
+          if result!="ok":
+              backup.unlink(missing_ok=True)
+              raise SystemExit("FACTORY_DATABASE_BACKUP_INTEGRITY_FAILED")
+          backup.chmod(0o600)
+          print("FACTORY_DATABASE_BACKUP_OK="+backup.name)
+          User=get_user_model()
+          username="mojtabarozegar11-ship-it"
+          with transaction.atomic():
+              users=User.objects.all()
+              if users.filter(username=username,is_superuser=True,is_active=True).exists():
+                  owner=users.get(username=username,is_superuser=True,is_active=True)
+                  print("OWNER_PROVENANCE_ALREADY_CONFIGURED")
+              elif users.exists():
+                  raise SystemExit("OWNER_BOOTSTRAP_REFUSED_NONEMPTY_USER_TABLE")
+              else:
+                  owner=User.objects.create_superuser(
+                      username=username, email="", password=None,
+                      first_name="Mojtaba", last_name="Rozegar")
+                  owner.set_unusable_password()
+                  owner.save(update_fields=["password"])
+                  print("OWNER_PROVENANCE_CREATED")
+              resolved=User.objects.filter(is_superuser=True,is_active=True).order_by("pk").first()
+              if resolved is None or resolved.pk!=owner.pk or owner.has_usable_password():
+                  raise SystemExit("OWNER_PROVENANCE_VALIDATION_FAILED")
+              print("FACTORY_OWNER_RESOLUTION_OK")
+              print("OWNER_LOGIN_PASSWORD_DISABLED="+str(not owner.has_usable_password()))
+          PY
+          REMOTE
+      - name: Remove temporary SSH key
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/vps-owner-repair"
