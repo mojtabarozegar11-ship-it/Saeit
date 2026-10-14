@@ -1,5 +1,8 @@
 # MojPlayWin stage 2 — safe deployment and rollback readiness
 
+> **Latest stage 7 update (2026-10-15):** The `mpw_commerce` package is now installed and registered on the live cPanel Django runtime and its two migrations are applied. All commerce feature switches are **OFF**, all commerce tables have no recorded sale, no public invoice route is enabled, and checkout remains HTTP 404. The older “not deployed” findings below are **historical pre-deployment baselines**. Live tests, backup/restore evidence, and precise rollback details are in [stages 3–7 evidence](mojplaywin-stages3-7-live-deployment-evidence.md). **Public paid sales are not live.**
+
+
 Status: **PREPARED, NOT DEPLOYED**. Owner requested stage 2: backup,
 version drift analysis, isolated restore drill and rollback preparation.
 Production payment flags, routes, applications, customers and data remain
