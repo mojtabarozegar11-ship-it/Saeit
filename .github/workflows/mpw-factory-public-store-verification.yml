@@ -36,6 +36,10 @@ jobs:
           zip_file=d/"zip"
           print("MPW_PUBLIC_STORE_HAS_FARM_LISTING="+str("Farm Enterprise Economics Toolkit" in store))
           print("MPW_PUBLIC_STORE_HAS_FACTORY_SECTION="+str("id=\"mpw-verified-factory\"" in store))
+          print("MPW_PUBLIC_STORE_MAIN_END_COUNT="+str(store.lower().count("</main>")))
+          print("MPW_PUBLIC_STORE_BODY_END_COUNT="+str(store.lower().count("</body>")))
+          print("MPW_PUBLIC_STORE_HTML_END_COUNT="+str(store.lower().count("</html>")))
+          print("MPW_PUBLIC_STORE_SAFE_FRAGMENT_ANCHOR="+str(store.lower().count("</main>")==1 or store.lower().count("</body>")==1))
           print("MPW_PUBLIC_STORE_HAS_WATER_BUDGET="+str("Water Budget Economics" in store))
           print("MPW_PUBLIC_FARM_FREE_PAGE_HAS_TITLE="+str("Farm Enterprise Economics Toolkit" in farm))
           if zip_file.exists():
