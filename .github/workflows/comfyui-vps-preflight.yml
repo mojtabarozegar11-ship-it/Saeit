@@ -79,5 +79,18 @@ jobs:
           done
           echo "--- user service visibility ---"
           if [[ -f "$HOME/.config/systemd/user/comfyui-isolated.service" ]]; then echo "COMFYUI_USER_UNIT_PRESENT"; else echo "COMFYUI_USER_UNIT_ABSENT"; fi
+          echo "--- pre-existing CPU runtime validation ---"
+          root="$HOME/comfyui-isolated"
+          if [[ -f "$root/source-v0.40.0/main.py" ]]; then echo "COMFYUI_SOURCE_V0400_MAIN_PRESENT"; else echo "COMFYUI_SOURCE_MAIN_MISSING"; fi
+          if [[ -x "$root/env-cpu/bin/python" ]]; then
+            "$root/env-cpu/bin/python" --version 2>&1 | sed 's/^/COMFYUI_CPU_PYTHON=/'
+            "$root/env-cpu/bin/python" -m pip show torch 2>/dev/null | grep -E '^Version:' | sed 's/^/TORCH_/' || true
+            "$root/env-cpu/bin/python" -m pip show comfyui-frontend-package 2>/dev/null | grep -E '^Version:' | sed 's/^/FRONTEND_/' || true
+          else echo "COMFYUI_CPU_VENV_MISSING"; fi
+          if [[ -f "$root/source-v0.40.0/requirements.txt" ]]; then echo "COMFYUI_REQUIREMENTS_PRESENT"; fi
+          echo "--- local prior launch configuration ---"
+          for file in "$root/launch.sh" "$root/run-cpu.sh" "$root/start.sh" "$root/control.sh"; do
+            if [[ -f "$file" ]]; then echo "LAUNCHER_PRESENT=$(basename "$file")"; fi
+          done
           echo "COMFYUI_PREFLIGHT_READONLY_COMPLETE"
           REMOTE
