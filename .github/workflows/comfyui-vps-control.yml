@@ -1,10 +1,5 @@
 name: ComfyUI VPS Private Lifecycle Control
 on:
-  push:
-    branches:
-      - feature/comfyui-vps-control-20261014
-    paths:
-      - .github/workflows/comfyui-vps-control.yml
   workflow_dispatch:
     inputs:
       action:
@@ -41,7 +36,6 @@ jobs:
           bash -n ops/comfyui-vps/control.sh
           mode="${REQUESTED_ACTION:-status}"
           duration="${REQUESTED_MINUTES:-15}"
-          if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then mode=status; duration=5; fi
           [[ "$mode" =~ ^(status|start|stop|health)$ ]] || exit 2
           [[ "$duration" =~ ^(5|10|15|30|60)$ ]] || exit 2
           d="$RUNNER_TEMP/comfyui-control-ssh"
