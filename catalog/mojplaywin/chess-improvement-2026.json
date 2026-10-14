@@ -1,0 +1,49 @@
+{
+  "product_id": "mojplaywin-chess-improvement-2026",
+  "title": "The Science and Practice of Chess Improvement",
+  "storefront": "https://mojplaywin.com/store/",
+  "language": "en",
+  "product_type": "ebook_pdf",
+  "currency": "USD",
+  "regular_price": "14.99",
+  "discount_percentage": 50,
+  "sale_price": "7.50",
+  "public_active": false,
+  "delivery_status": "pending_secure_asset_and_verified_payment",
+  "subtitle": "Train Deliberately. Think Clearly.",
+  "short_description": "An evidence-informed guide to improving chess decisions, game analysis, and deliberate practice.",
+  "long_description": "Improve your chess with a structured, evidence-informed system. Learn how to identify recurring errors in your own games, compare candidate moves, calculate critical variations, review without premature engine dependence, and turn each diagnosis into targeted practice. The guide includes a twelve-week (84-day) training curriculum, decision case cards, review templates, and practical exercises for a repeatable improvement routine.",
+  "pages": 225,
+  "approximate_words": 39740,
+  "curriculum_days": 84,
+  "main_features": [
+    "Evidence-informed chess training",
+    "Decision making and calculation",
+    "Human-first game review",
+    "84-day curriculum",
+    "Critical position review worksheets",
+    "Practice and progress tracking"
+  ],
+  "digital_asset": {
+    "file_name": "MojPlayWin_Science_and_Practice_of_Chess_Improvement.pdf",
+    "sha256": "d284d559bfac931cffe11e97561ac442d63dae5d8eda4bc04e84dd2c26022a1b",
+    "size_bytes": 432386,
+    "private_storage_required": true,
+    "public_download_forbidden": true,
+    "uploaded_to_host": false
+  },
+  "promo_image": {
+    "file_name": "MojPlayWin_Chess_Improvement_Poster_English_50_Off.png",
+    "sha256": "c78cce353fb309da7d5a996344c52f8ccb4a7142f2972f4181eb3841a5a8160d",
+    "size_pixels": "1080x1620",
+    "uploaded_to_host": false
+  },
+  "checkout_requirements": [
+    "Valid gateway credentials and eligible payer regions",
+    "An authenticated provider callback tied to the order",
+    "An idempotent confirmed payment state",
+    "Secure private file delivery only for a paid order",
+    "Successful sandbox or zero-value verification before public activation"
+  ],
+  "disclaimer": "No guaranteed rating gains. Training outcomes depend on the learner's practice and circumstances."
+}
