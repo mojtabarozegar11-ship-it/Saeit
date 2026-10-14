@@ -1,0 +1,42 @@
+name: MojPlayWin payment release preflight - isolated
+on:
+  push:
+    branches:
+      - qa/mpw-payment-release-preflight-20261015
+    paths:
+      - tests/native_ci_payment_release_preflight.py
+      - .github/workflows/mojplaywin-payment-release-preflight.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-payment-gates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install isolated test dependencies - no VPS keys or wallets
+        run: |
+          python3 -m venv "$RUNNER_TEMP/mpw-payment-test"
+          "$RUNNER_TEMP/mpw-payment-test/bin/python" -m pip install --disable-pip-version-check -q 'Django>=5.2,<6' 'eth-account>=0.13,<0.14'
+      - name: Prove fail-closed release gates, ETH/TRX and private delivery in disposable SQLite
+        shell: bash
+        env:
+          DJANGO_SETTINGS_MODULE: tests.native_checkout_settings
+        run: |
+          set -euo pipefail
+          PYTHON="$RUNNER_TEMP/mpw-payment-test/bin/python"
+          "$PYTHON" -m django check
+          "$PYTHON" -m django makemigrations mpw_commerce --check --dry-run
+          "$PYTHON" -m django test \
+            tests.native_ci_payment_release_preflight \
+            tests.native_ci_sitewide_commerce \
+            tests.native_ci_sitewide_reconcile \
+            tests.native_ci_sitewide_full_purchase \
+            --verbosity 1
+          echo MPW_CI_ONLY_PAYMENT_GATES_PASSED
+          echo NO_REAL_PAYMENT_NO_MAINNET_TRANSFER_NO_PRODUCTION_DEPLOYMENT
