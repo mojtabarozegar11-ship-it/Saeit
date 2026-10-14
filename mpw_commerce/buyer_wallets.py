@@ -113,7 +113,7 @@ def verify_signed_buyer_message(entry,signature):
     python_path=getattr(settings,"MPW_COMMERCE_BUYER_CRYPTO_PYTHON","")
     worker=Path(__file__).with_name("buyer_signature_worker.py")
     if (not isinstance(python_path,str) or not python_path.startswith("/")
-        or not Path(python_path).is_file() or Path(python_path).is_symlink()
+        or not Path(python_path).is_file()
         or not worker.is_file() or worker.is_symlink()
         or not isinstance(signature,str) or len(signature)>140):
         raise WalletLinkRejected("Buyer signature verifier unavailable")
