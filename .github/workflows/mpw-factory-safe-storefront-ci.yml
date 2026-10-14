@@ -6,6 +6,7 @@ on:
       - core/commerce_views.py
       - core/factory_storefront.py
       - core/templates/core/mojplaywin_factory_store.html
+      - core/templates/core/mojplaywin_store_base.html
       - tests/test_mpw_factory_safe_storefront.py
       - qa_mpstore_settings.py
       - qa_mpstore_urls.py
