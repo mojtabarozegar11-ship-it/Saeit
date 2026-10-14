@@ -68,7 +68,7 @@ def rollback(run_id):
                 raise RuntimeError(f"Refusing to remove symlink: {target}")
             target.unlink()
     restart_passenger()
-    (backup / "ROLLED_BACK").write_text("yes\\n", encoding="utf-8")
+    (backup / "ROLLED_BACK").write_text("yes\n", encoding="utf-8")
     print("TANIYA_ROLLBACK_COMPLETE")
 
 def deploy(run_id, commit_sha):
