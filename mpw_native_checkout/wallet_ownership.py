@@ -108,6 +108,38 @@ def verify_merchant_signature(asset, address, message, signature):
     if address.lower() != expected.lower():
         raise WalletOwnershipError("Unexpected configured wallet")
     raw = _signature_bytes(signature)
+    # Optional independent crypto venv. Does not modify the shared Django
+    # environment, and cannot sign transactions or access merchant keys.
+    from django.conf import settings
+    helper_python = getattr(settings, "MPW_NATIVE_CRYPTO_HELPER_PYTHON", None)
+    if helper_python:
+        import json
+        import os
+        from pathlib import Path
+        import subprocess
+        if not isinstance(helper_python, str):
+            raise WalletOwnershipError("Invalid isolated crypto verifier path")
+        helper = Path(helper_python)
+        worker = Path(__file__).with_name("crypto_subprocess_verify.py")
+        if (not helper.is_absolute() or not helper.is_file()
+                or not worker.is_file() or worker.is_symlink()):
+            raise WalletOwnershipError("Crypto verifier executable unavailable")
+        try:
+            request = json.dumps({
+                "asset": asset, "message": message, "signature": signature,
+            }).encode("utf-8")
+            proc = subprocess.run(
+                [str(helper), "-I", str(worker)],
+                input=request, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                timeout=7, check=False,
+                env={"PATH":"/usr/bin:/bin","PYTHONPATH":"","PYTHONDONTWRITEBYTECODE":"1"},
+            )
+            if proc.returncode != 0 or len(proc.stdout) > 128:
+                return False
+            response = json.loads(proc.stdout.decode("ascii"))
+            return type(response) is dict and response == {"verified": True}
+        except (OSError, subprocess.TimeoutExpired, ValueError) as exc:
+            raise WalletOwnershipError("Isolated verifier failed safely") from exc
     if not isinstance(message, str) or not (60 <= len(message) <= 1000):
         raise WalletOwnershipError("Invalid challenge message")
     if asset == "ETH":
