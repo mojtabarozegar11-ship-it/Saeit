@@ -11,9 +11,10 @@ def on_native_invoice_change(sender, instance, created, update_fields=None, **kw
     if instance.product_id != 72:
         return
     if created and instance.status == NativeInvoice.Status.AWAITING:
-        # Wake automatically after the buyer's sender proof is verified.
-        # The merchant never signs or approves individual purchases.
-        if instance.sender_signature_verified_at is not None:
+        # Legacy route requires previously signed wallet proof and buyer proof;
+        # all new purchases use the separate mpw_commerce engine instead.
+        if (instance.sender_signature_verified_at is not None
+                and instance.merchant_ownership_verified_at is not None):
             notify_after_commit(instance, "invoice_open")
     elif not created and instance.status in (
         NativeInvoice.Status.PAID,
