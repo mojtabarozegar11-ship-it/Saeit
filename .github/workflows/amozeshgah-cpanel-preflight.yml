@@ -110,6 +110,32 @@ jobs:
             fi
           done
           REMOTE
+      - name: Resolve company domain root in this cPanel account
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/amozeshgah-preflight"
+          timeout 45s ssh -F "$work/config" saeit-cpanel 'uapi --output=json DomainInfo domains_data' > "$work/domain-info.json"
+          python3 - "$work/domain-info.json" <<'PY'
+          import json,sys
+          data=json.load(open(sys.argv[1],encoding="utf-8"))
+          target={"zomorodmelal.ir","www.zomorodmelal.ir"}
+          found=[]
+          def visit(x):
+              if isinstance(x,dict):
+                  domain=x.get("domain") or x.get("servername")
+                  root=x.get("documentroot") or x.get("document_root") or x.get("docroot")
+                  if isinstance(domain,str) and domain.rstrip(".").lower() in target and isinstance(root,str):
+                      found.append((domain,root))
+                  for value in x.values(): visit(value)
+              elif isinstance(x,list):
+                  for value in x: visit(value)
+          visit(data)
+          if found:
+              for domain,root in found: print(f"CPANEL_DOMAIN_ROOT {domain}={root}")
+          else:
+              print("CPANEL_COMPANY_DOMAIN_NOT_ASSIGNED_TO_AUTHENTICATED_ACCOUNT")
+          PY
       - name: Remove temporary SSH material
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/amozeshgah-preflight"
