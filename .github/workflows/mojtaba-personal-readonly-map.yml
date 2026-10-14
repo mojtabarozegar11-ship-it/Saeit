@@ -102,5 +102,21 @@ jobs:
               ;;
             esac
           done
+          echo PUBLICATION_SCHEMA_INSPECTION
+          app="$HOME/mojtaba_personal/mojtaba_roozegar_personal_v17"
+          for f in "$app"/config/urls.py "$app"/core/urls.py "$app"/blog/urls.py "$app"/blog/models.py "$app"/core/models.py "$app"/config/settings.py; do
+            if test -f "$f"; then
+              echo "SCHEMA_FILE=$f"
+              case "$f" in
+                */models.py)
+                  grep -nE '^class |^[[:space:]]{4}[a-z_]+ = models\.|^[[:space:]]{4}def (save|published|slug|__str__)' "$f" | head -100 || true ;;
+                */urls.py) grep -nE 'path\(|re_path\(|include\(' "$f" | head -90 || true ;;
+                */settings.py) grep -A30 -m 1 'INSTALLED_APPS' "$f" | grep -E 'blog|post|articles|core|content|site' | head -25 || true ;;
+              esac
+            fi
+          done
+          echo PROJECT_TOP_DIRECTORIES
+          find "$app" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | grep -Ev '^\.|^__pycache__' | head -45
+          echo PUBLICATION_SCHEMA_INSPECTION_COMPLETE
           echo PERSONAL_MAPPING_READONLY_COMPLETE
           REMOTE
