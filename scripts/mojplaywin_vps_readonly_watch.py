@@ -100,10 +100,15 @@ def run_forever(home, *, time_fn=time.time, sleep=time.sleep,
         failures = 0
         next_scan = 0.0
         last_idle_heartbeat = 0.0
+        last_mode = None
         while not STOP and (max_cycles is None or cycle < max_cycles):
             cycle += 1
             now = time_fn()
             mode = get_pending_mode(marker, now=now)
+            # A newly arriving order must not inherit the longer idle delay.
+            if mode is not None and mode != last_mode:
+                next_scan = now
+            last_mode = mode
             if mode:
                 interval = ACTIVE_SECONDS
                 active = True
