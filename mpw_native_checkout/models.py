@@ -26,8 +26,8 @@ class NativeInvoice(models.Model):
     network = models.CharField(max_length=32)
     merchant_address = models.CharField(max_length=100)
     verified_sender_address = models.CharField(max_length=100)
-    # EVM Wei and TRON Sun. Decimal 0 is deliberately used instead of floating point.
-    amount_atomic = models.DecimalField(max_digits=50, decimal_places=0)
+    # Canonical decimal INTEGER text: preserves exact Wei/Sun on SQLite/MySQL/PostgreSQL.
+    amount_atomic = models.CharField(max_length=50)
     usd_amount = models.DecimalField(max_digits=14, decimal_places=2)
     usd_per_asset = models.DecimalField(max_digits=30, decimal_places=12)
     price_source = models.CharField(max_length=40)
@@ -47,7 +47,7 @@ class NativeInvoice(models.Model):
                 fields=["network", "merchant_address", "amount_atomic"],
                 name="mpw_native_unique_invoice_amount",
             ),
-            models.CheckConstraint(condition=Q(amount_atomic__gt=0), name="mpw_native_invoice_positive"),
+            models.CheckConstraint(condition=Q(amount_atomic__regex=r"^[1-9][0-9]*$"), name="mpw_native_invoice_positive"),
             models.CheckConstraint(condition=Q(usd_amount__gt=0), name="mpw_native_invoice_positive_usd"),
         ]
 
@@ -60,7 +60,7 @@ class NativeChainTransfer(models.Model):
     tx_hash = models.CharField(max_length=80)  # always lower-cased by service
     sender_address = models.CharField(max_length=100)
     recipient_address = models.CharField(max_length=100)
-    amount_atomic = models.DecimalField(max_digits=50, decimal_places=0)
+    amount_atomic = models.CharField(max_length=50)
     verified_at = models.DateTimeField()
     verification_backend = models.CharField(max_length=64)
     evidence_digest = models.CharField(max_length=64)
@@ -69,5 +69,5 @@ class NativeChainTransfer(models.Model):
     class Meta:
         constraints = [
             models.UniqueConstraint(fields=["network", "tx_hash"], name="mpw_native_unique_chain_tx"),
-            models.CheckConstraint(condition=Q(amount_atomic__gt=0), name="mpw_native_transfer_positive"),
+            models.CheckConstraint(condition=Q(amount_atomic__regex=r"^[1-9][0-9]*$"), name="mpw_native_transfer_positive"),
         ]
