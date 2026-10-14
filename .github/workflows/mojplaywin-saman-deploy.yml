@@ -195,7 +195,7 @@ jobs:
           with override_settings(ALLOWED_HOSTS=["*"]):
               client = Client(raise_request_exception=False)
               for path, marker in checks.items():
-                  response = client.get(path)
+                  response = client.get(path, secure=True)
                   print("SAMAN_TEST_CLIENT=" + path + " -> HTTP " + str(response.status_code))
                   if response.status_code != 200 or marker.encode() not in response.content:
                       print(response.content[:1000].decode("utf-8", errors="replace"))
