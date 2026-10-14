@@ -1,34 +1,65 @@
 name: ComfyUI VPS Read-Only Preflight
 on:
+  push:
+    branches:
+      - feature/comfyui-vps-control-20261014
+    paths:
+      - .github/workflows/comfyui-vps-preflight.yml
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: comfyui-vps-readonly-preflight
+  cancel-in-progress: false
 jobs:
   inspect:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Check SSH secret presence
+      - name: Inspect VPS safely using proven Saeit SSH credentials
+        shell: bash
         env:
-          VPS_HOST: ${{ secrets.VPS_HOST }}
-          VPS_USER: ${{ secrets.VPS_USER }}
-          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
-        run: |
-          if [ -z "$VPS_HOST" ] || [ -z "$VPS_USER" ] || [ -z "$VPS_SSH_KEY" ]; then
-            echo "Required VPS_HOST, VPS_USER or VPS_SSH_KEY secret missing"; exit 1
-          fi
-          echo "Secrets present (values hidden)"
-      - name: Read-only VPS inventory
-        env:
-          VPS_HOST: ${{ secrets.VPS_HOST }}
-          VPS_USER: ${{ secrets.VPS_USER }}
-          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
-          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
         run: |
           set -euo pipefail
-          test -n "$VPS_KNOWN_HOSTS" || { echo "VPS_KNOWN_HOSTS secret required"; exit 1; }
           umask 077
-          printf '%s\n' "$VPS_SSH_KEY" > /tmp/comfy_key
-          printf '%s\n' "$VPS_KNOWN_HOSTS" > /tmp/comfy_known_hosts
-          trap 'rm -f /tmp/comfy_key /tmp/comfy_known_hosts' EXIT
-          ssh -i /tmp/comfy_key -o BatchMode=yes -o ConnectTimeout=12 -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/tmp/comfy_known_hosts "$VPS_USER@$VPS_HOST" 'set -eu; echo "=== Host ==="; hostname; echo "=== Capacity ==="; free -h; df -h /; echo "=== GPU ==="; if command -v nvidia-smi >/dev/null; then nvidia-smi --query-gpu=name,memory.total --format=csv,noheader; else echo "No NVIDIA GPU tool"; fi; echo "=== Python ==="; python3 --version 2>&1 || :; echo "=== ComfyUI process ==="; pgrep -af "[m]ain.py.*ComfyUI" || :; echo "=== Port 8188 ==="; ss -ltn "( sport = :8188 )" || :'
+          d="$RUNNER_TEMP/comfyui-ssh"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          test -n "$VPS_KEY" || { echo "VPS_SSH_PRIVATE_KEY missing"; exit 1; }
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs' || {
+            echo "Unexpected VPS SSH fingerprint"; exit 1;
+          }
+          ssh -i "$d/key" -p 22 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$d/known" -o BatchMode=yes -o ConnectTimeout=15 \
+            githubops@178.239.147.150 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          echo "COMFYUI_PREFLIGHT_CONNECTED"
+          echo "USER=$(id -un)"
+          echo "HOST=$(hostname)"
+          echo "CPU_COUNT=$(getconf _NPROCESSORS_ONLN || true)"
+          echo "PYTHON=$(python3 --version 2>&1 || true)"
+          echo "--- memory ---"
+          free -h
+          echo "--- disk ---"
+          df -h "$HOME"
+          echo "--- gpu ---"
+          if command -v nvidia-smi >/dev/null 2>&1; then
+            nvidia-smi --query-gpu=name,memory.total --format=csv,noheader || true
+          else
+            echo "NO_NVIDIA_SMI"
+          fi
+          echo "--- home runtime ---"
+          if [[ -d "$HOME/factory-runtime" ]]; then echo FACTORY_PATH_EXISTS; else echo FACTORY_PATH_MISSING; fi
+          if [[ -d "$HOME/comfyui-isolated" ]]; then echo COMFYUI_HOME_PATH_EXISTS; else echo COMFYUI_HOME_PATH_FREE; fi
+          if [[ -d /opt/comfyui-isolated ]]; then echo COMFYUI_OPT_PATH_EXISTS; else echo COMFYUI_OPT_PATH_FREE; fi
+          echo "--- active ports ---"
+          ss -ltn '( sport = :8188 or sport = :18188 )' || true
+          echo "--- existing ComfyUI process ---"
+          pgrep -af '[C]omfyUI.*main.py|[m]ain.py.*--port (8188|18188)' || true
+          echo "COMFYUI_PREFLIGHT_READONLY_COMPLETE"
+          REMOTE
