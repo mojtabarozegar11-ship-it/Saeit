@@ -12,7 +12,8 @@ import tempfile
 from pathlib import Path
 
 HOME = Path("/home/zomorod2")
-APP_ROOT = HOME / "mojplaywin.com"
+DOCROOT = HOME / "mojplaywin.com"
+APP_ROOT = HOME / "Saeit-staging"
 BACKUP_ROOT = HOME / ".mojplaywin-backups"
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from taniya_patch import patch_urls, patch_views  # noqa: E402
@@ -77,19 +78,19 @@ def deploy(run_id, commit_sha):
         raise ValueError("Invalid source commit")
     if pwd.getpwuid(os.getuid()).pw_name != "zomorod2":
         raise RuntimeError("Unexpected cPanel account")
+    if DOCROOT.is_symlink() or not DOCROOT.is_dir():
+        raise RuntimeError("MojPlayWin document root is missing or redirected")
     if APP_ROOT.is_symlink() or not APP_ROOT.is_dir():
-        raise RuntimeError("MojPlayWin Passenger root is missing or redirected")
-    for required in ("passenger_wsgi.py", ".htaccess", "config/urls.py", "core/views.py"):
+        raise RuntimeError("Active Saeit application root is missing or redirected")
+    for required in ("passenger_wsgi.py", ".htaccess"):
+        if not (DOCROOT / required).is_file():
+            raise RuntimeError(f"Missing MojPlayWin Passenger document-root file: {required}")
+    wrapper = (DOCROOT / "passenger_wsgi.py").read_text(encoding="utf-8", errors="replace")
+    if "Saeit-staging" not in wrapper:
+        raise RuntimeError("Passenger wrapper no longer points at the verified Saeit application")
+    for required in ("config/urls.py", "core/views.py"):
         if not (APP_ROOT / required).is_file():
-            raise RuntimeError(f"Missing MojPlayWin application file: {required}")
-
-    stage = HOME / f".mojplaywin-taniya-{run_id}"
-    template_source = stage / FILES[2]
-    if not template_source.is_file():
-        raise RuntimeError("Staged Taniya page is missing")
-    html = template_source.read_text(encoding="utf-8")
-    if "<title>Taniya Studio" not in html or html.count('<article class="game"') != 20:
-        raise RuntimeError("Staged page failed title or 20-game validation")
+            raise RuntimeError(f"Missing active Saeit application file: {required}")
 
     url_target = APP_ROOT / FILES[0]
     view_target = APP_ROOT / FILES[1]
