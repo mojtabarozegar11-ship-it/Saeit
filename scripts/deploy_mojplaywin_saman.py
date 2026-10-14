@@ -45,7 +45,7 @@ def atomic_write(path, content, mode):
 
 
 def restart_passenger():
-    restart = APP_ROOT / "tmp" / "restart.txt"
+    restart = DOCROOT / "tmp" / "restart.txt"
     restart.parent.mkdir(parents=True, exist_ok=True)
     restart.touch()
 
