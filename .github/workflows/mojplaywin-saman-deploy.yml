@@ -113,7 +113,7 @@ jobs:
           timeout 45s ssh -F "$WORK/config" saeit-host \
             'test -d /home/zomorod2/mojplaywin.com && test ! -L /home/zomorod2/mojplaywin.com && test -f /home/zomorod2/mojplaywin.com/passenger_wsgi.py && test -f /home/zomorod2/mojplaywin.com/.htaccess && grep -Fq "Saeit-staging" /home/zomorod2/mojplaywin.com/passenger_wsgi.py'
           timeout 20s ssh -F "$WORK/config" saeit-host "install -d -m 700 /home/zomorod2/.mojplaywin-saman-$GITHUB_RUN_ID"
-          timeout 20s ssh -F "$WORK/config" saeit-host 'for path in saman/sections; do target="/home/zomorod2/mojplaywin.com/$path"; if [[ -e "$target" ]]; then echo "DOCROOT_PATH_EXISTS=$target"; ls -ld "$target"; else echo "DOCROOT_PATH_CLEAR=$target"; fi; done'
+          timeout 20s ssh -F "$WORK/config" saeit-host 'for path in saman/learn-saman saman/play-saman saman/products-saman saman/membership-saman saman/partners-saman saman/about-saman; do target="/home/zomorod2/mojplaywin.com/$path"; if [[ -e "$target" ]]; then echo "DOCROOT_PATH_EXISTS=$target"; ls -ld "$target"; else echo "DOCROOT_PATH_CLEAR=$target"; fi; done'
 
       - name: Package SAMAN deployment files
         run: tar -cf "$RUNNER_TEMP/saman.tar" scripts/deploy_mojplaywin_saman.py scripts/saman_patch.py templates/saman/index.html
@@ -164,12 +164,12 @@ jobs:
           from django.urls import resolve
           routes = {
               "/saman/": "saman_page",
-              "/saman/sections/learn/": "saman_section_page",
-              "/saman/sections/play/": "saman_section_page",
-              "/saman/sections/products/": "saman_section_page",
-              "/saman/sections/membership/": "saman_section_page",
-              "/saman/sections/partners/": "saman_section_page",
-              "/saman/sections/about/": "saman_section_page",
+              "/saman/learn-saman/": "saman_section_page",
+              "/saman/play-saman/": "saman_section_page",
+              "/saman/products-saman/": "saman_section_page",
+              "/saman/membership-saman/": "saman_section_page",
+              "/saman/partners-saman/": "saman_section_page",
+              "/saman/about-saman/": "saman_section_page",
           }
           for path, expected in routes.items():
               match = resolve(path)
@@ -197,12 +197,12 @@ jobs:
           [[ "$status" == "200" ]] || { echo "Live SAMAN route returned HTTP $status"; exit 1; }
           routes=(
             "/saman/:The SAMAN collection"
-            "/saman/sections/learn/:Learning that moves with you."
-            "/saman/sections/play/:More than one way to play."
-            "/saman/sections/products/:Useful resources, made to keep."
-            "/saman/sections/membership/:More depth for committed learners."
-            "/saman/sections/partners/:Good work grows through collaboration."
-            "/saman/sections/about/:A broader home for curiosity."
+            "/saman/learn-saman/:Learning that moves with you."
+            "/saman/play-saman/:More than one way to play."
+            "/saman/products-saman/:Useful resources, made to keep."
+            "/saman/membership-saman/:More depth for committed learners."
+            "/saman/partners-saman/:Good work grows through collaboration."
+            "/saman/about-saman/:A broader home for curiosity."
           )
           for entry in "${routes[@]}"; do
             route="${entry%%:*}"
