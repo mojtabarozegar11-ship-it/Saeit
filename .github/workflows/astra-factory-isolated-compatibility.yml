@@ -14,6 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
+      - uses: actions/checkout@v4
       - name: Test original Astra changes only in disposable isolated VPS directory
         shell: bash
         env:
@@ -30,6 +31,17 @@ jobs:
           ssh-keygen -y -P '' -f "$d/key" >/dev/null
           ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
           test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path("factory_assets/astra_initial_200_hypotheses.json")
+          d=json.loads(p.read_text(encoding="utf-8"))
+          q=[x["research_query"] for x in d["opportunities"]]
+          assert len(q)==200 and len(set(q))==200
+          assert all(x["status"]=="hypothesis_unverified" and x["approved_product"] is False for x in d["opportunities"])
+          print("ASTRA_VERSIONED_200_HYPOTHESES_VERIFIED")
+          PY
+          scp -i "$d/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=15 factory_assets/astra_initial_200_hypotheses.json githubops@178.239.147.150:/home/githubops/factory-runtime/operations/astra-qa-seed-candidate.json
           ssh -i "$d/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o BatchMode=yes -o ConnectTimeout=15 githubops@178.239.147.150 'bash -se' <<'REMOTE'
           set -euo pipefail
           umask 077
@@ -68,7 +80,19 @@ jobs:
               shutil.copy2(source_hypotheses,destination_hypotheses)
               print("ASTRA_STAGING_REAL_HYPOTHESES_COPIED")
           else:
-              print("ASTRA_STAGING_REAL_HYPOTHESES_FILE_MISSING")
+              candidate=source.parent/"operations/astra-qa-seed-candidate.json"
+              if not candidate.is_file() or candidate.is_symlink():raise RuntimeError("ASTRA_VERSIONED_SEED_CANDIDATE_MISSING")
+              import json
+              payload=json.loads(candidate.read_text(encoding="utf-8"))
+              entries=payload.get("opportunities")
+              if not isinstance(entries,list) or len(entries)!=200 or len({x["research_query"] for x in entries})!=200:
+                  raise RuntimeError("ASTRA_VERSIONED_SEED_INVALID")
+              if any(x.get("approved_product") is not False or x.get("status")!="hypothesis_unverified" for x in entries):
+                  raise RuntimeError("ASTRA_VERSIONED_SEED_MUST_BE_UNVERIFIED")
+              destination_hypotheses=dest/"var/factory/discovery/initial_200_hypotheses.json"
+              destination_hypotheses.parent.mkdir(parents=True,exist_ok=True)
+              shutil.copy2(candidate,destination_hypotheses)
+              print("ASTRA_STAGING_VERSIONED_200_HYPOTHESES_COPIED")
           with tarfile.open(arch,"r:gz") as tf:
               count=0
               for item in tf.getmembers():
