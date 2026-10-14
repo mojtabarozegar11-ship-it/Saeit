@@ -6,7 +6,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.utils import timezone
 
-from core.models import Order, OrderItem, Product
+from core.models import Order, OrderItem, Product, LedgerEntry
 from mpw_native_checkout.models import NativeInvoice, NativeChainTransfer
 from mpw_native_checkout.entitlements import qualified_order, can_download_paid_native_order
 
@@ -50,8 +50,8 @@ class NativeEntitlementTests(TestCase):
         self.product.metadata=data
         self.product.save(update_fields=["active","metadata","updated_at"])
 
-    def create_evidence(self,backend="verified-ethereum-mainnet-rpc"):
-        return NativeChainTransfer.objects.create(
+    def create_evidence(self,backend="ethereum-mainnet-verified"):
+        transfer = NativeChainTransfer.objects.create(
             invoice=self.invoice,network=self.invoice.network,
             tx_hash="0x"+"c"*64,
             sender_address=self.invoice.verified_sender_address,
@@ -61,6 +61,18 @@ class NativeEntitlementTests(TestCase):
             verification_backend=backend,
             evidence_digest="e"*64,
         )
+        LedgerEntry.objects.create(
+            order=self.order, payment_intent=None, entry_type="payment",
+            currency="USD", amount=Decimal("7.50"),
+            reference="native-crypto:"+self.invoice.network+":"+transfer.tx_hash,
+            metadata={
+                "native_invoice_id":self.invoice.pk,
+                "network":self.invoice.network,
+                "tx_hash":transfer.tx_hash,
+                "evidence_digest":transfer.evidence_digest,
+            },
+        )
+        return transfer
 
     def make_paid(self):
         self.activate_for_test()
@@ -96,6 +108,22 @@ class NativeEntitlementTests(TestCase):
     def test_mock_backend_does_not_unlock(self):
         self.make_paid()
         self.create_evidence(backend="ci-simulation")
+        self.assertFalse(can_download_paid_native_order(self.order.pk,self.user.pk))
+
+    def test_missing_payment_ledger_blocks_download(self):
+        self.make_paid()
+        self.create_evidence()
+        LedgerEntry.objects.filter(order=self.order).delete()
+        self.assertFalse(can_download_paid_native_order(self.order.pk,self.user.pk))
+
+    def test_fake_ledger_digest_blocks_download(self):
+        self.make_paid()
+        self.create_evidence()
+        entry=LedgerEntry.objects.get(order=self.order)
+        data=dict(entry.metadata)
+        data["evidence_digest"]="f"*64
+        entry.metadata=data
+        entry.save(update_fields=["metadata"])
         self.assertFalse(can_download_paid_native_order(self.order.pk,self.user.pk))
 
     def test_wrong_sender_does_not_unlock(self):
