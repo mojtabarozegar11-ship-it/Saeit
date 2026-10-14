@@ -7,7 +7,7 @@
 <meta name="description" content="{% block meta_description %}Zomorodmelal؛ پلتفرم خدماتی یکپارچه با خدمات، آموزش، هوش مصنوعی، آب‌وهوا، اقتصاد، استودیو، دانشنامه و شرکت{% endblock %}">
 <title>{% block title %}Zomorodmelal — پلتفرم خدماتی یکپارچه{% endblock %}</title>
 <link rel="icon" type="image/png" href="{% static 'site/company/company-logo.png' %}">
-<link rel="canonical" href="https://zomorodmelal.ir{% if request.path == "/academy/" %}/education/{% else %}{{ request.path }}{% endif %}">
+<link rel="canonical" href="https://zomorodmelal.ir{% if request.path == "/academy/" or request.path == "/education/" %}/amozeshgah/{% else %}{{ request.path }}{% endif %}">
 {% if request.path == "/" %}<link rel="preload" as="image" href="{% static 'site/heroes/platform-home.webp' %}" fetchpriority="high">
 {% elif request.path == "/services/" %}<link rel="preload" as="image" href="{% static 'site/heroes/services.webp' %}" fetchpriority="high">
 {% elif request.path == "/agriculture/" %}<link rel="preload" as="image" href="{% static 'site/heroes/agriculture.webp' %}" fetchpriority="high">
@@ -19,7 +19,7 @@
 {% elif request.path == "/economy/" %}<link rel="preload" as="image" href="{% static 'site/heroes/economy.webp' %}" fetchpriority="high">
 {% elif request.path == "/market/" %}<link rel="preload" as="image" href="{% static 'site/heroes/marketplace.webp' %}" fetchpriority="high">
 {% elif request.path == "/agents/" %}<link rel="preload" as="image" href="{% static 'site/heroes/ai.webp' %}" fetchpriority="high">
-{% elif request.path == "/education/" or request.path == "/academy/" %}<link rel="preload" as="image" href="{% static 'site/heroes/academy.webp' %}" fetchpriority="high">
+{% elif request.path == "/education/" or request.path == "/academy/" or request.path == "/amozeshgah/" %}<link rel="preload" as="image" href="{% static 'site/heroes/academy.webp' %}" fetchpriority="high">
 {% elif request.path == "/studio/" %}<link rel="preload" as="image" href="{% static 'site/heroes/game-studio.webp' %}" fetchpriority="high">
 {% elif request.path == "/weather/" %}<link rel="preload" as="image" href="{% static 'site/heroes/weather.webp' %}" fetchpriority="high">
 {% elif request.path == "/newsletter/" %}<link rel="preload" as="image" href="{% static 'site/heroes/newsletter.webp' %}" fetchpriority="high">
@@ -48,7 +48,7 @@
 <button class="menu-toggle" type="button" aria-label="باز کردن منو" aria-expanded="false">☰</button>
 <nav class="nav" aria-label="ناوبری اصلی">
 <a class="{% if request.path == "/" or request.path|slice:":9" == "/services/" %}active{% endif %}" href="/">خدمات</a>
-<a class="{% if request.path|slice:":11" == "/education/" %}active{% endif %}" href="/education/">آموزش</a>
+<a class="{% if request.path|slice:":12" == "/amozeshgah/" %}active{% endif %}" href="/amozeshgah/">آموزش</a>
 <a class="{% if request.path|slice:":8" == "/agents/" %}active{% endif %}" href="/agents/">هوش مصنوعی</a>
 <a class="{% if request.path|slice:":9" == "/weather/" %}active{% endif %}" href="/weather/">آب‌وهوا</a>
 <a class="{% if request.path|slice:":9" == "/economy/" %}active{% endif %}" href="/economy/">اقتصاد</a>
@@ -56,13 +56,13 @@
 <a class="{% if request.path|slice:":10" == "/knowledge/" %}active{% endif %}" href="/knowledge/">دانشنامه</a>
 <a class="{% if request.path|slice:":9" == "/company/" or request.path|slice:":7" == "/about/" or request.path|slice:":9" == "/contact/" %}active{% endif %}" href="/company/">شرکت</a>
 </nav>
-<div class="header-actions"><a class="icon-btn" href="/search/" title="جستجوی سایت" aria-label="جستجوی سایت">⌕</a>{% if user.is_authenticated %}<a class="header-cta" href="/education/dashboard/">یادگیری من</a>{% endif %}<a class="header-cta" href="/company/">شرکت</a></div>
+<div class="header-actions"><a class="icon-btn" href="/search/" title="جستجوی سایت" aria-label="جستجوی سایت">⌕</a>{% if user.is_authenticated %}<a class="header-cta" href="/amozeshgah/dashboard/">یادگیری من</a>{% endif %}<a class="header-cta" href="/company/">شرکت</a></div>
 </header>
 <main id="main-content" tabindex="-1">{% block content %}{% endblock %}</main>
 <footer class="site-footer">
 <div class="footer-grid">
 <div><div class="footer-brand"><img class="footer-logo" src="{% static 'site/company/company-logo.png' %}" alt=""> <span>Zomorodmelal</span></div><p>پلتفرم خدماتی یکپارچه؛ خدمات، آموزش، هوش مصنوعی، آب‌وهوا، اقتصاد، استودیو، دانشنامه و شرکت.</p></div>
-<div><strong>پلتفرم</strong><a href="/">خدمات</a><a href="/education/">آموزش</a><a href="/agents/">هوش مصنوعی</a><a href="/weather/">آب‌وهوا</a><a href="/economy/">اقتصاد</a><a href="/studio/">استودیو</a><a href="/knowledge/">دانشنامه</a><a href="/company/">شرکت</a></div>
+<div><strong>پلتفرم</strong><a href="/">خدمات</a><a href="/amozeshgah/">آموزش</a><a href="/agents/">هوش مصنوعی</a><a href="/weather/">آب‌وهوا</a><a href="/economy/">اقتصاد</a><a href="/studio/">استودیو</a><a href="/knowledge/">دانشنامه</a><a href="/company/">شرکت</a></div>
 <div><strong>درون خدمات</strong><a href="/agriculture/">کشاورزی</a><a href="/industry/">صنعت</a><a href="/market/">بازار</a><a href="/services/">همه خدمات</a></div>
 <div><strong>دسترسی</strong><a href="/company/#company-content-ecosystem">رسانه و وبلاگ شرکت</a><a href="/company/">شرکت</a><a href="/contact/">تماس و همکاری</a></div>
 </div>
