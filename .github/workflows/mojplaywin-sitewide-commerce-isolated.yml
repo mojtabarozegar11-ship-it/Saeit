@@ -6,6 +6,8 @@ on:
       - '.github/workflows/mojplaywin-sitewide-commerce-isolated.yml'
       - 'mpw_commerce/**'
       - 'tests/native_ci_sitewide_commerce.py'
+      - 'tests/native_ci_sitewide_chain_adapter.py'
+      - 'scripts/mojplaywin_native_chain_verify.py'
       - 'tests/native_checkout_settings.py'
   workflow_dispatch:
 permissions:
@@ -29,6 +31,6 @@ jobs:
           set -euo pipefail
           python3 -m django check
           python3 -m django makemigrations mpw_commerce --check --dry-run
-          python3 -m django test tests.native_ci_sitewide_commerce --verbosity 2
+          python3 -m django test tests.native_ci_sitewide_commerce tests.native_ci_sitewide_chain_adapter --verbosity 2
           echo MPW_COMMERCE_MULTI_PRODUCT_TESTS_PASSED
           echo MPW_PRODUCTION_SETTINGS_DB_AND_WEBSITE_UNCHANGED
