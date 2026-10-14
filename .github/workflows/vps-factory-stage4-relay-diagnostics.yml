@@ -128,18 +128,6 @@ jobs:
           echo STAGE4_SOURCE_SNIPPETS
           if test -f "$app/core/factory_stage4.py"; then sed -n '1,130p' "$app/core/factory_stage4.py" | sed -E 's/(SECRET|TOKEN|PASSWORD|API_KEY|PRIVATE_KEY|DATABASE_URL)[^=]*=.*/[REDACTED_CONFIG_LINE]/I'; fi
           if test -f "$app/core/factory_agent_runtime.py"; then sed -n '235,275p;475,520p' "$app/core/factory_agent_runtime.py" | sed -E 's/(SECRET|TOKEN|PASSWORD|API_KEY|PRIVATE_KEY|DATABASE_URL)[^=]*=.*/[REDACTED_CONFIG_LINE]/I'; fi
-          echo RECOVERY_ENTRYPOINTS
-          grep -nE "def .*retry|def .*resume|def .*process|def .*recover|def .*run|blocked|requeue" "$app/core/factory_agent_runtime.py" "$app/core/factory_stage4.py" | head -100 || true
-          echo OPERATIONS_SCRIPT_NAMES
-          echo LEGACY_RECOVERY_SOURCE
-          if test -f "$app/core/factory_legacy_recovery.py"; then sed -n '1,220p' "$app/core/factory_legacy_recovery.py"; fi
-          echo TASK_RUNTIME_RECOVERY_SOURCE
-          sed -n '300,425p' "$app/core/task_runtime.py"
-          grep -RIn "resume_blocked" "$app/core" --include='*.py' | head -40 || true
-          echo VPS_LOOP_SOURCE
-          sed -n '1,180p' "$ops/vps-only-loop.sh"
-          find "$ops" -maxdepth 1 -type f -name '*.sh' -printf '%f\n' | sort
-          grep -RInE 'def .*retry|def .*resume|def .*process|def .*recover|status[[:space:]]*=[[:space:]]*["'\''"]blocked|blocked.*status' "$app/core" --include='*.py' | head -120 || true
           echo FACTORY_OWNER_CODE
           sed -n '90,112p' "$app/core/factory_stage4.py" 2>/dev/null || true
           sed -n '210,240p' "$app/core/factory_agent_runtime.py" 2>/dev/null || true
@@ -185,23 +173,6 @@ jobs:
           print("ACTIVE_SUPERUSER_IDS="+",".join(map(str,qs.values_list("pk",flat=True)[:20])))
           print("ACTIVE_SUPERUSER_USERNAMES="+",".join(qs.values_list("username",flat=True)[:20]))
           print("FACTORY_OWNER_SETTING_NAMES="+",".join(sorted(k for k in dir(settings) if "OWNER" in k.upper() and "FACTORY" in k.upper())))
-          for name in ("AgentTask","FactoryRun"):
-              model=apps.get_model("core",name)
-              fields={field.name for field in model._meta.fields}
-              print("RUNTIME_MODEL_FIELDS="+name+":"+",".join(sorted(fields)))
-              for field_name in ("status","state","error","attempt_count","retry_count","run_id","id"):
-                  if field_name in fields:
-                      print("RUNTIME_FIELD_TYPE="+name+":"+field_name+":"+str(model._meta.get_field(field_name).get_internal_type()))
-              qs=model.objects.order_by("-pk")
-              for row in qs[:5]:
-                  values=[]
-                  for key in ("id","status","state","error","attempt_count","retry_count","next_retry_at","action_type","factory_run_id"):
-                      if key in fields:
-                          value=getattr(row,key)
-                          if key=="error" and value is not None:
-                              value=str(value)[:240]
-                          values.append(key+"="+str(value))
-                  print("RECENT_"+name+" "+" ".join(values))
           for model in apps.get_app_config("core").get_models():
               if model.__name__ in ("ResearchProject","FactoryTask","FactoryRun","AgentTask"):
                   print("MODEL="+model._meta.label+" COUNT="+str(model.objects.count()))
