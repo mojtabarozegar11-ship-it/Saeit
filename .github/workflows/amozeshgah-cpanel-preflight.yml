@@ -27,12 +27,6 @@ jobs:
           install -d -m 700 "$d"
           printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
           printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
-          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
-          test -n "$scan"
-          printf '%s\n' "$scan" > "$d/host.candidate"
-          actual="$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)"
-          test "$actual" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
-          cp "$d/host.candidate" "$d/host.known"
           chmod 600 "$d/"*
           ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
           ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
@@ -62,6 +56,12 @@ jobs:
             RequestTTY no
           EOF
           chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          actual="$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)"
+          test "$actual" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
       - name: Verify cPanel account and target paths without writes
         shell: bash
         run: |
@@ -71,7 +71,7 @@ jobs:
           echo CPANEL_AUTHENTICATED_USER="$(id -un)"
           echo CPANEL_HOST="$(hostname)"
           if test -r /etc/userdomains; then
-            owner="$(awk -F: '$1=="zomorodmelal.ir" {gsub(/[[:space:]]/,"",$2); print $2; exit}' /etc/userdomains)"
+            owner="$(awk -F: '$1=="zomorodmelal.ir" {gsub(/[[:space:]]/, "", $2); print $2; exit}' /etc/userdomains)"
             echo COMPANY_DOMAIN_OWNER="${owner:-NOT_FOUND_IN_MAP}"
           else
             echo COMPANY_DOMAIN_OWNER_MAP=NOT_READABLE
