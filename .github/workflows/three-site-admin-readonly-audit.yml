@@ -152,3 +152,5 @@ jobs:
           check_route MOJPLAYWIN_ADMIN https://mojplaywin.com/admin/login/
           check_route MOJTAba_PERSONAL_ADMIN https://mojplaywin.com/mojtaba.roozegar/admin/login/
           check_route MOJTAba_PERSONAL_HOME https://mojplaywin.com/mojtaba.roozegar/
+          check_route MOJTAba_PERSONAL_MOUNTED_HOME https://mojplaywin.com/mojtaba.roozegar/mojtaba.roozegar/
+          check_route MOJTAba_PERSONAL_ADMIN_CANDIDATE https://mojplaywin.com/mojtaba.roozegar/mojtaba.roozegar/manage/login/
