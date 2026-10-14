@@ -1,6 +1,7 @@
 """CI-only settings for validating draft ETH/TRX Django models and migrations."""
 SECRET_KEY = "local-test-only-not-production"
 DEBUG = False
+ALLOWED_HOSTS = ["mojplaywin.com", "testserver", "localhost", "zomorodmelal.ir"]
 USE_TZ = True
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 INSTALLED_APPS = [
