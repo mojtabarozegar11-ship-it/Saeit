@@ -74,7 +74,16 @@ jobs:
               chmod 600 "$backup"
             fi
             test -s "$backup"
+            switched=false
+            rollback_owned_code() {
+              if test "$switched" = true; then
+                tar -xf "$backup" -C "$active"
+                echo ASTRA_V2_PRIVATE_CODE_ROLLBACK=EXECUTED
+              fi
+            }
+            trap rollback_owned_code EXIT
             # Update only private source files while the clock worker cannot run.
+            switched=true
             tar -cf - -C "$stage" scripts/astra_v2_private_pipeline.py tests product_prototypes | tar -xf - -C "$active"
             cd "$active"
             python3 product_prototypes/farm_procurement_audit/self_test.py
@@ -125,6 +134,8 @@ jobs:
           print("ASTRA_V2_COMMERCIAL_QUALITY_VERIFIED=false")
           print("ASTRA_V2_STORE_PUBLICATION=false")
           PY
+            switched=false
+            trap - EXIT
           ) 9>"$private/.timer-lock"
           newcron="$(crontab -l | sha256sum | awk '{print $1}')"
           test "$oldcron" = "$newcron"
