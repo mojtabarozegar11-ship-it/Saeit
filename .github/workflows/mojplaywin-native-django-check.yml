@@ -13,6 +13,7 @@ on:
       - 'tests/native_ci_purchase_notify.py'
       - 'tests/native_ci_purchase_outbox.py'
       - 'tests/native_ci_real_socket_purchase_cycle.py'
+      - 'tests/native_ci_event_loop_gates.py'
       - 'mpw_native_checkout/migrations/0002_nativewatchoutbox.py'
   workflow_dispatch:
 permissions:
@@ -36,6 +37,6 @@ jobs:
           set -euo pipefail
           python3 -m django check
           python3 -m django makemigrations mpw_native_checkout --check --dry-run
-          python3 -m django test tests.native_ci_django_db tests.native_ci_django_entitlements tests.native_ci_automatic_settlement tests.native_ci_autopay_worker tests.native_ci_purchase_notify tests.native_ci_purchase_outbox tests.native_ci_real_socket_purchase_cycle --verbosity 1
+          python3 -m django test tests.native_ci_django_db tests.native_ci_django_entitlements tests.native_ci_automatic_settlement tests.native_ci_autopay_worker tests.native_ci_purchase_notify tests.native_ci_purchase_outbox tests.native_ci_real_socket_purchase_cycle tests.native_ci_event_loop_gates --verbosity 1
           echo NATIVE_DJANGO_SCHEMA_NO_DRIFT
           echo PRODUCTION_APPS_AND_DATABASE_UNCHANGED
