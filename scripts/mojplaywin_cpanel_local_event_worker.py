@@ -193,8 +193,22 @@ def main():
     import argparse
     parser = argparse.ArgumentParser(description="MojPlayWin cPanel local watch")
     parser.add_argument("--home", required=True)
+    parser.add_argument("--secret-file", default=None,
+                        help="Private on-host secret file, mode 0600; never use CLI secret values")
     args = parser.parse_args()
-    key = os.environ.get("MPW_NATIVE_EVENT_SECRET", "").encode("utf-8")
+    if args.secret_file:
+        from stat import S_ISREG
+        private_file=Path(args.secret_file)
+        st=private_file.lstat()
+        if (not S_ISREG(st.st_mode) or st.st_uid != os.getuid()
+                or (st.st_mode & 0o077) != 0 or st.st_size < 32
+                or st.st_size > 1024):
+            parser.error("Event key file ownership or permissions are unsafe")
+        key=private_file.read_bytes().strip()
+    else:
+        key = os.environ.get("MPW_NATIVE_EVENT_SECRET", "").encode("utf-8")
+    if len(key) < 32:
+        parser.error("Event secret not configured")
     os.umask(0o077)
     run_local_worker(args.home, key)
 
