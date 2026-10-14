@@ -107,7 +107,7 @@ class EventDrivenDjangoCycleTests(TestCase):
                 issued_at=self.now, expires_at=self.now+timedelta(minutes=10),
                 wallet_challenge_id="ci-only-no-real-wallet-proof",
                 sender_signature_verified_at=self.now,
-                merchant_ownership_verified_at=self.now,
+                merchant_ownership_verified_at=None,
             )
         return invoice
 
