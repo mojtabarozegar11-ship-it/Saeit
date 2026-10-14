@@ -74,6 +74,57 @@ class BrandStorePatchSafetyTests(unittest.TestCase):
         self.assertEqual(changed.split("def unrelated_brand_view")[1].split("def branded_store")[0],
                          original.split("def unrelated_brand_view")[1].split("def branded_store")[0])
 
+    def _patched_live_view(self, original_html=b"<html><main>Store</main></html>", brand="mojplaywin"):
+        from types import SimpleNamespace
+        code,_=prepare(self.prefix+EXPECTED+self.suffix)
+        class Items:
+            def order_by(self,*args):
+                return []
+        class Model:
+            class objects:
+                @staticmethod
+                def filter(**kwargs):
+                    return Items()
+        def render(request, template, context):
+            self.assertEqual(template,"brands/mojplaywin/store.html")
+            self.assertIn("factory_cards",context)
+            return SimpleNamespace(content=original_html)
+        ns={
+            "Http404": type("Http404",(Exception,),{}),
+            "brand_for_request": lambda req: SimpleNamespace(code=brand),
+            "Product": Model, "render":render,
+        }
+        exec(compile(code,"brand_views_fixture.py","exec"),ns)
+        return ns["branded_store"],ns["Http404"]
+
+    def test_patch_preserves_existing_html_while_inserting_safe_section(self):
+        from unittest.mock import patch
+        view,_=self._patched_live_view()
+        with patch("django.template.loader.render_to_string",return_value="<section>Free toolkit</section>"):
+            resp=view(object())
+        self.assertIn(b"<main>Store<section>Free toolkit</section></main>",resp.content)
+
+    def test_patch_never_causes_error_on_missing_html_anchor(self):
+        from unittest.mock import patch
+        html=b"<html><div>Legacy branded storefront</div></html>"
+        view,_=self._patched_live_view(original_html=html)
+        with patch("django.template.loader.render_to_string",return_value="<section>Free toolkit</section>"):
+            resp=view(object())
+        self.assertEqual(resp.content,html)
+
+    def test_patch_skips_mutation_when_no_approved_factory_cards(self):
+        from unittest.mock import patch
+        html=b"<html><main>Original marketplace</main></html>"
+        view,_=self._patched_live_view(original_html=html)
+        with patch("django.template.loader.render_to_string",return_value=""):
+            resp=view(object())
+        self.assertEqual(resp.content,html)
+
+    def test_patch_rejects_cross_site_view_call(self):
+        view,error=self._patched_live_view(brand="zomorodmelal")
+        with self.assertRaises(error):
+            view(object())
+
 
 if __name__=="__main__":
     unittest.main()
