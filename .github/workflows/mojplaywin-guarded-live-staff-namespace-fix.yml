@@ -131,20 +131,20 @@ jobs:
                   if os.path.exists(name):
                       os.unlink(name)
           def test_routes():
-              code=("""
-import django
-django.setup()
-from django.core.checks import run_checks,Tags
-from django.urls import reverse,resolve
-bad=[m for m in run_checks(tags=[Tags.urls]) if m.id=='urls.W005']
-assert not bad, 'Duplicate namespace warning'
-assert resolve('/admin/').view_name=='admin:index'
-assert resolve('/staff/').view_name=='staff_admin:index'
-assert resolve('/staff/login/').view_name=='staff_admin:login'
-assert reverse('admin:index')=='/admin/'
-assert reverse('staff_admin:index')=='/staff/'
-print('MPW_ADMIN_STAFF_POSTPATCH_DJANGO_URLS_OK=True')
-""")
+              code=__import__("textwrap").dedent("""
+              import django
+              django.setup()
+              from django.core.checks import run_checks,Tags
+              from django.urls import reverse,resolve
+              bad=[m for m in run_checks(tags=[Tags.urls]) if m.id=='urls.W005']
+              assert not bad, 'Duplicate namespace warning'
+              assert resolve('/admin/').view_name=='admin:index'
+              assert resolve('/staff/').view_name=='staff_admin:index'
+              assert resolve('/staff/login/').view_name=='staff_admin:login'
+              assert reverse('admin:index')=='/admin/'
+              assert reverse('staff_admin:index')=='/staff/'
+              print('MPW_ADMIN_STAFF_POSTPATCH_DJANGO_URLS_OK=True')
+              """)
               process=subprocess.run([str(python),"-c",code],cwd=site,env=dict(os.environ,DJANGO_SETTINGS_MODULE="config.settings",PYTHONDONTWRITEBYTECODE="1"),stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,timeout=55)
               if process.returncode!=0:
                   print("MPW_URL_TEST_FAILED=True")
