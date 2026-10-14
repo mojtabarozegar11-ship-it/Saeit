@@ -1,6 +1,6 @@
 {
-  "last_command_id": "termux-whoami-readonly-20261014",
-  "last_result": "whoami_check_passed",
+  "last_command_id": "termux-background-check-20261014",
+  "last_result": "python_available",
   "protocol_version": 1,
   "state": "idle"
 }

@@ -1,8 +1,8 @@
 {
-  "action": "whoami_check",
-  "code": "whoami_check_passed",
-  "command_id": "termux-whoami-readonly-20261014",
-  "completed_at": "2026-10-14T18:25:24Z",
+  "action": "python_check",
+  "code": "python_available",
+  "command_id": "termux-background-check-20261014",
+  "completed_at": "2026-10-14T18:45:25Z",
   "ok": true,
   "protocol_version": 1
 }
