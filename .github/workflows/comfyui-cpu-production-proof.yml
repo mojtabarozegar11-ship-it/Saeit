@@ -1,0 +1,51 @@
+name: ComfyUI CPU Image Production Proof
+on:
+  push:
+    branches: [feature/comfyui-final-audit-20261015]
+    paths: [.github/workflows/comfyui-cpu-production-proof.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: comfyui-cpu-production-proof
+  cancel-in-progress: false
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run bounded low-priority image generation on VPS
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          python3 -m py_compile ops/comfyui-vps/render_bounded.py
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/comfy-render"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh_opts=(-i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 -o ServerAliveInterval=20 -o ServerAliveCountMax=2)
+          timeout 320s ssh "${ssh_opts[@]}" githubops@178.239.147.150 python3 - < ops/comfyui-vps/render_bounded.py
+          mkdir -p "$RUNNER_TEMP/comfy-output"
+          scp "${ssh_opts[@]}" githubops@178.239.147.150:/home/githubops/comfyui-isolated/.control/qa-render/comfy_cpu_sample.png "$RUNNER_TEMP/comfy-output/comfy_cpu_sample.png"
+          python3 - "$RUNNER_TEMP/comfy-output/comfy_cpu_sample.png" <<'PY'
+          from pathlib import Path
+          import sys
+          data=Path(sys.argv[1]).read_bytes()
+          assert data.startswith(b"\x89PNG\r\n\x1a\n") and len(data)>500
+          print("ACTION_ARTIFACT_REAL_PNG_VERIFIED")
+          PY
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: comfyui-cpu-real-image-qa
+          path: ${{ runner.temp }}/comfy-output/comfy_cpu_sample.png
+          if-no-files-found: error
+          retention-days: 7
