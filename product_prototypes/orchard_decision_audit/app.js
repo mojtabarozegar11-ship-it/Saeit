@@ -217,7 +217,8 @@ function renderResult(data){
     grid.append(label,writeTable(data.scenarios[key]));
   }
   $("warnings").textContent="Important warnings:\n"+data.warnings.join("\n");
-  renderAnnualTrace(data);\n  $("result-area").scrollIntoView({behavior:"smooth",block:"start"});
+  renderAnnualTrace(data);
+  $("result-area").scrollIntoView({behavior:"smooth",block:"start"});
 }
 function downloadJson(payload,filename){
   const blob=new Blob([JSON.stringify(payload,null,2)+"\n"],{type:"application/json"});
