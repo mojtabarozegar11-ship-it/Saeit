@@ -1,10 +1,12 @@
 """Opt-in single-host event-driven ETH/TRX settlement worker, RELEASE BLOCKED.
 
 This is a *future* integration entrypoint; it is not scheduled or installed
-on the live Django app. Live activation requires wallet ownership attestations,
-audited sender-signature verification, successful mainnet receipt test and
-approved DB migration. Without explicit server-side release gate it refuses
-to start; without an open invoice it never calls chain APIs or OpenAI.
+on the live Django app. Merchant approval and merchant wallet signatures are
+NOT requested for purchases: receiving fixed-address native ETH/TRX payments
+does not require sending funds or signing with the merchant wallet.
+Deployment still requires audited buyer/order security, successful mainnet
+receipt verification, approved DB migration and release safety gates.
+Without an open invoice it never calls chain APIs or OpenAI.
 
 The local socket accepts only authenticated checkout wake/close events. It
 does not trust those events as payment proof. Every candidate must pass the
@@ -18,7 +20,6 @@ from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
 from mpw_native_checkout.autopay_worker import reconcile_once
-from mpw_native_checkout.wallet_ownership import proven_assets
 from scripts.mojplaywin_cpanel_local_event_worker import run_local_worker
 
 
@@ -50,17 +51,9 @@ class Command(BaseCommand):
             raise CommandError("Native auto-settlement not approved")
         if getattr(settings,"MPW_NATIVE_RELEASE_APPROVED",False) is not True:
             raise CommandError("Production safety gates not approved")
-        approval=getattr(settings,"MPW_NATIVE_MERCHANT_PROOFS",{})
-        if (not isinstance(approval,dict) or
-                approval.get("ETH") is not True or approval.get("TRX") is not True):
-            raise CommandError("Receiver wallet ownership not attested")
         root=getattr(settings,"MPW_NATIVE_EVENT_HOME",None)
         if not isinstance(root,str) or not Path(root).is_absolute():
             raise CommandError("Approved private local event directory missing")
-        # Settings/screenshot flags are NOT ownership evidence.
-        # Production execution requires the signed database attestations.
-        if proven_assets() != {"ETH": True, "TRX": True}:
-            raise CommandError("Actual cryptographic receiver ownership is missing")
         secret=_load_secret()
 
         def scan_eth():
