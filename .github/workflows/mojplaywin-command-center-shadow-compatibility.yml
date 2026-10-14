@@ -139,6 +139,28 @@ jobs:
                   api=overview_api(req)
                   assert api.status_code==200 and b'expected_components' in api.content
                   print('MPW_CC_STAFF_OVERVIEW_READONLY_200=True')
+        for route in (
+          '/staff/command-center/api/agents/',
+          '/staff/command-center/api/agents/directory/',
+          '/staff/command-center/api/approvals/pending/',
+          '/staff/command-center/api/content/stats/',
+          '/staff/command-center/api/content/queue/',
+          '/staff/command-center/api/content/album/',
+          '/staff/command-center/api/content/album/search/',
+        ):
+            resolved=resolve(route)
+            req=rf.get(route,HTTP_HOST='mojplaywin.com')
+            req.user=staff
+            rsp=resolved.func(req,**resolved.kwargs)
+            assert rsp.status_code==200, (route,rsp.status_code)
+            print('MPW_CC_STAFF_READONLY_API_OK',route)
+        for route in ('/staff/command-center/api/agents/proposals/','/staff/command-center/api/content/album/'):
+            resolved=resolve(route)
+            req=rf.get(route,HTTP_HOST='mojplaywin.com')
+            req.user=AnonymousUser()
+            rsp=resolved.func(req,**resolved.kwargs)
+            assert rsp.status_code in (301,302), (route,rsp.status_code)
+        print('MPW_CC_ANONYMOUS_WRITE_ENDPOINTS_BLOCKED=True')
           finally:
               sys.modules.pop(module.__name__,None)
               clear_url_caches()
