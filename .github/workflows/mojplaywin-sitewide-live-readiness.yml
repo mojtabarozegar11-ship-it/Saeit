@@ -139,7 +139,6 @@ jobs:
           ).lower())
           print("MPW_SITEWIDE_READ_ONLY_NO_CHANGES")
           PY
-          REMOTE       PY
           REMOTE
       - name: Remove transient keys
         if: always()
