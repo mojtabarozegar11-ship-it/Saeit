@@ -90,9 +90,14 @@ class BuyerWalletCheckoutTests(TestCase):
 
     def test_real_ephemeral_eth_signature_creates_one_order_invoice(self):
         challenge,text=self.challenge()
+        signed=self.signature(text)
+        self.assertTrue(verify_message({
+            "asset":"ETH","address":self.eth.address,
+            "message":text,"signature":signed,
+        }),"Ephemeral test key must recover correctly in the crypto verifier")
         with override_settings(MPW_COMMERCE_BUYER_CRYPTO_PYTHON=sys.executable):
             self.assertTrue(submit_buyer_wallet_signature(
-                self.customer,challenge.pk,self.signature(text),
+                self.customer,challenge.pk,signed,
                 now=self.now+timedelta(seconds=1),
             ))
         with self.assertRaises(WalletLinkRejected):
