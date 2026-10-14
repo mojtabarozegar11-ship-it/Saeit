@@ -1,0 +1,44 @@
+name: Verify six Zomorod public image and report URLs
+on:
+  push:
+    branches: [ops/zomorod-gallery-publish-20261014]
+    paths: [.github/workflows/zomorod-gallery-public-verify.yml]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - name: Check six published report URLs and WebP image bytes without SSH or writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="https://zomorodmelal.ir"
+          tmp="$RUNNER_TEMP/zmg-verify"; mkdir -p "$tmp"
+          curl --fail --location --silent --show-error --retry 2 --connect-timeout 10 --max-time 40 "$base/company-gallery/" -o "$tmp/gallery.html"
+          grep -Fq 'managerial-gallery-20261014' "$tmp/gallery.html"
+          slugs=(
+            gallery-digital-management
+            gallery-growth-presentation
+            gallery-smart-agriculture
+            gallery-business-collaboration
+            gallery-executive-portrait
+            gallery-organizational-leadership
+          )
+          for slug in "${slugs[@]}"; do
+            grep -Fq "/company-gallery/report/$slug/" "$tmp/gallery.html"
+            curl --fail --location --silent --show-error --retry 2 --connect-timeout 10 --max-time 40 "$base/company-gallery/report/$slug/" -o "$tmp/report.html"
+            grep -Fq "<title>" "$tmp/report.html"
+            grep -Fq "/company-gallery/photo/$slug/" "$tmp/report.html"
+            curl --fail --location --silent --show-error --retry 2 --connect-timeout 10 --max-time 40 "$base/company-gallery/photo/$slug/" -o "$tmp/photo.webp"
+            python3 - "$tmp/photo.webp" "$slug" <<'PY'
+          from pathlib import Path
+          import sys
+          blob=Path(sys.argv[1]).read_bytes()
+          assert len(blob)>10000,('image too small',sys.argv[2],len(blob))
+          assert blob[:4]==b'RIFF' and blob[8:12]==b'WEBP',('invalid image',sys.argv[2])
+          print('PUBLIC_PHOTO_AND_REPORT_OK',sys.argv[2],'bytes',len(blob))
+          PY
+          done
+          echo "PUBLIC_GALLERY_AND_ALL_SIX_PHOTOS_AND_REPORTS_VERIFIED"
