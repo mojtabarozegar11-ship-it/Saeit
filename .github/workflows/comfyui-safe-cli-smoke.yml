@@ -31,7 +31,7 @@ jobs:
           cd "$root/source-v0.40.0"
           export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONDONTWRITEBYTECODE=1
           echo COMFY_CLI_HELP_TEST_BEGIN
-          if timeout 55s nice -n 15 "$root/env-cpu/bin/python" -I main.py --help >/dev/null; then echo COMFY_CLI_HELP_OK; else echo COMFY_CLI_HELP_FAILED; exit 1; fi
+          if timeout 55s nice -n 15 "$root/env-cpu/bin/python" main.py --help >/dev/null; then echo COMFY_CLI_HELP_OK; else echo COMFY_CLI_HELP_FAILED; exit 1; fi
           echo COMFY_CLI_TEST_DONE
           f="$HOME/factory-runtime/operations/vps-only-loop.pid"
           if test -f "$f"; then
