@@ -123,18 +123,18 @@ jobs:
                       print('MPW_CC_SHADOW_ROUTE_OK',route)
                   rf=RequestFactory()
                   from command_center.views import dashboard,overview_api
-                  req=rf.get('/staff/command-center/')
+                  req=rf.get('/staff/command-center/',HTTP_HOST='mojplaywin.com')
                   req.user=AnonymousUser()
                   resp=dashboard(req)
                   assert resp.status_code in (301,302)
                   print('MPW_CC_ANONYMOUS_DENIED=True')
                   staff=types.SimpleNamespace(is_authenticated=True,is_active=True,is_staff=True,is_superuser=True)
-                  req=rf.get('/staff/command-center/')
+                  req=rf.get('/staff/command-center/',HTTP_HOST='mojplaywin.com')
                   req.user=staff
                   rsp=dashboard(req)
                   assert rsp.status_code==200 and len(rsp.content)>200
                   print('MPW_CC_STAFF_DASHBOARD_RENDER_200=True')
-                  req=rf.get('/staff/command-center/api/overview/')
+                  req=rf.get('/staff/command-center/api/overview/',HTTP_HOST='mojplaywin.com')
                   req.user=staff
                   api=overview_api(req)
                   assert api.status_code==200 and b'expected_components' in api.content
