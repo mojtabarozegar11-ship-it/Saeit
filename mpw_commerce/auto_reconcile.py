@@ -9,6 +9,7 @@ import math
 from types import SimpleNamespace
 
 from django.conf import settings
+from django.db import IntegrityError
 from django.utils import timezone
 
 from scripts.mojplaywin_direct_wallet_discovery import (
@@ -56,7 +57,9 @@ def reconcile_pending_orders(
         .order_by("id"))
     if asset_filter is not None:
         qs=qs.filter(asset=asset_filter)
-    invoices=list(qs[:MAX_BATCH])
+    invoices=list(qs[:MAX_BATCH+1])
+    if len(invoices)>MAX_BATCH:
+        raise ReconciliationUnavailable("Too many open invoices for bounded review")
     if not invoices:
         return {"state":"idle","pending":0,"matched":0,"paid":0,"rejected":0}
     older=min(i.issued_at for i in invoices)
@@ -91,7 +94,7 @@ def reconcile_pending_orders(
             if status=="paid":
                 paid+=1
         except (VerificationError,NativeRpcUnavailable,ChainAdapterUnavailable,
-                SettlementRejected,ValueError):
+                SettlementRejected,IntegrityError,ValueError):
             rejected+=1
     return {
         "state":"scanned","pending":len(invoices),"matched":len(matches),
