@@ -1,0 +1,155 @@
+name: MojPlayWin independent live commercial audit read only
+on:
+  push:
+    branches: [qa/mpw-payment-release-preflight-20261015]
+    paths: ['.github/workflows/mojplaywin-live-commercial-readonly-audit.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Audit deployed sitewide commerce readiness via verified VPS relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/mpw-root-audit"
+          mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          python3 - "$d/vps.key" "$d/host.key" <<'PY'
+          from pathlib import Path
+          import sys
+          for filename in sys.argv[1:]:
+              f=Path(filename)
+              f.write_text(f.read_text().replace("\r\n","\n").strip().replace("\\n","\n")+"\n")
+          PY
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host relay
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host host
+            HostName zohal.pws-dns.net
+            Port 1396
+            User zomorod2
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump relay
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+          EOF
+          timeout 30s ssh -F "$d/config" relay 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          timeout 100s ssh -F "$d/config" host 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = "zomorod2"
+          export PYTHONDONTWRITEBYTECODE=1
+          cd /home/zomorod2/Saeit-staging
+          /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - <<'PY'
+          import os
+          from pathlib import Path
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          import django
+          django.setup()
+          from django.conf import settings
+          from django.db import connection
+          from django.db.migrations.recorder import MigrationRecorder
+          from django.urls import get_resolver
+          from core.models import Product,Order
+          home=Path("/home/zomorod2")
+          live=home/"Saeit-staging"
+          domain=home/"mojplaywin.com"
+          wsgi=domain/"passenger_wsgi.py"
+          source=wsgi.read_text(errors="replace") if wsgi.is_file() else ""
+          print("MPW_DOMAIN_PASSENGER_TO_EXPECTED_CODEBASE",str(str(live) in source).lower())
+          print("MPW_DOMAIN_FOLDER_EXISTS",str(domain.is_dir()).lower())
+          print("MPW_ACTIVE_DJANGO_DB_VENDOR",connection.vendor)
+          print("MPW_LIVE_ALLOWED_HOST",str(
+              "mojplaywin.com" in settings.ALLOWED_HOSTS or
+              ".mojplaywin.com" in settings.ALLOWED_HOSTS or
+              "*" in settings.ALLOWED_HOSTS
+          ).lower())
+          print("MPW_COMMERCE_PACKAGE_IN_LIVE_CODEBASE",str(
+              (live/"mpw_commerce"/"models.py").is_file()
+          ).lower())
+          print("MPW_COMMERCE_APP_INSTALLED",str(
+              "mpw_commerce" in settings.INSTALLED_APPS
+          ).lower())
+          migration=MigrationRecorder(connection).applied_migrations()
+          print("MPW_COMMERCE_DB_MIGRATION_0001",str(
+              ("mpw_commerce","0001_initial") in migration
+          ).lower())
+          print("MPW_COMMERCE_DB_MIGRATION_0002",str(
+              ("mpw_commerce","0002_buyerwalletchallenge") in migration
+          ).lower())
+          print("MPW_COMMERCE_ROUTE_IN_ACTIVE_URLCONF",str(
+              "mpw_commerce" in (live/"config"/"urls.py").read_text()
+          ).lower())
+          for key in (
+              "MPW_COMMERCE_RELEASE_READY","MPW_COMMERCE_INVOICING_ENABLED",
+              "MPW_COMMERCE_SETTLEMENT_ENABLED","MPW_COMMERCE_REAL_RPC_ENABLED",
+              "MPW_COMMERCE_AUTORECONCILE_ENABLED",
+              "MPW_COMMERCE_BUYER_SIGNATURE_ENABLED",
+              "MPW_COMMERCE_CUSTOMER_HTTP_ENABLED",
+              "MPW_COMMERCE_DOWNLOADS_ENABLED",
+              "MPW_COMMERCE_COURSE_AUTO_ENROLL_ENABLED",
+          ):
+              print("MPW_LIVE_FEATURE",key,str(
+                  getattr(settings,key,False) is True
+              ).lower())
+          eligible=0
+          for product in Product.objects.filter(active=True).only(
+              "id","metadata","currency","price"
+          ).order_by("id")[:500]:
+              policy=(product.metadata or {}).get("mpw_commerce") if isinstance(product.metadata,dict) else None
+              if isinstance(policy,dict) and policy.get("enabled") is True:
+                  eligible+=1
+          print("MPW_PRODUCTS_ENABLED_FOR_COMMERCE_FIRST_500",eligible)
+          print("MPW_PRODUCT72_ACTIVE",str(
+              Product.objects.filter(id=72,active=True).exists()
+          ).lower())
+          print("MPW_ORDERS_PENDING",Order.objects.filter(status="pending").count())
+          print("MPW_DB_BACKUP_TOOL_READY",str(
+              __import__("shutil").which("mysqldump") is not None or
+              __import__("shutil").which("mariadb-dump") is not None
+          ).lower())
+          print("MPW_PRIVATE_BOOK_PRESENT",str(
+              (home/"MojPlayWin_Private_Assets"/"chess-improvement-2026"/
+               "MojPlayWin_Science_and_Practice_of_Chess_Improvement.pdf").is_file()
+          ).lower())
+          # Aggregated counts only; no customer records, PII or credentials.
+          from core.models import PaymentIntent
+          print("MPW_LIVE_ALL_PRODUCTS",Product.objects.count())
+          print("MPW_LIVE_ACTIVE_PRODUCTS",Product.objects.filter(active=True).count())
+          print("MPW_LIVE_ALL_ORDERS",Order.objects.count())
+          print("MPW_LIVE_ALL_PAYMENT_INTENTS",PaymentIntent.objects.count())
+          print("MPW_LIVE_PAYMENT_INTENTS_PAID",PaymentIntent.objects.filter(status="paid").count())
+          print("MPW_COMMERCE_RELEASE_NOT_YET_DEPLOYED="+str(
+              "mpw_commerce" not in settings.INSTALLED_APPS
+          ).lower())
+          print("MPW_SITEWIDE_READ_ONLY_NO_CHANGES")
+          PY
+          REMOTE
+      - name: Remove transient keys
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/mpw-root-audit"
