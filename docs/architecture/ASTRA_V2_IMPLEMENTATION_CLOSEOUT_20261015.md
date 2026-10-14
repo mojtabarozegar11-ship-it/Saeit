@@ -82,3 +82,16 @@ Neither is the existing live Django database, the public site path, nor a new pr
 6. Apply product-specific owner release/rights/price checks, destination publishing validation and real payment reconciliation. Never count an order as income until settlement and reconciliation.
 
 **Current status:** Successfully engineered and technically tested **reference production pipeline**, not a certified sellable autonomous factory. Source remains in **draft PR #101**, not merged to live.
+
+## 2026-10-15 verified operational addendum — private VPS heartbeat and crash recovery
+
+This addendum supersedes prior statements within this document that a **private experimental queue scheduler** was not installed. The **old production factory** is still unchanged, and the newly installed private schedule is not equivalent to autonomous market research or commercial product manufacturing.
+
+- Root issue fixed: an accidental double-escaped JSON newline caused the original VPS canary to fail on private brief enqueue. [Corrected VPS canary run 38655068663](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/38655068663) succeeded: 23 finance tests, 18 integration tests; 2 distinct private reference version ZIPs were found at that point. Neither is a separate commercial product.
+- Crash recovery added: under the exclusive lock the worker detects abandoned BUILDING rows and requeues up to 3 attempts; exhausted jobs are quarantined as FAILED_REVIEW without infinite loops. Three new regression scenarios exercise recovery, exhaustion and no duplicate new-product credit.
+- [395 tests passed on both CI and Django CI](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/38655208202) at the corresponding tested SHA, before the scheduler-only workflow and docs.
+- [Private VPS scheduler preflight 38655355200](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/38655355200) verified `githubops` cron support.
+- [Private scheduler installation 38655465210](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/38655465210) successfully installed exactly one scoped `*/5` cron row with flock and timeout after independently running 23 finance + 21 integration tests on VPS; immediate tick said `NO_ELIGIBLE_WORK`, no false claim of manufacturing. Backup stored in private directory, old factory schedule preserved and websites untouched.
+- [Operations, observability, safe disable steps](ASTRA_V2_PRIVATE_SCHEDULER_OPERATIONS_20261015.md).
+
+**Current goal completion:** 5-minute bounded *private queue processing* installed and initially checked; generation of genuinely new commercially qualified products, market-price evidence, independent score of >=90 and verified end-to-end store settlement remain unproven. Do not use private heartbeat, one repeated product family or successful CI as a sales KPI.
