@@ -74,13 +74,16 @@ case "$mode" in
     fi
     ;;
   connect)
-    [[ -f "$auth" && ! -L "$auth" && -s "$auth" ]] || { echo PRIVATE_TAILNET_AUTHKEY_NOT_CONFIGURED; exit 7; }
-    chmod 600 "$auth"
-    trap 'rm -f -- "$auth"' EXIT
     start_daemon
-    # The file: form avoids putting auth keys in process command-line arguments.
-    timeout 45s ts up --auth-key="file:$auth" --hostname=comfyui-private-vps --accept-routes=false >/dev/null
-    backend="$(state_value)"
+    backend="$(state_value || true)"
+    if [[ "$backend" != Running ]]; then
+      [[ -f "$auth" && ! -L "$auth" && -s "$auth" ]] || { echo PRIVATE_TAILNET_AUTHKEY_NOT_CONFIGURED; exit 7; }
+      chmod 600 "$auth"
+      trap 'rm -f -- "$auth"' EXIT
+      # The file: form avoids putting auth keys in process command-line arguments.
+      timeout 45s ts up --auth-key="file:$auth" --hostname=comfyui-private-vps --accept-routes=false >/dev/null
+      backend="$(state_value)"
+    fi
     [[ "$backend" == Running ]] || { echo PRIVATE_TAILNET_AUTHENTICATION_FAILED; exit 8; }
     echo PRIVATE_TAILNET_AUTHENTICATED
     # Serve is private to tailnet; never run 'tailscale funnel'.
