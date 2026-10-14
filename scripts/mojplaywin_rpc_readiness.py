@@ -10,7 +10,7 @@ from urllib.request import Request, urlopen
 from urllib.error import URLError
 
 ETH_RPC = "https://ethereum-rpc.publicnode.com"
-TRON_RPC = "https://api.trongrid.io"
+TRON_RPC = "https://tron-rpc.publicnode.com"
 TIMEOUT = 10
 MAX_BYTES = 200000
 
