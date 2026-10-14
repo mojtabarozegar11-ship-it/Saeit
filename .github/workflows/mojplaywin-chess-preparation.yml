@@ -107,6 +107,8 @@ jobs:
             mpw_native_checkout/models.py \
             mpw_native_checkout/entitlements.py \
             mpw_native_checkout/settlement.py \
+            mpw_native_checkout/purchase_notify.py \
+            mpw_native_checkout/signals.py \
             mpw_native_checkout/autopay_worker.py \
             mpw_native_checkout/management/__init__.py \
             mpw_native_checkout/management/commands/__init__.py \
