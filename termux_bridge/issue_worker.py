@@ -29,16 +29,46 @@ SAFE_CODES = frozenset({
 })
 
 
+def classify_gh_error(stderr):
+    """Return only a non-sensitive category, never GitHub stderr itself."""
+    message = (stderr or "").lower()
+    if "resource not accessible by personal access token" in message:
+        return "ISSUES_TOKEN_MISSING_WRITE_PERMISSION"
+    if "403" in message or "forbidden" in message:
+        return "ISSUES_PERMISSION_DENIED_403"
+    if "401" in message or "bad credentials" in message:
+        return "GITHUB_AUTHORIZATION_EXPIRED_401"
+    if "404" in message or "not found" in message:
+        return "GITHUB_ISSUE_NOT_FOUND_OR_INACCESSIBLE_404"
+    if "could not resolve host" in message or "network is unreachable" in message:
+        return "GITHUB_NETWORK_UNAVAILABLE"
+    if "rate limit" in message:
+        return "GITHUB_RATE_LIMIT"
+    if "prompt" in message or "terminal" in message:
+        return "GITHUB_CLI_INTERACTIVE_ERROR"
+    return "GITHUB_ISSUES_REJECTED_UNCLASSIFIED"
+
+
 def default_gh(args):
-    """Run a fixed GitHub CLI operation; never report stderr or token values."""
+    """Run a fixed GitHub CLI operation; report sanitized errors only."""
+    if not args or args[0] not in {"auth", "issue"}:
+        raise BridgeError("unexpected GitHub CLI operation")
     try:
         completed = subprocess.run(
             ["gh", *args], shell=False, check=False,
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+            text=True, encoding="utf-8", errors="replace",
             timeout=30,
         )
-    except (FileNotFoundError, subprocess.TimeoutExpired):
+    except FileNotFoundError:
+        print("GITHUB_ISSUE_DIAGNOSTIC=GH_CLI_NOT_INSTALLED", file=sys.stderr)
         return False
+    except subprocess.TimeoutExpired:
+        print("GITHUB_ISSUE_DIAGNOSTIC=GH_CLI_TIMEOUT", file=sys.stderr)
+        return False
+    if completed.returncode != 0 and args[0] == "issue":
+        print("GITHUB_ISSUE_DIAGNOSTIC=" + classify_gh_error(
+            completed.stderr), file=sys.stderr)
     return completed.returncode == 0
 
 
