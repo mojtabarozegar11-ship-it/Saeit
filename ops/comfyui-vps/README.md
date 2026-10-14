@@ -58,6 +58,15 @@ New isolated actions:
 - `ComfyUI Model Readiness Audit` only reads the VPS, verifies model structure, current SHA-256 and factory presence.
 - `ComfyUI Install Verified Tiny CPU Model` downloads one pinned-hash model on demand, with RAM/disk and factory-liveness preflight and atomic final placement.
 - `ComfyUI Private Model API Integration` temporarily starts local ComfyUI, verifies the installed model is recognized, then stops.
-- `ComfyUI CPU Image Production Proof` is a *low-resolution demonstration*, max 3 sampler steps, with a separate process, reduced CPU scheduling priority, soft data memory cap and RAM watchdog; on success uploads a single benign image as a GitHub Actions artifact. Never treat this smoke test as a high-quality production render.
+- The former native Tiny-SD proof was withdrawn: ComfyUI's standard CheckpointLoaderSimple recognizes the file but fails to load its compressed UNet architecture.
 
 No generated images, user prompts, or private credentials should be committed to this public repository. The actual graphical ComfyUI UI remains local-only; a private authenticated tailnet authorization is still required to browse it remotely.
+
+## 2026-10-15: verified inference capabilities and limitations
+
+- **Verified native ComfyUI:** CPU server starts, health API returns HTTP 200, Tiny-SD checkpoint is shown in the model dropdown. The native checkpoint load fails with UNet state_dict mismatch; **native ComfyUI inference is not operational for this compressed checkpoint**.
+- **Verified independent CPU companion output:** Pinned `stable-diffusion.cpp` produced a real 512x512 PNG on a **GitHub-hosted Ubuntu24 runner**, run `38655879476`, artifact `11936762212`, SHA-256 `44a3375a3790c4212228b4e720fd7df6f9624a9ea1cf12d322c67a5d7767c71e`. This is not proof of VPS image rendering. Output quality was visibly blurry; NOT commercially ready.
+- **Verified VPS portable backend:** Source-built `stable-diffusion.cpp` targeting glibc 2.31 was privately installed under `~/comfyui-isolated/.control/sd-cpp-runtime/bin/`. A compatible `libgomp.so.1` was placed beside it, and `sd-cli -h` now succeeds without system-package changes (repair run `38656666595`, follow-up audit run `38656485323`, rerun). Actual PNG generation **on the VPS** still requires separate proof.
+- The mobile image studio workflow offers `workflow_dispatch` with four preset types; jobs execute in an isolated GitHub runner and produce a downloadable artifact. The phone only needs the user's existing GitHub access, with no Termux, public ComfyUI port, or Tailscale enrollment.
+- The custom `SaeitSafeCPURender` code and standalone VPS renderer are **experimental, not deployed and not production approved**. They should be activated only if RAM, startup and PNG end-to-end prove safe on the 3.8 GiB VPS.
+- The factory loop was verified alive at the time of the model audit. An active factory loop does not imply sellable products; never infer product quality from process health.
