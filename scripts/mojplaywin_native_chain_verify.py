@@ -99,7 +99,7 @@ def _validate_quote(q: LockedQuote, chain: str):
     # database (not a buyer or this stateless library) locks the price.
     if q.quote_currency != "USD" or type(q.quote_amount) is not str:
         _fail("Invalid fiat quote")
-    if re.fullmatch(r"(?:0|[1-9][0-9]{0,11})\\.[0-9]{2}", q.quote_amount) is None:
+    if re.fullmatch(r"(?:0|[1-9][0-9]{0,11})\.[0-9]{2}", q.quote_amount) is None:
         _fail("Noncanonical USD amount")
     try:
         total=Decimal(q.quote_amount)
