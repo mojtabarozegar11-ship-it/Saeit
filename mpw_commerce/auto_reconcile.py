@@ -42,6 +42,7 @@ def reconcile_pending_orders(
     if asset_filter is not None and asset_filter not in ("ETH","TRX"):
         raise ReconciliationUnavailable("Unsupported asset filter")
     if any(getattr(settings,name,False) is not True for name in (
+        "MPW_COMMERCE_RELEASE_READY",
         "MPW_COMMERCE_AUTORECONCILE_ENABLED",
         "MPW_COMMERCE_SETTLEMENT_ENABLED",
         "MPW_COMMERCE_REAL_RPC_ENABLED",
