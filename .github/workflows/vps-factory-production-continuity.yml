@@ -22,7 +22,7 @@ jobs:
           test -n "$VPS_KEY"
           echo VPS_KEY_PRESENT
           d="$RUNNER_TEMP/vps-factory"; mkdir -p "$d"
-          printf '%s\n' "$VPS_KEY" > "$d/key"
+          printf '%s\\n' "$VPS_KEY" > "$d/key"
           chmod 600 "$d/key"
           ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
           test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
@@ -38,6 +38,39 @@ jobs:
           test -x "$script"
           grep -q 'FACTORY_RESEARCH_PROVIDER=core.self_hosted_research_provider.SelfHostedStagingResearchProvider' "$script"
           echo VPS_FACTORY_PREFLIGHT_OK
+          report_database_state() {
+            echo FACTORY_READ_ONLY_QUEUE_DIAGNOSTICS
+            cd "$base/django-app"
+            export SAEIT_ENV=production MOJ_FACTORY_LOCAL_MODE=1
+            export FACTORY_RESEARCH_PROVIDER=core.self_hosted_research_provider.SelfHostedStagingResearchProvider
+            "$base/.venv/bin/python" - <<'PY'
+          import json, os, re
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+          import django
+          django.setup()
+          from django.apps import apps
+          pattern = re.compile(r"(factory|task|queue|probe|opportun|evidence|research|workflow|schedule|job|run)", re.I)
+          for model in apps.get_app_config("core").get_models():
+              if pattern.search(model.__name__) or pattern.search(model._meta.db_table):
+                  try:
+                      print(f"FACTORY_MODEL_COUNT {model._meta.label}={model.objects.count()}")
+                  except Exception as exc:
+                      print(f"FACTORY_MODEL_COUNT_ERROR {model._meta.label}={type(exc).__name__}")
+          path = os.path.join(os.path.dirname(os.path.dirname(__file__)) if "__file__" in globals() else ".", "var/factory/discovery/latest.json")
+          try:
+              with open(path, encoding="utf-8") as f:
+                  data = json.load(f)
+              print("FACTORY_DISCOVERY_KEYS=" + ",".join(sorted(k for k in data if isinstance(k, str))[:40]))
+              for key in ("status", "stage", "opportunity_count", "evidence_count", "pending_evidence_count", "waiting_for_evidence"):
+                  value = data.get(key)
+                  if isinstance(value, (str, int, float, bool)) or value is None:
+                      print(f"FACTORY_DISCOVERY_{key.upper()}={value}")
+          except FileNotFoundError:
+              print("FACTORY_DISCOVERY_FILE_MISSING")
+          except Exception as exc:
+              print(f"FACTORY_DISCOVERY_READ_ERROR={type(exc).__name__}")
+          PY
+          }
           pid_is_factory() {
             [[ "$1" =~ ^[0-9]+$ ]] &&
               kill -0 "$1" 2>/dev/null &&
@@ -49,12 +82,13 @@ jobs:
             echo "FACTORY_PID=$fpid"
             ps -p "$fpid" -o etime=,args= | sed 's/^/FACTORY_PROCESS=/'
             if test -f "$log"; then
-              printf 'FACTORY_LOG_MTIME=%s\n' "$(stat -c %y "$log")"
+              printf 'FACTORY_LOG_MTIME=%s\\n' "$(stat -c %y "$log")"
               echo FACTORY_RECENT_ACTIVITY
               tail -n 35 "$log" || true
             else
               echo FACTORY_LOG_MISSING
             fi
+            report_database_state
           }
           exec 9>"$ops/vps-only-launch-v2.lock"
           if ! flock -n 9; then
@@ -82,7 +116,7 @@ jobs:
             exit 1
           else
             nohup "$script" 9>&- </dev/null >> "$ops/vps-only-launch.log" 2>&1 &
-            printf '%s\n' "$!" > "$pidfile"
+            printf '%s\\n' "$!" > "$pidfile"
             sleep 3
             current_pid="$(cat "$pidfile")"
             kill -0 "$current_pid"
