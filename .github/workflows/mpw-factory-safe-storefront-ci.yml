@@ -9,6 +9,8 @@ on:
       - scripts/mpw_branded_store_targeted_patch.py
       - tests/test_mpw_branded_store_targeted_patch.py
       - scripts/mpw_factory_preflight_validation.py
+      - scripts/mpw_storefront_release_package.py
+      - tests/test_mpw_storefront_release_package.py
       - tests/test_mpw_factory_preflight_validation.py
       - core/templates/core/includes/mpw_verified_factory_cards.html
       - core/templates/core/mojplaywin_factory_store.html
@@ -38,6 +40,6 @@ jobs:
           set -euo pipefail
           pip install -q -r requirements.txt
           python -m django check
-          python -m pytest -q tests/test_mpw_factory_safe_storefront.py tests/test_mpw_branded_store_targeted_patch.py tests/test_mpw_factory_preflight_validation.py
+          python -m pytest -q tests/test_mpw_factory_safe_storefront.py tests/test_mpw_branded_store_targeted_patch.py tests/test_mpw_factory_preflight_validation.py tests/test_mpw_storefront_release_package.py
           echo "MPW_FACTORY_STOREFRONT_RELEASE_GATES_CI_PASSED=True"
           echo "MPW_SITE_AND_PAYMENT_UNCHANGED=True"
