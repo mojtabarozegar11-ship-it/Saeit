@@ -1,7 +1,16 @@
 """Independent QA for the real offline irrigation allocation calculator."""
 from decimal import Decimal
+import importlib.util
+from pathlib import Path
 import unittest
-from calculator import evaluate
+
+# Avoid importing the first recipe's identically named calculator.py during
+# repository-wide pytest runs. Load this recipe's module by its exact path.
+spec = importlib.util.spec_from_file_location(
+    "saeit_water_budget_calculator", str(Path(__file__).with_name("calculator.py")))
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+evaluate = module.evaluate
 
 
 def sample():
