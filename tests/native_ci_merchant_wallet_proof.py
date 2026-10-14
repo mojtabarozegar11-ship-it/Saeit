@@ -62,6 +62,7 @@ class MerchantWalletProofTests(TestCase):
         gate = override_settings(MPW_WALLET_PROOF_OWNER_ID=self.owner.pk)
         gate.enable()
         self.addCleanup(gate.disable)
+        self.client.defaults["wsgi.url_scheme"] = "https"
 
     def test_fake_ethereum_signer_controls_only_its_own_address(self):
         with patch.dict(MERCHANT_ADDRESSES, {"ETH":self.eth.address}):
@@ -211,8 +212,19 @@ class MerchantWalletProofTests(TestCase):
             self.client.get(reverse("mpw_wallet_proof:challenge")).status_code,405
         )
 
+    def test_no_owner_signatures_can_be_issued_over_plain_http(self):
+        self.client.force_login(self.owner)
+        r=self.client.post(
+            reverse("mpw_wallet_proof:challenge"),
+            data='{"asset":"ETH"}',content_type="application/json",
+            secure=False,
+        )
+        self.assertEqual(r.status_code,403)
+        self.assertFalse(MerchantWalletChallenge.objects.exists())
+
     def test_csrf_required_even_when_authenticated(self):
         c=Client(enforce_csrf_checks=True)
+        c.defaults["wsgi.url_scheme"] = "https"
         c.force_login(self.owner)
         response=c.post(reverse("mpw_wallet_proof:challenge"),
                  data='{"asset":"ETH"}',content_type="application/json")
