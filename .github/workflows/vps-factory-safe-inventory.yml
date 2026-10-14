@@ -258,5 +258,42 @@ jobs:
           print("FACTORY_PRODUCT_STATE_COUNTS="+",".join(k+":"+str(v) for k,v in values.items()))
           PY
           fi
+          if test -f "$app/manage.py" && test -x "$base/.venv/bin/python"; then
+            cd "$app"
+            export SAEIT_ENV=production MOJ_FACTORY_LOCAL_MODE=1
+            "$base/.venv/bin/python" - <<'PY'
+          import os,re,collections
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          import django
+          django.setup()
+          from django.apps import apps
+          P=apps.get_model("core","Product")
+          T=apps.get_model("core","AgentTask")
+          F=apps.get_model("core","FactoryRun")
+          def count_summary(queryset,field):
+              d=collections.Counter(queryset.values_list(field,flat=True))
+              return ",".join(str(k)+":"+str(v) for k,v in sorted(d.items(),key=lambda kv:str(kv[0])))
+          for i,p in enumerate(P.objects.all().order_by("pk"),1):
+              runs=F.objects.filter(product=p)
+              tasks=T.objects.filter(product=p)
+              m=p.metadata if isinstance(p.metadata,dict) else {}
+              v=m.get("validation",{})
+              validation=v.get("outcome","missing") if isinstance(v,dict) else "non_dict"
+              if not (isinstance(validation,str) and re.fullmatch(r"[A-Za-z_.:-]{1,60}",validation)):
+                  validation="not_public_enum"
+              print("FACTORY_PRODUCT_"+str(i)+"_RUNS="+str(runs.count())+" STATES="+count_summary(runs,"status"))
+              print("FACTORY_PRODUCT_"+str(i)+"_TASKS="+str(tasks.count())+" STATES="+count_summary(tasks,"status")+" TYPES="+count_summary(tasks,"action_type"))
+              print("FACTORY_PRODUCT_"+str(i)+"_VALIDATION_OUTCOME="+validation)
+              research=m.get("research",{})
+              if isinstance(research,dict):
+                  print("FACTORY_PRODUCT_"+str(i)+"_RESEARCH_KEYS="+",".join(k for k in research if re.fullmatch(r"[A-Za-z_.:-]{1,60}",str(k))))
+              history=m.get("factory_history",[])
+              print("FACTORY_PRODUCT_"+str(i)+"_HISTORY_LENGTH="+str(len(history) if isinstance(history,list) else 0))
+          for name in ("ResearchProject","Report","Evidence","Finding"):
+              M=apps.get_model("core",name)
+              cols=[f.name for f in M._meta.fields]
+              print("FACTORY_RESEARCH_"+name.upper()+"_RELATIONAL_COLUMNS="+",".join(k for k in cols if k.endswith("_id") or k in ("project","product","factory_run","source_report","owner","status")))
+          PY
+          fi
           echo FACTORY_INVENTORY_READ_ONLY_DONE
           REMOTE
