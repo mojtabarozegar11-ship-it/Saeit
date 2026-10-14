@@ -1,0 +1,35 @@
+name: Termux Safe GitHub Command Bridge Tests
+on:
+  push:
+    branches:
+      - feature/termux-safe-command-bridge-20261014
+    paths:
+      - termux_bridge/**
+      - bridge/**
+      - tests/test_termux_bridge.py
+      - .github/workflows/termux-bridge-isolated-tests.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: saeit-termux-bridge-tests
+  cancel-in-progress: false
+jobs:
+  protocol:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Run safe bridge and local Git transport tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m compileall -q termux_bridge/worker.py
+          python -m unittest discover -s tests -p 'test_termux_bridge.py' -v
+          echo TERMUX_BRIDGE_LOCAL_TRANSPORT_TESTS_OK
+          echo NO_REAL_ANDROID_OR_VPS_ACTION_PERFORMED
