@@ -1,0 +1,36 @@
+name: MojPlayWin isolated factory storefront release-gate tests
+on:
+  push:
+    branches: [qa/mpw-factory-safe-storefront-20261014]
+    paths:
+      - core/commerce_views.py
+      - core/factory_storefront.py
+      - core/templates/core/mojplaywin_factory_store.html
+      - tests/test_mpw_factory_safe_storefront.py
+      - qa_mpstore_settings.py
+      - qa_mpstore_urls.py
+      - .github/workflows/mpw-factory-safe-storefront-ci.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test isolated Django storefront
+        env:
+          DJANGO_SETTINGS_MODULE: qa_mpstore_settings
+        run: |
+          set -euo pipefail
+          pip install -q -r requirements.txt
+          python -m django check
+          python -m pytest -q tests/test_mpw_factory_safe_storefront.py
+          echo "MPW_FACTORY_STOREFRONT_RELEASE_GATES_CI_PASSED=True"
+          echo "MPW_SITE_AND_PAYMENT_UNCHANGED=True"
