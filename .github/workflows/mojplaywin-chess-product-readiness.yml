@@ -106,6 +106,33 @@ jobs:
                           if len(matches)>=15: break
               print('CHESS_PDFS',str(root),matches)
           PY
+          echo "MODEL_AND_PAYMENT_DISCOVERY_START"
+          python3 - <<'PY'
+          from pathlib import Path
+          import ast
+          root=Path('/home/zomorod2/Saeit-staging')
+          for key in ['manage.py','config/settings.py','core/models.py','portal/models.py','core/views.py','core/urls.py','portal/views.py','portal/urls.py','command_center/models.py']:
+              p=root/key
+              print('APP_SOURCE',key,'present',p.is_file())
+              if p.is_file() and p.suffix=='.py':
+                  try:
+                      tree=ast.parse(p.read_text(errors='replace'))
+                      found=[]
+                      for node in ast.walk(tree):
+                          if isinstance(node,(ast.ClassDef,ast.FunctionDef,ast.AsyncFunctionDef)) and any(w in node.name.lower() for w in ('product','store','order','payment','checkout','download','digital','webhook')):
+                              found.append(node.name)
+                      print('SYMBOLS',key,sorted(set(found))[:65])
+                  except Exception as e:
+                      print('PARSE_ISSUE',key,type(e).__name__)
+          for base in [Path('/home/zomorod2/Saeit-staging'),Path('/home/zomorod2/mojplaywin.com')]:
+              for name in ['media','private_media','protected_media','products','ebooks','downloads']:
+                  p=base/name
+                  print('MEDIA_LOCATION',str(p),p.is_dir())
+                  if p.is_dir():
+                      pdfs=[(x.name,x.stat().st_size) for x in p.rglob('*.pdf') if x.is_file()]
+                      print('PDF_COUNT',len(pdfs),'POTENTIAL_BOOKS',[x for x in pdfs if 400000<=x[1]<=500000 or 'improvement' in x[0].lower()][:12])
+          PY
+          echo "MODEL_AND_PAYMENT_DISCOVERY_END"
           REMOTE
           for url in https://mojplaywin.com/ https://mojplaywin.com/admin/login/ https://mojplaywin.com/store/ https://mojplaywin.com/shop/; do
             code="$(curl -sS -L --connect-timeout 10 --max-time 20 -o /dev/null -w '%{http_code}' "$url" || true)"
