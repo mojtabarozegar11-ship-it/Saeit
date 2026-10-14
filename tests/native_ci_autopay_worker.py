@@ -220,3 +220,56 @@ class AutoPayWorkerTests(TestCase):
         self.assertEqual(invoice.order.status,"paid")
         self.assertEqual(LedgerEntry.objects.filter(order=invoice.order).count(),1)
         self.assertTrue(can_download_paid_native_order(invoice.order_id,self.owner.pk))
+
+
+    @override_settings(**ON)
+    def test_eth_purchase_never_queries_tron_even_if_another_tron_invoice_exists(self):
+        eth_invoice=self.new_invoice(asset="ETH")
+        self.new_invoice(asset="TRX")
+        observations=[]
+        def eth_scanner(**options):
+            observations.append(options)
+            return [self.eth_candidate()]
+        def trx_scanner(**options):
+            raise AssertionError("TRON API called for ETH invoice")
+        with patch("mpw_native_checkout.autopay_worker.settle_native_invoice",
+                   return_value="paid") as settlement:
+            summary=reconcile_once(
+                now=self.now,asset_filter="ETH",
+                eth_scanner=eth_scanner,trx_scanner=trx_scanner,
+            )
+        self.assertEqual(summary["matched"],1)
+        self.assertEqual(settlement.call_args.args,(eth_invoice.pk,ETH_TX))
+        self.assertEqual(len(observations),1)
+        self.assertEqual(observations[0]["lookback_s"],600)
+
+    @override_settings(**ON)
+    def test_tron_purchase_does_not_call_ethereum_for_other_orders(self):
+        self.new_invoice(asset="ETH")
+        tron_invoice=self.new_invoice(asset="TRX")
+        with patch("mpw_native_checkout.autopay_worker.settle_native_invoice",
+                   return_value="paid") as settlement:
+            summary=reconcile_once(
+                now=self.now,asset_filter="TRX",
+                eth_scanner=lambda **opts: (_ for _ in ()).throw(
+                    AssertionError("ETH indexer called for TRX invoice")
+                ),
+                trx_scanner=lambda **opts:[self.tron_candidate()],
+            )
+        self.assertEqual(summary["matched"],1)
+        self.assertEqual(settlement.call_args.args,(tron_invoice.pk,TRX_TX))
+
+    @override_settings(**ON)
+    def test_asset_filter_with_no_pending_matching_coin_performs_no_api_calls(self):
+        self.new_invoice(asset="ETH")
+        def forbidden(**opts):
+            raise AssertionError("API called with no pending TRX invoice")
+        result=reconcile_once(
+            now=self.now,asset_filter="TRX",
+            eth_scanner=forbidden,trx_scanner=forbidden,
+        )
+        self.assertEqual(result["state"],"no_pending")
+
+    def test_invalid_coin_filter_rejected_before_any_api_calls(self):
+        with self.assertRaises(AutoPayUnavailable):
+            reconcile_once(now=self.now,asset_filter="USDT")
