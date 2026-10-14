@@ -22,7 +22,7 @@ def _ensure(text, old, new, label):
     return text.replace(old, new, 1)
 
 def patch_urls(text):
-    if "from django.views.decorators" not in text:
+    if URL_IMPORT_OLD not in text and URL_IMPORT_NEW not in text:
         raise ValueError("Unexpected URL source")
     text = _ensure(text, URL_IMPORT_OLD, URL_IMPORT_NEW, "views import")
     text = _ensure(text, STUDIO_PATH_OLD, STUDIO_PATH_NEW, "studio route")
