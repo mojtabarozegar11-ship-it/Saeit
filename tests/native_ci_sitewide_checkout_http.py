@@ -64,7 +64,8 @@ class PrivateCheckoutHTTPTests(TestCase):
         )
 
     def post(self,url,payload,*,host="mojplaywin.com",csrf=True):
-        kwargs={"secure":True,"HTTP_HOST":host}
+        kwargs={"secure":True,"HTTP_HOST":host,
+                "HTTP_REFERER":"https://"+host+"/commerce/checkout/"}
         if csrf:
             kwargs["HTTP_X_CSRFTOKEN"]=CSRF
         return self.client.post(
