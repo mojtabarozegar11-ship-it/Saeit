@@ -148,7 +148,7 @@ def test_robot_task_uses_registered_connector_and_respects_budget(robot_setup):
     assert completed.status == "completed"
     assert completed.robot_id == robot.pk
     assert invoked == [{"topic": "soil"}]
-    assert str(completed.cost) == "1.2500"
+    assert str(completed.cost) == "1.25"
 
 
 @pytest.mark.django_db
