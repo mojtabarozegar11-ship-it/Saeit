@@ -91,7 +91,8 @@ class PaymentReleasePreflightTests(TestCase):
         eth = Mock(side_effect=AssertionError("ETH indexer unnecessary"))
         candidate = Candidate(
             "tron-mainnet", "a" * 64,
-            tron_address_to_hex(TRX_RECEIVER).lower(),\n            tron_address_to_hex(TRX_RECEIVER).lower(),
+            tron_address_to_hex(TRX_RECEIVER).lower(),
+            tron_address_to_hex(TRX_RECEIVER).lower(),
             invoice.amount_atomic, int(self.now.timestamp() * 1000),
         )
         tron = Mock(return_value=[candidate])
