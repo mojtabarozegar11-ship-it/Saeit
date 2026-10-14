@@ -10,6 +10,11 @@ on:
       - 'mpw_native_checkout/migrations/0002_nativewatchoutbox.py'
       - 'mpw_native_checkout/management/commands/mpw_native_flush_events.py'
       - 'mpw_native_checkout/management/commands/mpw_native_event_loop.py'
+      - 'mpw_native_checkout/wallet_ownership.py'
+      - 'mpw_native_checkout/merchant_wallet_views.py'
+      - 'mpw_native_checkout/merchant_wallet_urls.py'
+      - 'mpw_native_checkout/templates/mpw_native_checkout/merchant_wallet_proof.html'
+      - 'mpw_native_checkout/migrations/0003_merchantwalletchallenge_merchantwalletproof.py'
       - 'tests/test_mojplaywin_cpanel_local_event_worker.py'
       - 'scripts/mojplaywin_direct_wallet_invoice.py'
       - 'tests/test_mojplaywin_direct_wallet_invoice.py'
@@ -48,7 +53,7 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_mojplaywin_native_rpc_clients.py' -v
           python3 -m unittest discover -s tests -p 'test_mojplaywin_cpanel_local_event_worker.py' -v
           bash -n scripts/install_mpw_cpanel_staging_listener.sh
-          python3 -m py_compile scripts/mojplaywin_chess_assets.py scripts/mojplaywin_native_chain_verify.py scripts/mojplaywin_direct_wallet_invoice.py scripts/mojplaywin_direct_wallet_rates.py scripts/mojplaywin_direct_wallet_ledger.py scripts/mojplaywin_direct_wallet_discovery.py scripts/mojplaywin_native_rpc_clients.py mpw_native_checkout/autopay_worker.py mpw_native_checkout/settlement.py core/chess_ebook_delivery.py
+          python3 -m py_compile scripts/mojplaywin_chess_assets.py scripts/mojplaywin_native_chain_verify.py scripts/mojplaywin_direct_wallet_invoice.py scripts/mojplaywin_direct_wallet_rates.py scripts/mojplaywin_direct_wallet_ledger.py scripts/mojplaywin_direct_wallet_discovery.py scripts/mojplaywin_native_rpc_clients.py mpw_native_checkout/autopay_worker.py mpw_native_checkout/settlement.py mpw_native_checkout/wallet_ownership.py mpw_native_checkout/merchant_wallet_views.py mpw_native_checkout/merchant_wallet_urls.py core/chess_ebook_delivery.py
           echo VERIFIED_CODE_TESTS_PASSED
       - name: Stage only isolated inactive code on cPanel through pinned SSH relay
         shell: bash
@@ -120,6 +125,10 @@ jobs:
             mpw_native_checkout/apps.py \
             mpw_native_checkout/models.py \
             mpw_native_checkout/entitlements.py \
+            mpw_native_checkout/wallet_ownership.py \
+            mpw_native_checkout/merchant_wallet_views.py \
+            mpw_native_checkout/merchant_wallet_urls.py \
+            mpw_native_checkout/templates/mpw_native_checkout/merchant_wallet_proof.html \
             mpw_native_checkout/settlement.py \
             mpw_native_checkout/purchase_notify.py \
             mpw_native_checkout/signals.py \
@@ -132,6 +141,7 @@ jobs:
             mpw_native_checkout/migrations/__init__.py \
             mpw_native_checkout/migrations/0001_initial.py \
             mpw_native_checkout/migrations/0002_nativewatchoutbox.py \
+            mpw_native_checkout/migrations/0003_merchantwalletchallenge_merchantwalletproof.py \
             catalog/mojplaywin/chess-improvement-2026.json \
             tests/test_mojplaywin_chess_asset_installer.py \
             tests/test_mojplaywin_native_chain_verify.py \
@@ -158,6 +168,8 @@ jobs:
           echo LOCAL_PURCHASE_EVENT_PROCESSOR_STAGED_NOT_ENABLED
           echo DURABLE_PURCHASE_NOTIFICATION_OUTBOX_STAGED_UNMIGRATED
           echo PURCHASE_TO_CHAIN_EVENT_RECONCILIATION_STAGED_DISABLED
+          echo MERCHANT_WALLET_SIGNATURE_PAGE_STAGED_NOT_ROUTED
+          echo LIVE_PAYMENT_REMAINS_DISABLED
           echo CPANEL_STAGING_LISTENER_INSTALLER_AVAILABLE_NOT_YET_EXECUTED
           echo LIVE_SITE_FILES_UNCHANGED
           echo CHESS_PAYMENT_NOT_ACTIVATED
