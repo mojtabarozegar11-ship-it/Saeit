@@ -165,7 +165,7 @@ jobs:
               "/saman/": "saman_page",
               "/saman/learn/": "saman_section_page",
               "/saman/play/": "saman_section_page",
-              "/saman/shop/": "saman_section_page",
+              "/saman/products/": "saman_section_page",
               "/saman/membership/": "saman_section_page",
               "/saman/partners/": "saman_section_page",
               "/saman/about/": "saman_section_page",
@@ -198,7 +198,7 @@ jobs:
             "/saman/:The SAMAN collection"
             "/saman/learn/:Learning that moves with you."
             "/saman/play/:More than one way to play."
-            "/saman/shop/:Useful resources, made to keep."
+            "/saman/products/:Useful resources, made to keep."
             "/saman/membership/:More depth for committed learners."
             "/saman/partners/:Good work grows through collaboration."
             "/saman/about/:A broader home for curiosity."
