@@ -119,3 +119,8 @@ jobs:
           for domain, root in found:
               print(f"{domain} document root: {root}")
           PY
+
+      - name: Remove temporary SSH credentials and cPanel response
+        if: always()
+        shell: bash
+        run: rm -rf -- "$RUNNER_TEMP/mojplaywin-ssh"
