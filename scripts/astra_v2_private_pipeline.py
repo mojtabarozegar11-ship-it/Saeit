@@ -27,7 +27,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PROTOTYPE = ROOT / "product_prototypes" / "orchard_decision_audit"
 FILES = (
     "decision_audit.py", "serve_local.py", "app.js",
-    "index.html", "style.css", "example_synthetic.json", "README.md",
+    "index.html", "style.css", "example_synthetic.json", "README.md", "self_test.py",
 )
 TEST_NAME = "test_astra_orchard_decision_audit.py"
 BUILDER = "orchard_decision_audit_v2"
