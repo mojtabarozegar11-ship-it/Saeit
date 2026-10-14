@@ -41,7 +41,7 @@ def patch_urls(text):
         raise ValueError("Expected at least one existing route")
 
     root_routes = [route for route in routes if route.args[0].value == "saman/"]
-    section_routes = [route for route in routes if route.args[0].value == "saman/sections/<slug:section>/"]
+    section_routes = [route for route in routes if route.args[0].value == "saman/<slug:section>/"]
     if len(root_routes) > 1 or len(section_routes) > 1:
         raise ValueError("Found duplicate SAMAN routes")
     if root_routes and not _target_is(root_routes[0], "saman_page"):
@@ -60,7 +60,7 @@ def patch_urls(text):
     if not section_routes:
         text = _insert_after(
             text, root_routes[0],
-            'path("saman/sections/<slug:section>/", saman_section_page, name="saman_section"),'
+            'path("saman/<slug:section>/", saman_section_page, name="saman_section"),'
         )
         tree = ast.parse(text)
 
@@ -111,10 +111,10 @@ def patch_views(text):
     block = (
         "def saman_section_page(request, section):\n"
         "    from django.http import Http404\n"
-        "    allowed = {\"learn\", \"play\", \"products\", \"membership\", \"partners\", \"about\"}\n"
-        "    if section not in allowed:\n"
+        "    section_map = {\"learn-saman\": \"learn\", \"play-saman\": \"play\", \"products-saman\": \"products\", \"membership-saman\": \"membership\", \"partners-saman\": \"partners\", \"about-saman\": \"about\"}\n"
+        "    if section not in section_map:\n"
         "        raise Http404\n"
-        "    return render(request, \"saman/index.html\", {\"saman_section\": section})\n\n\n"
+        "    return render(request, \"saman/index.html\", {\"saman_section\": section_map[section]})\n\n\n"
     )
     platform = [
         node for node in tree.body
