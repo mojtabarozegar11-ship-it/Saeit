@@ -1,0 +1,79 @@
+name: ComfyUI Rootless Private Gateway Bootstrap
+on:
+  push:
+    branches: [feature/comfyui-private-mobile-gateway-20261015]
+    paths: [.github/workflows/comfyui-private-gateway-bootstrap.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: comfyui-rootless-gateway-bootstrap
+  cancel-in-progress: false
+jobs:
+  provision:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - name: Stage official Tailscale static binaries privately without sudo
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/comfy-private-net"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          test -n "$VPS_KEY" || { echo VPS_KEY_MISSING; exit 1; }
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs" || { echo HOST_KEY_UNEXPECTED; exit 1; }
+          SSH=(ssh -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 githubops@178.239.147.150)
+          arch="$("${SSH[@]}" uname -m)"
+          case "$arch" in
+            x86_64) distro_arch=amd64 ;;
+            aarch64) distro_arch=arm64 ;;
+            *) echo "UNSUPPORTED_VPS_ARCH"; exit 1 ;;
+          esac
+          version="1.104.1"
+          prefix="tailscale_${version}_${distro_arch}"
+          echo "TAILSCALE_OFFICIAL_STATIC_VERSION=$version"
+          curl --fail --location --silent --show-error --retry 2 --connect-timeout 15 --max-time 120 \
+            "https://pkgs.tailscale.com/stable/${prefix}.tgz" -o "$d/ts.tgz"
+          test "$(stat -c %s "$d/ts.tgz")" -lt 100000000
+          tar -tzf "$d/ts.tgz" | grep -Fxq "$prefix/tailscale"
+          tar -tzf "$d/ts.tgz" | grep -Fxq "$prefix/tailscaled"
+          tar -xzf "$d/ts.tgz" -C "$d" "$prefix/tailscale" "$prefix/tailscaled"
+          tar -cf - -C "$d/$prefix" tailscale tailscaled | "${SSH[@]}" 'set -euo pipefail; umask 077; root="$HOME/.local/opt/comfyui-tailnet"; target="$root/binaries-1.104.1"; install -d -m 700 "$root"; if [[ -d "$target" ]]; then tar -tf - >/dev/null; echo TAILSCALE_ALREADY_STAGED; exit 0; fi; tmp="$(mktemp -d "$root/.new-XXXXXXXX")"; trap '\''rm -rf -- "$tmp"'\'' EXIT; tar -xf - -C "$tmp"; test -x "$tmp/tailscale" && test -x "$tmp/tailscaled"; chmod 700 "$tmp/tailscale" "$tmp/tailscaled"; mv "$tmp" "$target"; echo TAILSCALE_PRIVATE_BINARIES_STAGED'
+          "${SSH[@]}" 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          binary="$HOME/.local/opt/comfyui-tailnet/binaries-1.104.1"
+          test -x "$binary/tailscale" && test -x "$binary/tailscaled"
+          echo "TAILSCALE_LOCAL_BINARY_VERIFIED"
+          tmp="$(mktemp -d "$HOME/.local/opt/comfyui-tailnet/.smoke-XXXXXXXX")"
+          pid=''
+          cleanup() {
+            [[ -z "$pid" ]] || { kill -TERM "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true; }
+            rm -rf -- "$tmp"
+          }
+          trap cleanup EXIT
+          "$binary/tailscaled" --tun=userspace-networking --socket="$tmp/tailscaled.sock" --state=mem: --statedir="$tmp" --no-logs-no-support >"$tmp/daemon.log" 2>&1 &
+          pid=$!
+          ok=0
+          for i in $(seq 1 20); do
+            if [[ -S "$tmp/tailscaled.sock" ]] && timeout 3 "$binary/tailscale" --socket="$tmp/tailscaled.sock" status --json >"$tmp/status.json" 2>/dev/null; then
+              ok=1
+              break
+            fi
+            if ! kill -0 "$pid" 2>/dev/null; then break; fi
+            sleep 1
+          done
+          [[ "$ok" == 1 ]] || { echo TAILSCALE_ROOTLESS_SMOKE_FAILED; exit 1; }
+          echo TAILSCALE_ROOTLESS_USERSPACE_SMOKE_OK
+          echo TAILSCALE_NO_ACCOUNT_LOGIN_ATTEMPTED
+          echo TAILSCALE_NO_PUBLIC_PORT_EXPOSED
+          echo "COMFYUI_GATEWAY_BOOTSTRAP_COMPLETE"
+          REMOTE
