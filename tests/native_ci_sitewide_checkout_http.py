@@ -3,7 +3,7 @@
 CI-only routes. Real ETH signatures use ephemeral test keys; all exchange
 rates come from a mocked SERVER function, not request JSON or the browser.
 """
-from datetime import datetime,timezone
+from datetime import datetime,timezone,timedelta
 from decimal import Decimal
 import json
 import sys
@@ -137,7 +137,7 @@ class PrivateCheckoutHTTPTests(TestCase):
                 buyer,challenge_id,
                 rate_loader=lambda asset:TrustedRate(
                     usd_per_asset=Decimal("3000"),
-                    source="coingecko",observed_at=now,
+                    source="coingecko",observed_at=now-timedelta(seconds=5),
                 ),
             )
         with patch("mpw_commerce.checkout_views.invoice_from_verified_buyer",
