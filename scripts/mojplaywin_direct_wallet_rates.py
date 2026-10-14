@@ -20,7 +20,11 @@ class RateFeedUnavailable(ValueError):
 
 
 def parse_coin_gecko_rates(document, now_epoch):
-    from mojplaywin_direct_wallet_invoice import SpotRate
+    try:
+        from scripts.mojplaywin_direct_wallet_invoice import SpotRate
+    except ModuleNotFoundError:
+        # Keep the standalone scripts/ CLI entrypoint compatible.
+        from mojplaywin_direct_wallet_invoice import SpotRate
 
     if type(now_epoch) is not int or now_epoch <= 0:
         raise RateFeedUnavailable("Invalid server clock")
