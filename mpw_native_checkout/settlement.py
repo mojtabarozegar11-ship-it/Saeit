@@ -1,8 +1,8 @@
 """Automatic verified native ETH/TRX settlement, STAGING ONLY.
 
 Never import into public URLconf or schedule against live payments before
-receiver-wallet ownership, RPC trust, buyer proof, rate and refund policies are
-validated. Backend code, not a browser form, supplies trusted RPC callbacks.
+trusted fixed receiving addresses, RPC trust, buyer proof, rate and refund
+policies are validated. No merchant approval is involved in a purchase. Backend code, not a browser form, supplies trusted RPC callbacks.
 """
 import hashlib
 import json
@@ -48,8 +48,8 @@ def _validate(invoice):
         raise SettlementRejected("Coin-network mismatch")
     if invoice.merchant_address.lower() != RECEIVERS[invoice.asset].lower():
         raise SettlementRejected("Wrong receiving wallet")
-    if invoice.merchant_ownership_verified_at is None or invoice.sender_signature_verified_at is None:
-        raise SettlementRejected("Wallet signatures have not been independently proven")
+    if invoice.sender_signature_verified_at is None:
+        raise SettlementRejected("Customer sender proof has not been independently verified")
     if not invoice.wallet_challenge_id or not invoice.verified_sender_address:
         raise SettlementRejected("Buyer proof missing")
     if not (invoice.issued_at < invoice.expires_at <= invoice.issued_at + timedelta(minutes=10)):
