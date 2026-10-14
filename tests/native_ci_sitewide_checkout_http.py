@@ -81,10 +81,14 @@ class PrivateCheckoutHTTPTests(TestCase):
 
     def test_unauthenticated_checkout_is_login_protected(self):
         self.client.logout()
+        response=self.client.get(
+            self.status_url,secure=True,HTTP_HOST="mojplaywin.com",
+        )
+        self.assertEqual(response.status_code,302)
         response=self.post(self.challenge_url,{
             "order_id":self.order.pk,"asset":"ETH","sender":self.key.address,
         })
-        self.assertEqual(response.status_code,302)
+        self.assertEqual(response.status_code,403)
 
     def test_absent_csrf_and_other_domains_cannot_issue_checkout(self):
         payload={"order_id":self.order.pk,"asset":"ETH","sender":self.key.address}
@@ -160,11 +164,11 @@ class PrivateCheckoutHTTPTests(TestCase):
         self.assertEqual(self.client.get(
             self.status_url,secure=True,HTTP_HOST="mojplaywin.com",
         ).json()["state"],"awaiting")
-        with patch("mpw_commerce.checkout_views.invoice_from_verified_buyer") as reserve:
-            self.assertEqual(self.post(self.invoice_url,{
-                "challenge_id":challenge["challenge_id"],
-            }).status_code,400)
-            reserve.assert_called_once()
+        # The real server-side challenge row has been consumed, so a replay
+        # cannot reserve a second payment without another valid signature.
+        self.assertEqual(self.post(self.invoice_url,{
+            "challenge_id":challenge["challenge_id"],
+        }).status_code,400)
         self.assertEqual(CommerceInvoice.objects.count(),1)
 
     def test_other_user_cannot_read_buyer_order_status(self):
