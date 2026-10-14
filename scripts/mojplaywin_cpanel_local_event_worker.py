@@ -78,7 +78,10 @@ def _receive(conn, key, home, now_epoch):
         result = handle_verified_event(raw, signature, key, home, now_epoch=now_epoch)
     except EventRejected as exc:
         raise LocalEventUnavailable("Signed purchase event rejected") from exc
-    return result
+    # The payload has already passed HMAC verification and strict parsing.
+    verified_action = json.loads(raw.decode("ascii"))["action"]
+    verified_asset = json.loads(raw.decode("ascii"))["asset"]
+    return result, verified_action, verified_asset
 
 
 def socket_request(socket_path, body, signature, *, timeout=3):
@@ -158,18 +161,24 @@ def run_local_worker(home, key, *, eth_scan=None, trx_scan=None,
                         continue
                     with connection:
                         try:
-                            result = _receive(connection, key, home, int(clock()))
+                            result, action, asset = _receive(
+                                connection, key, home, int(clock())
+                            )
                         except (OSError, LocalEventUnavailable, TimeoutError):
-                            connection.sendall(b"REJECTED\n")
+                            try:
+                                connection.sendall(b"REJECTED\n")
+                            except OSError:
+                                pass
                         else:
                             connection.sendall(b"OK\n")
                             received += 1
-                            if result["mode"]:
-                                # New purchase: inspect only that chain now.
+                            if action == "invoice_open" and result["mode"]:
+                                # Only query the network requested by THIS order.
+                                # Close events must never trigger another scan.
                                 try:
                                     scan_once(
-                                        mode=result["mode"],
-                                        eth_scan=eth_scan, trx_scan=trx_scan,
+                                        mode=asset, eth_scan=eth_scan,
+                                        trx_scan=trx_scan,
                                     )
                                 except (IndexerUnavailable, OSError, ValueError):
                                     pass
