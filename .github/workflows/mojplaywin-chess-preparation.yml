@@ -3,6 +3,8 @@ on:
   push:
     paths:
       - '.github/workflows/mojplaywin-chess-preparation.yml'
+      - 'scripts/mojplaywin_direct_wallet_invoice.py'
+      - 'tests/test_mojplaywin_direct_wallet_invoice.py'
   workflow_dispatch:
 permissions:
   contents: read
