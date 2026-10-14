@@ -173,6 +173,13 @@ jobs:
           print("ACTIVE_SUPERUSER_IDS="+",".join(map(str,qs.values_list("pk",flat=True)[:20])))
           print("ACTIVE_SUPERUSER_USERNAMES="+",".join(qs.values_list("username",flat=True)[:20]))
           print("FACTORY_OWNER_SETTING_NAMES="+",".join(sorted(k for k in dir(settings) if "OWNER" in k.upper() and "FACTORY" in k.upper())))
+          for name in ("Product","KnowledgeArticle","Report","ResearchSource","Evidence","Finding","Order"):
+              model=apps.get_model("core",name)
+              print("STORE_PIPELINE_COUNT_"+name+"="+str(model.objects.count()))
+              if name=="Product":
+                  print("STORE_PIPELINE_ACTIVE_PRODUCTS="+str(model.objects.filter(active=True).count()))
+              if name=="KnowledgeArticle":
+                  print("STORE_PIPELINE_PUBLISHED_KNOWLEDGE="+str(model.objects.filter(published=True).count()))
           for model in apps.get_app_config("core").get_models():
               if model.__name__ in ("ResearchProject","FactoryTask","FactoryRun","AgentTask"):
                   print("MODEL="+model._meta.label+" COUNT="+str(model.objects.count()))
@@ -193,6 +200,12 @@ jobs:
           else
             echo FACTORY_DISCOVERY_FILE_MISSING
           fi
+          echo VPS_PERSISTENCE_CHECK
+          ps -o ppid=,etime=,args= -p "$(cat "$ops/vps-only-loop.pid" 2>/dev/null)" 2>/dev/null || true
+          systemctl --user is-active saeit-factory.service 2>/dev/null || echo USER_SYSTEMD_UNIT_INACTIVE
+          systemctl --user is-enabled saeit-factory.service 2>/dev/null || echo USER_SYSTEMD_UNIT_NOT_ENABLED
+          loginctl show-user githubops -p Linger 2>/dev/null || echo USER_LINGER_STATUS_UNAVAILABLE
+          crontab -l 2>/dev/null | grep -Ei 'factory-runtime|vps-only-loop' || echo NO_FACTORY_CRON_ENTRY
           REMOTE
       - name: Remove runner SSH material
         if: always()
