@@ -224,6 +224,23 @@ jobs:
               print('MODULE_LINES',len(src.splitlines()))
           print('LIVE_CRYPTO_NATIVE_CHECKOUT_MAP_END')
           PY
+          echo "CRYPTO_MODEL_FIELDS_AND_IMPORTS_START"
+          python3 - <<'PY'
+          from pathlib import Path
+          import ast
+          base=Path('/home/zomorod2/Saeit-staging/core')
+          filename=base/'cryptopay_checkout.py'
+          tree=ast.parse(filename.read_text(errors='replace'))
+          for n in tree.body:
+              if isinstance(n,ast.ImportFrom):
+                  print('CHECKOUT_IMPORT',n.module,[x.name for x in n.names][:25])
+          for filename in base.glob('*crypto*.py'):
+              if filename.name=='cryptopay_checkout.py': continue
+              root=ast.parse(filename.read_text(errors='replace'))
+              names=[x.name for x in root.body if isinstance(x,(ast.FunctionDef,ast.ClassDef))]
+              print('CRYPTO_MODULE',filename.name,names[:40])
+          PY
+          echo "CRYPTO_MODEL_FIELDS_AND_IMPORTS_END"
           REMOTE
           for url in https://mojplaywin.com/ https://mojplaywin.com/admin/login/ https://mojplaywin.com/store/ https://mojplaywin.com/shop/; do
             code="$(curl -sS -L --connect-timeout 10 --max-time 20 -o /dev/null -w '%{http_code}' "$url" || true)"
