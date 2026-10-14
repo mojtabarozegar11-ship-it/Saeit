@@ -1,6 +1,7 @@
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.test import TestCase
+from django.urls import reverse
 
 from core.education_quality import audit_course, publication_ready
 from core.models import (
@@ -151,7 +152,7 @@ class EducationPlatformTests(TestCase):
         self.client.force_login(user)
         response = self.client.post("/education/course/test-course/certificate/issue/")
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, "/education/dashboard/")
+        self.assertEqual(response.url, "/amozeshgah/dashboard/")
         self.assertEqual(EducationCertificate.objects.filter(enrollment__user=user).count(), 1)
 
     def test_education_catalog_filters_published_courses(self):
@@ -193,3 +194,20 @@ class EducationPlatformTests(TestCase):
         )
         self.assertEqual(first, second)
 
+
+    def test_amozeshgah_is_canonical_and_legacy_education_urls_still_work(self):
+        landing = self.client.get("/amozeshgah/")
+        self.assertEqual(landing.status_code, 200)
+        self.assertContains(landing, "مرکز آموزش")
+
+        course = self.client.get("/amozeshgah/course/test-course/")
+        self.assertEqual(course.status_code, 200)
+
+        self.assertEqual(self.client.get("/education/").status_code, 200)
+        self.assertEqual(self.client.get("/education/course/test-course/").status_code, 200)
+
+        self.assertEqual(reverse("education"), "/amozeshgah/")
+        self.assertEqual(
+            reverse("education_course_detail", kwargs={"slug": "test-course"}),
+            "/amozeshgah/course/test-course/",
+        )
