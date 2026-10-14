@@ -31,6 +31,7 @@ class Migration(migrations.Migration):
                 ("expires_at", models.DateTimeField()),
                 ("wallet_challenge_id", models.CharField(max_length=128)),
                 ("sender_signature_verified_at", models.DateTimeField()),
+                ("merchant_ownership_verified_at", models.DateTimeField(null=True, blank=True)),
                 ("status", models.CharField(max_length=24, choices=[
                     ("awaiting", "Awaiting blockchain payment"),
                     ("paid", "Verified and paid"),
