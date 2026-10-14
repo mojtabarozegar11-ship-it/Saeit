@@ -1,0 +1,261 @@
+name: MojPlayWin stage 4 guarded inert commerce code install
+on:
+  push:
+    branches: [qa/mpw-payment-release-preflight-20261015]
+    paths: ['.github/workflows/mojplaywin-stage4-inert-code-install.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: mpw-stage4-inert-commerce-code
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate shadow Django compatibility without touching the live site
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/mpw-stage3-private-runner"
+          mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          python3 - "$d/vps.key" "$d/host.key" <<'PY'
+          from pathlib import Path
+          import sys
+          for filename in sys.argv[1:]:
+              f=Path(filename)
+              f.write_text(f.read_text().replace("\r\n","\n").strip().replace("\\n","\n")+"\n")
+          PY
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host relay
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host host
+            HostName zohal.pws-dns.net
+            Port 1396
+            User zomorod2
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump relay
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+          EOF
+          timeout 30s ssh -F "$d/config" relay 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          # Ship only audited code, without a private key, DB dump or .env.
+          tar -czf "$RUNNER_TEMP/mpw-commerce-shadow.tgz" \
+              mpw_commerce scripts/mojplaywin_native_chain_verify.py \
+              scripts/mojplaywin_native_rpc_clients.py \
+              scripts/mojplaywin_direct_wallet_discovery.py \
+              scripts/mojplaywin_direct_wallet_rates.py \
+              scripts/mojplaywin_direct_wallet_invoice.py
+          tar -tzf "$RUNNER_TEMP/mpw-commerce-shadow.tgz" > "$RUNNER_TEMP/mpw-commerce-shadow-files.txt"
+          grep -qx 'mpw_commerce/migrations/0002_buyerwalletchallenge.py' "$RUNNER_TEMP/mpw-commerce-shadow-files.txt"
+          checksum="$(sha256sum "$RUNNER_TEMP/mpw-commerce-shadow.tgz" | cut -d' ' -f1)"
+          timeout 60s ssh -F "$d/config" host \
+              'set -e; umask 077; mkdir -p "$HOME/.mpw-commerce-stage3-20261015"; chmod 700 "$HOME/.mpw-commerce-stage3-20261015"; cat > "$HOME/.mpw-commerce-stage3-20261015/source.tgz"' \
+              < "$RUNNER_TEMP/mpw-commerce-shadow.tgz"
+          uploaded="$(timeout 40s ssh -F "$d/config" host \
+             'sha256sum "$HOME/.mpw-commerce-stage3-20261015/source.tgz"' | cut -d' ' -f1)"
+          test "$checksum" = "$uploaded"
+          timeout 150s ssh -F "$d/config" host 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = "zomorod2"
+          umask 077
+          export PYTHONDONTWRITEBYTECODE=1
+          root="$HOME/.mpw-commerce-stage3-20261015"
+          site="$HOME/Saeit-staging"
+          venv="$HOME/virtualenv/Saeit-staging/3.11/bin/python"
+          test -x "$venv"
+          test -d "$site/core"
+          test -f "$site/config/settings.py"
+          test ! -e "$site/mpw_commerce"
+          test ! -L "$root"
+          test -f "$root/source.tgz"
+          mkdir -p "$root/code" "$root/conf"
+          chmod 700 "$root" "$root/code" "$root/conf"
+          tar -xzf "$root/source.tgz" -C "$root/code"
+          cat > "$root/conf/mpw_shadow_settings.py" <<'PY'
+          from config.settings import *
+          if "mpw_commerce" in INSTALLED_APPS:
+              raise RuntimeError("Commerce already present in live Django; abort preview")
+          INSTALLED_APPS = list(INSTALLED_APPS) + ["mpw_commerce"]
+          MPW_COMMERCE_RELEASE_READY = False
+          MPW_COMMERCE_CUSTOMER_HTTP_ENABLED = False
+          MPW_COMMERCE_INVOICING_ENABLED = False
+          MPW_COMMERCE_SETTLEMENT_ENABLED = False
+          MPW_COMMERCE_DOWNLOADS_ENABLED = False
+          MPW_COMMERCE_REAL_RPC_ENABLED = False
+          MPW_COMMERCE_AUTORECONCILE_ENABLED = False
+          MPW_COMMERCE_COURSE_AUTO_ENROLL_ENABLED = False
+          PY
+          # A separate shadow URL configuration routes commerce in isolation
+          # without changing config/urls.py or any public-facing endpoint.
+          cat > "$root/conf/mpw_shadow_urls.py" <<'PY'
+          from django.urls import include, path
+          urlpatterns = [path("_shadow_checkout/", include("mpw_commerce.urls"))]
+          PY
+          cat >> "$root/conf/mpw_shadow_settings.py" <<'PY'
+          ROOT_URLCONF = "mpw_shadow_urls"
+          MPW_COMMERCE_BUYER_SIGNATURE_ENABLED = False
+          PY
+          chmod 600 "$root/conf/mpw_shadow_settings.py" "$root/conf/mpw_shadow_urls.py"
+          export PYTHONPATH="$root/conf:$root/code:$site"
+          export DJANGO_SETTINGS_MODULE=mpw_shadow_settings
+          cd "$site"
+          "$venv" -m django check --settings=mpw_shadow_settings
+          "$venv" -m django makemigrations mpw_commerce --check --dry-run --settings=mpw_shadow_settings
+          "$venv" -m django sqlmigrate mpw_commerce 0001 --settings=mpw_shadow_settings > /dev/null
+          "$venv" -m django sqlmigrate mpw_commerce 0002 --settings=mpw_shadow_settings > /dev/null
+          "$venv" - <<'PY'
+          import django
+          django.setup()
+          from django.conf import settings
+          from django.db import connection
+          from django.db.migrations.executor import MigrationExecutor
+          assert connection.vendor == "mysql"
+          assert "mpw_commerce" in settings.INSTALLED_APPS
+          target=("mpw_commerce","0002_buyerwalletchallenge")
+          plan=MigrationExecutor(connection).migration_plan([target])
+          assert plan and all(m.app_label=="mpw_commerce" and not reverse
+                              for m,reverse in plan)
+          print("MPW_SHADOW_MIGRATION_PLAN",",".join(m.name for m,reverse in plan))
+          assert settings.MPW_COMMERCE_RELEASE_READY is False
+          from django.urls import reverse, resolve, NoReverseMatch
+          route = reverse("mpw_commerce:invoice")
+          assert route == "/_shadow_checkout/commerce/checkout/invoice/"
+          assert resolve(route).url_name == "invoice"
+          for key in (
+              "MPW_COMMERCE_RELEASE_READY",
+              "MPW_COMMERCE_CUSTOMER_HTTP_ENABLED",
+              "MPW_COMMERCE_INVOICING_ENABLED",
+              "MPW_COMMERCE_SETTLEMENT_ENABLED",
+              "MPW_COMMERCE_DOWNLOADS_ENABLED",
+              "MPW_COMMERCE_REAL_RPC_ENABLED",
+              "MPW_COMMERCE_AUTORECONCILE_ENABLED",
+              "MPW_COMMERCE_COURSE_AUTO_ENROLL_ENABLED",
+              "MPW_COMMERCE_BUYER_SIGNATURE_ENABLED",
+          ):
+              assert getattr(settings,key,False) is False,key
+          print("MPW_STAGE3_SHADOW_CHECKOUT_URL_RESOLVES=True")
+          print("MPW_STAGE3_ALL_PAYMENT_AND_ROUTE_GATES_OFF=True")
+          print("MPW_STAGE3_LIVE_URLCONF_NOT_EDITED=True")
+          print("MPW_SHADOW_DJANGO_AND_SQL_PREVIEW_OK")
+          print("MPW_LIVE_DATABASE_AND_SETTINGS_UNCHANGED")
+          print("MPW_NO_PAYMENT_OR_CUSTOMER_REQUESTS_PROCESSED")
+          PY
+          # Only install an unregistered, feature-disabled source directory.
+          "$venv" - <<'PY'
+          from pathlib import Path
+          import hashlib, json, os, shutil, tempfile, datetime
+          import django
+          os.environ["DJANGO_SETTINGS_MODULE"]="config.settings"
+          django.setup()
+          from django.conf import settings
+          from django.db.migrations.recorder import MigrationRecorder
+          from django.db import connection
+          from django.urls import reverse, NoReverseMatch
+          home=Path.home()
+          site=home/"Saeit-staging"
+          destination=site/"mpw_commerce"
+          source=home/".mpw-commerce-stage3-20261015"/"code"/"mpw_commerce"
+          assert site.is_dir() and not site.is_symlink()
+          assert not destination.exists() and not destination.is_symlink()
+          assert source.is_dir() and not source.is_symlink()
+          assert "mpw_commerce" not in settings.INSTALLED_APPS
+          assert not any(app=="mpw_commerce" for app,_ in MigrationRecorder(connection).applied_migrations())
+          try:
+              reverse("mpw_commerce:invoice")
+          except NoReverseMatch:
+              pass
+          else:
+              raise RuntimeError("Checkout was unexpectedly active")
+          for key in ("MPW_COMMERCE_RELEASE_READY","MPW_COMMERCE_SETTLEMENT_ENABLED",
+                      "MPW_COMMERCE_REAL_RPC_ENABLED","MPW_COMMERCE_CUSTOMER_HTTP_ENABLED"):
+              assert getattr(settings,key,False) is not True,key
+          backups=sorted((home/".mpw-private-db-backups").glob("*/manifest.json"),
+                         key=lambda p:p.stat().st_mtime,reverse=True)
+          assert backups,"No verified private backup"
+          info=json.loads(backups[0].read_text())
+          age=(datetime.datetime.now(datetime.timezone.utc)-
+               datetime.datetime.fromisoformat(info["timestamp_utc"])).total_seconds()
+          assert 0<=age<7200
+          archive=backups[0].parent/"mysql-full.sql.gz"
+          assert archive.is_file() and hashlib.sha256(archive.read_bytes()).hexdigest()==info["archive_sha256"]
+          rollback=info.get("code_rollback_checksums",{})
+          assert len(rollback)>=5
+          for path,expected in rollback.items():
+              f=backups[0].parent/"source-rollback"/path
+              assert f.is_file() and not f.is_symlink()
+              assert hashlib.sha256(f.read_bytes()).hexdigest()==expected
+          assert (source/"models.py").is_file()
+          assert not any(p.is_symlink() for p in source.rglob("*"))
+          work=Path(tempfile.mkdtemp(prefix=".mpw-inert-stage4-",dir=str(home)))
+          work.chmod(0o700)
+          try:
+              package=work/"mpw_commerce"
+              shutil.copytree(source,package)
+              (package/".mpw_inert_release_marker").write_text("MPW-STAGE4-20261015\n")
+              package.rename(destination)
+          finally:
+              shutil.rmtree(work)
+          print("MPW_STAGE4_INERT_PACKAGE_INSTALLED=True")
+          print("MPW_STAGE4_NO_CONFIG_OR_URL_CHANGES=True")
+          print("MPW_STAGE4_LIVE_DB_MIGRATED=False")
+          print("MPW_STAGE4_PAYMENTS_ENABLED=False")
+          PY
+          REMOTE
+      - name: Verify unchanged public homepage store and unavailable checkout; rollback exact inert package if failing
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-stage3-private-runner"
+          h="$(curl -L -sS --max-time 15 -o /dev/null -w '%{http_code}' https://mojplaywin.com/ || true)"
+          s="$(curl -L -sS --max-time 15 -o /dev/null -w '%{http_code}' https://mojplaywin.com/store/ || true)"
+          c="$(curl -L -sS --max-time 15 -o /dev/null -w '%{http_code}' https://mojplaywin.com/checkout/ || true)"
+          echo "MPW_STAGE4_HOME_HTTP=$h"
+          echo "MPW_STAGE4_STORE_HTTP=$s"
+          echo "MPW_STAGE4_CHECKOUT_HTTP=$c"
+          if [ "$h" != 200 ] || [ "$s" != 200 ] || [ "$c" != 404 ]; then
+            echo MPW_STAGE4_SMOKE_FAILED_BEGIN_SCOPED_ROLLBACK
+            timeout 50s ssh -F "$d/config" host 'python3 -' <<'PY'
+          from pathlib import Path
+          import shutil
+          p=Path.home()/"Saeit-staging"/"mpw_commerce"
+          marker=p/".mpw_inert_release_marker"
+          if p.is_dir() and not p.is_symlink() and marker.is_file():
+              if marker.read_text().strip()=="MPW-STAGE4-20261015":
+                  shutil.rmtree(p)
+                  print("MPW_STAGE4_ONLY_NEW_PACKAGE_REMOVED=True")
+          PY
+            exit 1
+          fi
+          echo MPW_STAGE4_SITE_SMOKE_GREEN=True
+          echo MPW_STAGE4_PAID_CHECKOUT_STILL_BLOCKED=True
+      - name: Remove transient keys
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/mpw-stage3-private-runner"
