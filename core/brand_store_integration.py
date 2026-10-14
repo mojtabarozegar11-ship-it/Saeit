@@ -14,5 +14,6 @@ def safe_brand_store_context(brand, products):
     return {
         "brand": brand,
         "products": nonfactory_products,
+        "other_products": nonfactory_products,
         "factory_cards": factory_cards,
     }
