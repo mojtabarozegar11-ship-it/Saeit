@@ -39,8 +39,11 @@ def reconcile_once(
     eth_chain_rpc=ethereum_rpc,
     trx_chain_rpc=tron_solidity_rpc,
     now=None,
+    asset_filter=None,
 ):
     """One bounded scan-and-settle cycle. Must be called by a trusted scheduler."""
+    if asset_filter is not None and asset_filter not in ("ETH","TRX"):
+        raise AutoPayUnavailable("Unexpected asset-specific reconciliation request")
     if getattr(settings, "MPW_NATIVE_AUTOPAY_ENABLED", False) is not True:
         return {"state":"disabled","scanned":0,"matched":0,"paid":0,"rejected":0}
     # Live release requires independent ownership checks for both receiving
@@ -60,6 +63,8 @@ def reconcile_once(
                 sender_signature_verified_at__isnull=False,
                 issued_at__gte=earliest)
         .order_by("id"))
+    if asset_filter:
+        qs=qs.filter(asset=asset_filter)
     if qs.count()>MAX_BATCH:
         raise AutoPayUnavailable("Batch capacity exceeded; do not skip open invoices")
     invoices=list(qs)
@@ -67,8 +72,10 @@ def reconcile_once(
         return {"state":"no_pending","scanned":0,"matched":0,"paid":0,"rejected":0}
 
     older=min(i.issued_at for i in invoices)
+    # Search only the required invoice age plus a small timestamp margin;
+    # never re-query an arbitrary hour of history for a brand-new order.
     lookback_s=min(MAX_LOOKBACK_SECONDS,
-                   max(3600, math.ceil((now-older).total_seconds())+3600))
+                   max(600, math.ceil((now-older).total_seconds())+90))
     coins={i.asset for i in invoices}
     now_ms=int(now.timestamp()*1000)
     try:
