@@ -160,12 +160,15 @@ def evaluate_db(database, candidates, now_utc):
         if key in seen:
             raise ValueError("duplicate opportunity_key")
         seen.add(key)
-    db = Path(database).expanduser().resolve(strict=True)
-    if not db.is_file() or db.is_symlink():
+    raw_db = Path(database).expanduser()
+    if raw_db.is_symlink():
+        raise ValueError("database symlink not permitted")
+    db = raw_db.resolve(strict=True)
+    if not db.is_file():
         raise ValueError("unsafe database path")
     # A read-only SQLite transaction obtains a consistent snapshot; query_only
     # forbids SQL changes. Uses parameterized SQL and an exact table allowlist.
-    uri = "file:" + db.as_posix() + "?mode=ro"
+    uri = db.as_uri() + "?mode=ro"
     with sqlite3.connect(uri, uri=True, timeout=10) as conn:
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA query_only=ON")
@@ -195,8 +198,11 @@ def main(argv=None):
     ap.add_argument("--out", required=True, help="Private local review report")
     ap.add_argument("--now-utc", required=True)
     args = ap.parse_args(argv)
-    source = Path(args.candidates).resolve(strict=True)
-    if not source.is_file() or source.is_symlink() or source.stat().st_size > 2_000_000:
+    raw_source = Path(args.candidates).expanduser()
+    if raw_source.is_symlink():
+        raise ValueError("candidate input symlink not permitted")
+    source = raw_source.resolve(strict=True)
+    if not source.is_file() or source.stat().st_size > 2_000_000:
         raise ValueError("unsafe candidates file")
     doc = json.loads(source.read_text(encoding="utf-8"))
     if not isinstance(doc, dict):
