@@ -25,6 +25,27 @@ def send_invoice_event(invoice, *, action, opener=urlopen):
     if getattr(settings, "MPW_NATIVE_EVENT_ENABLED", False) is not True:
         return "disabled"
 
+    transport = getattr(settings, "MPW_NATIVE_EVENT_TRANSPORT", "https")
+    if transport == "unix":
+        secret = getattr(settings, "MPW_NATIVE_EVENT_SECRET", "")
+        socket_path = getattr(settings, "MPW_NATIVE_EVENT_SOCKET", "")
+        if not isinstance(secret, str) or len(secret.encode("utf-8")) < 32:
+            raise NotificationUnavailable("Missing private event signing secret")
+        if not isinstance(socket_path, str) or not socket_path.startswith("/"):
+            raise NotificationUnavailable("Missing absolute private Unix socket")
+        try:
+            payload = make_event(
+                action=action, invoice_id=invoice.pk, order_id=invoice.order_id,
+                asset=invoice.asset, expires_at_epoch=int(invoice.expires_at.timestamp()),
+            )
+            body, signature = signed_message(payload, secret.encode("utf-8"))
+            from scripts.mojplaywin_cpanel_local_event_worker import socket_request
+            return socket_request(socket_path, body, signature)
+        except (EventRejected, OSError, ValueError) as exc:
+            raise NotificationUnavailable("Local event receiver unavailable") from exc
+    if transport != "https":
+        raise NotificationUnavailable("Unknown event transport")
+
     url = getattr(settings, "MPW_NATIVE_EVENT_URL", "")
     allowed_host = getattr(settings, "MPW_NATIVE_EVENT_HOST", "")
     secret = getattr(settings, "MPW_NATIVE_EVENT_SECRET", "")
