@@ -162,8 +162,29 @@ jobs:
         run: |
           set -euo pipefail
           WORK="$RUNNER_TEMP/mojplaywin-ssh"
-          timeout 60s ssh -F "$WORK/config" saeit-host \
-            "cd /home/zomorod2/Saeit-staging && python3 -c 'import os; os.environ.setdefault(\"DJANGO_SETTINGS_MODULE\", \"config.settings\"); import django; django.setup(); from django.urls import resolve; match=resolve(\"/taniya/\"); print(\"TANIYA_RUNTIME_ROUTE=\" + match.func.__name__)'"
+          timeout 90s ssh -F "$WORK/config" saeit-host 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          APP=/home/zomorod2/Saeit-staging
+          candidates=(
+            "$APP/.venv/bin/python"
+            "$APP/venv/bin/python"
+            /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python
+            /home/zomorod2/virtualenv/Saeit-staging/3.10/bin/python
+            /home/zomorod2/virtualenv/Saeit/3.11/bin/python
+            /home/zomorod2/virtualenv/Saeit/3.10/bin/python
+            /home/zomorod2/virtualenv/mojplaywin.com/3.11/bin/python
+            /home/zomorod2/virtualenv/mojplaywin.com/3.10/bin/python
+          )
+          for python in "${candidates[@]}"; do
+            if [[ -x "$python" ]] && "$python" -c 'import django' >/dev/null 2>&1; then
+              cd "$APP"
+              DJANGO_SETTINGS_MODULE=config.settings "$python" -c 'import django; django.setup(); from django.urls import resolve; match=resolve("/taniya/"); print("TANIYA_RUNTIME_ROUTE=" + match.func.__name__)'
+              exit 0
+            fi
+          done
+          echo "No Passenger virtualenv with Django found in the verified app paths."
+          exit 1
+          REMOTE
 
       - name: Verify live Taniya page
         id: smoke
