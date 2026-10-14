@@ -1,0 +1,33 @@
+name: SAMAN seven-page safe tests
+
+on:
+  push:
+    branches: [feature/saman-seven-real-pages-20261014]
+    paths:
+      - "templates/saman/**"
+      - "scripts/saman_patch.py"
+      - "scripts/deploy_mojplaywin_saman.py"
+      - "tests/test_saman_independent_pages.py"
+      - ".github/workflows/saman-seven-page-tests.yml"
+  pull_request:
+    paths:
+      - "templates/saman/**"
+      - "scripts/saman_patch.py"
+      - "scripts/deploy_mojplaywin_saman.py"
+      - "tests/test_saman_independent_pages.py"
+      - ".github/workflows/saman-seven-page-tests.yml"
+permissions:
+  contents: read
+jobs:
+  validate-independent-pages:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Compile safe SAMAN patch and rollback code
+        run: python -m py_compile scripts/saman_patch.py scripts/deploy_mojplaywin_saman.py
+      - name: Validate seven-page structure and exact legacy upgrade
+        run: python -m unittest discover -s tests -p 'test_saman_independent_pages.py' -v
