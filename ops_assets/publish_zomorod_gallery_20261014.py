@@ -159,6 +159,11 @@ def preflight(rows):
     for row in rows:
         validate_https('https://zomorodmelal.ir/company-gallery/photo/'+row['slug']+'/')
     print('SOURCE_URL_VALIDATION_OK',len(rows))
+    from django.contrib.auth import get_user_model
+    editor_qs=get_user_model().objects.filter(is_active=True,is_staff=True,is_superuser=True)
+    if editor_qs.count() != 1:
+        fail('A unique active owner-level Django administrator is required to record editorial approval')
+    print('EDITORIAL_OWNER_APPROVER_AVAILABLE')
     for x in (GALLERY_PARTIAL,REPORT_TEMPLATE,REPORT_MODULE):
         if x.exists() and MARK not in x.read_text(encoding='utf-8'):
             fail('An unrelated file exists at the add-on path: '+x.name)
@@ -326,6 +331,8 @@ def copy_media(rows):
 def save_database(rows,Article,GalleryPhoto):
     from django.db import transaction
     from django.utils import timezone
+    from django.contrib.auth import get_user_model
+    approver=get_user_model().objects.get(is_active=True,is_staff=True,is_superuser=True)
     created_articles=[]; created_photos=[]
     with transaction.atomic():
         for row in rows:
@@ -341,12 +348,12 @@ def save_database(rows,Article,GalleryPhoto):
                 article=Article.objects.create(
                   title=row['title'],slug=row['slug'],summary=row['summary'],body=row['body'],
                   language='fa',category=CATEGORY,sources=['https://zomorodmelal.ir/company-gallery/photo/'+row['slug']+'/'],cover=photo,state='published',
-                  publication_mode='human',published_at=timezone.now())
+                  publication_mode='human',approved_by=approver,published_at=timezone.now())
                 created_articles.append(article.pk)
-            elif article.state!='published' or article.cover_id!=photo.pk:
-                article.cover=photo;article.state='published'
+            elif article.state!='published' or article.cover_id!=photo.pk or article.approved_by_id is None:
+                article.cover=photo;article.state='published';article.approved_by=approver
                 if article.published_at is None:article.published_at=timezone.now()
-                article.save(update_fields=['cover','state','published_at'])
+                article.save(update_fields=['cover','state','approved_by','published_at'])
     print('DB_PUBLISHED_ARTICLES',Article.objects.filter(slug__in=EXPECTED_SLUGS,category=CATEGORY,state='published').count())
     print('DB_CREATED_NEW',len(created_articles),len(created_photos))
     return created_articles,created_photos
