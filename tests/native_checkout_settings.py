@@ -11,5 +11,10 @@ INSTALLED_APPS = [
 ]
 DATABASES = {"default": {"ENGINE": "django.db.backends.sqlite3", "NAME": ":memory:"}}
 MIDDLEWARE = []
+TEMPLATES = [{
+    "BACKEND": "django.template.backends.django.DjangoTemplates",
+    "APP_DIRS": True,
+    "OPTIONS": {"context_processors": ["django.template.context_processors.request"]},
+}]
 ROOT_URLCONF = "tests.native_checkout_urls"
 SILENCED_SYSTEM_CHECKS = []
