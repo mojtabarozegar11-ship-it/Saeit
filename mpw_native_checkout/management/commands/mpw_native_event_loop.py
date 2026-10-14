@@ -20,6 +20,7 @@ from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
 from mpw_native_checkout.autopay_worker import reconcile_once
+from mpw_native_checkout.wallet_ownership import proven_assets
 from scripts.mojplaywin_cpanel_local_event_worker import run_local_worker
 
 
@@ -51,6 +52,16 @@ class Command(BaseCommand):
             raise CommandError("Native auto-settlement not approved")
         if getattr(settings,"MPW_NATIVE_RELEASE_APPROVED",False) is not True:
             raise CommandError("Production safety gates not approved")
+        # Never revive the deprecated product-specific engine using settings
+        # flags alone. This check is one-time receiving-wallet attestation,
+        # not a merchant approval requirement for individual orders.
+        proof_flags=getattr(settings,"MPW_NATIVE_MERCHANT_PROOFS",{})
+        if (not isinstance(proof_flags,dict) or
+            proof_flags.get("ETH") is not True or
+            proof_flags.get("TRX") is not True):
+            raise CommandError("Legacy receiving wallet attestation missing")
+        if proven_assets() != {"ETH":True,"TRX":True}:
+            raise CommandError("Signed legacy wallet attestation not recorded")
         root=getattr(settings,"MPW_NATIVE_EVENT_HOME",None)
         if not isinstance(root,str) or not Path(root).is_absolute():
             raise CommandError("Approved private local event directory missing")
