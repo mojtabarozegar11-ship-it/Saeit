@@ -1,8 +1,5 @@
 name: ComfyUI Private Mobile Gateway Inventory
 on:
-  push:
-    branches: [feature/comfyui-private-mobile-gateway-20261015]
-    paths: [.github/workflows/comfyui-mobile-gateway-inventory.yml]
   workflow_dispatch:
 permissions:
   contents: read
