@@ -1,0 +1,85 @@
+name: MojPlayWin live owner-page readiness audit (read-only)
+on:
+  push:
+    branches: [release/mojplaywin-chess-product-20261014]
+    paths: ['.github/workflows/mojplaywin-owner-route-readiness.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Read-only hosting and live route inventory, never print settings or secrets
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/owner-readiness"
+          mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          python3 - "$d/vps.key" "$d/host.key" <<'PY'
+          import sys
+          from pathlib import Path
+          for p in sys.argv[1:]:
+              f=Path(p)
+              f.write_text(f.read_text().replace("\r\n","\n").strip().replace("\\n","\n")+"\n")
+          PY
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host relay
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump relay
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+          EOF
+          timeout 35s ssh -F "$d/config" relay 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          timeout 70s ssh -F "$d/config" host 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = zomorod2
+          python3 - <<'PY'
+          from pathlib import Path
+          root=Path("/home/zomorod2")
+          for name in ("Saeit-staging","saeit_v91","public_html","mojplaywin","MojPlayWin"):
+              base=root/name
+              print("HOST_ROOT_"+name.replace("-","_").upper(),"DIRECTORY" if base.is_dir() else "NOT_FOUND")
+              if not base.is_dir():continue
+              for f in ("manage.py","passenger_wsgi.py","config/settings.py","config/urls.py","mpw_native_checkout/models.py"):
+                  print("HOST_FILE_"+name.replace("-","_").upper()+"_"+f.replace("/","_").upper(),
+                        "PRESENT" if (base/f).is_file() else "ABSENT")
+          stage=root/"Saeit-staging"/"mojplaywin-chess-product-prep-20261014"
+          for f in ("mpw_native_checkout/templates/mpw_native_checkout/merchant_wallet_proof.html",
+                    "mpw_native_checkout/migrations/0003_merchantwalletchallenge_merchantwalletproof.py"):
+              print("STAGED_"+f.rsplit("/",1)[-1], "YES" if (stage/f).is_file() else "NO")
+          print("NO_DB_QUERIES_NO_KEYS_READ_NO_FILES_MODIFIED")
+          PY
+          REMOTE
+      - name: Delete ephemeral SSH credentials
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/owner-readiness"
