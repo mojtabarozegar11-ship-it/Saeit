@@ -63,11 +63,44 @@ jobs:
             LogLevel ERROR
           EOF
           chmod 600 "$d/config"
-      - name: Verify the configured VPS relay and cPanel hop
+      - name: Verify authenticated VPS relay
         shell: bash
         run: |
           set -euo pipefail
           timeout 30s ssh -F "$RUNNER_TEMP/saeit-ssh/config" saeit-vps 'set -eu; id -un; hostname; echo VPS_RELAY_OK'
+      - name: Refresh cPanel host pin only after confirmed fingerprint check
+        shell: python
+        run: |
+          import os, pathlib, subprocess, sys
+          root = pathlib.Path(os.environ["RUNNER_TEMP"]) / "saeit-ssh"
+          expected = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          endpoint = "[zohal.pws-dns.net]:1396"
+          result = subprocess.run(
+              ["ssh", "-F", str(root / "config"), "saeit-vps",
+               "timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net"],
+              capture_output=True, text=True, timeout=30)
+          lines = [line.split() for line in result.stdout.splitlines()
+                   if line and not line.startswith("#")]
+          if result.returncode or not lines or any(
+              len(parts) != 3 or parts[0] != endpoint or parts[1] != "ssh-ed25519"
+              for parts in lines):
+              sys.exit("CPANEL_HOST_KEY_SCAN_VALIDATION_FAILED")
+          candidate = root / "host.candidate"
+          candidate.write_text("\n".join(" ".join(parts) for parts in lines) + "\n")
+          checked = subprocess.run(
+              ["ssh-keygen", "-lf", str(candidate), "-E", "sha256"],
+              capture_output=True, text=True, timeout=5)
+          fingerprints = [line.split()[1] for line in checked.stdout.splitlines()
+                          if len(line.split()) > 1]
+          if checked.returncode or set(fingerprints) != {expected}:
+              sys.exit("CPANEL_HOST_FINGERPRINT_MISMATCH; TRUST_PIN_NOT_CHANGED")
+          (root / "host.known").write_text(candidate.read_text())
+          (root / "host.known").chmod(0o600)
+          print("CPANEL_HOST_FINGERPRINT_VERIFIED=" + expected)
+      - name: Verify cPanel access through VPS relay
+        shell: bash
+        run: |
+          set -euo pipefail
           timeout 35s ssh -F "$RUNNER_TEMP/saeit-ssh/config" saeit-host 'set -eu; id -un; hostname; test -d /home/zomorod2/Saeit-staging; echo CPANEL_HOP_OK'
       - name: Inspect VPS factory Stage 4 configuration without exposing secrets
         shell: bash
