@@ -62,7 +62,33 @@ jobs:
           actual="$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)"
           test "$actual" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
           cp "$d/host.candidate" "$d/host.known"
-      - name: Verify cPanel account and target paths without writes
+      - name: Inspect documented production cPanel account
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          ssh -F "$RUNNER_TEMP/amozeshgah-preflight/config" -o User=zomorodm saeit-cpanel 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          echo PRODUCTION_ACCOUNT_AUTHENTICATED_USER="$(id -un)"
+          for p in /home/zomorodm/repositories/Saeit /home/zomorodm/zomorodmelal-app/django_project; do
+            if test -d "$p"; then
+              echo "PRODUCTION_PATH_PRESENT=$p"
+              if test -f "$p/.git/HEAD"; then
+                echo "PRODUCTION_REPO_HEAD=$(cat "$p/.git/HEAD")"
+              fi
+              if test -f "$p/manage.py"; then
+                echo "PRODUCTION_DJANGO_PROJECT=$p"
+                if test -f "$p/config/urls.py" && grep -q 'amozeshgah' "$p/config/urls.py"; then echo "PRODUCTION_ROUTE_PRESENT=$p"; fi
+              fi
+            else
+              echo "PRODUCTION_PATH_ABSENT=$p"
+            fi
+          done
+          REMOTE
+          rc=$?
+          set -e
+          echo "PRODUCTION_ACCOUNT_SSH_EXIT=$rc"
+      - name: Inspect currently available cPanel account
         shell: bash
         run: |
           set -euo pipefail
@@ -70,18 +96,14 @@ jobs:
           set -euo pipefail
           echo CPANEL_AUTHENTICATED_USER="$(id -un)"
           echo CPANEL_HOST="$(hostname)"
-          if test -r /etc/userdomains; then
-            owner="$(awk -F: '$1=="zomorodmelal.ir" {gsub(/[[:space:]]/, "", $2); print $2; exit}' /etc/userdomains)"
-            echo COMPANY_DOMAIN_OWNER="${owner:-NOT_FOUND_IN_MAP}"
-          else
-            echo COMPANY_DOMAIN_OWNER_MAP=NOT_READABLE
-          fi
-          for p in /home/zomorodm/repositories/Saeit /home/zomorodm/zomorodmelal-app/django_project /home/zomorod2/Saeit-staging; do
+          for p in /home/zomorod2/Saeit-staging; do
             if test -d "$p"; then
               echo "PATH_PRESENT=$p"
               if test -f "$p/manage.py"; then echo "DJANGO_PROJECT_PRESENT=$p"; fi
-              if test -f "$p/config/urls.py" && grep -q 'path("amozeshgah/", education' "$p/config/urls.py"; then
-                echo "AMOZESHGHAH_ROUTE_PRESENT=$p"
+              if test -f "$p/config/urls.py"; then
+                echo "EDUCATION_ROUTE_LINES_BEGIN"
+                grep -n 'amozeshgah\|education/' "$p/config/urls.py" || true
+                echo "EDUCATION_ROUTE_LINES_END"
               fi
             else
               echo "PATH_ABSENT=$p"
