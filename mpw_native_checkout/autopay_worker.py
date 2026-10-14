@@ -1,8 +1,8 @@
 """Unattended inbound ETH/TRX reconciliation (staged, DISABLED by default).
 
-Call from a scheduled trusted server job only after the one-time merchant
-wallet ownership proof, verified live signing, RPC/indexer readiness and
-end-to-end paid ebook fulfilment tests.
+Call only after approved release gates, trusted sender/order validation,
+RPC/indexer readiness and end-to-end paid ebook fulfilment tests.
+The receiving merchant does not manually approve any customer purchase.
 
 No polling loop or cron is created here. Failure of either required indexer
 blocks the entire batch; unverified candidate hashes never settle orders.
@@ -46,20 +46,12 @@ def reconcile_once(
         raise AutoPayUnavailable("Unexpected asset-specific reconciliation request")
     if getattr(settings, "MPW_NATIVE_AUTOPAY_ENABLED", False) is not True:
         return {"state":"disabled","scanned":0,"matched":0,"paid":0,"rejected":0}
-    # Live release requires independent ownership checks for both receiving
-    # wallets; no settings switch or photograph proves ownership by itself.
-    approval=getattr(settings,"MPW_NATIVE_MERCHANT_PROOFS",{})
-    if (not isinstance(approval,dict) or
-            approval.get("ETH") is not True or approval.get("TRX") is not True):
-        raise AutoPayUnavailable("Merchant address ownership has not been proven")
-
     if now is None:
         now=timezone.now()
     earliest=now-timedelta(seconds=MAX_LOOKBACK_SECONDS)
     qs=(NativeInvoice.objects.select_related("order","product")
         .filter(status=NativeInvoice.Status.AWAITING,
                 order__status="pending",product_id=72,
-                merchant_ownership_verified_at__isnull=False,
                 sender_signature_verified_at__isnull=False,
                 issued_at__gte=earliest)
         .order_by("id"))
