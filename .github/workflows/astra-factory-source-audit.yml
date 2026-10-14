@@ -68,5 +68,40 @@ jobs:
                   for line in selected[:40]: print("ASTRA_SECTION="+line)
           PY
           fi
+          echo ASTRA_DESIGN_COMPARISON_BEGIN
+          python3 - "$HOME/factory-transfer-incoming/astra-factory-full-architecture.tar.gz" "$HOME/factory-runtime/django-app" <<'PY'
+          from pathlib import Path
+          import sys, tarfile, hashlib, re, json
+          archive=Path(sys.argv[1]); deployed=Path(sys.argv[2])
+          with tarfile.open(archive,"r:gz") as tf:
+              source_files=[m for m in tf.getmembers() if m.isfile() and m.name.startswith("files/")]
+              same, different, absent=[],[],[]
+              for m in source_files:
+                  rel=m.name[6:]
+                  if not re.fullmatch(r"[A-Za-z0-9_./-]{1,200}",rel) or ".." in Path(rel).parts: continue
+                  current=deployed / rel
+                  if not current.is_file() or current.is_symlink():
+                      absent.append(rel)
+                      continue
+                  original=tf.extractfile(m).read()
+                  (same if hashlib.sha256(original).digest()==hashlib.sha256(current.read_bytes()).digest() else different).append(rel)
+              print("ASTRA_DEPLOYED_SAME="+str(len(same)))
+              print("ASTRA_DEPLOYED_DIFFERENT="+str(len(different)))
+              print("ASTRA_DEPLOYED_ABSENT="+str(len(absent)))
+              for k,paths in (("DIFFERENT",different),("ABSENT",absent)):
+                  for item in paths[:50]: print("ASTRA_DEPLOYED_"+k+"_PATH="+item)
+              m=tf.getmember("files/docs/ASTRA_LUNA_HANDOFF.md")
+              source=tf.extractfile(m).read().decode("utf-8","replace").splitlines()
+              print("ASTRA_HANDOFF_LINECOUNT="+str(len(source)))
+              for n,line in enumerate(source,1):
+                  row=line.strip()
+                  if not row or len(row)>220: continue
+                  if re.search(r"(private.key|ssh-rsa|BEGIN .* PRIVATE|PASSWORD\s*[:=]|SECRET\s*[:=]|TOKEN\s*[:=]|API_KEY\s*[:=])",row,re.I):continue
+                  if re.match(r"^#{1,6}\s|^\d+[.)]\s|^\s*[-*]\s",row):
+                      row=re.sub(r"(?:\d{1,3}\.){3}\d{1,3}","[HOST]",row)
+                      row=re.sub(r"https?://[^\s)]+","[LINK]",row)
+                      print("ASTRA_PLAN_LINE_"+str(n)+"="+row[:220])
+          PY
+          echo ASTRA_DESIGN_COMPARISON_DONE
           echo ASTRA_AUDIT_READ_ONLY_COMPLETE
           REMOTE
