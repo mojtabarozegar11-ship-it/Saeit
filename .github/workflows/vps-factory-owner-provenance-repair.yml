@@ -91,6 +91,21 @@ jobs:
                   raise SystemExit("OWNER_PROVENANCE_VALIDATION_FAILED")
               print("FACTORY_OWNER_RESOLUTION_OK")
               print("OWNER_LOGIN_PASSWORD_DISABLED="+str(not owner.has_usable_password()))
+          from core.models import AgentTask
+          from core.task_runtime import TaskRuntime
+          task_id=96
+          task=AgentTask.objects.select_related("factory_run").get(pk=task_id)
+          if task.action_type != "product_research" or task.factory_run_id is None:
+              raise SystemExit("BLOCKED_TASK_SCOPE_VALIDATION_FAILED")
+          if task.status == "blocked" and task.factory_run.status == "blocked":
+              resumed=TaskRuntime().resume_blocked(
+                  task.pk, owner,
+                  "Configured and verified active owner provenance for Stage 4 ResearchProject creation.")
+              if resumed.status != "queued":
+                  raise SystemExit("BLOCKED_TASK_RESUME_VALIDATION_FAILED")
+              print("STAGE4_RESEARCH_TASK_RESUMED="+str(resumed.pk))
+          else:
+              print("STAGE4_RESEARCH_TASK_ALREADY_MOVED="+str(task.status))
           PY
           REMOTE
       - name: Remove temporary SSH key
