@@ -42,6 +42,32 @@ class PrivateManufacturingTests(unittest.TestCase):
         self.addCleanup(t.cleanup)
         self.root=pipeline.safe_root(Path(t.name)/"factory-private")
 
+    def test_distributed_product_runs_standalone_self_test(self):
+        pipeline.enqueue(self.root, brief())
+        result=pipeline.tick(self.root)
+        self.assertEqual(result["status"],"PRIVATE_QA_PASSED",result)
+        archive=next(self.root.glob("artifact-*.zip"))
+        unpack=self.root/"consumer-unpack"
+        unpack.mkdir()
+        with zipfile.ZipFile(archive) as z:
+            z.extractall(unpack)
+        script=unpack/"orchard_decision_audit"/"self_test.py"
+        self.assertTrue(script.exists())
+        proc=subprocess.run([sys.executable,str(script)],
+                            capture_output=True,text=True,timeout=10)
+        self.assertEqual(proc.returncode,0,proc.stderr)
+        self.assertIn("ORCHARD_PRODUCT_SELF_TEST=PASS",proc.stdout)
+
+    def test_delivered_application_has_annual_audit_and_csv_export(self):
+        html=(PRODUCT/"index.html").read_text()
+        js=(PRODUCT/"app.js").read_text()
+        self.assertIn('id="annual-audit"',html)
+        self.assertIn('id="download-csv"',html)
+        self.assertIn('id="print-report"',html)
+        self.assertIn("renderAnnualTrace(data)",js)
+        self.assertIn("function auditCSV(data)",js)
+        self.assertIn("function exportCSV(",js)
+
     def test_new_private_product_build_and_immutable_manifest(self):
         first=pipeline.enqueue(self.root,brief())
         self.assertTrue(first["new_job"])
