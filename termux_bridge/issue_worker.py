@@ -15,6 +15,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import time
 
 from termux_bridge.worker import (
     Bridge, BridgeError, COMMAND_PATH, REPO, BRANCH,
@@ -139,17 +140,31 @@ def main(argv=None):
     parser = argparse.ArgumentParser(
         description="Termux safe read-only Git + GitHub Issues reply bridge"
     )
-    parser.add_argument("--once", action="store_true", required=True)
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--once", action="store_true")
+    mode.add_argument("--loop", action="store_true")
+    parser.add_argument("--interval", type=int, default=300,
+                        help="Poll every 60..3600 seconds (default: 300)")
     args = parser.parse_args(argv)
-    del args
+    if not 60 <= args.interval <= 3600:
+        parser.error("--interval must be 60..3600")
     home = Path.home() / ".saeit-termux-bridge"
-    try:
-        result = IssuesBridge(home / "repo", home / "state").once()
-        print(result)
-        return 0
-    except BridgeError as exc:
-        print("TERMUX_BRIDGE_ERROR: " + str(exc), file=sys.stderr)
-        return 1
+    bridge = IssuesBridge(home / "repo", home / "state")
+    while True:
+        try:
+            result = bridge.once()
+            print(result, flush=True)
+        except BridgeError as exc:
+            print("TERMUX_BRIDGE_ERROR: " + str(exc), file=sys.stderr,
+                  flush=True)
+            if args.once:
+                return 1
+        if args.once:
+            return 0
+        try:
+            time.sleep(args.interval)
+        except KeyboardInterrupt:
+            return 0
 
 
 if __name__ == "__main__":
