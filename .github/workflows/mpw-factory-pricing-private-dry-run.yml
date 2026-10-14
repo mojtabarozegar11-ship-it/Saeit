@@ -69,8 +69,9 @@ jobs:
           test "$(id -un)" = "zomorod2"
           umask 077
           folder="$HOME/.mpw-factory-fair-pricing-qa"
-          test ! -e "$folder" && test ! -L "$folder"
-          mkdir -m 700 "$folder"
+          test ! -L "$folder"
+          if test ! -d "$folder"; then mkdir -m 700 "$folder"; fi
+          test -d "$folder" && chmod 700 "$folder"
           REMOTE
           tar -C "$GITHUB_WORKSPACE" -cf - \
             scripts/factory_fair_90pct_pricing.py \
