@@ -1,0 +1,111 @@
+name: VPS Factory Stage 4 Relay Diagnostics
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/vps-factory-stage4-relay-diagnostics.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: vps-factory-stage4-relay
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Configure pinned VPS and cPanel SSH relay
+        env:
+          VPS_KEY: \${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: \${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+          HOST_KNOWN: \${{ secrets.SAEIT_HOST_SSH_KNOWN_HOSTS }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY" && test -n "$HOST_KNOWN"
+          d="$RUNNER_TEMP/saeit-ssh"; mkdir -m 700 -p "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/host.key"
+          printf '%s\n' "$HOST_KNOWN" > "$d/host.known"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          scan="$(ssh-keyscan -T 10 -t rsa 178.239.147.150 2>/dev/null)"
+          test -n "$scan"
+          actual="$(printf '%s\n' "$scan" | ssh-keygen -lf - -E sha256 | awk '{print $2}' | sort -u)"
+          test "$actual" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          printf '%s\n' "$scan" > "$d/vps.known"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            StrictHostKeyChecking yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ServerAliveInterval 10
+            ServerAliveCountMax 1
+            ForwardAgent no
+            RequestTTY no
+            LogLevel ERROR
+          EOF
+          chmod 600 "$d/config"
+      - name: Verify the configured VPS relay and cPanel hop
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 30s ssh -F "$RUNNER_TEMP/saeit-ssh/config" saeit-vps 'set -eu; id -un; hostname; echo VPS_RELAY_OK'
+          timeout 35s ssh -F "$RUNNER_TEMP/saeit-ssh/config" saeit-host 'set -eu; id -un; hostname; test -d /home/zomorod2/Saeit-staging; echo CPANEL_HOP_OK'
+      - name: Inspect VPS factory Stage 4 configuration without exposing secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -F "$RUNNER_TEMP/saeit-ssh/config" saeit-vps 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          base="$HOME/factory-runtime"
+          ops="$base/operations"
+          app="$base/django-app"
+          log="$ops/vps-only-factory.log"
+          test -d "$base"
+          echo FACTORY_RUNTIME_PRESENT
+          if test -f "$ops/vps-only-loop.pid"; then
+            pid="$(cat "$ops/vps-only-loop.pid")"
+            echo "FACTORY_PID=$pid"
+            ps -p "$pid" -o args= || true
+          fi
+          if test -f "$log"; then
+            echo FACTORY_LOG_TAIL
+            tail -n 30 "$log"
+          fi
+          echo STAGE4_REFERENCES
+          grep -RInE 'stage.?4|stage_four|stage4|step.?4|STAGE_4|FACTORY_STAGE' "$ops" "$app/core" --include='*.sh' --include='*.py' 2>/dev/null | cut -d: -f1-2 | head -80 || true
+          if test -f "$app/var/factory/discovery/latest.json"; then
+            "$base/.venv/bin/python" - "$app/var/factory/discovery/latest.json" <<'PY'
+          import json,sys
+          data=json.load(open(sys.argv[1],encoding="utf-8"))
+          print("DISCOVERY_KEYS="+",".join(sorted(k for k in data if isinstance(k,str))[:40]))
+          for key in ("status","stage","opportunity_count","evidence_count","pending_evidence_count","waiting_for_evidence"):
+              value=data.get(key)
+              if isinstance(value,(str,int,float,bool)) or value is None:
+                  print(f"DISCOVERY_{key.upper()}={value}")
+          PY
+          else
+            echo FACTORY_DISCOVERY_FILE_MISSING
+          fi
+          REMOTE
+      - name: Remove runner SSH material
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/saeit-ssh"
