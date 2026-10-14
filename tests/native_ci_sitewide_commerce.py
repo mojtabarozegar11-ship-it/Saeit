@@ -7,6 +7,7 @@ from datetime import timedelta
 from decimal import Decimal
 from unittest.mock import Mock
 from django.contrib.auth import get_user_model
+from django.db import IntegrityError, transaction
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
@@ -253,7 +254,9 @@ class SitewideCommerceTests(TestCase):
         next_order,_=self.order([(self.member,1)])
         another=self.invoice(next_order)
         forged=self.good_receipt(another)
-        with self.assertRaises(Exception):
+        # Force a local savepoint for an expected duplicate-hash database
+        # rejection; never leave MySQL's outer TestCase transaction broken.
+        with self.assertRaises(IntegrityError), transaction.atomic():
             settle_order_invoice(another.pk,HASH_1,
                                  trusted_chain_verifier=lambda *_:forged)
         next_order.refresh_from_db()
