@@ -1,0 +1,96 @@
+name: Find SAMAN Chess Book in cPanel
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/mojplaywin-find-saman-book.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  find-book:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Configure pinned VPS to cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          [[ -n "$VPS_KEY" && -n "$HOST_KEY" ]] || { echo "Missing SSH key secret"; exit 1; }
+          WORK="$RUNNER_TEMP/mojplaywin-ssh"
+          install -d -m 700 "$WORK"
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          work = Path(os.environ["RUNNER_TEMP"]) / "mojplaywin-ssh"
+          for name, filename in (("VPS_KEY", "vps.key"), ("HOST_KEY", "host.key")):
+              value = os.environ[name].replace("\\n", "\n")
+              path = work / filename
+              path.write_text(value.rstrip("\n") + "\n", encoding="utf-8")
+              path.chmod(0o600)
+          PY
+          ssh-keygen -y -P "" -f "$WORK/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$WORK/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$WORK/vps.known" 2>/dev/null
+          VPS_FP="$(ssh-keygen -lf "$WORK/vps.known" -E sha256 | awk '{print $2}' | sort -u)"
+          [[ "$VPS_FP" == "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs" ]] || { echo "VPS host key pin mismatch"; exit 1; }
+          cat > "$WORK/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $WORK/vps.key
+            UserKnownHostsFile $WORK/vps.known
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ForwardAgent no
+          EOF
+          chmod 600 "$WORK/config"
+          timeout 30s ssh -F "$WORK/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$WORK/host.known" 2>/dev/null
+          HOST_FP="$(ssh-keygen -lf "$WORK/host.known" -E sha256 | awk '{print $2}' | sort -u)"
+          [[ "$HOST_FP" == "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04" ]] || { echo "cPanel host key pin mismatch"; exit 1; }
+          cat >> "$WORK/config" <<EOF
+          Host saeit-host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $WORK/host.key
+            UserKnownHostsFile $WORK/host.known
+            ProxyJump saeit-vps
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ForwardAgent no
+          EOF
+          chmod 600 "$WORK/config"
+          echo "Pinned cPanel relay is ready."
+
+      - name: Search cPanel home for the exact book PDF
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORK="$RUNNER_TEMP/mojplaywin-ssh"
+          timeout 90s ssh -F "$WORK/config" saeit-host 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          HOME_DIR="/home/zomorod2"
+          echo "Searching filenames only under the cPanel account home."
+          count=0
+          while IFS= read -r -d '' path; do
+            stat -c 'BOOK_FILE=%n|SIZE_BYTES=%s' "$path"
+            count=$((count + 1))
+          done < <(find "$HOME_DIR" -maxdepth 10 -type f -iname 'MojPlayWin_Science_and_Practice_of_Chess_Improvement*.pdf' -print0 2>/dev/null)
+          if [[ "$count" -eq 0 ]]; then
+            echo "BOOK_FILE_NOT_FOUND"
+          fi
+          REMOTE
+
+      - name: Remove temporary SSH credentials
+        if: always()
+        shell: bash
+        run: rm -rf -- "$RUNNER_TEMP/mojplaywin-ssh"
