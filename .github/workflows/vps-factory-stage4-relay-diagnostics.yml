@@ -154,8 +154,13 @@ jobs:
           from django.contrib.auth import get_user_model
           from django.apps import apps
           User=get_user_model()
-          qs=User.objects.filter(is_active=True,is_superuser=True)
           from django.conf import settings
+          print("AUTH_USER_MODEL="+str(settings.AUTH_USER_MODEL))
+          print("USER_MODEL_LABEL="+str(User._meta.label))
+          print("USER_USERNAME_FIELD="+str(User.USERNAME_FIELD))
+          print("USER_REQUIRED_FIELDS="+",".join(User.REQUIRED_FIELDS))
+          print("USER_MODEL_FIELDS="+",".join(field.name for field in User._meta.fields))
+          qs=User.objects.filter(is_active=True,is_superuser=True)
           print("USER_TOTAL_COUNT="+str(User.objects.count()))
           print("USER_ACTIVE_COUNT="+str(User.objects.filter(is_active=True).count()))
           print("USER_ACTIVE_STAFF_COUNT="+str(User.objects.filter(is_active=True,is_staff=True).count()))
