@@ -4,6 +4,7 @@ No payment endpoints or state changes are exposed. POST + CSRF required.
 """
 import json
 from django.contrib.auth.decorators import login_required
+from django.conf import settings
 from django.http import JsonResponse, HttpResponseForbidden
 from django.shortcuts import render
 from django.views.decorators.cache import never_cache
@@ -18,7 +19,12 @@ from .wallet_ownership import (
 
 def _is_owner(request):
     u = request.user
-    return bool(u.is_authenticated and u.is_active and u.is_superuser)
+    # Require one explicitly approved Django owner ID, not just any superuser.
+    owner_pk = getattr(settings, "MPW_WALLET_PROOF_OWNER_ID", None)
+    return bool(
+        u.is_authenticated and u.is_active and u.is_superuser
+        and type(owner_pk) is int and u.pk == owner_pk
+    )
 
 
 def _json_payload(request):
