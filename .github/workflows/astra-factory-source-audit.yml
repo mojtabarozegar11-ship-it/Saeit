@@ -163,6 +163,15 @@ jobs:
                         pathlib.Path(sys.argv[2])/"var/factory/discovery/hypotheses.json"):
                   print("ASTRA_INPUT_EXISTING="+str(p.relative_to(sys.argv[2]))+" IS_FILE="+str(p.is_file()))
           PY
+          python3 - "$HOME/factory-transfer-incoming/astra-factory-full-architecture.tar.gz" <<'PY'
+          import tarfile,sys,re
+          with tarfile.open(sys.argv[1],"r:gz") as tf:
+              lines=tf.extractfile("files/core/factory_queue.py").read().decode("utf-8","replace").splitlines()
+              for n,line in enumerate(lines,1):
+                  if 1<=n<=115:
+                      if re.search(r"PASSWORD|SECRET_KEY\s*=|API_KEY|PRIVATE KEY|CREDENTIAL",line,re.I):continue
+                      print("ASTRA_SEED_IMPL_%03d=%s"%(n,line[:170]))
+          PY
           echo ASTRA_DESIGN_COMPARISON_DONE
           echo ASTRA_AUDIT_READ_ONLY_COMPLETE
           REMOTE
