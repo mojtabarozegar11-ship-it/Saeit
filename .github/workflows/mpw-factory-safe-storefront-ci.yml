@@ -6,6 +6,7 @@ on:
       - core/commerce_views.py
       - core/factory_storefront.py
       - core/brand_store_integration.py
+      - core/templates/core/includes/mpw_verified_factory_cards.html
       - core/templates/core/mojplaywin_factory_store.html
       - core/templates/core/mojplaywin_store_base.html
       - tests/test_mpw_factory_safe_storefront.py
