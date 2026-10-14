@@ -65,7 +65,9 @@ def can_download_paid_native_order(order_id, customer_id):
     ).first()
     if invoice is None or not invoice.wallet_challenge_id:
         return False
-    if invoice.sender_signature_verified_at is None:
+    # Legacy entitlements retain their original proof integrity invariant;
+    # sitewide ownerless checkout grants are handled by mpw_commerce.
+    if invoice.merchant_ownership_verified_at is None or invoice.sender_signature_verified_at is None:
         return False
     if NETWORK_BY_ASSET.get(invoice.asset)!=invoice.network:
         return False
