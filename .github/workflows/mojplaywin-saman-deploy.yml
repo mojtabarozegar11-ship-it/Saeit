@@ -113,7 +113,7 @@ jobs:
           timeout 45s ssh -F "$WORK/config" saeit-host \
             'test -d /home/zomorod2/mojplaywin.com && test ! -L /home/zomorod2/mojplaywin.com && test -f /home/zomorod2/mojplaywin.com/passenger_wsgi.py && test -f /home/zomorod2/mojplaywin.com/.htaccess && grep -Fq "Saeit-staging" /home/zomorod2/mojplaywin.com/passenger_wsgi.py'
           timeout 20s ssh -F "$WORK/config" saeit-host "install -d -m 700 /home/zomorod2/.mojplaywin-saman-$GITHUB_RUN_ID"
-          timeout 20s ssh -F "$WORK/config" saeit-host 'for path in saman/learn saman/play saman/products saman/membership saman/partners saman/about; do target="/home/zomorod2/mojplaywin.com/$path"; if [[ -e "$target" ]]; then echo "DOCROOT_PATH_EXISTS=$target"; ls -ld "$target"; else echo "DOCROOT_PATH_CLEAR=$target"; fi; done'
+          timeout 20s ssh -F "$WORK/config" saeit-host 'for path in saman/sections; do target="/home/zomorod2/mojplaywin.com/$path"; if [[ -e "$target" ]]; then echo "DOCROOT_PATH_EXISTS=$target"; ls -ld "$target"; else echo "DOCROOT_PATH_CLEAR=$target"; fi; done'
 
       - name: Package SAMAN deployment files
         run: tar -cf "$RUNNER_TEMP/saman.tar" scripts/deploy_mojplaywin_saman.py scripts/saman_patch.py templates/saman/index.html
@@ -162,11 +162,19 @@ jobs:
           import django
           django.setup()
           from django.urls import resolve
-          section_urls = ["/saman/", "/saman/?section=learn", "/saman/?section=play", "/saman/?section=products", "/saman/?section=membership", "/saman/?section=partners", "/saman/?section=about"]
-          for url in section_urls:
-              match = resolve("/saman/")
-              print("SAMAN_RUNTIME_ROUTE=" + url + " -> " + match.func.__name__)
-              assert match.func.__name__ == "saman_page", url
+          routes = {
+              "/saman/": "saman_page",
+              "/saman/sections/learn/": "saman_section_page",
+              "/saman/sections/play/": "saman_section_page",
+              "/saman/sections/products/": "saman_section_page",
+              "/saman/sections/membership/": "saman_section_page",
+              "/saman/sections/partners/": "saman_section_page",
+              "/saman/sections/about/": "saman_section_page",
+          }
+          for path, expected in routes.items():
+              match = resolve(path)
+              print("SAMAN_RUNTIME_ROUTE=" + path + " -> " + match.func.__name__)
+              assert match.func.__name__ == expected, path
           PY
               exit 0
             fi
@@ -189,12 +197,12 @@ jobs:
           [[ "$status" == "200" ]] || { echo "Live SAMAN route returned HTTP $status"; exit 1; }
           routes=(
             "/saman/:The SAMAN collection"
-            "/saman/?section=learn:Learning that moves with you."
-            "/saman/?section=play:More than one way to play."
-            "/saman/?section=products:Useful resources, made to keep."
-            "/saman/?section=membership:More depth for committed learners."
-            "/saman/?section=partners:Good work grows through collaboration."
-            "/saman/?section=about:A broader home for curiosity."
+            "/saman/sections/learn/:Learning that moves with you."
+            "/saman/sections/play/:More than one way to play."
+            "/saman/sections/products/:Useful resources, made to keep."
+            "/saman/sections/membership/:More depth for committed learners."
+            "/saman/sections/partners/:Good work grows through collaboration."
+            "/saman/sections/about/:A broader home for curiosity."
           )
           for entry in "${routes[@]}"; do
             route="${entry%%:*}"
