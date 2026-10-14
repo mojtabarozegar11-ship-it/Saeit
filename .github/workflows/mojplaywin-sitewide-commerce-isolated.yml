@@ -1,0 +1,34 @@
+name: MojPlayWin sitewide commerce isolated Django tests
+on:
+  push:
+    branches: [release/mojplaywin-chess-product-20261014]
+    paths:
+      - '.github/workflows/mojplaywin-sitewide-commerce-isolated.yml'
+      - 'mpw_commerce/**'
+      - 'tests/native_ci_sitewide_commerce.py'
+      - 'tests/native_checkout_settings.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  sitewide-commerce:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install isolated Django test dependencies (not production)
+        shell: bash
+        run: python3 -m pip install --disable-pip-version-check -q 'Django>=5.2,<6' 'eth-account>=0.13,<0.14'
+      - name: Validate independent sitewide models and multi-product automatic payment
+        shell: bash
+        env:
+          DJANGO_SETTINGS_MODULE: tests.native_checkout_settings
+        run: |
+          set -euo pipefail
+          python3 -m django check
+          python3 -m django makemigrations mpw_commerce --check --dry-run
+          python3 -m django test tests.native_ci_sitewide_commerce --verbosity 2
+          echo MPW_COMMERCE_MULTI_PRODUCT_TESTS_PASSED
+          echo MPW_PRODUCTION_SETTINGS_DB_AND_WEBSITE_UNCHANGED
