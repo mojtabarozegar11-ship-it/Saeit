@@ -90,11 +90,9 @@ class PurchaseWatchEventTests(unittest.TestCase):
                                       KEY,home,now_epoch=NOW)
             self.assertEqual(out["mode"],"ETH")
 
-    def test_expired_signal_rejected(self):
-        with tempfile.TemporaryDirectory() as home:
-            body,sig=self.message(expires=NOW-10)
-            with self.assertRaises(EventRejected):
-                handle_verified_event(body,sig,KEY,home,now_epoch=NOW)
+    def test_expired_signal_rejected_at_source_before_network(self):
+        with self.assertRaises(EventRejected):
+            self.message(expires=NOW-10)
 
     def test_no_ai_or_network_functions_in_signal_receipt(self):
         with tempfile.TemporaryDirectory() as home:
