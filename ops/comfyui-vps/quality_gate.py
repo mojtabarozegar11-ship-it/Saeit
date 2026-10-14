@@ -36,6 +36,12 @@ if factory_pid.is_file():
         checks["factory_loop_running"] = True
     except (ValueError, ProcessLookupError, PermissionError, OSError):
         pass
+import platform
+import shutil
+checks["cpu_arch"] = platform.machine()
+checks["libc"] = platform.libc_ver()
+checks["gxx_available"] = shutil.which("g++") is not None
+checks["cmake_available"] = shutil.which("cmake") is not None
 checks["cgroup_v2"] = Path("/sys/fs/cgroup/cgroup.controllers").is_file()
 checks["user_cgroup_delegation"] = False
 cgroup = Path("/proc/self/cgroup")
