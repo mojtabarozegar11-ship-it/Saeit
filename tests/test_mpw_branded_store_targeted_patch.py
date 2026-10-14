@@ -94,7 +94,11 @@ class BrandStorePatchSafetyTests(unittest.TestCase):
             "brand_for_request": lambda req: SimpleNamespace(code=brand),
             "Product": Model, "render":render,
         }
-        exec(compile(code,"brand_views_fixture.py","exec"),ns)
+        node=next(x for x in ast.parse(code).body if isinstance(x,ast.FunctionDef) and x.name=="branded_store")
+        # The installed brand imports do not exist in isolated CI: execute the
+        # function alone against controlled mocks, not the unrelated imports.
+        isolated=ast.get_source_segment(code,node)
+        exec(compile(isolated,"brand_views_fixture.py","exec"),ns)
         return ns["branded_store"],ns["Http404"]
 
     def test_patch_preserves_existing_html_while_inserting_safe_section(self):
