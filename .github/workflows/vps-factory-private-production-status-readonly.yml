@@ -1,0 +1,64 @@
+name: VPS Factory private product cycle status read-only
+on:
+  push:
+    branches: [audit/vps-factory-runtime-evidence-20261014]
+    paths: [.github/workflows/vps-factory-private-production-status-readonly.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  ensure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Inspect local autonomous factory cycle status and publication gate
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/vps-factory"; mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -i "$d/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o BatchMode=yes githubops@178.239.147.150 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, time, subprocess
+          from pathlib import Path
+          base=Path.home()/"factory-runtime"
+          root=base/"private/autonomous-product-cycle"
+          state=root/"production-state.json"
+          print("FACTORY_PRIVATE_CYCLE_STATE_PRESENT="+str(state.is_file()))
+          if state.is_file() and not state.is_symlink():
+              data=json.loads(state.read_text())
+              for name in ("schema_version","mode","depends_on_orders","api_usage",
+                           "product_candidates_processed","research_dossiers_updated",
+                           "built_product_count","artifact_qa_passed",
+                           "publishable_product_count","publication_locked_until_owner_approval",
+                           "store_distribution_state"):
+                  val=data.get(name)
+                  if isinstance(val,(str,int,float,bool)) or val is None:
+                      print("FACTORY_PRIVATE_CYCLE_"+name.upper()+"="+str(val))
+              print("FACTORY_PRIVATE_CYCLE_STATE_AGE_SECONDS="+str(int(time.time()-state.stat().st_mtime)))
+          products=root/"digital-products"
+          print("FACTORY_PRIVATE_DIGITAL_PRODUCTS_DIR_PRESENT="+str(products.is_dir()))
+          if products.is_dir():
+              for recipe in ("farm_enterprise_economics","water_budget_economics"):
+                  d=products/recipe
+                  print("FACTORY_PRIVATE_RECIPE_"+recipe.upper()+"_DIR_PRESENT="+str(d.is_dir()))
+                  manifest=d/"manufacturing_manifest.json"
+                  print("FACTORY_PRIVATE_RECIPE_"+recipe.upper()+"_MANIFEST_PRESENT="+str(manifest.is_file()))
+          scan=subprocess.run(["crontab","-l"],capture_output=True,text=True,timeout=8)
+          if scan.returncode==0:
+              print("FACTORY_PRIVATE_CYCLE_CRON_PRESENT="+str("SAEIT_AUTONOMOUS_PRODUCTS_V2" in scan.stdout))
+              print("FACTORY_PRIVATE_STORE_SYNC_CRON_PRESENT="+str("SAEIT_FACTORY_STORE_SYNC" in scan.stdout))
+              print("FACTORY_PRIVATE_LOOP_WATCHDOG_PRESENT="+str("SAEIT_FACTORY_AUTOSTART" in scan.stdout))
+          else:
+              print("FACTORY_PRIVATE_CRON_READABLE=False")
+          print("FACTORY_PRIVATE_PRODUCTS_READ_ONLY_AUDIT=True")
+          PY
+          REMOTE
