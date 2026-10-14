@@ -108,13 +108,18 @@ jobs:
           PY
           )"
           if test -n "$mojplay_app"; then
-            inspect_admin MOJPLAYWIN "$mojplay_app" "$mojplay_app/.venv/bin/python"
+            inspect_admin MOJPLAYWIN "$mojplay_app" /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python
           else
             echo "MOJPLAYWIN_APP_ROOT=unresolved"
           fi
           personal=/home/zomorod2/mojtaba_personal/mojtaba_roozegar_personal_v17
           personal_python=/home/zomorod2/mojtaba_personal/.venv_personal_test/bin/python
           inspect_admin MOJTABA_PERSONAL "$personal" "$personal_python"
+          if test -x "$personal_python"; then
+            cd "$personal"
+            "$personal_python" manage.py shell -c 'from django.urls import resolve, Resolver404; paths=["/admin/login/","/staff/login/","/personnel/login/","/login/","/mojtaba.roozegar/admin/login/"]; [(lambda p: print("PERSONAL_RESOLVE",p,"=>",resolve(p).view_name,resolve(p).route) if not isinstance((lambda: resolve(p))(), Resolver404) else None)(p) for p in []]' 2>&1 || true
+            "$personal_python" manage.py shell -c 'from django.urls import resolve, Resolver404; paths=["/admin/login/","/staff/login/","/personnel/login/","/login/","/mojtaba.roozegar/admin/login/"]; exec("for p in paths:\\n try:\\n  r=resolve(p); print(\"PERSONAL_RESOLVE\",p,\"=>\",r.view_name,r.route)\\n except Resolver404: print(\"PERSONAL_RESOLVE\",p,\"=> NOT_FOUND\")")' 2>&1 || true
+          fi
           for f in /home/zomorod2/mojplaywin.com/.htaccess /home/zomorod2/mojplaywin.com/mojtaba.roozegar/.htaccess; do
             if test -f "$f"; then
               echo "PERSONAL_MOUNT_CONFIG=$f"
