@@ -10,7 +10,7 @@ from datetime import timedelta
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
-from django.test import Client, TestCase
+from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 from eth_account import Account
@@ -59,6 +59,9 @@ class MerchantWalletProofTests(TestCase):
         self.eth = Account.create()
         self.tron_private = keys.PrivateKey(b"\x21" * 32)
         self.tron_address = tron_base58_for_test(self.tron_private)
+        gate = override_settings(MPW_WALLET_PROOF_OWNER_ID=self.owner.pk)
+        gate.enable()
+        self.addCleanup(gate.disable)
 
     def test_fake_ethereum_signer_controls_only_its_own_address(self):
         with patch.dict(MERCHANT_ADDRESSES, {"ETH":self.eth.address}):
@@ -170,6 +173,28 @@ class MerchantWalletProofTests(TestCase):
         self.assertEqual(response.json()["address"],self.eth.address)
         self.assertIn("Nonce: ",response.json()["message"])
         self.assertFalse(response.json().get("checkout_activated",False))
+
+    def test_another_superuser_cannot_access_selected_owner_page(self):
+        another=get_user_model().objects.create_superuser(
+            username="another-administrator",password="ci-only-password",
+            email="other@example.test",
+        )
+        self.client.force_login(another)
+        self.assertEqual(
+            self.client.get(reverse("mpw_wallet_proof:page")).status_code,403
+        )
+        self.assertEqual(
+            self.client.post(reverse("mpw_wallet_proof:challenge"),
+                data='{"asset":"ETH"}',content_type="application/json").status_code,
+            403,
+        )
+
+    def test_superuser_denied_without_designated_owner_id(self):
+        self.client.force_login(self.owner)
+        with override_settings(MPW_WALLET_PROOF_OWNER_ID=None):
+            self.assertEqual(
+                self.client.get(reverse("mpw_wallet_proof:page")).status_code,403
+            )
 
     def test_staff_non_superuser_cannot_issue_any_challenge(self):
         self.stranger.is_staff=True
