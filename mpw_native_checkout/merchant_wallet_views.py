@@ -22,7 +22,10 @@ def _is_owner(request):
     # Require one explicitly approved Django owner ID, not just any superuser.
     owner_pk = getattr(settings, "MPW_WALLET_PROOF_OWNER_ID", None)
     return bool(
-        request.is_secure() and u.is_authenticated and u.is_active and u.is_superuser
+        request.is_secure()
+        and request.get_host().split(":")[0].lower()
+            in ("mojplaywin.com", "www.mojplaywin.com")
+        and u.is_authenticated and u.is_active and u.is_superuser
         and type(owner_pk) is int and u.pk == owner_pk
     )
 
