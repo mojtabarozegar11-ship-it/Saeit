@@ -16,9 +16,8 @@ def can_access_purchased_digital_item(item_id,customer_id):
                   order__status="paid").first())
     if item is None:
         return False
-    if (not item.product.active or
-        item.product.metadata.get("mpw_commerce",{}).get("fulfillment")!="digital"):
-        return False
+    # Existing paid buyer rights are keyed to the durable grant; unpublishing
+    # a product afterwards does not silently revoke an already-paid download.
     try:
         invoice=item.order.mpw_commerce_invoice
         grant=item.mpw_fulfillment
