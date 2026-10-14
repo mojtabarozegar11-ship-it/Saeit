@@ -1,0 +1,82 @@
+name: Zomorod gallery six report editorial correction
+on:
+  push:
+    branches: [ops/zomorod-gallery-publish-20261014]
+    paths:
+      - .github/workflows/zomorod-gallery-editorial-revision.yml
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-gallery-20261014
+  cancel-in-progress: false
+jobs:
+  correct_existing_six_reports:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify narrowly scoped correction script
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f ops_assets/revise_zomorod_gallery_copy_20261014.py
+          python3 -m py_compile ops_assets/revise_zomorod_gallery_copy_20261014.py
+          grep -Fq 'EDITORIAL_UPDATE_SUCCESS' ops_assets/revise_zomorod_gallery_copy_20261014.py
+      - name: Update only six gallery report texts through existing SSH relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zmg-ssh"; mkdir -p "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          python3 - "$d/host.key" <<'PY'
+          import pathlib,sys
+          p=pathlib.Path(sys.argv[1]); t=p.read_text().replace('\r\n','\n').strip()
+          p.write_text(t.replace('\\n','\n')+'\n')
+          PY
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host saeit-host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            LogLevel ERROR
+          EOF
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          stage=/home/zomorod2/Saeit-staging/gallery_publish_20261014
+          timeout 30s ssh -F "$d/config" saeit-host "test -d '$stage' && test -f /home/zomorod2/Saeit/manage.py && test -f /home/zomorod2/Saeit/moj/gallery_reports_20261014.py"
+          timeout 70s ssh -F "$d/config" saeit-host "cat > '$stage/editorial_revision.py'" < ops_assets/revise_zomorod_gallery_copy_20261014.py
+          timeout 75s ssh -F "$d/config" saeit-host "cd /home/zomorod2/Saeit && .venv/bin/python '$stage/editorial_revision.py' --preflight"
+          timeout 115s ssh -F "$d/config" saeit-host "cd /home/zomorod2/Saeit && flock -n '$stage/editorial_revision.lock' .venv/bin/python '$stage/editorial_revision.py' --apply"
+          echo "ZOMOROD_SIX_EDITORIAL_REPORTS_UPDATED_WITHOUT_PHOTO_OR_SITE_CHANGE"
