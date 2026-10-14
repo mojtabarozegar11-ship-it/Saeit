@@ -1,0 +1,48 @@
+name: MojPlayWin public storefront release verification
+on:
+  push:
+    branches: [qa/mpw-factory-safe-storefront-20261014]
+    paths:
+      - .github/workflows/mpw-factory-public-store-verification.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  public-only:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Verify public website and downloadable free toolkit without using credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$(mktemp -d)"
+          trap 'rm -rf "$work"' EXIT
+          for route in "store|/store/" "farm|/factory-releases/farm-enterprise-economics-v1/" "zip|/factory-releases/farm-enterprise-economics-v1/Farm_Enterprise_Economics_Toolkit_Free_v1.zip" "home|/"; do
+            label="${route%%|*}"
+            path="${route#*|}"
+            status=$(curl -L --silent --show-error --connect-timeout 8 --max-time 25 --output "$work/$label" --write-out '%{http_code}' "https://mojplaywin.com$path" || true)
+            echo "MPW_PUBLIC_${label^^}_HTTP_STATUS=$status"
+            if [[ -f "$work/$label" ]]; then
+              echo "MPW_PUBLIC_${label^^}_BYTES=$(wc -c < "$work/$label")"
+            fi
+          done
+          python3 - "$work" <<'PY'
+          from pathlib import Path
+          import sys,hashlib,zipfile,re
+          d=Path(sys.argv[1])
+          store=(d/"store").read_text("utf8","replace") if (d/"store").exists() else ""
+          farm=(d/"farm").read_text("utf8","replace") if (d/"farm").exists() else ""
+          zip_file=d/"zip"
+          print("MPW_PUBLIC_STORE_HAS_FARM_LISTING="+str("Farm Enterprise Economics Toolkit" in store))
+          print("MPW_PUBLIC_STORE_HAS_FACTORY_SECTION="+str("id=\"mpw-verified-factory\"" in store))
+          print("MPW_PUBLIC_STORE_HAS_WATER_BUDGET="+str("Water Budget Economics" in store))
+          print("MPW_PUBLIC_FARM_FREE_PAGE_HAS_TITLE="+str("Farm Enterprise Economics Toolkit" in farm))
+          if zip_file.exists():
+              digest=hashlib.sha256(zip_file.read_bytes()).hexdigest()
+              print("MPW_PUBLIC_FREE_ZIP_SHA256_MATCHES_VERIFIED="+str(digest=="06fdb7667cde55279a4f97d0adfa35ca9d2e7155f6740ff3b2588816300d1d13"))
+              print("MPW_PUBLIC_FREE_ZIP_VALID="+str(zipfile.is_zipfile(zip_file)))
+          else:
+              print("MPW_PUBLIC_FREE_ZIP_AVAILABLE=False")
+          print("MPW_PUBLIC_SITE_CHECK_READ_ONLY=True")
+          PY
