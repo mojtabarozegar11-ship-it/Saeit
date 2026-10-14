@@ -172,12 +172,12 @@ class EventNotificationTests(TestCase):
             on_native_invoice_change(NativeInvoice,inv,created=True)
             notify.assert_called_once_with(inv,"invoice_open")
 
-    def test_created_without_merchant_proof_still_wakes_automatically(self):
+    def test_deprecated_module_unverified_wallet_never_wakes_watcher(self):
         inv=self.invoice()
         inv.merchant_ownership_verified_at=None
         with patch("mpw_native_checkout.signals.notify_after_commit") as notify:
             on_native_invoice_change(NativeInvoice,inv,created=True)
-            notify.assert_called_once_with(inv,"invoice_open")
+            notify.assert_not_called()
 
     def test_missing_buyer_sender_proof_does_not_wake(self):
         inv=self.invoice()
