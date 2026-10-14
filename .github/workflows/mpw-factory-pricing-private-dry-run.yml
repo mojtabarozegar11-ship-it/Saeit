@@ -82,6 +82,7 @@ jobs:
           set -euo pipefail
           test "$(id -un)" = zomorod2
           export DJANGO_SETTINGS_MODULE=config.settings
+          export PYTHONPATH="$HOME/Saeit-staging"
           export PYTHONDONTWRITEBYTECODE=1
           cd "$HOME/Saeit-staging"
           "$HOME/virtualenv/Saeit-staging/3.11/bin/python" \
