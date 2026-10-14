@@ -69,11 +69,11 @@ def build_direct_invoice(
     *, order_id: int, customer_id: int, asset: str, rate: SpotRate,
     expected_sender: str, sender_proof_verified: bool,
     now_epoch: int, invoice_dust: int,
-    amount_is_unique: Callable[[str, str, int], bool],
+    reserve_amount: Callable[[str, str, int], bool],
 ) -> DirectInvoice:
     """Construct quote only after sender ownership proof and atomic uniqueness check.
 
-    amount_is_unique MUST be backed by an order reservation under a database lock.
+    reserve_amount MUST be backed by an order reservation under a database lock.
     A non-atomic callback is NOT suitable for production. The same quote must be
     persisted before any wallet payment instructions are displayed.
     """
@@ -115,7 +115,7 @@ def build_direct_invoice(
     if amount <= 0:
         raise InvoiceError("Invalid crypto amount")
     # No fallback to an unchecked invoice amount if the reservation fails.
-    if not callable(amount_is_unique) or amount_is_unique(cfg["chain"], cfg["recipient"], amount) is not True:
+    if not callable(reserve_amount) or reserve_amount(cfg["chain"], cfg["recipient"], amount, order_id) is not True:
         raise InvoiceError("Invoice amount could not be reserved uniquely")
 
     return DirectInvoice(
