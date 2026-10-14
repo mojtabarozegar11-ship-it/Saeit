@@ -131,3 +131,5 @@ jobs:
             report_factory "$current_pid"
           fi
           REMOTE
+
+# Operator-requested safe continuity verification on 2026-10-14; VPS-local watchdog remains authoritative.
