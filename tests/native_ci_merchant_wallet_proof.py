@@ -160,7 +160,7 @@ class MerchantWalletProofTests(TestCase):
         self.client.force_login(self.stranger)
         self.assertEqual(self.client.get(page).status_code,403)
         self.client.force_login(self.owner)
-        result=self.client.get(page)
+        result=self.client.get(page,secure=True)
         self.assertEqual(result.status_code,200)
         self.assertContains(result,"هیچ پولی منتقل")
         self.assertContains(result,"TRON (TRX)")
@@ -169,7 +169,7 @@ class MerchantWalletProofTests(TestCase):
         self.client.force_login(self.owner)
         with patch.dict(MERCHANT_ADDRESSES, {"ETH":self.eth.address}):
             response=self.client.post(reverse("mpw_wallet_proof:challenge"),
-                data=json.dumps({"asset":"ETH"}),content_type="application/json")
+                data=json.dumps({"asset":"ETH"}),content_type="application/json",secure=True)
         self.assertEqual(response.status_code,200)
         self.assertEqual(response.json()["address"],self.eth.address)
         self.assertIn("Nonce: ",response.json()["message"])
@@ -186,7 +186,7 @@ class MerchantWalletProofTests(TestCase):
         )
         self.assertEqual(
             self.client.post(reverse("mpw_wallet_proof:challenge"),
-                data='{"asset":"ETH"}',content_type="application/json").status_code,
+                data='{"asset":"ETH"}',content_type="application/json",secure=True).status_code,
             403,
         )
 
@@ -203,7 +203,7 @@ class MerchantWalletProofTests(TestCase):
         self.client.force_login(self.stranger)
         self.assertEqual(
             self.client.post(reverse("mpw_wallet_proof:challenge"),
-                data='{"asset":"ETH"}',content_type="application/json").status_code,403
+                data='{"asset":"ETH"}',content_type="application/json",secure=True).status_code,403
         )
 
     def test_wrong_http_method_not_allowed(self):
@@ -227,5 +227,5 @@ class MerchantWalletProofTests(TestCase):
         c.defaults["wsgi.url_scheme"] = "https"
         c.force_login(self.owner)
         response=c.post(reverse("mpw_wallet_proof:challenge"),
-                 data='{"asset":"ETH"}',content_type="application/json")
+                 data='{"asset":"ETH"}',content_type="application/json",secure=True)
         self.assertEqual(response.status_code,403)
