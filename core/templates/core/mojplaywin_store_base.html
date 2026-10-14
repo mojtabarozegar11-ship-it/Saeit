@@ -1,0 +1,37 @@
+{% load static %}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark">
+<meta name="description" content="{% block meta_description %}MojPlayWin — digital marketplace for tested products and tools.{% endblock %}">
+<title>{% block title %}MojPlayWin Store{% endblock %}</title>
+<style>
+:root{color-scheme:dark;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#14221b;color:#f6eeda}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;min-height:100vh;background:radial-gradient(ellipse at 80% 0%,#314832 0%,#14221b 68%);line-height:1.5}
+a{color:inherit}
+.skip-to-main{position:absolute;left:-1000px;top:0;padding:12px;background:#edd39b;color:#102418}
+.skip-to-main:focus{left:12px;z-index:10}
+.site-nav{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;max-width:1116px;margin:auto;padding:21px 20px;border-bottom:1px solid #9d8250}
+.site-brand{font-weight:900;letter-spacing:.03em;font-size:clamp(20px,4vw,27px);text-decoration:none;color:#f4dba9}
+.site-links{display:flex;align-items:center;gap:24px;font-weight:600}
+.site-links a{text-decoration:none}
+.site-links a:hover,.site-links a:focus{text-decoration:underline;text-underline-offset:6px}
+.site-footer{max-width:1116px;margin:32px auto 0;padding:24px 20px 36px;border-top:1px solid #846d45;color:#dacaa9;font-size:13px}
+.site-footer p{max-width:70ch}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+</style>
+{% block extra_css %}{% endblock %}
+</head>
+<body class="{% block body_class %}mpw-page{% endblock %}">
+<a href="#main-content" class="skip-to-main">Skip to content</a>
+<header class="site-nav" aria-label="Main navigation">
+  <a class="site-brand" href="/">MojPlayWin</a>
+  <nav class="site-links" aria-label="Store navigation"><a href="/">Home</a><a href="/store/" aria-current="page">Store</a></nav>
+</header>
+<main id="main-content" tabindex="-1">{% block content %}{% endblock %}</main>
+<footer class="site-footer"><strong>MojPlayWin</strong><p>Digital tools and learning resources. Verified source integrity does not imply a guarantee of commercial outcomes. Availability and secure checkout depend on product release checks.</p></footer>
+</body>
+</html>
