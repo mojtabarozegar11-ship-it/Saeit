@@ -1,0 +1,166 @@
+name: Saeit Factory Release Gate Read-only Audit
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/vps-factory-release-gate-audit.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: saeit-factory-store-preflight
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Prepare pinned SSH identities
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/factory-store-preflight"
+          install -d -m 700 "$d"
+          for item in VPS_KEY HOST_KEY; do
+            key="$d/${item}.key"
+            printf '%s' "${!item}" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$key"
+            chmod 600 "$key"
+            ssh-keygen -y -P '' -f "$key" >/dev/null
+          done
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -i "$d/VPS_KEY.key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/vps.known" -o BatchMode=yes githubops@178.239.147.150 'ssh-keyscan -T 10 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/VPS_KEY.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/HOST_KEY.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 12
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+      - name: Inspect factory product handoff source
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -F "$RUNNER_TEMP/factory-store-preflight/config" saeit-vps 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          base="$HOME/factory-runtime"
+          echo VPS_USER="$(id -un)"
+          test -s "$base/private/autonomous-product-cycle/production-state.json"
+          test -s "$base/private/autonomous-product-cycle/digital-products/farm_enterprise_economics/farm_enterprise_economics-internal-qa.zip"
+          echo VPS_MANUFACTURED_ZIP_PRESENT
+          stat -c 'VPS_ZIP_BYTES=%s PERMISSIONS=%a' "$base/private/autonomous-product-cycle/digital-products/farm_enterprise_economics/farm_enterprise_economics-internal-qa.zip"
+          python3 - "$base/private/autonomous-product-cycle/production-state.json" <<'PY'
+          import json,sys
+          j=json.load(open(sys.argv[1]))
+          for k in ('mode','depends_on_orders','built_product_count','artifact_qa_passed','publishable_product_count','store_distribution_state'):
+            print('VPS_FACTORY_'+k.upper()+'='+str(j.get(k)))
+          PY
+          REMOTE
+      - name: Inspect cPanel private staging and storefront runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -F "$RUNNER_TEMP/factory-store-preflight/config" saeit-cpanel 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          echo CPANEL_USER="$(id -un)"
+          echo CPANEL_HOME="$HOME"
+          for path in /home/zomorod2/Saeit-staging /home/zomorod2/zomorodmelal.ir /home/zomorod2/mojplaywin.com /home/zomorod2/mojtabarozegar.ir /home/zomorod2/public_html; do
+            if test -d "$path" && test ! -L "$path"; then
+              echo CPANEL_DIR_PRESENT="$(basename "$path")"
+              if test -f "$path/manage.py"; then echo CPANEL_DJANGO_SOURCE="$(basename "$path")"; fi
+              if test -f "$path/passenger_wsgi.py"; then echo CPANEL_PASSENGER_SOURCE="$(basename "$path")"; fi
+              if test -d "$path/.venv"; then echo CPANEL_LOCAL_VENV="$(basename "$path")"; fi
+            else
+              echo CPANEL_DIR_MISSING="$(basename "$path")"
+            fi
+          done
+          test -d /home/zomorod2/Saeit-staging
+          test -w /home/zomorod2/Saeit-staging
+          echo CPANEL_STAGING_WRITABLE
+          if test -f /home/zomorod2/Saeit-staging/core/models.py; then
+            grep -q '^class Product(' /home/zomorod2/Saeit-staging/core/models.py && echo CPANEL_DJANGO_PRODUCT_MODEL_PRESENT
+          fi
+          command -v python3 >/dev/null && python3 --version
+          df -h "$HOME" | tail -n 1 | awk '{print "CPANEL_DISK_FREE=" $4}'
+          REMOTE
+      - name: Inspect factory release gate and approval requirements on live Django
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -F "$RUNNER_TEMP/factory-store-preflight/config" saeit-cpanel 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          cd "$HOME/Saeit-staging"
+          python3 - <<'PY'
+          from pathlib import Path
+          import ast
+          file=Path("core/models.py")
+          raw=file.read_text(encoding="utf-8")
+          lines=raw.splitlines()
+          tree=ast.parse(raw)
+          wanted=("FactoryReleaseGate","FactoryArtifact","FactoryManifest","FactoryRun","ApprovalRequest","Product")
+          for node in tree.body:
+              if isinstance(node,ast.ClassDef) and node.name in wanted:
+                  print("LIVE_MODEL_NAME="+node.name)
+                  for stmt in node.body:
+                      if isinstance(stmt,(ast.FunctionDef,ast.AsyncFunctionDef)) and stmt.name in ("save","clean","full_clean","activate","validate","approve"):
+                          print("LIVE_MODEL_METHOD="+node.name+"."+stmt.name)
+                          start=stmt.lineno
+                          stop=min(stmt.end_lineno,start+95)
+                          for lineno in range(start,stop+1):
+                              print("MODEL_SOURCE_"+node.name+"_"+str(lineno)+"="+lines[lineno-1][:180])
+          for path in Path("core").rglob("*.py"):
+              try: source=path.read_text(encoding="utf-8")
+              except (OSError,UnicodeDecodeError): continue
+              if ("FactoryReleaseGate.objects.create" in source or
+                  "FactoryReleaseGate.objects.get_or_create" in source or
+                  "release_gate" in path.name.lower()):
+                  print("RELEASE_GATE_IMPLEMENTATION_FILE="+str(path)[:200])
+          PY
+          py="$HOME/virtualenv/Saeit-staging/3.11/bin/python"
+          test -x "$py"
+          DJANGO_SETTINGS_MODULE=config.settings "$py" - <<'PY'
+          import django
+          django.setup()
+          from django.apps import apps
+          from django.db.models import Count
+          for name in ("FactoryReleaseGate","FactoryArtifact","FactoryManifest","FactoryRun","Product","ApprovalRequest"):
+              try:m=apps.get_model("core",name)
+              except LookupError:continue
+              print("LIVE_GATE_SCHEMA_"+name+"="+",".join(f.name+":"+f.get_internal_type() for f in m._meta.fields))
+              try:print("LIVE_GATE_RECORD_COUNT_"+name+"="+str(m.objects.count()))
+              except Exception as e:print("LIVE_GATE_QUERY_ERROR_"+name+"="+type(e).__name__)
+          P=apps.get_model("core","Product")
+          found=P.objects.filter(metadata__factory_recipe="farm_enterprise_economics",metadata__factory_origin="saeit_vps")
+          print("TARGET_PRODUCT_RECORDS="+str(found.count()))
+          for p in found[:3]:
+              print("TARGET_PRODUCT_ID="+str(p.pk))
+              print("TARGET_PRODUCT_ACTIVE="+str(p.active))
+              print("TARGET_PRODUCT_ARTICLE_ID_PRESENT="+str(p.knowledge_article_id is not None))
+          K=apps.get_model("core","KnowledgeArticle")
+          print("TARGET_KNOWLEDGE_SLUG_EXISTS="+str(K.objects.filter(slug="farm-enterprise-economics-toolkit-free-v1").exists()))
+          PY
+          echo RELEASE_GATE_READ_ONLY_AUDIT_COMPLETE
+          REMOTE
+      - name: Clean temporary SSH keys
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/factory-store-preflight"
