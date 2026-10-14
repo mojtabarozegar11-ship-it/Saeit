@@ -7,7 +7,7 @@ on:
       - ".github/workflows/mojplaywin-saman-deploy.yml"
       - "scripts/deploy_mojplaywin_saman.py"
       - "scripts/saman_patch.py"
-      - "templates/saman/index.html"
+      - "templates/saman/**"
 
 permissions:
   contents: read
@@ -33,7 +33,26 @@ jobs:
           missing = [item for item in required if item not in html]
           if missing:
               raise SystemExit(f"SAMAN page missing required content: {missing}")
-          print("SAMAN English page checks passed.")
+          titles = {
+              "learn": "Learning that moves with you.",
+              "play": "More than one way to play.",
+              "products": "Useful resources, made to keep.",
+              "membership": "More depth for committed learners.",
+              "partners": "Good work grows through collaboration.",
+              "about": "A broader home for curiosity.",
+          }
+          seen_titles = set()
+          for section, marker in titles.items():
+              page = Path(f"templates/saman/{section}.html").read_text(encoding="utf-8")
+              assert marker in page, section
+              assert f'data-saman-page="{section}"' in page, section
+              assert f"<title>SAMAN" in page, section
+              assert 'aria-current="page"' in page, section
+              assert "<html lang=\"en\">" in page, section
+              title = page.split("<title>",1)[1].split("</title>",1)[0]
+              assert title not in seen_titles, section
+              seen_titles.add(title)
+          print("Seven independent SAMAN templates and unique page titles verified.")
           PY
 
       - name: Configure pinned SSH relay
@@ -117,7 +136,7 @@ jobs:
           timeout 20s ssh -F "$WORK/config" saeit-host "grep -nE 'RewriteCond|RewriteRule|Passenger' /home/zomorod2/mojplaywin.com/.htaccess || true"
 
       - name: Package SAMAN deployment files
-        run: tar -cf "$RUNNER_TEMP/saman.tar" scripts/deploy_mojplaywin_saman.py scripts/saman_patch.py templates/saman/index.html
+        run: tar -cf "$RUNNER_TEMP/saman.tar" scripts/deploy_mojplaywin_saman.py scripts/saman_patch.py templates/saman/index.html templates/saman/learn.html templates/saman/play.html templates/saman/products.html templates/saman/membership.html templates/saman/partners.html templates/saman/about.html
 
       - name: Upload and unpack deployment package
         shell: bash
@@ -200,6 +219,11 @@ jobs:
                   if response.status_code != 200 or marker.encode() not in response.content:
                       print(response.content[:1000].decode("utf-8", errors="replace"))
                       raise AssertionError(path)
+                  if path != "/saman/":
+                      section = path.strip("/").split("/")[-1].removesuffix("-saman")
+                      expected = f'data-saman-page="{section}"'.encode()
+                      assert expected in response.content, path
+                      assert b"data-saman-page=" not in client.get("/saman/", secure=True).content
           PY
               exit 0
             fi
@@ -259,6 +283,10 @@ jobs:
           marker = sys.argv[2]
           if "<title>SAMAN" not in html or marker not in html:
               raise SystemExit(f"Live SAMAN content verification failed: {marker}")
+          if sys.argv[2] != "The SAMAN collection":
+              slug = marker_to_slug = {"Learning that moves with you.":"learn", "More than one way to play.":"play", "Useful resources, made to keep.":"products", "More depth for committed learners.":"membership", "Good work grows through collaboration.":"partners", "A broader home for curiosity.":"about"}[marker]
+              if f'data-saman-page="{slug}"' not in html:
+                  raise SystemExit(f"Live SAMAN still uses shared template: {slug}")
           PY
             echo "Verified https://mojplaywin.com$route"
           done
