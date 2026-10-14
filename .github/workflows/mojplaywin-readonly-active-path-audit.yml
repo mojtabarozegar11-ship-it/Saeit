@@ -1,0 +1,112 @@
+name: MojPlayWin read-only active code and URL namespace inventory
+on:
+  push:
+    branches: [audit/mpw-cpanel-code-paths-20261014]
+    paths:
+      - .github/workflows/mojplaywin-readonly-active-path-audit.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Inventory cPanel application paths without writing to site or database
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/mpw-readonly-host"
+          mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          python3 - "$d/vps.key" "$d/host.key" <<'PY'
+          from pathlib import Path
+          import sys
+          for name in sys.argv[1:]:
+              p = Path(name)
+              p.write_text(p.read_text().replace("\r\n", "\n").strip().replace("\\n", "\n") + "\n")
+          PY
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host relay
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host host
+            HostName zohal.pws-dns.net
+            Port 1396
+            User zomorod2
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump relay
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+          EOF
+          timeout 30s ssh -F "$d/config" relay 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          timeout 120s ssh -F "$d/config" host 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = zomorod2
+          export PYTHONDONTWRITEBYTECODE=1
+          site="$HOME/Saeit-staging"
+          docroot="$HOME/mojplaywin.com"
+          venv="$HOME/virtualenv/Saeit-staging/3.11/bin/python"
+          test -d "$site/core" && test -f "$site/config/urls.py" && test -x "$venv"
+          echo "MPW_SITE_CODE_REALPATH=$(readlink -f "$site")"
+          echo "MPW_WEB_ROOT_REALPATH=$(readlink -f "$docroot")"
+          for f in "$site/config/urls.py" "$site/config/settings.py" "$docroot/passenger_wsgi.py"; do
+            if test -f "$f"; then
+              echo "MPW_SOURCE_DIGEST $(sha256sum "$f" | cut -d' ' -f1) $(basename "$f")"
+            fi
+          done
+          if test -e "$site/mpw_commerce"; then
+            echo MPW_COMMERCE_PRESENT_IN_ACTIVE_TREE=yes
+          else
+            echo MPW_COMMERCE_PRESENT_IN_ACTIVE_TREE=no
+          fi
+          cd "$site"
+          "$venv" -m django check --tag urls
+          "$venv" - <<'PY'
+          from collections import Counter
+          import django
+          django.setup()
+          from django.conf import settings
+          from django.urls import URLResolver, get_resolver
+          names = []
+          def scan(patterns):
+              for p in patterns:
+                  if isinstance(p, URLResolver):
+                      if p.namespace:
+                          names.append(p.namespace)
+                      scan(p.url_patterns)
+          scan(get_resolver().url_patterns)
+          counts = Counter(names)
+          print("MPW_ADMIN_NAMESPACE_INSTANCES", counts.get("admin", 0))
+          print("MPW_ALLOWLIST_CONTAINS_PUBLIC_DOMAIN", "mojplaywin.com" in settings.ALLOWED_HOSTS or "*" in settings.ALLOWED_HOSTS)
+          print("MPW_DATABASE_ENGINE_IS_MYSQL", settings.DATABASES["default"]["ENGINE"] == "django.db.backends.mysql")
+          print("MPW_READONLY_CODE_INSPECTION_COMPLETE")
+          PY
+          REMOTE
+      - name: Erase runner-only transient SSH keys
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/mpw-readonly-host"
