@@ -1,0 +1,192 @@
+name: MojPlayWin stage 2 fresh backup isolated restore rehearsal
+on:
+  push:
+    branches: [qa/mpw-payment-release-preflight-20261015]
+    paths:
+      - .github/workflows/mojplaywin-stage2-restore-rehearsal.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: mpw-stage2-private-restore
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 13
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Restore private SQL backup into fresh temporary cPanel DB and verify isolated cleanup
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/mpw-readonly-host"
+          mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          python3 - "$d/vps.key" "$d/host.key" <<'PY'
+          from pathlib import Path
+          import sys
+          for name in sys.argv[1:]:
+              p = Path(name)
+              p.write_text(p.read_text().replace("\r\n", "\n").strip().replace("\\n", "\n") + "\n")
+          PY
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host relay
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host host
+            HostName zohal.pws-dns.net
+            Port 1396
+            User zomorod2
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump relay
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+          EOF
+          timeout 30s ssh -F "$d/config" relay 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          timeout 560s ssh -F "$d/config" host 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = "zomorod2"
+          umask 077
+          export PYTHONDONTWRITEBYTECODE=1
+          cd "$HOME/Saeit-staging"
+          "$HOME/virtualenv/Saeit-staging/3.11/bin/python" - <<'PY'
+          import datetime, gzip, hashlib, json, os, pathlib, secrets, shutil, subprocess
+          from pathlib import Path
+          import django
+          os.environ["DJANGO_SETTINGS_MODULE"] = "config.settings"
+          django.setup()
+          from django.db import connections
+          from django.conf import settings
+          live = settings.DATABASES["default"]
+          assert live["ENGINE"] == "django.db.backends.mysql"
+          root = Path.home() / ".mpw-private-db-backups"
+          assert root.is_dir() and not root.is_symlink()
+          manifests = sorted(root.glob("*/manifest.json"), key=lambda p:p.stat().st_mtime, reverse=True)
+          assert manifests, "No private backup available"
+          manifest = json.loads(manifests[0].read_text())
+          archive = manifests[0].parent / "mysql-full.sql.gz"
+          assert archive.is_file() and not archive.is_symlink() and archive.stat().st_size > 512
+          digest = hashlib.sha256(archive.read_bytes()).hexdigest()
+          assert digest == manifest["archive_sha256"], "Backup digest differs"
+          assert 1 <= int(manifest["tables"]) <= 20000
+          # The stage-2 rollback snapshot must be a fresh independently
+          # verified private backup from the current release preparation.
+          age = (datetime.datetime.now(datetime.timezone.utc) -
+                 datetime.datetime.fromisoformat(manifest["timestamp_utc"])).total_seconds()
+          assert 0 <= age < 7200, "Reject stale or future-dated restore source"
+          code_map = manifest.get("code_rollback_checksums")
+          assert isinstance(code_map, dict) and len(code_map) >= 5
+          for rel, expected_sha in code_map.items():
+              assert rel and ".." not in pathlib.PurePosixPath(rel).parts
+              source_file = manifests[0].parent / "source-rollback" / rel
+              assert source_file.is_file() and not source_file.is_symlink()
+              assert hashlib.sha256(source_file.read_bytes()).hexdigest() == expected_sha
+          print("MPW_STAGE2_FRESH_BACKUP_AND_ROLLBACK_CODE_VERIFIED=True")
+          print("MPW_STAGE2_CODE_ROLLBACK_ENTRIES="+str(len(code_map)))
+          sql_client = shutil.which("mysql") or shutil.which("mariadb")
+          uapi = shutil.which("uapi") or "/usr/local/cpanel/bin/uapi"
+          assert sql_client and Path(uapi).is_file(), "Missing supported MySQL or cPanel client"
+          token=secrets.token_hex(3)
+          dbname="zomorod2_mpwr"+token
+          username="zomorod2_mpwu"+token
+          assert dbname != live["NAME"], "Refuse production database"
+          passwd=secrets.token_urlsafe(30)
+          def api(op, *args):
+              p=subprocess.run([uapi, "--output=json", "Mysql", op, *args],
+                  capture_output=True, text=True, timeout=65, check=False)
+              assert p.returncode == 0, "UAPI subprocess failed"
+              payload=json.loads(p.stdout)
+              assert payload.get("result",{}).get("status") == 1, "UAPI operation denied"
+              return payload.get("result",{}).get("data")
+          # cPanel must manage the database mapping; never CREATE/DROP DATABASE via SQL.
+          dbs = api("list_databases")
+          existing={str(x.get("database","")) for x in (dbs or []) if isinstance(x,dict)}
+          assert dbname not in existing, "Staging database name already exists"
+          made_db=False
+          made_user=False
+          tested=False
+          cleanup_ok=True
+          try:
+              api("create_database", "name="+dbname)
+              made_db=True
+              api("create_user", "name="+username, "password="+passwd)
+              made_user=True
+              api("set_privileges_on_database", "user="+username, "database="+dbname, "privileges=ALL%20PRIVILEGES")
+              env=os.environ.copy()
+              env["MYSQL_PWD"]=passwd
+              cmd=[sql_client,"--user="+username, "--host=localhost", "--default-character-set=utf8mb4", dbname]
+              with gzip.open(archive,"rb") as dump:
+                  with subprocess.Popen(cmd,stdin=subprocess.PIPE,stdout=subprocess.DEVNULL,stderr=subprocess.PIPE,env=env) as proc:
+                      try:
+                          shutil.copyfileobj(dump, proc.stdin, length=1048576)
+                          proc.stdin.close()
+                          errors=proc.stderr.read(16384)
+                          exit_code=proc.wait(timeout=200)
+                      except Exception:
+                          proc.kill()
+                          proc.wait()
+                          raise
+              assert exit_code == 0, "MySQL restore failed"
+              def query(sql):
+                  call=subprocess.run([sql_client,"--user="+username,"--host=localhost","--batch","--skip-column-names",dbname,"-e",sql],
+                      capture_output=True,text=True,timeout=40,env=env,check=False)
+                  assert call.returncode == 0, "Unable to verify restored schema"
+                  return call.stdout.strip()
+              table_count = int(query("SELECT COUNT(*) FROM information_schema.tables WHERE TABLE_SCHEMA=DATABASE() AND TABLE_TYPE='BASE TABLE'"))
+              assert table_count == int(manifest["tables"]), "Restored table count differs"
+              count = int(query("SELECT COUNT(*) FROM django_migrations"))
+              assert count > 0, "Missing restored migration history"
+              print("MPW_ISOLATED_FULL_BACKUP_RESTORE_PASSED=True")
+              print("MPW_RESTORED_TABLE_COUNT="+str(table_count))
+              print("MPW_RESTORED_DJANGO_MIGRATION_ROWS_POSITIVE=True")
+              print("MPW_RESTORE_USED_EXISTING_PRIVATE_BACKUP=True")
+              tested=True
+          finally:
+              # Only delete random resources successfully created in this very run.
+              if made_db:
+                  try:
+                      api("delete_database", "name="+dbname)
+                      print("MPW_TEMPORARY_RESTORE_DATABASE_DELETED=True")
+                  except Exception:
+                      cleanup_ok=False
+                      print("MPW_TEMPORARY_RESTORE_DATABASE_DELETED=False")
+              if made_user:
+                  try:
+                      api("delete_user", "name="+username)
+                      print("MPW_TEMPORARY_RESTORE_USER_DELETED=True")
+                  except Exception:
+                      cleanup_ok=False
+                      print("MPW_TEMPORARY_RESTORE_USER_DELETED=False")
+          assert cleanup_ok, "Staging resource cleanup needs review"
+          assert tested, "Restoration was not verified"
+          print("MPW_PRODUCTION_DB_NEVER_WRITTEN=True")
+          print("MPW_PUBLIC_CHECKOUT_STILL_NOT_ENABLED=True")
+          PY
+          REMOTE
+      - name: Erase runner-only transient SSH keys
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/mpw-readonly-host"
