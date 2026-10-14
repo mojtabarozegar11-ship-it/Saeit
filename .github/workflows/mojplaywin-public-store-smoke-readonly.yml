@@ -1,0 +1,50 @@
+name: MojPlayWin public storefront nonintrusive HTTP smoke
+on:
+  push:
+    branches: [qa/mpw-payment-release-preflight-20261015]
+    paths: ['.github/workflows/mojplaywin-public-store-smoke-readonly.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Probe the live public pages with safe HTTP GET and no sessions
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from urllib.request import Request, urlopen
+          from urllib.error import HTTPError, URLError
+          targets = {
+              "HOME": "https://mojplaywin.com/",
+              "STORE": "https://mojplaywin.com/store/",
+              "CHECKOUT": "https://mojplaywin.com/checkout/",
+          }
+          for name, url in targets.items():
+              request = Request(url, headers={
+                  "User-Agent":"MojPlayWin-safety-smoke/1.0",
+                  "Accept":"text/html",
+              }, method="GET")
+              try:
+                  with urlopen(request, timeout=12) as resp:
+                      status=resp.status
+                      final=resp.geturl()
+                      ctype=resp.headers.get("Content-Type","").split(";")[0]
+                      resp.read(8192)
+              except HTTPError as exc:
+                  status=exc.code
+                  ctype=""
+                  final=url
+              except (URLError, OSError, TimeoutError) as exc:
+                  status="UNREACHABLE"
+                  ctype=""
+                  final=url
+              print("MPW_PUBLIC_"+name+"_STATUS="+str(status))
+              print("MPW_PUBLIC_"+name+"_HTML="+str(ctype=="text/html"))
+              print("MPW_PUBLIC_"+name+"_STAYS_ON_MOJPLAYWIN="+str(final.startswith("https://mojplaywin.com/") or final.startswith("https://www.mojplaywin.com/")))
+          print("MPW_PUBLIC_HTTP_READ_ONLY_NO_ORDERS_OR_CHECKOUT_REQUESTS")
+          print("HTTP_CRAWL_DOES_NOT_PROVE_PAYMENTS_OR_STORE_SALES")
+          PY
