@@ -7,6 +7,7 @@ on:
       - termux_bridge/**
       - bridge/**
       - tests/test_termux_bridge.py
+      - tests/test_termux_issue_bridge.py
       - .github/workflows/termux-bridge-isolated-tests.yml
   workflow_dispatch:
 permissions:
@@ -30,6 +31,6 @@ jobs:
         run: |
           set -euo pipefail
           python -m compileall -q termux_bridge/worker.py
-          python -m unittest discover -s tests -p 'test_termux_bridge.py' -v
+          python -m unittest discover -s tests -p 'test_termux*.py' -v
           echo TERMUX_BRIDGE_LOCAL_TRANSPORT_TESTS_OK
           echo NO_REAL_ANDROID_OR_VPS_ACTION_PERFORMED
