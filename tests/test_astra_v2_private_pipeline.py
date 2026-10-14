@@ -68,6 +68,56 @@ class PrivateManufacturingTests(unittest.TestCase):
         self.assertIn("function auditCSV(data)",js)
         self.assertIn("function exportCSV(",js)
 
+    def test_two_independent_builders_produce_two_real_distinct_product_families(self):
+        first=brief("orchard_distinct_first")
+        second=brief("procurement_distinct_second")
+        second["builder"]=pipeline.PROCUREMENT_BUILDER
+        pipeline.enqueue(self.root,first)
+        pipeline.enqueue(self.root,second)
+        one=pipeline.tick(self.root)
+        two=pipeline.tick(self.root)
+        self.assertEqual(one["status"],"PRIVATE_QA_PASSED",one)
+        self.assertEqual(two["status"],"PRIVATE_QA_PASSED",two)
+        self.assertEqual(one["new_distinct_product_versions"],1)
+        self.assertEqual(two["new_distinct_product_versions"],1)
+        statuses=pipeline.status(self.root)
+        self.assertEqual(statuses["distinct_private_product_families"],2)
+        self.assertEqual(statuses["distinct_private_qa_artifact_versions"],2)
+        self.assertEqual(statuses["published_products"],0)
+        archives=sorted(self.root.glob("artifact-*.zip"))
+        self.assertEqual(len(archives),2)
+        members=[zipfile.ZipFile(archive).namelist() for archive in archives]
+        self.assertTrue(any("farm_procurement_audit/procurement_audit.py" in group
+                            for group in members))
+        self.assertTrue(any("orchard_decision_audit/decision_audit.py" in group
+                            for group in members))
+        reports=[json.loads(p.read_text()) for p in self.root.glob("qa-*.json")]
+        self.assertEqual({r["source_builder"] for r in reports},
+                         {pipeline.BUILDER,pipeline.PROCUREMENT_BUILDER})
+        for report in reports:
+            self.assertIsNone(report["quality_score"])
+            self.assertFalse(report["sale_ready"])
+            self.assertFalse(report["owner_publication_approval"])
+            self.assertFalse(report["evidence_of_willingness_to_pay"])
+
+    def test_second_builder_rebuild_does_not_fabricate_third_product(self):
+        b=brief("procurement_first_build")
+        b["builder"]=pipeline.PROCUREMENT_BUILDER
+        pipeline.enqueue(self.root,b)
+        self.assertEqual(pipeline.tick(self.root)["new_distinct_product_versions"],1)
+        b["brief_id"]="procurement_repeated_sources"
+        pipeline.enqueue(self.root,b)
+        self.assertEqual(pipeline.tick(self.root)["new_distinct_product_versions"],0)
+        self.assertEqual(pipeline.status(self.root)["distinct_private_product_families"],1)
+        self.assertEqual(pipeline.tick(self.root)["status"],"NO_ELIGIBLE_WORK")
+
+    def test_unsupported_builder_never_makes_files_or_paid_calls(self):
+        item=brief("unsupported_custom_model")
+        item["builder"]="llm_unrestricted_paid_builder"
+        with self.assertRaises(ValueError):
+            pipeline.enqueue(self.root,item)
+        self.assertEqual(list(self.root.glob("artifact-*.zip")),[])
+
     def test_new_private_product_build_and_immutable_manifest(self):
         first=pipeline.enqueue(self.root,brief())
         self.assertTrue(first["new_job"])
