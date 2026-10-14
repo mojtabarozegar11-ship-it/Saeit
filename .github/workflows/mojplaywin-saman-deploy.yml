@@ -114,6 +114,7 @@ jobs:
             'test -d /home/zomorod2/mojplaywin.com && test ! -L /home/zomorod2/mojplaywin.com && test -f /home/zomorod2/mojplaywin.com/passenger_wsgi.py && test -f /home/zomorod2/mojplaywin.com/.htaccess && grep -Fq "Saeit-staging" /home/zomorod2/mojplaywin.com/passenger_wsgi.py'
           timeout 20s ssh -F "$WORK/config" saeit-host "install -d -m 700 /home/zomorod2/.mojplaywin-saman-$GITHUB_RUN_ID"
           timeout 20s ssh -F "$WORK/config" saeit-host 'for path in saman/learn-saman saman/play-saman saman/products-saman saman/membership-saman saman/partners-saman saman/about-saman; do target="/home/zomorod2/mojplaywin.com/$path"; if [[ -e "$target" ]]; then echo "DOCROOT_PATH_EXISTS=$target"; ls -ld "$target"; else echo "DOCROOT_PATH_CLEAR=$target"; fi; done'
+          timeout 20s ssh -F "$WORK/config" saeit-host "grep -nE 'RewriteCond|RewriteRule|Passenger' /home/zomorod2/mojplaywin.com/.htaccess || true"
 
       - name: Package SAMAN deployment files
         run: tar -cf "$RUNNER_TEMP/saman.tar" scripts/deploy_mojplaywin_saman.py scripts/saman_patch.py templates/saman/index.html
@@ -175,6 +176,12 @@ jobs:
               match = resolve(path)
               print("SAMAN_RUNTIME_ROUTE=" + path + " -> " + match.func.__name__)
               assert match.func.__name__ == expected, path
+          import inspect
+          from core.views import saman_page, saman_section_page
+          print("SAMAN_ROOT_VIEW_SOURCE_BEGIN")
+          print(inspect.getsource(saman_page))
+          print("SAMAN_SECTION_VIEW_SOURCE_BEGIN")
+          print(inspect.getsource(saman_section_page))
           PY
               exit 0
             fi
