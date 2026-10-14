@@ -337,3 +337,4 @@ jobs:
           fi
           echo FACTORY_INVENTORY_READ_ONLY_DONE
           REMOTE
+# 2026-10-14 dynamic factory verification requested by operator
