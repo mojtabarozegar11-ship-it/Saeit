@@ -6,6 +6,8 @@ on:
       - '.github/workflows/mojplaywin-mysql-all-sales-quality-gate.yml'
       - 'tests/native_checkout_mysql_settings.py'
       - 'tests/native_ci_payment_release_preflight.py'
+      - 'tests/native_ci_sitewide_*.py'
+      - 'tests/native_ci_commerce_*.py'
       - 'mpw_commerce/**'
   workflow_dispatch:
 
@@ -77,6 +79,6 @@ jobs:
             tests.native_ci_sitewide_full_purchase \
             tests.native_ci_sitewide_full_purchase_cycle \
             tests.native_ci_sitewide_course_fulfillment \
-            --verbosity 1
+            --verbosity 2
           echo MPW_MYSQL8_FULL_BUYER_CHAIN_SUCCESS
           echo MPW_NO_LIVE_MONEY_NO_LIVE_SITE_CHANGES_NO_PRODUCTION_DB
