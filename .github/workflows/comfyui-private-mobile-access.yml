@@ -1,0 +1,58 @@
+name: ComfyUI Tailnet Private Mobile Access
+on:
+  push:
+    branches: [feature/comfyui-private-mobile-gateway-20261015]
+    paths:
+      - .github/workflows/comfyui-private-mobile-access.yml
+      - ops/comfyui-vps/private-tailnet.sh
+  workflow_dispatch:
+    inputs:
+      action:
+        description: Private gateway command; connect requires COMFYUI_TAILSCALE_AUTHKEY secret
+        required: true
+        type: choice
+        options: [status, connect, disconnect]
+permissions:
+  contents: read
+concurrency:
+  group: comfyui-tailnet-private-access
+  cancel-in-progress: false
+jobs:
+  gateway:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Perform allowlisted action via pinned VPS SSH
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          TAILNET_KEY: ${{ secrets.COMFYUI_TAILSCALE_AUTHKEY }}
+          REQUESTED_ACTION: ${{ inputs.action }}
+        run: |
+          set -euo pipefail
+          umask 077
+          bash -n ops/comfyui-vps/private-tailnet.sh
+          mode="${REQUESTED_ACTION:-status}"
+          if [[ "$GITHUB_EVENT_NAME" == push ]]; then mode=status; fi
+          [[ "$mode" =~ ^(status|connect|disconnect)$ ]] || exit 2
+          if [[ -n "$TAILNET_KEY" ]]; then echo PRIVATE_TAILNET_AUTH_SECRET_PRESENT; else echo PRIVATE_TAILNET_AUTH_SECRET_MISSING; fi
+          d="$RUNNER_TEMP/saeit-comfy-tailnet"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          test -n "$VPS_KEY"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          SSH=(ssh -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 githubops@178.239.147.150)
+          if [[ "$mode" == connect ]]; then
+            test -n "$TAILNET_KEY" || { echo COMFYUI_TAILSCALE_AUTHKEY_SECRET_REQUIRED; exit 7; }
+            # Avoid token in public logs, argv, and permanent VPS storage.
+            printf '%s\n' "$TAILNET_KEY" | "${SSH[@]}" 'set -euo pipefail; umask 077; dir="$HOME/.local/share/comfyui-tailnet"; install -d -m 700 "$dir"; test ! -L "$dir/authkey.pending"; cat > "$dir/authkey.pending"; chmod 600 "$dir/authkey.pending"'
+            unset TAILNET_KEY
+            cleanup_auth() { "${SSH[@]}" 'rm -f -- "$HOME/.local/share/comfyui-tailnet/authkey.pending"' >/dev/null 2>&1 || :; }
+            trap 'cleanup_auth; rm -rf -- "$d"' EXIT
+          fi
+          "${SSH[@]}" bash -s -- "$mode" < ops/comfyui-vps/private-tailnet.sh
