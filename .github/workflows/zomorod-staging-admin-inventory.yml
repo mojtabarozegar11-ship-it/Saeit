@@ -342,6 +342,68 @@ jobs:
           echo "STAGING_ADMIN_CSS_HTTP=200"
           rm -f "$response"
 
+      - name: Start bounded economic robots on staging
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-staging-ssh"
+          timeout 120s ssh -F "$d/config" saeit-host 'bash -se' <<'REMOTE'
+          set -eu
+          test "$(id -un)" = zomorod2
+          stage=/home/zomorod2/Saeit-staging
+          docroot=/home/zomorod2/Saeit-staging-web
+          runner="$stage/run-economic-cycle.sh"
+          log="$stage/economic-cycle.log"
+          test -f "$docroot/.htaccess"
+          test "$(grep -c '^PassengerAppRoot ' "$docroot/.htaccess")" = 1
+          active_release="$(awk '$1 == "PassengerAppRoot" {print $2}' "$docroot/.htaccess")"
+          case "$active_release" in "$stage"/admin-smoke/*) ;; *) echo "Refusing to run outside isolated staging release"; exit 40;; esac
+          test -f "$active_release/manage.py"
+          test -s "$active_release/.env"
+          test -s "$active_release/isolated-smoke.sqlite3"
+          python="$HOME/virtualenv/Saeit-staging/3.11/bin/python"
+          test -x "$python"
+          command -v crontab >/dev/null
+          cat > "$runner" <<'SH'
+          #!/bin/bash
+          set -euo pipefail
+          stage=/home/zomorod2/Saeit-staging
+          docroot=/home/zomorod2/Saeit-staging-web
+          test -f "$docroot/.htaccess"
+          release="$(awk '$1 == "PassengerAppRoot" {print $2}' "$docroot/.htaccess")"
+          case "$release" in "$stage"/admin-smoke/*) ;; *) echo "Refusing non-staging release"; exit 41;; esac
+          test -f "$release/manage.py"
+          test -s "$release/.env"
+          test -s "$release/isolated-smoke.sqlite3"
+          python="$HOME/virtualenv/Saeit-staging/3.11/bin/python"
+          test -x "$python"
+          lock="$stage/.economic-cycle.lock"
+          if ! mkdir "$lock" 2>/dev/null; then
+            echo "ROBOT_CYCLE_SKIPPED=already_running"
+            exit 0
+          fi
+          trap 'rmdir "$lock"' EXIT
+          cd "$release"
+          echo "ROBOT_CYCLE_START=$(date -u +%FT%TZ) RELEASE=$release"
+          "$python" manage.py seed_online_income_agents
+          "$python" manage.py online_income_cycle
+          "$python" manage.py run_economic_worker
+          echo "ROBOT_CYCLE_DONE=$(date -u +%FT%TZ)"
+          SH
+          chmod 700 "$runner"
+          "$runner" >> "$log" 2>&1
+          crontab_tmp="$(mktemp "$stage/crontab.XXXXXX")"
+          trap 'rm -f "$crontab_tmp"' EXIT
+          crontab -l 2>/dev/null | grep -Fv '# zomorod-staging-economic-robots' > "$crontab_tmp" || true
+          printf '*/15 * * * * /bin/bash %s >> %s 2>&1 # zomorod-staging-economic-robots\n' "$runner" "$log" >> "$crontab_tmp"
+          crontab "$crontab_tmp"
+          crontab -l | grep -F '# zomorod-staging-economic-robots'
+          echo "STAGING_ROBOT_FIRST_CYCLE=complete"
+          echo "STAGING_ROBOT_SCHEDULE=every 15 minutes"
+          echo "STAGING_ROBOT_SCOPE=$stage/admin-smoke/*"
+          echo "PUBLICATION_AND_FINANCIAL_ACTIONS=approval_gated"
+          REMOTE
+
       - name: Remove temporary SSH credentials and local archive
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/zomorod-staging-ssh" "$RUNNER_TEMP/saeit-admin-smoke.tar.gz"
