@@ -136,6 +136,34 @@ jobs:
           else:
               print("CPANEL_COMPANY_DOMAIN_NOT_ASSIGNED_TO_AUTHENTICATED_ACCOUNT")
           PY
+      - name: Inspect the public document root without changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -F "$RUNNER_TEMP/amozeshgah-preflight/config" saeit-cpanel 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          root=/home/zomorod2/public_html
+          echo CPANEL_PUBLIC_ROOT_OWNER="$(stat -c %U "$root")"
+          test -d "$root" && test -w "$root"
+          echo CPANEL_PUBLIC_ROOT_WRITABLE=yes
+          if test -e "$root/amozeshgah" || test -L "$root/amozeshgah"; then
+            echo EDUCATION_TARGET_PATH=ALREADY_PRESENT
+            ls -ld "$root/amozeshgah"
+          else echo EDUCATION_TARGET_PATH=AVAILABLE
+          fi
+          if test -e "$root/education" || test -L "$root/education"; then
+            echo LEGACY_EDUCATION_PATH=PRESENT
+            ls -ld "$root/education"
+          else echo LEGACY_EDUCATION_PATH=ABSENT
+          fi
+          echo PUBLIC_ROOT_TOP_LEVEL
+          find "$root" -mindepth 1 -maxdepth 1 -printf '%f %y\n' 2>/dev/null | sort | head -40
+          if test -f "$root/.htaccess"; then
+            echo ROOT_HTACCESS_TARGET_DIRECTIVES
+            grep -E '^[[:space:]]*(PassengerAppRoot|PassengerStartupFile|PassengerBaseURI|RewriteRule|RewriteCond)' "$root/.htaccess" | head -40 || true
+          else echo ROOT_HTACCESS=ABSENT
+          fi
+          REMOTE
       - name: Remove temporary SSH material
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/amozeshgah-preflight"
