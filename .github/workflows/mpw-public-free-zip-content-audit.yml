@@ -1,0 +1,52 @@
+name: MojPlayWin free ZIP content and public listing read-only audit
+on:
+  push:
+    branches: [audit/mpw-factory-private-inbox-20261014]
+    paths:
+      - .github/workflows/mpw-public-free-zip-content-audit.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - name: Inspect actual downloadable release without executing code
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$(mktemp -d)"
+          trap 'rm -rf -- "$work"' EXIT
+          url="https://mojplaywin.com/factory-releases/farm-enterprise-economics-v1/Farm_Enterprise_Economics_Toolkit_Free_v1.zip"
+          curl -fLsS --connect-timeout 10 --max-time 30 -o "$work/product.zip" "$url"
+          python3 - "$work/product.zip" <<'PY'
+          from pathlib import Path
+          import hashlib,sys,zipfile,ast,json
+          source=Path(sys.argv[1])
+          content=source.read_bytes()
+          sha=hashlib.sha256(content).hexdigest()
+          print("MPW_FREE_TOOLKIT_ZIP_SHA256="+sha)
+          print("MPW_FREE_TOOLKIT_ZIP_MATCHES_PRIVATE_RECEIPT_PREFIX="+str(sha.startswith("06fdb7667cde")))
+          assert sha.startswith("06fdb7667cde"),"Public package differs from previously observed private receipt"
+          with zipfile.ZipFile(source) as z:
+              assert z.testzip() is None
+              items=[i for i in z.infolist() if not i.is_dir()]
+              assert 2<=len(items)<=80
+              assert sum(i.file_size for i in items) <= 100_000_000
+              names=[i.filename for i in items]
+              assert all(n.startswith("farm_enterprise_economics/") and ".." not in n.split("/") for n in names)
+              assert not any((i.external_attr >> 16) & 0o170000 == 0o120000 for i in items)
+              print("MPW_FREE_TOOLKIT_FILE_COUNT="+str(len(items)))
+              print("MPW_FREE_TOOLKIT_UNPACKED_BYTES="+str(sum(i.file_size for i in items)))
+              for i in items:
+                  print("MPW_FREE_TOOLKIT_FILE="+i.filename+"|"+str(i.file_size))
+                  if i.filename.endswith(".py"):
+                      ast.parse(z.read(i).decode("utf-8"))
+              files={x.split("/")[-1] for x in names}
+              print("MPW_FREE_TOOLKIT_HAS_CALCULATOR="+str("calculator.py" in files))
+              print("MPW_FREE_TOOLKIT_HAS_README="+str("README.md" in files))
+              print("MPW_FREE_TOOLKIT_HAS_TESTS="+str(any(x.startswith("test_") and x.endswith(".py") for x in files)))
+              print("MPW_FREE_TOOLKIT_PYTHON_SOURCE_SYNTAX_VALID=True")
+              assert "README.md" in files and "calculator.py" in files
+          PY
