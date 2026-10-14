@@ -47,10 +47,10 @@ Rollback materials should remain on private hosting storage, protected by
 host account permissions and offsite independent backup policy. Having
 a backup does not by itself prove a point-in-time, zero-data-loss rollback.
 
-## Verified isolated restore
+## Verified isolated restore and migration rehearsal
 
-Restore rehearsal workflow:
-https://github.com/mojtabarozegar11-ship-it/Saeit/actions/workflows/mojplaywin-stage2-restore-rehearsal.yml
+- **Full restore test PASSED:** https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/38655380848 . Fresh backup restored to a newly created private temporary database; all 86 tables and positive Django migration history verified, then temporary database and user deleted.
+- **Commerce schema rehearsal PASSED:** https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/38655548580 . Only on restored temporary DB, new `mpw_commerce` migrations 0001/0002 applied, four new tables and order relations verified; existing base order and enrollment row counts unchanged; temporary resources deleted. No migrations in production.
 
 - Rejects absent, stale, symlinked or corrupt archived data.
 - Checks cryptographic digest of the SQL archive and private source-code
