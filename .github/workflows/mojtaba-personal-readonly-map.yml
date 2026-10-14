@@ -118,5 +118,8 @@ jobs:
           echo PROJECT_TOP_DIRECTORIES
           find "$app" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | grep -Ev '^\.|^__pycache__' | head -45
           echo PUBLICATION_SCHEMA_INSPECTION_COMPLETE
+          echo ARTICLE_POST_MODEL
+          sed -n '34,46p' "$HOME/mojtaba_personal/mojtaba_roozegar_personal_v17/core/models.py"
+          echo ARTICLE_POST_MODEL_DONE
           echo PERSONAL_MAPPING_READONLY_COMPLETE
           REMOTE
