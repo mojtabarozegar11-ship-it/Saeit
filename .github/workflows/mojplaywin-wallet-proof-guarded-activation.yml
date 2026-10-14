@@ -89,7 +89,7 @@ jobs:
           tar -xzf "$archive" -C "$source"
           rm -f "$archive"
           python3 -m py_compile "$source/scripts/mpw_activate_wallet_proof.py"
-          python3 "$source/scripts/mpw_activate_wallet_proof.py" --activate
+          "$HOME/virtualenv/Saeit-staging/3.11/bin/python" "$source/scripts/mpw_activate_wallet_proof.py" --activate
           echo MPW_OWNER_WALLET_PAGE_ENABLED_WITH_MYSQL_BACKUP
           echo MPW_CHECKOUT_AND_FACTORY_UNCHANGED
           REMOTE
