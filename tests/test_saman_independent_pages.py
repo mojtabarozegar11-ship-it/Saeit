@@ -77,7 +77,7 @@ def platform_page(request, section):
         self.assertNotIn('render(request, "saman/index.html",', new)
         self.assertEqual(new, patch_views(new))
         with self.assertRaises(ValueError):
-            patch_views(old.replace('render(request, "saman/index.html", {"saman_section": section_map[section]})', "return 'unexpected'"))
+            patch_views(old.replace('return render(request, "saman/index.html", {"saman_section": section_map[section]})', "return 'unexpected'"))
 
 
 if __name__ == "__main__":
