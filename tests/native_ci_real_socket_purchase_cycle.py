@@ -111,14 +111,23 @@ class EventDrivenDjangoCycleTests(TestCase):
             )
         return invoice
 
-    def stop_invoice(self, invoice, status):
-        with self.captureOnCommitCallbacks(execute=True):
-            invoice.status=status
-            invoice.save(update_fields=["status","updated_at"])
+    def await_scan(self):
+        deadline=time.monotonic()+4
+        while time.monotonic()<deadline and len(self.scan_calls)<1:
+            time.sleep(.01)
+        self.assertEqual(self.scan_calls,["ETH"])
+
+    def assert_listener_closed(self):
         self.worker_thread.join(timeout=5)
         self.assertFalse(self.worker_thread.is_alive())
         self.assertEqual(self.worker_errors,[])
         self.assertFalse((self.private/"pending-orders.mode").exists())
+
+    def stop_invoice(self, invoice, status):
+        with self.captureOnCommitCallbacks(execute=True):
+            invoice.status=status
+            invoice.save(update_fields=["status","updated_at"])
+        self.assert_listener_closed()
 
     def event_settings(self):
         return override_settings(
@@ -134,7 +143,7 @@ class EventDrivenDjangoCycleTests(TestCase):
             self.start_listener()
             self.assertEqual(self.scan_calls,[])
             invoice=self.create_verified_fixture()
-            self.assertEqual(self.scan_calls,["ETH"])
+            self.await_scan()
             self.assertEqual(
                 NativeWatchOutbox.objects.get(invoice=invoice).state,"delivered"
             )
@@ -155,7 +164,7 @@ class EventDrivenDjangoCycleTests(TestCase):
                     settle_native_invoice(invoice.pk, TX, ethereum_rpc=lambda *args:{}),
                     "paid",
                 )
-            self.stop_invoice(invoice, NativeInvoice.Status.PAID)
+            self.assert_listener_closed()  # paid settlement already sent close
             self.assertEqual(self.scan_calls,["ETH"])  # close never polls
             self.order.refresh_from_db()
             self.assertEqual(self.order.status,"paid")
