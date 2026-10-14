@@ -13,7 +13,7 @@ import tempfile
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
-from django.test import Client,TestCase,override_settings
+from django.test import Client, TransactionTestCase, override_settings
 from django.urls import reverse
 from eth_account import Account
 from eth_account.messages import encode_defunct
@@ -43,7 +43,7 @@ FLAGS={
 }
 
 
-class WholeSiteAutomaticBuyerCycleTests(TestCase):
+class WholeSiteAutomaticBuyerCycleTests(TransactionTestCase):
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
