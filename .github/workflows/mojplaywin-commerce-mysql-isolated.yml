@@ -1,0 +1,76 @@
+name: MojPlayWin commerce disposable MySQL integration CI
+on:
+  push:
+    branches: [test/mpw-commerce-mysql-isolated-20261014]
+    paths:
+      - .github/workflows/mojplaywin-commerce-mysql-isolated.yml
+      - tests/native_checkout_mysql_settings.py
+      - mpw_commerce/**
+      - mpw_native_checkout/**
+      - tests/native_ci_sitewide_*.py
+      - tests/native_ci_commerce_*.py
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  mysql-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: temporary-local-ci-only
+          MYSQL_DATABASE: mpw_ci
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -uroot -ptemporary-local-ci-only"
+          --health-interval=10s --health-timeout=5s --health-retries=12
+    env:
+      DJANGO_SETTINGS_MODULE: tests.native_checkout_mysql_settings
+      MPW_TEST_DB_PASSWORD: temporary-local-ci-only
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install isolated Django and MySQL client dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq pkg-config default-libmysqlclient-dev
+          python -m pip install -q --disable-pip-version-check 'Django>=5.2,<6' 'eth-account>=0.13,<0.14' 'mysqlclient>=2.2,<3'
+      - name: Assert ephemeral-only MySQL endpoint and check migrations
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from django.conf import settings
+          db=settings.DATABASES["default"]
+          assert db["HOST"]=="127.0.0.1" and db["NAME"]=="mpw_ci"
+          assert db["ENGINE"]=="django.db.backends.mysql"
+          assert db["TEST"]["NAME"]=="test_mpw_ci"
+          print("MPW_MYSQL_CI_EPHEMERAL_LOCALHOST_ONLY")
+          PY
+          python -m django check --database default
+          python -m django makemigrations mpw_commerce mpw_native_checkout --check --dry-run
+          python -m django migrate --noinput
+          echo MPW_MYSQL_FULL_MIGRATIONS_PASSED
+      - name: Run complete buyer purchase fulfillment and chain-adapter tests
+        run: |
+          set -euo pipefail
+          python -m django test \
+            tests.native_ci_sitewide_commerce \
+            tests.native_ci_sitewide_chain_adapter \
+            tests.native_ci_sitewide_reconcile \
+            tests.native_ci_commerce_private_assets \
+            tests.native_ci_commerce_download_views \
+            tests.native_ci_sitewide_buyer_wallets \
+            tests.native_ci_sitewide_checkout_http \
+            tests.native_ci_sitewide_full_purchase \
+            tests.native_ci_sitewide_course_fulfillment \
+            --verbosity 1
+          echo MPW_MYSQL_COMMERCE_INTEGRATION_SUCCEEDED_NO_PRODUCTION_USED
