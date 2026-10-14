@@ -25,24 +25,56 @@ KEY_PATHS=[
 CHECK_TOKENS=["company-gallery","workshop-login","personnel/site-builder","admin/site-content","mojtaba.roozegar","staff/command-center","newsletter","blog","language","media/","knowledge/","api/v1/","payment","robots.txt","sitemap.xml"]
 def say(kind,value):
  print("AUDIT_JSON "+json.dumps({"kind":kind,"data":value},ensure_ascii=False,sort_keys=True,default=str),flush=True)
+MAX_FILES_PER_ROOT=1200
+MAX_ROOT_SECONDS=18
+ALLOWED_TOP={"config","portal","core","moj","command_center","templates","static","tests","scripts","deploy","editorial","financial_core"}
+MANIFEST_STAT={}
 def manifest(root):
  files={}
+ start=time.monotonic()
+ stats={"limit_files":MAX_FILES_PER_ROOT,"limit_sec":MAX_ROOT_SECONDS,"truncated":False,"visited_dirs":0}
  if not root.is_dir():return files
+ def record(p):
+  if p.is_symlink() or not p.is_file():return
+  try:
+   if p.name in SKIP_FILES or p.name.startswith(".env") or (p.suffix.lower() not in EXTS and p.name!=".htaccess"):return
+   n=p.stat().st_size
+   if n>1_500_000:return
+   rel=str(p.relative_to(root))
+   if rel not in files:
+    h=hashlib.sha256(p.read_bytes()).hexdigest()
+    files[rel]={"sha":h,"size":n,"ext":p.suffix.lower()}
+  except (OSError,PermissionError):pass
+ for name in KEY_PATHS:
+  record(root/name)
+ for path in root.iterdir():
+  if path.is_file() and not path.name.startswith("."):
+   record(path)
  for dirpath,dirs,names in os.walk(root,followlinks=False):
-  dirs[:]=sorted(d for d in dirs if d not in SKIP_DIRS and not d.startswith("."))
+  stats["visited_dirs"]+=1
+  rel=Path(dirpath).relative_to(root)
+  depth=len(rel.parts) if str(rel)!="." else 0
+  if depth>5:
+   dirs[:]=[]
+   continue
+  if depth==0:
+   dirs[:]=sorted(d for d in dirs if d in ALLOWED_TOP)
+  else:
+   dirs[:]=sorted(d for d in dirs if d not in SKIP_DIRS and not d.startswith("."))
   for name in names:
-   p=Path(dirpath)/name
-   if name in SKIP_FILES or name.startswith(".env") or p.suffix.lower() not in EXTS or p.is_symlink():continue
-   try:
-    if not p.is_file() or p.stat().st_size>MAX_SIZE:continue
-    rel=str(p.relative_to(root))
-    if len(rel.split("/"))>11:continue
-    h=hashlib.sha256()
-    with p.open("rb") as f:
-     for block in iter(lambda:f.read(524288),b""):h.update(block)
-    files[rel]={"sha":h.hexdigest(),"size":p.stat().st_size,"ext":p.suffix.lower()}
-   except (OSError,PermissionError):continue
+   if name.startswith(".") and name!=".htaccess":continue
+   record(Path(dirpath)/name)
+   if len(files)>=MAX_FILES_PER_ROOT or (time.monotonic()-start)>MAX_ROOT_SECONDS:
+    stats["truncated"]=True
+    MANIFEST_STAT[str(root)]=stats
+    return files
+  if (time.monotonic()-start)>MAX_ROOT_SECONDS:
+   stats["truncated"]=True
+   MANIFEST_STAT[str(root)]=stats
+   return files
+ MANIFEST_STAT[str(root)]=stats
  return files
+
 def excerpt_models(root):
  out={}
  for relative in ["portal/models.py","core/models.py","command_center/models.py"]:
@@ -118,7 +150,7 @@ for label,root in ROOTS.items():
  inventories[label]=files
  counts=collections.Counter(p["ext"] for p in files.values())
  say("ROOT",{"id":label,"exists":root.is_dir(),"path":str(root),"realpath":str(root.resolve()) if root.exists() else "",
-           "file_count":len(files),"by_ext":dict(counts),"manage_exists":(root/"manage.py").is_file(),
+           "file_count":len(files),"bounded_sampling":MANIFEST_STAT.get(str(root),{}),"by_ext":dict(counts),"manage_exists":(root/"manage.py").is_file(),
            "migration_inventory":migration_names(root),"model_classes":excerpt_models(root),"urls":routes(root),
            "source_flags":scripts(root),"syntax":syntax(root,files)})
 live=inventories["LIVE_ZOMOROD"]
