@@ -47,7 +47,12 @@ class NativeEventLoopReleaseGateTests(SimpleTestCase):
                 MPW_NATIVE_MERCHANT_PROOFS={"ETH":True,"TRX":True},
                 MPW_NATIVE_EVENT_HOME=str(root),
                 MPW_NATIVE_EVENT_SECRET_FILE=str(key),
-            ), patch("mpw_native_checkout.management.commands.mpw_native_event_loop.run_local_worker") as runner:
+            ), patch(
+                "mpw_native_checkout.management.commands.mpw_native_event_loop.proven_assets",
+                return_value={"ETH":True,"TRX":True},
+            ), patch(
+                "mpw_native_checkout.management.commands.mpw_native_event_loop.run_local_worker"
+            ) as runner:
                 with self.assertRaises(CommandError):
                     call_command("mpw_native_event_loop")
                 runner.assert_not_called()
