@@ -115,15 +115,20 @@ def patch_views(text):
         "    section_map = {\"learn-saman\": \"learn\", \"play-saman\": \"play\", \"products-saman\": \"products\", \"membership-saman\": \"membership\", \"partners-saman\": \"partners\", \"about-saman\": \"about\"}\n"
         "    if section not in section_map:\n"
         "        raise Http404\n"
-        "    return render(request, \"saman/index.html\", {\"saman_section\": section_map[section]})\n\n\n"
+        "    return render(request, \"saman/\" + section_map[section] + \".html\")\n\n\n"
     )
 
     if existing:
         node = existing[0]
         source = ast.get_source_segment(text, node) or ""
-        if 'section_map = {' in source and 'section_map[section]' in source:
+        if 'section_map = {' in source and 'render(request, "saman/" + section_map[section] + ".html")' in source:
             return text
-        if 'render(request, "saman/index.html", {"saman_section": section})' not in source:
+        # Only replace the previously deployed SAMAN renderer, never unrelated views.
+        known_old = (
+            'render(request, "saman/index.html", {"saman_section": section_map[section]})' in source
+            or 'render(request, "saman/index.html", {"saman_section": section})' in source
+        )
+        if not known_old:
             raise ValueError("Existing SAMAN section view has an unexpected body")
         first_line = min([node.lineno] + [item.lineno for item in node.decorator_list])
         lines = text.splitlines(keepends=True)
