@@ -5,7 +5,8 @@ changes. Does not depend on GitHub Actions for ongoing execution.
 
 Polls public ETH/TRON incoming-payment indexers every 15 seconds ONLY while
 a fresh, local, server-controlled pending-orders marker exists. The default
-idle scan cadence is 180 seconds to avoid pointless rate-limit pressure.
+idle mode performs ZERO indexer or blockchain API requests. The local
+process only checks a short-lived pending-invoice signal and sleeps.
 
 The marker is NOT exposed on a website and must be refreshed ONLY by a
 separately authenticated backend order service after production integration.
@@ -24,7 +25,7 @@ from scripts.mojplaywin_direct_wallet_discovery import (
 )
 
 ACTIVE_SECONDS = 15
-IDLE_SECONDS = 180
+IDLE_SECONDS = 60
 MAX_MARKER_AGE_SECONDS = 120
 RETRY_LIMIT_SECONDS = 300
 VALID_MODES = frozenset({"ETH", "TRX", "BOTH"})
@@ -115,11 +116,13 @@ def run_forever(home, *, time_fn=time.time, sleep=time.sleep,
             else:
                 interval = IDLE_SECONDS
                 active = False
-            if now >= next_scan:
+                next_scan = now
+                failures = 0
+            if active and now >= next_scan:
                 try:
                     result = scan_once(
                         eth_scan=eth_scan, trx_scan=trx_scan,
-                        mode=mode or "BOTH",
+                        mode=mode,
                     )
                     failures = 0
                     # Do not print addresses, transaction hashes or buyer data.
@@ -133,7 +136,7 @@ def run_forever(home, *, time_fn=time.time, sleep=time.sleep,
                     logger.warning("indexer_unavailable retry_s=%s error_type=%s",
                                    cooldown, type(exc).__name__)
             elif not active and now - last_idle_heartbeat >= IDLE_SECONDS:
-                logger.info("idle heartbeat read_only=true")
+                logger.info("idle no_remote_calls=true no_ai_tokens=true")
                 last_idle_heartbeat = now
             sleep(ACTIVE_SECONDS)
         logger.info("stopped")
@@ -151,7 +154,10 @@ def main():
     signal.signal(signal.SIGTERM, request_stop)
     signal.signal(signal.SIGINT, request_stop)
     if args.once:
-        mode = get_pending_mode(Path(args.home) / "pending-orders.mode") or "BOTH"
+        mode = get_pending_mode(Path(args.home) / "pending-orders.mode")
+        if mode is None:
+            print("WATCHER_IDLE_ZERO_REMOTE_REQUESTS")
+            return 0
         try:
             result = scan_once(mode=mode)
         except (IndexerUnavailable, OSError, ValueError):
