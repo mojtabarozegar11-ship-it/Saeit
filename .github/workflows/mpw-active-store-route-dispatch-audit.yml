@@ -1,0 +1,104 @@
+name: MojPlayWin exact active store route and cross-domain dispatch audit
+on:
+  push:
+    branches: [qa/mpw-factory-safe-storefront-20261014]
+    paths:
+      - .github/workflows/mpw-active-store-route-dispatch-audit.yml
+      - core/templates/core/mojplaywin_store_base.html
+      - core/templates/core/mojplaywin_factory_store.html
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compare active Django route code with reviewed storefront patch and free product gate without writes
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/mpw-readonly-host"
+          mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          python3 - "$d/vps.key" "$d/host.key" <<'PY'
+          from pathlib import Path
+          import sys
+          for name in sys.argv[1:]:
+              p = Path(name)
+              p.write_text(p.read_text().replace("\r\n", "\n").strip().replace("\\n", "\n") + "\n")
+          PY
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host relay
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host host
+            HostName zohal.pws-dns.net
+            Port 1396
+            User zomorod2
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump relay
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+          EOF
+          timeout 30s ssh -F "$d/config" relay 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          timeout 100s ssh -F "$d/config" host 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = "zomorod2"
+          export PYTHONDONTWRITEBYTECODE=1
+          export DJANGO_SETTINGS_MODULE=config.settings
+          cd "$HOME/Saeit-staging"
+          "$HOME/virtualenv/Saeit-staging/3.11/bin/python" - <<'PY'
+          import ast,inspect
+          from pathlib import Path
+          import django
+          django.setup()
+          from django.urls import resolve,get_resolver
+          from django.test import RequestFactory
+          source=Path("config/urls.py").read_text()
+          tree=ast.parse(source)
+          for n in ast.walk(tree):
+              if (isinstance(n,ast.Call) and isinstance(n.func,ast.Name)
+                  and n.func.id in ("path","re_path") and n.args
+                  and isinstance(n.args[0],ast.Constant)
+                  and n.args[0].value in ("store/","market/","factory/","factory-releases/")):
+                  print("MPW_URL_ROUTE_DECLARATION",n.args[0].value,
+                        " ".join((ast.get_source_segment(source,n) or "")[:700].split()))
+          resolved=resolve("/store/")
+          print("MPW_STORE_RESOLVED_CALLBACK",getattr(resolved.func,"__qualname__","unknown"))
+          for name in ("store","factory_store","mpw_store","market"):
+              try:
+                  import django.urls
+                  print("MPW_ROUTE_REVERSE",name,django.urls.reverse(name))
+              except Exception:
+                  pass
+          print("MPW_STOREFRONT_ROUTE_AUDIT_COMPLETE=True")
+          PY
+          REMOTE
+      - name: Erase runner-only transient SSH keys
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/mpw-readonly-host"

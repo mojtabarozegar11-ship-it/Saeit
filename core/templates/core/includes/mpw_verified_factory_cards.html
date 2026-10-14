@@ -1,0 +1,22 @@
+{% comment %}
+Scoped optional insertion inside the existing branded MojPlayWin store.
+No checkout for products without verified release and payment evidence.
+{% endcomment %}
+{% if factory_cards %}
+<section id="mpw-verified-factory" aria-label="Verified factory releases" style="padding:24px 0">
+  <h2>Verified Factory Releases</h2>
+  <div class="mpw-factory-release-list">
+  {% for item in factory_cards %}
+    <article class="mpw-factory-release" style="border:2px solid #b99b63;border-radius:14px;padding:18px;margin:14px 0;background:#223628;color:#f6edd8">
+      <h3>{{ item.name }}</h3>
+      <p><strong>{{ item.price }}</strong></p>
+      {% if item.discount_claim %}
+        <p>{{ item.discount_claim }}. This is an assessed value, not a previously charged price.</p>
+      {% endif %}
+      <a href="{{ item.url }}" style="display:inline-block;padding:10px 20px;border-radius:24px;background:#e2bf7a;color:#1a281e;font-weight:bold">{{ item.button }}</a>
+    </article>
+  {% endfor %}
+  </div>
+  <p><small>Digital products are offered only after publication and delivery verification. Technical checks do not guarantee financial returns.</small></p>
+</section>
+{% endif %}

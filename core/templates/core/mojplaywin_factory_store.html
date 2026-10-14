@@ -1,0 +1,55 @@
+{% extends "core/mojplaywin_store_base.html" %}
+{% block title %}MojPlayWin | Verified Digital Tools{% endblock %}
+{% block meta_description %}Verified free and digital tools offered by MojPlayWin with clear pricing and safe checkout verification.{% endblock %}
+{% block body_class %}page-store commerce-page mpw-store{% endblock %}
+{% block content %}
+<section class="mpw-factory-market" aria-label="MojPlayWin Store">
+  <div class="mpw-factory-hero">
+    <p class="mpw-eyebrow">MOJPLAYWIN • DIGITAL MARKETPLACE</p>
+    <h1>Smart tools. Clear value.</h1>
+    <p>Explore released digital tools with verified source files and transparent pricing. Public downloads are free where stated. Paid checkout appears only when payment and delivery have passed production checks.</p>
+  </div>
+  <div class="mpw-products">
+    <h2>Verified Factory Releases</h2>
+    {% for item in factory_cards %}
+      <article class="mpw-product" aria-label="{{ item.name }}">
+        <div class="mpw-product-info">
+          <small>{% if item.kind == "free" %}FREE TOOLKIT{% else %}VERIFIED DIGITAL PRODUCT{% endif %}</small>
+          <h3>{{ item.name }}</h3>
+          <strong>{{ item.price }}</strong>
+          {% if item.discount_claim %}<p class="mpw-small-print">{{ item.discount_claim }}. The assessed reference is not a previously charged price.</p>{% endif %}
+        </div>
+        <a class="mpw-product-link" href="{{ item.url }}">{{ item.button }}</a>
+      </article>
+    {% empty %}
+      <p class="mpw-empty" role="status">No additional factory products have passed the public release and delivery checks yet.</p>
+    {% endfor %}
+  </div>
+  {% if other_products %}
+    <div class="mpw-products">
+      <h2>Other Active Products</h2>
+      {% for product in other_products %}
+        <article class="mpw-product">
+          <div class="mpw-product-info"><small>{{ product.product_type }}</small><h3>{{ product.title }}</h3><strong>{{ product.price }} {{ product.currency }}</strong></div>
+          <p class="mpw-small-print">Contact the store to confirm availability and delivery terms.</p>
+        </article>
+      {% endfor %}
+    </div>
+  {% endif %}
+  <p class="mpw-disclosure">A technical quality check is not a guarantee of financial returns. No unsupported “was” prices or fabricated discounts are shown.</p>
+</section>
+<style>
+.mpw-factory-market{margin:0 auto;max-width:1080px;padding:clamp(22px,5vw,64px) 18px;color:#f7f1de}
+.mpw-factory-hero{border:2px solid #be9956;border-radius:22px;padding:clamp(24px,5vw,58px);background:linear-gradient(135deg,#192b23,#334333)}
+.mpw-eyebrow{letter-spacing:.19em;color:#e0bb7f;font-weight:700;font-size:12px}
+.mpw-factory-hero h1{font-size:clamp(30px,5vw,58px);line-height:1.1;margin:.5em 0}
+.mpw-factory-hero p:last-child{color:#f2e7cf;line-height:1.75;max-width:68ch}
+.mpw-products{margin:36px 0}.mpw-products h2{font-size:22px;margin-bottom:18px}
+.mpw-product{background:#24382d;border:2px solid #b69657;border-radius:18px;padding:22px;margin:14px 0;display:flex;align-items:center;justify-content:space-between;gap:25px;flex-wrap:wrap}
+.mpw-product-info{min-width:220px;flex:1}.mpw-product h3{font-size:19px;margin:10px 0}.mpw-product small{font-size:11px;letter-spacing:.13em;color:#e8cc93}
+.mpw-product strong{font-size:22px;color:#fce1a3}.mpw-product-link{display:inline-block;border-radius:100px;background:#d8b66b;color:#202c24;padding:13px 23px;text-decoration:none;font-weight:700}
+.mpw-product-link:focus-visible{outline:3px solid #fff;outline-offset:3px}
+.mpw-small-print,.mpw-disclosure,.mpw-empty{line-height:1.6;color:#e4d5b6}.mpw-empty{padding:22px;border:1px dashed #b69657;border-radius:14px}
+@media(max-width:640px){.mpw-product{display:block}.mpw-product-link{margin-top:20px}}
+</style>
+{% endblock %}

@@ -1,0 +1,141 @@
+name: MojPlayWin actual live site deployment diff read-only
+on:
+  push:
+    branches: [qa/mpw-factory-safe-storefront-20261014]
+    paths:
+      - .github/workflows/mpw-factory-live-diff-readonly.yml
+      - core/templates/core/mojplaywin_store_base.html
+      - core/templates/core/mojplaywin_factory_store.html
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compare active Django route code with reviewed storefront patch and free product gate without writes
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/mpw-readonly-host"
+          mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          python3 - "$d/vps.key" "$d/host.key" <<'PY'
+          from pathlib import Path
+          import sys
+          for name in sys.argv[1:]:
+              p = Path(name)
+              p.write_text(p.read_text().replace("\r\n", "\n").strip().replace("\\n", "\n") + "\n")
+          PY
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host relay
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host host
+            HostName zohal.pws-dns.net
+            Port 1396
+            User zomorod2
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump relay
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+          EOF
+          timeout 30s ssh -F "$d/config" relay 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          timeout 120s ssh -F "$d/config" host 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = "zomorod2"
+          export PYTHONDONTWRITEBYTECODE=1
+          export DJANGO_SETTINGS_MODULE=config.settings
+          cd "$HOME/Saeit-staging"
+          "$HOME/virtualenv/Saeit-staging/3.11/bin/python" - <<'PY'
+          import ast,hashlib,importlib.util,datetime
+          from pathlib import Path
+          import django
+          django.setup()
+          from django.conf import settings
+          from django.contrib.auth import get_user_model
+          from django.urls import resolve
+          from django.test import RequestFactory
+          from django.db import connection
+          from core.models import Product,Order,PaymentIntent
+          home=Path.home(); site=home/"Saeit-staging"; pub=home/"mojplaywin.com"
+          paths=("core/commerce_views.py","core/templates/core/store.html","core/templates/core/mojplaywin_factory_store.html","core/templates/core/mojplaywin_store_base.html","core/factory_storefront.py","config/urls.py")
+          for rel in paths:
+              p=site/rel
+              if p.exists() and not p.is_symlink() and p.is_file():
+                  body=p.read_bytes()
+                  print("MPW_ACTIVE_FILE",rel,"SHA256",hashlib.sha256(body).hexdigest(),"BYTES",len(body))
+              else:
+                  print("MPW_ACTIVE_FILE_ABSENT",rel)
+          active=site/"core/commerce_views.py"
+          assert active.is_file() and not active.is_symlink()
+          text=active.read_text("utf-8")
+          tree=ast.parse(text)
+          for node in tree.body:
+              if isinstance(node,(ast.FunctionDef,ast.AsyncFunctionDef)):
+                  print("MPW_ACTIVE_COMMERCE_FUNCTION",node.name)
+          found=resolve("/store/")
+          print("MPW_STORE_VIEW_MODULE",getattr(found.func,"__module__","unknown"))
+          print("MPW_STORE_VIEW_NAME",getattr(found.func,"__name__","unknown"))
+          for label,host in (("MOJPLAYWIN","mojplaywin.com"),("ZOMOROD","zomorodmelal.ir")):
+              request=RequestFactory().get("/store/",HTTP_HOST=host)
+              from core.commerce_views import store_home
+              response=store_home(request)
+              print("MPW_ACTIVE_"+label+"_STORE_RENDER_200",response.status_code==200)
+              if hasattr(response,"content"):
+                  content=response.content.decode("utf8","replace")
+                  print("MPW_ACTIVE_"+label+"_BRAND_MOJPLAYWIN", "Smart tools. Clear value." in content)
+                  print("MPW_ACTIVE_"+label+"_BRAND_ZOMOROD","Zomorodmelal" in content)
+          farm=Product.objects.get(pk=131)
+          water=Product.objects.get(pk=147)
+          print("MPW_REAL_FARM_ACTIVE",farm.active)
+          print("MPW_REAL_WATER_ACTIVE",water.active)
+          print("MPW_REAL_FARM_PRICE",str(farm.price))
+          print("MPW_REAL_WATER_PRICE",str(water.price))
+          print("MPW_REAL_WATER_PAID_READY",water.metadata.get("factory_paid_checkout_ready"))
+          print("MPW_LIVE_ORDERS_COUNT",Order.objects.count())
+          print("MPW_LIVE_PAYMENT_INTENTS_COUNT",PaymentIntent.objects.count())
+          module=home/".saeit-factory-inbox/bin/publish_verified_factory_store_listing.py"
+          print("MPW_INSTALLED_FREE_PUBLISHER",module.is_file() and not module.is_symlink())
+          if module.is_file() and not module.is_symlink():
+              import importlib.util
+              spec=importlib.util.spec_from_file_location("mpw_free_release_preview",module)
+              pkg=importlib.util.module_from_spec(spec)
+              spec.loader.exec_module(pkg)
+              try:
+                  outcome=pkg.publish(home/".saeit-factory-inbox",site,pub,apply=False)
+                  print("MPW_FREE_DRY_RUN_STATUS",outcome.get("status"))
+                  print("MPW_FREE_DRY_RUN_TARGET",outcome.get("product_id"))
+              except Exception as exc:
+                  print("MPW_FREE_DRY_RUN_BLOCKED_ERROR_TYPE",type(exc).__name__)
+          print("MPW_LIVE_CODE_DB_READONLY_AUDIT_COMPLETE=True")
+          PY
+          REMOTE
+      - name: Erase runner-only transient SSH keys
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/mpw-readonly-host"
