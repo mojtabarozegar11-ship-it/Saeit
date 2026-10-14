@@ -15,7 +15,7 @@ from core.models import Order, LedgerEntry
 from mpw_commerce.models import CommerceInvoice, CommerceReceipt, CommerceFulfillment
 from mpw_commerce.auto_reconcile import reconcile_pending_orders
 from mpw_commerce.trusted_chain import verify_with_trusted_rpc, ChainAdapterUnavailable
-from scripts.mojplaywin_direct_wallet_discovery import Candidate
+from scripts.mojplaywin_direct_wallet_discovery import Candidate, tron_address_to_hex
 
 GATES = {
     "MPW_COMMERCE_RELEASE_READY": True,
@@ -91,7 +91,7 @@ class PaymentReleasePreflightTests(TestCase):
         eth = Mock(side_effect=AssertionError("ETH indexer unnecessary"))
         candidate = Candidate(
             "tron-mainnet", "a" * 64,
-            TRX_RECEIVER.lower(), TRX_RECEIVER.lower(),
+            tron_address_to_hex(TRX_RECEIVER).lower(),\n            tron_address_to_hex(TRX_RECEIVER).lower(),
             invoice.amount_atomic, int(self.now.timestamp() * 1000),
         )
         tron = Mock(return_value=[candidate])
