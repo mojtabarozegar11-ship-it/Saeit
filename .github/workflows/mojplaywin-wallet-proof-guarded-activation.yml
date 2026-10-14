@@ -109,4 +109,4 @@ jobs:
       - name: Remove temporary SSH credentials
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/mpw-proof-preflight"
-# Prioritize the private proof route above the homepage; public checkout remains disabled.
+# The private wallet proof route is isolated from checkout and keeps public sales disabled.
