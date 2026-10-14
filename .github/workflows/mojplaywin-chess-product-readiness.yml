@@ -159,6 +159,44 @@ jobs:
             echo DJANGO_PYTHON_MISSING
           fi
           echo "DJANGO_PRODUCT_GATE_AUDIT_END"
+          echo "LIVE_CRYPTO_INTEGRATION_AUDIT_START"
+          python3 - <<'PY'
+          import ast
+          from pathlib import Path
+          root=Path('/home/zomorod2/Saeit-staging')
+          terms=('crypto','payment','checkout','webhook','gateway','provider','invoice','wallet','confirm','fulfill','purchase')
+          selected=[]
+          for base in (root/'core',root/'config'):
+              if not base.exists(): continue
+              for p in base.rglob('*.py'):
+                  if any(part in ('migrations','tests','__pycache__') for part in p.parts): continue
+                  if len(selected)>50: break
+                  try: text=p.read_text(errors='replace')
+                  except OSError: continue
+                  if any(t in text.lower() for t in ('CryptoPaymentIntent','CRYPTO_GATEWAY','CRYPTO_PAY','crypto_checkout','payment_webhook','crypto_checkout')):
+                      selected.append(p)
+          for path in selected[:50]:
+              print('CANDIDATE',str(path.relative_to(root)))
+              try: tree=ast.parse(path.read_text(errors='replace'))
+              except SyntaxError: continue
+              for node in ast.walk(tree):
+                  if isinstance(node,(ast.ClassDef,ast.FunctionDef,ast.AsyncFunctionDef)):
+                      name=node.name.lower()
+                      if any(t in name for t in terms): print('  DEFINITION',node.name,'LINE',node.lineno)
+          settings=root/'config/settings.py'
+          if settings.exists():
+              lines=settings.read_text(errors='replace').splitlines()
+              for i,s in enumerate(lines,1):
+                  if any(t in s.upper() for t in ('PAYMENT_', 'CRYPTO_', 'NOWPAYMENTS', 'COINPAYMENTS', 'CRYPTOMUS', 'BTCPAY','TRON','USDT_')):
+                      print('SETTING_KEY_ONLY',i,s.split('=',1)[0].strip()[:90] if '=' in s else '<expression>')
+          for rel in ('config/urls.py','core/urls.py'):
+              p=root/rel
+              if not p.is_file(): continue
+              for i,ln in enumerate(p.read_text(errors='replace').splitlines(),1):
+                  if any(t in ln.lower() for t in ('crypto','payment','checkout','store','order','webhook','invoice','download')):
+                      print('URL_HINT',rel,i,ln[:170])
+          print('LIVE_CRYPTO_INTEGRATION_AUDIT_END')
+          PY
           REMOTE
           for url in https://mojplaywin.com/ https://mojplaywin.com/admin/login/ https://mojplaywin.com/store/ https://mojplaywin.com/shop/; do
             code="$(curl -sS -L --connect-timeout 10 --max-time 20 -o /dev/null -w '%{http_code}' "$url" || true)"
