@@ -25,7 +25,7 @@ class DirectWalletQuoteTests(unittest.TestCase):
             sender_proof_verified=True,
             now_epoch=NOW,
             invoice_dust=9,
-            amount_is_unique=lambda chain, address, amount: True,
+            reserve_amount=lambda chain, address, amount: True,
         )
         args.update(changes)
         return args
@@ -82,7 +82,7 @@ class DirectWalletQuoteTests(unittest.TestCase):
 
     def test_existing_amount_blocks_checkout(self):
         with self.assertRaises(m.InvoiceError):
-            m.build_direct_invoice(**self.prepare(amount_is_unique=lambda *args: False))
+            m.build_direct_invoice(**self.prepare(reserve_amount=lambda *args: False))
 
     def test_rate_asset_mismatch_blocks_checkout(self):
         rate=m.SpotRate("TRX","0.30","coingecko",NOW-1)
