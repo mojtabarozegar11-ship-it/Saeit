@@ -75,13 +75,19 @@ jobs:
           stage,site=map(Path,sys.argv[1:])
           source=stage/"mpw_native_checkout"
           target=site/"mpw_native_checkout"
-          if target.exists() or target.is_symlink():
-              raise SystemExit("MPW_INACTIVE_PROOF_PACKAGE_ALREADY_EXISTS_REVIEW_REQUIRED")
+          if target.is_symlink():
+              raise SystemExit("MPW_PROOF_PACKAGE_SYMLINK_UNSAFE")
           permitted={".py",".html"}
           paths=[x for x in source.rglob("*") if x.is_file() and "__pycache__" not in x.parts]
           if not paths or any(x.suffix not in permitted or x.is_symlink() for x in paths):
               raise SystemExit("MPW_PROOF_PACKAGE_UNSAFE")
-          shutil.copytree(source,target,ignore=shutil.ignore_patterns("__pycache__","*.pyc"))
+          if target.exists():
+              for item in paths:
+                  dest=target/item.relative_to(source)
+                  if not dest.is_file() or dest.read_bytes()!=item.read_bytes():
+                      raise SystemExit("MPW_EXISTING_PROOF_MODULES_DIFFER_STOP")
+          else:
+              shutil.copytree(source,target,ignore=shutil.ignore_patterns("__pycache__","*.pyc"))
           for p in target.rglob("*"):
               if p.is_file():p.chmod(0o640)
           for name in ("mojplaywin_native_chain_verify.py","mojplaywin_purchase_events.py"):
@@ -122,7 +128,7 @@ jobs:
           executor=MigrationExecutor(connection)
           target=[("mpw_native_checkout","0003_merchantwalletchallenge_merchantwalletproof")]
           plan=executor.migration_plan(target)
-          if not plan or any(app!="mpw_native_checkout" or backwards for (app,_),backwards in plan):
+          if not plan or any(m.app_label!="mpw_native_checkout" or backwards for m,backwards in plan):
               raise SystemExit("MPW_MIGRATION_PLAN_HAS_UNEXPECTED_OPERATION")
           print("MPW_ONLY_NEW_PROOF_APP_MIGRATIONS",",".join(m.name for m,backwards in plan))
           PY
