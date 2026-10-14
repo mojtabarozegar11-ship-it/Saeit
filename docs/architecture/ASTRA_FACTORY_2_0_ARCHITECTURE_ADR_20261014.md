@@ -226,3 +226,22 @@ Existing code to preserve/adapt:
 Design choices to validate before implementation: concrete evidence data sources/platform permissions; modality-specific trusted validators; true qualified backlog; target storefront jurisdiction/licensing, safe spending/compute budgets, and actual VPS headroom. No speculative sales or guaranteed 90+ score.
 
 **Status at authoring:** ARCHITECTURE PROPOSAL ONLY; none of phases B–G or the new selection/build/QA engine are claimed as implemented. No live VPS or cPanel changes are part of this change.
+
+## 14. Research connection step — 2026-10-15, VPS read-only evidence audit
+
+**Audit source:** [GitHub Actions run 38652072237](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/38652072237), UTC 2026-10-14 23:07; query-only isolated factory SQLite, no site or factory mutations.
+
+Measured aggregate snapshot, NOT verified customer demand:
+- ResearchProject: **257**, ResearchSource: **479**, Evidence: **479**, Finding: **477**.
+- FactoryRun: **220**, core Product records: **209**; these are row counts, not completed commercial goods.
+- Evidence-linked ResearchSource records: **479**.
+- HTTPS references with SHA256-looking hashes: **479**, spanning **248 preliminary hostnames**. A URL + SHA-format checksum does not establish independent page retrieval, truthful excerpt, independent publisher, buyer interest or willingness to pay.
+- **core_factoryqueueitem and core_discoverysnapshot absent** in this observed live database. Astra migration 0049 may pass in a disposable test environment but cannot be assumed installed on the live VPS.
+
+New branch-only bridge:
+- `scripts/astra_research_evidence_adapter.py`: read-only `mode=ro` SQLite transaction; source-to-evidence/project/factory-owned-inactive-product mapping; opt-in exact Astra queue-key mapping where migration 0049 exists; strict SHA, timestamp and source-type validation delegated to selector.
+- `tests/test_astra_research_evidence_adapter.py`: synthetic fixture tests for source ownership boundaries, product exclusion, absent 0049 schema, type-specific evidence, no automatic product/publish/payment permission, no database writes and private report output.
+- `.github/workflows/astra-v2-research-source-audit.yml`: VPS read-only aggregate check over proven pinned GitHub-to-VPS SSH route. No raw URLs, passages, keys or user data emitted to CI.
+- Existing sources without an independently attested market claim classification stay *uncategorized* and cannot satisfy the demand/willingness-to-pay gate. A provider claim label is still **provisional**, never independently verified by the bridge.
+
+**Next technical blocker:** implement bounded independently verified source retrieval and claim classification with provenance/freshness/rights review, prove genuinely useful qualified briefs, then enable a builder **only after** the separate guarded Astra 0049 single-writer integration and owner policy checks. The current stage did not create new commercial products, spend API tokens or change the live scheduler.
