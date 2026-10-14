@@ -1,10 +1,5 @@
 name: ComfyUI Tailnet Private Mobile Access
 on:
-  push:
-    branches: [feature/comfyui-private-mobile-gateway-20261015]
-    paths:
-      - .github/workflows/comfyui-private-mobile-access.yml
-      - ops/comfyui-vps/private-tailnet.sh
   workflow_dispatch:
     inputs:
       action:
