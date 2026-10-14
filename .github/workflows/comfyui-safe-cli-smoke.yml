@@ -1,0 +1,42 @@
+name: ComfyUI Safe CLI Smoke Test
+on:
+  push:
+    branches: [audit/vps-comfyui-hardware-20261014]
+    paths: [.github/workflows/comfyui-safe-cli-smoke.yml]
+permissions:
+  contents: read
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: ComfyUI CLI smoke test while retaining VPS factory loop
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/ssh"; install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;print(sys.stdin.read().replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}')" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          timeout 105s ssh -i "$d/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o BatchMode=yes githubops@178.239.147.150 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          root="$HOME/comfyui-isolated"
+          test -x "$root/env-cpu/bin/python" && test -f "$root/source-v0.40.0/main.py"
+          cd "$root/source-v0.40.0"
+          export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONDONTWRITEBYTECODE=1
+          echo COMFY_CLI_HELP_TEST_BEGIN
+          if timeout 55s nice -n 15 "$root/env-cpu/bin/python" -I main.py --help >/dev/null; then echo COMFY_CLI_HELP_OK; else echo COMFY_CLI_HELP_FAILED; exit 1; fi
+          echo COMFY_CLI_TEST_DONE
+          f="$HOME/factory-runtime/operations/vps-only-loop.pid"
+          if test -f "$f"; then
+            pid="$(cat "$f")"
+            if [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null; then echo FACTORY_LOOP_ALIVE_AFTER_SMOKE; else echo FACTORY_LOOP_NOT_VERIFIED_AFTER_SMOKE; fi
+          fi
+          free -m | awk '/^Mem:/{print "RAM_AVAILABLE_MB="$7}'
+          REMOTE
