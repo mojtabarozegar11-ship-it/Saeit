@@ -115,6 +115,14 @@ jobs:
           personal=/home/zomorod2/mojtaba_personal/mojtaba_roozegar_personal_v17
           personal_python=/home/zomorod2/mojtaba_personal/.venv_personal_test/bin/python
           inspect_admin MOJTABA_PERSONAL "$personal" "$personal_python"
+          for f in /home/zomorod2/mojplaywin.com/.htaccess /home/zomorod2/mojplaywin.com/mojtaba.roozegar/.htaccess; do
+            if test -f "$f"; then
+              echo "PERSONAL_MOUNT_CONFIG=$f"
+              grep -E '^[[:space:]]*Passenger(AppRoot|BaseURI|StartupFile)|^[[:space:]]*Rewrite(Engine|Cond|Rule)' "$f" | head -25 || true
+            else
+              echo "PERSONAL_MOUNT_CONFIG_MISSING=$f"
+            fi
+          done
           REMOTE
       - name: Check public login routes (read-only HTTP GET)
         shell: bash
@@ -134,3 +142,4 @@ jobs:
           check_route ZOMOROD_ADMIN https://zomorodmelal.ir/admin/login/
           check_route MOJPLAYWIN_ADMIN https://mojplaywin.com/admin/login/
           check_route MOJTAba_PERSONAL_ADMIN https://mojplaywin.com/mojtaba.roozegar/admin/login/
+          check_route MOJTAba_PERSONAL_HOME https://mojplaywin.com/mojtaba.roozegar/
