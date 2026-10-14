@@ -65,7 +65,16 @@ async function refreshCommerceEvidence(){
    const card=document.createElement("article"),amount=document.createElement("strong"),desc=document.createElement("p");
    card.className="card";amount.textContent=String(value);desc.textContent=label;card.append(amount,desc);host.append(card);
   }
-  finance.textContent=isEn?"Verified revenue: Unknown — external settlement not reconciled. VPS factory runtime: Unknown.":"درآمد تأییدشده: نامشخص — تطبیق با تسویه مستقل انجام نشده است. وضعیت اجرای کارخانه VPS: نامشخص.";
+  const factory=d.factory||{};
+  const verified=factory.state==="observed_running";
+  const details=factory.product_cycle;
+  const runtime=verified?(isEn?"VPS factory loop: observed running":"حلقه کارخانه VPS: اجرای فعال مشاهده‌شده"):
+    (isEn?"VPS runtime: "+(factory.state||"unknown"):"وضعیت اجرای VPS: "+(factory.state||"نامشخص"));
+  const packages=details?
+    (isEn?" | Private packages: "+details.built_product_count+" | Publishable: "+details.publishable_product_count+" | Distribution: "+details.store_distribution_state:
+     " | بسته‌های خصوصی: "+details.built_product_count+" | قابل انتشار طبق وضعیت کارخانه: "+details.publishable_product_count+" | توزیع: "+details.store_distribution_state):"";
+  const observed=factory.observed_at?" | "+(isEn?"Observed: ":"زمان نمونه: ")+factory.observed_at:"";
+  finance.textContent=(isEn?"Verified revenue: Unknown — external settlement unverified. ":"درآمد تأییدشده: نامشخص — تطبیق تسویه انجام نشده است. ")+runtime+packages+observed;
   proof.textContent=(isEn?"Source: ":"منبع: ")+d.source+" | "+d.captured_at+" | "+(isEn?"Shared database, not solely this site":"دیتابیس مشترک، بدون اثبات انتساب انحصاری به این سایت");
  }catch(e){
   host.replaceChildren();
