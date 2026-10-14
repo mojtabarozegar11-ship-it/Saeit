@@ -185,7 +185,7 @@ jobs:
                               value=str(value)[:240]
                           values.append(key+"="+str(value))
                   print("RECENT_"+name+" "+" ".join(values))
-                    for model in apps.get_app_config("core").get_models():
+          for model in apps.get_app_config("core").get_models():
               if model.__name__ in ("ResearchProject","FactoryTask","FactoryRun","AgentTask"):
                   print("MODEL="+model._meta.label+" COUNT="+str(model.objects.count()))
                   names={field.name for field in model._meta.get_fields()}
