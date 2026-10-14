@@ -20,10 +20,10 @@ def test_taniya_patch_adds_route_and_view_to_base_source():
     base_urls = urls.replace(
         "from core.views import home, platform_page, taniya_studio",
         "from core.views import home, platform_page",
-    ).replace('    path("taniya/", taniya_studio, name="taniya_studio"),\\n', "")
+    ).replace('    path("taniya/", taniya_studio, name="taniya_studio"),\n', "")
     base_views = views.replace(
-        "@never_cache\\ndef taniya_studio(request):\\n"
-        '    return render(request, "taniya_studio/index.html")\\n\\n\\n',
+        "@never_cache\ndef taniya_studio(request):\n"
+        '    return render(request, "taniya_studio/index.html")\n\n\n',
         "",
     ).replace(
         '"links":[{"title":"Taniya Studio","text":"20 playful browser games","url":"/taniya/"},',
