@@ -213,6 +213,16 @@ class MerchantWalletProofTests(TestCase):
             self.client.get(reverse("mpw_wallet_proof:challenge")).status_code,405
         )
 
+    def test_shared_django_other_domains_cannot_request_wallet_signatures(self):
+        self.client.force_login(self.owner)
+        response=self.client.post(
+            reverse("mpw_wallet_proof:challenge"),
+            data='{"asset":"ETH"}',content_type="application/json",
+            secure=True, HTTP_HOST="zomorodmelal.ir",
+        )
+        self.assertEqual(response.status_code,403)
+        self.assertFalse(MerchantWalletChallenge.objects.exists())
+
     def test_no_owner_signatures_can_be_issued_over_plain_http(self):
         self.client.force_login(self.owner)
         r=self.client.post(
