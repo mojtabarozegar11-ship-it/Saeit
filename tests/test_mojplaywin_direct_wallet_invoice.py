@@ -25,7 +25,7 @@ class DirectWalletQuoteTests(unittest.TestCase):
             sender_proof_verified=True,
             now_epoch=NOW,
             invoice_dust=9,
-            reserve_amount=lambda chain, address, amount: True,
+            reserve_amount=lambda chain, address, amount, order_id: True,
         )
         args.update(changes)
         return args
