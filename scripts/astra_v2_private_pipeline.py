@@ -274,7 +274,39 @@ def _make_artifact(root, job_id, builder=BUILDER):
         if temp.exists():temp.unlink()
 
 
+def intake_private_briefs(root):
+    """Collect capped local-only proto briefs. No network, buyer claims or publication.
+
+    Work arrives only when an external reviewed process writes an allowlisted
+    JSON brief into the private inbox. Re-scans are idempotent by payload SHA.
+    An invalid inbox file is recorded as a count and never blocks healthy work.
+    """
+    inbox = root / "incoming"
+    if not inbox.exists():
+        return {"accepted":0,"unchanged":0,"rejected":0}
+    if inbox.is_symlink() or not inbox.is_dir():
+        raise ValueError("private inbox must be a regular directory")
+    entries = sorted(inbox.iterdir(),key=lambda p:p.name)
+    if len(entries) > MAX_BRIEFS:
+        raise ValueError("private inbox exceeds bounded entry count")
+    counts={"accepted":0,"unchanged":0,"rejected":0}
+    for item in entries:
+        if not item.name.endswith(".json") or item.is_symlink() or not item.is_file():
+            counts["rejected"] += 1
+            continue
+        try:
+            if item.stat().st_size > 20000:
+                raise ValueError("oversized private brief")
+            obj=json.loads(item.read_text(encoding="utf-8"))
+            result=enqueue(root,obj)
+            counts["accepted" if result["new_job"] else "unchanged"]+=1
+        except (OSError,ValueError,TypeError,UnicodeDecodeError):
+            counts["rejected"]+=1
+    return counts
+
+
 def tick(root):
+    intake_private_briefs(root)
     with locked(root), database(root) as conn:
         # The EXCLUSIVE file lock remains held for the full build. Therefore
         # any BUILDING job seen *after* acquiring it was abandoned by a
