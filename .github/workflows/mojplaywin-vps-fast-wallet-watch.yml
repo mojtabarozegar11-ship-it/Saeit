@@ -8,6 +8,8 @@ on:
       - 'scripts/mojplaywin_vps_readonly_watch.py'
       - 'scripts/install_mpw_vps_readonly_watch.sh'
       - 'tests/test_mojplaywin_vps_readonly_watch.py'
+      - 'scripts/mojplaywin_purchase_events.py'
+      - 'tests/test_mojplaywin_purchase_events.py'
   workflow_dispatch:
 permissions:
   contents: read
@@ -27,6 +29,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 -m unittest discover -s tests -p 'test_mojplaywin_vps_readonly_watch.py' -v
+          python3 -m unittest discover -s tests -p 'test_mojplaywin_purchase_events.py' -v
           bash -n scripts/install_mpw_vps_readonly_watch.sh
           python3 -m py_compile scripts/mojplaywin_native_chain_verify.py scripts/mojplaywin_direct_wallet_discovery.py scripts/mojplaywin_vps_readonly_watch.py
           echo MPW_VPS_WATCH_UNIT_TESTS_OK
@@ -54,6 +57,7 @@ jobs:
             scripts/mojplaywin_native_chain_verify.py \
             scripts/mojplaywin_direct_wallet_discovery.py \
             scripts/mojplaywin_vps_readonly_watch.py \
+            scripts/mojplaywin_purchase_events.py \
             scripts/install_mpw_vps_readonly_watch.sh
           local_sha="$(sha256sum "$RUNNER_TEMP/mpw-vps-wallet.tar.gz" | awk '{print $1}')"
           connect "set -eu; test \"\$(id -un)\" = githubops; umask 077; mkdir -p \"\$HOME/mojplaywin-wallet-watch/releases/$version\"; cat > \"\$HOME/mojplaywin-wallet-watch/incoming-$version.tar.gz\"" < "$RUNNER_TEMP/mpw-vps-wallet.tar.gz"
