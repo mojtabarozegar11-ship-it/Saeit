@@ -15,7 +15,10 @@ import shutil
 import stat
 from tempfile import TemporaryDirectory
 
-from scripts.mpw_branded_store_targeted_patch import prepare
+try:
+    from scripts.mpw_branded_store_targeted_patch import prepare
+except ModuleNotFoundError:
+    from mpw_branded_store_targeted_patch import prepare
 
 ROOT = Path(__file__).resolve().parents[1]
 FILES = (
@@ -46,7 +49,8 @@ def build_package(active_source: Path, destination: Path):
     dst = dst_parent / destination.name
     if dst.exists() or dst.is_symlink():
         raise ValueError("RELEASE_OUTPUT_ALREADY_EXISTS")
-    if dst == active or dst in active.parents:
+    site_root = active.parent.parent
+    if dst == active or dst == site_root or site_root in dst.parents:
         raise ValueError("UNSAFE_OUTPUT_LOCATION")
     preimage = active.read_bytes()
     candidate, count = prepare(preimage.decode("utf-8"))
