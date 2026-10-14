@@ -164,6 +164,49 @@ function writeTable(rows){
   });
   table.append(body);return table;
 }
+function renderAnnualTrace(data){
+  const host=$("annual-audit");host.replaceChildren();
+  const h=document.createElement("h3");h.className="scenarioheading";h.textContent="ANNUAL CASH-FLOW AUDIT / BASE CASE";host.append(h);
+  const note=document.createElement("p");note.className="muted";
+  note.textContent="Amounts reflect only your assumptions; source records and market demand have not been independently verified.";host.append(note);
+  for(const o of data.scenarios.base){
+    const detail=document.createElement("details");detail.className="annual-detail";
+    const caption=document.createElement("summary");caption.textContent=o.option+" · inspect annual figures";detail.append(caption);
+    const scroll=document.createElement("div");scroll.className="year-scroll";
+    const table=document.createElement("table");table.className="resulttable annual-table";
+    const thead=document.createElement("thead"),head=document.createElement("tr");
+    ["Year","Revenue","Variable cost","Net cash","Discounted cash","Cumulative cash"].forEach(label=>{
+      const th=document.createElement("th");th.textContent=label;head.append(th);
+    });
+    thead.append(head);table.append(thead);
+    const body=document.createElement("tbody");
+    o.years.forEach(y=>{
+      const tr=document.createElement("tr");
+      ["year","stressed_revenue","stressed_variable_cost","cashflow",
+       "discounted_cashflow","cumulative_undiscounted_cashflow"].forEach(field=>{
+        const td=document.createElement("td");td.textContent=String(y[field]);tr.append(td);
+      });body.append(tr);
+    });
+    table.append(body);scroll.append(table);detail.append(scroll);host.append(detail);
+  }
+}
+function auditCSV(data){
+  const fields=["year","stressed_revenue","stressed_variable_cost","cashflow",
+    "discounted_cashflow","cumulative_undiscounted_cashflow"];
+  const escapeCSV=v=>'"'+String(v).replaceAll('"','""')+'"';
+  const records=[["scenario","option",...fields].map(escapeCSV).join(",")];
+  for(const [scenario,options] of Object.entries(data.scenarios)){
+    options.forEach(o=>o.years.forEach(y=>{
+      records.push([scenario,o.option,...fields.map(key=>y[key])].map(escapeCSV).join(","));
+    }));
+  }
+  return records.join("\n")+"\n";
+}
+function exportCSV(csv,filename){
+  const url=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"}));
+  const anchor=document.createElement("a");anchor.href=url;anchor.download=filename;
+  document.body.append(anchor);anchor.click();anchor.remove();URL.revokeObjectURL(url);
+}
 function renderResult(data){
   report=data;$("result-empty").hidden=true;$("result-area").hidden=false;
   $("winner").textContent=data.leading_option_by_base_npv_not_advice;
@@ -174,7 +217,7 @@ function renderResult(data){
     grid.append(label,writeTable(data.scenarios[key]));
   }
   $("warnings").textContent="Important warnings:\n"+data.warnings.join("\n");
-  $("result-area").scrollIntoView({behavior:"smooth",block:"start"});
+  renderAnnualTrace(data);\n  $("result-area").scrollIntoView({behavior:"smooth",block:"start"});
 }
 function downloadJson(payload,filename){
   const blob=new Blob([JSON.stringify(payload,null,2)+"\n"],{type:"application/json"});
@@ -238,6 +281,14 @@ $("import-file").addEventListener("change",async e=>{
 });
 $("download-input").addEventListener("click",()=>{
   try{downloadJson(collect(),"orchard-decision-input-private.json");}catch(e){showMessage(e.message);}
+});
+$("download-csv").addEventListener("click",()=>{
+  if(report)exportCSV(auditCSV(report),"orchard-decision-annual-audit.csv");
+});
+$("print-report").addEventListener("click",()=>{
+  if(!report){showMessage("Calculate before printing.");return;}
+  document.querySelectorAll("#annual-audit details").forEach(d=>d.open=true);
+  window.print();
 });
 $("download-report").addEventListener("click",()=>{
   if(report)downloadJson(report,"orchard-decision-report-private.json");
