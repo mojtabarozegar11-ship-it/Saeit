@@ -206,3 +206,82 @@ class FullPrivatePurchaseCycle(TestCase):
             "mpw_commerce:download",
             kwargs={"item_id":self.book_item.pk},
         )).status_code,404)
+
+    def test_tron_wallet_full_order_payment_and_private_download(self):
+        """Offline TRX path: signed text, server quote, receipt and buyer PDF."""
+        import hashlib
+        from eth_keys import keys
+        from eth_utils import keccak
+        from mpw_commerce.buyer_signature_worker import BASE58
+        from mpw_commerce.models import CommerceInvoice
+
+        private=keys.PrivateKey(bytes([0x21])*32)  # CI fixture, not real funds
+        raw_address=b"\x41"+keccak(private.public_key.to_bytes())[-20:]
+        checksum=hashlib.sha256(hashlib.sha256(raw_address).digest()).digest()[:4]
+        number=int.from_bytes(raw_address+checksum,"big")
+        address=""
+        while number:
+            number,digit=divmod(number,58)
+            address=BASE58[digit]+address
+        issued=self.post(reverse("mpw_commerce:challenge"),{
+            "order_id":self.order.pk,"asset":"TRX","sender":address,
+        })
+        self.assertEqual(issued.status_code,201,issued.content)
+        challenge=issued.json()
+        message=challenge["message"].encode("utf-8")
+        digest=keccak(b"\x19TRON Signed Message:\n"+
+                      str(len(message)).encode("ascii")+message)
+        signed=private.sign_msg_hash(digest).to_bytes()
+        signature="0x"+(signed[:64]+bytes([signed[-1]+27])).hex()
+        verified=self.post(reverse("mpw_commerce:verify"),{
+            "challenge_id":challenge["challenge_id"],"signature":signature,
+        })
+        self.assertEqual(verified.status_code,200,verified.content)
+
+        def trusted_rate(buyer,challenge_id):
+            return invoice_from_verified_buyer(
+                buyer,challenge_id,
+                rate_loader=lambda _:TrustedRate(
+                    usd_per_asset=Decimal("0.25"),
+                    source="coingecko",
+                    observed_at=timezone.now()-timedelta(seconds=5),
+                ),
+            )
+        with patch("mpw_commerce.checkout_views.invoice_from_verified_buyer",
+                   side_effect=trusted_rate):
+            response=self.post(reverse("mpw_commerce:invoice"),{
+                "challenge_id":challenge["challenge_id"],
+            })
+        self.assertEqual(response.status_code,201,response.content)
+        doc=response.json()
+        self.assertEqual(doc["network"],"tron-mainnet")
+        self.assertEqual(doc["receiver"],
+                         "THFNU1iEXHd71WjEgjqUksd2UnMg2pUi73")
+        self.assertEqual(doc["usd_total"],"20.00")
+        invoice=CommerceInvoice.objects.get(pk=doc["invoice_id"])
+        trx_hash="a"*64
+        server_proof={
+            "finalized":True,"order_id":self.order.pk,
+            "network":"tron-mainnet","tx_hash":trx_hash,
+            "sender":address.lower(),
+            "recipient":invoice.recipient.lower(),
+            "amount_atomic":int(invoice.amount_atomic),
+            "backend":"tron-mainnet-verified",
+            "block_timestamp":invoice.issued_at+timedelta(seconds=15),
+        }
+        self.assertEqual(
+            settle_order_invoice(
+                invoice.pk,trx_hash,
+                trusted_chain_verifier=lambda invoice,tx:server_proof,
+            ),
+            "paid",
+        )
+        self.assertEqual(LedgerEntry.objects.filter(order=self.order).count(),1)
+        self.assertEqual(self.service_item.mpw_fulfillment.status,"queued")
+        downloaded=self.get(reverse(
+            "mpw_commerce:download",kwargs={"item_id":self.book_item.pk},
+        ))
+        self.assertEqual(downloaded.status_code,200)
+        self.assertEqual(b"".join(downloaded.streaming_content),
+                         self.document.read_bytes())
+        downloaded.close()
