@@ -158,7 +158,7 @@ class RobotAdmin(ModelAdmin):
         "requires_owner_approval", "connector",
     )
     search_fields = ("code", "name", "mission", "connector", "credential_reference")
-    readonly_fields = ("runtime_enabled", "requires_owner_approval", "created_at", "updated_at")
+    readonly_fields = ("runtime_enabled", "created_at", "updated_at")
     inlines = (RobotTaskInline,)
     list_select_related = ("agent",)
     fieldsets = (
