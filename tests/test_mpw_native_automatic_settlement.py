@@ -142,10 +142,10 @@ class NativeAutoSettlementTests(TestCase):
             settle_native_invoice(invoice.pk,ETH_TX,ethereum_rpc=lambda *args:{})
         self.check_unpaid(invoice,order)
 
-    def test_unverified_customer_wallet_blocks_payment(self):
+    def test_missing_customer_signature_challenge_blocks_payment(self):
         invoice, order=self.invoice()
-        invoice.sender_signature_verified_at=None
-        invoice.save(update_fields=["sender_signature_verified_at"])
+        invoice.wallet_challenge_id=""
+        invoice.save(update_fields=["wallet_challenge_id"])
         with self.assertRaises(SettlementRejected):
             settle_native_invoice(invoice.pk,ETH_TX,ethereum_rpc=lambda *args:{})
         self.check_unpaid(invoice,order)
