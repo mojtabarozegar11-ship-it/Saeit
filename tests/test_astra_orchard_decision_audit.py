@@ -97,6 +97,36 @@ class OrchardInvestmentDecisionAuditTests(unittest.TestCase):
         self.assertFalse(report["store_listing_authorized"])
         self.assertFalse(report["market_demand_verified"])
 
+    def test_near_equal_npvs_are_ranked_before_output_rounding(self):
+        s = scenario()
+        s["discount_rate_pct"] = "0"
+        s["horizon_years"] = 1
+        for o in s["options"]:
+            o["years"] = o["years"][:2]
+            for row in o["years"]:
+                for field in ("revenue", "variable_cost", "fixed_cost", "capital_cost", "terminal_value"):
+                    row[field] = "0"
+        s["options"][0]["years"][1]["revenue"] = "1.003"
+        s["options"][1]["years"][1]["revenue"] = "1.004"
+        result = audit.analyze(s)
+        self.assertEqual(result["scenarios"]["base"][0]["option"], "Replace Orchard Block")
+        self.assertEqual(result["scenarios"]["base"][0]["npv"], "1.00")
+        self.assertEqual(result["scenarios"]["base"][1]["npv"], "1.00")
+
+    def test_tiny_negative_npvs_are_flagged_even_if_display_rounds_zero(self):
+        s = scenario()
+        s["discount_rate_pct"] = "0"
+        s["horizon_years"] = 1
+        for o in s["options"]:
+            o["years"] = o["years"][:2]
+            for row in o["years"]:
+                for field in ("revenue", "variable_cost", "fixed_cost", "capital_cost", "terminal_value"):
+                    row[field] = "0"
+            o["years"][0]["capital_cost"] = "0.003"
+        r = audit.analyze(s)
+        self.assertTrue(r["all_base_npvs_negative"])
+        self.assertEqual(r["scenarios"]["base"][0]["npv"], "-0.00")
+
     def test_reference_name_must_exist(self):
         s = scenario()
         s["reference_option"] = "Not present"
