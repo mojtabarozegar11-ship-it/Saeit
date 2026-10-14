@@ -20,7 +20,9 @@ HOST = "127.0.0.1"
 PORT = 18189
 HOP = {"host", "connection", "keep-alive", "proxy-authenticate",
        "proxy-authorization", "te", "trailer", "transfer-encoding",
-       "upgrade", "cookie", "content-length"}
+       "upgrade", "cookie", "content-length", "sec-websocket-key",
+       "sec-websocket-version", "sec-websocket-extensions",
+       "sec-websocket-protocol"}
 RETURN_HOP = {"connection", "keep-alive", "proxy-authenticate",
               "proxy-authorization", "te", "trailer", "transfer-encoding",
               "upgrade", "set-cookie"}
