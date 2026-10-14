@@ -1,0 +1,225 @@
+name: Saeit Publish Free Toolkit in MojPlayWin Store
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/vps-native-store-publish-free.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: saeit-factory-store-preflight
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Prepare pinned SSH identities
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/factory-store-preflight"
+          install -d -m 700 "$d"
+          for item in VPS_KEY HOST_KEY; do
+            key="$d/${item}.key"
+            printf '%s' "${!item}" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$key"
+            chmod 600 "$key"
+            ssh-keygen -y -P '' -f "$key" >/dev/null
+          done
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -i "$d/VPS_KEY.key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/vps.known" -o BatchMode=yes githubops@178.239.147.150 'ssh-keyscan -T 10 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/VPS_KEY.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/HOST_KEY.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 12
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+      - name: Inspect factory product handoff source
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -F "$RUNNER_TEMP/factory-store-preflight/config" saeit-vps 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          base="$HOME/factory-runtime"
+          echo VPS_USER="$(id -un)"
+          test -s "$base/private/autonomous-product-cycle/production-state.json"
+          test -s "$base/private/autonomous-product-cycle/digital-products/farm_enterprise_economics/farm_enterprise_economics-internal-qa.zip"
+          echo VPS_MANUFACTURED_ZIP_PRESENT
+          stat -c 'VPS_ZIP_BYTES=%s PERMISSIONS=%a' "$base/private/autonomous-product-cycle/digital-products/farm_enterprise_economics/farm_enterprise_economics-internal-qa.zip"
+          python3 - "$base/private/autonomous-product-cycle/production-state.json" <<'PY'
+          import json,sys
+          j=json.load(open(sys.argv[1]))
+          for k in ('mode','depends_on_orders','built_product_count','artifact_qa_passed','publishable_product_count','store_distribution_state'):
+            print('VPS_FACTORY_'+k.upper()+'='+str(j.get(k)))
+          PY
+          REMOTE
+      - name: Inspect cPanel private staging and storefront runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -F "$RUNNER_TEMP/factory-store-preflight/config" saeit-cpanel 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          echo CPANEL_USER="$(id -un)"
+          echo CPANEL_HOME="$HOME"
+          for path in /home/zomorod2/Saeit-staging /home/zomorod2/zomorodmelal.ir /home/zomorod2/mojplaywin.com /home/zomorod2/mojtabarozegar.ir /home/zomorod2/public_html; do
+            if test -d "$path" && test ! -L "$path"; then
+              echo CPANEL_DIR_PRESENT="$(basename "$path")"
+              if test -f "$path/manage.py"; then echo CPANEL_DJANGO_SOURCE="$(basename "$path")"; fi
+              if test -f "$path/passenger_wsgi.py"; then echo CPANEL_PASSENGER_SOURCE="$(basename "$path")"; fi
+              if test -d "$path/.venv"; then echo CPANEL_LOCAL_VENV="$(basename "$path")"; fi
+            else
+              echo CPANEL_DIR_MISSING="$(basename "$path")"
+            fi
+          done
+          test -d /home/zomorod2/Saeit-staging
+          test -w /home/zomorod2/Saeit-staging
+          echo CPANEL_STAGING_WRITABLE
+          if test -f /home/zomorod2/Saeit-staging/core/models.py; then
+            grep -q '^class Product(' /home/zomorod2/Saeit-staging/core/models.py && echo CPANEL_DJANGO_PRODUCT_MODEL_PRESENT
+          fi
+          command -v python3 >/dev/null && python3 --version
+          df -h "$HOME" | tail -n 1 | awk '{print "CPANEL_DISK_FREE=" $4}'
+          REMOTE
+      - uses: actions/checkout@v4
+      - name: Validate native release tools before touching Django
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/publish_verified_factory_store_listing.py
+          python3 -m py_compile scripts/publish_factory_free_tool.py
+          test -f core/templates/core/store.html
+      - name: Stage release importer and narrowly update Django store card markup
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/factory-store-preflight"
+          ssh -F "$d/config" saeit-cpanel 'test -d "$HOME/.saeit-factory-inbox/bin" && test -d "$HOME/Saeit-staging/core/templates/core"'
+          scp -F "$d/config" scripts/publish_verified_factory_store_listing.py saeit-cpanel:/home/zomorod2/.saeit-factory-inbox/bin/publish_verified_factory_store_listing.py.tmp
+          ssh -F "$d/config" saeit-cpanel 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          bin="$HOME/.saeit-factory-inbox/bin"
+          script="$bin/publish_verified_factory_store_listing.py"
+          tmp="$script.tmp"
+          test -s "$tmp"
+          test -f "$bin/store_receiver.py"
+          test -f "$bin/import_factory_store_drafts.py"
+          test -f "$bin/publish_factory_free_tool.py"
+          python3 -m py_compile "$tmp"
+          chmod 600 "$tmp"
+          mv -f "$tmp" "$script"
+          template="$HOME/Saeit-staging/core/templates/core/store.html"
+          test -f "$template"
+          test ! -L "$template"
+          mkdir -p "$bin/backups"
+          backup="$bin/backups/store-template-before-factory-$(date -u +%Y%m%dT%H%M%SZ).html"
+          cp -p "$template" "$backup"
+          chmod 600 "$backup"
+          python3 - "$template" <<'PY'
+          from pathlib import Path
+          import os,sys,tempfile
+          p=Path(sys.argv[1])
+          old='<article class="store-product-card"><small>{{ product.product_type }}</small><h3>{{ product.title }}</h3><strong>{{ product.price }} {{ product.currency }}</strong></article>'
+          new='<article class="store-product-card"><small>{{ product.product_type }}</small><h3>{{ product.title }}</h3><strong>{{ product.price }} {{ product.currency }}</strong>{% if product.metadata.factory_recipe == "farm_enterprise_economics" and product.metadata.factory_status == "published_free" %}<p><a href="/factory-releases/farm-enterprise-economics-v1/" rel="noopener">Download free toolkit and view details</a></p>{% endif %}</article>'
+          original=p.read_text(encoding="utf-8")
+          if new in original:
+              print("STORE_FREE_PRODUCT_LINK_ALREADY_CONFIGURED")
+          elif old in original:
+              updated=original.replace(old,new,1)
+              handle,tmp=tempfile.mkstemp(dir=str(p.parent),prefix=".store-saeit-")
+              try:
+                  with os.fdopen(handle,"w",encoding="utf-8") as f:f.write(updated)
+                  os.chmod(tmp,p.stat().st_mode & 0o777)
+                  os.replace(tmp,str(p))
+              finally:
+                  if os.path.exists(tmp):os.unlink(tmp)
+              print("STORE_FREE_PRODUCT_LINK_TEMPLATE_ADDED")
+          else:
+              raise SystemExit("STORE_TEMPLATE_UNEXPECTED_LAYOUT_REFUSING_UPDATE")
+          PY
+          REMOTE
+      - name: Run Django dry-run and activate the one owner-approved free listing
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/factory-store-preflight"
+          ssh -F "$d/config" saeit-cpanel 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          app="$HOME/Saeit-staging"
+          doc="$HOME/mojplaywin.com"
+          inbox="$HOME/.saeit-factory-inbox"
+          script="$inbox/bin/publish_verified_factory_store_listing.py"
+          python="$HOME/virtualenv/Saeit-staging/3.11/bin/python"
+          test -x "$python"
+          cd "$app"
+          export DJANGO_SETTINGS_MODULE=config.settings
+          export PYTHONPATH="$app"
+          "$python" -m django check
+          "$python" "$script" --inbox "$inbox" --app "$app" --document-root "$doc"
+          "$python" "$script" --inbox "$inbox" --app "$app" --document-root "$doc" --apply --owner-delegated-publication
+          "$python" "$script" --inbox "$inbox" --app "$app" --document-root "$doc" --apply --owner-delegated-publication
+          "$python" - <<'PY'
+          import django
+          django.setup()
+          from django.apps import apps
+          Product=apps.get_model("core","Product")
+          selected=Product.objects.filter(
+              active=True,
+              price=0,
+              currency="USD",
+              metadata__factory_recipe="farm_enterprise_economics",
+              metadata__factory_status="published_free",
+          )
+          assert selected.count()==1,"ONE_EXACT_ACTIVE_FREE_FACTORY_PRODUCT_REQUIRED"
+          p=selected.get()
+          assert p.knowledge_article and p.knowledge_article.published
+          assert p.metadata["factory_publication_permission"] is True
+          print("MOJPLAYWIN_NATIVE_FREE_LISTING_ACTIVE="+str(p.pk))
+          PY
+          REMOTE
+      - name: Verify public store advertises working free download, preserving other sites
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/factory-store-preflight"
+          store_status="$(curl -sSL --max-time 25 -o "$d/public-store.html" -w '%{http_code}' 'https://mojplaywin.com/store/')"
+          echo MOJPLAYWIN_STORE_HTTP="$store_status"
+          test "$store_status" = 200
+          grep -q 'Farm Enterprise Economics Toolkit' "$d/public-store.html"
+          grep -q 'Download free toolkit and view details' "$d/public-store.html"
+          status="$(curl -sSL --max-time 18 -o "$d/public-product.html" -w '%{http_code}' 'https://mojplaywin.com/factory-releases/farm-enterprise-economics-v1/')"
+          test "$status" = 200
+          grep -q 'Farm Enterprise Economics Toolkit' "$d/public-product.html"
+          for url in https://mojplaywin.com/ https://mojplaywin.com/mojtaba.roozegar/ https://mojplaywin.com/mojtaba.roozegar/manage/login/; do
+            code="$(curl -sSL --max-time 18 -o /dev/null -w '%{http_code}' "$url" || true)"
+            echo UNRELATED_PUBLIC_SITE_HEALTH="$code"
+            test "$code" = 200
+          done
+          echo MOJPLAYWIN_NATIVE_STORE_PUBLICATION_VERIFIED
+      - name: Clean temporary SSH keys
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/factory-store-preflight"
