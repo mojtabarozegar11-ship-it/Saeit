@@ -1,0 +1,72 @@
+name: Astra Factory Architecture Source Audit
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/astra-factory-source-audit.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: saeit-astra-source-audit
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Read original Astra archive and existing factory state without modifying VPS
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/astra-source-audit"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -i "$d/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o BatchMode=yes -o ConnectTimeout=15 githubops@178.239.147.150 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          echo ASTRA_HOST="$(hostname)"
+          for p in "$HOME/factory-transfer-incoming/astra-factory-full-architecture.tar.gz" "$HOME/factory-runtime/operations" "$HOME/factory-runtime/django-app"; do
+            if test -e "$p"; then echo "ASTRA_PATH_PRESENT=$(basename "$p")"; else echo "ASTRA_PATH_MISSING=$(basename "$p")"; fi
+          done
+          p="$HOME/factory-transfer-incoming/astra-factory-full-architecture.tar.gz"
+          if test -f "$p" && test ! -L "$p"; then
+            sha256sum "$p" | awk '{print "ASTRA_ARCHIVE_SHA256=" $1}'
+            stat -c 'ASTRA_ARCHIVE_BYTES=%s' "$p"
+            python3 - "$p" <<'PY'
+          import sys,tarfile,re
+          f=sys.argv[1]
+          with tarfile.open(f,"r:gz") as tar:
+              members=tar.getmembers()
+              print("ASTRA_ARCHIVE_ENTRIES="+str(len(members)))
+              for m in members[:160]:
+                  name=m.name
+                  if re.fullmatch(r"[A-Za-z0-9_./+@ -]{1,180}",name):
+                      print("ASTRA_MEMBER="+m.name+" TYPE="+("file" if m.isfile() else "directory" if m.isdir() else "other")+" SIZE="+str(m.size))
+              for m in members:
+                  name=m.name
+                  if not m.isfile() or m.size>200000 or not name.lower().endswith((".md",".txt",".rst")):
+                      continue
+                  if not re.search(r"arch|plan|stage|phase|migration|readme|factory|astra|implementation",name,re.I):
+                      continue
+                  source=tar.extractfile(m)
+                  if source is None: continue
+                  lines=source.read(200000).decode("utf-8","replace").splitlines()
+                  selected=[]
+                  for line in lines:
+                      line=line.strip()
+                      if (re.match(r"^#{1,5}\s+[A-Za-z0-9]",line) or re.match(r"^(stage|phase|step|milestone|architecture|objective|security|migration|rollout|rollback|risk|prerequisite)[ :0-9-]",line,re.I)) and len(line)<160:
+                          selected.append(re.sub(r"(?i)(token|secret|password|key|credential)\s*[=:].*","[REDACTED]",line))
+                  print("ASTRA_DOCUMENT="+name+" LINES="+str(len(lines)))
+                  for line in selected[:40]: print("ASTRA_SECTION="+line)
+          PY
+          fi
+          echo ASTRA_AUDIT_READ_ONLY_COMPLETE
+          REMOTE
