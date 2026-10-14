@@ -209,6 +209,38 @@ class PrivateManufacturingTests(unittest.TestCase):
         self.assertEqual(pipeline.tick(self.root)["new_distinct_product_versions"],0)
         self.assertEqual(pipeline.tick(self.root)["status"],"NO_ELIGIBLE_WORK")
 
+    def test_private_inbox_auto_enqueue_and_replay_are_deduplicated(self):
+        inbox=self.root/"incoming"
+        inbox.mkdir(mode=0o700)
+        orchard=brief("inbox_autonomous_orchard")
+        procurement=brief("inbox_autonomous_procurement")
+        procurement["builder"]=pipeline.PROCUREMENT_BUILDER
+        (inbox/"a.json").write_text(json.dumps(orchard))
+        (inbox/"b.json").write_text(json.dumps(procurement))
+        self.assertEqual(pipeline.tick(self.root)["new_distinct_product_versions"],1)
+        self.assertEqual(pipeline.tick(self.root)["new_distinct_product_versions"],1)
+        self.assertEqual(pipeline.tick(self.root)["status"],"NO_ELIGIBLE_WORK")
+        self.assertEqual(pipeline.status(self.root)["distinct_private_product_families"],2)
+        self.assertEqual(pipeline.status(self.root)["queues"]["PRIVATE_QA_PASSED"],2)
+
+    def test_invalid_or_paid_private_inbox_cannot_block_eligible_task(self):
+        inbox=self.root/"incoming";inbox.mkdir()
+        (inbox/"bad.json").write_text('{"broken"')
+        malicious=brief("invalid_paid_job")
+        malicious["paid_api_budget"]=100
+        (inbox/"paid.json").write_text(json.dumps(malicious))
+        (inbox/"good.json").write_text(json.dumps(brief("free_valid_job")))
+        outcome=pipeline.tick(self.root)
+        self.assertEqual(outcome["status"],"PRIVATE_QA_PASSED")
+        self.assertEqual(pipeline.status(self.root)["queues"]["PRIVATE_QA_PASSED"],1)
+        self.assertEqual(pipeline.intake_private_briefs(self.root)["rejected"],2)
+
+    def test_symlink_inbox_rejected_before_task_execution(self):
+        with tempfile.TemporaryDirectory() as external:
+            (self.root/"incoming").symlink_to(external)
+            with self.assertRaisesRegex(ValueError,"regular directory"):
+                pipeline.tick(self.root)
+
     def test_invalid_builder_approval_or_fake_verified_demand_blocked(self):
         for patch in (
             {"builder":"shell_script"},
