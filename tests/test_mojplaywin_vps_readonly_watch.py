@@ -64,7 +64,7 @@ class WatcherTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             watcher.scan_once(mode="PAY")
 
-    def test_idle_loops_use_one_indexer_scan_per_180s(self):
+    def test_idle_loops_make_zero_indexer_requests(self):
         with tempfile.TemporaryDirectory() as root:
             clock=[1_700_000_000.0]
             count=[0]
@@ -81,7 +81,7 @@ class WatcherTests(unittest.TestCase):
                     max_cycles=7)
             finally:
                 watcher.STOP=old
-            self.assertEqual(count[0],1)
+            self.assertEqual(count[0],0)
 
     def test_active_marker_scans_every_15s(self):
         with tempfile.TemporaryDirectory() as root:
@@ -130,6 +130,19 @@ class WatcherTests(unittest.TestCase):
                 watcher.STOP=old
             self.assertEqual(counter[0],3)
 
+    def test_no_order_never_calls_eth_or_tron_even_after_many_cycles(self):
+        with tempfile.TemporaryDirectory() as root:
+            clock=[1_700_000_000.0]
+            def forbidden(): raise AssertionError("Idle watcher must never make network calls")
+            old=watcher.STOP
+            try:
+                watcher.STOP=False
+                watcher.run_forever(root,time_fn=lambda:clock[0],
+                    sleep=lambda dt:clock.__setitem__(0,clock[0]+dt),
+                    eth_scan=forbidden,trx_scan=forbidden,max_cycles=100)
+            finally:
+                watcher.STOP=old
+
     def test_network_failure_backs_off(self):
         with tempfile.TemporaryDirectory() as root:
             clock=[1_700_000_000.0]
@@ -145,7 +158,7 @@ class WatcherTests(unittest.TestCase):
                     eth_scan=scan_eth,trx_scan=lambda:[],max_cycles=3)
             finally:
                 watcher.STOP=old
-            self.assertEqual(counter[0],2)
+            self.assertEqual(counter[0],0)
 
 
 if __name__=="__main__":
