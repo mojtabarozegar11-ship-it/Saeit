@@ -10,6 +10,9 @@ process only checks a short-lived pending-invoice signal and sleeps.
 
 The marker is NOT exposed on a website and must be refreshed ONLY by a
 separately authenticated backend order service after production integration.
+One event is valid for up to 20 minutes; receipt confirmation or cancellation
+must remove it early. Multiple parallel orders require a server-side aggregate
+signal, not blindly removing the marker after one order.
 """
 import argparse
 import logging
@@ -26,7 +29,7 @@ from scripts.mojplaywin_direct_wallet_discovery import (
 
 ACTIVE_SECONDS = 15
 IDLE_SECONDS = 60
-MAX_MARKER_AGE_SECONDS = 120
+MAX_MARKER_AGE_SECONDS = 1200
 RETRY_LIMIT_SECONDS = 300
 VALID_MODES = frozenset({"ETH", "TRX", "BOTH"})
 STOP = False
