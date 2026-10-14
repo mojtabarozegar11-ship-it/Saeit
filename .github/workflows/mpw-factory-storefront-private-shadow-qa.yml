@@ -4,6 +4,8 @@ on:
     branches: [qa/mpw-factory-safe-storefront-20261014]
     paths:
       - .github/workflows/mpw-factory-storefront-private-shadow-qa.yml
+      - core/templates/core/mojplaywin_store_base.html
+      - core/templates/core/mojplaywin_factory_store.html
   workflow_dispatch:
 permissions:
   contents: read
