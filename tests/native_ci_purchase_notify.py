@@ -27,6 +27,33 @@ class EventNotificationTests(TestCase):
             merchant_ownership_verified_at=timezone.now(),
         )
 
+    @override_settings(MPW_NATIVE_EVENT_ENABLED=True,
+                       MPW_NATIVE_EVENT_TRANSPORT="unix",
+                       MPW_NATIVE_EVENT_SOCKET="/tmp/mpw-ci-only.sock",
+                       MPW_NATIVE_EVENT_SECRET=KEY)
+    def test_same_host_invoice_triggers_authenticated_unix_message(self):
+        invoice=self.invoice()
+        with patch("scripts.mojplaywin_cpanel_local_event_worker.socket_request",
+                   return_value="delivered") as deliver:
+            result=send_invoice_event(invoice,action="invoice_open")
+        self.assertEqual(result,"delivered")
+        self.assertEqual(deliver.call_args.args[0],"/tmp/mpw-ci-only.sock")
+        body,signature=deliver.call_args.args[1:3]
+        event=verify_event(body,signature,KEY.encode())
+        self.assertEqual(event["invoice"],10)
+        self.assertEqual(event["order"],70)
+        self.assertEqual(event["asset"],"ETH")
+
+    @override_settings(MPW_NATIVE_EVENT_ENABLED=True,
+                       MPW_NATIVE_EVENT_TRANSPORT="unix",
+                       MPW_NATIVE_EVENT_SOCKET="/tmp/mpw-ci-only.sock",
+                       MPW_NATIVE_EVENT_SECRET="")
+    def test_missing_unix_signing_key_never_dispatches(self):
+        with patch("scripts.mojplaywin_cpanel_local_event_worker.socket_request") as deliver:
+            with self.assertRaises(NotificationUnavailable):
+                send_invoice_event(self.invoice(),action="invoice_open")
+        deliver.assert_not_called()
+
     def test_default_disabled_has_zero_http_calls(self):
         with override_settings(MPW_NATIVE_EVENT_ENABLED=False):
             with patch("mpw_native_checkout.purchase_notify.urlopen") as send:
