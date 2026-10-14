@@ -1,0 +1,257 @@
+name: MojPlayWin guarded live command center publication with rollback
+on:
+  push:
+    branches: [release/mpw-command-center-guarded-20261014]
+    paths:
+      - .github/workflows/mojplaywin-command-center-guarded-live-publication.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 13
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Publish tested staff command center with backup, Django checks, HTTP smoke and rollback
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/mpw-readonly-host"
+          mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          python3 - "$d/vps.key" "$d/host.key" <<'PY'
+          from pathlib import Path
+          import sys
+          for name in sys.argv[1:]:
+              p = Path(name)
+              p.write_text(p.read_text().replace("\r\n", "\n").strip().replace("\\n", "\n") + "\n")
+          PY
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host relay
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host host
+            HostName zohal.pws-dns.net
+            Port 1396
+            User zomorod2
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump relay
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+          EOF
+          timeout 30s ssh -F "$d/config" relay 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          timeout 60s ssh -F "$d/config" host 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = zomorod2
+          umask 077
+          base="$HOME/.mpw-command-center-qa"
+          candidate="$base/release-candidate-20261014"
+          test -d "$base/source/command_center" && test ! -L "$base" && test ! -L "$candidate"
+          test ! -e "$candidate" && mkdir -p "$candidate"
+          chmod 700 "$candidate"
+          REMOTE
+          tar -C "$GITHUB_WORKSPACE" -cf - command_center | timeout 85s ssh -F "$d/config" host 'tar -xf - -C "$HOME/.mpw-command-center-qa/release-candidate-20261014"'
+          timeout 410s ssh -F "$d/config" host 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = zomorod2
+          export PYTHONDONTWRITEBYTECODE=1
+          cd "$HOME/Saeit-staging"
+          "$HOME/virtualenv/Saeit-staging/3.11/bin/python" - <<'PY'
+          import ast,datetime,hashlib,os,secrets,shutil,stat,subprocess,sys,tempfile,time
+          from pathlib import Path
+          home=Path.home()
+          site=home/"Saeit-staging"
+          web=home/"mojplaywin.com"
+          source=home/".mpw-command-center-qa/release-candidate-20261014/command_center"
+          tested=home/".mpw-command-center-qa/source/command_center"
+          target=site/"command_center"
+          settings=site/"config/settings.py"
+          urls=site/"config/urls.py"
+          python=home/"virtualenv/Saeit-staging/3.11/bin/python"
+          restart=web/"tmp/restart.txt"
+          assert site.is_dir() and web.is_dir() and python.is_file()
+          assert source.is_dir() and tested.is_dir() and not source.is_symlink()
+          assert target.exists() is False and target.is_symlink() is False, "Active package already exists"
+          assert settings.is_file() and urls.is_file() and not settings.is_symlink() and not urls.is_symlink()
+          assert restart.parent.is_dir() and not restart.parent.is_symlink() and not restart.is_symlink()
+          assert "/home/zomorod2/Saeit-staging" in (web/"passenger_wsgi.py").read_text(), "Passenger points to other app"
+          def tree_digest(root):
+              files=sorted(p for p in root.rglob("*") if p.is_file())
+              assert files and not any(p.is_symlink() for p in root.rglob("*")), "Untrusted symlink in candidate"
+              h=hashlib.sha256()
+              for p in files:
+                  rel=str(p.relative_to(root))
+                  if rel.endswith(".pyc") or "__pycache__/" in rel:
+                      continue
+                  h.update(rel.encode()+b"\0"+hashlib.sha256(p.read_bytes()).digest())
+              return h.hexdigest()
+          assert tree_digest(source)==tree_digest(tested),"Candidate differs from successful shadow tests"
+          print("MPW_CC_TESTED_CANDIDATE_SOURCE_DIGEST_MATCH=True")
+          from hashlib import sha256
+          original={p:p.read_bytes() for p in (settings,urls)}
+          modes={p:stat.S_IMODE(p.stat().st_mode) for p in (settings,urls)}
+          marker="# MPW_COMMAND_CENTER_STAFF_ROUTE_V1"
+          assert marker.encode() not in original[urls] and marker.encode() not in original[settings]
+          assert b'command_center' not in original[settings], "Existing command-center settings need review"
+          expected=b'path("staff/", include((admin.site.get_urls(), "admin"), namespace="staff_admin"))'
+          assert original[urls].count(expected)==1, "Unexpected /staff/ resolver"
+          assert b"path(" in original[urls] and b"urlpatterns" in original[urls] and b"include" in original[urls]
+          config_add=(b"\n"+marker.encode()+b"\nINSTALLED_APPS = [*INSTALLED_APPS, 'command_center']\n")
+          urls_add=(b"\n"+marker.encode()+b"\nurlpatterns.insert(0, path('staff/command-center/', include('command_center.urls')))\n")
+          for p,addon in ((settings,config_add),(urls,urls_add)):
+              compile((original[p]+addon).decode("utf-8"),str(p),"exec")
+          def public_smoke():
+              results={}
+              for route in ("/","/admin/","/staff/","/store/"):
+                  x=subprocess.run(["curl","-sS","--connect-timeout","8","--max-time","15",
+                       "-o","/dev/null","-w","%{http_code}","https://mojplaywin.com"+route],
+                       stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,text=True,timeout=20,check=False)
+                  assert x.returncode==0 and x.stdout.strip().isdigit(), "Public HTTPS health request failed"
+                  results[route]=int(x.stdout.strip())
+                  assert 100<=results[route]<500, "Preexisting site unhealthy"
+              return results
+          baseline=public_smoke()
+          print("MPW_CC_PUBLIC_SITE_BASELINE_HEALTHY=True")
+          private=home/".mpw-cc-release-backups"
+          assert not private.is_symlink()
+          private.mkdir(mode=0o700,exist_ok=True)
+          private.chmod(0o700)
+          checkpoint=private/(datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")+"-"+secrets.token_hex(4))
+          checkpoint.mkdir(mode=0o700)
+          for p,name in ((settings,"settings.py"),(urls,"urls.py")):
+              copy=checkpoint/name
+              copy.write_bytes(original[p])
+              copy.chmod(0o600)
+              assert copy.read_bytes()==original[p]
+          print("MPW_CC_BOTH_CONFIG_BACKUPS_VERIFIED=True")
+          def atomic(p,data):
+              fd,name=tempfile.mkstemp(prefix=p.name+".mpw.",suffix=".tmp",dir=str(p.parent))
+              try:
+                  with os.fdopen(fd,"wb") as out:
+                      out.write(data)
+                      out.flush()
+                      os.fsync(out.fileno())
+                  os.chmod(name,modes[p])
+                  os.replace(name,p)
+              finally:
+                  if os.path.exists(name):os.unlink(name)
+          def django_checks():
+              code = """
+          import django
+          django.setup()
+          from django.conf import settings
+          from django.core.checks import run_checks,Tags
+          from django.urls import resolve,reverse
+          from django.contrib.auth.models import AnonymousUser
+          from django.test import RequestFactory
+          from types import SimpleNamespace
+          assert 'command_center' in settings.INSTALLED_APPS
+          assert not any(m.id=='urls.W005' for m in run_checks(tags=[Tags.urls]))
+          for path,view in (
+           ('/admin/','admin:index'),
+           ('/staff/','staff_admin:index'),
+           ('/staff/command-center/','command_center_dashboard'),
+           ('/staff/command-center/api/overview/','command_center_overview_api')):
+              assert resolve(path).view_name==view,(path,resolve(path).view_name)
+          assert reverse('staff_admin:index')=='/staff/'
+          assert reverse('command_center_dashboard')=='/staff/command-center/'
+          from command_center.views import dashboard,overview_api
+          rf=RequestFactory()
+          guest=rf.get('/staff/command-center/',HTTP_HOST='mojplaywin.com')
+          guest.user=AnonymousUser()
+          assert dashboard(guest).status_code==302
+          staff=SimpleNamespace(is_authenticated=True,is_staff=True,is_active=True,is_superuser=True)
+          req=rf.get('/staff/command-center/',HTTP_HOST='mojplaywin.com')
+          req.user=staff
+          resp=dashboard(req)
+          assert resp.status_code==200 and len(resp.content)>200
+          req=rf.get('/staff/command-center/api/overview/',HTTP_HOST='mojplaywin.com')
+          req.user=staff
+          assert overview_api(req).status_code==200
+          print('MPW_CC_DJANGO_POSTINSTALL_ROUTES_AND_RENDER_OK=True')
+          """
+              proc=subprocess.run([str(python),"-c",code],cwd=site,env=dict(os.environ, DJANGO_SETTINGS_MODULE="config.settings",PYTHONDONTWRITEBYTECODE="1"),stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,timeout=95)
+              if proc.returncode:
+                  print("MPW_CC_POSTINSTALL_DJANGO_CHECK_FAILED=True")
+                  raise RuntimeError("Installed application failed Django checks")
+              assert "MPW_CC_DJANGO_POSTINSTALL_ROUTES_AND_RENDER_OK=True" in proc.stdout
+              print("MPW_CC_DJANGO_POSTINSTALL_ROUTES_AND_RENDER_OK=True")
+          for p in (settings,urls):
+              assert p.read_bytes()==original[p],"Active config changed during deployment preflight"
+          created=False
+          modified=[]
+          try:
+              shutil.copytree(source,target,symlinks=False,ignore=shutil.ignore_patterns("__pycache__","*.pyc"))
+              created=True
+              for p in target.rglob("*"):
+                  if p.is_dir():p.chmod(0o750)
+                  elif p.is_file():p.chmod(0o640)
+              target.chmod(0o750)
+              assert tree_digest(target)==tree_digest(source), "Installed module digest mismatch"
+              atomic(settings,original[settings]+config_add)
+              modified.append(settings)
+              atomic(urls,original[urls]+urls_add)
+              modified.append(urls)
+              django_checks()
+              restart.touch()
+              verified=False
+              for _ in range(8):
+                  time.sleep(3)
+                  try:
+                      after=public_smoke()
+                      cmd=subprocess.run(["curl","-sS","--connect-timeout","8","--max-time","15",
+                           "-o","/dev/null","-w","%{http_code} %{redirect_url}",
+                           "https://mojplaywin.com/staff/command-center/"],
+                           stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,text=True,timeout=20)
+                      parts=cmd.stdout.strip().split(" ",1)
+                      if (cmd.returncode==0 and len(parts)==2 and parts[0] in ("301","302","303")
+                          and "/admin/login/" in parts[1]
+                          and all(v<500 for v in after.values())):
+                          verified=True
+                          break
+                  except Exception:
+                      continue
+              if not verified:
+                  raise RuntimeError("Public command-center redirect or site smoke failed")
+              print("MPW_CC_LIVE_STAFF_LOGIN_GUARDED_REDIRECT_OK=True")
+              print("MPW_CC_LIVE_EXISTING_SITE_SMOKE_OK=True")
+              print("MPW_CC_LIVE_MODULE_DEPLOYED=True")
+              print("MPW_CC_LIVE_DATABSE_MIGRATIONS_PERFORMED=False")
+              print("MPW_CC_PAYMENT_SETTINGS_UNCHANGED=True")
+          except BaseException:
+              for p in reversed(modified):
+                  atomic(p,original[p])
+              if created and target.is_dir() and not target.is_symlink():
+                  shutil.rmtree(target)
+              restart.touch()
+              print("MPW_CC_RELEASE_ROLLBACK_EXECUTED=True")
+              raise
+          PY
+          REMOTE
+      - name: Erase runner-only transient SSH keys
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/mpw-readonly-host"
