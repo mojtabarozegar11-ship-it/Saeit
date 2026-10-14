@@ -61,6 +61,14 @@ jobs:
                   total+=size
                   if total>100000000:raise RuntimeError("STAGING_COPY_BUDGET_EXCEEDED")
                   shutil.copy2(p,dest/relative/name)
+          source_hypotheses=source/"var/factory/discovery/initial_200_hypotheses.json"
+          if source_hypotheses.is_file() and not source_hypotheses.is_symlink() and source_hypotheses.stat().st_size<2000000:
+              destination_hypotheses=dest/"var/factory/discovery/initial_200_hypotheses.json"
+              destination_hypotheses.parent.mkdir(parents=True,exist_ok=True)
+              shutil.copy2(source_hypotheses,destination_hypotheses)
+              print("ASTRA_STAGING_REAL_HYPOTHESES_COPIED")
+          else:
+              print("ASTRA_STAGING_REAL_HYPOTHESES_FILE_MISSING")
           with tarfile.open(arch,"r:gz") as tf:
               count=0
               for item in tf.getmembers():
