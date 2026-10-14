@@ -1,0 +1,111 @@
+name: MojPlayWin cPanel Django-to-local-listener signature handshake
+on:
+  push:
+    branches:
+      - release/mojplaywin-chess-product-20261014
+    paths:
+      - '.github/workflows/mojplaywin-cpanel-django-local-handshake.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: mpw-cpanel-local-django-handshake
+  cancel-in-progress: false
+jobs:
+  authenticated-handshake:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Validate actual private HMAC signing and local socket with synthetic CLOSE only
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/mpw-local-django-handshake"
+          mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          python3 - "$d/vps.key" "$d/host.key" <<'PY'
+          from pathlib import Path
+          import sys
+          for name in sys.argv[1:]:
+              p=Path(name)
+              p.write_text(p.read_text().replace("\r\n","\n").strip().replace("\\n","\n")+"\n")
+          PY
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host saeit-host
+            HostName zohal.pws-dns.net
+            Port 1396
+            User zomorod2
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+          EOF
+          timeout 35s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          timeout 65s ssh -F "$d/config" saeit-host 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = zomorod2
+          stage=/home/zomorod2/Saeit-staging/mojplaywin-chess-product-prep-20261014
+          runtime="$HOME/.mpw-native-event-staging"
+          test -f "$stage/mpw_native_checkout/purchase_notify.py"
+          test -S "$runtime/native-purchase.sock"
+          test "$(stat -c '%a' "$runtime/.staging-event-hmac")" = 600
+          test ! -f "$runtime/pending-orders.mode"
+          venv=/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python
+          test -x "$venv"
+          cd "$stage"
+          PYTHONPATH="$stage" PYTHONDONTWRITEBYTECODE=1 "$venv" - <<'PY'
+          from datetime import datetime, timedelta, timezone
+          from pathlib import Path
+          from types import SimpleNamespace
+          from django.conf import settings
+          import os
+
+          root=Path.home()/".mpw-native-event-staging"
+          settings.configure(
+              MPW_NATIVE_EVENT_ENABLED=True,
+              MPW_NATIVE_EVENT_TRANSPORT="unix",
+              MPW_NATIVE_EVENT_SOCKET=str(root/"native-purchase.sock"),
+              MPW_NATIVE_EVENT_SECRET_FILE=str(root/".staging-event-hmac"),
+              MPW_NATIVE_EVENT_SECRET="",
+          )
+          from mpw_native_checkout.purchase_notify import send_invoice_event
+          # Synthetic close for an ID outside ordinary product orders. It
+          # cannot create a purchase, trigger scanning, or change Django DB.
+          synthetic=SimpleNamespace(
+              pk=999999998,order_id=999999998,asset="ETH",
+              expires_at=datetime.now(timezone.utc)+timedelta(minutes=8),
+          )
+          assert send_invoice_event(synthetic,action="invoice_closed")=="delivered"
+          assert not (root/"pending-orders.mode").exists()
+          print("CPANEL_DJANGO_PRIVATE_HMAC_TO_LOCAL_SOCKET_ACK_OK")
+          print("CPANEL_IDLE_ZERO_CHAIN_RPC_OR_OPENAI_CALLS")
+          print("CPANEL_NO_REAL_ORDERS_OR_WALLET_CHANGES")
+          PY
+          REMOTE
+      - name: Erase temporary SSH materials
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/mpw-local-django-handshake"
