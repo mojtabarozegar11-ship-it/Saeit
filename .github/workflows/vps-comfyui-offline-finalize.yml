@@ -1,0 +1,90 @@
+name: ComfyUI Offline CPU Setup Finalization
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: saeit-comfyui-finalize
+  cancel-in-progress: false
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Install CPU dependencies offline into private VPS directory only
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" || { echo VPS_KEY_MISSING; exit 1; }
+          d="$RUNNER_TEMP/comfy-final"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          scan="$(ssh-keyscan -T 10 -t rsa 178.239.147.150 2>/dev/null)"
+          test -n "$scan"
+          test "$(printf '%s\n' "$scan" | ssh-keygen -lf - -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          printf '%s\n' "$scan" > "$d/known"
+          timeout 1030s ssh -i "$d/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o BatchMode=yes -o ConnectTimeout=15 githubops@178.239.147.150 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1
+          export PIP_NO_INDEX=1 PIP_NO_CACHE_DIR=1 PYTHONNOUSERSITE=1 PIP_DISABLE_PIP_VERSION_CHECK=1
+          root="$HOME/comfyui-isolated"
+          test "$(id -un)" = githubops
+          test -d "$root" && test ! -L "$root"
+          factory="$HOME/factory-runtime/operations/vps-only-loop.pid"
+          check_factory() {
+            if test -f "$factory"; then
+              pid="$(cat "$factory")"
+              if [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null; then
+                echo "FACTORY_LOOP_ALIVE=$1"
+              else echo "FACTORY_LOOP_NOT_VERIFIED=$1"; fi
+            else echo "FACTORY_LOOP_PIDFILE_MISSING=$1"; fi
+          }
+          trap 'check_factory AFTER_COMFY_SETUP' EXIT
+          check_factory BEFORE_COMFY_SETUP
+          ram="$(awk '/^MemAvailable:/{print $2}' /proc/meminfo)"
+          disk="$(df -Pk "$HOME" | awk 'NR==2{print $4}')"
+          echo "AVAILABLE_RAM_KIB=$ram"
+          echo "FREE_DISK_KIB=$disk"
+          ((ram >= 2400000 && disk >= 10000000)) || { echo COMFY_PRECHECK_RESOURCE_GUARD_BLOCKED; exit 1; }
+          test -f "$root/comfy-source.tar.gz"
+          test -f "$root/comfy-wheelhouse.tar"
+          echo COMFY_TRANSFER_BUNDLES_FOUND
+          timeout 60s tar -tzf "$root/comfy-source.tar.gz" >/dev/null
+          timeout 120s tar -tf "$root/comfy-wheelhouse.tar" >/dev/null
+          echo COMFY_ARCHIVES_VALID
+          test ! -L "$root/source-v0.40.0"
+          mkdir -p "$root/source-v0.40.0"
+          tar -xzf "$root/comfy-source.tar.gz" -C "$root/source-v0.40.0" --no-same-owner --no-same-permissions
+          test -f "$root/source-v0.40.0/main.py"
+          tar -xf "$root/comfy-wheelhouse.tar" -C "$root" --no-same-owner --no-same-permissions
+          test -d "$root/comfy-wheelhouse"
+          if command -v python3.11 >/dev/null 2>&1; then
+            py="$(command -v python3.11)"
+          else
+            py="$HOME/factory-runtime/.venv/bin/python"
+          fi
+          "$py" -c 'import sys; assert (3,11) <= sys.version_info[:2] < (3,15)'
+          if ! test -x "$root/env-cpu/bin/python"; then "$py" -m venv "$root/env-cpu"; fi
+          vpy="$root/env-cpu/bin/python"
+          cd "$root/source-v0.40.0"
+          echo COMFY_OFFLINE_PIP_CPU_TORCH
+          nice -n 15 timeout 440s "$vpy" -m pip install --no-index --find-links="$root/comfy-wheelhouse" torch==2.11.0 torchvision==0.26.0
+          echo COMFY_OFFLINE_PIP_REQUIREMENTS
+          nice -n 15 timeout 440s "$vpy" -m pip install --no-index --find-links="$root/comfy-wheelhouse" -r requirements.txt
+          echo COMFY_BASE_DEPENDENCIES_INSTALLED
+          nice -n 15 timeout 90s "$vpy" -c 'import sys,torch,aiohttp,yaml; print("COMFY_PYTHON="+sys.version.split()[0]); print("COMFY_TORCH="+torch.__version__); print("COMFY_CUDA="+str(torch.cuda.is_available()))'
+          test -f "$root/source-v0.40.0/main.py"
+          echo COMFYUI_CPU_BASE_INSTALLED_PRIVATE_NO_MODEL_NO_SERVER
+          # Reclaim wheel archives only after successful import checks.
+          rm -f -- "$root/comfy-source.tar.gz" "$root/comfy-wheelhouse.tar"
+          find "$root/comfy-wheelhouse" -maxdepth 1 -type f -delete
+          rmdir "$root/comfy-wheelhouse" || true
+          echo COMFYUI_INSTALL_COMPLETE_WITHOUT_FACTORY_CHANGES
+          REMOTE
