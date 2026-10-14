@@ -4,6 +4,7 @@ on:
     paths:
       - '.github/workflows/mojplaywin-chess-preparation.yml'
       - 'scripts/mojplaywin_cpanel_local_event_worker.py'
+      - 'scripts/install_mpw_cpanel_staging_listener.sh'
       - 'mpw_native_checkout/models.py'
       - 'mpw_native_checkout/purchase_notify.py'
       - 'mpw_native_checkout/migrations/0002_nativewatchoutbox.py'
@@ -45,6 +46,7 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_mojplaywin_direct_wallet_discovery.py' -v
           python3 -m unittest discover -s tests -p 'test_mojplaywin_native_rpc_clients.py' -v
           python3 -m unittest discover -s tests -p 'test_mojplaywin_cpanel_local_event_worker.py' -v
+          bash -n scripts/install_mpw_cpanel_staging_listener.sh
           python3 -m py_compile scripts/mojplaywin_chess_assets.py scripts/mojplaywin_native_chain_verify.py scripts/mojplaywin_direct_wallet_invoice.py scripts/mojplaywin_direct_wallet_rates.py scripts/mojplaywin_direct_wallet_ledger.py scripts/mojplaywin_direct_wallet_discovery.py scripts/mojplaywin_native_rpc_clients.py mpw_native_checkout/autopay_worker.py mpw_native_checkout/settlement.py core/chess_ebook_delivery.py
           echo VERIFIED_CODE_TESTS_PASSED
       - name: Stage only isolated inactive code on cPanel through pinned SSH relay
@@ -110,6 +112,7 @@ jobs:
             scripts/mojplaywin_native_rpc_clients.py \
             scripts/mojplaywin_purchase_events.py \
             scripts/mojplaywin_cpanel_local_event_worker.py \
+            scripts/install_mpw_cpanel_staging_listener.sh \
             scripts/mojplaywin_vps_readonly_watch.py \
             core/chess_ebook_delivery.py \
             mpw_native_checkout/__init__.py \
@@ -152,6 +155,7 @@ jobs:
           echo AUTOMATIC_NATIVE_WORKER_STAGED_DISABLED_BY_DEFAULT
           echo LOCAL_PURCHASE_EVENT_PROCESSOR_STAGED_NOT_ENABLED
           echo DURABLE_PURCHASE_NOTIFICATION_OUTBOX_STAGED_UNMIGRATED
+          echo CPANEL_STAGING_LISTENER_INSTALLER_AVAILABLE_NOT_YET_EXECUTED
           echo LIVE_SITE_FILES_UNCHANGED
           echo CHESS_PAYMENT_NOT_ACTIVATED
       - name: Scrub runner credentials
