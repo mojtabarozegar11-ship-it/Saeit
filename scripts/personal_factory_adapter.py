@@ -106,10 +106,16 @@ def verify_application(app, public_base, target):
     configured = Path(directives.get("passengerapproot", "/nonexistent")).expanduser().resolve()
     if configured != app:
         raise RuntimeError("PERSONAL_PASSENGER_APP_MISMATCH")
-    if not str(target).startswith(str(app) + os.sep):
+    resolved_target = target.resolve()
+    if resolved_target == app or not str(resolved_target).startswith(str(app) + os.sep):
         raise RuntimeError("PRIVATE_TARGET_OUTSIDE_APP")
-    if target.is_symlink() or public_base == target or str(target).startswith(str(public_base) + os.sep):
+    if public_base == resolved_target or str(resolved_target).startswith(str(public_base) + os.sep):
         raise RuntimeError("PUBLIC_OR_SYMLINK_TARGET")
+    cursor = target
+    while cursor != app and cursor.parent != cursor:
+        if cursor.is_symlink():
+            raise RuntimeError("PRIVATE_TARGET_SYMLINK_COMPONENT")
+        cursor = cursor.parent
     return app
 
 
