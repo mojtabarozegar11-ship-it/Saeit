@@ -80,12 +80,10 @@ jobs:
           set -euo pipefail
           HOME_DIR="/home/zomorod2"
           echo "Searching filenames only under the cPanel account home."
-          count=0
-          while IFS= read -r -d '' path; do
-            stat -c 'BOOK_FILE=%n|SIZE_BYTES=%s' "$path"
-            count=$((count + 1))
-          done < <(find "$HOME_DIR" -maxdepth 10 -type f -iname 'MojPlayWin_Science_and_Practice_of_Chess_Improvement*.pdf' -print0 2>/dev/null)
-          if [[ "$count" -eq 0 ]]; then
+          matches="$(find "$HOME_DIR" -maxdepth 10 -type f -iname 'MojPlayWin_Science_and_Practice_of_Chess_Improvement*.pdf' -exec stat -c 'BOOK_FILE=%n|SIZE_BYTES=%s' {} \; 2>/dev/null || true)"
+          if [[ -n "$matches" ]]; then
+            printf '%s\n' "$matches"
+          else
             echo "BOOK_FILE_NOT_FOUND"
           fi
           REMOTE
