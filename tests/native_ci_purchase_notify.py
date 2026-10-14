@@ -1,5 +1,7 @@
 """Inactive Django purchase-event integration tests; no HTTP calls or payment activity."""
 from datetime import timedelta
+from pathlib import Path
+import tempfile
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -26,6 +28,68 @@ class EventNotificationTests(TestCase):
             sender_signature_verified_at=timezone.now(),
             merchant_ownership_verified_at=timezone.now(),
         )
+
+    def test_reuses_private_0600_secret_file_without_environment_secret(self):
+        with tempfile.TemporaryDirectory() as directory:
+            secret_path = Path(directory) / "secret"
+            secret_path.write_text(KEY, encoding="utf-8")
+            secret_path.chmod(0o600)
+            with override_settings(
+                MPW_NATIVE_EVENT_ENABLED=True,
+                MPW_NATIVE_EVENT_TRANSPORT="unix",
+                MPW_NATIVE_EVENT_SOCKET="/tmp/mpw-ci-only.sock",
+                MPW_NATIVE_EVENT_SECRET_FILE=str(secret_path),
+                MPW_NATIVE_EVENT_SECRET="",
+            ), patch(
+                "scripts.mojplaywin_cpanel_local_event_worker.socket_request",
+                return_value="delivered",
+            ) as deliver:
+                self.assertEqual(
+                    send_invoice_event(self.invoice(), action="invoice_open"),
+                    "delivered",
+                )
+            event = verify_event(
+                deliver.call_args.args[1], deliver.call_args.args[2],
+                KEY.encode("utf-8"),
+            )
+            self.assertEqual(event["order"], 70)
+
+    def test_insecure_key_file_is_rejected_without_emitting_message(self):
+        with tempfile.TemporaryDirectory() as directory:
+            secret_path = Path(directory) / "secret"
+            secret_path.write_text(KEY, encoding="utf-8")
+            secret_path.chmod(0o644)
+            with override_settings(
+                MPW_NATIVE_EVENT_ENABLED=True,
+                MPW_NATIVE_EVENT_TRANSPORT="unix",
+                MPW_NATIVE_EVENT_SOCKET="/tmp/mpw-ci-only.sock",
+                MPW_NATIVE_EVENT_SECRET_FILE=str(secret_path),
+                MPW_NATIVE_EVENT_SECRET=KEY,
+            ), patch(
+                "scripts.mojplaywin_cpanel_local_event_worker.socket_request"
+            ) as deliver:
+                with self.assertRaises(NotificationUnavailable):
+                    send_invoice_event(self.invoice(), action="invoice_open")
+                deliver.assert_not_called()
+
+    def test_symlinked_event_key_is_rejected_without_emitting_message(self):
+        with tempfile.TemporaryDirectory() as directory:
+            secret_path = Path(directory) / "secret"
+            secret_path.write_text(KEY, encoding="utf-8")
+            secret_path.chmod(0o600)
+            linked_key = Path(directory) / "linked-secret"
+            linked_key.symlink_to(secret_path)
+            with override_settings(
+                MPW_NATIVE_EVENT_ENABLED=True,
+                MPW_NATIVE_EVENT_TRANSPORT="unix",
+                MPW_NATIVE_EVENT_SOCKET="/tmp/mpw-ci-only.sock",
+                MPW_NATIVE_EVENT_SECRET_FILE=str(linked_key),
+            ), patch(
+                "scripts.mojplaywin_cpanel_local_event_worker.socket_request"
+            ) as deliver:
+                with self.assertRaises(NotificationUnavailable):
+                    send_invoice_event(self.invoice(), action="invoice_open")
+                deliver.assert_not_called()
 
     @override_settings(MPW_NATIVE_EVENT_ENABLED=True,
                        MPW_NATIVE_EVENT_TRANSPORT="unix",
