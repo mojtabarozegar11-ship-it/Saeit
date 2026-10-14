@@ -1,9 +1,22 @@
-name: CPU Model Independent Image Proof (Ephemeral Runner)
+name: ComfyUI CPU Image Studio - Preset Runner
 on:
   push:
     branches: [feature/comfyui-final-audit-20261015]
     paths: [.github/workflows/comfyui-cpu-runner-image-proof.yml]
   workflow_dispatch:
+    inputs:
+      preset:
+        description: Select a prepared demo scene
+        type: choice
+        required: true
+        default: orchard
+        options: [orchard, greenhouse, product, abstract]
+      steps:
+        description: Diffusion sampling steps (CPU; more steps require more time)
+        type: choice
+        required: true
+        default: '8'
+        options: ['4', '8', '12']
 permissions:
   contents: read
 jobs:
@@ -36,13 +49,27 @@ jobs:
           echo CPU_RUNNER_SOURCES_SHA256_VERIFIED
       - name: Generate a real 512px image on the isolated 7 GB runner
         shell: bash
+        env:
+          REQUESTED_PRESET: ${{ inputs.preset }}
+          REQUESTED_STEPS: ${{ inputs.steps }}
         run: |
           set -euo pipefail
+          case "${REQUESTED_PRESET:-orchard}" in
+            orchard) prompt="a peaceful almond orchard in warm afternoon sunshine, artistic landscape painting" ;;
+            greenhouse) prompt="healthy green seedlings growing in a modern bright greenhouse, painterly illustration" ;;
+            product) prompt="botanical green product package on a wooden table, soft studio lighting, illustrative art" ;;
+            abstract) prompt="abstract botanical emerald green and warm golden leaves, textured artistic composition" ;;
+            *) echo "INVALID_PRESET"; exit 2 ;;
+          esac
+          case "${REQUESTED_STEPS:-8}" in
+            4|8|12) steps="${REQUESTED_STEPS:-8}" ;;
+            *) echo "INVALID_STEPS"; exit 2 ;;
+          esac
           export LD_LIBRARY_PATH="$CPU_LIB_DIR"
           export OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2
-          timeout 320s nice -n 10 "$CPU_EXE" \
-            -m "$CPU_MODEL" -p "green shoots in a sunny farm field, painterly landscape" \
-            -W 512 -H 512 --steps 4 --seed 42 --cfg-scale 7 \
+          timeout 540s nice -n 10 "$CPU_EXE" \
+            -m "$CPU_MODEL" -p "$prompt" \
+            -W 512 -H 512 --steps "$steps" --seed "${GITHUB_RUN_NUMBER:-42}" --cfg-scale 7 \
             --sampling-method euler_a --diffusion-fa -o "$CPU_RENDER_OUTPUT"
           python3 - "$CPU_RENDER_OUTPUT" <<'PY'
           import hashlib,struct,sys
