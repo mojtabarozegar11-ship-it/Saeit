@@ -13,6 +13,35 @@ Opportunity -> Qualified -> Approved -> Executing -> Delivered -> Invoiced -> Pa
 
 `Paid`, an order, an invoice, a lead, a dashboard number, or an agent claim is not verified revenue. `Verified Revenue` requires externally evidenced settlement plus successful reconciliation. The canonical implementation is `core/revenue_lifecycle.py`.
 
+
+## Production is independent of customer orders
+
+The factory is **supply-led and opportunity-led**, not made-to-order.
+It continually searches market and research signals, prioritizes a portfolio,
+prepares original assets, and advances each product through evidence, quality,
+pricing, and approval. It must not wait for a paid order or customer instruction
+before it proposes or produces an asset.
+
+Production trigger: VPS-local scheduler, fresh market evidence, newly registered
+factory opportunity, or stale product-research/QA state. No Order or
+PaymentIntent record is required for product research or production.
+
+Strict separation:
+- **Before sale:** discover -> research -> build -> quality/review -> pricing ->
+  owner-authorized publication -> distribute to permitted storefronts.
+- **After sale:** confirmed payment -> digital delivery -> reconciliation ->
+  support/refund handling and measurement.
+
+Local preparation starts from existing unsold, factory-managed products and is
+idempotent and rate-limited; unchanged dossiers must not call paid AI APIs.
+Production must not invent sources or set active=True to circumvent quality
+gates. Existing owner-consent and approved publication requirements remain in
+force. Initial VPS-local implementation is
+scripts/factory_autonomous_portfolio.py; it stages confidential research and
+quality evidence, not a sale-ready asset. A verified publishing adapter is a
+separate downstream component. External payment processing and customer orders
+cannot be production prerequisites.
+
 ## Factory lifecycle
 1. Discover a lawful revenue opportunity.
 2. Qualify eligibility: jurisdiction, provider/platform terms, KYC/AML where applicable, settlement route, operational capability and owner policy.
