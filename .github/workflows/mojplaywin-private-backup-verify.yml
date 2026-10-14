@@ -1,0 +1,187 @@
+name: MojPlayWin private production MySQL backup and integrity verification
+on:
+  push:
+    branches: [ops/mpw-private-backup-20261014]
+    paths:
+      - .github/workflows/mojplaywin-private-backup-verify.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Back up active MySQL database privately and verify compressed archive
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/mpw-private-backup"
+          mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          python3 - "$d/vps.key" "$d/host.key" <<'PY'
+          from pathlib import Path
+          import sys
+          for name in sys.argv[1:]:
+              p = Path(name)
+              p.write_text(p.read_text().replace("\r\n", "\n").strip().replace("\\n", "\n") + "\n")
+          PY
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host relay
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host host
+            HostName zohal.pws-dns.net
+            Port 1396
+            User zomorod2
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump relay
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+          EOF
+          timeout 30s ssh -F "$d/config" relay 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          timeout 240s ssh -F "$d/config" host 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = "zomorod2"
+          umask 077
+          export PYTHONDONTWRITEBYTECODE=1
+          export DJANGO_SETTINGS_MODULE=config.settings
+          cd "$HOME/Saeit-staging"
+          test -f config/settings.py && test -f .env
+          "$HOME/virtualenv/Saeit-staging/3.11/bin/python" - <<'PY'
+          import datetime
+          import gzip
+          import hashlib
+          import json
+          import os
+          import pathlib
+          import re
+          import secrets
+          import shutil
+          import subprocess
+          import tempfile
+          import django
+          django.setup()
+          from django.conf import settings
+          from django.db import connections
+          home = pathlib.Path.home().resolve()
+          site = (home / "Saeit-staging").resolve(strict=True)
+          assert site == home / "Saeit-staging", "Unexpected Django source location"
+          db = settings.DATABASES["default"]
+          assert db["ENGINE"] == "django.db.backends.mysql", "Only MySQL can be backed up here"
+          dbname = str(db["NAME"])
+          assert re.fullmatch(r"[A-Za-z0-9_]+", dbname), "Invalid database identifier"
+          with connections["default"].cursor() as cur:
+              cur.execute("SELECT COUNT(*),COALESCE(SUM(data_length+index_length),0),COALESCE(SUM(CASE WHEN engine NOT IN ('InnoDB', 'Aria') THEN 1 ELSE 0 END),0) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_type='BASE TABLE'")
+              table_count, db_bytes, non_transactional = map(int, cur.fetchone())
+          assert table_count > 0, "No tables to back up"
+          backup_parent = home / ".mpw-private-db-backups"
+          assert not backup_parent.is_symlink(), "Refuse backup symlink"
+          assert not backup_parent.exists() or backup_parent.is_dir()
+          disk_free = shutil.disk_usage(home).free
+          required = max(24 * 1024**2, int(db_bytes * 1.20))
+          assert disk_free >= required, "Insufficient physical free space"
+          program = shutil.which("mysqldump") or shutil.which("mariadb-dump")
+          assert program, "Backup command unavailable"
+          backup_parent.mkdir(mode=0o700, exist_ok=True)
+          backup_parent.chmod(0o700)
+          checkpoint = backup_parent / (datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "-" + secrets.token_hex(4))
+          checkpoint.mkdir(mode=0o700)
+          checkpoint.chmod(0o700)
+          export = checkpoint / "mysql-full.sql.gz"
+          partial = checkpoint / "mysql-full.sql.gz.part"
+          cmd = [program, "--single-transaction", "--quick", "--skip-lock-tables", "--no-tablespaces", "--hex-blob", "--default-character-set=utf8mb4", "--routines", "--triggers", "--events", "--user=" + str(db["USER"])]
+          if db.get("HOST"):
+              cmd.append("--host=" + str(db["HOST"]))
+          if db.get("PORT"):
+              cmd.append("--port=" + str(db["PORT"]))
+          if db.get("OPTIONS", {}).get("unix_socket"):
+              cmd.append("--socket=" + str(db["OPTIONS"]["unix_socket"]))
+          cmd.append(dbname)
+          child_env = os.environ.copy()
+          child_env["MYSQL_PWD"] = str(db.get("PASSWORD",""))
+          try:
+              with tempfile.TemporaryFile() as errors:
+                  with subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=errors, env=child_env, cwd=site) as proc:
+                      with gzip.open(partial, "wb", compresslevel=5) as out:
+                          shutil.copyfileobj(proc.stdout, out, length=1024*1024)
+                      status = proc.wait(timeout=120)
+                  assert status == 0, "Database export command failed"
+              assert partial.stat().st_size > 512, "Unexpectedly short dump"
+              found_table = False
+              raw_size = 0
+              with gzip.open(partial, "rb") as source:
+                  while True:
+                      block = source.read(1024 * 1024)
+                      if not block:
+                          break
+                      raw_size += len(block)
+                      if b"CREATE TABLE" in block:
+                          found_table = True
+              assert found_table and raw_size > 1024, "SQL dump missing table statements"
+              partial.chmod(0o600)
+              partial.rename(export)
+              for label, src in (
+                  ("settings.py", site/"config/settings.py"),
+                  ("urls.py", site/"config/urls.py"),
+                  ("env", site/".env"),
+              ):
+                  assert src.is_file() and not src.is_symlink(), "Required source missing or symlink"
+                  target = checkpoint / label
+                  shutil.copy2(src, target)
+                  target.chmod(0o600)
+              digest = hashlib.sha256(export.read_bytes()).hexdigest()
+              manifest = {
+                  "timestamp_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                  "tables": table_count,
+                  "non_innodb_or_aria_tables": non_transactional,
+                  "compressed_bytes": export.stat().st_size,
+                  "uncompressed_bytes": raw_size,
+                  "archive_sha256": digest,
+                  "backup_is_a_restore_test": False
+              }
+              mf = checkpoint / "manifest.json"
+              mf.write_text(json.dumps(manifest, indent=2) + "\n")
+              mf.chmod(0o600)
+              print("MPW_PRIVATE_BACKUP_CREATED=True")
+              print("MPW_BACKUP_PERMISSION_0700=" + str((checkpoint.stat().st_mode & 0o777) == 0o700))
+              print("MPW_SQL_GZIP_FULL_INTEGRITY=True")
+              print("MPW_BACKUP_TABLE_COUNT=" + str(table_count))
+              print("MPW_BACKUP_NONTRANSACTIONAL_TABLE_COUNT=" + str(non_transactional))
+              print("MPW_BACKUP_COMPRESSED_BYTES=" + str(export.stat().st_size))
+              print("MPW_BACKUP_DIGEST_PREFIX=" + digest[:16])
+              print("MPW_DATABASE_READ_ONLY_NO_MIGRATION=True")
+              print("MPW_BACKUP_RESTORE_TEST_DONE=False")
+          except Exception:
+              if partial.exists():
+                  partial.unlink()
+              raise
+          PY
+          REMOTE
+      - name: Erase runner-only transient SSH keys
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/mpw-private-backup"
