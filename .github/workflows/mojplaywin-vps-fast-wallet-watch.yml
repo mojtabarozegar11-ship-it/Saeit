@@ -5,6 +5,9 @@ on:
       - release/mojplaywin-chess-product-20261014
     paths:
       - '.github/workflows/mojplaywin-vps-fast-wallet-watch.yml'
+      - 'scripts/mojplaywin_vps_readonly_watch.py'
+      - 'scripts/install_mpw_vps_readonly_watch.sh'
+      - 'tests/test_mojplaywin_vps_readonly_watch.py'
   workflow_dispatch:
 permissions:
   contents: read
