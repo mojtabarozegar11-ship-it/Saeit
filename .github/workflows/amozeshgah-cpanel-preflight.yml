@@ -207,6 +207,46 @@ jobs:
           grep -n '^def education\|^class Education' "$app/education/views.py" "$app/core/views.py" 2>/dev/null | head -30 || true
           echo LIVE_EDUCATION_VIEW_SYMBOLS_END
           REMOTE
+      - name: Inspect registered Passenger apps and education staging
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/amozeshgah-preflight"
+          timeout 45s ssh -F "$work/config" saeit-cpanel 'uapi --output=json PassengerApps list_applications' > "$work/passenger-apps.json"
+          python3 - "$work/passenger-apps.json" <<'PY'
+          import json,sys
+          obj=json.load(open(sys.argv[1],encoding="utf-8"))
+          data=(obj.get("result") or {}).get("data")
+          allowed={"name","app_name","application_name","domain","base_uri","base_url","application_path","path","enabled","status"}
+          rows=[]
+          def walk(x):
+              if isinstance(x,dict):
+                  row={k:v for k,v in x.items() if k in allowed and isinstance(v,(str,int,bool))}
+                  if row: rows.append(row)
+                  for v in x.values(): walk(v)
+              elif isinstance(x,list):
+                  for v in x: walk(v)
+          walk(data)
+          if rows:
+              for row in rows: print("PASSENGER_APP="+json.dumps(row,sort_keys=True))
+          else: print("PASSENGER_APP_LIST_EMPTY_OR_SCHEMA_UNRECOGNIZED")
+          PY
+          ssh -F "$work/config" saeit-cpanel 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          app=/home/zomorod2/Saeit-staging
+          if test -d "$app" && test -f "$app/manage.py" && test -f "$app/passenger_wsgi.py"; then
+            echo EDUCATION_STAGING_APP_PRESENT=yes
+            if git -C "$app" rev-parse --git-dir >/dev/null 2>&1; then
+              echo EDUCATION_STAGING_HEAD="$(git -C "$app" rev-parse HEAD)"
+              echo EDUCATION_STAGING_BRANCH="$(git -C "$app" branch --show-current)"
+              echo EDUCATION_STAGING_CHANGE_COUNT="$(git -C "$app" status --porcelain | wc -l | tr -d ' ')"
+            fi
+            if grep -q 'amozeshgah' "$app/config/urls.py"; then echo EDUCATION_STAGING_CANONICAL_ROUTE=yes; else echo EDUCATION_STAGING_CANONICAL_ROUTE=no; fi
+            if test -f "$app/.env"; then echo EDUCATION_STAGING_ENV_PRESENT=yes; else echo EDUCATION_STAGING_ENV_PRESENT=no; fi
+            if test -x "$app/.venv/bin/python"; then echo EDUCATION_STAGING_VENV_PRESENT=yes; else echo EDUCATION_STAGING_VENV_PRESENT=no; fi
+          else echo EDUCATION_STAGING_APP_PRESENT=no
+          fi
+          REMOTE
       - name: Remove temporary SSH material
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/amozeshgah-preflight"
