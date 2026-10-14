@@ -22,6 +22,25 @@ for category in categories:
                 models.append(p)
     checks["models"][category] = len(models)
 checks["model_total"] = sum(checks["models"].values())
+factory_pid = home / "factory-runtime/operations/vps-only-loop.pid"
+checks["factory_loop_running"] = False
+if factory_pid.is_file():
+    try:
+        pid = int(factory_pid.read_text().strip())
+        os.kill(pid, 0)
+        checks["factory_loop_running"] = True
+    except (ValueError, ProcessLookupError, PermissionError, OSError):
+        pass
+checks["cgroup_v2"] = Path("/sys/fs/cgroup/cgroup.controllers").is_file()
+checks["user_cgroup_delegation"] = False
+cgroup = Path("/proc/self/cgroup")
+if checks["cgroup_v2"] and cgroup.is_file():
+    for line in cgroup.read_text().splitlines():
+        if line.startswith("0::"):
+            active = Path("/sys/fs/cgroup") / line.split("::", 1)[1].lstrip("/")
+            checks["user_cgroup_delegation"] = os.access(active, os.W_OK)
+checks["private_tailscale_binary"] = (home / ".local/opt/comfyui-tailnet/binaries-1.104.1/tailscale").exists()
+
 print("COMFYUI_QUALITY_GATE=" + json.dumps(checks, sort_keys=True))
 if not checks["runtime_present"] or not checks["private_dir"] or not checks["python_present"]:
     raise SystemExit(1)
