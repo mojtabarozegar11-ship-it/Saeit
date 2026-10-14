@@ -1,0 +1,162 @@
+name: Saeit Personal Commerce Framework Audit
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/vps-personal-framework-audit.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: saeit-factory-store-preflight
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Prepare pinned SSH identities
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/factory-store-preflight"
+          install -d -m 700 "$d"
+          for item in VPS_KEY HOST_KEY; do
+            key="$d/${item}.key"
+            printf '%s' "${!item}" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$key"
+            chmod 600 "$key"
+            ssh-keygen -y -P '' -f "$key" >/dev/null
+          done
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -i "$d/VPS_KEY.key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/vps.known" -o BatchMode=yes githubops@178.239.147.150 'ssh-keyscan -T 10 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/VPS_KEY.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/HOST_KEY.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 12
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+      - name: Inspect factory product handoff source
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -F "$RUNNER_TEMP/factory-store-preflight/config" saeit-vps 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          base="$HOME/factory-runtime"
+          echo VPS_USER="$(id -un)"
+          test -s "$base/private/autonomous-product-cycle/production-state.json"
+          test -s "$base/private/autonomous-product-cycle/digital-products/farm_enterprise_economics/farm_enterprise_economics-internal-qa.zip"
+          echo VPS_MANUFACTURED_ZIP_PRESENT
+          stat -c 'VPS_ZIP_BYTES=%s PERMISSIONS=%a' "$base/private/autonomous-product-cycle/digital-products/farm_enterprise_economics/farm_enterprise_economics-internal-qa.zip"
+          python3 - "$base/private/autonomous-product-cycle/production-state.json" <<'PY'
+          import json,sys
+          j=json.load(open(sys.argv[1]))
+          for k in ('mode','depends_on_orders','built_product_count','artifact_qa_passed','publishable_product_count','store_distribution_state'):
+            print('VPS_FACTORY_'+k.upper()+'='+str(j.get(k)))
+          PY
+          REMOTE
+      - name: Inspect cPanel private staging and storefront runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -F "$RUNNER_TEMP/factory-store-preflight/config" saeit-cpanel 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          echo CPANEL_USER="$(id -un)"
+          echo CPANEL_HOME="$HOME"
+          for path in /home/zomorod2/Saeit-staging /home/zomorod2/zomorodmelal.ir /home/zomorod2/mojplaywin.com /home/zomorod2/mojtabarozegar.ir /home/zomorod2/public_html; do
+            if test -d "$path" && test ! -L "$path"; then
+              echo CPANEL_DIR_PRESENT="$(basename "$path")"
+              if test -f "$path/manage.py"; then echo CPANEL_DJANGO_SOURCE="$(basename "$path")"; fi
+              if test -f "$path/passenger_wsgi.py"; then echo CPANEL_PASSENGER_SOURCE="$(basename "$path")"; fi
+              if test -d "$path/.venv"; then echo CPANEL_LOCAL_VENV="$(basename "$path")"; fi
+            else
+              echo CPANEL_DIR_MISSING="$(basename "$path")"
+            fi
+          done
+          test -d /home/zomorod2/Saeit-staging
+          test -w /home/zomorod2/Saeit-staging
+          echo CPANEL_STAGING_WRITABLE
+          if test -f /home/zomorod2/Saeit-staging/core/models.py; then
+            grep -q '^class Product(' /home/zomorod2/Saeit-staging/core/models.py && echo CPANEL_DJANGO_PRODUCT_MODEL_PRESENT
+          fi
+          command -v python3 >/dev/null && python3 --version
+          df -h "$HOME" | tail -n 1 | awk '{print "CPANEL_DISK_FREE=" $4}'
+          REMOTE
+      - name: Identify the independent personal application framework and model
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -F "$RUNNER_TEMP/factory-store-preflight/config" saeit-cpanel 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          root=Path.home()
+          ht=root/"mojplaywin.com/mojtaba.roozegar/.htaccess"
+          if ht.is_file():
+              for line in ht.read_text(encoding="utf-8",errors="replace").splitlines():
+                  line=line.strip()
+                  if line.startswith("#"): continue
+                  parts=line.split()
+                  if len(parts)>1 and parts[0].lower().startswith("passenger"):
+                      val=" ".join(parts[1:])
+                      if parts[0].lower()=="passengerapproot":
+                          target=Path(val).expanduser()
+                          try:
+                              allowed=target.resolve().is_relative_to(root.resolve())
+                          except AttributeError:
+                              allowed=str(target.resolve()).startswith(str(root.resolve())+"/")
+                          print("PERSONAL_ACTIVE_APP_ROOT_WITHIN_ACCOUNT="+str(allowed))
+                          if allowed:
+                              print("PERSONAL_ACTIVE_APP_ROOT_REL="+str(target.resolve().relative_to(root.resolve())))
+                      elif parts[0].lower()=="passengerstartupfile":
+                          print("PERSONAL_ACTIVE_STARTUP_FILENAME="+Path(val).name)
+                      elif parts[0].lower()=="passengerpython":
+                          print("PERSONAL_ACTIVE_PYTHON_EXISTS="+str(Path(val).is_file()))
+                      elif parts[0].lower()=="passengerbaseuri":
+                          print("PERSONAL_ACTIVE_BASE_URI="+val[:100])
+          base=root/"mojtaba_personal"
+          names={"manage.py","wsgi.py","asgi.py","passenger_wsgi.py","app.py",
+                 "urls.py","requirements.txt","pyproject.toml"}
+          found=0
+          if base.is_dir():
+              for f in base.glob("**/*"):
+                  try: rel=f.relative_to(base)
+                  except Exception: continue
+                  if len(rel.parts)>4: continue
+                  if f.is_file() and f.name in names:
+                      found+=1
+                      if found<=60:
+                          print("PERSONAL_CODE_FILE="+str(rel))
+                          if f.name in ("passenger_wsgi.py","app.py","wsgi.py","requirements.txt"):
+                              text=f.read_text(encoding="utf-8",errors="replace")[:40000].lower()
+                              print("PERSONAL_CODE_USES_FLASK="+str("flask" in text))
+                              print("PERSONAL_CODE_USES_DJANGO="+str("django" in text))
+                              print("PERSONAL_CODE_USES_SQLALCHEMY="+str("sqlalchemy" in text))
+          print("PERSONAL_CANDIDATE_ENTRYPOINTS="+str(found))
+          PY
+          echo PERSONAL_APP_FRAMEWORK_AUDIT_COMPLETE
+          REMOTE
+      - name: Clean temporary SSH keys
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/factory-store-preflight"
