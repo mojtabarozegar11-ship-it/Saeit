@@ -33,6 +33,29 @@ sleep 2
 kill -0 "$(cat "$base/watch.pid")"
 ENSURE
 chmod 700 "$root/ensure.sh"
+# Gracefully restart ONLY the confirmed owned watcher, so updated Python code
+# takes effect; never signal unrelated VPS services or the factory process.
+exec 8>"$root/supervisor.lock"
+flock -w 8 8
+old_pid="$(cat "$root/watch.pid" 2>/dev/null || true)"
+if [[ "$old_pid" =~ ^[0-9]+$ ]] && kill -0 "$old_pid" 2>/dev/null; then
+  old_cmd="$(ps -p "$old_pid" -o args= 2>/dev/null || true)"
+  if [[ "$old_cmd" == *"$root/current/scripts/mojplaywin_vps_readonly_watch.py"* ]]; then
+    kill -TERM "$old_pid"
+    for attempt in 1 2 3 4 5 6 7 8 9 10; do
+      kill -0 "$old_pid" 2>/dev/null || break
+      sleep 0.5
+    done
+    if kill -0 "$old_pid" 2>/dev/null; then
+      echo "MPW_OLD_WATCHER_DID_NOT_STOP"
+      exit 1
+    fi
+  else
+    echo "MPW_PID_OWNERSHIP_MISMATCH"
+    exit 1
+  fi
+fi
+flock -u 8
 bash "$root/ensure.sh"
 pid="$(cat "$root/watch.pid")"
 ps -p "$pid" -o args= | grep -F 'mojplaywin_vps_readonly_watch.py' >/dev/null
@@ -51,6 +74,6 @@ else
   echo MPW_CRON_UNAVAILABLE_BACKGROUND_WATCH_RUNNING
 fi
 echo MPW_ACTIVE_MARKER_POLL_EVERY_15S
-echo MPW_IDLE_API_SCAN_EVERY_180S
+echo MPW_IDLE_INDEXER_REQUESTS_ZERO
 echo MPW_WALLET_WATCH_READ_ONLY_NO_SETTLEMENT
 echo MPW_LIVE_SITE_UNCHANGED
