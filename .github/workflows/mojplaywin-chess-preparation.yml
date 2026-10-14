@@ -4,6 +4,10 @@ on:
     paths:
       - '.github/workflows/mojplaywin-chess-preparation.yml'
       - 'scripts/mojplaywin_cpanel_local_event_worker.py'
+      - 'mpw_native_checkout/models.py'
+      - 'mpw_native_checkout/purchase_notify.py'
+      - 'mpw_native_checkout/migrations/0002_nativewatchoutbox.py'
+      - 'mpw_native_checkout/management/commands/mpw_native_flush_events.py'
       - 'tests/test_mojplaywin_cpanel_local_event_worker.py'
       - 'scripts/mojplaywin_direct_wallet_invoice.py'
       - 'tests/test_mojplaywin_direct_wallet_invoice.py'
@@ -119,8 +123,10 @@ jobs:
             mpw_native_checkout/management/__init__.py \
             mpw_native_checkout/management/commands/__init__.py \
             mpw_native_checkout/management/commands/mpw_native_autopay.py \
+            mpw_native_checkout/management/commands/mpw_native_flush_events.py \
             mpw_native_checkout/migrations/__init__.py \
             mpw_native_checkout/migrations/0001_initial.py \
+            mpw_native_checkout/migrations/0002_nativewatchoutbox.py \
             catalog/mojplaywin/chess-improvement-2026.json \
             tests/test_mojplaywin_chess_asset_installer.py \
             tests/test_mojplaywin_native_chain_verify.py \
@@ -145,6 +151,7 @@ jobs:
           echo INCOMING_CHAIN_INDEXER_STAGED_READ_ONLY
           echo AUTOMATIC_NATIVE_WORKER_STAGED_DISABLED_BY_DEFAULT
           echo LOCAL_PURCHASE_EVENT_PROCESSOR_STAGED_NOT_ENABLED
+          echo DURABLE_PURCHASE_NOTIFICATION_OUTBOX_STAGED_UNMIGRATED
           echo LIVE_SITE_FILES_UNCHANGED
           echo CHESS_PAYMENT_NOT_ACTIVATED
       - name: Scrub runner credentials
