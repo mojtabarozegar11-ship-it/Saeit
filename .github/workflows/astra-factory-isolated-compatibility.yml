@@ -122,6 +122,7 @@ jobs:
           TREASURY_EXECUTION_ENABLED=CRYPTO_EXECUTION_ENABLED=False
           TRADE_EMAIL_ENABLED=False
           FACTORY_PIPELINE_ENABLED=False
+          FACTORY_RESEARCH_PROVIDER='core.self_hosted_research_provider.SelfHostedStagingResearchProvider'
           """,encoding='utf-8')
           db=pathlib.Path(os.environ['HOME'])/"factory-runtime/private/factory-fresh-isolated.sqlite3"
           if not db.is_file():raise RuntimeError("ISOLATED_FACTORY_DB_MISSING")
@@ -232,6 +233,19 @@ jobs:
           for item in FactoryQueueItem.objects.values("state").annotate(n=Count("id")).order_by("state"):
               print("ASTRA_STAGING_QUEUE_STATE_"+str(item["state"])+"="+str(item["n"]))
           print("ASTRA_STAGING_DISCOVERY_SNAPSHOT_COUNT="+str(DiscoverySnapshot.objects.count()))
+          import re
+          for row in FactoryQueueItem.objects.filter(state="requires_owner_approval").values("last_error")[:3]:
+              error=str(row["last_error"] or "").lower()
+              categories=[key for key,pattern in (
+                  ("provider",r"provider|research"),
+                  ("network",r"dns|ssl|https|connection|proxy|socket|network"),
+                  ("timeout",r"timeout|timed out"),
+                  ("permission",r"permission|denied|forbidden"),
+                  ("policy",r"policy|owner|approval|prohibited"),
+                  ("configuration",r"setting|config|attribute|import|module"),
+                  ("database",r"sqlite|database|table|column")) if re.search(pattern,error)]
+              print("ASTRA_STAGING_APPROVAL_BLOCKER_CLASS="+",".join(categories or ["unclassified"]))
+
           PY
           echo ASTRA_EXISTING_FACTORY_AND_LIVE_SITES_UNMODIFIED
           REMOTE
