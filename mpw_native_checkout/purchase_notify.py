@@ -96,12 +96,98 @@ def send_invoice_event(invoice, *, action, opener=urlopen):
     return "delivered"
 
 
+
+def dispatch_queued_watch_event(invoice_id, *, sender=send_invoice_event):
+    """Retry one durable alert with a DB row lock. Never marks orders paid."""
+    from datetime import timedelta
+    from django.utils import timezone
+    from .models import NativeWatchOutbox
+
+    if getattr(settings, "MPW_NATIVE_EVENT_ENABLED", False) is not True:
+        return "disabled"
+    with transaction.atomic():
+        entry = (
+            NativeWatchOutbox.objects.select_for_update()
+            .select_related("invoice")
+            .filter(invoice_id=invoice_id, state="pending").first()
+        )
+        if entry is None:
+            return "nothing_queued"
+        now = timezone.now()
+        if entry.next_attempt_at and entry.next_attempt_at > now:
+            return "backoff"
+        try:
+            status = sender(entry.invoice, action=entry.action)
+            if status != "delivered":
+                raise NotificationUnavailable("Receiver did not acknowledge")
+        except (NotificationUnavailable, OSError, ValueError):
+            entry.attempts = min(65535, entry.attempts + 1)
+            wait = min(300, 2 ** min(8, entry.attempts))
+            entry.next_attempt_at = now + timedelta(seconds=wait)
+            entry.save(update_fields=[
+                "attempts", "next_attempt_at", "updated_at",
+            ])
+            return "retry_queued"
+        entry.state = "delivered"
+        entry.delivered_at = now
+        entry.next_attempt_at = None
+        entry.save(update_fields=[
+            "state", "delivered_at", "next_attempt_at", "updated_at",
+        ])
+        return "delivered"
+
+
+def flush_pending_watch_events(*, limit=20):
+    """Bounded local-database recovery only; zero requests when queue empty."""
+    from django.db.models import Q
+    from django.utils import timezone
+    from .models import NativeWatchOutbox
+
+    if getattr(settings, "MPW_NATIVE_EVENT_ENABLED", False) is not True:
+        return {"state": "disabled", "attempted": 0}
+    if type(limit) is not int or limit < 1 or limit > 100:
+        raise ValueError("Unsafe outbox batch size")
+    now = timezone.now()
+    ids = list(
+        NativeWatchOutbox.objects.filter(state="pending")
+        .filter(Q(next_attempt_at__isnull=True) | Q(next_attempt_at__lte=now))
+        .order_by("updated_at").values_list("invoice_id", flat=True)[:limit]
+    )
+    attempted = 0
+    for invoice_id in ids:
+        result = dispatch_queued_watch_event(invoice_id)
+        if result in ("delivered", "retry_queued"):
+            attempted += 1
+    return {"state": "processed", "attempted": attempted}
+
+
 def notify_after_commit(invoice, action):
-    """Avoid blocking payment state on a transient downstream watcher outage."""
+    """Persist the latest required event BEFORE the parent's transaction commits.
+
+    Failed deliveries remain in the private Django outbox for bounded retries.
+    A 'close' replaces an unsent 'open', so stale alerts cannot reactivate
+    an already-paid invoice.
+    """
+    from django.utils import timezone
+    from .models import NativeWatchOutbox
+
+    if action not in ("invoice_open", "invoice_closed"):
+        raise NotificationUnavailable("Unknown invoice notification")
+    NativeWatchOutbox.objects.update_or_create(
+        invoice=invoice,
+        defaults={
+            "action": action,
+            "state": "pending",
+            "attempts": 0,
+            "next_attempt_at": None,
+            "delivered_at": None,
+        },
+    )
+
     def callback():
         try:
-            send_invoice_event(invoice, action=action)
-        except NotificationUnavailable:
-            # A durable retry queue is required before production activation.
-            logger.warning("wallet_event_send_failed kind=%s", action)
+            dispatch_queued_watch_event(invoice.pk)
+        except Exception:
+            # Preserve outbox row for retry; never lose the purchase alert.
+            logger.exception("watch_event_queue_delivery_deferred")
     transaction.on_commit(callback)
