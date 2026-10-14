@@ -5,7 +5,9 @@ call is the independently verified internal ledger transaction.
 """
 from datetime import timedelta
 from decimal import Decimal
-from unittest.mock import Mock
+from unittest.mock import Mock,patch
+from io import StringIO
+from django.core.management import call_command
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
@@ -68,6 +70,20 @@ class ReconciliationTests(TestCase):
         self.assertEqual(result["state"],"disabled")
         eth.assert_not_called()
         settle.assert_not_called()
+
+    def test_release_not_ready_disables_all_chain_checks_even_with_other_flags_on(self):
+        eth=Mock(side_effect=AssertionError("No network while not released"))
+        with override_settings(**{**FLAGS,"MPW_COMMERCE_RELEASE_READY":False}):
+            result=reconcile_pending_orders(now=self.now,eth_scanner=eth)
+        self.assertEqual(result["state"],"disabled")
+        eth.assert_not_called()
+
+    def test_management_command_off_never_initiates_payment_check(self):
+        output=StringIO()
+        with override_settings(MPW_COMMERCE_RELEASE_READY=False):
+            call_command("mpw_commerce_reconcile",stdout=output)
+        self.assertIn("state=disabled",output.getvalue())
+        self.assertIn("paid=0",output.getvalue())
 
     @override_settings(**FLAGS)
     def test_idle_has_zero_chain_requests(self):
