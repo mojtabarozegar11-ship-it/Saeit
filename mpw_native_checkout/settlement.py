@@ -6,6 +6,7 @@ validated. Backend code, not a browser form, supplies trusted RPC callbacks.
 """
 import hashlib
 import json
+import re
 from decimal import Decimal
 from datetime import timedelta
 
@@ -79,6 +80,15 @@ def settle_native_invoice(invoice_id, tx_hash, *, ethereum_rpc=None, tron_solidi
     if invoice is None:
         raise SettlementRejected("Invoice not found")
     normalized_hash = str(tx_hash).lower()
+    valid_hash = (
+        re.fullmatch(r"0x[0-9a-f]{64}", normalized_hash)
+        if invoice.network == "ethereum-mainnet"
+        else re.fullmatch(r"[0-9a-f]{64}", normalized_hash)
+        if invoice.network == "tron-mainnet"
+        else None
+    )
+    if valid_hash is None:
+        raise SettlementRejected("Invalid chain transaction ID")
     if invoice.status == NativeInvoice.Status.PAID:
         if NativeChainTransfer.objects.filter(
             invoice=invoice, network=invoice.network, tx_hash=normalized_hash,
