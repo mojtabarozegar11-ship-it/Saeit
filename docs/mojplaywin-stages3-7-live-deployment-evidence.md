@@ -72,6 +72,18 @@ The independent read-only confirmation reports:
 Do not invent paid revenue, manufacturer quality or a prior crossed-out
 price. The new schema is empty; a green CI pipeline is **not** revenue.
 
+
+## Independent final catalog eligibility check
+
+Read-only evidence: https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/38657266642 .
+
+- 193 shared-catalog products; 193 with nonempty metadata and titles of at least 20 characters. Neither measure is a content-quality certification.
+- **Only two priced USD products (IDs 72 and 147)** and **zero active**.
+- Two products have an assigned owner; **none** have a linked research article.
+- **Zero** have the structured `mpw_commerce` sale policy, a configured private asset under that policy, or `enabled=true`.
+- Zero have `factory_publication_permission=true`, `asset_verified=true`, `quality_approved=true` or `license_verified=true` in the checked metadata fields. Different undocumented keys could exist; these results are not proof that no rights documents exist elsewhere.
+- Therefore the catalog **cannot** be safely bulk-published; there is no product with independently evidenced sale eligibility in these known checks. Product bytes, authorship and market pricing require separate substantive evaluation.
+
 ## Production rollback and final release policy
 
 **Live app settings:** app registration is introduced only inside
