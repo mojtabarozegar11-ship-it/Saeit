@@ -11,6 +11,7 @@ on:
       - 'mpw_native_checkout/management/commands/mpw_native_flush_events.py'
       - 'mpw_native_checkout/management/commands/mpw_native_event_loop.py'
       - 'mpw_native_checkout/wallet_ownership.py'
+      - 'mpw_native_checkout/crypto_subprocess_verify.py'
       - 'mpw_native_checkout/merchant_wallet_views.py'
       - 'mpw_native_checkout/merchant_wallet_urls.py'
       - 'mpw_native_checkout/templates/mpw_native_checkout/merchant_wallet_proof.html'
@@ -126,6 +127,7 @@ jobs:
             mpw_native_checkout/models.py \
             mpw_native_checkout/entitlements.py \
             mpw_native_checkout/wallet_ownership.py \
+            mpw_native_checkout/crypto_subprocess_verify.py \
             mpw_native_checkout/merchant_wallet_views.py \
             mpw_native_checkout/merchant_wallet_urls.py \
             mpw_native_checkout/templates/mpw_native_checkout/merchant_wallet_proof.html \
