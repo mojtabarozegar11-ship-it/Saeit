@@ -1,0 +1,120 @@
+name: MojPlayWin merchant proof release preflight (read only)
+on:
+  push:
+    branches: [release/mojplaywin-chess-product-20261014]
+    paths: ['.github/workflows/mojplaywin-proof-live-preflight.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - name: Preflight real Django mapping, crypto requirements and migrations
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/mpw-proof-preflight"
+          mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          python3 - "$d/vps.key" "$d/host.key" <<'PY'
+          from pathlib import Path
+          import sys
+          for filename in sys.argv[1:]:
+            p=Path(filename)
+            p.write_text(p.read_text().replace("\r\n","\n").strip().replace("\\n","\n")+"\n")
+          PY
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host relay
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump relay
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+          EOF
+          timeout 30s ssh -F "$d/config" relay 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          timeout 90s ssh -F "$d/config" host 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = zomorod2
+          export PYTHONDONTWRITEBYTECODE=1
+          cd /home/zomorod2/Saeit-staging
+          python3 - <<'PY'
+          from pathlib import Path
+          root=Path('/home/zomorod2')
+          for candidate in (root/'Saeit-staging', root/'public_html',root/'mojplaywin.com',root/'domains'/'mojplaywin.com'):
+            print('ROOT',candidate.relative_to(root), 'exists='+str(candidate.exists()), 'real='+str(candidate.resolve().relative_to(root)) if candidate.exists() and candidate.resolve().is_relative_to(root) else 'outside_root')
+          for name in ('passenger_wsgi.py','.htaccess','config/settings.py','config/urls.py','mpw_native_checkout/models.py','requirements.txt','.env'):
+            p=root/'Saeit-staging'/name
+            print('LIVE_ROOT_ITEM',name,'exists='+str(p.exists()))
+          for name in ('/home/zomorod2/public_html/.htaccess','/home/zomorod2/Saeit-staging/.htaccess'):
+            p=Path(name)
+            if p.is_file():
+              t=p.read_text(errors='replace')
+              print('PASSENGER_CONFIG',p.parent.name,'PASSENGER_APP_ROOT_PRESENT='+str('PassengerAppRoot' in t),'MOJPLAYWIN_DOMAIN_MENTION='+str('mojplaywin' in t.lower()))
+          stage=root/'Saeit-staging'/'mojplaywin-chess-product-prep-20261014'
+          print('STAGE_PROOF_PAGE_PRESENT',(stage/'mpw_native_checkout/templates/mpw_native_checkout/merchant_wallet_proof.html').is_file())
+          print('STAGE_PROOF_MIGRATIONS_PRESENT',all((stage/'mpw_native_checkout/migrations'/s).is_file() for s in ('0001_initial.py','0002_nativewatchoutbox.py','0003_merchantwalletchallenge_merchantwalletproof.py')))
+          print('LIVE_CONFIG_HAS_PROOF_GATE','MPW_MERCHANT_WALLET_PROOF_ENABLED' in (root/'Saeit-staging/config/settings.py').read_text())
+          print('LIVE_ROUTES_HAS_PROOF','mpw_wallet_proof' in (root/'Saeit-staging/config/urls.py').read_text())
+          PY
+          venv=/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python
+          test -x "$venv"
+          "$venv" - <<'PY'
+          for package in ('django','eth_account','eth_keys','eth_utils','environ','rest_framework'):
+            try:
+              __import__(package)
+            except Exception:
+              print('PKG',package,'UNAVAILABLE')
+            else:
+              print('PKG',package,'IMPORT_OK')
+          PY
+          "$venv" - <<'PY'
+          import os
+          os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          try:
+            import django
+            django.setup()
+            from django.conf import settings
+            from django.contrib.auth import get_user_model
+            from core.models import Product
+            print('DJANGO_CONFIG_OK','database_vendor='+settings.DATABASES['default']['ENGINE'].rsplit('.',1)[-1])
+            print('DJANGO_NATIVE_APP_INSTALLED','mpw_native_checkout' in settings.INSTALLED_APPS)
+            print('DJANGO_DEFAULT_URLCONF',settings.ROOT_URLCONF)
+            print('DJANGO_ALLOWED_MOJPLAYWIN','mojplaywin.com' in settings.ALLOWED_HOSTS or '.mojplaywin.com' in settings.ALLOWED_HOSTS)
+            print('DJANGO_ACTIVE_SUPERUSERS',get_user_model().objects.filter(is_superuser=True,is_active=True).count())
+            print('DJANGO_CHESS_PRODUCT72_EXISTS',Product.objects.filter(pk=72).exists())
+          except Exception as exc:
+            print('DJANGO_PREFLIGHT_FAILED',type(exc).__name__)
+          PY
+          echo READ_ONLY_NO_SCHEMA_OR_LIVE_FILE_CHANGES
+          REMOTE
+      - name: Remove temporary SSH credentials
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/mpw-proof-preflight"
