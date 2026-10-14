@@ -281,6 +281,10 @@ def activate():
         write_atomic(dot,"\n".join(dot_lines)+"\n",0o600)
 
         env=active_env()
+        # The live owner page reads its proof tables. Add only this app’s
+        # tables after the complete private MySQL backup has passed validation.
+        run((VENV,"-m","django","migrate",PROOF_APP,"--noinput"),env=env)
+        print("PROOF_TABLES_MIGRATED_AFTER_BACKUP")
         run((VENV,"-m","django","check"),env=env)
         # Process-local request test: authenticated owner only, HTTPS and
         # host-restricted. Does not save login state or make blockchain calls.
