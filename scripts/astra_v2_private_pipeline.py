@@ -255,6 +255,25 @@ def _make_artifact(root, job_id):
 
 def tick(root):
     with locked(root), database(root) as conn:
+        # The EXCLUSIVE file lock remains held for the full build. Therefore
+        # any BUILDING job seen *after* acquiring it was abandoned by a
+        # terminated worker, not concurrently running. Recover at most twice;
+        # never retry owner/policy blockers or unknown historical factory jobs.
+        interrupted = conn.execute(
+            "SELECT id, attempts FROM jobs WHERE stage='BUILDING' ORDER BY id"
+        ).fetchall()
+        with conn:
+            for lost_id, used_attempts in interrupted:
+                if used_attempts < 3:
+                    conn.execute(
+                        """UPDATE jobs SET stage='QUEUED',
+                           last_error='INTERRUPTED_REQUEUED' WHERE id=?""",
+                        (lost_id,))
+                else:
+                    conn.execute(
+                        """UPDATE jobs SET stage='FAILED_REVIEW',
+                           last_error='RETRY_LIMIT_EXCEEDED' WHERE id=?""",
+                        (lost_id,))
         row=conn.execute(
             "SELECT id,brief_id,builder,stage,attempts FROM jobs "
             "WHERE stage='QUEUED' ORDER BY id LIMIT 1").fetchone()
