@@ -1,0 +1,96 @@
+name: ComfyUI VPS Read-Only Preflight
+on:
+  push:
+    branches:
+      - feature/comfyui-vps-control-20261014
+    paths:
+      - .github/workflows/comfyui-vps-preflight.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: comfyui-vps-readonly-preflight
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Inspect VPS safely using proven Saeit SSH credentials
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/comfyui-ssh"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          test -n "$VPS_KEY" || { echo "VPS_SSH_PRIVATE_KEY missing"; exit 1; }
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs' || {
+            echo "Unexpected VPS SSH fingerprint"; exit 1;
+          }
+          ssh -i "$d/key" -p 22 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$d/known" -o BatchMode=yes -o ConnectTimeout=15 \
+            githubops@178.239.147.150 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          echo "COMFYUI_PREFLIGHT_CONNECTED"
+          echo "USER=$(id -un)"
+          echo "HOST=$(hostname)"
+          echo "CPU_COUNT=$(getconf _NPROCESSORS_ONLN || true)"
+          echo "PYTHON=$(python3 --version 2>&1 || true)"
+          echo "--- memory ---"
+          free -h
+          echo "--- disk ---"
+          df -h "$HOME"
+          echo "--- gpu ---"
+          if command -v nvidia-smi >/dev/null 2>&1; then
+            nvidia-smi --query-gpu=name,memory.total --format=csv,noheader || true
+          else
+            echo "NO_NVIDIA_SMI"
+          fi
+          echo "--- home runtime ---"
+          if [[ -d "$HOME/factory-runtime" ]]; then echo FACTORY_PATH_EXISTS; else echo FACTORY_PATH_MISSING; fi
+          if [[ -d "$HOME/comfyui-isolated" ]]; then echo COMFYUI_HOME_PATH_EXISTS; else echo COMFYUI_HOME_PATH_FREE; fi
+          if [[ -d /opt/comfyui-isolated ]]; then echo COMFYUI_OPT_PATH_EXISTS; else echo COMFYUI_OPT_PATH_FREE; fi
+          echo "--- active ports ---"
+          ss -ltn '( sport = :8188 or sport = :18188 )' || true
+          echo "--- existing ComfyUI process ---"
+          pgrep -af '[C]omfyUI.*main.py|[m]ain.py.*--port (8188|18188)' || true
+          echo "--- existing installation layout (read-only) ---"
+          if [[ -d "$HOME/comfyui-isolated" ]]; then
+            stat -c 'COMFYUI_OWNER=%U:%G MODE=%a' "$HOME/comfyui-isolated"
+            du -sh "$HOME/comfyui-isolated" 2>/dev/null || true
+            find "$HOME/comfyui-isolated" -maxdepth 2 -mindepth 1 -type d -printf 'DIR=%P\n' 2>/dev/null | head -35
+            for f in main.py ComfyUI/main.py venv/bin/python .venv/bin/python pyvenv.cfg requirements.txt ComfyUI/requirements.txt; do
+              if [[ -e "$HOME/comfyui-isolated/$f" ]]; then echo "FOUND=$f"; fi
+            done
+            for p in "$HOME/comfyui-isolated/venv/bin/python" "$HOME/comfyui-isolated/.venv/bin/python" "$HOME/comfyui-isolated/ComfyUI/.venv/bin/python"; do
+              if [[ -x "$p" ]]; then "$p" --version 2>&1 | sed 's/^/COMFYUI_VENV_PYTHON=/' || true; fi
+            done
+          fi
+          echo "--- available interpreters ---"
+          for executable in python3.10 python3.11 python3.12 python3.13 uv docker; do
+            if command -v "$executable" >/dev/null 2>&1; then echo "AVAILABLE=$executable"; fi
+          done
+          echo "--- user service visibility ---"
+          if [[ -f "$HOME/.config/systemd/user/comfyui-isolated.service" ]]; then echo "COMFYUI_USER_UNIT_PRESENT"; else echo "COMFYUI_USER_UNIT_ABSENT"; fi
+          echo "--- pre-existing CPU runtime validation ---"
+          root="$HOME/comfyui-isolated"
+          if [[ -f "$root/source-v0.40.0/main.py" ]]; then echo "COMFYUI_SOURCE_V0400_MAIN_PRESENT"; else echo "COMFYUI_SOURCE_MAIN_MISSING"; fi
+          if [[ -x "$root/env-cpu/bin/python" ]]; then
+            "$root/env-cpu/bin/python" --version 2>&1 | sed 's/^/COMFYUI_CPU_PYTHON=/'
+            "$root/env-cpu/bin/python" -m pip show torch 2>/dev/null | grep -E '^Version:' | sed 's/^/TORCH_/' || true
+            "$root/env-cpu/bin/python" -m pip show comfyui-frontend-package 2>/dev/null | grep -E '^Version:' | sed 's/^/FRONTEND_/' || true
+          else echo "COMFYUI_CPU_VENV_MISSING"; fi
+          if [[ -f "$root/source-v0.40.0/requirements.txt" ]]; then echo "COMFYUI_REQUIREMENTS_PRESENT"; fi
+          echo "--- local prior launch configuration ---"
+          for file in "$root/launch.sh" "$root/run-cpu.sh" "$root/start.sh" "$root/control.sh"; do
+            if [[ -f "$file" ]]; then echo "LAUNCHER_PRESENT=$(basename "$file")"; fi
+          done
+          echo "COMFYUI_PREFLIGHT_READONLY_COMPLETE"
+          REMOTE

@@ -1,0 +1,52 @@
+name: ComfyUI VPS Private Lifecycle Control
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: ComfyUI control (local-only; no factory changes)
+        required: true
+        type: choice
+        options: [status, start, stop, health]
+      minutes:
+        description: Max session minutes (auto-stops)
+        required: true
+        type: choice
+        default: '15'
+        options: ['5', '10', '15', '30', '60']
+permissions:
+  contents: read
+concurrency:
+  group: comfyui-vps-private-control
+  cancel-in-progress: false
+jobs:
+  control:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run allowlisted private ComfyUI controller through existing SSH relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          REQUESTED_ACTION: ${{ inputs.action }}
+          REQUESTED_MINUTES: ${{ inputs.minutes }}
+        run: |
+          set -euo pipefail
+          umask 077
+          bash -n ops/comfyui-vps/control.sh
+          mode="${REQUESTED_ACTION:-status}"
+          duration="${REQUESTED_MINUTES:-15}"
+          [[ "$mode" =~ ^(status|start|stop|health)$ ]] || exit 2
+          [[ "$duration" =~ ^(5|10|15|30|60)$ ]] || exit 2
+          d="$RUNNER_TEMP/comfyui-control-ssh"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          test -n "$VPS_KEY" || { echo MISSING_VPS_SSH_KEY; exit 1; }
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -i "$d/key" -p 22 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$d/known" -o BatchMode=yes -o ConnectTimeout=15 \
+            githubops@178.239.147.150 bash -s -- "$mode" "$duration" < ops/comfyui-vps/control.sh
