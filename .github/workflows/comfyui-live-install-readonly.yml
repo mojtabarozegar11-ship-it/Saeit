@@ -1,0 +1,57 @@
+name: ComfyUI Installation Live Readonly Progress
+on:
+  push:
+    branches: [audit/vps-comfyui-hardware-20261014]
+    paths: [.github/workflows/comfyui-live-install-readonly.yml]
+permissions:
+  contents: read
+concurrency:
+  group: comfyui-install-progress-readonly
+  cancel-in-progress: false
+jobs:
+  status:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Verify factory and ComfyUI installation progress without changes
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/comfy-progress"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;print(sys.stdin.read().replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test -s "$d/known"
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          timeout 60s ssh -i "$d/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o BatchMode=yes githubops@178.239.147.150 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          root="$HOME/comfyui-isolated"
+          echo COMFY_STATUS_BEGIN
+          for rel in comfy-source.tar.gz comfy-wheelhouse.tar source-v0.40.0/main.py env-cpu/bin/python; do
+            if test -e "$root/$rel"; then echo "COMFY_PRESENT=$rel"; else echo "COMFY_MISSING=$rel"; fi
+          done
+          if test -d "$root/source-v0.40.0"; then du -sm "$root/source-v0.40.0" | awk '{print "COMFY_SOURCE_MB="$1}'; fi
+          if test -d "$root/env-cpu"; then du -sm "$root/env-cpu" | awk '{print "COMFY_ENV_MB="$1}'; fi
+          if test -x "$root/env-cpu/bin/python"; then
+            "$root/env-cpu/bin/python" -m pip show torch 2>/dev/null | grep -E '^(Name|Version):' | head -n 2 || true
+          fi
+          for name in python python3 pip; do
+            n="$(ps -eo comm= | awk -v n="$name" '$1==n{x++}END{print x+0}')"
+            echo "RUNNING_PROCESS_COUNT=$name:$n"
+          done
+          pidfile="$HOME/factory-runtime/operations/vps-only-loop.pid"
+          if test -f "$pidfile"; then
+            pid="$(cat "$pidfile")"
+            if [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null; then echo FACTORY_LOOP_ALIVE; else echo FACTORY_LOOP_NOT_VERIFIED; fi
+          else echo FACTORY_PIDFILE_MISSING; fi
+          free -m | awk '/^Mem:/{print "RAM_AVAILABLE_MB="$7}'
+          df -Pm "$HOME" | awk 'NR==2{print "DISK_FREE_MB="$4}'
+          echo COMFY_STATUS_END
+          REMOTE
