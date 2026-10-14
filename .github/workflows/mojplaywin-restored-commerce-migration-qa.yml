@@ -190,29 +190,29 @@ jobs:
                       "MPW_STAGING_USER": username,
                       "MPW_STAGING_PASSWORD": passwd,
                   })
-                  check_code = """
-import django
-django.setup()
-from django.db import connection
-from django.db.migrations.executor import MigrationExecutor
-from django.db.migrations.recorder import MigrationRecorder
-from django.core.management import call_command
-assert connection.vendor == 'mysql'
-target = ('mpw_commerce','0002_buyerwalletchallenge')
-plan = MigrationExecutor(connection).migration_plan([target])
-assert len(plan) == 2 and all(m.app_label == 'mpw_commerce' and not reverse for m,reverse in plan), 'Unexpected dependencies or migration drift'
-call_command('migrate','mpw_commerce',verbosity=0,interactive=False)
-tables = set(connection.introspection.table_names())
-expected = {'mpw_commerce_commerceinvoice','mpw_commerce_commercereceipt','mpw_commerce_commercefulfillment','mpw_commerce_buyerwalletchallenge'}
-assert expected <= tables, 'Commerce schema incomplete'
-applied = MigrationRecorder(connection).applied_migrations()
-assert target in applied and ('mpw_commerce','0001_initial') in applied
-from mpw_commerce.models import CommerceInvoice,CommerceReceipt,CommerceFulfillment,BuyerWalletChallenge
-assert CommerceInvoice._meta.get_field('order').remote_field.model._meta.db_table == 'core_order'
-assert CommerceFulfillment._meta.get_field('item').remote_field.model._meta.db_table == 'core_orderitem'
-print('MPW_RESTORED_COMMERCE_0001_0002_APPLIED=True')
-print('MPW_RESTORED_ORDER_RELATIONS_COMPATIBLE=True')
-"""
+                  check_code = __import__("textwrap").dedent("""
+                  import django
+                  django.setup()
+                  from django.db import connection
+                  from django.db.migrations.executor import MigrationExecutor
+                  from django.db.migrations.recorder import MigrationRecorder
+                  from django.core.management import call_command
+                  assert connection.vendor == 'mysql'
+                  target = ('mpw_commerce','0002_buyerwalletchallenge')
+                  plan = MigrationExecutor(connection).migration_plan([target])
+                  assert len(plan) == 2 and all(m.app_label == 'mpw_commerce' and not reverse for m,reverse in plan), 'Unexpected dependencies or migration drift'
+                  call_command('migrate','mpw_commerce',verbosity=0,interactive=False)
+                  tables = set(connection.introspection.table_names())
+                  expected = {'mpw_commerce_commerceinvoice','mpw_commerce_commercereceipt','mpw_commerce_commercefulfillment','mpw_commerce_buyerwalletchallenge'}
+                  assert expected <= tables, 'Commerce schema incomplete'
+                  applied = MigrationRecorder(connection).applied_migrations()
+                  assert target in applied and ('mpw_commerce','0001_initial') in applied
+                  from mpw_commerce.models import CommerceInvoice,CommerceReceipt,CommerceFulfillment,BuyerWalletChallenge
+                  assert CommerceInvoice._meta.get_field('order').remote_field.model._meta.db_table == 'core_order'
+                  assert CommerceFulfillment._meta.get_field('item').remote_field.model._meta.db_table == 'core_orderitem'
+                  print('MPW_RESTORED_COMMERCE_0001_0002_APPLIED=True')
+                  print('MPW_RESTORED_ORDER_RELATIONS_COMPATIBLE=True')
+                  """)
                   check = subprocess.run(
                       [str(venv), "-c", check_code],
                       cwd=site, env=tmp_env, stdout=subprocess.PIPE,
