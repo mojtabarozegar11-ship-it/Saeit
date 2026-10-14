@@ -1,4 +1,4 @@
-name: Zomorod six photo and six reports production release
+name: Zomorod gallery production release with editorial approval
 on:
   push:
     branches: [ops/zomorod-gallery-publish-20261014]
