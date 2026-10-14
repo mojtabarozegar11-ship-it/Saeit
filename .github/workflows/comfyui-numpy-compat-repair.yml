@@ -20,3 +20,16 @@ jobs:
       - name: Inspect wheel metadata
         run: |
           ls -lh "$RUNNER_TEMP/numpy"
+      - name: Upload wheel to isolated ComfyUI directory
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p "$RUNNER_TEMP/ssh"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;print(sys.stdin.read().replace("\\n","\n").rstrip()+"\n",end="")' > "$RUNNER_TEMP/ssh/key"
+          chmod 600 "$RUNNER_TEMP/ssh/key"
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$RUNNER_TEMP/ssh/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$RUNNER_TEMP/ssh/known" -E sha256 | awk '{print $2}')" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          scp -i "$RUNNER_TEMP/ssh/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$RUNNER_TEMP/ssh/known" "$RUNNER_TEMP/numpy/"*.whl githubops@178.239.147.150:/home/githubops/comfyui-isolated/
