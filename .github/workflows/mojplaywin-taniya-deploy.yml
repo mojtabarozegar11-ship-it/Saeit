@@ -156,12 +156,30 @@ jobs:
           timeout 60s ssh -F "$WORK/config" saeit-host \
             "python3 /home/zomorod2/.mojplaywin-taniya-$GITHUB_RUN_ID/scripts/deploy_mojplaywin_taniya.py deploy $GITHUB_RUN_ID $GITHUB_SHA"
 
+      - name: Verify Django runtime route
+        id: route_check
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORK="$RUNNER_TEMP/mojplaywin-ssh"
+          timeout 60s ssh -F "$WORK/config" saeit-host \
+            "cd /home/zomorod2/Saeit-staging && python3 -c 'import os; os.environ.setdefault(\"DJANGO_SETTINGS_MODULE\", \"config.settings\"); import django; django.setup(); from django.urls import resolve; match=resolve(\"/taniya/\"); print(\"TANIYA_RUNTIME_ROUTE=\" + match.func.__name__)'"
+
       - name: Verify live Taniya page
         id: smoke
         shell: bash
         run: |
           set -euo pipefail
-          curl --retry 5 --retry-delay 3 --retry-connrefused -fsS https://mojplaywin.com/taniya/ -o "$RUNNER_TEMP/taniya-live.html"
+          status="000"
+          for attempt in {1..10}; do
+            status="$(curl -sS -o "$RUNNER_TEMP/taniya-live.html" -w '%{http_code}' https://mojplaywin.com/taniya/ || true)"
+            if [[ "$status" == "200" ]]; then
+              break
+            fi
+            echo "Taniya page not ready yet (HTTP $status, attempt $attempt)."
+            sleep 3
+          done
+          [[ "$status" == "200" ]] || { echo "Live Taniya page returned HTTP $status"; exit 1; }
           python - "$RUNNER_TEMP/taniya-live.html" <<'PY'
           from pathlib import Path
           import sys
@@ -173,7 +191,7 @@ jobs:
           PY
 
       - name: Roll back failed live smoke test
-        if: failure() && steps.deploy.outcome == 'success' && steps.smoke.outcome == 'failure'
+        if: failure() && steps.deploy.outcome == 'success' && (steps.route_check.outcome == 'failure' || steps.smoke.outcome == 'failure')
         shell: bash
         run: |
           set -euo pipefail
