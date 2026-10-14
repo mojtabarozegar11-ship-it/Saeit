@@ -28,9 +28,17 @@ class WatcherTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as root:
             p = Path(root)/"pending-orders.mode"
             p.write_text("BOTH")
-            past=time.time()-500
+            past=time.time()-2000
             os.utime(p,(past,past))
             self.assertIsNone(watcher.get_pending_mode(p,now=time.time()))
+
+    def test_single_invoice_event_remains_active_across_10_minutes(self):
+        with tempfile.TemporaryDirectory() as root:
+            marker=Path(root)/"pending-orders.mode"
+            marker.write_text("TRX")
+            t=time.time()
+            self.assertEqual(watcher.get_pending_mode(marker,now=t+600),"TRX")
+            self.assertIsNone(watcher.get_pending_mode(marker,now=t+1201))
 
     def test_untrusted_symlink_ignored(self):
         with tempfile.TemporaryDirectory() as root:
