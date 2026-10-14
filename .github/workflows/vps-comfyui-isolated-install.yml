@@ -1,0 +1,110 @@
+name: ComfyUI Isolated CPU Installation
+on:
+  push:
+    branches: [audit/vps-comfyui-hardware-20261014]
+    paths: [.github/workflows/vps-comfyui-isolated-install.yml]
+permissions:
+  contents: read
+concurrency:
+  group: saeit-vps-comfyui-isolated-install
+  cancel-in-progress: false
+jobs:
+  install:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Guarded install on standalone VPS (no factory changes)
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" || { echo 'INSTALL_BLOCKED_MISSING_VPS_KEY'; exit 1; }
+          d="$RUNNER_TEMP/comfyui-isolated"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          scan="$(ssh-keyscan -T 10 -t rsa 178.239.147.150 2>/dev/null)"
+          test -n "$scan"
+          actual="$(printf '%s\n' "$scan" | ssh-keygen -lf - -E sha256 | awk '{print $2}' | sort -u)"
+          test "$actual" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs' || { echo 'INSTALL_BLOCKED_HOST_KEY_CHANGED'; exit 1; }
+          printf '%s\n' "$scan" > "$d/known"
+          timeout 1250s ssh -i "$d/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=15 githubops@178.239.147.150 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          export PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_NO_CACHE_DIR=1 PIP_DEFAULT_TIMEOUT=25
+          export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1
+          echo 'COMFYUI_SAFE_INSTALL_BEGIN'
+          test "$(id -un)" = 'githubops'
+          root="$HOME/comfyui-isolated"
+          if test -e "$root"; then
+            if test -x "$root/venv/bin/python" && test -f "$root/ComfyUI/main.py"; then
+              echo 'COMFYUI_INSTALL_ALREADY_PRESENT_NO_OVERWRITE'
+              "$root/venv/bin/python" -c 'import torch; print("TORCH_VERSION="+torch.__version__); print("TORCH_CUDA_AVAILABLE="+str(torch.cuda.is_available()))'
+              exit 0
+            fi
+            echo 'COMFYUI_INSTALL_BLOCKED_EXISTING_UNRECOGNIZED_DIRECTORY'
+            exit 1
+          fi
+          mem_kib="$(awk '/^MemAvailable:/{print $2}' /proc/meminfo)"
+          disk_kib="$(df -Pk "$HOME" | awk 'NR==2{print $4}')"
+          echo "PREFLIGHT_AVAILABLE_RAM_KIB=$mem_kib"
+          echo "PREFLIGHT_FREE_DISK_KIB=$disk_kib"
+          if (( mem_kib < 2300000 || disk_kib < 18000000 )); then
+            echo 'COMFYUI_INSTALL_BLOCKED_FACTORY_RESOURCES_PROTECTED'
+            exit 1
+          fi
+          if [[ -f "$HOME/factory-runtime/operations/vps-only-loop.pid" ]]; then
+            pid="$(cat "$HOME/factory-runtime/operations/vps-only-loop.pid")"
+            if [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null; then
+              echo 'FACTORY_LOOP_ALIVE_BEFORE'
+            else
+              echo 'FACTORY_LOOP_NOT_VERIFIED_BEFORE'
+            fi
+          fi
+          if command -v python3.11 >/dev/null 2>&1; then
+            py="$(command -v python3.11)"
+          elif test -x "$HOME/factory-runtime/.venv/bin/python"; then
+            py="$HOME/factory-runtime/.venv/bin/python"
+          else
+            echo 'COMFYUI_INSTALL_BLOCKED_NO_PYTHON311'
+            exit 1
+          fi
+          "$py" -c 'import sys; assert (3,11) <= sys.version_info[:2] < (3,15), sys.version'
+          command -v git >/dev/null 2>&1 || { echo 'COMFYUI_INSTALL_BLOCKED_GIT_MISSING'; exit 1; }
+          install -d -m 700 "$root"
+          trap 'echo COMFYUI_INSTALL_PARTIAL_REVIEW_REQUIRED' ERR
+          echo 'COMFYUI_FETCHING_STABLE_RELEASE=v0.40.0'
+          timeout 120s git clone -c core.hooksPath=/dev/null --depth 1 --single-branch --branch v0.40.0 https://github.com/Comfy-Org/ComfyUI.git "$root/ComfyUI"
+          echo 'COMFYUI_SOURCE_CLONED'
+          "$py" -m venv "$root/venv"
+          test -x "$root/venv/bin/python"
+          cd "$root/ComfyUI"
+          export PYTHONNOUSERSITE=1
+          echo 'COMFYUI_INSTALL_CPU_PYTORCH_BEGIN'
+          nice -n 15 timeout 520s "$root/venv/bin/python" -m pip install --no-cache-dir --retries 1 torch==2.11.0 torchvision==0.26.0 torchaudio==2.11.0 --index-url https://download.pytorch.org/whl/cpu
+          echo 'COMFYUI_CPU_TORCH_READY'
+          nice -n 15 timeout 520s "$root/venv/bin/python" -m pip install --no-cache-dir --retries 1 -r requirements.txt
+          echo 'COMFYUI_REQUIREMENTS_READY'
+          nice -n 15 timeout 45s "$root/venv/bin/python" - <<'PY'
+          import sys,torch
+          print("COMFYUI_PYTHON="+sys.version.split()[0])
+          print("COMFYUI_TORCH="+torch.__version__)
+          print("COMFYUI_CUDA="+str(torch.cuda.is_available()))
+          assert not torch.cuda.is_available()
+          PY
+          test -f "$root/ComfyUI/main.py"
+          echo 'COMFYUI_BASE_INSTALLED_PRIVATE_NO_MODEL_NO_SERVER'
+          if test -f "$HOME/factory-runtime/operations/vps-only-loop.pid"; then
+            pid="$(cat "$HOME/factory-runtime/operations/vps-only-loop.pid")"
+            if [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null; then
+              echo 'FACTORY_LOOP_ALIVE_AFTER'
+            else
+              echo 'FACTORY_LOOP_NOT_VERIFIED_AFTER'
+            fi
+          fi
+          echo 'COMFYUI_SAFE_INSTALL_END'
+          REMOTE
