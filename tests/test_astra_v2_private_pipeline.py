@@ -123,6 +123,42 @@ class PrivateManufacturingTests(unittest.TestCase):
         self.assertEqual(after["published_products"],0)
         self.assertIsNone(after["verified_revenue"])
 
+    def test_interrupted_job_resumes_after_simulated_worker_death(self):
+        pipeline.enqueue(self.root, brief("crashed_worker_job"))
+        with pipeline.locked(self.root), pipeline.database(self.root) as con:
+            with con:
+                con.execute("UPDATE jobs SET stage='BUILDING',attempts=1")
+        result=pipeline.tick(self.root)
+        self.assertEqual(result["status"], "PRIVATE_QA_PASSED", result)
+        self.assertEqual(pipeline.status(self.root)["distinct_private_qa_artifact_versions"], 1)
+        with pipeline.database(self.root) as con:
+            state=con.execute("SELECT stage,attempts FROM jobs").fetchone()
+        self.assertEqual(state, ("PRIVATE_QA_PASSED",2))
+
+    def test_thrice_interrupted_job_is_quarantined_without_infinite_retries(self):
+        pipeline.enqueue(self.root, brief("irrecoverable_worker_job"))
+        with pipeline.locked(self.root), pipeline.database(self.root) as con:
+            with con:
+                con.execute("UPDATE jobs SET stage='BUILDING',attempts=3")
+        result=pipeline.tick(self.root)
+        self.assertEqual(result["status"],"NO_ELIGIBLE_WORK")
+        with pipeline.database(self.root) as con:
+            state=con.execute("SELECT stage,attempts,last_error FROM jobs").fetchone()
+        self.assertEqual(state,("FAILED_REVIEW",3,"RETRY_LIMIT_EXCEEDED"))
+        self.assertEqual(pipeline.status(self.root)["distinct_private_qa_artifact_versions"],0)
+
+    def test_multiple_stalled_workers_are_recovered_before_new_work(self):
+        pipeline.enqueue(self.root, brief("stalled_early"))
+        pipeline.enqueue(self.root, brief("waiting_later"))
+        with pipeline.locked(self.root), pipeline.database(self.root) as con:
+            with con:
+                con.execute("UPDATE jobs SET stage='BUILDING',attempts=1 WHERE id=1")
+        run=pipeline.tick(self.root)
+        self.assertEqual(run["status"],"PRIVATE_QA_PASSED",run)
+        self.assertEqual(run["job_id"],1)
+        self.assertEqual(pipeline.tick(self.root)["new_distinct_product_versions"],0)
+        self.assertEqual(pipeline.tick(self.root)["status"],"NO_ELIGIBLE_WORK")
+
     def test_invalid_builder_approval_or_fake_verified_demand_blocked(self):
         for patch in (
             {"builder":"shell_script"},
