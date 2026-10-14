@@ -1,0 +1,47 @@
+name: ComfyUI CPU Wheelhouse Transfer
+on:
+  push:
+    branches: [audit/vps-comfyui-hardware-20261014]
+    paths: [.github/workflows/vps-comfyui-wheelhouse-transfer.yml]
+permissions:
+  contents: read
+jobs:
+  transfer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: Comfy-Org/ComfyUI
+          ref: v0.40.0
+          path: comfy-source
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Download Linux CPU-only dependency wheels onto GitHub runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/comfy-wheelhouse"
+          printf 'torch==2.11.0\ntorchvision==0.26.0\n' > "$RUNNER_TEMP/constraints.txt"
+          timeout 800s python -m pip download --disable-pip-version-check --no-cache-dir             --dest "$RUNNER_TEMP/comfy-wheelhouse" --only-binary=:all:             --platform manylinux_2_28_x86_64 --python-version 311             --implementation cp --abi cp311             --constraint "$RUNNER_TEMP/constraints.txt"             --extra-index-url https://download.pytorch.org/whl/cpu             torch==2.11.0 torchvision==0.26.0 -r comfy-source/requirements.txt
+          echo "WHEEL_FILES=$(find "$RUNNER_TEMP/comfy-wheelhouse" -type f | wc -l)"
+          du -sh "$RUNNER_TEMP/comfy-wheelhouse"
+          tar -cf "$RUNNER_TEMP/comfy-wheelhouse.tar" -C "$RUNNER_TEMP" comfy-wheelhouse
+      - name: Secure copy pre-downloaded CPU wheels to isolated VPS home
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          mkdir -p "$RUNNER_TEMP/keydir"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;print(sys.stdin.read().replace("\\n","\n").rstrip()+"\n",end="")' > "$RUNNER_TEMP/keydir/key"
+          chmod 600 "$RUNNER_TEMP/keydir/key"
+          ssh-keygen -y -P '' -f "$RUNNER_TEMP/keydir/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$RUNNER_TEMP/keydir/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$RUNNER_TEMP/keydir/known" -E sha256 | awk '{print $2}')" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          timeout 1100s scp -i "$RUNNER_TEMP/keydir/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$RUNNER_TEMP/keydir/known" -o BatchMode=yes -o ServerAliveInterval=20             "$RUNNER_TEMP/comfy-wheelhouse.tar" githubops@178.239.147.150:/home/githubops/comfyui-isolated/
+          echo CPU_WHEELHOUSE_TRANSFERRED
