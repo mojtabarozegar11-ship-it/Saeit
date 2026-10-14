@@ -1,0 +1,25 @@
+[Unit]
+Description=Isolated ComfyUI (manual start, local-only)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=comfyui-svc
+Group=comfyui-svc
+WorkingDirectory=/opt/comfyui-isolated/ComfyUI
+ExecStart=/opt/comfyui-isolated/venv/bin/python main.py --listen 127.0.0.1 --port 8188 --cpu
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/opt/comfyui-isolated
+MemoryMax=4G
+CPUQuota=150%
+TasksMax=200
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target
