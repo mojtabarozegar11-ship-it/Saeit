@@ -102,9 +102,16 @@ jobs:
           print("MPW_COMMERCE_DB_MIGRATION_0002",str(
               ("mpw_commerce","0002_buyerwalletchallenge") in migration
           ).lower())
-          print("MPW_COMMERCE_ROUTE_IN_ACTIVE_URLCONF",str(
-              "mpw_commerce" in (live/"config"/"urls.py").read_text()
-          ).lower())
+          # Resolve the actual route instead of searching for text/comments
+          # in the URLconf (which can produce misleading true positives).
+          from django.urls import NoReverseMatch, reverse
+          try:
+              reverse("mpw_commerce:invoice")
+          except NoReverseMatch:
+              invoice_route_exists = False
+          else:
+              invoice_route_exists = True
+          print("MPW_COMMERCE_INVOICE_ROUTE_RESOLVABLE",str(invoice_route_exists).lower())
           for key in (
               "MPW_COMMERCE_RELEASE_READY","MPW_COMMERCE_INVOICING_ENABLED",
               "MPW_COMMERCE_SETTLEMENT_ENABLED","MPW_COMMERCE_REAL_RPC_ENABLED",
@@ -141,6 +148,16 @@ jobs:
           from core.models import PaymentIntent
           print("MPW_LIVE_ALL_PRODUCTS",Product.objects.count())
           print("MPW_LIVE_ACTIVE_PRODUCTS",Product.objects.filter(active=True).count())
+          print("MPW_LIVE_PRICED_PRODUCTS",Product.objects.filter(price__gt=0).count())
+          from collections import Counter
+          print("MPW_LIVE_PRODUCT_TYPE_BREAKDOWN",sorted(Counter(
+              Product.objects.values_list("product_type",flat=True)
+          ).items()))
+          approved_count=0
+          for m in Product.objects.values_list("metadata",flat=True):
+              if isinstance(m,dict) and m.get("factory_publication_permission") is True:
+                  approved_count+=1
+          print("MPW_LIVE_FACTORY_PUBLICATION_PERMISSION_COUNT",approved_count)
           print("MPW_LIVE_ALL_ORDERS",Order.objects.count())
           print("MPW_LIVE_ALL_PAYMENT_INTENTS",PaymentIntent.objects.count())
           print("MPW_LIVE_PAYMENT_INTENTS_PAID",PaymentIntent.objects.filter(status="paid").count())
