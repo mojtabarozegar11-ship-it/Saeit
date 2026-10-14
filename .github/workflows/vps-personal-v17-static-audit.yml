@@ -1,0 +1,154 @@
+name: Saeit Personal V17 Static Commerce Audit
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/vps-personal-v17-static-audit.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: saeit-factory-store-preflight
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Prepare pinned SSH identities
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/factory-store-preflight"
+          install -d -m 700 "$d"
+          for item in VPS_KEY HOST_KEY; do
+            key="$d/${item}.key"
+            printf '%s' "${!item}" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$key"
+            chmod 600 "$key"
+            ssh-keygen -y -P '' -f "$key" >/dev/null
+          done
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -i "$d/VPS_KEY.key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/vps.known" -o BatchMode=yes githubops@178.239.147.150 'ssh-keyscan -T 10 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/VPS_KEY.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/HOST_KEY.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 12
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+      - name: Inspect factory product handoff source
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -F "$RUNNER_TEMP/factory-store-preflight/config" saeit-vps 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          base="$HOME/factory-runtime"
+          echo VPS_USER="$(id -un)"
+          test -s "$base/private/autonomous-product-cycle/production-state.json"
+          test -s "$base/private/autonomous-product-cycle/digital-products/farm_enterprise_economics/farm_enterprise_economics-internal-qa.zip"
+          echo VPS_MANUFACTURED_ZIP_PRESENT
+          stat -c 'VPS_ZIP_BYTES=%s PERMISSIONS=%a' "$base/private/autonomous-product-cycle/digital-products/farm_enterprise_economics/farm_enterprise_economics-internal-qa.zip"
+          python3 - "$base/private/autonomous-product-cycle/production-state.json" <<'PY'
+          import json,sys
+          j=json.load(open(sys.argv[1]))
+          for k in ('mode','depends_on_orders','built_product_count','artifact_qa_passed','publishable_product_count','store_distribution_state'):
+            print('VPS_FACTORY_'+k.upper()+'='+str(j.get(k)))
+          PY
+          REMOTE
+      - name: Inspect cPanel private staging and storefront runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -F "$RUNNER_TEMP/factory-store-preflight/config" saeit-cpanel 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          echo CPANEL_USER="$(id -un)"
+          echo CPANEL_HOME="$HOME"
+          for path in /home/zomorod2/Saeit-staging /home/zomorod2/zomorodmelal.ir /home/zomorod2/mojplaywin.com /home/zomorod2/mojtabarozegar.ir /home/zomorod2/public_html; do
+            if test -d "$path" && test ! -L "$path"; then
+              echo CPANEL_DIR_PRESENT="$(basename "$path")"
+              if test -f "$path/manage.py"; then echo CPANEL_DJANGO_SOURCE="$(basename "$path")"; fi
+              if test -f "$path/passenger_wsgi.py"; then echo CPANEL_PASSENGER_SOURCE="$(basename "$path")"; fi
+              if test -d "$path/.venv"; then echo CPANEL_LOCAL_VENV="$(basename "$path")"; fi
+            else
+              echo CPANEL_DIR_MISSING="$(basename "$path")"
+            fi
+          done
+          test -d /home/zomorod2/Saeit-staging
+          test -w /home/zomorod2/Saeit-staging
+          echo CPANEL_STAGING_WRITABLE
+          if test -f /home/zomorod2/Saeit-staging/core/models.py; then
+            grep -q '^class Product(' /home/zomorod2/Saeit-staging/core/models.py && echo CPANEL_DJANGO_PRODUCT_MODEL_PRESENT
+          fi
+          command -v python3 >/dev/null && python3 --version
+          df -h "$HOME" | tail -n 1 | awk '{print "CPANEL_DISK_FREE=" $4}'
+          REMOTE
+      - name: Read-only inspect personal V17 routes models and Python dependency
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -F "$RUNNER_TEMP/factory-store-preflight/config" saeit-cpanel 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          python3 - <<'PY'
+          import ast
+          from pathlib import Path
+          root=Path.home()/"mojtaba_personal/mojtaba_roozegar_personal_v17"
+          for relative in ("core/models.py","personal_site/models.py","config/urls.py","core/urls.py","personal_site/urls.py"):
+              path=root/relative
+              if not path.is_file():
+                  print("PERSONAL_STATIC_SOURCE_ABSENT="+relative)
+                  continue
+              try:
+                  tree=ast.parse(path.read_text(encoding="utf-8"))
+              except SyntaxError:
+                  print("PERSONAL_STATIC_SOURCE_SYNTAX_ERROR="+relative)
+                  continue
+              print("PERSONAL_STATIC_SOURCE_PRESENT="+relative)
+              for node in ast.walk(tree):
+                  if isinstance(node,ast.ClassDef) and any(x in node.name.lower() for x in ("product","store","shop","commerce","order","digital","catalog","file")):
+                      print("PERSONAL_COMMERCE_CLASS="+relative+":"+node.name)
+                  if isinstance(node,ast.Call) and isinstance(node.func,ast.Name) and node.func.id in ("path","re_path") and node.args:
+                      route=node.args[0]
+                      if isinstance(route,ast.Constant) and isinstance(route.value,str):
+                          if any(x in route.value.lower() for x in ("store","product","shop","checkout","payment","purchase","manage","admin")):
+                              print("PERSONAL_COMMERCE_ROUTE="+relative+":"+route.value[:100])
+          for relative in (".venv_personal_test/bin/python", "mojtaba_roozegar_personal_v17/.venv/bin/python", "mojtaba_roozegar_personal_v17/venv/bin/python"):
+              path=root.parent/relative
+              if path.is_file():
+                  print("PERSONAL_ALT_PYTHON_PRESENT="+relative)
+          PY
+          root="$HOME/mojtaba_personal"
+          for py in "$root/.venv_personal_test/bin/python" "$root/mojtaba_roozegar_personal_v17/.venv/bin/python" "$root/mojtaba_roozegar_personal_v17/venv/bin/python"; do
+            if test -x "$py"; then
+              if "$py" -c 'import django,dotenv' >/dev/null 2>&1; then
+                echo "PERSONAL_ALT_RUNTIME_WITH_DOTENV_AVAILABLE=$(basename "$(dirname "$(dirname "$py")")")"
+              else
+                echo "PERSONAL_ALT_RUNTIME_MISSING_REQUIRED_MODULE=$(basename "$(dirname "$(dirname "$py")")")"
+              fi
+            fi
+          done
+          echo PERSONAL_STATIC_COMMERCE_AUDIT_COMPLETE
+          REMOTE
+      - name: Clean temporary SSH keys
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/factory-store-preflight"
