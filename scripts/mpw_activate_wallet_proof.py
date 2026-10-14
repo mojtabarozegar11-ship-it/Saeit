@@ -291,8 +291,42 @@ def activate():
         write_atomic(dot,"\n".join(dot_lines)+"\n",0o600)
 
         env=active_env()
-        # The live owner page reads its proof tables. Add only this app’s
-        # tables after the complete private MySQL backup has passed validation.
+        # SAFETY GATE: verify the effective allowed host and the real Django
+        # owner page render BEFORE running any live-schema migrations. Mock
+        # only the proof-table lookup because this check must work even when
+        # the merchant proof tables have not been created yet. No payments,
+        # signatures, challenge writes or checkout activation are performed.
+        pre_migration_code = """
+from unittest.mock import patch
+from django.conf import settings
+from django.contrib.auth import get_user_model
+from django.http.request import validate_host
+from django.test import RequestFactory
+from mpw_native_checkout.merchant_wallet_views import merchant_wallet_page
+host = 'mojplaywin.com'
+is_allowed = validate_host(host, settings.ALLOWED_HOSTS)
+print('MPW_PREFLIGHT_HOST_ALLOWLIST_OK='+str(is_allowed))
+assert is_allowed, 'MojPlayWin host absent from effective Django allowlist'
+request = RequestFactory().get('/merchant/wallet-proof/', secure=True, HTTP_HOST=host)
+request.user = get_user_model().objects.filter(is_superuser=True,is_active=True).get()
+try:
+    actual_host = request.get_host()
+    with patch('mpw_native_checkout.merchant_wallet_views.proven_assets',
+               return_value={'ETH': False, 'TRX': False}):
+        response = merchant_wallet_page(request)
+except Exception as exc:
+    print('MPW_PREFLIGHT_PRE_MIGRATION_EXCEPTION='+type(exc).__name__)
+    raise
+print('MPW_PREFLIGHT_REQUEST_HOST_OK='+str(actual_host==host))
+print('MPW_PREFLIGHT_OWNER_RENDER_HTTP='+str(response.status_code))
+assert actual_host == host and response.status_code == 200
+print('MPW_PREFLIGHT_OWNER_RENDER_BEFORE_DB_MIGRATION_OK')
+"""
+        run((VENV,"-c",
+             "import django;django.setup();exec("+repr(pre_migration_code)+")"),
+            env=env)
+        # The live owner page reads its proof tables. Add only this app's
+        # tables after both the backup and pre-migration page render succeed.
         run((VENV,"-m","django","migrate",PROOF_APP,"--noinput"),env=env)
         print("PROOF_TABLES_MIGRATED_AFTER_BACKUP")
         run((VENV,"-m","django","check"),env=env)
