@@ -22,7 +22,8 @@ jobs:
         run: |
           set -euo pipefail
           python3 -m unittest discover -s tests -p 'test_mojplaywin_chess_asset_installer.py' -v
-          python3 -m py_compile scripts/mojplaywin_chess_assets.py core/chess_ebook_delivery.py
+          python3 -m unittest discover -s tests -p 'test_mojplaywin_native_chain_verify.py' -v
+          python3 -m py_compile scripts/mojplaywin_chess_assets.py scripts/mojplaywin_native_chain_verify.py core/chess_ebook_delivery.py
           echo VERIFIED_CODE_TESTS_PASSED
       - name: Stage only isolated inactive code on cPanel through pinned SSH relay
         shell: bash
@@ -79,9 +80,12 @@ jobs:
           test "$(ssh-keygen -lf "$base/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
           tar -czf "$RUNNER_TEMP/chess-prep.tar.gz" \
             scripts/mojplaywin_chess_assets.py \
+            scripts/mojplaywin_native_chain_verify.py \
             core/chess_ebook_delivery.py \
             catalog/mojplaywin/chess-improvement-2026.json \
-            tests/test_mojplaywin_chess_asset_installer.py
+            tests/test_mojplaywin_chess_asset_installer.py \
+            tests/test_mojplaywin_native_chain_verify.py \
+            catalog/mojplaywin/chess-crypto-eth-trx-gateway-staging.json
           target=/home/zomorod2/Saeit-staging/mojplaywin-chess-product-prep-20261014
           timeout 45s ssh -F "$base/config" saeit-host "umask 077; mkdir -p '$target' && test -d '$target'"
           timeout 60s ssh -F "$base/config" saeit-host "cat > '$target/prep.tar.gz'" < "$RUNNER_TEMP/chess-prep.tar.gz"
@@ -89,6 +93,7 @@ jobs:
           remote_sha="$(timeout 45s ssh -F "$base/config" saeit-host "sha256sum '$target/prep.tar.gz'" | cut -d ' ' -f 1)"
           test "$local_sha" = "$remote_sha"
           timeout 45s ssh -F "$base/config" saeit-host "cd '$target' && tar -tzf prep.tar.gz | grep -Fxq scripts/mojplaywin_chess_assets.py && tar -tzf prep.tar.gz | grep -Fxq core/chess_ebook_delivery.py && tar -xzf prep.tar.gz && test -f scripts/mojplaywin_chess_assets.py && test -f core/chess_ebook_delivery.py && chmod 700 scripts && chmod 600 scripts/mojplaywin_chess_assets.py && echo PRIVATE_PREPARATION_STAGED"
+          echo ETH_TRX_VERIFIERS_STAGED_OFFLINE
           echo LIVE_SITE_FILES_UNCHANGED
           echo CHESS_PAYMENT_NOT_ACTIVATED
       - name: Scrub runner credentials
