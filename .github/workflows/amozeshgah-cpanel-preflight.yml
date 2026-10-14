@@ -164,6 +164,33 @@ jobs:
           else echo ROOT_HTACCESS=ABSENT
           fi
           REMOTE
+      - name: Inspect active Passenger app and release state
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -F "$RUNNER_TEMP/amozeshgah-preflight/config" saeit-cpanel 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          app=/home/zomorod2/Saeit
+          test -d "$app" && test -f "$app/manage.py" && test -f "$app/passenger_wsgi.py"
+          echo ACTIVE_PASSENGER_APP=$app
+          if git -C "$app" rev-parse --git-dir >/dev/null 2>&1; then
+            echo ACTIVE_APP_GIT_HEAD="$(git -C "$app" rev-parse HEAD)"
+            echo ACTIVE_APP_BRANCH="$(git -C "$app" branch --show-current)"
+            echo ACTIVE_APP_WORKTREE_CHANGE_COUNT="$(git -C "$app" status --porcelain | wc -l | tr -d ' ')"
+            echo ACTIVE_APP_REMOTE_NAMES="$(git -C "$app" remote | tr '\n' ' ')"
+          else echo ACTIVE_APP_GIT_REPO=NO
+          fi
+          if grep -q 'amozeshgah' "$app/config/urls.py"; then
+            echo ACTIVE_APP_CANONICAL_ROUTE=YES
+            grep -n 'amozeshgah' "$app/config/urls.py"
+          else echo ACTIVE_APP_CANONICAL_ROUTE=NO
+          fi
+          for p in "$app/.venv/bin/python" "$app/venv/bin/python" "$HOME/virtualenv/Saeit/3.11/bin/python" "$HOME/virtualenv/Saeit/3.10/bin/python" "$HOME/virtualenv/Saeit/3.9/bin/python"; do
+            if test -x "$p"; then echo ACTIVE_APP_PYTHON_CANDIDATE="$p"; fi
+          done
+          if test -f "$app/.env"; then echo ACTIVE_APP_ENV_FILE_PRESENT=yes; else echo ACTIVE_APP_ENV_FILE_PRESENT=no; fi
+          if test -f "$app/deploy/cpanel_deploy.sh"; then echo CPANEL_DEPLOY_SCRIPT_PRESENT=yes; else echo CPANEL_DEPLOY_SCRIPT_PRESENT=no; fi
+          REMOTE
       - name: Remove temporary SSH material
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/amozeshgah-preflight"
