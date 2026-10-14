@@ -199,9 +199,19 @@ jobs:
           for entry in "${routes[@]}"; do
             route="${entry%%:*}"
             marker="${entry#*:}"
-            status="$(curl -sS -o "$RUNNER_TEMP/saman-live.html" -w '%{http_code}' "https://mojplaywin.com$route" || true)"
-            if [[ "$status" != "200" ]]; then
-              echo "SAMAN page $route returned HTTP $status"
+            status="000"
+            ready=false
+            for attempt in {1..8}; do
+              status="$(curl -sS -o "$RUNNER_TEMP/saman-live.html" -w '%{http_code}' "https://mojplaywin.com$route" || true)"
+              if [[ "$status" == "200" ]] && grep -Fq "$marker" "$RUNNER_TEMP/saman-live.html"; then
+                ready=true
+                break
+              fi
+              echo "Waiting for SAMAN content at $route (HTTP $status, attempt $attempt)."
+              sleep 2
+            done
+            if [[ "$ready" != "true" ]]; then
+              echo "SAMAN page $route did not return the expected content (HTTP $status)"
               python3 - "$RUNNER_TEMP/saman-live.html" <<'PY'
           from pathlib import Path
           import sys
