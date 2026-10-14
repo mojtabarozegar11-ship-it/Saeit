@@ -20,6 +20,41 @@ class NotificationUnavailable(ValueError):
     pass
 
 
+def _load_event_signing_key():
+    """Use the same restricted on-host key file as the private socket listener.
+
+    The key is never included in a repository, network log, event or CLI arg.
+    No fallback to env/plaintext if a configured key file is unsafe.
+    """
+    import os
+    import stat
+    from pathlib import Path
+
+    filename = getattr(settings, "MPW_NATIVE_EVENT_SECRET_FILE", None)
+    if filename is not None:
+        if not isinstance(filename, str) or not Path(filename).is_absolute():
+            raise NotificationUnavailable("Invalid event signing key path")
+        file = Path(filename)
+        try:
+            info = file.lstat()
+            if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid()
+                    or info.st_mode & 0o077 or not 32 <= info.st_size <= 1024):
+                raise NotificationUnavailable("Untrusted event key file")
+            secret = file.read_bytes().strip()
+        except OSError as exc:
+            raise NotificationUnavailable("Event signing key unavailable") from exc
+        if len(secret) < 32:
+            raise NotificationUnavailable("Event signing key too short")
+        return secret
+    configured = getattr(settings, "MPW_NATIVE_EVENT_SECRET", "")
+    if not isinstance(configured, str):
+        raise NotificationUnavailable("Missing event signing key")
+    secret = configured.encode("utf-8")
+    if len(secret) < 32:
+        raise NotificationUnavailable("Missing event signing key")
+    return secret
+
+
 def send_invoice_event(invoice, *, action, opener=urlopen):
     """Return disabled/delivered. Reject unknown/unsafe remote destinations."""
     if getattr(settings, "MPW_NATIVE_EVENT_ENABLED", False) is not True:
@@ -27,10 +62,8 @@ def send_invoice_event(invoice, *, action, opener=urlopen):
 
     transport = getattr(settings, "MPW_NATIVE_EVENT_TRANSPORT", "https")
     if transport == "unix":
-        secret = getattr(settings, "MPW_NATIVE_EVENT_SECRET", "")
+        secret = _load_event_signing_key()
         socket_path = getattr(settings, "MPW_NATIVE_EVENT_SOCKET", "")
-        if not isinstance(secret, str) or len(secret.encode("utf-8")) < 32:
-            raise NotificationUnavailable("Missing private event signing secret")
         if not isinstance(socket_path, str) or not socket_path.startswith("/"):
             raise NotificationUnavailable("Missing absolute private Unix socket")
         try:
@@ -38,7 +71,7 @@ def send_invoice_event(invoice, *, action, opener=urlopen):
                 action=action, invoice_id=invoice.pk, order_id=invoice.order_id,
                 asset=invoice.asset, expires_at_epoch=int(invoice.expires_at.timestamp()),
             )
-            body, signature = signed_message(payload, secret.encode("utf-8"))
+            body, signature = signed_message(payload, secret)
             from scripts.mojplaywin_cpanel_local_event_worker import socket_request
             return socket_request(socket_path, body, signature)
         except (EventRejected, OSError, ValueError) as exc:
@@ -48,7 +81,7 @@ def send_invoice_event(invoice, *, action, opener=urlopen):
 
     url = getattr(settings, "MPW_NATIVE_EVENT_URL", "")
     allowed_host = getattr(settings, "MPW_NATIVE_EVENT_HOST", "")
-    secret = getattr(settings, "MPW_NATIVE_EVENT_SECRET", "")
+    secret = _load_event_signing_key()
     if not isinstance(url, str) or not isinstance(allowed_host, str):
         raise NotificationUnavailable("Purchase notification endpoint missing")
     try:
@@ -65,15 +98,13 @@ def send_invoice_event(invoice, *, action, opener=urlopen):
         raise NotificationUnavailable("Invalid HTTPS event URL") from exc
     if not allowed:
         raise NotificationUnavailable("Unapproved event endpoint")
-    if not isinstance(secret, str) or len(secret.encode("utf-8")) < 32:
-        raise NotificationUnavailable("Missing HMAC notification secret")
 
     try:
         payload = make_event(
             action=action, invoice_id=invoice.pk, order_id=invoice.order_id,
             asset=invoice.asset, expires_at_epoch=int(invoice.expires_at.timestamp()),
         )
-        body, signature = signed_message(payload, secret.encode("utf-8"))
+        body, signature = signed_message(payload, secret)
     except (EventRejected, TypeError, ValueError) as exc:
         raise NotificationUnavailable("Unsafe invoice notification") from exc
 
