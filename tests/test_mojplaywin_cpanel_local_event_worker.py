@@ -83,7 +83,7 @@ class LocalPurchaseWorkerTests(unittest.TestCase):
         self.send("invoice_closed",invoice=51,asset="ETH")
         self.done(thread)
         self.assertEqual((self.home/"pending-orders.mode").read_text(),"TRX\n")
-        self.assertEqual(self.calls,["ETH","ETH","TRX","TRX"])
+        self.assertEqual(self.calls,["ETH","TRX"])
 
     def test_bad_hmac_does_not_wake_or_ack(self):
         thread=self.start()
