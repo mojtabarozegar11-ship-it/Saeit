@@ -16,6 +16,7 @@ jobs:
         env:
           VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
           HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+          VPS_KNOWN: ${{ secrets.SAEIT_VPS_SSH_KNOWN_HOSTS }}
         run: |
           set -euo pipefail
           umask 077
@@ -33,7 +34,16 @@ jobs:
           chmod 600 "$d/"*.key
           ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
           ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
-          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          echo "STAGE=prepare_vps_known_host"
+          if [[ -n "$VPS_KNOWN" ]]; then
+            printf "%s\n" "$VPS_KNOWN" > "$d/vps.known"
+          else
+            for attempt in 1 2 3; do
+              ssh-keyscan -T 7 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null && [[ -s "$d/vps.known" ]] && break
+              sleep 2
+            done
+          fi
+          echo "VPS_HOST_KEY_ROWS=$(wc -l < "$d/vps.known")"
           test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
           cat > "$d/config" <<EOF
           Host saeit-vps
@@ -58,8 +68,10 @@ jobs:
             RequestTTY no
             ConnectTimeout 10
           EOF
+          echo "STAGE=verify_host_key_through_vps"
           timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
           test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          echo "STAGE=check_mojplaywin_host_files"
           timeout 120s ssh -F "$d/config" saeit-host 'bash -se' <<'REMOTE'
           set -euo pipefail
           echo "REMOTE_USER=$(id -un)"
