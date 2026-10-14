@@ -97,7 +97,7 @@ def send_invoice_event(invoice, *, action, opener=urlopen):
 
 
 
-def dispatch_queued_watch_event(invoice_id, *, sender=send_invoice_event):
+def dispatch_queued_watch_event(invoice_id, *, sender=None):
     """Retry one durable alert with a DB row lock. Never marks orders paid."""
     from datetime import timedelta
     from django.utils import timezone
@@ -105,6 +105,8 @@ def dispatch_queued_watch_event(invoice_id, *, sender=send_invoice_event):
 
     if getattr(settings, "MPW_NATIVE_EVENT_ENABLED", False) is not True:
         return "disabled"
+    if sender is None:
+        sender = send_invoice_event
     with transaction.atomic():
         entry = (
             NativeWatchOutbox.objects.select_for_update()
