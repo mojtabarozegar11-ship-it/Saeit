@@ -392,6 +392,7 @@ jobs:
           SH
           chmod 700 "$runner"
           "$runner" >> "$log" 2>&1
+          tail -n 40 "$log"
           crontab_tmp="$(mktemp "$stage/crontab.XXXXXX")"
           trap 'rm -f "$crontab_tmp"' EXIT
           crontab -l 2>/dev/null | grep -Fv '# zomorod-staging-economic-robots' > "$crontab_tmp" || true
