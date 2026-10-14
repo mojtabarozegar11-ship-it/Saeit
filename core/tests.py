@@ -156,3 +156,19 @@ class FoundationTests(TestCase):
         session = ChatSession.objects.create(user=self.owner, title="test")
         reply = MasterAgentChat().respond(session, "سلام")
         self.assertIn("هیچ اقدامی اجرا نشد", reply)
+
+
+class TaniyaStudioPageTests(TestCase):
+    def test_taniya_page_renders_twenty_browser_games(self):
+        response = self.client.get("/taniya/")
+
+        self.assertEqual(response.status_code, 200)
+        page = response.content.decode("utf-8")
+        self.assertIn("Taniya Studio", page)
+        self.assertEqual(page.count('<article class="game"'), 20)
+
+    def test_studio_page_links_to_taniya(self):
+        response = self.client.get("/studio/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "/taniya/")
