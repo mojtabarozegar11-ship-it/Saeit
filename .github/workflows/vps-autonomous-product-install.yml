@@ -20,6 +20,7 @@ jobs:
           set -euo pipefail
           bash -n deploy/install_autonomous_factory_products.sh
           python3 -m unittest discover -s product_recipes/farm_enterprise_economics -p 'test_*.py' -v
+          python3 -m unittest discover -s product_recipes/water_budget_economics -p 'test_*.py' -v
           python3 -m unittest discover -s tests -p 'test_factory_product_maker.py' -v
           python3 -m unittest discover -s tests -p 'test_factory_vps_product_cycle.py' -v
       - name: Install private VPS factory product cycle
@@ -38,6 +39,6 @@ jobs:
           ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
           test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
           SSH=(ssh -i "$d/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o BatchMode=yes githubops@178.239.147.150)
-          tar -cf - scripts/factory_first_product_pilot.py scripts/factory_autonomous_portfolio.py scripts/factory_product_maker.py scripts/factory_vps_product_cycle.py product_recipes/farm_enterprise_economics deploy/install_autonomous_factory_products.sh | "${SSH[@]}" 'mkdir -p "$HOME/factory-runtime/operations/product-deploy-source"; tar -xf - -C "$HOME/factory-runtime/operations/product-deploy-source"'
+          tar -cf - scripts/factory_first_product_pilot.py scripts/factory_autonomous_portfolio.py scripts/factory_product_maker.py scripts/factory_vps_product_cycle.py product_recipes/farm_enterprise_economics product_recipes/water_budget_economics deploy/install_autonomous_factory_products.sh | "${SSH[@]}" 'mkdir -p "$HOME/factory-runtime/operations/product-deploy-source"; tar -xf - -C "$HOME/factory-runtime/operations/product-deploy-source"'
           "${SSH[@]}" 'bash "$HOME/factory-runtime/operations/product-deploy-source/deploy/install_autonomous_factory_products.sh"'
           "${SSH[@]}" 'test -s "$HOME/factory-runtime/private/autonomous-product-cycle/production-state.json" && crontab -l | grep SAEIT_AUTONOMOUS_PRODUCTS_V2 && echo AUTONOMOUS_PRODUCT_VPS_VERIFIED'
