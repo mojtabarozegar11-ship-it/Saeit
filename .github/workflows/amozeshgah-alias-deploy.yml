@@ -120,7 +120,7 @@ jobs:
             exit 1
           fi
           sha="$(sha256sum "$work/index.html" | awk '{print $1}')"
-          remote_sha="$(ssh -F "$work/config" saeit-cpanel "sha256sum '$stage/index.html' | cut -d' ' -f1)")
+          remote_sha=$(ssh -F "$work/config" saeit-cpanel "sha256sum '$stage/index.html' | cut -d' ' -f1")
           test "$sha" = "$remote_sha"
           ssh -F "$work/config" saeit-cpanel "set -euo pipefail; test ! -e '$target' && mv '$stage' '$target'; echo PUBLISH_STATE=created"
           printf 'sha=%s\n' "$sha" >> "$GITHUB_OUTPUT"
