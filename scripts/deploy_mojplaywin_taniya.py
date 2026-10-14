@@ -92,6 +92,14 @@ def deploy(run_id, commit_sha):
         if not (APP_ROOT / required).is_file():
             raise RuntimeError(f"Missing active Saeit application file: {required}")
 
+    stage = HOME / f".mojplaywin-taniya-{run_id}"
+    template_source = stage / FILES[2]
+    if not template_source.is_file():
+        raise RuntimeError("Staged Taniya page is missing")
+    html = template_source.read_text(encoding="utf-8")
+    if "<title>Taniya Studio" not in html or html.count('<article class="game"') != 20:
+        raise RuntimeError("Staged page failed title or 20-game validation")
+
     url_target = APP_ROOT / FILES[0]
     view_target = APP_ROOT / FILES[1]
     template_target = APP_ROOT / FILES[2]
