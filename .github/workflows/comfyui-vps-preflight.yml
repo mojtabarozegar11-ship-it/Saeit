@@ -61,5 +61,23 @@ jobs:
           ss -ltn '( sport = :8188 or sport = :18188 )' || true
           echo "--- existing ComfyUI process ---"
           pgrep -af '[C]omfyUI.*main.py|[m]ain.py.*--port (8188|18188)' || true
+          echo "--- existing installation layout (read-only) ---"
+          if [[ -d "$HOME/comfyui-isolated" ]]; then
+            stat -c 'COMFYUI_OWNER=%U:%G MODE=%a' "$HOME/comfyui-isolated"
+            du -sh "$HOME/comfyui-isolated" 2>/dev/null || true
+            find "$HOME/comfyui-isolated" -maxdepth 2 -mindepth 1 -type d -printf 'DIR=%P\n' 2>/dev/null | head -35
+            for f in main.py ComfyUI/main.py venv/bin/python .venv/bin/python pyvenv.cfg requirements.txt ComfyUI/requirements.txt; do
+              if [[ -e "$HOME/comfyui-isolated/$f" ]]; then echo "FOUND=$f"; fi
+            done
+            for p in "$HOME/comfyui-isolated/venv/bin/python" "$HOME/comfyui-isolated/.venv/bin/python" "$HOME/comfyui-isolated/ComfyUI/.venv/bin/python"; do
+              if [[ -x "$p" ]]; then "$p" --version 2>&1 | sed 's/^/COMFYUI_VENV_PYTHON=/' || true; fi
+            done
+          fi
+          echo "--- available interpreters ---"
+          for executable in python3.10 python3.11 python3.12 python3.13 uv docker; do
+            if command -v "$executable" >/dev/null 2>&1; then echo "AVAILABLE=$executable"; fi
+          done
+          echo "--- user service visibility ---"
+          if [[ -f "$HOME/.config/systemd/user/comfyui-isolated.service" ]]; then echo "COMFYUI_USER_UNIT_PRESENT"; else echo "COMFYUI_USER_UNIT_ABSENT"; fi
           echo "COMFYUI_PREFLIGHT_READONLY_COMPLETE"
           REMOTE
