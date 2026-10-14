@@ -1,0 +1,134 @@
+name: Astra Factory Isolated VPS Compatibility
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/astra-factory-isolated-compatibility.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: saeit-astra-isolated-compatibility
+  cancel-in-progress: false
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Test original Astra changes only in disposable isolated VPS directory
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/astra-isolated"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          test -n "$VPS_KEY"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -i "$d/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o BatchMode=yes -o ConnectTimeout=15 githubops@178.239.147.150 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          base="$HOME/factory-runtime"
+          archive="$HOME/factory-transfer-incoming/astra-factory-full-architecture.tar.gz"
+          app="$base/django-app"
+          python="$base/.venv/bin/python"
+          test -f "$archive" && test -x "$python" && test -f "$app/manage.py"
+          scratch="$(mktemp -d "$base/operations/astra-qa-XXXXXX")"
+          trap 'rm -rf -- "$scratch"' EXIT
+          export ASTRA_QA_ROOT="$scratch"
+          "$python" - "$app" "$scratch/site" "$archive" "$scratch/test.sqlite3" <<'PY'
+          import sys,os,shutil,tarfile,pathlib,sqlite3,stat
+          source,dest,arch,copydb=map(pathlib.Path,sys.argv[1:])
+          dest.mkdir(mode=0o700)
+          excluded={'.git','.env','.venv','node_modules','var','media','staticfiles','private','uploads','__pycache__','backups'}
+          allowed={'.py','.md','.txt','.json','.yaml','.yml','.html','.js','.css','.svg','.sh','.toml','.cfg','.ini'}
+          total=0
+          for root,dirs,files in os.walk(source,followlinks=False):
+              root=pathlib.Path(root)
+              dirs[:]=[d for d in dirs if d not in excluded and not (root/d).is_symlink()]
+              relative=root.relative_to(source)
+              (dest/relative).mkdir(parents=True,exist_ok=True)
+              for name in files:
+                  p=root/name
+                  if p.is_symlink() or name.startswith('.env') or p.suffix not in allowed:continue
+                  size=p.stat().st_size
+                  if size>2000000: continue
+                  total+=size
+                  if total>100000000:raise RuntimeError("STAGING_COPY_BUDGET_EXCEEDED")
+                  shutil.copy2(p,dest/relative/name)
+          with tarfile.open(arch,"r:gz") as tf:
+              count=0
+              for item in tf.getmembers():
+                  if not item.isfile() or not item.name.startswith("files/"):continue
+                  rel=pathlib.PurePosixPath(item.name[6:])
+                  if rel.is_absolute() or ".." in rel.parts or item.size>2000000:raise RuntimeError("ASTRA_ARCHIVE_UNSAFE")
+                  if rel.as_posix()=="config/factory_local_settings.py":continue
+                  if rel.suffix not in allowed:continue
+                  target=dest.joinpath(*rel.parts)
+                  target.parent.mkdir(parents=True,exist_ok=True)
+                  with tf.extractfile(item) as stream, target.open('wb') as out:shutil.copyfileobj(stream,out)
+                  count+=1
+          profile=dest/"config/astra_qa_settings.py"
+          profile.write_text("""from .settings import *
+          from pathlib import Path
+          import os
+          if os.environ.get('ASTRA_QA_ROOT') is None:
+              raise RuntimeError('ISOLATED_QA_ROOT_REQUIRED')
+          DATABASES = {'default': {'ENGINE': 'django.db.backends.sqlite3',
+                     'NAME': str(Path(os.environ['ASTRA_QA_ROOT']) / 'test.sqlite3'),
+                     'OPTIONS': {'timeout': 20}}}
+          DEBUG=False
+          PRODUCTION_PUBLICATION_ENABLED=REAL_PAYMENTS_ENABLED=False
+          TREASURY_EXECUTION_ENABLED=CRYPTO_EXECUTION_ENABLED=False
+          TRADE_EMAIL_ENABLED=False
+          FACTORY_PIPELINE_ENABLED=False
+          """,encoding='utf-8')
+          db=pathlib.Path(os.environ['HOME'])/"factory-runtime/private/factory-fresh-isolated.sqlite3"
+          if not db.is_file():raise RuntimeError("ISOLATED_FACTORY_DB_MISSING")
+          original=sqlite3.connect(db.as_uri()+"?mode=ro",uri=True,timeout=20)
+          clone=sqlite3.connect(str(copydb),timeout=20)
+          original.backup(clone)
+          clone.close();original.close()
+          os.chmod(copydb,0o600)
+          print("ASTRA_STAGING_SOURCE_COPIED")
+          print("ASTRA_STAGING_OVERLAY_FILES="+str(count))
+          print("ASTRA_STAGING_DATABASE_PRIVATE_SNAPSHOT_OK")
+          PY
+          export SECRET_KEY="$("$python" -c 'import secrets; print(secrets.token_urlsafe(48))')"
+          export DJANGO_SETTINGS_MODULE=config.astra_qa_settings
+          export PYTHONPATH="$scratch/site"
+          export SAEIT_ENV=development MOJ_FACTORY_LOCAL_MODE=1
+          export MOJ_PAID_LLM_ENABLED=0 MOJ_LLM_DAILY_CALL_BUDGET=0 MOJ_LLM_MAX_COST_MINOR=0
+          export PRODUCTION_PUBLICATION_ENABLED=0 REAL_PAYMENTS_ENABLED=0
+          cd "$scratch/site"
+          "$python" -m compileall -q core config
+          echo ASTRA_STAGING_PYTHON_COMPILE_OK
+          if timeout 70 "$python" manage.py check --settings=config.astra_qa_settings > "$scratch/check.log" 2>&1; then
+            echo ASTRA_STAGING_DJANGO_CHECK_OK
+          else
+            echo ASTRA_STAGING_DJANGO_CHECK_FAILED
+            grep -E '^(.*(Error|Exception|ImportError|ModuleNotFoundError|FieldError|SystemCheckError|LookupError|django.core.exceptions).*)$' "$scratch/check.log" | tail -n 8 | cut -c 1-220 || true
+            exit 1
+          fi
+          if timeout 90 "$python" manage.py migrate core 0049 --noinput --settings=config.astra_qa_settings > "$scratch/migrate.log" 2>&1; then
+            echo ASTRA_STAGING_MIGRATION_0049_OK
+          else
+            echo ASTRA_STAGING_MIGRATION_0049_FAILED
+            grep -E '(Error|Exception|Conflicting|InconsistentMigrationHistory|Traceback|not found|could not|missing|LookupError)' "$scratch/migrate.log" | tail -n 8 | cut -c 1-220 || true
+            exit 1
+          fi
+          if timeout 100 "$python" manage.py test core.tests.test_factory_durable_runtime --settings=config.astra_qa_settings --verbosity 1 > "$scratch/tests.log" 2>&1; then
+            echo ASTRA_STAGING_DURABLE_TESTS_OK
+            grep -E '^(Ran [0-9]+ tests|OK)$' "$scratch/tests.log" || true
+          else
+            echo ASTRA_STAGING_DURABLE_TESTS_FAILED
+            grep -E '^(FAILED|Ran [0-9]+ tests|ERROR:|FAIL:|ImportError:|LookupError:|django.core.exceptions)' "$scratch/tests.log" | tail -n 10 | cut -c 1-220 || true
+            exit 1
+          fi
+          echo ASTRA_EXISTING_FACTORY_AND_LIVE_SITES_UNMODIFIED
+          REMOTE
