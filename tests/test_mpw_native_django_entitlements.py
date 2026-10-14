@@ -34,7 +34,7 @@ class NativeEntitlementTests(TestCase):
             network="ethereum-mainnet",
             merchant_address="0x89149b01f59115B86553561F12438D2ADF517E75",
             verified_sender_address="0x"+"a"*40,
-            amount_atomic=Decimal("2500000000000000"),
+            amount_atomic="2500000000000000",
             usd_amount=Decimal("7.50"),usd_per_asset=Decimal("3000"),
             price_source="coingecko",price_observed_at=self.now,
             issued_at=self.now,expires_at=self.now+timedelta(minutes=10),
@@ -124,6 +124,6 @@ class NativeEntitlementTests(TestCase):
     def test_mismatched_receipt_amount_blocks_download(self):
         self.make_paid()
         claim=self.create_evidence()
-        claim.amount_atomic=claim.amount_atomic+1
+        claim.amount_atomic=str(int(claim.amount_atomic)+1)
         claim.save(update_fields=["amount_atomic"])
         self.assertFalse(can_download_paid_native_order(self.order.pk,self.user.pk))
