@@ -190,16 +190,15 @@ class NativeAutoSettlementTests(TestCase):
                 settle_native_invoice(invoice.pk,ETH_TX,ethereum_rpc=lambda *args:{})
         self.check_unpaid(invoice,order)
 
-    def test_background_batch_does_not_credit_invalid_claims(self):
+    def test_background_batch_rejects_invalid_and_settles_once(self):
         invoice, order=self.invoice()
         proof=self.expected_proof(invoice,ETH_TX)
         with patch("mpw_native_checkout.settlement.verify_eth_transfer",return_value=proof):
             result=reconcile_discovered_transfers(
-                [(invoice.pk,"0xinvalid"), (invoice.pk,ETH_TX)],
+                [(invoice.pk,"0xinvalid"),(invoice.pk,ETH_TX),(invoice.pk,ETH_TX)],
                 ethereum_rpc=lambda *args:{},
             )
-        self.assertEqual(result[0][1],"paid") if False else None
-        # The fake verifier intentionally accepts only the mocked valid proof,
-        # so actual RPC validators must additionally validate hash syntax.
-        self.assertEqual(len(result),2)
-        self.assertEqual(result[-1][1],"already_paid")
+        self.assertEqual(result,[
+            (invoice.pk,"not_settled"),(invoice.pk,"paid"),(invoice.pk,"already_paid"),
+        ])
+        self.assertEqual(LedgerEntry.objects.filter(order=order).count(),1)
