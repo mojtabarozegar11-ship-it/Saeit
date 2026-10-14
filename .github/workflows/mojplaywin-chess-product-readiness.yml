@@ -197,6 +197,33 @@ jobs:
                       print('URL_HINT',rel,i,ln[:170])
           print('LIVE_CRYPTO_INTEGRATION_AUDIT_END')
           PY
+          echo "LIVE_CRYPTO_NATIVE_CHECKOUT_MAP_START"
+          python3 - <<'PY'
+          import ast
+          from pathlib import Path
+          p=Path('/home/zomorod2/Saeit-staging/core/cryptopay_checkout.py')
+          print('CRYPTO_CHECKOUT_EXISTS',p.is_file())
+          if p.is_file():
+              src=p.read_text(errors='replace')
+              tree=ast.parse(src)
+              for node in tree.body:
+                  if isinstance(node,(ast.FunctionDef,ast.AsyncFunctionDef,ast.ClassDef)):
+                      print('TOP_LEVEL_SYMBOL',node.name,'lines',node.lineno,node.end_lineno)
+                      if node.name in ('checkout','crypto_order','private_download'):
+                          callnames=set()
+                          for x in ast.walk(node):
+                              if isinstance(x,ast.Call):
+                                  y=x.func
+                                  if isinstance(y,ast.Name): callnames.add(y.id)
+                                  elif isinstance(y,ast.Attribute): callnames.add(y.attr)
+                          print('CHECKOUT_CALL_NAMES',node.name,sorted(callnames)[:80])
+                          print('DECORATOR_NAMES',node.name,[ast.unparse(x)[:70] for x in node.decorator_list])
+              for line in src.splitlines():
+                  if line.strip().startswith(('def ','class ')):
+                      continue
+              print('MODULE_LINES',len(src.splitlines()))
+          print('LIVE_CRYPTO_NATIVE_CHECKOUT_MAP_END')
+          PY
           REMOTE
           for url in https://mojplaywin.com/ https://mojplaywin.com/admin/login/ https://mojplaywin.com/store/ https://mojplaywin.com/shop/; do
             code="$(curl -sS -L --connect-timeout 10 --max-time 20 -o /dev/null -w '%{http_code}' "$url" || true)"
