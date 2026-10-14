@@ -1,0 +1,195 @@
+name: Deploy Taniya to MojPlayWin
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/mojplaywin-taniya-deploy.yml"
+      - "scripts/deploy_mojplaywin_taniya.py"
+      - "scripts/taniya_patch.py"
+      - "templates/taniya_studio/index.html"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mojplaywin-taniya-production
+  cancel-in-progress: false
+
+jobs:
+  test-and-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: python -m pip install --upgrade pip && pip install -r requirements.txt
+      - name: Django deployment checks
+        env:
+          SECRET_KEY: ci-secret-key
+          DEBUG: "False"
+          ALLOWED_HOSTS: localhost,127.0.0.1
+        run: python manage.py check --deploy
+      - name: Build static manifest
+        env:
+          SECRET_KEY: ci-secret-key
+          DEBUG: "False"
+          ALLOWED_HOSTS: localhost,127.0.0.1
+        run: python manage.py collectstatic --noinput
+      - name: Run tests
+        env:
+          SECRET_KEY: ci-secret-key
+          DEBUG: "False"
+          ALLOWED_HOSTS: localhost,127.0.0.1
+        run: pytest -q
+      - name: Apply migrations to CI database
+        env:
+          SECRET_KEY: ci-secret-key
+          DEBUG: "False"
+          ALLOWED_HOSTS: localhost,127.0.0.1
+        run: python manage.py migrate --noinput
+      - name: Verify production readiness
+        env:
+          SECRET_KEY: ci-secret-key
+          DEBUG: "False"
+          ALLOWED_HOSTS: localhost,127.0.0.1
+        run: python manage.py production_gate
+
+      - name: Configure pinned SSH relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_HOST: ${{ secrets.SAEIT_HOST_SSH_HOST }}
+          HOST_USER: ${{ secrets.SAEIT_HOST_SSH_USER }}
+          HOST_PORT: ${{ secrets.SAEIT_HOST_SSH_PORT }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          [[ -n "$VPS_KEY" && -n "$HOST_HOST" && -n "$HOST_USER" && -n "$HOST_KEY" ]] || { echo "Missing SSH configuration"; exit 1; }
+          [[ "$HOST_HOST" =~ ^[A-Za-z0-9.:-]+$$${0,1}$$ && "$HOST_USER" =~ ^[A-Za-z_][A-Za-z0-9_.-]*$$ ]] || exit 1
+          HOST_PORT="$${HOST_PORT:-1396}"
+          [[ "$HOST_PORT" =~ ^[0-9]{1,5}$$ ]] && ((HOST_PORT >= 1 && HOST_PORT <= 65535)) || exit 1
+          VPS_KEY="$${VPS_KEY//$$n/$'\n'}"
+          HOST_KEY="$${HOST_KEY//$$n/$'\n'}"
+          WORK="$RUNNER_TEMP/mojplaywin-ssh"
+          install -d -m 700 "$WORK"
+          printf '%s\n' "$VPS_KEY" > "$WORK/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$WORK/host.key"
+          chmod 600 "$WORK/"*.key
+          ssh-keygen -y -P "" -f "$WORK/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$WORK/host.key" >/dev/null
+
+          VPS_SCAN="$(ssh-keyscan -T 10 -t rsa 178.239.147.150 2>/dev/null)"
+          [[ -n "$VPS_SCAN" ]]
+          printf '%s\n' "$VPS_SCAN" > "$WORK/vps.known"
+          VPS_FP="$(ssh-keygen -lf "$WORK/vps.known" -E sha256 | awk '{print $2}' | sort -u)"
+          [[ "$VPS_FP" == "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs" ]] || { echo "VPS host key pin mismatch"; exit 1; }
+
+          cat > "$WORK/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $WORK/vps.key
+            UserKnownHostsFile $WORK/vps.known
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ForwardAgent no
+          EOF
+          chmod 600 "$WORK/config"
+
+          HOST_SCAN="$(ssh -F "$WORK/config" saeit-vps "timeout 15s ssh-keyscan -T 8 -p $HOST_PORT -t ed25519 $HOST_HOST" 2>/dev/null)"
+          [[ -n "$HOST_SCAN" ]]
+          printf '%s\n' "$HOST_SCAN" > "$WORK/host.known"
+          HOST_FP="$(ssh-keygen -lf "$WORK/host.known" -E sha256 | awk '{print $2}' | sort -u)"
+          [[ "$HOST_FP" == "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04" ]] || { echo "cPanel host key pin mismatch"; exit 1; }
+
+          cat >> "$WORK/config" <<EOF
+          Host saeit-host
+            HostName $HOST_HOST
+            User $HOST_USER
+            Port $HOST_PORT
+            IdentityFile $WORK/host.key
+            UserKnownHostsFile $WORK/host.known
+            ProxyJump saeit-vps
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ForwardAgent no
+          EOF
+          chmod 600 "$WORK/config"
+          echo "Pinned SSH relay is ready."
+
+      - name: Verify MojPlayWin target and create remote staging
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$(curl -sS -o /dev/null -w '%{http_code}' https://mojplaywin.com/admin/login/)" == "200" ]]
+          WORK="$RUNNER_TEMP/mojplaywin-ssh"
+          timeout 45s ssh -F "$WORK/config" saeit-host \
+            'test -d /home/zomorod2/mojplaywin.com && test ! -L /home/zomorod2/mojplaywin.com && test -f /home/zomorod2/mojplaywin.com/passenger_wsgi.py && test -f /home/zomorod2/mojplaywin.com/.htaccess && test -f /home/zomorod2/mojplaywin.com/config/urls.py && test -f /home/zomorod2/mojplaywin.com/core/views.py'
+          timeout 20s ssh -F "$WORK/config" saeit-host "install -d -m 700 /home/zomorod2/.mojplaywin-taniya-$GITHUB_RUN_ID"
+
+      - name: Package only Taniya deployment files
+        run: tar -cf "$RUNNER_TEMP/taniya.tar" scripts/deploy_mojplaywin_taniya.py scripts/taniya_patch.py templates/taniya_studio/index.html
+
+      - name: Upload Taniya package
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORK="$RUNNER_TEMP/mojplaywin-ssh"
+          scp -F "$WORK/config" "$RUNNER_TEMP/taniya.tar" "saeit-host:/home/zomorod2/.mojplaywin-taniya-$GITHUB_RUN_ID/bundle.tar"
+          timeout 30s ssh -F "$WORK/config" saeit-host \
+            "tar -xf /home/zomorod2/.mojplaywin-taniya-$GITHUB_RUN_ID/bundle.tar -C /home/zomorod2/.mojplaywin-taniya-$GITHUB_RUN_ID && rm -f /home/zomorod2/.mojplaywin-taniya-$GITHUB_RUN_ID/bundle.tar"
+
+      - name: Deploy Taniya page
+        id: deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORK="$RUNNER_TEMP/mojplaywin-ssh"
+          timeout 60s ssh -F "$WORK/config" saeit-host \
+            "python3 /home/zomorod2/.mojplaywin-taniya-$GITHUB_RUN_ID/scripts/deploy_mojplaywin_taniya.py deploy $GITHUB_RUN_ID $GITHUB_SHA"
+
+      - name: Verify live Taniya page
+        id: smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --retry 5 --retry-delay 3 --retry-connrefused -fsS https://mojplaywin.com/taniya/ -o "$RUNNER_TEMP/taniya-live.html"
+          python - "$RUNNER_TEMP/taniya-live.html" <<'PY'
+          from pathlib import Path
+          import sys
+
+          html = Path(sys.argv[1]).read_text(encoding="utf-8")
+          if "<title>Taniya Studio" not in html or html.count('<article class="game"') != 20:
+              raise SystemExit("Live Taniya page failed title or 20-game validation")
+          print("Live Taniya page verified with 20 games.")
+          PY
+
+      - name: Roll back failed live smoke test
+        if: failure() && steps.deploy.outcome == 'success' && steps.smoke.outcome == 'failure'
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORK="$RUNNER_TEMP/mojplaywin-ssh"
+          timeout 60s ssh -F "$WORK/config" saeit-host \
+            "python3 /home/zomorod2/.mojplaywin-taniya-$GITHUB_RUN_ID/scripts/deploy_mojplaywin_taniya.py rollback $GITHUB_RUN_ID"
+
+      - name: Remove remote staging files
+        if: always()
+        shell: bash
+        run: |
+          if [[ -f "$RUNNER_TEMP/mojplaywin-ssh/config" ]]; then
+            ssh -F "$RUNNER_TEMP/mojplaywin-ssh/config" -o ConnectTimeout=10 saeit-host \
+              "rm -rf /home/zomorod2/.mojplaywin-taniya-$GITHUB_RUN_ID" || true
+          fi
+
+      - name: Remove temporary SSH credentials
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/mojplaywin-ssh" "$RUNNER_TEMP/taniya.tar" "$RUNNER_TEMP/taniya-live.html"
