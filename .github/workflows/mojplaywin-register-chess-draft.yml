@@ -1,0 +1,133 @@
+name: MojPlayWin register reviewed chess product draft
+on:
+  push:
+    paths:
+      - '.github/workflows/mojplaywin-register-chess-draft.yml'
+permissions:
+  contents: read
+concurrency:
+  group: mojplaywin-register-chess-draft
+  cancel-in-progress: false
+jobs:
+  register:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check approved catalog metadata
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from decimal import Decimal
+          with open('catalog/mojplaywin/chess-improvement-2026.json',encoding='utf-8') as f:
+              d=json.load(f)
+          assert d['product_id']=='mojplaywin-chess-improvement-2026'
+          assert d['title']=='The Science and Practice of Chess Improvement'
+          assert Decimal(d['sale_price'])==Decimal('7.50')
+          assert d['currency']=='USD'
+          assert d['public_active'] is False
+          assert d['digital_asset']['sha256']=='d284d559bfac931cffe11e97561ac442d63dae5d8eda4bc04e84dd2c26022a1b'
+          assert d['digital_asset']['uploaded_to_host'] is False
+          print('APPROVED_METADATA_VERIFIED')
+          PY
+      - name: Register inactive product with SSH relay (one safe DB insert)
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+          VPS_KNOWN: ${{ secrets.SAEIT_VPS_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/ssh"; mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          python3 - "$d/vps.key" "$d/host.key" <<'PY'
+          import pathlib,sys
+          for f in sys.argv[1:]:
+              p=pathlib.Path(f)
+              p.write_text(p.read_text().replace("\r\n","\n").strip().replace("\\n","\n")+"\n")
+          PY
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          if [[ -n "$VPS_KNOWN" ]]; then
+            printf "%s\n" "$VPS_KNOWN" > "$d/vps.known"
+          else
+            ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          fi
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host saeit-host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+          EOF
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          payload="$(base64 -w0 catalog/mojplaywin/chess-improvement-2026.json)"
+          timeout 90s ssh -F "$d/config" saeit-host "cd /home/zomorod2/Saeit-staging && MANIFEST_B64='$payload' PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python manage.py shell" <<'PY'
+          import os,base64,json
+          from decimal import Decimal
+          from django.db import transaction
+          from django.apps import apps
+          d=json.loads(base64.b64decode(os.environ['MANIFEST_B64']))
+          if d['public_active'] is not False:
+              raise RuntimeError('Public activation forbidden in draft workflow')
+          P=apps.get_model('core','Product')
+          title=d['title']
+          found=P.objects.filter(title__iexact=title).first()
+          if found:
+              print('EXISTING_PRODUCT_ID',found.pk,'ACTIVE',found.active)
+          else:
+              meta={
+                'product_id':d['product_id'],
+                'slug':'the-science-and-practice-of-chess-improvement',
+                'short_description':d['short_description'],
+                'long_description':d['long_description'],
+                'language':d['language'],
+                'pages':d['pages'],
+                'curriculum_days':d['curriculum_days'],
+                'features':d['main_features'],
+                'regular_price':d['regular_price'],
+                'discount_percentage':d['discount_percentage'],
+                'checkout_enabled':False,
+                'fulfillment_status':'pending_verified_payment_and_private_pdf',
+                'pdf_sha256':d['digital_asset']['sha256'],
+                'poster_sha256':d['promo_image']['sha256'],
+                'disclaimer':d['disclaimer'],
+              }
+              with transaction.atomic():
+                  p=P(title=title,product_type='digital_book',price=Decimal(d['sale_price']),currency=d['currency'],active=False,metadata=meta)
+                  p.full_clean()
+                  p.save()
+                  print('DRAFT_PRODUCT_CREATED',p.pk,'ACTIVE',p.active,'PRICE',p.price,p.currency)
+          print('DRAFT_PRODUCT_GATE_OK')
+          PY
+          code="$(curl -sSL --connect-timeout 12 --max-time 30 -o /dev/null -w '%{http_code}' https://mojplaywin.com/store/)"
+          echo "STORE_HTTP=$code"
+          test "$code" = 200
+      - name: Remove SSH material
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/ssh"
