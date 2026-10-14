@@ -1,0 +1,99 @@
+name: MojPlayWin cPanel MySQL staging provisioning capability
+on:
+  push:
+    branches: [ops/mpw-private-backup-20261014]
+    paths:
+      - .github/workflows/mojplaywin-cpanel-staging-db-probe.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check cPanel UAPI availability and safe staging database capacity
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/mpw-readonly-host"
+          mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          python3 - "$d/vps.key" "$d/host.key" <<'PY'
+          from pathlib import Path
+          import sys
+          for name in sys.argv[1:]:
+              p = Path(name)
+              p.write_text(p.read_text().replace("\r\n", "\n").strip().replace("\\n", "\n") + "\n")
+          PY
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host relay
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host host
+            HostName zohal.pws-dns.net
+            Port 1396
+            User zomorod2
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump relay
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+          EOF
+          timeout 30s ssh -F "$d/config" relay 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          timeout 45s ssh -F "$d/config" host 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          if command -v uapi >/dev/null 2>&1; then
+            echo MPW_CPANEL_UAPI_AVAILABLE=True
+          elif test -x /usr/local/cpanel/bin/uapi; then
+            echo MPW_CPANEL_UAPI_AVAILABLE=True
+          else
+            echo MPW_CPANEL_UAPI_AVAILABLE=False
+          fi
+          python3 - <<'PY'
+          import json, pathlib, os, shutil, subprocess
+          from pathlib import Path
+          p=Path.home()/".mpw-private-db-backups"
+          manifests=list(p.glob("*/manifest.json")) if p.is_dir() else []
+          values=[]
+          for f in manifests:
+              try:
+                  a=json.loads(f.read_text())
+                  values.append((a.get("uncompressed_bytes",0),a.get("tables",0)))
+              except Exception:
+                  pass
+          if values:
+              sz, n = max(values)
+              print("MPW_PRIVATE_BACKUP_RAW_MB", sz // 1048576)
+              print("MPW_PRIVATE_BACKUP_TABLES", n)
+          else:
+              print("MPW_PRIVATE_BACKUP_MANIFESTS_MISSING=True")
+          print("MPW_CPANEL_AVAILABLE_DISK_MB", shutil.disk_usage(Path.home()).free // 1048576)
+          PY
+          REMOTE
+      - name: Erase runner-only transient SSH keys
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/mpw-readonly-host"
