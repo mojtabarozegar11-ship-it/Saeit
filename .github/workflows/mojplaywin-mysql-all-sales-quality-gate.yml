@@ -1,0 +1,82 @@
+name: MojPlayWin comprehensive buyer checkout and fulfillment MySQL gate
+on:
+  push:
+    branches: [qa/mpw-payment-release-preflight-20261015]
+    paths:
+      - '.github/workflows/mojplaywin-mysql-all-sales-quality-gate.yml'
+      - 'tests/native_checkout_mysql_settings.py'
+      - 'tests/native_ci_payment_release_preflight.py'
+      - 'mpw_commerce/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  isolated-real-mysql:
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: disposable-ci-only-do-not-reuse
+          MYSQL_DATABASE: mpw_ci
+        ports: [3306:3306]
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -uroot -pdisposable-ci-only-do-not-reuse"
+          --health-interval=10s --health-timeout=5s --health-retries=12
+    env:
+      DJANGO_SETTINGS_MODULE: tests.native_checkout_mysql_settings
+      MPW_TEST_DB_PASSWORD: disposable-ci-only-do-not-reuse
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install fixed-range CI dependencies on clean disposable runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq pkg-config default-libmysqlclient-dev
+          python -m pip install --disable-pip-version-check -q 'Django>=5.2,<6' 'eth-account>=0.13,<0.14' 'mysqlclient>=2.2,<3'
+      - name: Assert localhost-only database and validate migrations
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from django.conf import settings
+          db=settings.DATABASES['default']
+          assert db['ENGINE']=='django.db.backends.mysql'
+          assert db['NAME']=='mpw_ci' and db['HOST']=='127.0.0.1'
+          assert db['TEST']['NAME']=='test_mpw_ci'
+          assert db['USER']=='root'
+          print('MPW_DISPOSABLE_MYSQL8_ONLY=True')
+          PY
+          python -m django check --database default
+          python -m django makemigrations mpw_commerce mpw_native_checkout --check --dry-run
+          python -m django migrate --noinput
+          echo MPW_DISPOSABLE_MYSQL8_MIGRATIONS_OK
+      - name: Test full buyer checkout, both chains, replay resistance, secure delivery and courses
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m django test \
+            tests.native_ci_payment_release_preflight \
+            tests.native_ci_sitewide_commerce \
+            tests.native_ci_sitewide_chain_adapter \
+            tests.native_ci_sitewide_reconcile \
+            tests.native_ci_commerce_private_assets \
+            tests.native_ci_commerce_download_views \
+            tests.native_ci_sitewide_buyer_wallets \
+            tests.native_ci_sitewide_checkout_http \
+            tests.native_ci_sitewide_full_purchase \
+            tests.native_ci_sitewide_full_purchase_cycle \
+            tests.native_ci_sitewide_course_fulfillment \
+            --verbosity 1
+          echo MPW_MYSQL8_FULL_BUYER_CHAIN_SUCCESS
+          echo MPW_NO_LIVE_MONEY_NO_LIVE_SITE_CHANGES_NO_PRODUCTION_DB
