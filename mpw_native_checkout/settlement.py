@@ -90,9 +90,14 @@ def settle_native_invoice(invoice_id, tx_hash, *, ethereum_rpc=None, tron_solidi
     if valid_hash is None:
         raise SettlementRejected("Invalid chain transaction ID")
     if invoice.status == NativeInvoice.Status.PAID:
-        if NativeChainTransfer.objects.filter(
-            invoice=invoice, network=invoice.network, tx_hash=normalized_hash,
-        ).exists():
+        ref = f"native-crypto:{invoice.network}:{normalized_hash}"
+        if (
+            invoice.order.status == "paid"
+            and NativeChainTransfer.objects.filter(
+                invoice=invoice, network=invoice.network, tx_hash=normalized_hash,
+            ).exists()
+            and LedgerEntry.objects.filter(order=invoice.order, reference=ref).exists()
+        ):
             return "already_paid"
         raise SettlementRejected("Invoice already paid with a different transaction")
     if invoice.status != NativeInvoice.Status.AWAITING:
@@ -120,6 +125,17 @@ def settle_native_invoice(invoice_id, tx_hash, *, ethereum_rpc=None, tron_solidi
         backend = "tron-solidity-verified"
     else:
         raise SettlementRejected("Unrecognized chain")
+
+    # Require the verified receipt to match this particular order, sender and coin.
+    if not isinstance(proof, dict) or (
+        proof.get("network") != invoice.network
+        or proof.get("order_id") != invoice.order_id
+        or proof.get("transaction_hash") != normalized_hash
+        or proof.get("amount_smallest_units") != int(invoice.amount_atomic)
+        or str(proof.get("recipient", "")).lower() != invoice.merchant_address.lower()
+        or str(proof.get("sender", "")).lower() != invoice.verified_sender_address.lower()
+    ):
+        raise SettlementRejected("Blockchain receipt proof does not match invoice")
 
     # Receipt verification happens outside the transaction. Revalidate every
     # relevant field under DB row locks before writing all records atomically.
