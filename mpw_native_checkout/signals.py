@@ -11,10 +11,9 @@ def on_native_invoice_change(sender, instance, created, update_fields=None, **kw
     if instance.product_id != 72:
         return
     if created and instance.status == NativeInvoice.Status.AWAITING:
-        # Do not query any blockchain until the buyer and merchant wallet
-        # proofs have been verified.
-        if (instance.sender_signature_verified_at is not None
-                and instance.merchant_ownership_verified_at is not None):
+        # Wake automatically after the buyer's sender proof is verified.
+        # The merchant never signs or approves individual purchases.
+        if instance.sender_signature_verified_at is not None:
             notify_after_commit(instance, "invoice_open")
     elif not created and instance.status in (
         NativeInvoice.Status.PAID,
