@@ -191,6 +191,22 @@ jobs:
           if test -f "$app/.env"; then echo ACTIVE_APP_ENV_FILE_PRESENT=yes; else echo ACTIVE_APP_ENV_FILE_PRESENT=no; fi
           if test -f "$app/deploy/cpanel_deploy.sh"; then echo CPANEL_DEPLOY_SCRIPT_PRESENT=yes; else echo CPANEL_DEPLOY_SCRIPT_PRESENT=no; fi
           REMOTE
+      - name: Inspect live education route without changing files
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -F "$RUNNER_TEMP/amozeshgah-preflight/config" saeit-cpanel 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          app=/home/zomorod2/Saeit
+          echo LIVE_URLS_FILE_TRACKED_CHANGE_COUNT="$(git -C "$app" status --porcelain -- config/urls.py | wc -l | tr -d ' ')"
+          echo LIVE_URLS_DIFF_LINE_COUNT="$(git -C "$app" diff --numstat -- config/urls.py | awk '{a+=$1; d+=$2} END {print a+d}')"
+          echo LIVE_EDUCATION_URL_LINES_BEGIN
+          grep -n 'education/' "$app/config/urls.py" | head -30 || true
+          echo LIVE_EDUCATION_URL_LINES_END
+          echo LIVE_EDUCATION_VIEW_SYMBOLS_BEGIN
+          grep -n '^def education\|^class Education' "$app/education/views.py" "$app/core/views.py" 2>/dev/null | head -30 || true
+          echo LIVE_EDUCATION_VIEW_SYMBOLS_END
+          REMOTE
       - name: Remove temporary SSH material
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/amozeshgah-preflight"
