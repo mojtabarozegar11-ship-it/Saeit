@@ -50,15 +50,15 @@ jobs:
           HOST_KEY="${HOST_KEY//\\n/$'\n'}"
           WORK="$RUNNER_TEMP/mojplaywin-ssh"
           install -d -m 700 "$WORK"
-          printf '%s\\n' "$VPS_KEY" > "$WORK/vps.key"
-          printf '%s\\n' "$HOST_KEY" > "$WORK/host.key"
+          printf '%s\n' "$VPS_KEY" > "$WORK/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$WORK/host.key"
           chmod 600 "$WORK/"*.key
           ssh-keygen -y -P "" -f "$WORK/vps.key" >/dev/null
           ssh-keygen -y -P "" -f "$WORK/host.key" >/dev/null
 
           VPS_SCAN="$(ssh-keyscan -T 10 -t rsa 178.239.147.150 2>/dev/null)"
           [[ -n "$VPS_SCAN" ]]
-          printf '%s\\n' "$VPS_SCAN" > "$WORK/vps.known"
+          printf '%s\n' "$VPS_SCAN" > "$WORK/vps.known"
           VPS_FP="$(ssh-keygen -lf "$WORK/vps.known" -E sha256 | awk '{print $2}' | sort -u)"
           [[ "$VPS_FP" == "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs" ]] || { echo "VPS host key pin mismatch"; exit 1; }
 
@@ -78,7 +78,7 @@ jobs:
 
           HOST_SCAN="$(timeout 30s ssh -F "$WORK/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
           [[ -n "$HOST_SCAN" ]]
-          printf '%s\\n' "$HOST_SCAN" > "$WORK/host.known"
+          printf '%s\n' "$HOST_SCAN" > "$WORK/host.known"
           HOST_FP="$(ssh-keygen -lf "$WORK/host.known" -E sha256 | awk '{print $2}' | sort -u)"
           [[ "$HOST_FP" == "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04" ]] || { echo "cPanel host key pin mismatch"; exit 1; }
 
