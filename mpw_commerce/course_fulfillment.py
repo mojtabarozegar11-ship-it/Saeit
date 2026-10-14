@@ -40,7 +40,8 @@ def fulfill_paid_course_item(item_id):
         item=grant.item
         order=item.order
         product=item.product
-        commerce=(product.metadata or {}).get("mpw_commerce")
+        commerce=(product.metadata.get("mpw_commerce")
+                  if isinstance(product.metadata,dict) else None)
         if (not isinstance(commerce,dict)
             or commerce.get("fulfillment")!="service"
             or item.quantity!=1
@@ -84,7 +85,8 @@ def fulfill_paid_course_item(item_id):
 
 def fulfill_course_batch(limit=100):
     """One bounded database-only pass; no background network polling."""
-    if getattr(settings,"MPW_COMMERCE_COURSE_AUTO_ENROLL_ENABLED",False) is not True:
+    if (getattr(settings,"MPW_COMMERCE_RELEASE_READY",False) is not True
+        or getattr(settings,"MPW_COMMERCE_COURSE_AUTO_ENROLL_ENABLED",False) is not True):
         return {"state":"disabled","processed":0,"enrolled":0}
     if type(limit) is not int or limit<=0 or limit>100:
         raise CourseFulfillmentUnavailable("Unsafe batch size")
