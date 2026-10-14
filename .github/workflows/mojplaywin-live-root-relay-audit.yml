@@ -82,6 +82,31 @@ jobs:
           if home.is_dir():
               print('MOJPLAYWIN_TOP_DIRS',','.join(sorted(x.name for x in home.iterdir() if x.is_dir())[:25]))
               print('MOJPLAYWIN_TOP_FILES',','.join(sorted(x.name for x in home.iterdir() if x.is_file() and not x.name.startswith('.') and x.name not in ('settings.py','config.py'))[:25]))
+          import ast
+          startup=root/'mojplaywin.com'/'passenger_wsgi.py'
+          if startup.is_file():
+              tree=ast.parse(startup.read_text(errors='replace'))
+              refs=[]
+              for n in ast.walk(tree):
+                  if isinstance(n,ast.Constant) and isinstance(n.value,str):
+                      v=n.value
+                      if v.startswith('/home/zomorod2/') and len(v)<250:
+                          refs.append(v)
+                      if v in ('config.settings','settings','DJANGO_SETTINGS_MODULE'):
+                          refs.append(v)
+              print('STARTUP_REFERENCES',sorted(set(refs))[:25])
+              src=startup.read_text(errors='replace')
+              print('STARTUP_MARKERS',
+                    'saeit_staging='+str('Saeit-staging' in src),
+                    'saeit_prod='+str('/Saeit' in src),
+                    'django='+str('django' in src.lower()),
+                    'wsgi='+str('wsgi' in src.lower()))
+          for dirname in ('Saeit','Saeit-staging','mojplaywin.com'):
+              base=root/dirname
+              print('CODEBASE',dirname,'manage='+str((base/'manage.py').is_file()),
+                    'settings='+str((base/'config/settings.py').is_file()),
+                    'urls='+str((base/'config/urls.py').is_file()),
+                    'proof_app='+str((base/'mpw_native_checkout/models.py').is_file()))
           print('CPANEL_DOMAIN_MAPPING_AUDIT_ONLY_NO_CHANGES')
           PY
           REMOTE
