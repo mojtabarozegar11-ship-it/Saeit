@@ -1,6 +1,6 @@
 {
+  "last_command_id": "initial-ping-20261014",
+  "last_result": "pong",
   "protocol_version": 1,
-  "state": "awaiting_termux_worker",
-  "last_command_id": null,
-  "last_result": null
+  "state": "idle"
 }
