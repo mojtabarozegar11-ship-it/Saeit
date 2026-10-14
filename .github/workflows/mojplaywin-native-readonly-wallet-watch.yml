@@ -1,7 +1,6 @@
 name: MojPlayWin ETH TRX wallet watch (read-only)
 on:
-  schedule:
-    - cron: '17,47 * * * *'
+  # Scheduled checks are handled by the VPS watcher; this remains manual/CI only.
   workflow_dispatch:
   push:
     branches: [main]
