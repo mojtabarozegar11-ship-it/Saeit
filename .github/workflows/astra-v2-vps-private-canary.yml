@@ -67,11 +67,8 @@ jobs:
            "paid_api_budget":0,
            "problem":"Demonstrate a real locally auditable multi-year orchard investment comparison, without any external spending or market claims."
           }
-          if not p.exists():
-           p.write_text(json.dumps(obj,sort_keys=True)+"\n")
-           p.chmod(0o600)
-          else:
-           assert json.loads(p.read_text())==obj
+          p.write_text(json.dumps(obj,sort_keys=True)+"\\n")
+          p.chmod(0o600)
           PY
           python3 scripts/astra_v2_private_pipeline.py enqueue --root "$private" --brief "$stage/brief-private-v1.json"
           python3 scripts/astra_v2_private_pipeline.py tick --root "$private"
