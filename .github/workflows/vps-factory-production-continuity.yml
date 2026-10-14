@@ -17,21 +17,26 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          trap 'rc=$?; echo "LOCAL_FAILURE line=$LINENO exit=$rc"; exit "$rc"' ERR
           umask 077
           test -n "$VPS_KEY"
+          echo VPS_KEY_PRESENT
           d="$RUNNER_TEMP/vps-factory"; mkdir -p "$d"
           printf '%s\n' "$VPS_KEY" > "$d/key"
           chmod 600 "$d/key"
           ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
           test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
-          ssh -i "$d/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o BatchMode=yes githubops@178.239.147.150 'bash -se' <<'REMOTE'
+          echo VPS_HOSTKEY_VERIFIED
+          ssh -i "$d/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=5 -o ServerAliveCountMax=2 githubops@178.239.147.150 'bash -se' <<'REMOTE'
           set -euo pipefail
+          trap 'rc=$?; echo "REMOTE_FAILURE line=$LINENO exit=$rc"; exit "$rc"' ERR
           base="$HOME/factory-runtime"
           ops="$base/operations"
           script="$ops/vps-only-loop.sh"
           pidfile="$ops/vps-only-loop.pid"
           test -x "$script"
           grep -q 'FACTORY_RESEARCH_PROVIDER=core.self_hosted_research_provider.SelfHostedStagingResearchProvider' "$script"
+          echo VPS_FACTORY_PREFLIGHT_OK
           exec 9>"$ops/vps-only-launch-v2.lock"
           flock -w 30 9
           if test -s "$pidfile" && kill -0 "$(cat "$pidfile")" 2>/dev/null; then
@@ -44,6 +49,6 @@ jobs:
             echo FACTORY_LOOP_RECOVERED
           fi
           echo "FACTORY_PID=$(cat "$pidfile")"
-          echo "FACTORY_RECENT_ACTIVITY"
+          echo FACTORY_RECENT_ACTIVITY
           tail -n 35 "$ops/vps-only-factory.log" || true
           REMOTE
