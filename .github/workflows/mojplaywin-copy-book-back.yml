@@ -1,0 +1,104 @@
+name: Restore SAMAN book source copy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/mojplaywin-copy-book-back.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  copy-book:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Configure pinned VPS to cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          [[ -n "$VPS_KEY" && -n "$HOST_KEY" ]] || { echo "Missing SSH key secret"; exit 1; }
+          WORK="$RUNNER_TEMP/mojplaywin-ssh"
+          install -d -m 700 "$WORK"
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          work = Path(os.environ["RUNNER_TEMP"]) / "mojplaywin-ssh"
+          for name, filename in (("VPS_KEY", "vps.key"), ("HOST_KEY", "host.key")):
+              value = os.environ[name].replace("\\n", "\n")
+              path = work / filename
+              path.write_text(value.rstrip("\n") + "\n", encoding="utf-8")
+              path.chmod(0o600)
+          PY
+          ssh-keygen -y -P "" -f "$WORK/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$WORK/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$WORK/vps.known" 2>/dev/null
+          VPS_FP="$(ssh-keygen -lf "$WORK/vps.known" -E sha256 | awk '{print $2}' | sort -u)"
+          [[ "$VPS_FP" == "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs" ]] || { echo "VPS host key pin mismatch"; exit 1; }
+          cat > "$WORK/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $WORK/vps.key
+            UserKnownHostsFile $WORK/vps.known
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ForwardAgent no
+          EOF
+          chmod 600 "$WORK/config"
+          timeout 30s ssh -F "$WORK/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$WORK/host.known" 2>/dev/null
+          HOST_FP="$(ssh-keygen -lf "$WORK/host.known" -E sha256 | awk '{print $2}' | sort -u)"
+          [[ "$HOST_FP" == "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04" ]] || { echo "cPanel host key pin mismatch"; exit 1; }
+          cat >> "$WORK/config" <<EOF
+          Host saeit-host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $WORK/host.key
+            UserKnownHostsFile $WORK/host.known
+            ProxyJump saeit-vps
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ForwardAgent no
+          EOF
+          chmod 600 "$WORK/config"
+
+      - name: Copy the private book back to its original location
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORK="$RUNNER_TEMP/mojplaywin-ssh"
+          timeout 90s ssh -F "$WORK/config" saeit-host 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          SRC="/home/zomorod2/MojPlayWin_Private_Assets/store/chess-improvement/Science-and-Practice-of-Chess-Improvement.pdf"
+          COPY="/home/zomorod2/MojPlayWin_Private_Assets/chess-improvement-2026/MojPlayWin_Science_and_Practice_of_Chess_Improvement.pdf"
+          [[ -f "$SRC" && ! -L "$SRC" ]] || { echo "Private product copy not found"; exit 1; }
+          [[ "$(stat -c %s "$SRC")" == "432386" ]] || { echo "Source size check failed"; exit 1; }
+          mkdir -p -m 700 "$(dirname "$COPY")"
+          if [[ -e "$COPY" ]]; then
+            [[ -f "$COPY" && ! -L "$COPY" ]] || { echo "Original path is not a regular file"; exit 1; }
+            [[ "$(sha256sum "$SRC" | awk '{print $1}')" == "$(sha256sum "$COPY" | awk '{print $1}')" ]] || { echo "Existing original differs; refusing overwrite"; exit 1; }
+          else
+            cp -p -- "$SRC" "$COPY"
+            chmod 600 "$COPY"
+          fi
+          source_sha="$(sha256sum "$SRC" | awk '{print $1}')"
+          copy_sha="$(sha256sum "$COPY" | awk '{print $1}')"
+          [[ "$source_sha" == "$copy_sha" ]] || { rm -f -- "$COPY"; echo "Hash mismatch; removed incomplete copy"; exit 1; }
+          echo "PRIVATE_PRODUCT_COPY=$SRC"
+          echo "ORIGINAL_COPY=$COPY"
+          echo "COPY_SIZE=$(stat -c %s "$COPY")"
+          echo "COPY_MODE=$(stat -c %a "$COPY")"
+          REMOTE
+
+      - name: Remove temporary SSH credentials
+        if: always()
+        shell: bash
+        run: rm -rf -- "$RUNNER_TEMP/mojplaywin-ssh"
