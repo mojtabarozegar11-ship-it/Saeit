@@ -1,0 +1,67 @@
+name: ComfyUI Private Mobile Gateway Inventory
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: comfyui-private-gateway-inventory
+  cancel-in-progress: false
+jobs:
+  inventory:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Read-only inventory via pinned Saeit VPS SSH identity
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/comfy-gateway-inventory"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          test -n "$VPS_KEY" || { echo "VPS_KEY_MISSING"; exit 1; }
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -i "$d/key" -p 22 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$d/known" -o BatchMode=yes -o ConnectTimeout=15 \
+            githubops@178.239.147.150 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          echo "PRIVATE_GATEWAY_INVENTORY_CONNECTED"
+          echo "SSH_ACCOUNT=$(id -un)"
+          echo "--- private overlay status ---"
+          for name in tailscale cloudflared nginx caddy traefik; do
+            if command -v "$name" >/dev/null 2>&1; then
+              echo "BIN_$name=AVAILABLE"
+            else
+              echo "BIN_$name=ABSENT"
+            fi
+          done
+          if command -v tailscale >/dev/null 2>&1; then
+            echo "TAILSCALE_VERSION=$(tailscale version | head -n 1)"
+            # Avoid emitting tailnet IPs, account details, or domains to a potentially public Actions log.
+            if tailscale status --json 2>/dev/null | python3 -c 'import json,sys; s=json.load(sys.stdin); sys.exit(0 if s.get("BackendState")=="Running" and s.get("Self",{}).get("Online") else 1)' ; then
+              echo "TAILSCALE_AUTHENTICATED_ONLINE"
+            else
+              echo "TAILSCALE_NOT_ONLINE_OR_NOT_AUTHENTICATED"
+            fi
+            if tailscale serve status 2>/dev/null | grep -Eq 'https://|http://'; then
+              echo "TAILSCALE_SERVE_ALREADY_CONFIGURED"
+            else
+              echo "TAILSCALE_SERVE_NOT_CONFIGURED"
+            fi
+          fi
+          if command -v cloudflared >/dev/null 2>&1; then echo "CLOUDFLARED_BINARY_PRESENT"; fi
+          if command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then echo "NONINTERACTIVE_SUDO_AVAILABLE"; else echo "NONINTERACTIVE_SUDO_UNAVAILABLE"; fi
+          echo "--- current local ComfyUI binding ---"
+          if ss -ltn '( sport = :18188 or sport = :8188 )' | grep -q LISTEN; then echo "COMFYUI_LISTENER_PRESENT"; else echo "COMFYUI_LISTENER_ABSENT"; fi
+          echo "--- resource guard ---"
+          free -h | awk '/^Mem:/{print "RAM_TOTAL="$2" RAM_AVAILABLE="$7}'
+          df -h "$HOME" | awk 'NR==2{print "DISK_AVAILABLE="$4}'
+          if [[ -d "$HOME/comfyui-isolated" && -f "$HOME/comfyui-isolated/source-v0.40.0/main.py" ]]; then echo "COMFYUI_LOCAL_SOURCE_PRESENT"; fi
+          echo "PRIVATE_GATEWAY_INVENTORY_READONLY_COMPLETE"
+          REMOTE
