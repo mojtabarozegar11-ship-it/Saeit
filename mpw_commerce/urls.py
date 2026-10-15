@@ -5,6 +5,7 @@ Not included in the active production URLconf.
 from django.urls import path
 from .downloads import download_paid_item
 from .purchase_history import purchased_downloads
+from .customer_auth import CustomerLogin, CustomerLogout, customer_register
 from .buyer_orders import create_digital_order
 from .product_checkout_page import product_checkout_page
 from .checkout_views import (
@@ -14,6 +15,9 @@ from .checkout_views import (
 
 app_name="mpw_commerce"
 urlpatterns=[
+    path("accounts/login/",CustomerLogin.as_view(),name="customer_login"),
+    path("accounts/register/",customer_register,name="customer_register"),
+    path("accounts/logout/",CustomerLogout.as_view(),name="customer_logout"),
     path("commerce/book/<int:product_id>/",product_checkout_page,name="book"),
     path("commerce/my-purchases/",purchased_downloads,name="purchases"),
     path("commerce/checkout/order/",create_digital_order,name="order"),
