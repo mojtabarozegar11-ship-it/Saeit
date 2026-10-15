@@ -1,0 +1,155 @@
+name: Astra V2 0049 Isolated VPS Restore and Candidate
+
+on:
+  push:
+    branches: [factory/astra-v2-0049-integration-20261015]
+    paths:
+      - .github/workflows/astra-v2-0049-vps-restore-candidate.yml
+      - scripts/astra_v2_0049_backup_restore_probe.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: astra-v2-0049-offline-restore-candidate
+  cancel-in-progress: false
+
+jobs:
+  isolated-restore:
+    runs-on: ubuntu-latest
+    timeout-minutes: 19
+    env:
+      SAEIT_ENV: ci
+      DEBUG: "False"
+      SECRET_KEY: astra-0049-temporary-restore-proof
+      ALLOWED_HOSTS: localhost,127.0.0.1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Generate and inspect exact 0049 additive migration SQL
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install -r requirements.txt
+          python manage.py makemigrations --check --dry-run
+          export DATABASE_URL="sqlite:///$RUNNER_TEMP/astra0049-sql-reference.sqlite3"
+          python manage.py sqlmigrate core 0049 > "$RUNNER_TEMP/astra-0049.sql"
+          python3 - "$RUNNER_TEMP/astra-0049.sql" <<'PY'
+          import pathlib,re,sys
+          sql=pathlib.Path(sys.argv[1]).read_text().lower()
+          assert 0<len(sql)<100_000
+          assert "create table" in sql
+          assert "core_factoryqueueitem" in sql
+          assert "core_discoverysnapshot" in sql
+          assert not re.search(r"\b(drop|delete|update|alter|attach|detach|replace|truncate|vacuum)\b",sql)
+          print("ASTRA_0049_ADD_ONLY_DDL=PASS")
+          PY
+      - name: Prove SQLite backup and restore on CI-owned 0048 database
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/astradb"
+          export DATABASE_URL="sqlite:///$RUNNER_TEMP/astradb/factory-fresh-isolated.sqlite3"
+          python manage.py migrate core 0048 --noinput --verbosity 0
+          work="$(mktemp -d "$RUNNER_TEMP/astradb/astra0049-restore-proof-ci-XXXXXXXX")"
+          python scripts/astra_v2_0049_backup_restore_probe.py \
+            --source "$RUNNER_TEMP/astradb/factory-fresh-isolated.sqlite3" \
+            --ddl "$RUNNER_TEMP/astra-0049.sql" \
+            --workspace "$work"
+          echo ASTRA_0049_CI_BACKUP_RESTORE=PASS
+      - name: Ship allowlisted source as inactive versioned VPS candidate and test restore
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          t="$RUNNER_TEMP/astra0049-vps"
+          install -d -m 700 "$t"
+          trap 'rm -rf -- "$t"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$t/key"
+          chmod 600 "$t/key"
+          ssh-keygen -y -P '' -f "$t/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$t/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$t/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$t/config" <<'CFG'
+          Host private-vps
+            HostName 178.239.147.150
+            User githubops
+            BatchMode yes
+            IdentitiesOnly yes
+            StrictHostKeyChecking yes
+            ConnectTimeout 15
+          CFG
+          printf "    IdentityFile %s\n    UserKnownHostsFile %s\n" "$t/key" "$t/known" >> "$t/config"
+          chmod 600 "$t/config"
+          short="$(git rev-parse --short=12 HEAD)"
+          [[ "$short" =~ ^[a-f0-9]{12}$ ]]
+          tar -cf "$t/source.tar" \
+            scripts/astra_v2_0049_backup_restore_probe.py \
+            scripts/astra_opportunity_selector.py \
+            scripts/astra_research_evidence_adapter.py \
+            scripts/astra_v2_private_pipeline.py \
+            scripts/astra_v2_topic_gate.py \
+            scripts/astra_v2_self_directed_education.py \
+            scripts/astra_v2_release_gate.py \
+            scripts/astra_v2_stage45_probe.py \
+            product_prototypes/orchard_decision_audit \
+            product_prototypes/farm_procurement_audit \
+            product_prototypes/farm_water_land_margin_audit \
+            tests/test_astra_v2_private_pipeline.py \
+            tests/test_astra_v2_self_directed_education.py \
+            tests/test_astra_v2_release_gate.py \
+            tests/test_astra_v2_stage45_probe.py \
+            tests/test_astra_orchard_decision_audit.py \
+            tests/test_astra_farm_procurement_audit.py \
+            tests/test_astra_farm_water_land_margin_audit.py \
+            tests/test_astra_v2_independent_math_regressions.py
+          sha256sum "$t/source.tar" | cut -d' ' -f1 > "$t/source.sha256"
+          ssh -F "$t/config" private-vps "bash -se -- '$short'" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          test "$(id -un)" = githubops
+          operation="$HOME/factory-runtime/operations"
+          test -d "$operation" && test ! -L "$operation"
+          candidate="$operation/astra-v2-0049-candidate-$1"
+          test ! -e "$candidate" && test ! -L "$candidate"
+          mkdir -m 700 -- "$candidate"
+          echo ASTRA_0049_VERSIONED_CANDIDATE_DIRECTORY_CREATED=true
+          REMOTE
+          cat "$t/source.tar" | ssh -F "$t/config" private-vps "cat > 'factory-runtime/operations/astra-v2-0049-candidate-$short/source.tar'"
+          cat "$RUNNER_TEMP/astra-0049.sql" | ssh -F "$t/config" private-vps "cat > 'factory-runtime/operations/astra-v2-0049-candidate-$short/0049.sql'"
+          localhash="$(cat "$t/source.sha256")"
+          ssh -F "$t/config" private-vps "bash -se -- '$short' '$localhash'" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          root="$HOME/factory-runtime"
+          candidate="$root/operations/astra-v2-0049-candidate-$1"
+          original="$root/private/factory-fresh-isolated.sqlite3"
+          test -d "$candidate" && test ! -L "$candidate"
+          test -f "$original" && test ! -L "$original"
+          test "$(sha256sum "$candidate/source.tar" | awk '{print $1}')" = "$2"
+          cd "$candidate"
+          tar -xf source.tar --no-same-owner --no-same-permissions
+          # Runtime source is staged, but no activation marker, cron edits,
+          # service restarts, website writes, DB migrations or store calls.
+          python3 -m unittest discover -s tests -p 'test_astra_v2_private_pipeline.py' -q
+          python3 -m unittest discover -s tests -p 'test_astra_v2_independent_math_regressions.py' -q
+          work="$(mktemp -d "$root/private/astra0049-restore-proof-XXXXXXXX")"
+          trap 'rm -rf -- "$work"' EXIT
+          python3 scripts/astra_v2_0049_backup_restore_probe.py \
+            --source "$original" --ddl "$candidate/0049.sql" --workspace "$work"
+          # Leave only the inactive, version-addressed source candidate:
+          # deleting the archive is safe after the SHA and smoke checks.
+          rm -f -- "$candidate/source.tar"
+          printf 'no_activation=1\nno_public_release=1\nno_live_migration=1\n' > "$candidate/RELEASE_NOT_ACTIVE"
+          chmod -R go-rwx "$candidate"
+          echo ASTRA_V2_0049_VPS_CANDIDATE_STAGED_INACTIVE=true
+          echo ASTRA_V2_0049_VPS_SMOKE_AND_RESTORE=PASS
+          echo ASTRA_V2_0049_LIVE_SCHEDULER_UNCHANGED=true
+          echo ASTRA_V2_0049_PAYMENTS_PUBLISHING_DISABLED=true
+          REMOTE
