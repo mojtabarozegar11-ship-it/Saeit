@@ -32,8 +32,8 @@ jobs:
           python3 - "$d/host.key" <<'PY'
           import pathlib,sys
           p=pathlib.Path(sys.argv[1])
-          t=p.read_text().replace('\\r\\n','\\n').strip()
-          p.write_text(t.replace('\\\\n','\\n')+'\\n')
+          t=p.read_text().replace('\r\n','\n').strip()
+          p.write_text(t.replace('\\n','\n')+'\n')
           PY
           chmod 600 "$d/"*.key
           ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
