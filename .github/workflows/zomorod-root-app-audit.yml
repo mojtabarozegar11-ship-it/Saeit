@@ -381,32 +381,101 @@ jobs:
           echo
           echo "CPANEL_DIAGNOSTICS_END"
           REMOTE
-      - name: Inspect Python Selector registration
+      - name: Repair Passenger venv mapping and verify internal routes
         if: always()
         shell: bash
         env:
           SSH_CONFIG: ${{ runner.temp }}/zomorod-restore/config
         run: |
           set -euo pipefail
-          ssh -F "$SSH_CONFIG" saeit-cpanel bash -se <<'REMOTE'
-          set +e
-          echo "PYTHON_SELECTOR_DIAGNOSTICS_BEGIN"
-          for tool in selectorctl cloudlinux-selector; do
-            command -v "$tool" 2>/dev/null || true
-          done
-          if command -v selectorctl >/dev/null 2>&1; then
-            selectorctl --help 2>&1 | head -n 100
-            echo "SELECTOR_PYTHON_USER_SUMMARY_BEGIN"
-            selectorctl --interpreter=python --user=zomorod2 --json --user-summary 2>&1 | head -c 15000
-            echo
-            echo "SELECTOR_PYTHON_USER_SUMMARY_END"
+          ssh -F "$SSH_CONFIG" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          commit_sha="$1"
+          cd /home/zomorod2/Saeit
+          python_path="$(awk '$1 == "PassengerPython" { gsub(/"/, "", $2); print $2; exit }' /home/zomorod2/public_html/.htaccess)"
+          test -n "$python_path"
+          test -x "$python_path"
+          venv="$(dirname "$(dirname "$python_path")")"
+          launcher="$venv/bin/set_env_vars.py"
+          echo "PASSENGER_PYTHON=$python_path"
+          if ! test -x "$launcher"; then
+            echo "PASSENGER_VENV_LAUNCHER_PRESENT=no; refusing to change application settings"
+            exit 0
           fi
-          if command -v cloudlinux-selector >/dev/null 2>&1; then
-            echo "CLOUDLINUX_SELECTOR_HELP_BEGIN"
-            cloudlinux-selector --help 2>&1 | head -n 100
-            echo "CLOUDLINUX_SELECTOR_HELP_END"
+          echo "PASSENGER_VENV_LAUNCHER_PRESENT=yes"
+          python3 - "$commit_sha" "$venv" <<'PY'
+          import json, os, pathlib, subprocess, sys, time
+          commit_sha, venv = sys.argv[1:]
+          result = subprocess.run(["uapi", "--output=json", "PassengerApps", "list_applications"], check=True, capture_output=True, text=True)
+          data = json.loads(result.stdout)
+          found = []
+          stack = [data]
+          while stack:
+              x = stack.pop()
+              if isinstance(x, dict):
+                  if str(x.get("domain", "")).lower() == "zomorodmelal.ir" and x.get("base_uri") == "/":
+                      found.append(x)
+                  stack.extend(x.values())
+              elif isinstance(x, list):
+                  stack.extend(x)
+          if len(found) != 1:
+              raise SystemExit(f"ROOT_APP_COUNT={len(found)}; refusing to edit")
+          app = found[0]
+          if app.get("name") != "saeit-django" or app.get("path") != "/home/zomorod2/Saeit" or app.get("enabled") not in (1, True, "1"):
+              raise SystemExit("ROOT_APP_MAPPING_OR_STATUS_CHANGED; refusing to edit")
+          envvars = app.get("envvars") or {}
+          if not isinstance(envvars, dict):
+              raise SystemExit("UNEXPECTED_ENVIRONMENT_VARIABLE_FORMAT; refusing to edit")
+          previous = dict(envvars)
+          updated = dict(previous)
+          updated["VIRTUAL_ENV"] = venv
+          backup_dir = pathlib.Path.home() / ".backups" / "zomorodmelal-root-homepage"
+          backup_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+          backup = backup_dir / f"passenger-env-before-{commit_sha}.json"
+          if backup.exists():
+              raise SystemExit("ENVIRONMENT_BACKUP_ALREADY_EXISTS; refusing to edit")
+          fd = os.open(backup, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+          with os.fdopen(fd, "w", encoding="utf-8") as f:
+              json.dump(previous, f, ensure_ascii=False)
+          args = ["uapi", "--output=json", "PassengerApps", "edit_application", "name=saeit-django"]
+          for name, value in updated.items():
+              args.extend([f"envvar_name={name}", f"envvar_value={value}"])
+          edited = subprocess.run(args, capture_output=True, text=True)
+          try:
+              response = json.loads(edited.stdout)
+          except Exception:
+              backup.unlink(missing_ok=True)
+              raise SystemExit("PASSENGER_EDIT_RETURNED_INVALID_JSON; no configuration confirmation")
+          status = response.get("result", {}).get("status")
+          errors = response.get("result", {}).get("errors") or []
+          print("PASSENGER_EDIT_STATUS=" + str(status))
+          print("PASSENGER_EDIT_ERRORS=" + str(errors))
+          if edited.returncode != 0 or status != 1 or errors:
+              backup.unlink(missing_ok=True)
+              raise SystemExit("PASSENGER_VENV_MAPPING_EDIT_FAILED")
+          verified = subprocess.run(["uapi", "--output=json", "PassengerApps", "list_applications"], check=True, capture_output=True, text=True)
+          data = json.loads(verified.stdout)
+          apps = []
+          stack = [data]
+          while stack:
+              x = stack.pop()
+              if isinstance(x, dict):
+                  if str(x.get("domain", "")).lower() == "zomorodmelal.ir" and x.get("base_uri") == "/":
+                      apps.append(x)
+                  stack.extend(x.values())
+              elif isinstance(x, list):
+                  stack.extend(x)
+          if len(apps) != 1 or (apps[0].get("envvars") or {}).get("VIRTUAL_ENV") != venv:
+              raise SystemExit("PASSENGER_VENV_MAPPING_READBACK_FAILED; backup=" + str(backup))
+          print("PASSENGER_VIRTUAL_ENV_CONFIGURED=yes")
+          print("PASSENGER_ENVIRONMENT_BACKUP=" + str(backup))
+          print("PASSENGER_ENVIRONMENT_VARIABLE_NAMES=" + ",".join(sorted(updated)))
+          PY
+          touch tmp/restart.txt
+          if command -v passenger-config >/dev/null 2>&1; then
+            passenger-config restart-app /home/zomorod2/Saeit 2>&1 || true
           fi
-          echo "PYTHON_SELECTOR_DIAGNOSTICS_END"
+          echo "PASSENGER_RESTART_TRIGGERED=yes"
           REMOTE
       - name: Check live site routes
         shell: bash
