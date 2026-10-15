@@ -33,5 +33,18 @@ class CPUSmokeSafety(unittest.TestCase):
                        '-DGGML_BMI2=OFF','-march=x86-64','sd-cpp-runtime-sse2'):
             self.assertIn(option, content)
 
+    def test_comfyui_node_uses_same_verified_private_sse2_runtime(self):
+        source = (ROOT / "saeit_cpu_node/__init__.py").read_text(encoding="utf-8")
+        self.assertIn("sd-cpp-runtime-sse2/bin", source)
+        self.assertIn('"-W", "256", "-H", "256"', source)
+        self.assertIn('"default": 2, "min": 1, "max": 3', source)
+        self.assertIn("factory_running()", source)
+        self.assertIn("os.killpg(child.pid, signal.SIGTERM)", source)
+
+    def test_github_native_node_preset_safety(self):
+        preset_source = (ROOT / "run_preset.py").read_text(encoding="utf-8")
+        self.assertIn("steps not in (1, 2, 3)", preset_source)
+        self.assertIn("SaeitSafeCPURender", preset_source)
+
 if __name__ == "__main__":
     unittest.main()
