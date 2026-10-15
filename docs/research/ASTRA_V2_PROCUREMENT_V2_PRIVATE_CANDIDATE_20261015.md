@@ -43,3 +43,13 @@ This is **not a real supplier quote** and demonstrates arithmetic, not realized 
 Obtain anonymized genuine farm procurement quotations with consent and documented comparable grade/unit/contract terms; independently compare exact hand-calculated versus engine results, validate the buyer's cost/speed improvement versus a free spreadsheet, obtain a subject-expert review of cost and tax assumptions, and measure actual willingness to pay. Fail to publication-safe private research if any requirement is missing. Only then assess whether to adopt this revision as the running private specialist and create an authorized public retail edition.
 
 **Release status:** PRIVATE_TECHNICAL_CANDIDATE / COMMERCIAL_BLOCKED.
+
+
+## Later technical promotion to running PRIVATE specialist (same date)
+
+This section supersedes the earlier "candidate not yet running" limitation **only as to the private specialist**. Publication restrictions and unverified commercial demand remain unchanged.
+
+- [First successful private source upgrade 38690111870](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/38690111870) used the existing factory locks, copied a recoverable private source backup, installed the revised procurement math and test in the isolated Astra R&D runtime, invoked the actual autonomous private manufacturing pipeline and verified its immutable new ZIP had passed private QA. 28 procurement tests and 31 pipeline tests passed. The original database remained on migration 0048, with no store, payment or publicly deployed site changes.
+- [Hardened rollback workflow run 38690177651](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/38690177651) succeeded with rollback state maintained in the same shell (guards even partial swaps). Again the source-built procurement revision reached PRIVATE_QA_PASSED, the **three original builder families** remained present and the original factory SQLite SHA was unchanged across the operation.
+- It remains only a newer **source revision of the second pre-existing builder family**, not a fourth product family, a commercial launch or a customer transaction. Expert validation, actual procurement quotes, verified buyer problem, source licensing and real financial settlements remain absent.
+- The private source backup is retained for rollback. Both PR #101 and #109 continue unmerged/draft as appropriate; only the private isolated canary manufacturing source was updated, never the live commerce/site stack.
