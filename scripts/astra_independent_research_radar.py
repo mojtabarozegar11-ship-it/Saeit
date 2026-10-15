@@ -3,7 +3,7 @@
 
 Research only. This is NOT a buyer-interview, price, product-quality, build,
 publication, payment, or market-demand verification service. No factory imports.
-Only two fixed USDA NASS HTTPS RSS feeds are fetched; tests use offline bytes.
+Only fixed USDA NASS HTTPS RSS feeds and its newsroom are read; tests use offline bytes.
 No API keys, database connections, production writes, or site changes.
 """
 import argparse
@@ -16,7 +16,6 @@ import os
 from pathlib import Path
 import re
 import ssl
-import tempfile
 from urllib.parse import urljoin, urlsplit
 from urllib.request import (
     HTTPSHandler, HTTPRedirectHandler, ProxyHandler, Request, build_opener
@@ -49,7 +48,7 @@ class NoRedirect(HTTPRedirectHandler):
 
 
 def fetch_feed(name):
-    """Use only exact vetted public URLs; block redirects and environment proxies."""
+    """Read exact vetted public sources; block redirects and environment proxies."""
     if name not in FEEDS and name not in HTML_SOURCES:
         raise ValueError("unregistered feed")
     opener = build_opener(ProxyHandler({}), HTTPSHandler(context=ssl.create_default_context()), NoRedirect())
