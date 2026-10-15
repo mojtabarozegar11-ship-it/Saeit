@@ -1,8 +1,5 @@
-name: ComfyUI VPS Private SSE2 Node Registration
+name: ComfyUI VPS Private SSE2 Node Install / Verify
 on:
-  push:
-    branches: [feature/comfyui-vps-render-proof-20261015]
-    paths: [.github/workflows/comfyui-vps-node-register.yml]
   workflow_dispatch:
 permissions:
   contents: read
@@ -47,15 +44,21 @@ jobs:
             echo COMFYUI_CURRENTLY_RUNNING_REFUSE_LIVE_NODE_CHANGE
             exit 3
           fi
-          if [[ -e "$target/__init__.py" ]]; then
-            echo CUSTOM_NODE_ALREADY_EXISTS_REFUSE_OVERWRITE
+          if [[ -L "$target/__init__.py" ]]; then
+            echo CUSTOM_NODE_LINK_REFUSED
             exit 4
           fi
-          umask 077
-          install -d -m 700 "$target"
-          echo CUSTOM_NODE_DESTINATION_RESERVED
+          if [[ ! -e "$target/__init__.py" ]]; then
+            umask 077
+            install -d -m 700 "$target"
+            echo CUSTOM_NODE_DESTINATION_RESERVED
+          else
+            echo CUSTOM_NODE_PRESENT_VERIFY_EXISTING_DIGEST
+          fi
           REMOTE
-          scp "${opts[@]}" "$local_file" githubops@178.239.147.150:"$target/__init__.py"
+          if ! "${remote[@]}" "test -f '$target/__init__.py'"; then
+            scp "${opts[@]}" "$local_file" githubops@178.239.147.150:"$target/__init__.py"
+          fi
           check="$("${remote[@]}" "sha256sum '$target/__init__.py' | awk '{print \$1}'")"
           test "$digest" = "$check"
           echo CUSTOM_NODE_SOURCE_SHA256_VERIFIED
