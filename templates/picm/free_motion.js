@@ -183,6 +183,27 @@ async function makeVideo(){
  link.textContent="دریافت ویدیوی "+secs+" ثانیه‌ای ("+extension.toUpperCase()+")";
  link.style.cssText="display:block;color:#ced6ff;padding:12px;font-weight:bold;text-decoration:underline";
  preview.replaceChildren(video,link);
+ // Android in-app browsers may block blob: downloads. Offer a native Save/Share
+ // action when the browser supports sharing video files, without any upload.
+ if(navigator.share && navigator.canShare && typeof File!=="undefined"){
+  try{
+   const mobileFile=new File([resultBlob],link.download,{type:resultBlob.type});
+   if(navigator.canShare({files:[mobileFile]})){
+    const share=document.createElement("button");
+    share.type="button";
+    share.textContent="ذخیره یا اشتراک‌گذاری فایل ویدیو";
+    share.style.cssText="display:block;width:100%;padding:13px;border-radius:10px;border:1px solid #a3b0ff;background:#28345a;color:white;font-weight:bold";
+    share.addEventListener("click",async()=>{
+     try{
+      await navigator.share({files:[mobileFile],title:"PICM Motion Video"});
+     }catch(error){
+      if(error.name!=="AbortError")message("ذخیره مستقیم انجام نشد. از لینک دریافت ویدیو استفاده کنید یا صفحه را در Chrome باز کنید.");
+     }
+    });
+    preview.appendChild(share);
+   }
+  }catch(error){}
+ }
  const sizeMB=(resultBlob.size/1048576).toFixed(2);
  message("فایل ویدیویی واقعی ضبط شد: "+sizeMB+" MB، فرمت "+extension.toUpperCase()+"؛ روی «دریافت ویدیو» زیر پیش‌نمایش بزنید.");
  if(!stopReceived)message("فایل ویدیویی ضبط شد ("+sizeMB+" MB)، اما مرورگر پایان ضبط را کامل اعلام نکرد. دکمهٔ دانلود را امتحان کنید.");
