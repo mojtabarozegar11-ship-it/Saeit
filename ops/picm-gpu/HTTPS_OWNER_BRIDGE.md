@@ -121,3 +121,46 @@ These tests use synthetic inputs and fake transport acknowledgments. They
 verify authorization, no unauthorized photo transfer, chunk integrity and
 correct handling of missing GPU. A green test suite cannot prove real model
 availability, visual identity consistency, or a 60-second AI film.
+
+
+## Wan2.2 5B lower-VRAM profile (optional, not a runtime guarantee)
+
+The official ComfyUI Wan2.2 guide describes the 5B TI2V workflow as
+supporting roughly 8GB NVIDIA GPU VRAM with ComfyUI's native CPU offloading.
+That is a CONDITIONAL model-specific case, **not** a promise that every
+8GB GPU can render a smooth, 60-second film:
+https://docs.comfy.org/tutorials/video/wan/wan2_2
+
+Select the 5B profile only if your **exported ComfyUI API graph** really
+connects the `wan2.2_ti2v_5B` `UNETLoader` through
+`Wan22ImageToVideoLatent`, a sampler, and `SaveVideo`.
+The preflight refuses decoy/disconnected model nodes or an unrelated
+14B workflow even if the driver reports ample free VRAM.
+
+On a separately provisioned GPU host, BEFORE claiming any owner job:
+
+```bash
+cd /path/to/Saeit/ops/picm-gpu
+python3 gpu_preflight.py \
+  --work-dir "$HOME/picm-owner-work" \
+  --workflow-api "$HOME/private/workflow_api.json" \
+  --node-map "$HOME/private/node_map.json" \
+  --gpu-profile wan22-5b-offload-8gb
+```
+
+After successful readiness checks, the one-job private worker accepts
+the same explicit model profile:
+
+```bash
+python3 video_worker_client.py \
+  --private-dir "$HOME/picm-owner-work" \
+  --token-file "$HOME/private/gpu-worker-token" \
+  --workflow-api "$HOME/private/workflow_api.json" \
+  --node-map "$HOME/private/node_map.json" \
+  --gpu-profile wan22-5b-offload-8gb
+```
+
+The default conservative profile remains `standard-24gb`.
+The script does not download model weights, install a GPU driver, purchase
+GPU hours, guarantee compatible CPU RAM, or prove a real AI movie.
+Every GPU-side model and video output still needs a real 5-second test.
