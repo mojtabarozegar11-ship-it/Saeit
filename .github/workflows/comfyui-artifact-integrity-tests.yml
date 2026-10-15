@@ -1,7 +1,7 @@
 name: ComfyUI Artifact Integrity Gate Tests
 on:
-  push:
-    branches: [feature/comfyui-production-integrity-20261015]
+  pull_request:
+    branches: [main]
     paths:
       - .github/workflows/comfyui-artifact-integrity-tests.yml
       - ops/comfyui-vps/image_quality_report.py
