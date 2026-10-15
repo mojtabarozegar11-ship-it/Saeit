@@ -15,14 +15,24 @@ ROOT = HOME / "Saeit-staging"
 DOCROOT = HOME / "mojplaywin.com"
 BACKUPS = HOME / ".mojplaywin-backups"
 FILES = (Path("config/urls.py"), Path("core/picm_auth.py"),
-         Path("templates/picm/login.html"), Path("templates/picm/index.html"))
+         Path("templates/picm/login.html"), Path("templates/picm/index.html"),
+         Path("core/picm_views.py"))
 MARK = "# SAEIT_PICM_PRIVATE_LOGIN_V1"
+WORKSPACE_MARK = "# SAEIT_PICM_WORKSPACE_V1"
 ROUTES = '''
 # SAEIT_PICM_PRIVATE_LOGIN_V1
 from core.picm_auth import picm_login, picm_logout
 urlpatterns += [
     path("picm/login/", picm_login, name="picm_login"),
     path("picm/logout/", picm_logout, name="picm_logout"),
+]
+'''
+
+WORKSPACE_ROUTES = '''
+# SAEIT_PICM_WORKSPACE_V1
+from core.picm_views import picm_workbench
+urlpatterns += [
+    path("picm/workspace/", picm_workbench, name="picm_workbench"),
 ]
 '''
 
@@ -81,11 +91,23 @@ def deploy(run):
                 or 'path("picm/logout/"' in root_urls):
             raise RuntimeError("PICM_LOGIN_ROUTE_COLLISION")
         urls = root_urls.rstrip() + "\n" + ROUTES
+    if WORKSPACE_MARK in urls:
+        if (urls.count(WORKSPACE_MARK) != 1
+                or urls.count('path("picm/workspace/"') != 1):
+            raise RuntimeError("PICM_WORKSPACE_ROUTE_INTEGRITY_FAILED")
+    else:
+        if 'path("picm/workspace/"' in urls:
+            raise RuntimeError("PICM_WORKSPACE_ROUTE_COLLISION")
+        urls = urls.rstrip() + "\n" + WORKSPACE_ROUTES
     ast.parse(urls)
     src_auth = (stage / "core/picm_auth.py").read_bytes()
     ast.parse(src_auth.decode("utf-8"))
     src_login = (stage / "templates/picm/login.html").read_bytes()
     src_index = (stage / "templates/picm/index.html").read_bytes()
+    src_views = (stage / "core/picm_views.py").read_bytes()
+    ast.parse(src_views.decode("utf-8"))
+    if b"def picm_workbench(request):" not in src_views or b"def picm_page(request):" not in src_views:
+        raise RuntimeError("PICM_WORKSPACE_VIEWS_NOT_FOUND")
     if b'<title>PICM' not in src_index or b'/picm/login/' not in src_index or b'csrf_token' not in src_login:
         raise RuntimeError("PICM_LOGIN_TEMPLATES_INVALID")
     backup = BACKUPS / ("picm-login-" + run)
@@ -105,7 +127,8 @@ def deploy(run):
     (backup / "manifest.json").write_text(json.dumps(manifest))
     try:
         payload = {FILES[0]: urls.encode(), FILES[1]: src_auth,
-                   FILES[2]: src_login, FILES[3]: src_index}
+                   FILES[2]: src_login, FILES[3]: src_index,
+                   FILES[4]: src_views}
         for relative, content in payload.items():
             atomic_write(ROOT / relative, content, manifest[str(relative)]["mode"])
         restart()
