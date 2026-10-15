@@ -71,7 +71,7 @@ def render(doc):
                  'water price, a continuously differentiable dual value, '
                  'real-world profitability, or permission to pump more water.'
                  '</p><div class="scrolling"><table><thead><tr>'
-                 '<th>Water budget (% baseline)</th><th>Budget (m³)</th>'
+                 '<th>Water budget (fraction of baseline)</th><th>Budget (m³)</th>'
                  '<th>Water used (m³)</th><th>Optimal gross margin</th>'
                  '<th>Gross margin gain since prior point</th>'
                  '<th>Average gain per added m³ (currency/m³)</th>'
