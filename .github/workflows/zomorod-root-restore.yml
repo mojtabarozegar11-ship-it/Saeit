@@ -1,0 +1,147 @@
+name: Restore previous Zomorod homepage
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/zomorod-root-restore.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: zomorod-root-homepage
+  cancel-in-progress: false
+
+jobs:
+  restore-previous-root:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare the pinned VPS to cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-restore"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "CONFIRMED_PINNED_RELAY_READY=yes"
+
+      - name: Back up and remove only the managed root homepage
+        shell: bash
+        env:
+          SSH_CONFIG: ${{ runner.temp }}/zomorod-restore/config
+        run: |
+          set -euo pipefail
+          ssh -F "$SSH_CONFIG" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          commit_sha="$1"
+          root=/home/zomorod2/public_html
+          target="$root/index.html"
+          marker='<!-- saeit-zomorod-root-homepage-v1 -->'
+          backup="$HOME/.backups/zomorodmelal-root-homepage/index-disabled-$commit_sha"
+          test -d "$root" && test "$(stat -c %U "$root")" = "zomorod2" && test -w "$root"
+          test -f "$root/.htaccess"
+          test -f "$HOME/.backups/zomorodmelal-amozeshgah/htaccess.20261014T235252Z"
+          cmp -s "$root/.htaccess" "$HOME/.backups/zomorodmelal-amozeshgah/htaccess.20261014T235252Z"
+          test -f "$target" && test ! -L "$target"
+          grep -Fq "$marker" "$target"
+          install -d -m 700 "$HOME/.backups/zomorodmelal-root-homepage"
+          test ! -e "$backup"
+          cp -p "$target" "$backup"
+          cmp -s "$target" "$backup"
+          hidden="$root/.zomorod-root-disabled-$commit_sha"
+          test ! -e "$hidden" && test ! -L "$hidden"
+          mv -T "$target" "$hidden"
+          mv -T "$hidden" "$backup"
+          test ! -e "$target" && test -s "$backup"
+          echo "MANAGED_ROOT_PAGE_BACKED_UP=yes"
+          echo "PREVIOUS_ROOT_ROUTING_RESTORED=yes"
+          REMOTE
+
+      - name: Verify previous root and keep the academy routes live
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-restore"
+          install -d -m 700 "$d/checks"
+          failed=0
+          check_page() {
+            label="$1"
+            url="$2"
+            needle="$3"
+            file="$d/checks/$label.html"
+            result="$(curl --silent --show-error --location --max-redirs 5 --connect-timeout 10 --max-time 30 -H 'Cache-Control: no-cache' -o "$file" -w '%{http_code}|%{content_type}|%{url_effective}' "$url" || true)"
+            code="${result%%|*}"
+            type="$(printf '%s' "$result" | cut -d '|' -f2)"
+            printf 'PUBLIC_CHECK %s result=%s\n' "$url" "$result"
+            if [ "$code" != "200" ] || [[ "$type" != text/html* ]] || grep -Fq '<!-- saeit-zomorod-root-homepage-v1 -->' "$file" || { [ -n "$needle" ] && ! grep -Fq "$needle" "$file"; }; then
+              failed=1
+            fi
+          }
+          check_page root https://zomorodmelal.ir/ "زمرد ملل"
+          check_page www https://www.zomorodmelal.ir/ "زمرد ملل"
+          check_page academy https://zomorodmelal.ir/amozeshgah/ "آموزشگاه زمرد ملل"
+          check_page legacy https://zomorodmelal.ir/education/ "آموزشگاه زمرد ملل"
+          if [ "$failed" -ne 0 ]; then
+            ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          commit_sha="$1"
+          root=/home/zomorod2/public_html
+          target="$root/index.html"
+          backup="$HOME/.backups/zomorodmelal-root-homepage/index-disabled-$commit_sha"
+          if test -f "$backup" && test ! -e "$target"; then
+            mv -T "$backup" "$target"
+            echo "MANAGED_ROOT_PAGE_AUTOMATICALLY_RESTORED=yes"
+          fi
+          REMOTE
+            exit 1
+          fi
+          echo "PREVIOUS_HOMEPAGE_AND_ACADEMY_VALIDATION=passed"
+
+      - name: Remove temporary SSH material
+        if: always()
+        shell: bash
+        run: rm -rf -- "$RUNNER_TEMP/zomorod-restore"
