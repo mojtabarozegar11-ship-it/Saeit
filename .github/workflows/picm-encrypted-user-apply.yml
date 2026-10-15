@@ -1,0 +1,100 @@
+name: PICM Install One-Time Encrypted User
+on:
+  issues:
+    types: [opened]
+permissions:
+  contents: read
+concurrency:
+  group: mojplaywin-picm-credential-setup
+  cancel-in-progress: false
+jobs:
+  account:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event.issue.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.issue.title == 'Ops: install encrypted PICM private login 2026-10-15'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check one-time Django provisioning logic
+        run: python3 -m py_compile scripts/picm_provision_user.py
+      - name: Configure pinned relay and cPanel SSH
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -Eeuo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          WORK="$RUNNER_TEMP/picm-ssh"
+          install -d -m 700 "$WORK"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$WORK/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$WORK/host.key"
+          chmod 600 "$WORK/"*.key
+          ssh-keygen -y -P '' -f "$WORK/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$WORK/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$WORK/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$WORK/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$WORK/config" <<EOF
+          Host picm-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $WORK/vps.key
+            UserKnownHostsFile $WORK/vps.known
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ForwardAgent no
+          EOF
+          chmod 600 "$WORK/config"
+          timeout 30s ssh -F "$WORK/config" picm-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$WORK/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$WORK/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          cat >> "$WORK/config" <<EOF
+          Host picm-host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $WORK/host.key
+            UserKnownHostsFile $WORK/host.known
+            ProxyJump picm-vps
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ForwardAgent no
+          EOF
+          chmod 600 "$WORK/config"
+          echo PICM_RELAY_READY
+      - name: Install owner-encrypted non-admin credentials inside private cPanel only
+        shell: bash
+        env:
+          CIPHERTEXT: ${{ github.event.issue.body }}
+        run: |
+          set -Eeuo pipefail
+          umask 077
+          [[ "$CIPHERTEXT" =~ ^[A-Za-z0-9+/]{512}$ ]] || { echo INVALID_RSA_REQUEST; exit 4; }
+          WORK="$RUNNER_TEMP/picm-ssh"
+          stage="/home/zomorod2/.picm-account-$GITHUB_RUN_ID"
+          timeout 25s ssh -F "$WORK/config" picm-host "install -d -m 700 $stage"
+          scp -q -F "$WORK/config" scripts/picm_provision_user.py "picm-host:$stage/provision.py"
+          # The RSA-OAEP ciphertext never contains readable passwords.
+          printf '%s' "$CIPHERTEXT" | timeout 90s ssh -F "$WORK/config" picm-host \
+          "set -e; cd /home/zomorod2/Saeit-staging; \
+          for p in /home/zomorod2/Saeit-staging/.venv/bin/python /home/zomorod2/Saeit-staging/venv/bin/python \
+          /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python \
+          /home/zomorod2/virtualenv/Saeit/3.11/bin/python \
+          /home/zomorod2/virtualenv/mojplaywin.com/3.11/bin/python; do \
+          if test -x \"\$p\" && \"\$p\" -c 'import django' >/dev/null 2>&1; then \
+          DJANGO_SETTINGS_MODULE=config.settings \"\$p\" $stage/provision.py; exit 0; fi; \
+          done; echo PICM_DJANGO_INTERPRETER_MISSING; exit 9"
+          echo PICM_LOGIN_ACCOUNT_PRIVATE_DB_SETUP_SUCCESS
+      - name: Remove temporary files and ephemeral runner credentials
+        if: always()
+        shell: bash
+        run: |
+          if [[ -f "$RUNNER_TEMP/picm-ssh/config" ]]; then
+            ssh -F "$RUNNER_TEMP/picm-ssh/config" picm-host "rm -rf /home/zomorod2/.picm-account-$GITHUB_RUN_ID" || true
+          fi
+          rm -rf -- "$RUNNER_TEMP/picm-ssh"
