@@ -43,7 +43,7 @@ class RouteInstallerTests(unittest.TestCase):
             app,source,backups=self.make(d)
             file=app/"config/urls.py"
             file.write_text(file.read_text()+"\n"+mod.ROUTES[0])
-            with self.assertRaisesRegex(ValueError,"active URL route anchors"):
+            with self.assertRaisesRegex(ValueError,"partial Astra URL integration"):
                 mod.plan(app,source,backups)
 
     def test_conflicting_module_rejected(self):
