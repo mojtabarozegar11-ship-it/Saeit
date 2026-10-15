@@ -1,0 +1,198 @@
+name: MojPlayWin guarded book checkout pages install
+on:
+  push:
+    branches: [audit/mpw-book72-go-live-gates-20261015]
+    paths: [.github/workflows/mpw-book72-safe-pages-install.yml]
+permissions:
+  contents: read
+jobs:
+  install:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Prepare pinned SSH connections to authorized site host
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/astra-live-payment"
+          install -d -m 700 "$d"
+          for item in VPS_KEY HOST_KEY; do
+            printf '%s' "${!item}" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/$item.key"
+            chmod 600 "$d/$item.key"
+            ssh-keygen -y -P '' -f "$d/$item.key" >/dev/null
+          done
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -i "$d/VPS_KEY.key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/vps.known" -o BatchMode=yes githubops@178.239.147.150 'ssh-keyscan -T 10 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/VPS_KEY.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/HOST_KEY.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 12
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+      - name: Checkout exact tested and integrated buyer module snapshot
+        uses: actions/checkout@v4
+        with:
+          ref: 53a92c4ac49d8ea4eedff4f8511f734dd9d29536
+          persist-credentials: false
+      - name: Verify checkout and assemble only four restricted files
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "53a92c4ac49d8ea4eedff4f8511f734dd9d29536"
+          for path in mpw_commerce/product_checkout_page.py mpw_commerce/purchase_history.py mpw_commerce/templates/mpw_commerce/product_checkout.html mpw_commerce/templates/mpw_commerce/purchased_downloads.html; do
+            test -f "$path" && test ! -L "$path"
+          done
+          tar -czf "$RUNNER_TEMP/mpw-book72-buyer-pages.tgz" \
+            mpw_commerce/product_checkout_page.py \
+            mpw_commerce/purchase_history.py \
+            mpw_commerce/templates/mpw_commerce/product_checkout.html \
+            mpw_commerce/templates/mpw_commerce/purchased_downloads.html
+      - name: Stage files on cPanel via pinned private VPS relay
+        shell: bash
+        run: |
+          set -euo pipefail
+          id="${{ github.run_id }}"
+          [[ "$id" =~ ^[0-9]{8,20}$ ]]
+          ssh -F "$RUNNER_TEMP/astra-live-payment/config" saeit-cpanel "umask 077; mkdir -p '$HOME/.mpw-book72-install-$id'" || exit 1
+          scp -F "$RUNNER_TEMP/astra-live-payment/config" "$RUNNER_TEMP/mpw-book72-buyer-pages.tgz" "saeit-cpanel:.mpw-book72-install-$id/pages.tgz"
+      - name: Guarded install and import verification, no payment activation
+        shell: bash
+        run: |
+          set -euo pipefail
+          id="${{ github.run_id }}"
+          [[ "$id" =~ ^[0-9]{8,20}$ ]]
+          ssh -F "$RUNNER_TEMP/astra-live-payment/config" saeit-cpanel "RUN_ID=$id bash -se" <<'REMOTE'
+          set -euo pipefail
+          app="$HOME/Saeit-staging"
+          doc="$HOME/mojplaywin.com"
+          test -f "$app/manage.py" && test -f "$doc/passenger_wsgi.py"
+          grep -Fq Saeit-staging "$doc/passenger_wsgi.py"
+          export PYTHONPATH="$app"
+          export DJANGO_SETTINGS_MODULE=config.settings
+          cd "$app"
+          for py in "$HOME/virtualenv/Saeit-staging/3.11/bin/python" "$app/.venv/bin/python" "$HOME/virtualenv/Saeit-staging/3.10/bin/python" "$HOME/virtualenv/mojplaywin.com/3.11/bin/python"; do
+            if test -x "$py" && "$py" -c 'import django' >/dev/null 2>&1; then
+              "$py" - <<'PY'
+          import os,pathlib,tarfile,tempfile,shutil,ast
+          import django
+          from django.conf import settings
+          from django.urls import resolve
+          root=pathlib.Path("/home/zomorod2/Saeit-staging")
+          package=root/"mpw_commerce"
+          archive=pathlib.Path("/home/zomorod2/.mpw-book72-install-"+os.environ["RUN_ID"])/"pages.tgz"
+          backup=pathlib.Path("/home/zomorod2/.mpw-book72-install-"+os.environ["RUN_ID"])/"backup"
+          names=(
+              "mpw_commerce/product_checkout_page.py",
+              "mpw_commerce/purchase_history.py",
+              "mpw_commerce/templates/mpw_commerce/product_checkout.html",
+              "mpw_commerce/templates/mpw_commerce/purchased_downloads.html",
+          )
+          if not archive.is_file() or archive.is_symlink() or not package.is_dir() or package.is_symlink():
+              raise RuntimeError("Staged archive and package preconditions failed")
+          for flag in ("MPW_COMMERCE_RELEASE_READY","MPW_COMMERCE_INVOICING_ENABLED","MPW_COMMERCE_SETTLEMENT_ENABLED","MPW_COMMERCE_DOWNLOADS_ENABLED"):
+              if getattr(settings,flag,False) is True:
+                  raise RuntimeError("Refuse to install when payment release flags are on")
+          if not (root/"mpw_native_checkout/wallet_ownership.py").is_file():
+              raise RuntimeError("Dependent merchant proof module missing")
+          url_path=package/"urls.py"
+          if not url_path.is_file() or url_path.is_symlink():
+              raise RuntimeError("Expected existing commerce URL file missing")
+          original=url_path.read_text(encoding="utf-8")
+          if "commerce/checkout/order/" not in original or "commerce/checkout/invoice/" not in original:
+              raise RuntimeError("Unexpected live commerce URL interface")
+          if "commerce/book/<int:product_id>/" in original or "commerce/my-purchases/" in original:
+              raise RuntimeError("Checkout buyer page routes already registered; no replacement")
+          for rel in names:
+              target=root/rel
+              if target.exists() or target.is_symlink():
+                  raise RuntimeError("Refuse to overwrite an existing buyer module")
+          with tarfile.open(archive,"r:gz") as bundle:
+              members=bundle.getmembers()
+              if {m.name for m in members}!=set(names) or len(members)!=len(names):
+                  raise RuntimeError("Unexpected staged file list")
+              if any(not m.isfile() or m.size > 180000 for m in members):
+                  raise RuntimeError("Unsafe staged member")
+              code={m.name:bundle.extractfile(m).read() for m in members}
+          for rel in names:
+              if rel.endswith(".py"):
+                  ast.parse(code[rel].decode("utf-8"),filename=rel)
+          extra=(
+              "\n# Strictly buyer-owned pages; live sale and download switches remain off.\n"
+              "from .product_checkout_page import product_checkout_page\n"
+              "from .purchase_history import purchased_downloads\n"
+              "urlpatterns += [\n"
+              '    path("commerce/book/<int:product_id>/", product_checkout_page, name="book"),\n'
+              '    path("commerce/my-purchases/", purchased_downloads, name="purchases"),\n'
+              "]\n"
+          )
+          revised=original+extra
+          ast.parse(revised,filename=str(url_path))
+          backup.mkdir(parents=True,mode=0o700,exist_ok=False)
+          os.chmod(backup,0o700)
+          saved=backup/"urls.py"
+          saved.write_text(original,encoding="utf-8")
+          os.chmod(saved,0o600)
+          installed=[]
+          try:
+              for rel in names:
+                  target=root/rel
+                  target.parent.mkdir(parents=True,exist_ok=True)
+                  fd,tmp=tempfile.mkstemp(dir=target.parent,prefix=".buyer-stage-")
+                  with os.fdopen(fd,"wb") as output:output.write(code[rel])
+                  os.chmod(tmp,0o644)
+                  os.replace(tmp,target)
+                  installed.append(target)
+              fd,tmp=tempfile.mkstemp(dir=url_path.parent,prefix=".urls-stage-")
+              with os.fdopen(fd,"w",encoding="utf-8") as output:output.write(revised)
+              os.chmod(tmp,0o644)
+              os.replace(tmp,url_path)
+              django.setup()
+              for route,name in (("/commerce/book/72/","mpw_commerce:book"),("/commerce/my-purchases/","mpw_commerce:purchases")):
+                  if resolve(route).view_name!=name:
+                      raise RuntimeError("New buyer-only URL could not be resolved")
+              print("MPW_BOOK72_PRIVATE_BUYER_PAGES_INSTALLED=YES")
+              print("MPW_BOOK72_SECURE_PURCHASE_RECOVERY_ROUTE=YES")
+              print("MPW_BOOK72_PAYMENT_RELEASE_REMAINS_DISABLED=YES")
+              print("MPW_BOOK72_ACTIVE_PRODUCT_UNCHANGED=YES")
+              print("MPW_BOOK72_ROLLBACK_URLS_SAVED=YES")
+          except BaseException:
+              fd,tmp=tempfile.mkstemp(dir=url_path.parent,prefix=".urls-rollback-")
+              with os.fdopen(fd,"w",encoding="utf-8") as output:output.write(original)
+              os.chmod(tmp,0o644);os.replace(tmp,url_path)
+              for target in installed:
+                  if target.is_file() and not target.is_symlink(): target.unlink()
+              print("MPW_BOOK72_PAGE_INSTALL_ROLLED_BACK=YES")
+              raise
+          PY
+              exit 0
+            fi
+          done
+          exit 1
+          REMOTE
+      - name: Clean local SSH key materials and staging tar
+        if: always()
+        shell: bash
+        run: rm -rf -- "$RUNNER_TEMP/astra-live-payment" "$RUNNER_TEMP/mpw-book72-buyer-pages.tgz"
