@@ -1,0 +1,409 @@
+{
+  "version": 1,
+  "site": "mojplaywin.com/mojtaba.roozegar/",
+  "language": "en",
+  "editorial_policy": "Original, responsibly framed educational and reflective content. Project concepts are not falsely presented as launched products; fiction is labeled as fiction. No invented dated accomplishments.",
+  "total": 50,
+  "entries": [
+    {
+      "id": "MPW-001",
+      "page": "home",
+      "type": "Perspective",
+      "title": "A useful idea starts with a real problem",
+      "lead": "A new venture becomes meaningful when it addresses a task that people already struggle to complete. Before choosing a technology, I begin by describing the user, the decision they face, and what would count as a successful result.",
+      "body": "This approach links my earlier business experience with my interest in modern digital products. It favors interviews, measurable needs, small prototypes, and honest limitations over impressive presentations without a working benefit. A useful first step is to write a one-sentence problem statement and test whether real people recognize it."
+    },
+    {
+      "id": "MPW-002",
+      "page": "home",
+      "type": "Perspective",
+      "title": "Why practical research deserves a public place",
+      "lead": "Research is most valuable when the path from evidence to decision can be followed. A reader should understand the question, the method, the assumptions, and the boundaries of any recommendation, even when the underlying subject is technical.",
+      "body": "This site treats research communication as a craft of its own. Agricultural economics, product design, education, and entrepreneurship all benefit from transparent reasoning. Instead of presenting every opinion as a finding, I aim to separate measured facts, professional judgment, open questions, and ideas that are still being tested."
+    },
+    {
+      "id": "MPW-003",
+      "page": "home",
+      "type": "Perspective",
+      "title": "Technology should serve people, not headlines",
+      "lead": "New tools can save time, but novelty alone does not create value. Artificial intelligence, software automation, and digital commerce need the same basic scrutiny as any traditional business operation: who benefits, who bears the risk, and what happens when the system fails?",
+      "body": "A responsible launch includes understandable instructions, human review where necessary, secure handling of information, and an effective way to correct mistakes. This is a direction for work, not a claim that every proposed feature is already available. Credible technology earns trust through repeated, observable performance."
+    },
+    {
+      "id": "MPW-004",
+      "page": "home",
+      "type": "Perspective",
+      "title": "A professional story can have more than one chapter",
+      "lead": "Working across agriculture, trading, hospitality, research, and digital development has taught me that different fields share underlying questions about quality, cost, service, and trust. Experience in one industry can suggest ideas for another without guaranteeing that those ideas will work.",
+      "body": "My personal site brings these chapters into one place while keeping their differences visible. Earlier professional background should not be confused with newly completed projects. I prefer to describe what I have learned, explain what I intend to build, and invite informed collaboration around work that can be checked."
+    },
+    {
+      "id": "MPW-005",
+      "page": "home",
+      "type": "Perspective",
+      "title": "Building meaningful connections across borders",
+      "lead": "International collaboration begins with clarity about skills and expectations. A useful introduction tells a prospective partner which problems matter, what relevant experience exists, and which outcomes still depend on time, resources, or independent verification.",
+      "body": "For this new chapter, I welcome conversations connecting scientific thinking, responsible digital entrepreneurship, and practical commercial knowledge. Collaboration should start with a limited scope, named responsibilities, suitable legal arrangements, and a shared definition of success. A thoughtful small project is often a better beginning than a broad promise."
+    },
+    {
+      "id": "MPW-006",
+      "page": "about",
+      "type": "Personal reflection",
+      "title": "Heritage is part of the present",
+      "lead": "Iranian history and culture remain part of how I understand identity, persistence, and the meaning of professional work. The past is not only a collection of monuments; it is also carried in language, habits of learning, family stories, and everyday choices.",
+      "body": "When I refer to Cyrus or Persepolis, I am recognizing a cultural connection rather than offering an invented personal episode. This website leaves room for that connection while looking forward to new professional relationships. Cultural pride and openness to other traditions can coexist in the same life."
+    },
+    {
+      "id": "MPW-007",
+      "page": "about",
+      "type": "Personal reflection",
+      "title": "Beginning again without inventing a timeline",
+      "lead": "A major personal transition changes ordinary routines as well as professional plans. My unexpected relocation to Vancouver made continuity especially important: the knowledge and interests developed before a move do not disappear when the surrounding circumstances change.",
+      "body": "I choose not to publish precise dates or private incidents that I have not supplied for public use. Instead, the emphasis here is on what can be said responsibly: I am building a new professional chapter, and I want the work to be judged by clarity, usefulness, and evidence rather than a dramatic biography."
+    },
+    {
+      "id": "MPW-008",
+      "page": "about",
+      "type": "Professional outlook",
+      "title": "Learning across several disciplines",
+      "lead": "Agricultural economics encourages careful consideration of scarce resources. Commerce requires attention to customer trust and the quality of what is delivered. Hospitality reveals how small operational failures can quickly affect a person's experience. Research teaches the value of questioning assumptions.",
+      "body": "These connections shape my interest in digital systems. Software can organize information and reduce repetitive work, but human judgment remains necessary when consequences are substantial. Working across disciplines is not the same as claiming expertise in every field; it means knowing when to collaborate with specialists."
+    },
+    {
+      "id": "MPW-009",
+      "page": "about",
+      "type": "Professional outlook",
+      "title": "The difference between experience and an ambition",
+      "lead": "A biography is clearer when it separates roles already held from products still in development. Past management or trading experience establishes a background, while a proposed game, digital service, or course requires its own testing before anyone should rely on it.",
+      "body": "On this website, descriptions of proposed work are intentionally framed as directions, prototypes, or goals unless independent evidence supports stronger wording. This distinction protects the reader and the value of the work itself. Good professional communication makes uncertainty visible instead of hiding it in promotional language."
+    },
+    {
+      "id": "MPW-010",
+      "page": "about",
+      "type": "Professional outlook",
+      "title": "What good collaboration looks like to me",
+      "lead": "The best projects begin with a problem that can be described simply enough for people from different backgrounds to discuss. Each participant should know why they are involved, what decisions they can make, and how progress will be evaluated.",
+      "body": "I am interested in collaborations that combine research, education, technology, and practical operations. A short discovery phase, written scope, realistic budget, and agreed quality checks help avoid misunderstandings. Respect for intellectual property and transparent communication are essential regardless of the size of the opportunity."
+    },
+    {
+      "id": "MPW-011",
+      "page": "projects",
+      "type": "Project concept",
+      "title": "Water and land decision-support workbench",
+      "lead": "A farm planning workbench could help producers compare crop alternatives using their own assumptions about acreage, irrigation, production costs, expected yields, and market prices. The principal task is to make trade-offs visible before decisions become costly.",
+      "body": "A useful first release would separate observed measurements from estimates, support several drought scenarios, and show sensitivity to yield and price changes. The concept must be tested against real farm workflows before being described as a validated decision tool. Responsible design also includes clearly stated limitations and data privacy."
+    },
+    {
+      "id": "MPW-012",
+      "page": "projects",
+      "type": "Project concept",
+      "title": "Research notes that can become practical tools",
+      "lead": "Many valuable observations never reach the people who could use them because they remain buried in specialist reports. One development direction is to turn carefully reviewed methods into calculators, checklists, and readable guides that preserve the underlying assumptions.",
+      "body": "Each tool would require a traceable source, worked example, plain-language explanation, and a way to revise it when evidence changes. The intended benefit is not to replace a qualified professional but to help users ask better questions. Availability and readiness should be stated separately for every finished item."
+    },
+    {
+      "id": "MPW-013",
+      "page": "projects",
+      "type": "Project concept",
+      "title": "A transparent digital learning library",
+      "lead": "A practical learning collection can organize subjects from introductory explanations through case-based exercises. Students should be able to see the prerequisites, learning objectives, worked examples, and criteria for judging their own progress.",
+      "body": "The first design challenge is content accuracy, not the size of the catalog. A small group of thoroughly edited lessons is more useful than hundreds of repetitive pages. Assessment should include applying knowledge to a new situation and explaining a choice, rather than only recognizing a correct multiple-choice response."
+    },
+    {
+      "id": "MPW-014",
+      "page": "projects",
+      "type": "Project concept",
+      "title": "Original games with measurable learning value",
+      "lead": "A game can invite players to experiment with decisions, encounter consequences, and improve through feedback. If education is part of the promise, the game should identify what skill is being practiced and whether that skill improves beyond the game itself.",
+      "body": "A prototype might model planning under limited resources or require cooperation across different roles. The game should remain enjoyable without making unrealistic claims about learning outcomes. Originality, accessibility, and clear rules matter alongside graphics and monetization. Any planned title must be distinguished from a published product."
+    },
+    {
+      "id": "MPW-015",
+      "page": "projects",
+      "type": "Project concept",
+      "title": "A responsible scientific publishing workflow",
+      "lead": "The path from initial manuscript to commercial publication should include a defined audience, source checks, substantive editing, independent review when warranted, rights verification, and final production checks. Each stage removes a different class of error.",
+      "body": "My intended publishing workflow would also track revisions and record why changes were made. A long document is not inherently valuable because of its length. Readers deserve accurate explanations, original exercises where useful, legible design, and clear statements about what is established knowledge versus an author's interpretation."
+    },
+    {
+      "id": "MPW-016",
+      "page": "projects",
+      "type": "Project concept",
+      "title": "Digital presentation for artisan and specialist trade",
+      "lead": "Jewelry, precious metals, and handwoven carpets all require careful descriptions that a generic storefront may fail to provide. Buyers need relevant specifications, provenance where documented, condition information, and clarity about what is and is not certified.",
+      "body": "An educational digital catalog could explain terminology and the questions a customer should ask before a purchase. Commercial listings would need independent verification and appropriate consumer protections. The concept draws on prior trading experience without implying that a particular item has been authenticated or is currently available for sale."
+    },
+    {
+      "id": "MPW-017",
+      "page": "projects",
+      "type": "Project concept",
+      "title": "Better digital operations for hospitality businesses",
+      "lead": "Cafés and restaurants coordinate purchasing, preparation, scheduling, food safety, service, and customer communication under short deadlines. A useful digital toolkit should improve those routine decisions instead of adding administrative work.",
+      "body": "Potential components include recipe costing, ingredient inventory, preparation checklists, and a simple method for learning from customer feedback. Food safety and local regulations remain separate professional obligations. A pilot should test whether staff actually save time and make fewer errors before expanding the software's feature list."
+    },
+    {
+      "id": "MPW-018",
+      "page": "posts",
+      "type": "Research note",
+      "title": "Gross margin is not the same as business profit",
+      "lead": "A crop budget often begins with expected sales minus variable production costs. The resulting gross margin is useful for comparing alternatives under similar assumptions, but it does not include every cost of running an agricultural enterprise.",
+      "body": "Land rent, depreciation, financing, unpaid family labor, and shared overhead can change the financial picture. A strong analysis states which costs are included and why. Before accepting a ranking of crops, verify that the comparison uses the same time horizon and accounting boundary. Otherwise, apparently precise figures can support a misleading recommendation."
+    },
+    {
+      "id": "MPW-019",
+      "page": "posts",
+      "type": "Research note",
+      "title": "Water productivity needs the right denominator",
+      "lead": "When irrigation water is scarce, a farmer may compare kilograms of product or net economic contribution per cubic meter of water. These measures answer different questions and should not be treated as interchangeable.",
+      "body": "Water applied is not always the same as water consumed, and a calculation must specify which quantity was measured. Crop quality, timing, soil conditions, and the local value of water also matter. A useful report shows both the physical and economic indicators, explains the measurement method, and tests what happens under less favorable seasonal conditions."
+    },
+    {
+      "id": "MPW-020",
+      "page": "posts",
+      "type": "Research note",
+      "title": "Sensitivity analysis as a decision habit",
+      "lead": "A single forecast is vulnerable to errors in prices, yields, labor requirements, and input costs. Sensitivity analysis asks how the ranking of alternatives changes when assumptions move within plausible ranges.",
+      "body": "Begin with a baseline and change one variable at a time to learn which assumptions are decisive. Then test combinations of adverse changes, such as lower yields and higher energy prices. When a decision changes under a small adjustment, the result is fragile and deserves additional investigation. Showing this fragility can be more valuable than declaring one plan optimal."
+    },
+    {
+      "id": "MPW-021",
+      "page": "posts",
+      "type": "Research note",
+      "title": "Cash flow can defeat an apparently profitable plan",
+      "lead": "A farm or small business may earn accounting profit over a year while running short of money during a critical month. Seeds, wages, utilities, and equipment may require payment long before any harvest or customer receipts arrive.",
+      "body": "A cash-flow forecast therefore places payments and income on a timeline rather than in a single annual total. Include realistic payment delays, seasonal peaks, and a margin for uncertainty. The goal is to understand the financing gap before it becomes urgent. Profitability and liquidity should be analyzed together, but reported as different quantities."
+    },
+    {
+      "id": "MPW-022",
+      "page": "posts",
+      "type": "Research note",
+      "title": "What trustworthy soil measurements require",
+      "lead": "Soil tests become useful only when the sampling method reflects the decision being made. An isolated sample from an unusual point may misrepresent a field, and different laboratory methods can produce results that are not directly comparable.",
+      "body": "Document location, depth, date, crop history, sample handling, laboratory method, and units. Interpret the numbers alongside local agronomic knowledge and observed plant conditions. Recommendations about fertilizer or amendments should follow the test's scope and the crop's needs. An attractive dashboard cannot compensate for weak samples or missing context."
+    },
+    {
+      "id": "MPW-023",
+      "page": "posts",
+      "type": "Research note",
+      "title": "Evaluating agricultural genetics claims",
+      "lead": "Improvements in seed or livestock genetics should be evaluated against appropriate comparison groups and the conditions under which measurements were collected. A claim about higher yield or performance may depend on feed, climate, management, or disease pressure.",
+      "body": "Look for replicated evidence, clear trait definitions, and uncertainty around reported gains. Check whether the result applies to the intended production system and whether relevant legal or biosafety requirements have been addressed. Responsible communication distinguishes a promising research finding from a commercially reliable product."
+    },
+    {
+      "id": "MPW-024",
+      "page": "posts",
+      "type": "Research note",
+      "title": "Using AI without confusing confidence with evidence",
+      "lead": "Artificial intelligence can help summarize information and suggest questions, but fluent language is not proof that a citation exists or a numerical statement is correct. A useful workflow starts by defining what the output may and may not be trusted to do.",
+      "body": "For consequential claims, open the original sources, verify dates and units, reproduce important calculations, and keep a record of corrections. Sensitive information should only be used where storage and access conditions are appropriate. AI works best as an assistant to critical judgment, with clear human responsibility for the final result."
+    },
+    {
+      "id": "MPW-025",
+      "page": "posts",
+      "type": "Research note",
+      "title": "A research article needs an evidence trail",
+      "lead": "A scientific or professional article should let readers distinguish primary evidence, secondary summaries, personal interpretation, and open hypotheses. These categories may appear together, but they should not silently substitute for one another.",
+      "body": "Before publishing, check whether the question is specific, methods are described fairly, and important limitations remain visible. Verify quotations, source dates, permissions, tables, and figure labels. When evidence is incomplete, explain what additional measurement would improve confidence. Clear structure and careful attribution are signs of respect for the reader."
+    },
+    {
+      "id": "MPW-026",
+      "page": "posts",
+      "type": "Research note",
+      "title": "Feedback loops in games and learning",
+      "lead": "A well-designed interactive experience tells a user what they are trying to accomplish, what action is possible, and how the outcome follows from that action. Feedback should arrive quickly enough to support learning without revealing every answer in advance.",
+      "body": "Adjust difficulty by observing where players struggle, not merely by guessing what seems challenging. If a game claims educational value, assess transfer to tasks outside the game and avoid confusing engagement with mastery. Playtesting should include different levels of prior knowledge and accessibility needs."
+    },
+    {
+      "id": "MPW-027",
+      "page": "posts",
+      "type": "Research note",
+      "title": "Measuring whether a lesson worked",
+      "lead": "Completion rates and positive reviews are useful operational signals, but neither proves that a student learned a skill. A stronger evaluation asks learners to demonstrate the target behavior in a fresh example.",
+      "body": "Write learning objectives in observable terms, create assessment tasks that match them, and compare performance before and after instruction where practical. Review incorrect answers for patterns of misunderstanding. Educational materials should then be revised based on evidence, not only on presentation style. The aim is durable understanding, not decorative complexity."
+    },
+    {
+      "id": "MPW-028",
+      "page": "posts",
+      "type": "Research note",
+      "title": "Fair pricing for digital products",
+      "lead": "Pricing should reflect a product's actual value proposition, development and support costs, rights obligations, and the expectations of its audience. A large discount is not proof that the undiscounted price represented fair market value.",
+      "body": "Describe what the buyer receives, how access or downloads work, what updates are included, and any refund or support terms. Compare the offer with genuinely similar alternatives and avoid invented scarcity. Test demand on a small scale, then adjust based on real purchasing behavior and transparent customer feedback rather than a predetermined percentage."
+    },
+    {
+      "id": "MPW-029",
+      "page": "posts",
+      "type": "Research note",
+      "title": "Building trust around digital payments",
+      "lead": "A storefront is not commercially ready merely because an invoice can be generated or internal tests pass. A real buyer needs a clear order summary, dependable payment confirmation, secure fulfillment, and a way to resolve failed or duplicate transactions.",
+      "body": "For blockchain payments, network selection, address verification, confirmations, fee assumptions, and refund handling must be explicit. Monitor settlement and access controls without exposing private keys. A complete audit uses controlled real-world tests and reconciles payment records with delivered goods. Claims of successful sales should require corresponding transaction evidence."
+    },
+    {
+      "id": "MPW-030",
+      "page": "gallery",
+      "type": "Visual editorial",
+      "title": "Portraits and the difference between image and evidence",
+      "lead": "Professional portraits can communicate mood, values, or intended areas of work, but they do not automatically document that a meeting, laboratory visit, or business event occurred. Captions should respect that distinction.",
+      "body": "The photographs in this personal collection are provided by the owner and appear as editorial images. Where an image has a composed setting or several views in one frame, it remains presented as supplied rather than split into new scenes. The purpose of the gallery is to show visual identity without making unsupported factual claims."
+    },
+    {
+      "id": "MPW-031",
+      "page": "gallery",
+      "type": "Visual editorial",
+      "title": "Why consistency matters more than visual excess",
+      "lead": "A personal website benefits from a recognizable visual language: readable type, deliberate spacing, restrained color choices, and images that support rather than interrupt the text. Visitors should be able to understand the subject of a section even without viewing its pictures.",
+      "body": "Large media files also have costs in speed and accessibility. Responsive layouts, descriptive alternative text, and careful loading strategies make the collection usable on smaller devices. The ideal result is a coherent reading experience that does not sacrifice clarity for decoration."
+    },
+    {
+      "id": "MPW-032",
+      "page": "gallery",
+      "type": "Visual editorial",
+      "title": "Preserving the integrity of supplied photographs",
+      "lead": "A consistent portfolio does not require altering every photograph. Original files can be retained while page layout, captions, and display size adapt to the screen. This preserves the distinction between the asset itself and how it is presented.",
+      "body": "For this collection, editorial composites are left intact, and the published files are checked against known SHA-256 hashes. The visual selections may accompany relevant topics across the website, but they are not evidence of a claimed location or event without separate verification. Accurate labels matter as much as attractive design."
+    },
+    {
+      "id": "MPW-033",
+      "page": "resume",
+      "type": "Professional method",
+      "title": "Management means designing reliable decisions",
+      "lead": "Leadership involves setting priorities, assigning responsibility, and giving people enough information to make useful choices. A system that depends on constant intervention by one person is difficult to scale or improve.",
+      "body": "In agribusiness and other operational environments, simple written procedures and measurable review points can reduce uncertainty. Good management also requires listening to the people closest to the work, acknowledging errors, and changing course when evidence warrants. This describes a professional approach rather than a claim about a specific unverified result."
+    },
+    {
+      "id": "MPW-034",
+      "page": "resume",
+      "type": "Professional method",
+      "title": "Research is a discipline of asking better questions",
+      "lead": "A research background is expressed not only through credentials but through methods: defining the problem, identifying a suitable unit of analysis, selecting evidence, testing alternatives, and stating what the findings cannot prove.",
+      "body": "Agricultural production economics brings these methods close to practical decisions about land, labor, inputs, and uncertainty. The same habits can strengthen evaluation of digital products or educational tools. The crucial skill is recognizing when a conclusion exceeds the evidence and needs further review."
+    },
+    {
+      "id": "MPW-035",
+      "page": "resume",
+      "type": "Professional method",
+      "title": "Specialist trading requires careful description",
+      "lead": "Precious metals, jewelry, coins, and handwoven carpets can involve substantial differences in quality, provenance, condition, and market demand. Responsible trade begins with identifying those differences rather than treating superficially similar items as equivalent.",
+      "body": "A meaningful description explains relevant characteristics and the basis for any quoted value. Appraisal, certification, and legal obligations vary by item and jurisdiction and may require independent specialists. The experience of evaluating complex goods encourages patience, documentation, and clear communication with customers."
+    },
+    {
+      "id": "MPW-036",
+      "page": "resume",
+      "type": "Professional method",
+      "title": "Hospitality makes operational quality visible",
+      "lead": "Restaurant and café operations offer immediate feedback. Delays, inconsistent preparation, unclear menus, inventory errors, and poor communication affect the guest experience quickly and sometimes visibly.",
+      "body": "An effective operation connects recipe specifications, purchasing, staff training, hygiene procedures, and service standards. Data can help reveal recurring patterns, but direct observation remains important. Digital tools are useful when they support reliable service without distracting staff from the customer. Local food safety standards should guide all implementation."
+    },
+    {
+      "id": "MPW-037",
+      "page": "resume",
+      "type": "Professional method",
+      "title": "Website development is a continuing service",
+      "lead": "A professional website is more than an attractive home page. It needs understandable navigation, accessible content, secure authentication where required, reliable performance, and a maintenance process when software or information changes.",
+      "body": "A sound release plan includes backups, tests, independent verification of important routes, and a clearly defined rollback. Search visibility matters, but it should follow authentic content rather than invented expertise. Sustainable development is measured by what visitors can actually accomplish, not by the number of promised features."
+    },
+    {
+      "id": "MPW-038",
+      "page": "activities",
+      "type": "Current focus",
+      "title": "Scoping useful scientific projects",
+      "lead": "A project should start with a question, intended users, decision constraints, and the evidence required for a defensible outcome. A narrow scope is not a weakness; it makes research quality and resource needs easier to understand.",
+      "body": "An initial plan can list deliverables, sources, review points, risks, and the responsibility of each participant. Projects should be revised when assumptions fail rather than silently extending deadlines or making claims that a stage is complete. This creates a stronger foundation for later collaboration."
+    },
+    {
+      "id": "MPW-039",
+      "page": "activities",
+      "type": "Current focus",
+      "title": "Practical teaching built around application",
+      "lead": "Educational materials should provide more than a definition and a list of terms. An effective lesson introduces a problem, demonstrates a method, gives the learner a chance to apply it, and explains why plausible alternatives may be wrong.",
+      "body": "Examples drawn from production economics, business operations, and digital systems can make abstract ideas easier to use. The quality of instruction should be assessed through learner performance and clarity, not only through the volume of content produced. Accessibility and different levels of prior knowledge are part of the design."
+    },
+    {
+      "id": "MPW-040",
+      "page": "activities",
+      "type": "Current focus",
+      "title": "Quality assurance for digital publications",
+      "lead": "Content quality is a production responsibility. Original writing, fact-checking, consistency, readability, rights clearance, technical packaging, and working delivery all matter before a publication can responsibly be offered for sale.",
+      "body": "A structured review can separate the concerns of researchers, editors, designers, and developers. Automated tests are valuable for finding repeated formatting or technical errors, but they cannot fully replace subject-matter judgment. A public listing should match the actual file and the buyer's reasonable expectations."
+    },
+    {
+      "id": "MPW-041",
+      "page": "activities",
+      "type": "Current focus",
+      "title": "Designing responsible AI-assisted workflows",
+      "lead": "Automation works best when it has explicit inputs, allowed actions, quality thresholds, and recorded results. A system should be able to stop safely or ask for review when evidence is inadequate.",
+      "body": "For research and digital products, useful automation may include sorting sources, suggesting outlines, checking consistency, and generating test cases. Sensitive actions such as taking payments, publishing factual claims, or accessing private information require stronger controls. The goal is accountable efficiency, not autonomy without measurement."
+    },
+    {
+      "id": "MPW-042",
+      "page": "activities",
+      "type": "Current focus",
+      "title": "Service design with the customer in mind",
+      "lead": "A service is experienced as a sequence of small interactions: finding information, choosing an option, understanding a price, completing a request, and receiving help when something goes wrong.",
+      "body": "Mapping those interactions often reveals opportunities to simplify work before adding technology. A helpful design shows expectations upfront, makes errors recoverable, and avoids hiding essential terms. This applies to hospitality, specialist trade, consulting, and digital commerce. Clear service boundaries protect both the business and its customers."
+    },
+    {
+      "id": "MPW-043",
+      "page": "activities",
+      "type": "Current focus",
+      "title": "Cooperation across sectors and borders",
+      "lead": "Cross-sector work can create useful connections, but it also introduces differences in language, regulation, standards, and professional assumptions. Successful cooperation begins by identifying these differences rather than assuming they will disappear.",
+      "body": "A sensible first collaboration may be a small research brief, educational pilot, or problem-definition workshop. Participants should agree on ownership of work, confidentiality, review standards, and realistic expectations. Documenting those agreements makes trust easier to sustain, especially when teams work in different places."
+    },
+    {
+      "id": "MPW-044",
+      "page": "memories",
+      "type": "Personal reflection",
+      "title": "What stays with us when circumstances change",
+      "lead": "A person's surroundings can change quickly, while skills and memories develop more slowly. The habits formed through work, reading, and solving practical problems often remain useful even when the next chapter looks very different from the one imagined.",
+      "body": "I consider continuity an important part of starting again. It is possible to acknowledge uncertainty without filling private gaps with invented detail. In this personal space, reflections are offered as reflections: they explain values and perspective, not an independently documented chronology of every life event."
+    },
+    {
+      "id": "MPW-045",
+      "page": "memories",
+      "type": "Personal reflection",
+      "title": "Language, history, and the meaning of belonging",
+      "lead": "Cultural belonging can be experienced through familiar expressions, books, shared stories, and the way an idea is explained to someone else. The connection does not depend on living in one place forever.",
+      "body": "My Iranian heritage is a lasting point of reference, and a new environment provides opportunities to listen and learn from others. This is not a claim that different cultures are interchangeable. It is an invitation to approach unfamiliar people with curiosity while remaining respectful of the background that shaped one's identity."
+    },
+    {
+      "id": "MPW-046",
+      "page": "memories",
+      "type": "Personal reflection",
+      "title": "The value of ordinary professional lessons",
+      "lead": "Not every useful memory belongs to a dramatic turning point. A difficult meeting, a corrected calculation, or a customer question can change the way a person approaches work.",
+      "body": "Across different fields, I have come to value preparation, listening, careful documentation, and the willingness to revisit a decision. These are reflective lessons rather than accounts of a named confidential transaction. As this section develops, specific dated memories can be added only when their details are suitable for public sharing."
+    },
+    {
+      "id": "MPW-047",
+      "page": "memories",
+      "type": "Personal reflection",
+      "title": "Making room for the next chapter",
+      "lead": "A new professional beginning calls for patience. Building useful work, earning trust, and learning unfamiliar systems can take longer than a single plan suggests. The best response is to focus on actions that can be tested and improved.",
+      "body": "For me, that means keeping earlier knowledge in view while exploring research, technology, education, and responsible entrepreneurship. This page is not a promise of future achievements. It is a record of intent and perspective, open to being enriched by real experiences when they are ready to be shared."
+    },
+    {
+      "id": "MPW-048",
+      "page": "stories",
+      "type": "Original fiction",
+      "title": "The lantern and the unfinished atlas",
+      "lead": "In a small room above a harbor, a mapmaker kept an atlas without borders. Each page began with a question instead of a name. One morning a visitor arrived carrying a lantern and asked, 'Where does the road end?'",
+      "body": "The mapmaker placed the lantern beside an unfinished drawing. 'I can show you where we have walked,' he said, 'but not where everyone must go.' Together they traced a path around a dark corner of the page. The visitor discovered that a map could be useful even when it admitted uncertainty. At dusk, the atlas gained another blank page, ready for the next traveler. This is an invented story, not a memory or a claim about a real person."
+    },
+    {
+      "id": "MPW-049",
+      "page": "stories",
+      "type": "Original fiction",
+      "title": "The orchard that learned to count",
+      "lead": "Beyond an old stone wall stood an orchard where every tree carried a paper tag. The caretaker wrote down the days of rain, the hours of sunlight, and the fruit collected from each branch. A young inventor promised a machine that could predict every harvest.",
+      "body": "The first prediction was precise and wrong. Instead of hiding the result, the inventor returned to the orchard with a notebook. 'Your machine cannot see the soil after a storm,' the caretaker said. The two began recording more carefully and treating every forecast as a question. By the following spring, the numbers were less confident and far more useful. The orchard's lesson was simple: evidence improves when people are willing to learn from mistakes. This story is fictional."
+    },
+    {
+      "id": "MPW-050",
+      "page": "stories",
+      "type": "Original fiction",
+      "title": "A baker's ledger of impossible recipes",
+      "lead": "A baker who loved numbers kept a ledger of recipes that never worked twice. Some cakes rose beautifully on cold mornings and collapsed on warm afternoons. He blamed his oven until a young customer asked whether he had weighed the ingredients.",
+      "body": "At first the baker objected: his grandmother had measured by instinct. Then he decided to record temperature, time, and quantities without giving up the joy of baking. The ledger did not make every recipe perfect. It helped him understand what had changed. Years later, he taught apprentices to follow instructions first, observe carefully, and then experiment. The most treasured page was still the first failed cake. This is an original fictional vignette, not an account of a real café."
+    }
+  ]
+}
