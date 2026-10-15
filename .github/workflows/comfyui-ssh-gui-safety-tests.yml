@@ -1,0 +1,27 @@
+name: ComfyUI Mobile SSH GUI Safety Tests
+on:
+  push:
+    branches: [main]
+    paths:
+      - ops/comfyui-vps/mobile_key_authorize.py
+      - ops/comfyui-vps/termux-local-gui.sh
+      - ops/comfyui-vps/tests/test_mobile_key_authorize.py
+      - .github/workflows/comfyui-termux-local-ssh-key.yml
+      - .github/workflows/comfyui-ssh-gui-safety-tests.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  safety:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate private ComfyUI SSH scripts without remote side effects
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          bash -n ops/comfyui-vps/termux-local-gui.sh
+          python3 -m py_compile ops/comfyui-vps/mobile_key_authorize.py
+          python3 -m unittest discover -s ops/comfyui-vps/tests -p test_mobile_key_authorize.py -v
+          echo COMFYUI_MOBILE_SSH_STATIC_SAFETY_OK
