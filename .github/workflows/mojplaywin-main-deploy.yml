@@ -34,7 +34,7 @@ jobs:
           from pathlib import Path
           required = {
               "core/templates/mojplaywin/home.html": ("Ideas become knowledge", "OUR PORTFOLIO", "CONNECTED VENTURES"),
-              "core/templates/mojplaywin/store.html": ("INITIAL COLLECTION", "Taniya and the Little Baker Worms"),
+              "core/templates/mojplaywin/store.html": ("INITIAL COLLECTION", "{{ product.title }}"),
               "core/templates/mojplaywin/section.html": ("{{ section_title }}", "mw-page-hero"),
           }
           for name, markers in required.items():
