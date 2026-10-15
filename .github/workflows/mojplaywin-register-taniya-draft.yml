@@ -36,7 +36,7 @@ jobs:
           assert d['author']=='Mojtaba Roozegar'
           assert d['graphic_designer']=='Mojtaba Roozegar'
           assert d['public_active'] is False
-          assert d['digital_asset']['sha256']=='2f6dace4e5bc09ffe11b9e5d677ddff4980fe00de94b7c2ea5b286d1303901d48'
+          assert d['digital_asset']['sha256']=='2f6dace4e5bc09ffe5f8d7a677ddff4980fe00de94b7c2ea5b286d1303901d48'
           assert d['digital_asset']['uploaded_to_host'] is False
           print('TANIYA_DRAFT_METADATA_VERIFIED_SALES_DISABLED')
           PY
