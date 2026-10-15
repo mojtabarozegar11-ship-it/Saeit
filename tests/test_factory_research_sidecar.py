@@ -73,6 +73,44 @@ class ResearchSidecarTests(unittest.TestCase):
         self.assertEqual(out["processed"],0)
         self.assertEqual(out["publishable"],0)
 
+
+    def test_rotates_oversized_backlog_and_reports_unscanned(self):
+        with sqlite3.connect(self.db) as c:
+            template=c.execute("SELECT metadata FROM core_product WHERE id=1").fetchone()[0]
+            c.execute("INSERT INTO core_product VALUES (?,?,?,?,?,?,?,?,?)",
+                      (4,"Draft 4","digital",template,0,"0",None,None,1))
+            c.execute("INSERT INTO core_product VALUES (?,?,?,?,?,?,?,?,?)",
+                      (5,"Draft 5","digital",template,0,"0",None,None,1))
+        first=sidecar.inspect(self.db,self.out,limit=2)
+        data=json.loads((self.out/"latest.json").read_text(encoding="utf-8"))
+        self.assertEqual([p["product_id"] for p in data["products"]],[1,2])
+        self.assertEqual(data["total_factory_drafts_in_scope"],4)
+        self.assertEqual(data["unscanned_in_this_batch"],2)
+        self.assertEqual(first["unscanned"],2)
+        second=sidecar.inspect(self.db,self.out,limit=2)
+        data=json.loads((self.out/"latest.json").read_text(encoding="utf-8"))
+        self.assertEqual([p["product_id"] for p in data["products"]],[4,5])
+        self.assertTrue(second["changed"])
+        sidecar.inspect(self.db,self.out,limit=2)
+        data=json.loads((self.out/"latest.json").read_text(encoding="utf-8"))
+        self.assertEqual([p["product_id"] for p in data["products"]],[1,2])
+
+    def test_duplicate_titles_only_counted_not_disclosed(self):
+        with sqlite3.connect(self.db) as c:
+            c.execute("UPDATE core_product SET title=? WHERE id=2",("  DRAFT   1  ",))
+        sidecar.inspect(self.db,self.out,limit=50)
+        report=json.loads((self.out/"latest.json").read_text(encoding="utf-8"))
+        self.assertEqual(report["duplicate_title_occurrences_in_batch"],1)
+        self.assertEqual(report["duplicate_title_groups_in_batch"],1)
+        self.assertNotIn("DRAFT",str(report["blocker_frequency"]))
+
+    def test_symlink_cursor_denied(self):
+        self.out.mkdir()
+        path=self.out/"cursor.json"
+        path.symlink_to(self.root/"bad-destination")
+        with self.assertRaisesRegex(RuntimeError,"CURSOR_SYMLINK"):
+            sidecar.inspect(self.db,self.out,limit=50)
+
     def test_limit_requires_bounded_integer(self):
         for n in (0,101,-1,True,1.5):
             with self.subTest(limit=n),self.assertRaises(ValueError):
