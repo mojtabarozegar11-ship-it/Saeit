@@ -1,5 +1,6 @@
 from django.urls import path
 from .views import dashboard, overview_api
+from .workflow import stages
 from .agent_views import metrics
 from .agent_directory import directory
 from .agent_proposals import propose
@@ -14,6 +15,7 @@ from .story_image_suggestions import suggestions as story_images
 urlpatterns = [
     path("", dashboard, name="command_center_dashboard"),
     path("api/overview/", overview_api, name="command_center_overview_api"),
+    path("api/workflow/", stages, name="command_center_workflow_api"),
     path("api/agents/", metrics, name="command_center_agent_metrics_api"),
     path("api/agents/directory/", directory, name="command_center_agent_directory_api"),
     path("api/agents/proposals/", propose, name="command_center_agent_proposals_api"),
