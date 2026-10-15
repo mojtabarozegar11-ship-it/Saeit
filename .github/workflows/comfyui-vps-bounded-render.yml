@@ -1,0 +1,54 @@
+name: ComfyUI VPS Bounded CPU PNG Proof
+on:
+  push:
+    branches: [feature/comfyui-vps-render-proof-20261015]
+    paths: [.github/workflows/comfyui-vps-bounded-render.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: comfyui-vps-bounded-png-proof
+  cancel-in-progress: false
+jobs:
+  render:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run isolated VPS proof over pinned SSH transport
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          python3 -m py_compile ops/comfyui-vps/vps_smoke.py
+          test -n "$VPS_KEY"
+          dir="$RUNNER_TEMP/comfy-proof-ssh"
+          install -d -m 700 "$dir"
+          trap 'rm -rf -- "$dir"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$dir/key"
+          chmod 600 "$dir/key"
+          ssh-keygen -y -P '' -f "$dir/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$dir/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$dir/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          opts=(-i "$dir/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$dir/known" -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=3)
+          timeout 425s ssh "${opts[@]}" githubops@178.239.147.150 python3 - < ops/comfyui-vps/vps_smoke.py
+          install -d -m 700 "$RUNNER_TEMP/comfy-vps-result"
+          scp "${opts[@]}" githubops@178.239.147.150:/home/githubops/comfyui-isolated/.control/qa-render/vps_cpu_smoke_256.png "$RUNNER_TEMP/comfy-vps-result/image.png"
+          python3 - "$RUNNER_TEMP/comfy-vps-result/image.png" <<'PY'
+          from pathlib import Path
+          import hashlib,struct,sys
+          data=Path(sys.argv[1]).read_bytes()
+          assert data[:8]==bytes.fromhex("89504e470d0a1a0a")
+          assert struct.unpack(">II",data[16:24])==(256,256)
+          print("ACTION_VPS_PNG_VERIFIED")
+          print("ACTION_VPS_PNG_SHA256="+hashlib.sha256(data).hexdigest())
+          PY
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: comfyui-vps-native-host-cpu-smoke
+          path: ${{ runner.temp }}/comfy-vps-result/image.png
+          if-no-files-found: error
+          retention-days: 7
