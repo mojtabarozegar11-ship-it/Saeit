@@ -12,8 +12,7 @@ jobs:
     if: >-
       github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
       github.event.issue.user.login == 'mojtabarozegar11-ship-it' &&
-      (github.event.issue.title == 'Ops: generate PICM one-time public key 2026-10-15' ||
-       github.event.issue.title == 'Ops: install encrypted PICM private login 2026-10-15')
+      github.event.issue.title == 'Ops: generate PICM one-time public key 2026-10-15'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -69,7 +68,6 @@ jobs:
           chmod 600 "$WORK/config"
           echo PICM_RELAY_READY
       - name: Generate RSA-OAEP one-time key ONLY inside private cPanel home
-        if: github.event.issue.title == 'Ops: generate PICM one-time public key 2026-10-15'
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -91,29 +89,6 @@ jobs:
           echo PICM_ONE_TIME_PUBLIC_KEY_DER_BASE64_END
           echo PICM_PRIVATE_KEY_NEVER_EXPOSED
           REMOTE
-      - name: Privately provision non-admin Django user from owner-encrypted issue body
-        if: github.event.issue.title == 'Ops: install encrypted PICM private login 2026-10-15'
-        shell: bash
-        env:
-          ENCRYPTED_PAYLOAD: ${{ github.event.issue.body }}
-        run: |
-          set -Eeuo pipefail
-          umask 077
-          [[ "$ENCRYPTED_PAYLOAD" =~ ^[A-Za-z0-9+/]{512}$ ]] || { echo INVALID_ENCRYPTED_LOGIN_REQUEST; exit 4; }
-          WORK="$RUNNER_TEMP/picm-ssh"
-          timeout 20s ssh -F "$WORK/config" picm-host "install -d -m 700 /home/zomorod2/.picm-credential-$GITHUB_RUN_ID"
-          scp -q -F "$WORK/config" scripts/picm_provision_user.py "picm-host:/home/zomorod2/.picm-credential-$GITHUB_RUN_ID/provision.py"
-          # Only RSA-OAEP ciphertext crosses GitHub and SSH. No password in logs or repo files.
-          printf '%s' "$ENCRYPTED_PAYLOAD" | timeout 80s ssh -F "$WORK/config" picm-host \
-          "RUN_ID=$GITHUB_RUN_ID bash -c 'set -euo pipefail; cd /home/zomorod2/Saeit-staging; \
-          for py in /home/zomorod2/Saeit-staging/.venv/bin/python /home/zomorod2/Saeit-staging/venv/bin/python \
-          /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python \
-          /home/zomorod2/virtualenv/Saeit/3.11/bin/python \
-          /home/zomorod2/virtualenv/mojplaywin.com/3.11/bin/python; do \
-          if [[ -x \$py ]] && \$py -c \"import django\" >/dev/null 2>&1; then \
-          DJANGO_SETTINGS_MODULE=config.settings \$py /home/zomorod2/.picm-credential-\$RUN_ID/provision.py; exit 0; fi; \
-          done; echo PICM_DJANGO_RUNTIME_MISSING; exit 9'"
-          echo PICM_USER_CREATED_PASSWORD_HASH_ONLY_IN_PRIVATE_DB
       - name: Clean temporary auth script and runner SSH material
         if: always()
         shell: bash
