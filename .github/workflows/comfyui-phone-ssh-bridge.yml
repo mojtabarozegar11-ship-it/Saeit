@@ -1,0 +1,57 @@
+name: ComfyUI Phone SSH Bridge Setup
+on:
+  push:
+    branches: [ops/comfyui-headscale-readiness-20261015]
+    paths:
+      - ".github/workflows/comfyui-phone-ssh-bridge.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: comfyui-phone-ssh-bridge
+  cancel-in-progress: false
+jobs:
+  setup:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure pinned VPS SSH
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -Eeuo pipefail
+          umask 077
+          d="$RUNNER_TEMP/comfyui-phone-bridge"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          echo "$d" > "$RUNNER_TEMP/comfyui-phone-bridge-path"
+      - name: Install a forwarding-only phone key
+        shell: bash
+        env:
+          PHONE_PUBLIC_KEY: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICaXd7XWbwj/Xzr0+gyeA9nwtnqao5b62S4srHUin2C8 comfyui-phone-ui-20261015"
+        run: |
+          set -Eeuo pipefail
+          d="$(cat "$RUNNER_TEMP/comfyui-phone-bridge-path")"
+          line="restrict,port-forwarding,permitopen=\"127.0.0.1:18188\",permitlisten=\"none:0\",command=\"/bin/false\" $PHONE_PUBLIC_KEY"
+          printf '%s\n' "$line" | ssh -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 githubops@178.239.147.150 'python3 -c '"'"'import os,pathlib,sys; line=sys.stdin.readline().rstrip("\n"); d=pathlib.Path.home()/".ssh"; d.mkdir(mode=0o700,parents=True,exist_ok=True); os.chmod(d,0o700); p=d/"authorized_keys"; p.touch(mode=0o600,exist_ok=True); rows=p.read_text().splitlines(); (p.open("a").write(line+"\n") if line not in rows else None); os.chmod(p,0o600); print("PHONE_FORWARD_KEY_INSTALLED")'"'"''
+      - name: Start existing ComfyUI for a bounded session
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          d="$(cat "$RUNNER_TEMP/comfyui-phone-bridge-path")"
+          ssh -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 githubops@178.239.147.150 bash -s -- start 60 < ops/comfyui-vps/control.sh
+      - name: Verify loopback-only binding and API health
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          d="$(cat "$RUNNER_TEMP/comfyui-phone-bridge-path")"
+          ssh -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 githubops@178.239.147.150 'set -Eeuo pipefail; curl -fsS --max-time 3 http://127.0.0.1:18188/system_stats -o /dev/null; echo COMFYUI_API_HEALTHY; ss -H -ltn "sport = :18188"'
+      - name: Clean temporary SSH material
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/comfyui-phone-bridge" "$RUNNER_TEMP/comfyui-phone-bridge-path"
