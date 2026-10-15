@@ -161,8 +161,74 @@ def database(root):
         con.close()
 
 
+def _topic_gate(root):
+    """Load the opt-in gate only in private workspaces that explicitly enable it."""
+    marker = root / ".enable-topic-research-gate"
+    if marker.is_symlink():
+        raise ValueError("unsafe topic gate marker")
+    if not marker.exists():
+        return None
+    script = ROOT / "scripts" / "astra_v2_topic_gate.py"
+    if script.is_symlink() or not script.is_file():
+        raise ValueError("topic gate implementation missing")
+    spec = importlib.util.spec_from_file_location("astra_private_topic_gate", str(script))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    module.enabled(root)
+    return module
+
+
+def _approved_source_revision_keys():
+    """Only the exact current, allowlisted source revisions bypass market triage."""
+    trusted = set()
+    for builder, config in BUILDERS.items():
+        _validate_sources(builder)
+        versions = [(name, (config["root"] / name).read_bytes())
+                    for name in config["files"]]
+        revision = digest(builder.encode() + b"".join(
+            name.encode() + b"\\x00" + digest(blob).encode() for name, blob in versions))
+        trusted.add(("auto_" + revision[:20], builder))
+    return trusted
+
+
+def reconcile_private_topic_queue(root, conn):
+    """Hold stale/new unqualified external jobs; leave reviewed source QA alone."""
+    gate = _topic_gate(root)
+    if gate is None:
+        return {"mode": "disabled", "held": 0, "released_for_private_qa": 0}
+    verdicts, dossier_state = gate.verdicts(root)
+    trusted_sources = _approved_source_revision_keys()
+    rows = conn.execute(
+        "SELECT id,brief_id,builder,stage FROM jobs "
+        "WHERE stage IN ('QUEUED','RESEARCH_REQUIRED') ORDER BY id"
+    ).fetchall()
+    held = released = 0
+    with conn:
+        for job_id, brief_id, builder, stage in rows:
+            allowed = ((brief_id, builder) in trusted_sources or
+                       gate.private_prototype_eligible(verdicts.get(brief_id)))
+            if not allowed and stage == "QUEUED":
+                conn.execute(
+                    "UPDATE jobs SET stage='RESEARCH_REQUIRED',"
+                    "last_error='TOPIC_RESEARCH_GATE_PENDING' WHERE id=?", (job_id,))
+                held += 1
+            elif allowed and stage == "RESEARCH_REQUIRED":
+                conn.execute(
+                    "UPDATE jobs SET stage='QUEUED',last_error='' WHERE id=?", (job_id,))
+                released += 1
+    return {"mode": "private_provisional_review_only",
+            "dossier_state": dossier_state, "held": held,
+            "released_for_private_qa": released}
+
+
 def enqueue(root, obj):
     payload = check_brief(obj)
+    gate = _topic_gate(root)
+    if gate is not None:
+        verdicts, dossier_state = gate.verdicts(root)
+        if not gate.private_prototype_eligible(verdicts.get(obj["brief_id"])):
+            return {"job_id": None, "status": "RESEARCH_REQUIRED",
+                    "new_job": False, "dossier_state": dossier_state}
     ident = digest(payload)
     with locked(root), database(root) as conn:
         existing = conn.execute(
@@ -296,13 +362,13 @@ def intake_private_briefs(root):
     """
     inbox = root / "incoming"
     if not inbox.exists():
-        return {"accepted":0,"unchanged":0,"rejected":0}
+        return {"accepted":0,"unchanged":0,"rejected":0,"held_for_research":0}
     if inbox.is_symlink() or not inbox.is_dir():
         raise ValueError("private inbox must be a regular directory")
     entries = sorted(inbox.iterdir(),key=lambda p:p.name)
     if len(entries) > MAX_BRIEFS:
         raise ValueError("private inbox exceeds bounded entry count")
-    counts={"accepted":0,"unchanged":0,"rejected":0}
+    counts={"accepted":0,"unchanged":0,"rejected":0,"held_for_research":0}
     for item in entries:
         if not item.name.endswith(".json") or item.is_symlink() or not item.is_file():
             counts["rejected"] += 1
@@ -312,7 +378,10 @@ def intake_private_briefs(root):
                 raise ValueError("oversized private brief")
             obj=json.loads(item.read_text(encoding="utf-8"))
             result=enqueue(root,obj)
-            counts["accepted" if result["new_job"] else "unchanged"]+=1
+            if result["status"] == "RESEARCH_REQUIRED":
+                counts["held_for_research"] += 1
+            else:
+                counts["accepted" if result["new_job"] else "unchanged"]+=1
         except (OSError,ValueError,TypeError,UnicodeDecodeError):
             counts["rejected"]+=1
     return counts
@@ -385,6 +454,7 @@ def tick(root):
     intake_private_briefs(root)
     with locked(root), database(root) as conn:
         revision_intake=plan_private_source_revisions(root, conn)
+        topic_gate_state=reconcile_private_topic_queue(root, conn)
         try:
             autonomous=_self_directed_cycle(root)
         except (OSError,ValueError,AssertionError,RuntimeError,zipfile.BadZipFile):
@@ -416,6 +486,7 @@ def tick(root):
             return {"status":"NO_ELIGIBLE_WORK", "new_products":0,
                     "autonomous_education":autonomous,
                     "private_source_autoplan":revision_intake,
+                    "topic_quality_gate":topic_gate_state,
                     "note":"no queued specialist builds; educational editions are separate from commercial products"}
         job_id, brief_id, builder, _, attempts = row
         if builder not in BUILDERS:
@@ -442,7 +513,8 @@ def tick(root):
                     "new_distinct_product_versions":int(already==1),
                     "new_products_for_sale":0,"qa_score":None,
                     "autonomous_education":autonomous,
-                    "private_source_autoplan":revision_intake}
+                    "private_source_autoplan":revision_intake,
+                    "topic_quality_gate":topic_gate_state}
         except (OSError,ValueError,subprocess.SubprocessError,RuntimeError) as exc:
             with conn:
                 conn.execute("UPDATE jobs SET stage='FAILED_REVIEW',last_error=? WHERE id=?",
@@ -450,7 +522,8 @@ def tick(root):
             return {"status":"FAILED_REVIEW","job_id":job_id,
                     "error_type":type(exc).__name__,"new_products":0,
                     "autonomous_education":autonomous,
-                    "private_source_autoplan":revision_intake}
+                    "private_source_autoplan":revision_intake,
+                    "topic_quality_gate":topic_gate_state}
 
 
 def status(root):
@@ -472,7 +545,8 @@ def status(root):
                 "distinct_private_product_families":family_count,
                 "available_specialist_builders":sorted(BUILDERS),
                 "published_products":0,"verified_revenue":None,
-                "autonomous_supply_from_real_sources_enabled":False}
+                "autonomous_supply_from_real_sources_enabled":False,
+                "private_topic_research_gate_enabled":_topic_gate(root) is not None}
 
 
 def demo():
