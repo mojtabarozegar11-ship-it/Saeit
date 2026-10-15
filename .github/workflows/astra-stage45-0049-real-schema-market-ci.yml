@@ -1,0 +1,121 @@
+name: Astra 0049 Real Schema Market Bridge CI
+
+on:
+  push:
+    branches:
+      - factory/astra-0049-real-schema-market-smoke-20261015
+      - factory/astra-v2-0049-integration-20261015
+    paths:
+      - .github/workflows/astra-stage45-0049-real-schema-market-ci.yml
+      - scripts/astra_stage45_0049_integration_probe.py
+      - scripts/astra_stage45_market_queue_bridge.py
+      - scripts/astra_stage45_research_backlog.py
+      - scripts/astra_market_readiness_gate.py
+      - scripts/astra_research_evidence_adapter.py
+      - scripts/astra_opportunity_selector.py
+      - research/astra-water-margin-us-primary-market-pilot.json
+      - tests/test_astra_stage45_market_queue_bridge.py
+      - core/migrations/0049_astra_stage45_research_queue.py
+  pull_request:
+    branches:
+      - factory/astra-v2-0049-integration-20261015
+
+permissions:
+  contents: read
+
+jobs:
+  real-schema-private-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SAEIT_ENV: ci
+      DEBUG: "False"
+      SECRET_KEY: astra-0049-real-schema-isolated-ci-test-only
+      ALLOWED_HOSTS: "localhost,127.0.0.1"
+      ASTRA_0049_SYNTHETIC_PROOF: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install Django dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Create brand-new disposable Django SQLite and migrate to 0049
+        shell: bash
+        run: |
+          set -euo pipefail
+          export DATABASE_URL="sqlite:///$RUNNER_TEMP/astra-0049-ephemeral-market.sqlite3"
+          test ! -e "$RUNNER_TEMP/astra-0049-ephemeral-market.sqlite3"
+          python manage.py check
+          python manage.py migrate --noinput --verbosity 0
+          python - "$RUNNER_TEMP/astra-0049-ephemeral-market.sqlite3" <<'PY'
+          import sqlite3, sys
+          with sqlite3.connect(sys.argv[1]) as conn:
+              marker=conn.execute(
+                  "SELECT COUNT(*) FROM django_migrations WHERE app='core' "
+                  "AND name='0049_astra_stage45_research_queue'").fetchone()[0]
+              assert marker == 1
+              assert conn.execute("SELECT COUNT(*) FROM core_factoryqueueitem").fetchone()[0] == 0
+              print("ASTRA_0049_MARKET_REAL_DJANGO_SCHEMA=PASS")
+          PY
+      - name: Ensure illustrative Django sources are NOT promoted by old integration probe
+        shell: bash
+        run: |
+          set -euo pipefail
+          export DATABASE_URL="sqlite:///$RUNNER_TEMP/astra-0049-ephemeral-market.sqlite3"
+          python manage.py shell -c 'from scripts.astra_stage45_0049_integration_probe import run; run()'
+          echo ASTRA_0049_MARKET_SYNTHETIC_RESEARCH_ONLY=true
+      - name: Exercise actual migrated Django 0049 through market queue bridge read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          db="$RUNNER_TEMP/astra-0049-ephemeral-market.sqlite3"
+          before="$(sha256sum "$db" | cut -d ' ' -f 1)"
+          python scripts/astra_stage45_market_queue_bridge.py \
+            --db "$db" \
+            --market-dir research \
+            --now-utc "$(python -c 'from datetime import datetime,timezone; print(datetime.now(timezone.utc).isoformat())')" \
+            --output "$RUNNER_TEMP/astra-0049-disposable-market-report.json"
+          after="$(sha256sum "$db" | cut -d ' ' -f 1)"
+          test "$before" = "$after"
+          python - "$RUNNER_TEMP/astra-0049-disposable-market-report.json" <<'PY'
+          import json, pathlib, sys
+          report=json.loads(pathlib.Path(sys.argv[1]).read_text())
+          assert report["mode"] == "private_read_only_0049_queue_market_triage", report
+          assert report["queue_items_examined"] == 2,report
+          assert report["discovery_topics"] == 2,report
+          assert report["market_packets_examined"] == 1,report
+          assert report["explicit_unverified_packet_links"] == 0,report
+          assert report["topics_without_market_packets"] == 2,report
+          assert report["unlinked_market_product_keys"] == ["farm_water_land_margin_audit_v1"],report
+          assert report["commercially_qualified_products"] == 0,report
+          assert report["network_requests"] == 0,report
+          assert report["factory_mutations"] == 0,report
+          assert report["site_mutations"] == 0,report
+          assert report["payment_attempts"] == 0,report
+          assert all(
+              not row["build_authorized"] and
+              not row["publish_authorized"] and
+              not row["payment_authorized"] and
+              not row["linkage_independently_verified"] and
+              row["market_packet_key"] is None and
+              row["queue_preliminary_unique_documents"] == 0
+              for row in report["research_queue"]),report
+          print("ASTRA_0049_REAL_SCHEMA_MARKET_BRIDGE=PASS")
+          print("ASTRA_0049_UNVERIFIED_PILOT_AUTO_BINDINGS=0")
+          print("ASTRA_0049_MARKET_RELEASES=0")
+          print("ASTRA_0049_DISPOSABLE_DB_SHA256_UNCHANGED=true")
+          PY
+      - name: Exercise explicit crosswalk and security regressions on disposable fixtures
+        run: |
+          set -euo pipefail
+          python -m unittest discover -s tests -p 'test_astra_stage45_market_queue_bridge.py' -q
+          python -m unittest discover -s tests -p 'test_astra_market_readiness_gate.py' -q
+          python -m unittest discover -s tests -p 'test_astra_stage45_research_backlog.py' -q
+          echo ASTRA_0049_MARKET_TRIAGE_REGRESSIONS=PASS
+      - name: No VPS, public site or payment access
+        run: |
+          echo ASTRA_0049_LIVE_MIGRATIONS=0
+          echo ASTRA_0049_VPS_DEPLOY=NO
+          echo ASTRA_0049_STORE_PUBLISHING=DISABLED
+          echo ASTRA_0049_PAYMENTS=DISABLED
