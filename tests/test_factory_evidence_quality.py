@@ -59,7 +59,7 @@ class FactoryEvidenceQualityTests(unittest.TestCase):
     def test_hundred_structured_records_only_qualify_for_independent_review(self):
         r=quality.assess(synthetic_bundle())
         self.assertTrue(r["research_gate_passed"])
-        self.assertEqual(r["research_gate"],"READY_FOR_INDEPENDENT_REVIEW")
+        self.assertEqual(r["research_gate"],"QUANTITATIVE_THRESHOLD_MET_REVIEW_REQUIRED")
         self.assertEqual(r["counts"]["validated_unique_evidence_passages"],100)
         self.assertEqual(r["counts"]["public_distinct_domain_groups"],5)
         self.assertFalse(r["publish_authorized"])
@@ -87,7 +87,7 @@ class FactoryEvidenceQualityTests(unittest.TestCase):
         b["internal_actions"]=[]
         r=quality.assess(b)
         self.assertFalse(r["research_gate_passed"])
-        self.assertIn("ONE_VERIFIED_INTERNAL_RESEARCH_ACTION_REQUIRED",r["blockers"])
+        self.assertIn("ONE_STRUCTURED_INTERNAL_RESEARCH_ACTION_REQUIRED",r["blockers"])
 
     def test_missing_owner_blocks_research(self):
         b=synthetic_bundle()
