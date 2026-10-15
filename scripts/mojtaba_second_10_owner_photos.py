@@ -179,6 +179,11 @@ def main():
             if photo_dir.is_symlink() or not photo_dir.is_dir():
                 raise ValueError("Unsafe second gallery directory")
             contents=list(photo_dir.iterdir())
+            if len(contents)==1 and contents[0].name=="photo-01.jpg" and contents[0].is_file() and not contents[0].is_symlink() and contents[0].stat().st_size==0:
+                # Previous interrupted attempt created this empty placeholder before ZIP lookup failed.
+                contents[0].unlink()
+                contents=[]
+                print("EMPTY_BROKEN_PLACEHOLDER_CLEANED=yes",flush=True)
             if contents:
                 expected={"photo-"+f"{i:02d}"+".png" for i in range(1,11)}
                 if {p.name for p in contents}!=expected:
