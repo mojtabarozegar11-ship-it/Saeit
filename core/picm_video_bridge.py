@@ -20,6 +20,7 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
+from .picm_mp4_verify import valid_mp4_container
 from .picm_access import owner_allowed, owner_id
 from .picm_views import locked, UUID_RE, PICM_REFERENCE_TTL_SECONDS
 
@@ -306,11 +307,9 @@ def video_worker_finish(request, ident):
         part = root / (ident + ".mp4.part")
         if part.is_symlink() or not part.is_file() or part.stat().st_size != s["total"]:
             return HttpResponse(status=422)
+        if not valid_mp4_container(part):
+            return HttpResponse(status=422)
         with part.open("rb") as stream:
-            header = stream.read(min(2 * 1024 * 1024, s["total"]))
-            if header[4:8] != b"ftyp" or b"moov" not in header:
-                return HttpResponse(status=422)
-            stream.seek(0)
             digest = hashlib.sha256()
             for block in iter(lambda: stream.read(1024 * 1024), b""):
                 digest.update(block)
