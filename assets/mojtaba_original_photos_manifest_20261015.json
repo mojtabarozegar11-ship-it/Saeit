@@ -1,0 +1,107 @@
+{
+  "version": 1,
+  "source": "10 user-supplied photographs from original chat attachment bundle; exact byte-preserving copies only",
+  "algorithm": "SHA-256",
+  "files": [
+    {
+      "path": "photo-01.jpg",
+      "title": "Founder portrait · MojPlayWin",
+      "sha256": "76d46c93cf269d39b5c71a93e25c90bd7b794fbd251cd7d503dbd5221de3dccf",
+      "size_bytes": 412452,
+      "pixel_dimensions": [
+        1536,
+        1536
+      ]
+    },
+    {
+      "path": "photo-02.jpg",
+      "title": "Executive work · Zomorod Melal",
+      "sha256": "00e1a093fb1b55e28b79fb3e9a640ae2fc025eca21ee6819c3eb7a2dcaf945e3",
+      "size_bytes": 321755,
+      "pixel_dimensions": [
+        1229,
+        1536
+      ]
+    },
+    {
+      "path": "photo-03.jpg",
+      "title": "Business presentation",
+      "sha256": "3446212e93ac0c759bbfe8bf4359727318b05a2c7bb93902505fb6843130aef9",
+      "size_bytes": 277579,
+      "pixel_dimensions": [
+        1229,
+        1536
+      ]
+    },
+    {
+      "path": "photo-04.jpg",
+      "title": "Agricultural research & technology",
+      "sha256": "9c3572cbba6b23f7744cb04f7f5ccb04bc90ca88a23b4836f27445814fa84fe7",
+      "size_bytes": 325713,
+      "pixel_dimensions": [
+        1229,
+        1536
+      ]
+    },
+    {
+      "path": "photo-05.jpg",
+      "title": "Business cooperation",
+      "sha256": "2ea023db5e6854b0c767f8bd4f6b5d4b0596296e9904c60a313e9f2209d8d5f8",
+      "size_bytes": 276878,
+      "pixel_dimensions": [
+        1229,
+        1536
+      ]
+    },
+    {
+      "path": "photo-06.jpg",
+      "title": "Executive leadership",
+      "sha256": "7fad4709ee52b6294d259c835d1445d1ed63de12d0a5799aa0b2f671a888977a",
+      "size_bytes": 329177,
+      "pixel_dimensions": [
+        1229,
+        1536
+      ]
+    },
+    {
+      "path": "photo-07.jpg",
+      "title": "Zomorod Melal leadership",
+      "sha256": "ee8aabee87ccc5fe302c97080cc314d9ab5236672219b3fca96ed8bdfbb72951",
+      "size_bytes": 316319,
+      "pixel_dimensions": [
+        1229,
+        1536
+      ]
+    },
+    {
+      "path": "photo-08.jpg",
+      "title": "Founder · MojPlayWin profile",
+      "sha256": "4ed4c074bc947acba9333707abb30caf6c084bdea8f6a202690d77405febd493",
+      "size_bytes": 434479,
+      "pixel_dimensions": [
+        1536,
+        1536
+      ]
+    },
+    {
+      "path": "photo-09.jpg",
+      "title": "MojPlayWin · Executive portrait",
+      "sha256": "474d586d1f47847aeae9a8e8b113d0e28de328a4f993a2315ac92cd39e241024",
+      "size_bytes": 439161,
+      "pixel_dimensions": [
+        1536,
+        1536
+      ]
+    },
+    {
+      "path": "photo-10.jpg",
+      "title": "Agriculture & management profile",
+      "sha256": "2b12cd8c95fb912467917d13bb7332989aee8635040d835ddd3ddf1853540e19",
+      "size_bytes": 304766,
+      "pixel_dimensions": [
+        1229,
+        1536
+      ]
+    }
+  ]
+}
