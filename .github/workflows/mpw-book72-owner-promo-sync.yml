@@ -1,0 +1,91 @@
+name: MojPlayWin book72 safe promotional metadata release
+on:
+  push:
+    branches: [audit/mpw-book72-go-live-gates-20261015]
+    paths: [.github/workflows/mpw-book72-owner-promo-sync.yml]
+permissions:
+  contents: read
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 69ea0d7a784aaaa9df6a4865e7d17fc55ab53c90
+          persist-credentials: false
+      - name: Assert expected guarded pricing and syntax
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_book72_apply_promo.py
+          grep -Fq '"list_price_usd":"30.00"' scripts/mpw_book72_apply_promo.py
+          grep -Fq '"sale_price_usd":"7.50"' scripts/mpw_book72_apply_promo.py
+          echo BOOK72_PROMOTION_VALIDATED_LOCALLY
+      - name: Prepare pinned SSH connections to authorized site host
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/astra-live-payment"
+          install -d -m 700 "$d"
+          for item in VPS_KEY HOST_KEY; do
+            printf '%s' "${!item}" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/$item.key"
+            chmod 600 "$d/$item.key"
+            ssh-keygen -y -P '' -f "$d/$item.key" >/dev/null
+          done
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -i "$d/VPS_KEY.key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/vps.known" -o BatchMode=yes githubops@178.239.147.150 'ssh-keyscan -T 10 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/VPS_KEY.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/HOST_KEY.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 12
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+      - name: Transfer one trusted promo script and update only private product metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          dir=".mpw-promo-${{ github.run_id }}"
+          ssh -F "$RUNNER_TEMP/astra-live-payment/config" saeit-cpanel "umask 077; mkdir -m 700 '$dir'"
+          scp -F "$RUNNER_TEMP/astra-live-payment/config" scripts/mpw_book72_apply_promo.py "saeit-cpanel:$dir/apply.py"
+          expected="$(sha256sum scripts/mpw_book72_apply_promo.py | cut -d ' ' -f1)"
+          real="$(ssh -F "$RUNNER_TEMP/astra-live-payment/config" saeit-cpanel "sha256sum '$dir/apply.py' | cut -d ' ' -f1")"
+          test "$expected" = "$real"
+          ssh -F "$RUNNER_TEMP/astra-live-payment/config" saeit-cpanel "PROMO_FOLDER='$dir' bash -se" <<'REMOTE'
+          set -euo pipefail
+          export PYTHONPATH="$HOME/Saeit-staging" DJANGO_SETTINGS_MODULE=config.settings
+          cd "$HOME/Saeit-staging"
+          for py in "$HOME/virtualenv/Saeit-staging/3.11/bin/python" "$PWD/.venv/bin/python" "$HOME/virtualenv/Saeit-staging/3.10/bin/python"; do
+            if test -x "$py" && "$py" -c 'import django' >/dev/null 2>&1; then
+              "$py" "$HOME/$PROMO_FOLDER/apply.py"
+              exit 0
+            fi
+          done
+          echo BOOK72_PROMO_PYTHON_NOT_FOUND
+          exit 1
+          REMOTE
+      - name: Clean temporary identities
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/astra-live-payment"
