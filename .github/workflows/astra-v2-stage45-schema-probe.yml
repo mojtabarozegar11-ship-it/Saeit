@@ -2,7 +2,7 @@ name: Astra V2 Stage 4-5 Live Schema Evidence Probe
 
 on:
   push:
-    branches: [feature/astra-factory-v2-architecture-20261014]
+    branches: [feature/astra-factory-v2-architecture-20261014, feature/astra-v2-0048-integration-canary-20261015]
     paths:
       - .github/workflows/astra-v2-stage45-schema-probe.yml
       - scripts/astra_v2_stage45_probe.py
