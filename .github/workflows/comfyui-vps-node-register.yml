@@ -1,0 +1,69 @@
+name: ComfyUI VPS Private SSE2 Node Registration
+on:
+  push:
+    branches: [feature/comfyui-vps-render-proof-20261015]
+    paths: [.github/workflows/comfyui-vps-node-register.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: comfyui-vps-private-node-registration
+  cancel-in-progress: false
+jobs:
+  register:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install isolated CPU node and test ComfyUI registry via loopback
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          python3 -m py_compile ops/comfyui-vps/saeit_cpu_node/__init__.py
+          local_file="ops/comfyui-vps/saeit_cpu_node/__init__.py"
+          digest="$(sha256sum "$local_file" | awk '{print $1}')"
+          dir="$RUNNER_TEMP/saeit-private-node"
+          install -d -m 700 "$dir"
+          trap 'rm -rf -- "$dir"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$dir/key"
+          chmod 600 "$dir/key"
+          ssh-keygen -y -P '' -f "$dir/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$dir/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$dir/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          opts=(-i "$dir/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$dir/known" -o ConnectTimeout=15)
+          remote=(ssh "${opts[@]}" githubops@178.239.147.150)
+          target="/home/githubops/comfyui-isolated/source-v0.40.0/custom_nodes/saeit_safe_cpu"
+          "${remote[@]}" 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          src="$HOME/comfyui-isolated/source-v0.40.0"
+          target="$src/custom_nodes/saeit_safe_cpu"
+          test -f "$src/main.py" && test -x "$HOME/comfyui-isolated/env-cpu/bin/python"
+          test -x "$HOME/comfyui-isolated/.control/sd-cpp-runtime-sse2/bin/sd-cli"
+          if ss -ltn '( sport = :18188 )' | grep -q LISTEN; then
+            echo COMFYUI_CURRENTLY_RUNNING_REFUSE_LIVE_NODE_CHANGE
+            exit 3
+          fi
+          if [[ -e "$target/__init__.py" ]]; then
+            echo CUSTOM_NODE_ALREADY_EXISTS_REFUSE_OVERWRITE
+            exit 4
+          fi
+          umask 077
+          install -d -m 700 "$target"
+          echo CUSTOM_NODE_DESTINATION_RESERVED
+          REMOTE
+          scp "${opts[@]}" "$local_file" githubops@178.239.147.150:"$target/__init__.py"
+          check="$("${remote[@]}" "sha256sum '$target/__init__.py' | awk '{print \$1}'")"
+          test "$digest" = "$check"
+          echo CUSTOM_NODE_SOURCE_SHA256_VERIFIED
+          "${remote[@]}" 'python3 -m py_compile "$HOME/comfyui-isolated/source-v0.40.0/custom_nodes/saeit_safe_cpu/__init__.py"'
+          cleanup() {
+            "${remote[@]}" bash -s -- stop 5 < ops/comfyui-vps/control.sh || true
+          }
+          trap 'cleanup; rm -rf -- "$dir"' EXIT
+          "${remote[@]}" bash -s -- start 5 < ops/comfyui-vps/control.sh
+          "${remote[@]}" python3 - < ops/comfyui-vps/verify_cpu_node.py
+          echo COMFYUI_VPS_SAFE_CPU_NODE_REGISTERED_VERIFIED
