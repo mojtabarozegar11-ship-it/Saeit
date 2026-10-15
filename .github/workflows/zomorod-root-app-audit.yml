@@ -150,6 +150,19 @@ jobs:
           import_status=$?
           echo "PASSENGER_WSGI_IMPORT_EXIT=$import_status"
           tail -n 35 "$diag" | sed -E 's/(SECRET_KEY|PASSWORD|TOKEN|API_KEY|PRIVATE_KEY)([^=]*=)[^[:space:]]+/\1\2[redacted]/Ig'
+          printf 'RECENT_APP_ERROR_LOG_FILES_BEGIN\n'
+          find /home/zomorod2/logs /home/zomorod2/Saeit /home/zomorod2/public_html -maxdepth 3 -type f \\
+            \( -iname '*error*log*' -o -iname '*passenger*log*' -o -iname '*stderr*' \) \\
+            -printf '%T@ %s %p\\n' 2>/dev/null | sort -nr | head -n 25
+          printf 'RECENT_APP_ERROR_LOG_FILES_END\n'
+          while IFS= read -r logfile; do
+            test -f "$logfile" || continue
+            echo "APP_ERROR_LOG_BEGIN=$logfile"
+            tail -n 100 "$logfile" | grep -Ei 'error|exception|traceback|passenger|spawn|killed|limit|denied|failed' | tail -n 35 | \\
+              sed -E 's/(SECRET_KEY|PASSWORD|TOKEN|API_KEY|PRIVATE_KEY)([^=]*=)[^[:space:]]+/\\1\\2[redacted]/Ig; s/(Authorization: ).*/\\1[redacted]/Ig'
+            echo "APP_ERROR_LOG_END=$logfile"
+          done < <(find /home/zomorod2/logs /home/zomorod2/Saeit /home/zomorod2/public_html -maxdepth 3 -type f \\
+            \( -iname '*error*log*' -o -iname '*passenger*log*' -o -iname '*stderr*' \) 2>/dev/null | head -n 8)
           set -e
           REMOTE
       - name: Check live site routes
