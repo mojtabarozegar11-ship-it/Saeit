@@ -77,7 +77,7 @@ class CuratedSourceTests(unittest.TestCase):
 
     def test_unknown_targets_blocked(self):
         with self.assertRaisesRegex(ValueError,"UNKNOWN_SOURCE_NOT_ALLOWED"):
-            monitor.run(self.path,opener=FakeOpener(),sources=monitor.SOURCES[:4]+(("extra","https://example.com","unknown"),])
+            monitor.run(self.path,opener=FakeOpener(),sources=monitor.SOURCES[:4]+(("extra","https://example.com","unknown"),))
 
     def test_short_bounded_hash_and_no_republished_text(self):
         url=monitor.SOURCES[0][1]
