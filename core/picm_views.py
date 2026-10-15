@@ -270,3 +270,14 @@ def picm_worker_finish(request, ident):
         job["updated"] = time.time()
         save_job(root, job)
     return JsonResponse({"state": job["state"]})
+
+
+@never_cache
+@require_GET
+def picm_worker_health(request):
+    with locked() as root:
+        if not worker_authorized(request, root):
+            return HttpResponse(status=403)
+    response = JsonResponse({"ready": True, "engine": "private-vps-polling"})
+    response["Cache-Control"] = "no-store"
+    return response
