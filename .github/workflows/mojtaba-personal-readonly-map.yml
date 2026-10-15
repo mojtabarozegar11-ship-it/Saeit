@@ -121,5 +121,120 @@ jobs:
           echo ARTICLE_POST_MODEL
           sed -n '34,46p' "$HOME/mojtaba_personal/mojtaba_roozegar_personal_v17/core/models.py"
           echo ARTICLE_POST_MODEL_DONE
+          echo PERSONAL_SEO_AUDIT_BEGIN
+          app="$HOME/mojtaba_personal/mojtaba_roozegar_personal_v17"
+          python3 - "$app" <<'PYSEO'
+          from html.parser import HTMLParser
+          from pathlib import Path
+          from urllib.request import Request, urlopen
+          from urllib.error import HTTPError, URLError
+          from xml.etree import ElementTree
+          import json, re, sys
+          root=Path(sys.argv[1])
+          class Head(HTMLParser):
+              def __init__(self):
+                  super().__init__(); self.title_on=False; self.h1_on=False
+                  self.title=[]; self.h1=[]; self.meta={}; self.canonical=[]
+                  self.ld_on=False; self.ld=[]; self.ld_types=[]
+              def handle_starttag(self, tag, attrs):
+                  a=dict(attrs)
+                  if tag=="title": self.title_on=True
+                  if tag=="h1": self.h1_on=True
+                  if tag=="meta" and a.get("name","").lower() in ("description","robots","googlebot"):
+                      self.meta[a["name"].lower()]=a.get("content","")[:300]
+                  if tag=="link" and "canonical" in a.get("rel","").lower().split():
+                      self.canonical.append(a.get("href","")[:300])
+                  if tag=="script" and a.get("type","").lower()=="application/ld+json": self.ld_on=True; self.ld=[]
+              def handle_endtag(self, tag):
+                  if tag=="title": self.title_on=False
+                  if tag=="h1": self.h1_on=False
+                  if tag=="script" and self.ld_on:
+                      raw="".join(self.ld)
+                      self.ld_types += re.findall(r'"@type"\s*:\s*"([^"]+)"', raw)
+                      self.ld_on=False
+              def handle_data(self,data):
+                  if self.title_on and len(self.title)<1: self.title.append(data.strip()[:250])
+                  if self.h1_on and len(self.h1)<3: self.h1.append(data.strip()[:250])
+                  if self.ld_on: self.ld.append(data)
+          print("SEO_TEMPLATE_SCAN_BEGIN")
+          templates=root/"templates"
+          found=0
+          for path in sorted(templates.rglob("*.html")) if templates.is_dir() else []:
+              try: html=path.read_text(encoding="utf-8")
+              except Exception: continue
+              p=Head(); p.feed(html)
+              if p.title or p.meta or p.canonical or p.ld_types or p.h1:
+                  print("SEO_TEMPLATE="+str(path.relative_to(root))+" TITLE="+json.dumps(" ".join(p.title),ensure_ascii=False)+" DESCRIPTION="+json.dumps(p.meta.get("description",""),ensure_ascii=False)+" ROBOTS="+json.dumps(p.meta.get("robots",""),ensure_ascii=False)+" CANONICAL="+json.dumps(p.canonical[:2],ensure_ascii=False)+" H1="+json.dumps([x for x in p.h1 if x],ensure_ascii=False)+" JSONLD_TYPES="+json.dumps(sorted(set(p.ld_types)),ensure_ascii=False))
+                  found+=1
+                  if found>=30: break
+          print("SEO_TEMPLATE_FILES_REPORTED="+str(found))
+          views=root/"core"/"views.py"
+          if views.is_file():
+              lines=views.read_text(encoding="utf-8",errors="replace").splitlines()
+              for i,line in enumerate(lines):
+                  if re.match(r'\s*def\s+(home|robots|health)\b',line):
+                      print("SEO_VIEW_SOURCE="+str(i+1)+":"+line.strip())
+                      for j in range(i+1,min(i+30,len(lines))):
+                          if "render(" in lines[j] or "HttpResponse" in lines[j] or "sitemap" in lines[j].lower() or "robots" in lines[j].lower():
+                              print("SEO_VIEW_ROUTE_DETAIL="+str(j+1)+":"+lines[j].strip()[:220])
+          print("SEO_TEMPLATE_SCAN_END")
+          PYSEO
+          python3 - <<'PYHTTP'
+          from html.parser import HTMLParser
+          from urllib.request import Request,urlopen
+          from urllib.error import HTTPError,URLError
+          from xml.etree import ElementTree
+          from urllib.parse import urljoin
+          import re
+          base="https://mojplaywin.com"
+          target=base+"/mojtaba.roozegar/"
+          paths=[target, base+"/robots.txt", base+"/sitemap.xml",
+                 target+"robots.txt", target+"sitemap.xml", target+"feed.xml"]
+          class Meta(HTMLParser):
+              def __init__(self):
+                  super().__init__(); self.title_on=False; self.title=[]; self.meta={}; self.canonical=[]; self.h1_on=False; self.h1=[]
+              def handle_starttag(self,tag,attrs):
+                  a=dict(attrs)
+                  if tag=="title": self.title_on=True
+                  if tag=="h1": self.h1_on=True
+                  if tag=="meta" and a.get("name","").lower() in ("description","robots","googlebot"):
+                      self.meta[a["name"].lower()]=a.get("content","")[:300]
+                  if tag=="link" and "canonical" in a.get("rel","").lower().split(): self.canonical.append(a.get("href","")[:300])
+              def handle_endtag(self,tag):
+                  if tag=="title": self.title_on=False
+                  if tag=="h1": self.h1_on=False
+              def handle_data(self,data):
+                  if self.title_on: self.title.append(data.strip()[:250])
+                  if self.h1_on and len(self.h1)<3: self.h1.append(data.strip()[:250])
+          for url in paths:
+              try:
+                  req=Request(url,headers={"User-Agent":"SaeitPersonalSEOReadOnlyAudit/1.0"})
+                  with urlopen(req,timeout=12) as response:
+                      raw=response.read(2000000); text=raw.decode("utf-8","replace")
+                      print("SEO_HTTP="+url+" STATUS="+str(response.status)+" TYPE="+response.headers.get("Content-Type","")+" BYTES="+str(len(raw)))
+                  if url==target:
+                      p=Meta(); p.feed(text)
+                      print("SEO_LIVE_PAGE_TITLE="+" ".join(x for x in p.title if x)[:300])
+                      print("SEO_LIVE_DESCRIPTION="+p.meta.get("description",""))
+                      print("SEO_LIVE_ROBOTS="+p.meta.get("robots",""))
+                      print("SEO_LIVE_CANONICAL="+repr(p.canonical[:2]))
+                      print("SEO_LIVE_H1="+repr([x for x in p.h1 if x]))
+                  elif url.endswith("/robots.txt"):
+                      for line in text.splitlines():
+                          if re.match(r"\s*(user-agent|allow|disallow|sitemap)\s*:",line,re.I):
+                              print("SEO_ROBOTS_LINE="+url+" "+line.strip()[:300])
+                  elif url.endswith("/sitemap.xml"):
+                      try:
+                          root=ElementTree.fromstring(text)
+                          locs=[x.text or "" for x in root.iter() if x.tag.endswith("loc")]
+                          print("SEO_SITEMAP_URLS="+url+" COUNT="+str(len(locs))+" TARGET_PRESENT="+str(target in locs))
+                          print("SEO_SITEMAP_PERSONAL_URLS="+repr([x for x in locs if "mojtaba.roozegar" in x][:20]))
+                      except Exception as exc: print("SEO_SITEMAP_PARSE_ERROR="+url+" "+type(exc).__name__)
+              except HTTPError as exc: print("SEO_HTTP="+url+" STATUS="+str(exc.code))
+              except Exception as exc: print("SEO_HTTP_ERROR="+url+" "+type(exc).__name__)
+          print("PERSONAL_SEO_AUDIT_COMPLETE")
+          PYHTTP
+          echo PERSONAL_SEO_AUDIT_END
+          
           echo PERSONAL_MAPPING_READONLY_COMPLETE
           REMOTE
