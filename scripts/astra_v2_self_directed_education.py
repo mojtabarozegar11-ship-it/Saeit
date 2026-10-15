@@ -14,12 +14,16 @@ import hashlib
 import io
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import zipfile
 
 MAX_CASE_BYTES = 64 * 1024 * 1024
 MIN_FREE_BYTES = 256 * 1024 * 1024
+MAX_RETAINED_EDUCATIONAL_CASES = 720
+MIN_PROTECTED_AGE_HOURS = 168
+CASE_FILENAME = re.compile(r"case-([0-9]{8,})-([0-9a-f]{16})\\.zip\\Z")
 EPOCH = 1_788_739_200  # fixed epoch to make IDs stable across restarts
 KINDS = ("capital_budgeting", "input_procurement", "break_even", "irrigation_allocation")
 D = Decimal
@@ -174,6 +178,61 @@ def _files(item):
             "self_test.py":selftest.encode("utf-8")}
 
 
+def _validate_archive(path, expected_files, expected_hour):
+    """A private edition must match original deterministic synthetic bytes."""
+    if path.is_symlink() or not path.is_file() or path.stat().st_size > 100_000:
+        raise ValueError("unsafe or oversized synthetic edition")
+    with zipfile.ZipFile(path) as z:
+        if z.testzip() is not None or set(z.namelist()) != {
+                "astra_case/" + name for name in expected_files}:
+            raise ValueError("private synthetic ZIP integrity error")
+        for name, expected in expected_files.items():
+            if z.read("astra_case/" + name) != expected:
+                raise ValueError("private synthetic ZIP content mismatch")
+        content=json.loads(z.read("astra_case/CASE.json"))
+        if (content.get("edition_number") != expected_hour or
+                content.get("input_data_kind") != "FICTIONAL EDUCATIONAL EXERCISE" or
+                content.get("actual_market_data") is not False or
+                content.get("publication_allowed") is not False):
+            raise ValueError("unsafe synthetic archive manifest")
+
+
+def _retire_only_old_generated_cases(folder, current_hour):
+    """Bound a synthetic-only cache; never remove user or other factory files.
+
+    Only age-eligible editions with byte-for-byte original generated contents
+    are retired. The caller holds the private single-writer queue lock.
+    """
+    candidates = []
+    for path in folder.iterdir():
+        match = CASE_FILENAME.fullmatch(path.name)
+        if match is None:
+            continue
+        hour = int(match.group(1))
+        if hour > current_hour - MIN_PROTECTED_AGE_HOURS:
+            continue
+        if path.is_symlink() or not path.is_file():
+            continue
+        candidates.append((hour, path))
+    total = len(list(folder.glob("case-*.zip")))
+    needed = max(0, total - MAX_RETAINED_EDUCATIONAL_CASES + 1)
+    if needed == 0:
+        return 0
+    retired = 0
+    for previous_hour, path in sorted(candidates):
+        if retired >= needed:
+            break
+        try:
+            old_expected = _files(case_for_hour(previous_hour))
+            _validate_archive(path, old_expected, previous_hour)
+        except (ValueError, OSError, zipfile.BadZipFile, KeyError, AssertionError):
+            # Foreign/mutated archives are preserved for private investigation.
+            continue
+        path.unlink()
+        retired += 1
+    return retired
+
+
 def build_hour(root, hour):
     """Produce at most one unique useful case per UTC hour and bounded storage.
 
@@ -196,14 +255,18 @@ def build_hour(root, hour):
     if destination.is_symlink():
         raise ValueError("unsafe edition destination")
     if destination.exists():
-        with zipfile.ZipFile(destination) as z:
-            assert z.testzip() is None
-            assert set(z.namelist())==set("astra_case/"+k for k in files)
+        _validate_archive(destination, files, hour)
         return {"status":"UNCHANGED","subject":item["subject"],
                 "edition_number":hour,"new_private_educational_edition":False}
-    existing=sorted(folder.glob("case-*.zip"))
+    retired = _retire_only_old_generated_cases(folder, hour)
+    existing = sorted(folder.glob("case-*.zip"))
+    if any(path.is_symlink() or not path.is_file() for path in existing):
+        return {"status":"RESOURCE_REVIEW_REQUIRED","edition_number":hour,
+                "new_private_educational_edition":False}
     occupied=sum(path.stat().st_size for path in existing)
-    if occupied>=MAX_CASE_BYTES or shutil.disk_usage(folder).free<MIN_FREE_BYTES:
+    if (len(existing) >= MAX_RETAINED_EDUCATIONAL_CASES or
+            occupied>=MAX_CASE_BYTES or
+            shutil.disk_usage(folder).free<MIN_FREE_BYTES):
         return {"status":"RESOURCE_REVIEW_REQUIRED","edition_number":hour,
                 "new_private_educational_edition":False}
     buf=io.BytesIO()
@@ -232,7 +295,8 @@ def build_hour(root, hour):
     return {"status":"PRIVATE_CASE_BUILT","subject":item["subject"],
             "edition_number":hour,"sha256":hashlib.sha256(archive).hexdigest(),
             "new_private_educational_edition":True,
-            "sale_ready":False,"market_demand_verified":False}
+            "sale_ready":False,"market_demand_verified":False,
+            "retired_old_synthetic_editions":retired}
 
 
 def create_current(root, now_utc=None):
