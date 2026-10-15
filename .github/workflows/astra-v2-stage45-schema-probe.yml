@@ -61,6 +61,11 @@ jobs:
           assert d["new_commercial_products_verified"]==0
           original=d["legacy_factory"]
           isolated=d["isolated_astra_v2"]
+          assert original["migration"]["latest_core_migration"]=="0048_business_market_architecture"
+          assert original["migration"]["astra_0049_recorded"] is False
+          assert original["stage45_schema_tables_present"] is False
+          assert original["aggregates"]["core_product"]>=209
+          assert isolated["families_qa_passed"]==3
           print("ASTRA_STAGE45_LEGACY_READ_ADAPTER="+str(original["legacy_readonly_adapter_schema_compatible"]).lower())
           print("ASTRA_STAGE45_LIVE_SCHEMA_0049="+str(original["stage45_schema_tables_present"]).lower())
           print("ASTRA_STAGE45_LIVE_MIGRATION_0049="+str(original["migration"]["astra_0049_recorded"]).lower())
