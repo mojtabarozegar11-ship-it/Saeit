@@ -44,12 +44,20 @@ def report_html(doc):
         html.append('<section class="card"><h2>'+x(key.title())+' scenario</h2>')
         winner=data["lowest_cost_eligible_supplier_under_inputs"]
         html.append("<p><strong>Lowest arithmetic eligible offer:</strong> "+x(winner if winner else "None eligible")+"</p>")
-        html.append('<div class="scroll"><table><thead><tr><th>Supplier</th><th>Eligible?</th><th>Gross units ordered</th><th>Landed total</th><th>Effective cost/net unit</th><th>Limitations</th></tr></thead><tbody>')
+        gap=data.get("arithmetic_cost_gap_to_second_eligible_not_realized_savings")
+        if gap is not None:
+            html.append("<p><strong>Arithmetic gap to second eligible offer (NOT realized savings):</strong> "+
+                        x(str(gap))+" "+x(str(doc["currency"]))+". "+
+                        "Quote terms, quality, taxes and supplier identity remain unverified.</p>")
+        html.append('<div class="scroll"><table><thead><tr><th>Supplier</th><th>Eligible?</th><th>Price basis</th><th>Whole packs</th><th>Gross units ordered</th><th>Excess usable units</th><th>Landed total</th><th>Effective cost/net unit</th><th>Limitations</th></tr></thead><tbody>')
         for offer in data["offers"]:
             eligible=offer["eligible_for_cost_comparison"]
             html.append("<tr><td>"+x(str(offer["supplier"]))+
                  "</td><td class='"+("eligible" if eligible else "blocked")+"'>"+("Yes" if eligible else "No")+
+                 "</td><td>"+x(str(offer.get("quote_pricing_basis","per_base_unit")))+
+                 "</td><td>"+x(str(offer.get("whole_packs_ordered") or "N/A"))+
                  "</td><td>"+x(str(offer.get("gross_order_units","N/A")))+
+                 "</td><td>"+x(str(offer.get("surplus_usable_units","N/A")))+
                  "</td><td>"+x(str(offer.get("total_landed_cost","N/A")))+
                  "</td><td>"+x(str(offer.get("landed_cost_per_net_required_unit","N/A")))+
                  "</td><td>"+x(", ".join(offer["reasons"]) if offer["reasons"] else "None reported")+"</td></tr>")
