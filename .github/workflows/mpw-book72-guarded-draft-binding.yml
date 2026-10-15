@@ -1,0 +1,169 @@
+name: MojPlayWin book 72 guarded private draft binding
+on:
+  push:
+    branches: [audit/mpw-book72-go-live-gates-20261015]
+    paths: [.github/workflows/mpw-book72-guarded-draft-binding.yml]
+permissions:
+  contents: read
+jobs:
+  bind:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Prepare pinned SSH connections to authorized site host
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/astra-live-payment"
+          install -d -m 700 "$d"
+          for item in VPS_KEY HOST_KEY; do
+            printf '%s' "${!item}" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/$item.key"
+            chmod 600 "$d/$item.key"
+            ssh-keygen -y -P '' -f "$d/$item.key" >/dev/null
+          done
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -i "$d/VPS_KEY.key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/vps.known" -o BatchMode=yes githubops@178.239.147.150 'ssh-keyscan -T 10 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/VPS_KEY.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/HOST_KEY.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 12
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+      - name: Bind archived book and catalog to unique verified site owner without publishing
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -F "$RUNNER_TEMP/astra-live-payment/config" saeit-cpanel 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          app="$HOME/Saeit-staging"
+          doc="$HOME/mojplaywin.com"
+          test -f "$app/manage.py" && test -f "$doc/passenger_wsgi.py"
+          grep -Fq Saeit-staging "$doc/passenger_wsgi.py"
+          export DJANGO_SETTINGS_MODULE=config.settings
+          export PYTHONPATH="$app"
+          cd "$app"
+          for py in "$HOME/virtualenv/Saeit-staging/3.11/bin/python" "$app/.venv/bin/python" "$HOME/virtualenv/Saeit-staging/3.10/bin/python" "$HOME/virtualenv/mojplaywin.com/3.11/bin/python"; do
+            if test -x "$py" && "$py" -c 'import django' >/dev/null 2>&1; then
+              "$py" - <<'PY'
+          import os,json,hashlib,datetime,pathlib,tempfile
+          import django
+          from django.apps import apps
+          from django.conf import settings
+          from django.db import transaction
+          from django.contrib.auth import get_user_model
+          django.setup()
+          if settings.DEBUG is not False:
+              raise RuntimeError("Production settings must be used")
+          Product=apps.get_model("core","Product")
+          Knowledge=apps.get_model("core","KnowledgeArticle")
+          p=Product.objects.get(pk=72)
+          if p.active:
+              raise RuntimeError("Refuse to mutate already public product")
+          if p.currency!="USD" or str(p.price)!="7.50" or p.product_type!="digital_book":
+              raise RuntimeError("Unrecognized original book product")
+          for flag in ("MPW_COMMERCE_RELEASE_READY","MPW_COMMERCE_INVOICING_ENABLED","MPW_COMMERCE_SETTLEMENT_ENABLED","MPW_COMMERCE_DOWNLOADS_ENABLED"):
+              if getattr(settings,flag,False) is True:
+                  raise RuntimeError("Refuse to bind while sale release is enabled")
+          asset=pathlib.Path("/home/zomorod2/MojPlayWin_Private_Assets/store/chess-improvement/MojPlayWin_Chess_Grandmaster_Final_Covered_2026.pdf")
+          if asset.is_symlink() or not asset.is_file() or asset.stat().st_size!=3631972:
+              raise RuntimeError("Private original book asset identity failed")
+          sha=hashlib.sha256()
+          with asset.open("rb") as stream:
+              for block in iter(lambda:stream.read(1024*1024),b""): sha.update(block)
+          if sha.hexdigest()!="3837fc3cb21ed1a2e7c33e0db8f8e10d158583309b02b97d4d674d25a147207a":
+              raise RuntimeError("Private book SHA-256 mismatch")
+          users=get_user_model().objects.filter(is_active=True,is_staff=True,is_superuser=True)
+          if users.count()!=1:
+              raise RuntimeError("Owner not uniquely resolvable; no changes made")
+          owner=users.first()
+          if p.owner_id not in (None,owner.pk):
+              raise RuntimeError("Existing owner differs; abort")
+          slug="mpw-chess-improvement-2026-product72-draft"
+          prior=Knowledge.objects.filter(slug=slug).first()
+          if prior is not None and (prior.published or prior.title!="The Science and Practice of Chess Improvement"):
+              raise RuntimeError("Conflicting knowledge record")
+          if p.knowledge_article_id not in (None,prior.pk if prior else None):
+              raise RuntimeError("Product already points at another article")
+          metadata=p.metadata if isinstance(p.metadata,dict) else {}
+          existing=metadata.get("mpw_commerce",{})
+          if not isinstance(existing,dict) or existing.get("enabled") is True:
+              raise RuntimeError("Existing commerce configuration must remain disabled")
+          if existing.get("private_file") not in (None,"","store/chess-improvement/MojPlayWin_Chess_Grandmaster_Final_Covered_2026.pdf"):
+              raise RuntimeError("Conflicting private asset")
+          backup_dir=pathlib.Path.home()/".mpw-book72-private-rollback"
+          if backup_dir.is_symlink(): raise RuntimeError("Unsafe backup directory")
+          backup_dir.mkdir(mode=0o700,exist_ok=True)
+          os.chmod(backup_dir,0o700)
+          backup_name="book72-draft-prebind-"+os.environ.get("GITHUB_RUN_ID","manual")+"-"+datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%S")+".json"
+          backup=backup_dir/backup_name
+          with backup.open("x",encoding="utf-8") as f:
+              os.chmod(backup,0o600)
+              json.dump({"id":72,"owner_id":p.owner_id,"knowledge_article_id":p.knowledge_article_id,"metadata":metadata,
+                         "active":p.active,"price":str(p.price),"currency":p.currency},f,ensure_ascii=False)
+          with transaction.atomic():
+              locked=Product.objects.select_for_update().get(pk=72)
+              if locked.active or locked.owner_id!=p.owner_id or locked.knowledge_article_id!=p.knowledge_article_id or locked.metadata!=p.metadata:
+                  raise RuntimeError("Concurrent product change, refused")
+              if prior is None:
+                  prior=Knowledge.objects.create(
+                      slug=slug,title="The Science and Practice of Chess Improvement",
+                      content=("Author: Mojtaba Roozegar. Private editorial draft for product 72. "
+                               "The earlier archived PDF is kept for provenance; the new 741-page working "
+                               "manuscript requires publication-quality and independent scientific review. "
+                               "Do not enable sales or claim grandmaster verification before release."),
+                      published=False)
+              updated=dict(metadata)
+              new_commerce=dict(existing)
+              new_commerce.update({"enabled":False,"fulfillment":"digital",
+                  "private_file":"store/chess-improvement/MojPlayWin_Chess_Grandmaster_Final_Covered_2026.pdf"})
+              updated["mpw_commerce"]=new_commerce
+              updated["mpw_book72_release_hold"]="new_741_page_manuscript_not_on_host_quality_pending"
+              locked.owner=owner
+              locked.knowledge_article=prior
+              locked.metadata=updated
+              locked.full_clean()
+              locked.save(update_fields=["owner","knowledge_article","metadata","updated_at"])
+              assert locked.active is False and locked.metadata["mpw_commerce"]["enabled"] is False
+              assert prior.published is False
+          verified=Product.objects.select_related("knowledge_article").get(pk=72)
+          assert verified.owner_id==owner.pk and verified.knowledge_article is not None
+          assert verified.active is False and verified.knowledge_article.published is False
+          print("BOOK72_PRIVATE_DRAFT_OWNER_BOUND=YES")
+          print("BOOK72_PRIVATE_DRAFT_ARTICLE_BOUND=YES")
+          print("BOOK72_ARCHIVED_PDF_VERIFIED=YES")
+          print("BOOK72_PUBLICATION_REMAINS_OFF=YES")
+          print("BOOK72_PRICE_UNCHANGED_USD=7.50")
+          print("BOOK72_PRIVATE_ROLLBACK_BACKUP_CREATED=YES")
+          PY
+              exit 0
+            fi
+          done
+          echo BOOK72_DRAFT_BIND_FAILED=NO_PYTHON
+          exit 1
+          REMOTE
+      - name: Clean temporary identities
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/astra-live-payment"
