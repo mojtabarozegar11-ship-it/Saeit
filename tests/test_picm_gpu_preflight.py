@@ -100,11 +100,19 @@ class PICMIndependentGPUReadinessTests(unittest.TestCase):
     def test_wan5b_profile_accepts_8gb_only_when_free_vram_sufficient(self):
         self.assertEqual(p.GPU_PROFILES["wan22-5b-offload-8gb"], 7000)
         response = {"devices": [{"type": "cuda", "name": "NVIDIA RTX 8GB"}]}
+        source = json.loads(self.graph.read_text())
+        source["3"]["class_type"] = "Wan22ImageToVideoLatent"
+        source["9"] = {"class_type": "UNETLoader",
+                        "inputs": {"unet_name": "wan2.2_ti2v_5B_fp16.safetensors"}}
+        source["4"]["inputs"]["model"] = ["9", 0]
+        self.graph.write_text(json.dumps(source))
         with patch.object(p.shutil, "which", return_value="/usr/bin/ffmpeg"):
             with patch.object(p.shutil, "disk_usage", return_value=self.disk):
                 def check(minimum):
                     return p.inspect(self.home, self.graph, self.nodes,
                         minimum_gpu_mib=minimum, probe=lambda _: response,
+                        gpu_profile="wan22-5b-offload-8gb" if minimum == 7000
+                            else "standard-24gb",
                         gpu_command=lambda: "8192, 7400")
                 self.assertFalse(check(p.GPU_PROFILES["standard-24gb"])["ready"])
                 self.assertTrue(check(p.GPU_PROFILES["wan22-5b-offload-8gb"])["ready"])
@@ -114,11 +122,40 @@ class PICMIndependentGPUReadinessTests(unittest.TestCase):
             with patch.object(p.shutil, "disk_usage", return_value=self.disk):
                 result = p.inspect(self.home, self.graph, self.nodes,
                     minimum_gpu_mib=p.GPU_PROFILES["wan22-5b-offload-8gb"],
+                    gpu_profile="wan22-5b-offload-8gb",
                     probe=lambda _: {"devices": [{"type": "cuda"}]},
                     gpu_command=lambda: "8192, 4900")
         self.assertFalse(result["ready"])
         self.assertIn("insufficient_free_gpu_vram", result["requirements"])
 
+    def test_low_vram_profile_rejects_unrelated_14b_workflow(self):
+        with patch.object(p.shutil, "which", return_value="/usr/bin/ffmpeg"):
+            with patch.object(p.shutil, "disk_usage", return_value=self.disk):
+                result = p.inspect(
+                    self.home, self.graph, self.nodes,
+                    minimum_gpu_mib=7000, gpu_profile="wan22-5b-offload-8gb",
+                    probe=lambda _: {"devices": [{"type": "cuda"}]},
+                    gpu_command=lambda: "8192, 7400")
+        self.assertFalse(result["ready"])
+        self.assertIn("wan22_5b_checkpoint_not_selected_in_workflow",
+                      result["requirements"])
+
+    def test_disconnected_5b_checkpoint_does_not_bypass_model_gate(self):
+        graph = json.loads(self.graph.read_text())
+        graph["9"] = {"class_type": "UNETLoader",
+                      "inputs": {"unet_name": "wan2.2_ti2v_5B_fp16.safetensors"}}
+        graph["3"]["class_type"] = "Wan22ImageToVideoLatent"
+        self.graph.write_text(json.dumps(graph))
+        with patch.object(p.shutil, "which", return_value="/usr/bin/ffmpeg"):
+            with patch.object(p.shutil, "disk_usage", return_value=self.disk):
+                result = p.inspect(
+                    self.home, self.graph, self.nodes,
+                    minimum_gpu_mib=7000, gpu_profile="wan22-5b-offload-8gb",
+                    probe=lambda _: {"devices": [{"type": "cuda"}]},
+                    gpu_command=lambda: "8192, 7400")
+        self.assertFalse(result["ready"])
+        self.assertIn("wan22_5b_checkpoint_not_selected_in_workflow",
+                      result["requirements"])
 
 if __name__ == "__main__":
     unittest.main()
