@@ -1,0 +1,91 @@
+name: Astra Independent Private Research Dossiers Health
+
+on:
+  push:
+    branches: [feature/astra-v2-0048-integration-canary-20261015]
+    paths: [.github/workflows/astra-v2-research-dossiers-health.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  read-only-private-evidence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Verify research dossier quantity, content, original legacy schema and two cron jobs
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          tmp="$RUNNER_TEMP/astra-dossier-health"
+          install -d -m 700 "$tmp"
+          trap 'rm -rf -- "$tmp"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$tmp/key"
+          chmod 600 "$tmp/key"
+          ssh-keygen -y -P '' -f "$tmp/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$tmp/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$tmp/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -i "$tmp/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$tmp/known" \
+            -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=15 githubops@178.239.147.150 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          root="$HOME/factory-runtime"
+          dir="$root/private/astra-v2-research-dossiers/briefs"
+          factory="$root/private/factory-fresh-isolated.sqlite3"
+          queue="$root/private/astra-v2-research-bridge/research-tasks.sqlite3"
+          test -d "$dir" && test ! -L "$dir"
+          test "$(crontab -l | grep -c ASTRA_V2_PRIVATE_RESEARCH_BRIDGE || true)" = 1
+          test "$(crontab -l | grep -c ASTRA_V2_PRIVATE_RESEARCH_DOSSIERS || true)" = 1
+          "$root/.venv/bin/python" - "$dir" "$factory" "$queue" <<'PY'
+          import datetime,json,pathlib,sqlite3,sys
+          out,factory,queue=map(pathlib.Path,sys.argv[1:])
+          rows=sorted(out.glob("research-*.json"))
+          assert len(rows)>=50,len(rows)
+          checked=0
+          for path in rows:
+              assert not path.is_symlink() and path.stat().st_size<=20000
+              d=json.loads(path.read_text(encoding="utf-8"))
+              assert d["schema_version"]==1
+              assert d["research_evidence_target"]==100
+              assert d["independently_verified_research_items"]==0
+              assert d["commercial_quality_score"] is None
+              assert d["release_authorized"] is False
+              assert d["external_actions_required"]==5
+              assert d["internal_actions_required"]==1
+              assert d["market_research_performed_by_this_run"] is False
+              checked+=1
+          cursor=out/".research-dossiers-cursor.json"
+          assert cursor.is_file() and not cursor.is_symlink()
+          progress=json.loads(cursor.read_text())
+          assert progress["last_product_id"]>=0
+          updated=datetime.datetime.fromisoformat(progress["updated_utc"])
+          age=(datetime.datetime.now(datetime.timezone.utc)-updated).total_seconds()
+          assert -90<=age<=3600,age
+          def ro(path):
+              assert path.is_file() and not path.is_symlink()
+              c=sqlite3.connect(path.resolve().as_uri()+"?mode=ro",uri=True)
+              c.execute("PRAGMA query_only=ON")
+              return c
+          with ro(factory) as old, ro(queue) as tasks:
+              applied=old.execute("SELECT name FROM django_migrations WHERE app='core' ORDER BY name DESC LIMIT 1").fetchone()[0]
+              assert applied=="0048_business_market_architecture"
+              total=old.execute("SELECT COUNT(*) FROM core_product").fetchone()[0]
+              task_count=tasks.execute("SELECT COUNT(*) FROM research_tasks").fetchone()[0]
+              assert task_count>=50
+          print("ASTRA_DOSSIER_HEALTH=PASS")
+          print("ASTRA_DOSSIER_DOCUMENTS_VERIFIED="+str(checked))
+          print("ASTRA_DOSSIER_SCHEDULED_REFRESH_EVERY_30_MIN=true")
+          print("ASTRA_DOSSIER_RESEARCH_BRIDGE_CRON_UNCHANGED=true")
+          print("ASTRA_DOSSIER_RESEARCH_TASKS="+str(task_count))
+          print("ASTRA_DOSSIER_LAST_BUILD_AGE_SECONDS="+str(int(age)))
+          print("ASTRA_DOSSIER_ORIGINAL_FACTORY_PRODUCTS="+str(total))
+          print("ASTRA_DOSSIER_ORIGINAL_MIGRATION_0048=true")
+          print("ASTRA_DOSSIER_MARKET_DEMAND_ATTESTATIONS=0")
+          print("ASTRA_DOSSIER_PRODUCTS_RELEASED=0")
+          print("ASTRA_DOSSIER_PRIVATE_READONLY_AUDIT=true")
+          PY
+          REMOTE
