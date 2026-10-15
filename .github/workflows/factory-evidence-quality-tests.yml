@@ -1,0 +1,27 @@
+name: Factory Evidence Quality Policy Tests
+on:
+  push:
+    branches: [feature/factory-evidence-quality-gate-20261015]
+    paths:
+      - .github/workflows/factory-evidence-quality-tests.yml
+      - scripts/factory_evidence_quality.py
+      - scripts/factory_autonomous_portfolio.py
+      - tests/test_factory_evidence_quality.py
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify scientific coverage is never fabricated or auto-approved
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/factory_evidence_quality.py scripts/factory_autonomous_portfolio.py
+          python3 -m unittest discover -s tests -p 'test_factory_evidence_quality.py' -v
+          python3 -m unittest discover -s tests -p 'test_factory_autonomous_portfolio.py' -v
+          python3 -m unittest discover -s tests -p 'test_factory_vps_product_cycle.py' -v
+          echo FACTORY_RESEARCH_EVIDENCE_GATE_TESTS_PASSED
