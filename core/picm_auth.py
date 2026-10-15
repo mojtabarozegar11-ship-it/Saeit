@@ -67,7 +67,7 @@ def _throttle(key, failed=False, clear=False):
 @require_http_methods(["GET", "POST"])
 def picm_login(request):
     if request.user.is_authenticated:
-        return redirect("/picm/")
+        return redirect("/picm/workspace/")
     error = None
     if request.method == "POST":
         username = normalize_username(request.POST.get("username", ""))
@@ -88,7 +88,7 @@ def picm_login(request):
             else:
                 _throttle(key, clear=True)
                 login(request, user)
-                return redirect("/picm/")
+                return redirect("/picm/workspace/")
     return render(request, "picm/login.html", {"picm_error": error})
 
 
