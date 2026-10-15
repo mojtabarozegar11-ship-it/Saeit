@@ -26,7 +26,6 @@ jobs:
           umask 077
           d="$RUNNER_TEMP/mojtaba-seo"
           mkdir -p "$d"
-          trap 'rm -rf -- "$d"' EXIT
           printf '%s\n' "$VPS_KEY" > "$d/vps.key"
           printf '%s\n' "$HOST_KEY" > "$d/host.key"
           python3 - "$d/host.key" <<'PY'
@@ -245,3 +244,8 @@ jobs:
           echo "SEO_UPDATE=completed"
           echo "SEO_BACKUP=$backup"
           REMOTE
+
+      - name: Remove temporary SSH material
+        if: always()
+        shell: bash
+        run: rm -rf -- "$RUNNER_TEMP/mojtaba-seo"
