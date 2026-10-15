@@ -11,6 +11,8 @@ on:
       - 'tests/native_ci_customer_checkout_page.py'
       - 'tests/native_ci_customer_purchase_history.py'
       - 'tests/native_ci_customer_auth.py'
+      - 'tests/native_ci_book72_promo.py'
+      - 'scripts/mpw_book72_apply_promo.py'
       - 'mpw_commerce/**'
       - 'tests/native_ci_buyer_cart.py'
       - 'tests/native_checkout_mysql_settings.py'
@@ -78,6 +80,7 @@ jobs:
             tests.native_ci_customer_checkout_page \
             tests.native_ci_customer_purchase_history \
             tests.native_ci_customer_auth \
+            tests.native_ci_book72_promo \
             tests.native_ci_sitewide_commerce \
             tests.native_ci_sitewide_chain_adapter \
             tests.native_ci_sitewide_reconcile \
