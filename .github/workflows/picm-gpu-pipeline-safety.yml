@@ -9,6 +9,8 @@ on:
       - tests/test_picm_story_assemble.py
       - tests/test_picm_video_bridge.py
       - tests/test_picm_video_worker_client.py
+      - tests/test_picm_gpu_preflight.py
+      - core/picm_mp4_verify.py
       - templates/picm/story_preview.js
       - core/picm_video_bridge.py
       - core/picm_video_urls.py
@@ -46,8 +48,8 @@ jobs:
           ALLOWED_HOSTS: localhost,127.0.0.1
         run: |
           python -m pip install -r requirements.txt
-          python -m py_compile core/picm_video_bridge.py core/picm_video_urls.py ops/picm-gpu/video_worker_client.py
-          pytest -q tests/test_picm_video_bridge.py tests/test_picm_video_worker_client.py
+          python -m py_compile core/picm_mp4_verify.py core/picm_video_bridge.py core/picm_video_urls.py ops/picm-gpu/video_worker_client.py ops/picm-gpu/gpu_preflight.py
+          pytest -q tests/test_picm_video_bridge.py tests/test_picm_video_worker_client.py tests/test_picm_gpu_preflight.py
           node --check templates/picm/story_preview.js
       - name: Explicit evidence statement
         run: echo 'PICM_ISOLATED_SOFTWARE_GATES_ONLY_NOT_A_GPU_RENDER'
