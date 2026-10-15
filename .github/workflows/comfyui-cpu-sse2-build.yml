@@ -53,6 +53,10 @@ jobs:
           tar -C "$RUNNER_TEMP/sd-cpp/build" -cf "$d/sd-cpp.tar" bin
           sha256sum "$d/sd-cpp.tar" | awk '{print "CPU_RUNTIME_ARCHIVE_SHA256="$1}'
           sshopts=(-i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15)
+          if ssh "${sshopts[@]}" githubops@178.239.147.150 'test -x "$HOME/comfyui-isolated/.control/sd-cpp-runtime-sse2/bin/sd-cli"'; then
+            echo SSE2_ALREADY_INSTALLED_NO_REPLACEMENT
+            exit 0
+          fi
           ssh "${sshopts[@]}" githubops@178.239.147.150 'bash -se' < /dev/null <<'REMOTE'
           set -euo pipefail
           umask 077
