@@ -1,4 +1,4 @@
-name: MojPlayWin cPanel document root check
+name: Public domains cPanel document root check
 
 on:
   push:
@@ -95,7 +95,7 @@ jobs:
           import json
           import sys
 
-          target = {"mojplaywin.com", "www.mojplaywin.com"}
+          target = {"mojplaywin.com", "www.mojplaywin.com", "mojtaba.roozegar.com"}
           with open(sys.argv[1], encoding="utf-8") as stream:
               data = json.load(stream)
           found = []
@@ -114,7 +114,7 @@ jobs:
 
           visit(data)
           if not found:
-              print("MOJPLAYWIN_DOMAIN_NOT_FOUND_IN_CPANEL")
+              print("TARGET_DOMAIN_NOT_FOUND_IN_CPANEL")
               raise SystemExit(2)
           for domain, root in found:
               print(f"{domain} document root: {root}")
