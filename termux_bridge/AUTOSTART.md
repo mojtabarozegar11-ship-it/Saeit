@@ -43,3 +43,32 @@ secret publication are implemented.
 Android may pause or kill background processes unless background
 execution is permitted. GitHub CI verifies Python logic and file
 safety, but **not** Android reboot/battery behavior.
+
+## ComfyUI phone SSH preparation (15 October 2026)
+
+The live Git bridge returned an actual `pong`. A **new**, allowlisted
+`comfyui_key_prepare` action is implemented and CI tested. It creates (or
+reuses) `~/.saeit-comfyui-phone/comfyui_ed25519` and reports only the matching
+`ssh-ed25519` **public** key in `bridge/result.json`. No commands or private
+keys are obtained from GitHub, and the operation does not open a socket.
+
+IMPORTANT: the existing Android Python worker cannot hot-reload updated Python
+functions merely because its dedicated checkout did `git pull`. Once, on the
+phone in Termux, restart the already running worker using:
+
+```bash
+pkill -f '[t]ermux_bridge.autostart --run' 2>/dev/null || true
+pkill -f '[t]ermux_bridge.worker --loop' 2>/dev/null || true
+cd "$HOME/.saeit-termux-bridge/repo" && git pull --ff-only &&
+python -m termux_bridge.autostart --start
+```
+
+The issued Git command `comfyui-key-prepare-20261015-0956` expires at
+2026-10-16 09:56:47 UTC. If it has expired, the owner must send a new command.
+A matching receipt, **not** a passing CI test, is proof that this new action
+ran on the physical phone. A privileged workflow on `main` independently
+validates a completed phone receipt from the exact tested Git commit before it
+adds a strictly forwarding-only public key to the existing VPS. The private key
+must never be submitted, logged, or committed. Phone SSH tunnel activation and
+browser availability remain separate checks.
+
