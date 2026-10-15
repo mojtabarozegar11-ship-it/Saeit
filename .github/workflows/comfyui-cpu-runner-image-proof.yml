@@ -1,8 +1,8 @@
 name: ComfyUI CPU Image Studio - Preset Runner
 on:
   push:
-    branches: [feature/comfyui-studio-quality-safety-20261015]
-    paths: [.github/workflows/comfyui-cpu-runner-image-proof.yml]
+    branches: [feature/comfyui-production-integrity-20261015]
+    paths: [".github/workflows/comfyui-cpu-runner-image-proof.yml", ops/comfyui-vps/verify_artifact_pair.py]
   workflow_dispatch:
     inputs:
       preset:
