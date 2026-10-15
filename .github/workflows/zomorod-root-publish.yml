@@ -41,8 +41,8 @@ jobs:
           required=("https://zomorodmelal.ir/amozeshgah/","https://mojplaywin.com/")
           if not all((check.rtl,check.title,check.canonical,check.h1)) or not all(x in check.links for x in required):
               raise SystemExit("Homepage metadata, RTL structure, heading, or live links are missing")
-          if len(source.encode("utf-8")) < 6000:
-              raise SystemExit("Homepage source is unexpectedly small")
+          if "<!-- saeit-zomorod-root-homepage-v1 -->" not in source or len(source.encode("utf-8")) < 6000:
+              raise SystemExit("Managed homepage marker is missing or the source is unexpectedly small")
           print("ROOT_HOMEPAGE_SOURCE=valid")
           print(f"ROOT_HOMEPAGE_BYTES={len(source.encode('utf-8'))}")
           PY
@@ -107,21 +107,31 @@ jobs:
           backup="$HOME/.backups/zomorodmelal-amozeshgah/htaccess.20261014T235252Z"
           test -f "$backup" && cmp -s "$root/.htaccess" "$backup"
           test ! -e "$root/index.html" && test ! -L "$root/index.html"
-          raw="$(uapi --output=json PassengerApps list_applications)"
-          printf '%s' "$raw" | python3 -c 'import json,sys; d=json.load(sys.stdin); stack=[d]; found=[]
-while stack:
- x=stack.pop()
- if isinstance(x,dict):
-  if str(x.get("domain","")).lower()=="zomorodmelal.ir" and x.get("base_uri")=="/": found.append(x.get("enabled"))
-  stack.extend(x.values())
- elif isinstance(x,list): stack.extend(x)
-if not found or any(str(v).lower() not in ("0","false") for v in found): raise SystemExit("Root Passenger app is missing or enabled; refusing static publication")
-print("ROOT_PASSENGER_APP_DISABLED=yes")'
+          raw="$HOME/.root-app-audit-$$.json"
+          trap 'rm -f -- "$raw"' EXIT
+          uapi --output=json PassengerApps list_applications > "$raw"
+          python3 - "$raw" <<'PY'
+          import json
+          import sys
+          data=json.load(open(sys.argv[1],encoding="utf-8"))
+          stack=[data]; states=[]
+          while stack:
+              value=stack.pop()
+              if isinstance(value,dict):
+                  if str(value.get("domain","")).lower()=="zomorodmelal.ir" and value.get("base_uri")=="/":
+                      states.append(value.get("enabled"))
+                  stack.extend(value.values())
+              elif isinstance(value,list):
+                  stack.extend(value)
+          if not states or any(str(value).lower() not in ("0","false") for value in states):
+              raise SystemExit("Root Passenger app is missing or enabled; refusing static publication")
+          print("ROOT_PASSENGER_APP_DISABLED=yes")
+          PY
           echo ROOT_DIRECTORY_OWNER=zomorod2
           echo ROOT_HTACCESS_UNCHANGED=yes
           echo ROOT_INDEX_AVAILABLE=yes
           REMOTE
-      - name: Stage and atomically publish root index only
+      - name: Stage homepage and atomically publish only root index.html
         shell: bash
         run: |
           set -euo pipefail
@@ -130,8 +140,21 @@ print("ROOT_PASSENGER_APP_DISABLED=yes")'
           stage="$root/.zomorod-root-stage-$GITHUB_SHA"
           ssh -F "$d/config" saeit-cpanel "set -eu; test ! -e '$root/index.html' && test ! -L '$root/index.html'; test ! -e '$stage'; mkdir -m 700 '$stage'"
           tar -C public -czf - index.html | ssh -F "$d/config" saeit-cpanel "tar -xzf - -C '$stage'"
-          sha="$(sha256sum public/index.html | awk '{print $1}')"
-          ssh -F "$d/config" saeit-cpanel "set -eu; test -s '$stage/index.html'; test \"$(sha256sum '$stage/index.html' | awk '{print \\\$1}')\" = '$sha'; chmod 644 '$stage/index.html'; mv -T '$stage/index.html' '$root/index.html'; rmdir '$stage'; test -s '$root/index.html'; echo ROOT_INDEX_INSTALLED=yes"
+          expected_sha="$(sha256sum public/index.html | awk '{print $1}')"
+          ssh -F "$d/config" saeit-cpanel bash -s -- "$expected_sha" "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          expected_sha="$1"
+          commit_sha="$2"
+          root=/home/zomorod2/public_html
+          stage="$root/.zomorod-root-stage-$commit_sha"
+          actual_sha="$(sha256sum "$stage/index.html" | awk '{print $1}')"
+          test "$actual_sha" = "$expected_sha"
+          chmod 644 "$stage/index.html"
+          mv -T "$stage/index.html" "$root/index.html"
+          rmdir "$stage"
+          test -s "$root/index.html"
+          echo ROOT_INDEX_INSTALLED=yes
+          REMOTE
       - name: Verify apex and www, roll back if either fails
         shell: bash
         run: |
@@ -139,29 +162,32 @@ print("ROOT_PASSENGER_APP_DISABLED=yes")'
           d="$RUNNER_TEMP/zomorod-root"
           failed=0
           for url in https://zomorodmelal.ir/ https://www.zomorodmelal.ir/; do
-            file="$d/$(printf '%s' "$url" | sed 's#https://##; s#/#_#g; s#\\.#_#g').html"
+            name="$(printf '%s' "$url" | sed 's#https://##; s#/#_#g; s#\\.#_#g')"
+            file="$d/$name.html"
             result="$(curl --silent --show-error --location --max-redirs 5 --connect-timeout 10 --max-time 30 -H 'Cache-Control: no-cache' -o "$file" -w '%{http_code}|%{content_type}|%{url_effective}' "$url" || true)"
             code="${result%%|*}"
             type="$(printf '%s' "$result" | cut -d '|' -f2)"
             printf 'PUBLIC_ROOT_CHECK %s result=%s\n' "$url" "$result"
-            if [ "$code" != "200" ] || [[ "$type" != text/html* ]] || ! grep -Fq 'شرکت کشت و صنعت زمرد ملل | دانش، تولید و آینده' "$file" || ! grep -Fq 'https://zomorodmelal.ir/amozeshgah/' "$file"; then failed=1; fi
+            if [ "$code" != "200" ] || [[ "$type" != text/html* ]] || ! grep -Fq '<!-- saeit-zomorod-root-homepage-v1 -->' "$file" || ! grep -Fq 'https://zomorodmelal.ir/amozeshgah/' "$file"; then failed=1; fi
           done
           if [ "$failed" -ne 0 ]; then
-            ssh -F "$d/config" saeit-cpanel 'bash -se' <<'REMOTE'
+            ssh -F "$d/config" saeit-cpanel bash -s -- "$GITHUB_SHA" <<'REMOTE'
           set -euo pipefail
+          commit_sha="$1"
           root=/home/zomorod2/public_html
-          backup="$HOME/.backups/zomorodmelal-root-homepage/index-failed-$GITHUB_SHA"
-          if test -f "$root/index.html" && grep -Fq '<!-- saeit-zomorod-root-homepage-v1 -->' "$root/index.html"; then
+          target="$root/index.html"
+          backup="$HOME/.backups/zomorodmelal-root-homepage/index-failed-$commit_sha"
+          if test -f "$target" && grep -Fq '<!-- saeit-zomorod-root-homepage-v1 -->' "$target"; then
             install -d -m 700 "$HOME/.backups/zomorodmelal-root-homepage"
             test ! -e "$backup"
-            mv -T "$root/index.html" "$backup"
+            mv -T "$target" "$backup"
           fi
           echo ROOT_PUBLICATION_ROLLED_BACK=yes
           REMOTE
             exit 1
           fi
           echo ROOT_APEX_AND_WWW_VALIDATION=passed
-          grep -F '<title>' "$d/zomorodmelal.ir_.html" | head -1
+          grep -F '<title>' "$d/zomorodmelal_ir_.html" | head -1
       - name: Remove temporary SSH material
         if: always()
         shell: bash
