@@ -92,7 +92,8 @@ class FourDraftPreparationTests(unittest.TestCase):
         content=SCRIPT.read_text()
         self.assertNotIn("PaymentIntent.objects.create",content)
         self.assertNotIn("Order.objects.create",content)
-        self.assertNotIn("active=True",content)
+        self.assertIn("active=False,owner=owner",content)
+        self.assertNotIn("obj.active=True",content)
         self.assertNotIn("urllib.request",content)
 
 
