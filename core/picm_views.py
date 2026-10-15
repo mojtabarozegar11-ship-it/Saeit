@@ -487,8 +487,6 @@ def picm_reference_status(request, ident):
         return unauthenticated()
     if not owner_allowed(request.user):
         raise Http404
-    if not owner_allowed(request.user):
-        return JsonResponse({"error": "forbidden"}, status=403)
     if not UUID_RE.fullmatch(ident):
         raise Http404
     with locked() as root:
