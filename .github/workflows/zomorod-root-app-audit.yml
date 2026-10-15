@@ -391,6 +391,37 @@ jobs:
           ssh -F "$SSH_CONFIG" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
           set -euo pipefail
           commit_sha="$1"
+          backup_dir="$HOME/.backups/zomorodmelal-root-homepage"
+          profile="$HOME/.bash_profile"
+          profile_backup="$backup_dir/bash-profile-before-e33df0b67045f966ea56a9dbc8ffdb5cead1fb20"
+          if test -f "$profile_backup"; then
+            if grep -qx 'CODEX_NO_PREVIOUS_BASH_PROFILE' "$profile_backup"; then
+              python3 - "$profile" <<'PY'
+          import pathlib,sys
+          p=pathlib.Path(sys.argv[1])
+          if p.exists():
+              lines=p.read_text(encoding="utf-8",errors="replace").splitlines(keepends=True)
+              out=[];skip=False
+              for line in lines:
+                  if line.rstrip("\n")=="# ZOMORODMELAL_PASSENGER_VIRTUAL_ENV":
+                      skip=True
+                      continue
+                  if skip and line.strip()=="export VIRTUAL_ENV=/home/zomorod2/virtualenv/Saeit/3.10":
+                      skip=False
+                      continue
+                  skip=False
+                  out.append(line)
+              if "".join(out).strip():
+                  p.write_text("".join(out),encoding="utf-8")
+              else:
+                  p.unlink()
+          PY
+            else
+              cp -p "$profile_backup" "$profile"
+            fi
+            rm -f "$profile_backup"
+            echo "INEFFECTIVE_LOGIN_PROFILE_FALLBACK_REMOVED=yes"
+          fi
           cd /home/zomorod2/Saeit
           python_path="$(awk '$1 == "PassengerPython" { gsub(/"/, "", $2); print $2; exit }' /home/zomorod2/public_html/.htaccess)"
           test -n "$python_path"
@@ -456,39 +487,7 @@ jobs:
           print("PASSENGER_EDIT_ERRORS=" + str(errors))
           if edited.returncode != 0 or status != 1 or errors:
               backup.unlink(missing_ok=True)
-              error_text = " ".join(str(e) for e in errors)
-              if "parameter" in error_text.lower() and "python" in error_text.lower():
-                  profile = pathlib.Path.home() / ".bash_profile"
-                  marker = "# ZOMORODMELAL_PASSENGER_VIRTUAL_ENV"
-                  profile_backup = backup_dir / f"bash-profile-before-{commit_sha}"
-                  if profile.exists():
-                      if profile_backup.exists():
-                          raise SystemExit("BASH_PROFILE_BACKUP_ALREADY_EXISTS")
-                      import shutil
-                      shutil.copy2(profile, profile_backup)
-                      os.chmod(profile_backup, 0o600)
-                      old_profile = profile.read_text(encoding="utf-8", errors="replace")
-                  else:
-                      profile_backup.write_text("CODEX_NO_PREVIOUS_BASH_PROFILE\n", encoding="utf-8")
-                      os.chmod(profile_backup, 0o600)
-                      old_profile = ""
-                  if marker not in old_profile:
-                      with profile.open("a", encoding="utf-8") as f:
-                          if old_profile and not old_profile.endswith("\n"):
-                              f.write("\n")
-                          f.write(marker + "\nexport VIRTUAL_ENV=" + venv + "\n")
-                  check = subprocess.run(["bash", "-lc", "printenv VIRTUAL_ENV"], capture_output=True, text=True)
-                  if check.stdout.strip() != venv:
-                      status_record["login_shell_virtual_env"] = False
-                      edit_status_path.write_text(json.dumps(status_record, ensure_ascii=False), encoding="utf-8")
-                      raise SystemExit("LOGIN_SHELL_VIRTUAL_ENV_NOT_SET")
-                  status_record["fallback"] = "bash_profile"
-                  status_record["bash_profile_backup"] = str(profile_backup)
-                  status_record["login_shell_virtual_env"] = True
-                  edit_status_path.write_text(json.dumps(status_record, ensure_ascii=False), encoding="utf-8")
-                  print("PASSENGER_VIRTUAL_ENV_CONFIGURED_VIA_LOGIN_PROFILE=yes")
-              else:
-                  raise SystemExit("PASSENGER_VENV_MAPPING_EDIT_FAILED")
+              raise SystemExit("PASSENGER_VENV_MAPPING_EDIT_FAILED")
           verified = subprocess.run(["uapi", "--output=json", "PassengerApps", "list_applications"], check=True, capture_output=True, text=True)
           data = json.loads(verified.stdout)
           apps = []
