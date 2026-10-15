@@ -110,7 +110,11 @@ def issue_buyer_wallet_challenge(order_id,buyer,asset,address,*,now=None):
 
 def verify_signed_buyer_message(entry,signature):
     """Launch the preinstalled isolated, read-only crypto verifier process."""
-    python_path=getattr(settings,"MPW_COMMERCE_BUYER_CRYPTO_PYTHON","")
+    # Prefer a dedicated verifier; reuse the already installed isolated
+    # merchant cryptography runtime only when the dedicated path is absent.
+    # The buyer worker remains a separate signed-message-only script.
+    python_path=(getattr(settings,"MPW_COMMERCE_BUYER_CRYPTO_PYTHON","")
+                 or getattr(settings,"MPW_NATIVE_CRYPTO_HELPER_PYTHON",""))
     worker=Path(__file__).with_name("buyer_signature_worker.py")
     if (not isinstance(python_path,str) or not python_path.startswith("/")
         or not Path(python_path).is_file()
