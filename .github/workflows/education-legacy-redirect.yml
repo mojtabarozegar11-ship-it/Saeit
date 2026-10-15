@@ -1,0 +1,132 @@
+name: Preserve the legacy education URL
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/education-legacy-redirect.yml"
+      - "public/education/index.html"
+permissions:
+  contents: read
+concurrency:
+  group: amozeshgah-publication
+  cancel-in-progress: false
+jobs:
+  redirect-legacy-education:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate redirect destination
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from html.parser import HTMLParser
+          from pathlib import Path
+          source = Path("public/education/index.html").read_text(encoding="utf-8")
+          class Check(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.canonical = False
+                  self.redirect = False
+                  self.link = False
+              def handle_starttag(self, tag, attrs):
+                  a = dict(attrs)
+                  if tag == "link" and a.get("rel") == "canonical":
+                      self.canonical = a.get("href") == "https://zomorodmelal.ir/amozeshgah/"
+                  if tag == "meta" and a.get("http-equiv", "").lower() == "refresh":
+                      self.redirect = a.get("content") == "0;url=https://zomorodmelal.ir/amozeshgah/"
+                  if tag == "a" and a.get("href") == "https://zomorodmelal.ir/amozeshgah/":
+                      self.link = True
+          check = Check()
+          check.feed(source)
+          if not all((check.canonical, check.redirect, check.link)):
+              raise SystemExit("Legacy education redirect source is invalid")
+          if "s ae it-education-redirect" in source:
+              raise SystemExit("Unexpected redirect marker")
+          print("LEGACY_REDIRECT_SOURCE=valid")
+          PY
+
+      - name: Prepare pinned VPS relay and cPanel SSH
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/education-redirect"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+
+      - name: Install legacy path without changing the app or root
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/education-redirect"
+          target="/home/zomorod2/public_html/education"
+          stage="/home/zomorod2/public_html/.education-redirect-stage-$GITHUB_SHA"
+          ssh -F "$d/config" saeit-cpanel "set -eu; test -s /home/zomorod2/public_html/amozeshgah/index.html; grep -Fq 'https://zomorodmelal.ir/amozeshgah/' /home/zomorod2/public_html/amozeshgah/index.html; test ! -e '$target' && test ! -L '$target'; test ! -e '$stage' && mkdir -m 755 '$stage'"
+          tar -C public/education -czf - index.html | ssh -F "$d/config" saeit-cpanel "tar -xzf - -C '$stage'"
+          ssh -F "$d/config" saeit-cpanel "set -eu; chmod 644 '$stage/index.html'; chmod 755 '$stage'; test ! -e '$target' && test ! -L '$target'; mv -T '$stage' '$target'; grep -Fq 's ae it-education-redirect' '$target/index.html' && exit 1 || true; grep -Fq 's ae it-education-redirect' '$target/index.html' && exit 1 || true; grep -Fq 's ae it-education-redirect' '$target/index.html' && exit 1 || true; grep -Fq 'https://zomorodmelal.ir/amozeshgah/' '$target/index.html'; echo LEGACY_REDIRECT_INSTALLED=yes"
+
+      - name: Verify public legacy URL and roll back a failed install
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/education-redirect"
+          html="$d/education.html"
+          result="$(curl --silent --show-error --location --retry 2 --retry-delay 1 --max-time 40 -H 'Cache-Control: no-cache' -o "$html" -w '%{http_code}|%{content_type}' https://zomorodmelal.ir/education/ || true)"
+          code="${result%%|*}"
+          content_type="${result#*|}"
+          valid=1
+          if [ "$code" != "200" ] || [[ "$content_type" != text/html* ]]; then valid=0; fi
+          if ! grep -Fq 'https://zomorodmelal.ir/amozeshgah/' "$html" || ! grep -Fq 'http-equiv="refresh"' "$html"; then valid=0; fi
+          if [ "$valid" -ne 1 ]; then
+            echo "LEGACY_URL_CHECK_FAILED status=$code content_type=$content_type"
+            backup="/home/zomorod2/.backups/zomorodmelal-amozeshgah/failed-education-$GITHUB_SHA"
+            ssh -F "$d/config" saeit-cpanel "set -eu; if test -d /home/zomorod2/public_html/education; then install -d -m 700 /home/zomorod2/.backups/zomorodmelal-amozeshgah; test ! -e '$backup'; mv -T /home/zomorod2/public_html/education '$backup'; fi; echo ROLLBACK_COMPLETED=yes"
+            exit 1
+          fi
+          echo "LEGACY_EDUCATION_HTTP=$code"
+          echo "LEGACY_REDIRECT_CHECK=passed"
+
+      - name: Remove temporary SSH material
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/education-redirect"
