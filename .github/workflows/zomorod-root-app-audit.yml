@@ -242,7 +242,8 @@ jobs:
           for path in /home/zomorod2/public_html/index.html /home/zomorod2/public_html/amozeshgah/index.html /home/zomorod2/public_html/.htaccess; do
             if test -f "$path"; then stat -c 'FILE=%n SIZE=%s MODE=%a MTIME=%y' "$path"; else echo "FILE_MISSING=$path"; fi
           done
-          if test -x /usr/local/cpanel/bin/cpapi2; then /usr/local/cpanel/bin/cpapi2 --user=zomorod2 --output=json LVEInfo getUsage 2>&1 | head -c 12000; echo; else echo "CPAPI2_UNAVAILABLE"; fi
+          uapi --output=json ResourceUsage get_usages 2>&1 | head -c 12000 || true
+          echo
           command -v lveinfo >/dev/null 2>&1 && lveinfo --user zomorod2 --period 1h --by-fault all 2>&1 | head -n 35 || true
           echo "CPANEL_DIAGNOSTICS_END"
           REMOTE
