@@ -1,5 +1,7 @@
 """End-to-end tests: real new private prototype ZIP, durable queue, UI, release gates."""
 import copy
+from datetime import datetime, timezone
+import hashlib
 import http.client
 import importlib.util
 import json
@@ -34,6 +36,35 @@ def brief(identifier="orchard_mvp_001"):
         "paid_api_budget":0,
         "problem":"Testable long-horizon orchard capital investment audit with operator data",
     }
+
+
+def add_topic_dossier(root, key, *, score=80, thin=False):
+    assessments = {name:score for name in (
+        "problem_intensity", "demand", "differentiation",
+        "feasibility", "margin", "distribution", "strategic_fit")}
+    gates = {"lawful":True, "rights_reviewed":True,
+             "build_capability_available":True,
+             "distribution_path_available":True}
+    claims = [
+        ("example.com","problem"), ("example.org","willingness_to_pay"),
+        ("example.net","comparison"), ("example.com","feasibility")]
+    if thin:
+        claims = claims[:2]
+    snapshots = []
+    for host, claim in claims:
+        snapshots.append({
+            "opportunity_key":key,
+            "url":"https://" + host + "/" + claim,
+            "claim_type":claim,
+            "observed_at":datetime.now(timezone.utc).isoformat(),
+            "content_sha256":hashlib.sha256((key + host + claim).encode()).hexdigest(),
+        })
+    (root / "topic-research-dossiers.json").write_text(json.dumps({
+        "candidates":[{"opportunity_key":key,
+                       "problem":"Synthetic private orchard technical reference problem",
+                       "assessments":assessments, "gates":gates}],
+        "snapshots":snapshots,
+    }), encoding="utf-8")
 
 
 class PrivateManufacturingTests(unittest.TestCase):
@@ -187,6 +218,63 @@ class PrivateManufacturingTests(unittest.TestCase):
             flag.symlink_to(Path(dst)/"release-approval")
             with self.assertRaisesRegex(ValueError,"unsafe specialist"):
                 pipeline.tick(self.root)
+
+    def test_topic_gate_quarantines_existing_weak_job_and_recovers_only_after_research(self):
+        weak = brief("gate_queued_weak")
+        pipeline.enqueue(self.root, weak)
+        (self.root / ".enable-topic-research-gate").write_text("private_only")
+        add_topic_dossier(self.root,weak["brief_id"],score=1)
+        first = pipeline.tick(self.root)
+        self.assertEqual(first["status"], "NO_ELIGIBLE_WORK")
+        self.assertEqual(first["topic_quality_gate"]["held"], 1)
+        self.assertEqual(pipeline.status(self.root)["queues"]["RESEARCH_REQUIRED"], 1)
+        self.assertFalse(list(self.root.glob("artifact-*.zip")))
+        add_topic_dossier(self.root,weak["brief_id"],score=80)
+        second = pipeline.tick(self.root)
+        self.assertEqual(second["status"], "PRIVATE_QA_PASSED",second)
+        self.assertEqual(second["topic_quality_gate"]["released_for_private_qa"],1)
+        self.assertEqual(second["new_products_for_sale"],0)
+        self.assertEqual(pipeline.status(self.root)["published_products"],0)
+
+    def test_topic_gate_rejects_high_score_with_thin_sources_or_corrupt_dossier(self):
+        (self.root / ".enable-topic-research-gate").write_text("private_only")
+        payload = brief("gate_insufficient_sources")
+        add_topic_dossier(self.root,payload["brief_id"],score=100,thin=True)
+        rejected = pipeline.enqueue(self.root,payload)
+        self.assertEqual(rejected["status"],"RESEARCH_REQUIRED")
+        self.assertFalse(rejected["new_job"])
+        self.assertEqual(pipeline.status(self.root)["queues"],{})
+        (self.root / "topic-research-dossiers.json").write_text('{"broken":true}')
+        self.assertEqual(pipeline.enqueue(self.root,payload)["dossier_state"],"INVALID_DOSSIER")
+        self.assertEqual(pipeline.tick(self.root)["status"],"NO_ELIGIBLE_WORK")
+        self.assertEqual(pipeline.status(self.root)["published_products"],0)
+
+    def test_topic_gate_does_not_interrupt_allowlisted_autonomous_source_qa(self):
+        (self.root / ".enable-topic-research-gate").write_text("private_only")
+        (self.root / ".enable-autonomous-specialists").write_text("private_only")
+        result = pipeline.tick(self.root)
+        self.assertEqual(result["status"],"PRIVATE_QA_PASSED",result)
+        self.assertEqual(result["topic_quality_gate"]["mode"],
+                         "private_provisional_review_only")
+        self.assertEqual(result["private_source_autoplan"]["new_source_jobs"],3)
+        for _ in range(2):
+            self.assertEqual(pipeline.tick(self.root)["status"],"PRIVATE_QA_PASSED")
+        self.assertEqual(pipeline.tick(self.root)["status"],"NO_ELIGIBLE_WORK")
+        self.assertEqual(pipeline.status(self.root)["distinct_private_product_families"],3)
+        self.assertEqual(pipeline.status(self.root)["published_products"],0)
+
+    def test_topic_gate_rejects_unsafe_marker_and_symlinked_dossier(self):
+        marker = self.root / ".enable-topic-research-gate"
+        marker.write_text("publish_all")
+        with self.assertRaisesRegex(ValueError,"unsafe topic gate marker"):
+            pipeline.enqueue(self.root,brief())
+        marker.write_text("private_only")
+        with tempfile.TemporaryDirectory() as other:
+            (self.root / "topic-research-dossiers.json").symlink_to(
+                Path(other) / "elsewhere.json")
+            blocked = pipeline.enqueue(self.root,brief())
+            self.assertEqual(blocked["dossier_state"],"UNSAFE_DOSSIER")
+        self.assertEqual(pipeline.status(self.root)["queues"],{})
 
     def test_new_private_product_build_and_immutable_manifest(self):
         first=pipeline.enqueue(self.root,brief())

@@ -128,8 +128,11 @@ class AdapterTests(unittest.TestCase):
         report = adapter.evaluate_db(self.db, [
             item("orchard", astra_queue_key="discovery:ASTRA-H001")], NOW)
         row = report["candidates"][0]
-        self.assertEqual(row["status"], "REVIEW_REQUIRED")
+        self.assertEqual(row["status"], "RESEARCH_REQUIRED")
         self.assertEqual(row["distinct_source_domains_preliminary"], 2)
+        self.assertIn("FEWER_THAN_THREE_DISTINCT_SOURCE_DOMAINS", row["blockers"])
+        self.assertIn("COMPETITOR_COMPARISON_SIGNAL_MISSING", row["blockers"])
+        self.assertIn("FEASIBILITY_SIGNAL_MISSING", row["blockers"])
         self.assertFalse(row["evidence_verified_independently"])
         self.assertFalse(row["build_authorized"])
         self.assertFalse(row["publish_authorized"])
@@ -152,9 +155,39 @@ class AdapterTests(unittest.TestCase):
                              (i,1,f"https://{host}/test",hash_for(host),NOW,
                               json.dumps({"claim_type":typ, "claim": "fake sales"})))
         report = adapter.evaluate_db(self.db, [item("x", astra_queue_key="x")], NOW)
-        self.assertEqual(report["candidates"][0]["status"], "REVIEW_REQUIRED")
+        self.assertEqual(report["candidates"][0]["status"], "RESEARCH_REQUIRED")
+        self.assertIn("FEWER_THAN_THREE_DISTINCT_SOURCE_DOMAINS",
+                      report["candidates"][0]["blockers"])
         self.assertFalse(report["candidates"][0]["build_authorized"])
         self.assertFalse(report["candidates"][0]["payment_authorized"])
+
+    def test_complete_typed_discovery_dossier_reaches_review_but_never_build(self):
+        with sqlite3.connect(self.db) as conn:
+            conn.executescript("""
+              CREATE TABLE core_factoryqueueitem (id INTEGER PRIMARY KEY, key TEXT, kind TEXT);
+              CREATE TABLE core_discoverysnapshot (
+                id INTEGER PRIMARY KEY, hypothesis_id INTEGER, url TEXT,
+                content_hash TEXT, retrieved_at TEXT, record TEXT);
+            """)
+            conn.execute("INSERT INTO core_factoryqueueitem VALUES (1,'complete','discovery')")
+            for i, (host, typ) in enumerate([
+                ("a.example.com", "problem"),
+                ("b.example.org", "willingness_to_pay"),
+                ("c.example.net", "comparison"),
+                ("a.example.com", "feasibility")
+            ], 1):
+                conn.execute("INSERT INTO core_discoverysnapshot VALUES (?,?,?,?,?,?)",
+                             (i,1,f"https://{host}/{typ}",hash_for(host+typ),NOW,
+                              json.dumps({"claim_type":typ})))
+        report = adapter.evaluate_db(self.db, [
+            item("complete", astra_queue_key="complete")], NOW)
+        row = report["candidates"][0]
+        self.assertEqual(row["status"], "REVIEW_REQUIRED")
+        self.assertEqual(row["distinct_source_domains_preliminary"], 3)
+        self.assertFalse(row["evidence_verified_independently"])
+        self.assertFalse(row["build_authorized"])
+        self.assertFalse(row["publish_authorized"])
+        self.assertFalse(row["payment_authorized"])
 
     def test_invalid_mapping_and_duplicate_rejected(self):
         for value in (True, -1, "1"):
