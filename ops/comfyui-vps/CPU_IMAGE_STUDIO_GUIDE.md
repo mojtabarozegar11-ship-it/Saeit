@@ -34,3 +34,46 @@ The worker downloads and SHA-256 verifies the exact engine and model at each run
 - `ops/comfyui-vps/quality_gate.py`
 - `ops/comfyui-vps/install_tiny_model.sh`
 - `.github/workflows/comfyui-model-readiness-audit.yml`
+
+## Oct 15, 2026: quality gate and source-of-truth status
+
+The same image generation workflows now attach `quality_report.json` next to the PNG.
+The report verifies PNG decoding, SHA-256, dimensions, and basic diagnostic image
+signals. These signals cannot judge composition, brand suitability or factual
+accuracy. The **release gate always fails closed** for experimental Tiny-SD
+previews: `publish_allowed=false`, `auto_store_upload_allowed=false`,
+`commercial_ready=false`, and `manual_review_required=true`. Images
+are downloadable test previews, **never** sale-ready merchandise or production
+website assets.
+
+**Validated ComfyUI integration was upgraded later than this document's earlier
+section:** the custom `SaeitSafeCPURender` node has produced an actual
+256x256 PNG on the VPS, with a factory-liveness check and cleanup. Evidence:
+GitHub Actions run `38659838508`, SHA-256
+`a06e90814e2cfb85c00e6a7821fbec6cc600682dedfbb4c91f39515519f8229a`.
+The standard `CheckpointLoaderSimple` is *still incompatible* with the
+compressed Tiny-SD model, but the isolated CPU companion bridge works. The
+native VPS node is slow and outputs experimental blurry results; prioritize
+the GitHub-hosted 512px CPU runner over running many jobs on the live factory VPS.
+
+**Source privacy:** the Saeit repository is **public**, so GitHub Actions logs
+and downloadable artifact images must be treated as potentially public. The
+allowlisted presets are intentionally nonconfidential. Do **not** enter private
+prompts, confidential client materials, identity images, wallet details, account
+tokens, or proprietary data as Actions inputs. Any future private studio must
+use a truly access-controlled storage/compute system; it is not safe to use the
+public Actions artifact store for private creations.
+
+**Professional quality:** Upgrading 256px/512px previews or adding digital
+watermarks does not establish a true native 8K high-quality result. Use a
+reviewed, appropriately licensed higher-capacity model on a separate GPU
+provider with cost caps, and verify actual image quality and rights before
+turning on any catalog distribution. No spend or GPU provider account
+changes were needed for this quality gate.
+
+Evidence:
+- `ops/comfyui-vps/image_quality_report.py`: fail-closed technical QA
+- `ops/comfyui-vps/tests/test_image_quality_report.py`: tests
+- `.github/workflows/comfyui-image-quality-tests.yml`: isolated CI
+- `.github/workflows/comfyui-cpu-runner-image-proof.yml`: 512px PNG + QA artifact
+- `.github/workflows/comfyui-vps-native-node-proof.yml`: 256px VPS PNG + QA artifact
