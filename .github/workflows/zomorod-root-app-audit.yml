@@ -259,13 +259,38 @@ jobs:
           date -u
           uptime
           cat /proc/loadavg
-          ps -u "$(id -u)" -o pid,ppid,stat,etime,comm,%cpu,%mem --sort=-%cpu | head -n 25
+          uid="$(id -u)"
+          echo "ACCOUNT_PROCESS_COUNT=$(ps -u "$uid" --no-headers | wc -l)"
+          ps -u "$uid" -o pid,ppid,stat,etime,comm,%cpu,%mem,args --sort=-%cpu | head -n 45
+          python3 - <<'PY'
+          import glob,os,pwd,re
+          uid=pwd.getpwnam("zomorod2").pw_uid
+          def clean(s):
+              s=re.sub(r"(?i)(password|token|secret|api[_-]?key|private[_-]?key)([=: ]+)[^ ]+",r"\\1\\2[redacted]",s)
+              return s[:700]
+          for p in sorted(glob.glob("/proc/[0-9]*"),key=lambda x:int(x.rsplit("/",1)[1])):
+              try:
+                  st=os.stat(p)
+                  if st.st_uid!=uid: continue
+                  pid=int(p.rsplit("/",1)[1])
+                  cmd=open(p+"/cmdline","rb").read().replace(b"\\0",b" ").decode(errors="replace").strip()
+                  cwd=os.readlink(p+"/cwd")
+                  status=open(p+"/status").read()
+                  ppid=re.search(r"^PPid:\\s+(.*)$",status,re.M)
+                  print(f"OWN_PROCESS pid={pid} ppid={ppid.group(1) if ppid else '?'} cwd={cwd} cmd={clean(cmd)}")
+              except (OSError,PermissionError): pass
+          PY
+          for tool in lveinfo lveps lvectl cloudlinux-summary; do
+            command -v "$tool" 2>/dev/null || true
+          done
+          if command -v lveinfo >/dev/null 2>&1; then lveinfo --user zomorod2 --period 1h --by-fault all 2>&1 | head -n 50; fi
+          if command -v lveps >/dev/null 2>&1; then lveps -u zomorod2 2>&1 | head -n 50; fi
+          uapi --output=json PassengerApps list_applications 2>&1 | head -c 10000 || true
           for path in /home/zomorod2/public_html/index.html /home/zomorod2/public_html/amozeshgah/index.html /home/zomorod2/public_html/.htaccess; do
             if test -f "$path"; then stat -c 'FILE=%n SIZE=%s MODE=%a MTIME=%y' "$path"; else echo "FILE_MISSING=$path"; fi
           done
           uapi --output=json ResourceUsage get_usages 2>&1 | head -c 12000 || true
           echo
-          command -v lveinfo >/dev/null 2>&1 && lveinfo --user zomorod2 --period 1h --by-fault all 2>&1 | head -n 35 || true
           echo "CPANEL_DIAGNOSTICS_END"
           REMOTE
       - name: Check live site routes
