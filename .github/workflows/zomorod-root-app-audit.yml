@@ -131,7 +131,7 @@ jobs:
               if open(live,"rb").read()!=updated:
                   raise SystemExit("STATIC_DIRECTORY_RULES_VERIFY_FAILED")
               print("STATIC_DIRECTORY_RULES_CONFIGURED=yes")
-                    print("ROOT_APP_PRECHECK=passed")
+          print("ROOT_APP_PRECHECK=passed")
           PY
           result="$(uapi --output=json PassengerApps enable_application name=saeit-django)"
           python3 -c 'import json,sys; d=json.load(sys.stdin); r=d.get("result",{}); print("PASSENGER_ENABLE_STATUS="+str(r.get("status"))); print("PASSENGER_ENABLE_ERRORS="+str(r.get("errors") or [])); sys.exit(0 if r.get("status")==1 and not r.get("errors") else 1)' <<<"$result"
