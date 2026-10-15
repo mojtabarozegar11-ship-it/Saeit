@@ -3,18 +3,28 @@ name: Astra Topic Selector Quality Gate
 on:
   push:
     branches:
-      - feature/astra-topic-selection-quality-gate-20261015
+      - feature/astra-topic-gate-private-queue-20261015
       - feature/astra-factory-v2-architecture-20261014
     paths:
       - scripts/astra_opportunity_selector.py
+      - scripts/astra_research_evidence_adapter.py
+      - scripts/astra_v2_topic_gate.py
+      - scripts/astra_v2_private_pipeline.py
       - tests/test_astra_opportunity_selector.py
+      - tests/test_astra_research_evidence_adapter.py
+      - tests/test_astra_v2_private_pipeline.py
       - .github/workflows/astra-topic-selector-ci.yml
   pull_request:
     branches:
       - feature/astra-factory-v2-architecture-20261014
     paths:
       - scripts/astra_opportunity_selector.py
+      - scripts/astra_research_evidence_adapter.py
+      - scripts/astra_v2_topic_gate.py
+      - scripts/astra_v2_private_pipeline.py
       - tests/test_astra_opportunity_selector.py
+      - tests/test_astra_research_evidence_adapter.py
+      - tests/test_astra_v2_private_pipeline.py
       - .github/workflows/astra-topic-selector-ci.yml
 
 permissions:
@@ -23,13 +33,17 @@ permissions:
 jobs:
   selector-regression:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Verify selector syntax
-        run: python -m py_compile scripts/astra_opportunity_selector.py tests/test_astra_opportunity_selector.py
-      - name: Run research priority and evidence gate regressions
-        run: python -m unittest discover -s tests -p 'test_astra_opportunity_selector.py' -v
+      - name: Check syntax
+        run: python -m py_compile scripts/astra_opportunity_selector.py scripts/astra_research_evidence_adapter.py scripts/astra_v2_topic_gate.py scripts/astra_v2_private_pipeline.py tests/test_astra_research_evidence_adapter.py tests/test_astra_v2_private_pipeline.py
+      - name: Validate selection and bridge
+        run: |
+          python -m unittest discover -s tests -p 'test_astra_opportunity_selector.py' -v
+          python -m unittest discover -s tests -p 'test_astra_research_evidence_adapter.py' -v
+      - name: Validate private manufacturing quarantine and recovery
+        run: python -m unittest discover -s tests -p 'test_astra_v2_private_pipeline.py' -v
