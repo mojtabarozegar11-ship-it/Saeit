@@ -40,10 +40,8 @@ jobs:
                       self.link = True
           check = Check()
           check.feed(source)
-          if not all((check.canonical, check.redirect, check.link)):
+          if not all((check.canonical, check.redirect, check.link)) or "<!-- saeit-education-redirect -->" not in source:
               raise SystemExit("Legacy education redirect source is invalid")
-          if "s ae it-education-redirect" in source:
-              raise SystemExit("Unexpected redirect marker")
           print("LEGACY_REDIRECT_SOURCE=valid")
           PY
 
@@ -102,11 +100,12 @@ jobs:
           d="$RUNNER_TEMP/education-redirect"
           target="/home/zomorod2/public_html/education"
           stage="/home/zomorod2/public_html/.education-redirect-stage-$GITHUB_SHA"
-          ssh -F "$d/config" saeit-cpanel "set -eu; test -s /home/zomorod2/public_html/amozeshgah/index.html; grep -Fq 'https://zomorodmelal.ir/amozeshgah/' /home/zomorod2/public_html/amozeshgah/index.html; test ! -e '$target' && test ! -L '$target'; test ! -e '$stage' && mkdir -m 755 '$stage'"
+          backup="/home/zomorod2/.backups/zomorodmelal-amozeshgah/education-previous-$GITHUB_SHA"
+          ssh -F "$d/config" saeit-cpanel "set -eu; test -s /home/zomorod2/public_html/amozeshgah/index.html; grep -Fq 'https://zomorodmelal.ir/amozeshgah/' /home/zomorod2/public_html/amozeshgah/index.html; if test -e '$target' || test -L '$target'; then test -d '$target' && test ! -L '$target' && test -s '$target/index.html' && grep -Fq '<!-- saeit-education-redirect -->' '$target/index.html'; fi; test ! -e '$stage' && mkdir -m 755 '$stage'"
           tar -C public/education -czf - index.html | ssh -F "$d/config" saeit-cpanel "tar -xzf - -C '$stage'"
-          ssh -F "$d/config" saeit-cpanel "set -eu; chmod 644 '$stage/index.html'; chmod 755 '$stage'; test ! -e '$target' && test ! -L '$target'; mv -T '$stage' '$target'; grep -Fq 's ae it-education-redirect' '$target/index.html' && exit 1 || true; grep -Fq 's ae it-education-redirect' '$target/index.html' && exit 1 || true; grep -Fq 's ae it-education-redirect' '$target/index.html' && exit 1 || true; grep -Fq 'https://zomorodmelal.ir/amozeshgah/' '$target/index.html'; echo LEGACY_REDIRECT_INSTALLED=yes"
+          ssh -F "$d/config" saeit-cpanel "set -eu; chmod 644 '$stage/index.html'; chmod 755 '$stage'; if test -e '$target'; then install -d -m 700 /home/zomorod2/.backups/zomorodmelal-amozeshgah; test ! -e '$backup'; mv -T '$target' '$backup'; fi; if ! mv -T '$stage' '$target'; then if test -d '$backup'; then mv -T '$backup' '$target'; fi; exit 1; fi; grep -Fq '<!-- saeit-education-redirect -->' '$target/index.html'; echo LEGACY_REDIRECT_INSTALLED=yes"
 
-      - name: Verify public legacy URL and roll back a failed install
+      - name: Verify public legacy URL and restore the previous version on failure
         shell: bash
         run: |
           set -euo pipefail
@@ -120,8 +119,9 @@ jobs:
           if ! grep -Fq 'https://zomorodmelal.ir/amozeshgah/' "$html" || ! grep -Fq 'http-equiv="refresh"' "$html"; then valid=0; fi
           if [ "$valid" -ne 1 ]; then
             echo "LEGACY_URL_CHECK_FAILED status=$code content_type=$content_type"
-            backup="/home/zomorod2/.backups/zomorodmelal-amozeshgah/failed-education-$GITHUB_SHA"
-            ssh -F "$d/config" saeit-cpanel "set -eu; if test -d /home/zomorod2/public_html/education; then install -d -m 700 /home/zomorod2/.backups/zomorodmelal-amozeshgah; test ! -e '$backup'; mv -T /home/zomorod2/public_html/education '$backup'; fi; echo ROLLBACK_COMPLETED=yes"
+            backup="/home/zomorod2/.backups/zomorodmelal-amozeshgah/education-previous-$GITHUB_SHA"
+            failed="/home/zomorod2/.backups/zomorodmelal-amozeshgah/education-failed-$GITHUB_SHA"
+            ssh -F "$d/config" saeit-cpanel "set -eu; install -d -m 700 /home/zomorod2/.backups/zomorodmelal-amozeshgah; if test -d /home/zomorod2/public_html/education && test ! -L /home/zomorod2/public_html/education; then test ! -e '$failed'; mv -T /home/zomorod2/public_html/education '$failed'; fi; if test -d '$backup'; then mv -T '$backup' /home/zomorod2/public_html/education; fi; echo ROLLBACK_COMPLETED=yes"
             exit 1
           fi
           echo "LEGACY_EDUCATION_HTTP=$code"
