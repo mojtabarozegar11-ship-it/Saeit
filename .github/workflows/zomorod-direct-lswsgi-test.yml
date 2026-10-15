@@ -1,0 +1,158 @@
+name: Zomorod direct LSWSGI reversible configuration proof
+on:
+  push:
+    branches: [diagnostic/zomorod-503-readonly-20261015]
+    paths: [.github/workflows/zomorod-direct-lswsgi-test.yml]
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-selector-recovery-safe
+  cancel-in-progress: false
+jobs:
+  test-direct:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - name: Prepare pinned relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/zomorod-restore"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "CONFIRMED_PINNED_RELAY_READY=yes"
+      - name: Apply provisional account-level WSGI configuration and roll back if unhealthy
+        shell: bash
+        env:
+          SSH_CONFIG: ${{ runner.temp }}/zomorod-restore/config
+        run: |
+          set -euo pipefail
+          needs_restore=no
+          restore() {
+            if [ "$needs_restore" = yes ]; then
+              echo "ROLLBACK_ACCOUNT_HTACCESS_BEGIN"
+              ssh -F "$SSH_CONFIG" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          root=/home/zomorod2/public_html
+          backup="$HOME/.backups/zomorod-503-selector-test/htaccess-before-direct-lswsgi"
+          test "$(id -un)" = zomorod2 && test -s "$backup"
+          python3 - "$backup" "$root/.htaccess" <<'PY'
+          import os,sys,pathlib
+          original=pathlib.Path(sys.argv[1]).read_bytes()
+          live=pathlib.Path(sys.argv[2])
+          assert b'PassengerAppRoot "/home/zomorod2/Saeit"' in original
+          if live.read_bytes()!=original:
+              t=live.with_name(".htaccess.zm-503-rollback")
+              t.write_bytes(original)
+              t.chmod(0o644)
+              os.replace(t,live)
+          print("ACCOUNT_HTACCESS_RESTORED=yes")
+          PY
+          touch /home/zomorod2/Saeit/tmp/restart.txt
+          REMOTE
+            fi
+          }
+          trap restore EXIT
+          ssh -F "$SSH_CONFIG" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          root=/home/zomorod2/public_html
+          backup="$HOME/.backups/zomorod-503-selector-test/htaccess-before-direct-lswsgi"
+          test "$(id -un)" = zomorod2 && test -d "$HOME/.backups/zomorod-503-selector-test"
+          test -s "$root/index.html" && test -s "$root/amozeshgah/index.html"
+          test -x /opt/alt/python310/bin/lswsgi
+          test -f /home/zomorod2/Saeit/passenger_wsgi.py
+          test ! -e "$backup" && cp -p "$root/.htaccess" "$backup"
+          cmp -s "$root/.htaccess" "$backup"
+          python3 - "$root/.htaccess" <<'PY'
+          import pathlib,re,sys,os
+          target=pathlib.Path(sys.argv[1]); s=target.read_text()
+          assert s.count('PassengerAppRoot "/home/zomorod2/Saeit"')==1
+          assert len(re.findall(r"(?m)^PassengerPython ",s))==1
+          assert "SetEnv LS_PYTHONBIN " not in s and "SetEnv PYTHONHOME " not in s
+          assert "PassengerStartupFile " not in s and "PassengerAppType " not in s
+          s=re.sub(r'(?m)^PassengerPython [^\n]+$','PassengerPython "/opt/alt/python310/bin/lswsgi"',s)
+          s += ('\n# ZM isolated temporary LSWSGI test\n'
+                 'PassengerAppType wsgi\n'
+                 'PassengerStartupFile passenger_wsgi.py\n'
+                 'SetEnv LS_PYTHONBIN "/home/zomorod2/virtualenv/Saeit/3.10/bin/python"\n'
+                 'SetEnv PYTHONHOME "/home/zomorod2/virtualenv/Saeit/3.10"\n')
+          tmp=target.with_name(".htaccess.zm-503-direct-tmp")
+          assert not tmp.exists()
+          tmp.write_text(s)
+          tmp.chmod(0o644)
+          os.replace(tmp,target)
+          print("PROVISIONAL_DIRECT_LSWSGI_WRITTEN=yes")
+          PY
+          install -d -m 700 /home/zomorod2/Saeit/tmp
+          touch /home/zomorod2/Saeit/tmp/restart.txt
+          REMOTE
+          needs_restore=yes
+          sleep 5
+          home=$(curl -L -s -o /dev/null --max-time 17 -w '%{http_code}' "https://zomorodmelal.ir/?lswsgi_trial=1" || true)
+          school=$(curl -L -s -o /dev/null --max-time 17 -w '%{http_code}' "https://zomorodmelal.ir/amozeshgah/?lswsgi_trial=1" || true)
+          tmpbody=$(mktemp)
+          login=$(curl -L -s -H 'Cache-Control: no-cache' -o "$tmpbody" --max-time 17 -w '%{http_code}' "https://zomorodmelal.ir/admin/login/?lswsgi_trial=1" || true)
+          size=$(wc -c < "$tmpbody")
+          echo "TRIAL_HOME_HTTP=$home"
+          echo "TRIAL_ACADEMY_HTTP=$school"
+          echo "TRIAL_ADMIN_LOGIN_HTTP=$login BYTES=$size"
+          if [ "$home" = 200 ] && [ "$school" = 200 ] && [ "$login" = 200 ] && [ "$size" -gt 600 ] && grep -Eqi '(csrfmiddlewaretoken|name="username"|name=.username.)' "$tmpbody"; then
+            echo "TRIAL_REAL_DJANGO_LOGIN=confirmed"
+            needs_restore=no
+            echo "DIRECT_LSWSGI_FIX_PERSISTED=yes"
+          else
+            echo "TRIAL_REAL_DJANGO_LOGIN=not_confirmed"
+            echo "DIRECT_LSWSGI_ROLLBACK_REQUIRED=yes"
+          fi
+          rm -f "$tmpbody"
+      - name: Verify after rollback or fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          for p in / /amozeshgah/ /admin/login/; do
+            code=$(curl -L -s -o /dev/null --max-time 19 -w '%{http_code}' "https://zomorodmelal.ir$p?lswsgi_posttest=1" || true)
+            echo "POSTTEST_URL=$p HTTP=$code"
+          done
+      - name: Remove temporary SSH material
+        if: always()
+        shell: bash
+        run: rm -rf -- "$RUNNER_TEMP/zomorod-restore"
