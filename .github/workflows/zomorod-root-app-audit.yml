@@ -434,6 +434,18 @@ jobs:
           ssh -F "$SSH_CONFIG" saeit-cpanel bash -se <<'REMOTE'
           set +e
           echo "PASSENGER_ADMIN_ERROR_LOGS_BEGIN"
+          echo "LSWS_WRAPPER_BEGIN"
+          if test -r /usr/local/lsws/fcgi-bin/lswsgi_wrapper; then
+            nl -ba /usr/local/lsws/fcgi-bin/lswsgi_wrapper | head -n 80
+          else
+            echo "LSWS_WRAPPER_READABLE=no"
+          fi
+          echo "LSWS_WRAPPER_END"
+          for path in /bin/set_env_vars.py /usr/bin/set_env_vars.py /usr/local/bin/set_env_vars.py /usr/local/lsws/fcgi-bin/set_env_vars.py /opt/cpanel/ea-python310/root/usr/bin/set_env_vars.py /opt/alt/python310/bin/set_env_vars.py; do
+            if test -e "$path"; then stat -c 'SET_ENV_FILE=%n MODE=%a OWNER=%U:%G' "$path"; else echo "SET_ENV_MISSING=$path"; fi
+          done
+          echo "ACCOUNT_UID=$(id -u) BIN_WRITABLE=$(test -w /bin && echo yes || echo no)"
+          ls -ld /bin /usr/local/lsws/fcgi-bin 2>&1 || true
           for path in /home/zomorod2/public_html/stderr.log /home/zomorod2/Saeit/stderr.log /home/zomorod2/logs/error_log /home/zomorod2/logs/zomorodmelal.ir-ssl_log; do
             if test -f "$path"; then
               echo "LOG_BEGIN=$path"
