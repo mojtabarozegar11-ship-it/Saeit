@@ -50,10 +50,10 @@ jobs:
       - name: Migrate only fresh disposable 0048 CI database
         run: |
           set -euo pipefail
-          export DATABASE_URL="sqlite:///$RUNNER_TEMP/astra-0048-integrated-empty.sqlite3"
-          test ! -e "$RUNNER_TEMP/astra-0048-integrated-empty.sqlite3"
+          export DATABASE_URL="sqlite:///$RUNNER_TEMP/astra-0048-integrated-migrate.sqlite3"
+          test ! -e "$RUNNER_TEMP/astra-0048-integrated-migrate.sqlite3"
           python3 manage.py migrate --noinput --verbosity 0
-          python3 - "$RUNNER_TEMP/astra-0048-integrated-empty.sqlite3" <<'PY'
+          python3 - "$RUNNER_TEMP/astra-0048-integrated-migrate.sqlite3" <<'PY'
           import sqlite3, pathlib, sys
           p=pathlib.Path(sys.argv[1])
           assert p.is_file()
