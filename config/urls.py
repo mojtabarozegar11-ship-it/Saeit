@@ -6,6 +6,7 @@ from django.views.generic import RedirectView
 from core.views import home, platform_page
 from core.brand_views import branded_home, branded_page, branded_game, branded_store, branded_product, branded_product
 from core.brand import brand_for_request
+from core.astra_preview_views import astra_preview_page
 from core.commerce_views import store_home, auctions_home
 from core.seo_views import site_search
 from core.brand_seo_views import branded_robots_txt, branded_sitemap_xml
@@ -21,6 +22,8 @@ from core.company_content_views import company_gallery, company_content_feed, co
 from core.knowledge_views import knowledge_article_detail, knowledge_book_detail, knowledge_domain_detail
 
 urlpatterns = [
+    path("factory-previews/", astra_preview_page, name="astra_preview_index"),
+    path("factory-previews/<slug:slug>/", astra_preview_page, name="astra_preview_detail"),
     path("", branded_home, name="home"),
     path("games/first-realm/", branded_game, {"slug": "first-realm"}, name="mpw_first_realm"),
     path("products/", branded_page, {"page": "products"}, name="mpw_products"),
