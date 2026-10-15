@@ -30,7 +30,13 @@ def plan(app, module, backupdir):
         raise ValueError("unsafe Django module")
     payload=source.read_bytes()
     compile(payload, str(target), "exec")
-    if target.exists() and target.read_bytes()!=payload:
+    prior_guard = (
+        b'    hostname = request.get_host().split(":", 1)[0].lower().rstrip(".")\\n'
+        b'    if hostname not in {"mojplaywin.com", "www.mojplaywin.com"}:\\n'
+        b'        raise Http404("Not found")\\n'
+    )
+    old_allowed = payload.replace(prior_guard, b"", 1)
+    if target.exists() and target.read_bytes() not in (payload, old_allowed):
         raise ValueError("existing Astra preview module conflicts")
     old=urls.read_text(encoding="utf-8")
     if ((IMPORT_NEW in old) != (ROUTES[0] in old and ROUTES[1] in old)):
@@ -63,6 +69,25 @@ def apply(plan, *, commit=False):
                 "new_module":not plan["target"].exists()}
     if not plan["target"].exists():
         write_new(plan["target"],plan["payload"],0o644)
+    elif plan["target"].read_bytes()!=plan["payload"]:
+        old_module=plan["target"].read_bytes()
+        sha=hashlib.sha256(old_module).hexdigest()[:20]
+        backup=plan["backups"]/("before-astra-preview-module-"+sha+".py")
+        if not backup.exists():
+            write_new(backup,old_module,0o600)
+        elif backup.read_bytes()!=old_module:
+            raise ValueError("existing module backup differs")
+        fd,tmp=tempfile.mkstemp(prefix=".astra-preview-",dir=str(plan["target"].parent))
+        try:
+            with os.fdopen(fd,"wb") as f:
+                f.write(plan["payload"])
+                f.flush()
+                os.fsync(f.fileno())
+            os.chmod(tmp,plan["target"].stat().st_mode & 0o777)
+            os.replace(tmp,plan["target"])
+        finally:
+            if os.path.exists(tmp):
+                os.unlink(tmp)
     if plan["old"]!=plan["new"]:
         checksum=hashlib.sha256(plan["old"].encode()).hexdigest()[:20]
         backup=plan["backups"]/("before-astra-preview-urls-"+checksum+".py")
