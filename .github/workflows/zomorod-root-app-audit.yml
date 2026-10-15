@@ -119,19 +119,7 @@ jobs:
               required=(b'PassengerAppRoot "/home/zomorod2/Saeit"',b'PassengerBaseURI "/"')
               if not all(item in original for item in required):
                   raise SystemExit("ORIGINAL_HTACCESS_BACKUP_MAPPING_MISMATCH")
-              import re
-              match=re.search(rb'^PassengerPython\s+"?([^"\s]+)',original,re.M)
-              if not match:
-                  raise SystemExit("PASSENGER_PYTHON_DIRECTIVE_MISSING")
-              python_path=match.group(1).decode("utf-8")
-              venv=os.path.dirname(os.path.dirname(python_path))
-              expected=os.path.expanduser("~/virtualenv/Saeit/3.10")
-              env_script=os.path.join(venv,"bin","set_env_vars.py")
-              if venv!=expected or not os.path.isfile(env_script) or not os.access(env_script,os.X_OK):
-                  raise SystemExit("PASSENGER_VENV_ENV_HELPER_MISSING_OR_UNEXPECTED")
-              prefix=(f'SetEnv PYTHONHOME "{venv}"\n'
-                      "RewriteEngine On\n"
-                      f"RewriteRule ^admin(/|$) - [E=VIRTUAL_ENV:{venv},E=PYTHONHOME:{venv}]\n"
+              prefix=("RewriteEngine On\n"
                       "RewriteRule ^$ index.html [END]\n"
                       "RewriteRule ^amozeshgah/?$ amozeshgah/index.html [END]\n"
                       "DirectoryIndex index.html\n").encode("utf-8")
@@ -446,24 +434,6 @@ jobs:
           ssh -F "$SSH_CONFIG" saeit-cpanel bash -se <<'REMOTE'
           set +e
           echo "PASSENGER_ADMIN_ERROR_LOGS_BEGIN"
-          echo "HOST_REPAIR_ACCESS_BEGIN"
-          id
-          ls -l /usr/local/lsws/admin/misc/enable_ruby_python_selector.sh /usr/local/lsws/fcgi-bin/lswsgi_wrapper 2>&1 || true
-          sudo -n -l 2>&1 | head -n 30 || true
-          command -v selectorctl 2>/dev/null || true
-          echo "HOST_REPAIR_ACCESS_END"
-          echo "LSWS_WRAPPER_BEGIN"
-          if test -r /usr/local/lsws/fcgi-bin/lswsgi_wrapper; then
-            nl -ba /usr/local/lsws/fcgi-bin/lswsgi_wrapper | head -n 80
-          else
-            echo "LSWS_WRAPPER_READABLE=no"
-          fi
-          echo "LSWS_WRAPPER_END"
-          for path in /bin/set_env_vars.py /usr/bin/set_env_vars.py /usr/local/bin/set_env_vars.py /usr/local/lsws/fcgi-bin/set_env_vars.py /opt/cpanel/ea-python310/root/usr/bin/set_env_vars.py /opt/alt/python310/bin/set_env_vars.py; do
-            if test -e "$path"; then stat -c 'SET_ENV_FILE=%n MODE=%a OWNER=%U:%G' "$path"; else echo "SET_ENV_MISSING=$path"; fi
-          done
-          echo "ACCOUNT_UID=$(id -u) BIN_WRITABLE=$(test -w /bin && echo yes || echo no)"
-          ls -ld /bin /usr/local/lsws/fcgi-bin 2>&1 || true
           for path in /home/zomorod2/public_html/stderr.log /home/zomorod2/Saeit/stderr.log /home/zomorod2/logs/error_log /home/zomorod2/logs/zomorodmelal.ir-ssl_log; do
             if test -f "$path"; then
               echo "LOG_BEGIN=$path"
@@ -471,15 +441,6 @@ jobs:
               echo "LOG_END=$path"
             fi
           done
-          echo "PASSENGER_EDIT_SCHEMA_BEGIN"
-          uapi --output=json PassengerApps edit_application 2>&1 | head -c 5000 || true
-          uapi --output=json PassengerApps edit_application name=saeit-django 2>&1 | head -c 5000 || true
-          uapi --output=json PassengerApps edit_application name=saeit-django python=/home/zomorod2/virtualenv/Saeit/3.10/bin/python 2>&1 | head -c 5000 || true
-          echo
-          echo "PASSENGER_EDIT_SCHEMA_END"
-          echo "PASSENGER_UAPI_FUNCTIONS_BEGIN"
-          uapi --list PassengerApps 2>&1 | head -n 100
-          echo "PASSENGER_UAPI_FUNCTIONS_END"
           echo "PASSENGER_ADMIN_ERROR_LOGS_END"
           REMOTE
       - name: Remove temporary SSH material
