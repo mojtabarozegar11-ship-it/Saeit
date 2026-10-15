@@ -1,0 +1,23 @@
+name: Mojtaba internal pages content tests
+on:
+  push:
+    branches: ['feat/mojtaba-personal-inner-pages-20261015']
+    paths:
+      - 'scripts/mojtaba_personal_inner_content.py'
+      - 'tests/test_mojtaba_personal_inner_content.py'
+      - '.github/workflows/mojtaba-inner-pages-tests.yml'
+  pull_request:
+    paths:
+      - 'scripts/mojtaba_personal_inner_content.py'
+      - 'tests/test_mojtaba_personal_inner_content.py'
+permissions:
+  contents: read
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile and validate all eight new sections
+        run: |
+          python3 -m py_compile scripts/mojtaba_personal_inner_content.py
+          python3 -m unittest discover -s tests -p 'test_mojtaba_personal_inner_content.py' -v
