@@ -1,0 +1,171 @@
+name: MojPlayWin live Django host safety read-only probe
+on:
+  push:
+    branches: [fix/mpw-wallet-host-preflight-before-migration-20261014]
+    paths:
+      - .github/workflows/mojplaywin-host-readonly-probe.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: mpw-host-readonly-safety-probe
+  cancel-in-progress: false
+jobs:
+  read-only-host:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - name: Set up pinned SSH relay, without credentials in logs
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/mpw-host-readonly-probe"
+          install -d -m 700 "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          python3 - "$d/vps.key" "$d/host.key" <<'PY'
+          from pathlib import Path
+          import sys
+          for filename in sys.argv[1:]:
+              p = Path(filename)
+              p.write_text(p.read_text().replace("\r\n","\n").strip().replace("\\n","\n")+"\n")
+          PY
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host relay
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump relay
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+          EOF
+          timeout 30s ssh -F "$d/config" relay 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          echo MPW_RELAY_PINNED_OK
+      - name: Read effective Django host handling (no database, no writes)
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 55s ssh -F "$RUNNER_TEMP/mpw-host-readonly-probe/config" host 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = "zomorod2"
+          cd /home/zomorod2/Saeit-staging
+          test -f config/settings.py && test -f config/urls.py && test -f .env
+          test -f "$HOME/mojplaywin.com/passenger_wsgi.py"
+          DJANGO_SETTINGS_MODULE=config.settings PYTHONDONTWRITEBYTECODE=1 "$HOME/virtualenv/Saeit-staging/3.11/bin/python" - <<'PY'
+          from pathlib import Path
+          from django.conf import settings
+          from django.core.exceptions import DisallowedHost
+          from django.test import RequestFactory
+          import sys
+          print("MPW_RUNTIME_DJANGO_CONFIG_IMPORTED")
+          print("MPW_RUNTIME_PYTHON_311="+str(sys.version_info[:2] == (3, 11)))
+          print("MPW_RUNTIME_DEBUG_DISABLED="+str(not settings.DEBUG))
+          print("MPW_RUNTIME_PROOF_FLAG="+str(bool(getattr(settings, "MPW_MERCHANT_WALLET_PROOF_ENABLED", False))))
+          for host in ("mojplaywin.com", "www.mojplaywin.com"):
+              req = RequestFactory().get("/merchant/wallet-proof/",secure=True,HTTP_HOST=host)
+              try:
+                  allowed = req.get_host() == host
+              except DisallowedHost:
+                  allowed = False
+              print("MPW_RUNTIME_HOST_ALLOWED_"+host.upper().replace(".","_")+"="+str(allowed))
+          source=Path("config/settings.py").read_text()
+          urls=Path("config/urls.py").read_text()
+          print("MPW_RUNTIME_PROOF_SETTINGS_MARKER="+str("# MPW_MERCHANT_WALLET_OWNERSHIP_ONLY_V1" in source))
+          print("MPW_RUNTIME_PROOF_URLS_MARKER="+str("# MPW_MERCHANT_WALLET_ROUTE_ONLY_V1" in urls))
+          passenger=Path("/home/zomorod2/mojplaywin.com/passenger_wsgi.py").read_text()
+          print("MPW_RUNTIME_PASSENGER_TARGET_IS_SAEIT="+str("/home/zomorod2/Saeit-staging" in passenger))
+          # Import the real live URL/router and render only an HTTPS GET.
+          # A fake authenticated principal and mocked proof read mean that this
+          # needs NO SQL query, saved session, blockchain call, or mutation.
+          import django
+          from types import SimpleNamespace
+          from unittest.mock import patch
+          django.setup()
+          from django.urls import resolve
+          from mpw_native_checkout.merchant_wallet_views import merchant_wallet_page
+          owner_id = getattr(settings, "MPW_WALLET_PROOF_OWNER_ID", 0)
+          print("MPW_RUNTIME_OWNER_ID_CONFIGURED="+str(type(owner_id) is int and owner_id > 0))
+          assert type(owner_id) is int and owner_id > 0
+          page_route = resolve("/merchant/wallet-proof/")
+          print("MPW_RUNTIME_PROOF_ROUTE_RESOLVES="+str(page_route.url_name == "page"))
+          request = RequestFactory().get("/merchant/wallet-proof/", secure=True,
+                                         HTTP_HOST="mojplaywin.com")
+          request.user = SimpleNamespace(
+              pk=owner_id, is_authenticated=True, is_active=True, is_superuser=True
+          )
+          try:
+              with patch("mpw_native_checkout.merchant_wallet_views.proven_assets",
+                         return_value={"ETH": False, "TRX": False}):
+                  response = merchant_wallet_page(request)
+          except Exception as exc:
+              print("MPW_RUNTIME_PROOF_RENDER_ERROR_TYPE="+type(exc).__name__)
+              raise
+          print("MPW_RUNTIME_PROOF_RENDER_HTTP="+str(response.status_code))
+          print("MPW_RUNTIME_PROOF_TEMPLATE_ASSETS="+str(b"Ethereum" in response.content and b"TRON" in response.content))
+          assert page_route.url_name == "page" and response.status_code == 200
+          assert b"Ethereum" in response.content and b"TRON" in response.content
+          print("MPW_RUNTIME_READONLY_PROBE_COMPLETE_NO_DB_OR_MUTATION")
+          PY
+          REMOTE
+      - name: Read only merchant proof and commerce readiness, without DB writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 55s ssh -F "$RUNNER_TEMP/mpw-host-readonly-probe/config" host 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = "zomorod2"
+          cd /home/zomorod2/Saeit-staging
+          DJANGO_SETTINGS_MODULE=config.settings PYTHONDONTWRITEBYTECODE=1 "$HOME/virtualenv/Saeit-staging/3.11/bin/python" - <<'PY'
+          import django
+          django.setup()
+          from django.conf import settings
+          print("MPW_LIVE_COMMERCE_INSTALLED="+str("mpw_commerce" in settings.INSTALLED_APPS))
+          print("MPW_LIVE_COMMERCE_RELEASE_READY="+str(bool(getattr(settings,"MPW_COMMERCE_RELEASE_READY",False))))
+          print("MPW_LIVE_PROOF_APP_INSTALLED="+str("mpw_native_checkout" in settings.INSTALLED_APPS))
+          if "mpw_native_checkout" in settings.INSTALLED_APPS:
+              from mpw_native_checkout.wallet_ownership import proven_assets
+              # SELECT-only ORM queries. Never issue a challenge, signature,
+              # migration, balance transfer or payment settlement.
+              proofs=proven_assets()
+              print("MPW_LIVE_MERCHANT_ETH_PROVEN="+str(proofs.get("ETH") is True))
+              print("MPW_LIVE_MERCHANT_TRX_PROVEN="+str(proofs.get("TRX") is True))
+          print("MPW_LIVE_READONLY_SELECTS_COMPLETE")
+          PY
+          REMOTE
+      - name: Check anonymous public HTTP responses (GET only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          home="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 https://mojplaywin.com/ || true)"
+          page="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 https://mojplaywin.com/merchant/wallet-proof/ || true)"
+          echo "MPW_PUBLIC_HOME_HTTP=$home"
+          echo "MPW_PUBLIC_WALLET_PROOF_ANONYMOUS_HTTP=$page"
+          # Values are diagnostic; never trigger a production rollback or mutation.
+      - name: Erase temporary credentials
+        if: always()
+        shell: bash
+        run: rm -rf -- "$RUNNER_TEMP/mpw-host-readonly-probe"
