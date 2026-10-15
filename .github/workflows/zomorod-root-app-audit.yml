@@ -7,7 +7,7 @@ on:
       - ".github/workflows/zomorod-root-app-audit.yml"
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: zomorod-root-homepage
@@ -539,6 +539,59 @@ jobs:
           done
           echo "PASSENGER_ADMIN_ERROR_LOGS_END"
           REMOTE
+      - name: Publish temporary recovery status
+        if: always()
+        shell: bash
+        env:
+          SSH_CONFIG: ${{ runner.temp }}/zomorod-restore/config
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set +e
+          status_path="$RUNNER_TEMP/zomorod-recovery-status.json"
+          python3 - "$SSH_CONFIG" "$GITHUB_SHA" "$status_path" <<'PY'
+          import json, subprocess, sys, urllib.request, urllib.error, base64
+          ssh_config, commit_sha, status_path = sys.argv[1:]
+          routes = {}
+          urls = [
+              "https://zomorodmelal.ir/",
+              "https://zomorodmelal.ir/admin/",
+              "https://zomorodmelal.ir/admin/login/",
+              "https://zomorodmelal.ir/amozeshgah/",
+          ]
+          for url in urls:
+              try:
+                  p=subprocess.run(["curl","--silent","--show-error","--location","--max-time","30","--output","/dev/null","--write-out","%{http_code}",url],capture_output=True,text=True,timeout=35)
+                  routes[url]=int(p.stdout.strip() or "0")
+              except Exception:
+                  routes[url]=0
+          venv_configured=False
+          try:
+              remote=subprocess.run(["ssh","-F",ssh_config,"saeit-cpanel","python3 -c 'import json,subprocess; d=json.loads(subprocess.check_output([\"uapi\",\"--output=json\",\"PassengerApps\",\"list_applications\"],text=True)); s=[d]; a=[]\nwhile s:\n x=s.pop()\n if isinstance(x,dict):\n  if str(x.get(\"domain\",\"\")).lower()==\"zomorodmelal.ir\" and x.get(\"base_uri\")==\"/\": a.append(x)\n  s.extend(x.values())\n elif isinstance(x,list): s.extend(x)\nprint(\"yes\" if len(a)==1 and (a[0].get(\"envvars\") or {}).get(\"VIRTUAL_ENV\")==\"/home/zomorod2/virtualenv/Saeit/3.10\" else \"no\")'"],capture_output=True,text=True,timeout=30)
+              venv_configured="yes" in remote.stdout.splitlines()
+          except Exception:
+              pass
+          payload={"commit_sha":commit_sha,"passenger_virtual_env_configured":venv_configured,"routes":routes}
+          with open(status_path,"w",encoding="utf-8") as f: json.dump(payload,f,ensure_ascii=False,indent=2)
+          try:
+              token=__import__("os").environ["GH_TOKEN"]
+              api="https://api.github.com/repos/"+__import__("os").environ["GITHUB_REPOSITORY"]+"/contents/.codex/zomorod-recovery-status.json"
+              headers={"Authorization":"Bearer "+token,"Accept":"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28"}
+              sha=None
+              try:
+                  req=urllib.request.Request(api+"?ref=main",headers=headers)
+                  with urllib.request.urlopen(req,timeout=20) as response: sha=json.load(response).get("sha")
+              except urllib.error.HTTPError as error:
+                  if error.code!=404: raise
+              body={"message":"Record temporary Zomorod route recovery status","content":base64.b64encode(open(status_path,"rb").read()).decode(),"branch":"main"}
+              if sha: body["sha"]=sha
+              req=urllib.request.Request(api,data=json.dumps(body).encode(),headers={**headers,"Content-Type":"application/json"},method="PUT")
+              with urllib.request.urlopen(req,timeout=30) as response: print("RECOVERY_STATUS_FILE_COMMITTED="+str(response.status))
+          except Exception as error:
+              print("RECOVERY_STATUS_FILE_COMMITTED=no")
+              print("RECOVERY_STATUS_PUBLICATION_ERROR="+type(error).__name__)
+          print("RECOVERY_STATUS_ROUTES="+json.dumps(routes,ensure_ascii=False,sort_keys=True))
+          print("PASSENGER_VIRTUAL_ENV_CONFIGURED="+str(venv_configured).lower())
+          PY
       - name: Remove temporary SSH material
         if: always()
         shell: bash
