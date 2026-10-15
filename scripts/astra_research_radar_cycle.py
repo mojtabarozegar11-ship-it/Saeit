@@ -72,7 +72,7 @@ def _historical_reference_digests(workspace, now):
     seen = set()
     entries = []
     for p in workspace.iterdir():
-        match = re.fullmatch(r"(?:daily|retry)-([0-9]{8})(?:-[0-3])?\\.json", p.name)
+        match = re.fullmatch(r"(?:daily|retry)-([0-9]{8})(?:-[0-3])?\.json", p.name)
         if match and cutoff <= match.group(1) <= now.strftime("%Y%m%d"):
             entries.append(p)
     if len(entries) > 160:
