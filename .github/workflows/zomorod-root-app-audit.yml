@@ -181,7 +181,8 @@ jobs:
                   print("LOG_READ_ERROR="+type(exc).__name__)
               print("APP_ERROR_LOG_END="+str(path))
           print("RECENT_APP_ERROR_LOG_FILES_END")
-          PY          set -e
+          PY
+          set -e
           REMOTE
       - name: Check live site routes
         shell: bash
