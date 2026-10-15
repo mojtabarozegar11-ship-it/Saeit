@@ -1,0 +1,111 @@
+name: MojPlayWin grandmaster commerce preflight audit
+on:
+  push:
+    branches: [audit/mpw-chess-file-readonly-20261015]
+    paths: ['.github/workflows/mojplaywin-gm-commerce-preflight-20261015.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Check chess ebook location and SHA256 on cPanel without changes
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/mpw-root-audit"
+          mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          python3 - "$d/vps.key" "$d/host.key" <<'PY'
+          from pathlib import Path
+          import sys
+          for filename in sys.argv[1:]:
+              f=Path(filename)
+              f.write_text(f.read_text().replace("\r\n","\n").strip().replace("\\n","\n")+"\n")
+          PY
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host relay
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host host
+            HostName zohal.pws-dns.net
+            Port 1396
+            User zomorod2
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump relay
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+          EOF
+          timeout 30s ssh -F "$d/config" relay 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          timeout 110s ssh -F "$d/config" host 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = "zomorod2"
+          cd "$HOME/Saeit-staging"
+          export PYTHONDONTWRITEBYTECODE=1
+          "$HOME/virtualenv/Saeit-staging/3.11/bin/python" - <<'PY'
+          import os,hashlib,django
+          from pathlib import Path
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          django.setup()
+          from django.conf import settings
+          from django.db import connection
+          from core.models import Product,Order,PaymentIntent
+          from django.urls import reverse
+          p=Product.objects.get(pk=72)
+          expected="3837fc3cb21ed1a2e7c33e0db8f8e10d158583309b02b97d4d674d25a147207a"
+          f=Path.home()/"MojPlayWin_Private_Assets/store/chess-improvement/MojPlayWin_Chess_Grandmaster_Final_Covered_2026.pdf"
+          print("GM_DB_VENDOR="+connection.vendor)
+          print("GM_BOOK_ON_HOST="+str(f.is_file()))
+          print("GM_BOOK_VERIFIED="+str(f.is_file() and f.stat().st_size==3631972 and hashlib.sha256(f.read_bytes()).hexdigest()==expected))
+          print("GM_PRODUCT_PK="+str(p.pk))
+          print("GM_PRODUCT_ACTIVE="+str(p.active))
+          print("GM_PRODUCT_TITLE="+str(p.title))
+          print("GM_PRODUCT_TYPE="+str(p.product_type))
+          print("GM_PRODUCT_PRICE_USD="+str(p.price))
+          print("GM_PRODUCT_CURRENCY="+str(p.currency))
+          print("GM_PRODUCT_OWNER_PRESENT="+str(p.owner_id is not None))
+          print("GM_PRODUCT_ARTICLE_PRESENT="+str(p.knowledge_article_id is not None))
+          meta=p.metadata if isinstance(p.metadata,dict) else {}
+          for key in ("product_id","pages","edition","author","final_pdf_filename","final_pdf_status","asset_verified","quality_approved","license_verified","factory_publication_permission","payment_live","checkout_enabled"):
+              v=meta.get(key)
+              print("GM_META_"+key.upper()+"="+str(v)[:160])
+          print("GM_ORDER_TOTAL="+str(Order.objects.count()))
+          print("GM_PAYMENT_INTENT_TOTAL="+str(PaymentIntent.objects.count()))
+          for flag in ("MPW_COMMERCE_RELEASE_READY","MPW_COMMERCE_INVOICING_ENABLED","MPW_COMMERCE_SETTLEMENT_ENABLED","MPW_COMMERCE_CUSTOMER_HTTP_ENABLED","MPW_COMMERCE_REAL_RPC_ENABLED"):
+              print("GM_FLAG_"+flag+"="+str(getattr(settings,flag,False)))
+          try:print("GM_PRODUCT_PAGE_ROUTE="+reverse("mpw_product",kwargs={"pk":72}))
+          except Exception as exc:print("GM_PRODUCT_ROUTE_ERROR="+type(exc).__name__)
+          print("GM_READ_ONLY_AUDIT_COMPLETE=True")
+          PY
+          REMOTE
+          for url in https://mojplaywin.com/store/ https://mojplaywin.com/store/product/72/; do
+            code="$(curl -sSL --max-time 20 -o /dev/null -w '%{http_code}' "$url" || true)"
+            echo "GM_LIVE_HTTP $url $code"
+          done
+
+      - name: Remove transient keys
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/mpw-root-audit"
