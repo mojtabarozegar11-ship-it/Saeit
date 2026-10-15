@@ -110,7 +110,7 @@ def patch(page: str, content: str) -> str:
     result=content[:end]+"\n"+addition(page)+"\n"+content[end:]
     if result.count(MARKER)!=1: raise ValueError("Missing new block")
     for n in ROUTES[page][1]:
-        if result.count(PHOTO_SUBDIR+"/photo-"+f"{n:02d}"+".jpg")!=2:
+        if result.count(PHOTO_SUBDIR+"/photo-"+f"{n:02d}"+".png")!=2:
             raise ValueError("Expected exactly two new references per photograph")
     return result
 
