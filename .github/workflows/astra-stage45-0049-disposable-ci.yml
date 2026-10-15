@@ -14,6 +14,8 @@ on:
       - tests/test_astra_research_evidence_adapter.py
       - scripts/astra_stage45_research_backlog.py
       - tests/test_astra_stage45_research_backlog.py
+      - scripts/astra_stage45_legacy_gap_inventory.py
+      - tests/test_astra_stage45_legacy_gap_inventory.py
       - .github/workflows/astra-stage45-0049-disposable-ci.yml
   pull_request:
     branches: [factory/staging-reconciliation-20261008]
@@ -28,6 +30,8 @@ on:
       - tests/test_astra_research_evidence_adapter.py
       - scripts/astra_stage45_research_backlog.py
       - tests/test_astra_stage45_research_backlog.py
+      - scripts/astra_stage45_legacy_gap_inventory.py
+      - tests/test_astra_stage45_legacy_gap_inventory.py
       - .github/workflows/astra-stage45-0049-disposable-ci.yml
 
 permissions:
@@ -121,6 +125,10 @@ jobs:
           print("ASTRA_0049_RESEARCH_BACKLOG_E2E=PASS")
           print("ASTRA_0049_REAL_CUSTOMER_EVIDENCE_ATTESTED=0")
           PY
+      - name: Verify research-only inventory from legacy 0048 lineage
+        run: |
+          set -euo pipefail
+          python -m unittest discover -s tests -p 'test_astra_stage45_legacy_gap_inventory.py' -v
       - name: Confirm no VPS credentials or services used
         run: |
           echo ASTRA_0049_VPS_CONNECTIONS=0
