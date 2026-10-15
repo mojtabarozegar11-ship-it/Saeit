@@ -181,6 +181,19 @@ jobs:
             sleep 4
           done
           echo "ALL_PRODUCTION_ROUTE_PROOFS=passed"
+      - name: Verify multiple company interior routes after repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          for p in /services/ /agriculture/ /about/ /contact/; do
+            temp="$(mktemp)"
+            code=$(curl -L --silent --show-error --max-time 22 -o "$temp" -w '%{http_code}' "https://zomorodmelal.ir$p?repair_internal_proof=1" || true)
+            bytes=$(wc -c < "$temp")
+            printf 'INTERNAL_ROUTE=%s HTTP=%s BYTES=%s\n' "$p" "$code" "$bytes"
+            test "$code" != 500 && test "$code" != 502 && test "$code" != 503 && test "$code" != 504 || exit 1
+            test "$bytes" != 26 || exit 1
+            rm -f "$temp"
+          done
       - name: Remove temporary SSH material
         if: always()
         shell: bash
