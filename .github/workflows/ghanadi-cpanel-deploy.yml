@@ -64,8 +64,16 @@ jobs:
               asset = Path("core/static/site/ghanadi") / name
               if not asset.is_file() or asset.stat().st_size < 400:
                   raise SystemExit(f"Missing Ghanadi illustration: {name}")
+          for name in ("hero.webp", "cookies.webp", "cafe.webp", "cake.webp"):
+              asset = Path("core/static/site/ghanadi") / name
+              if not asset.is_file() or asset.stat().st_size < 10000:
+                  raise SystemExit(f"Missing generated Ghanadi photograph: {name}")
+          if 'class="chart-card"' not in source or 'تعداد عنوان در هر بخش' not in source:
+              raise SystemExit("Ghanadi catalog charts are missing")
           print("GHANADI_RELEASE_SOURCE=valid")
           print("PRODUCT_RECORDS=20")
+          print("GENERATED_PHOTOS=4")
+          print("CATALOG_CHARTS=2")
           PY
 
       - name: Run production gates and regression tests
@@ -154,28 +162,23 @@ jobs:
           target="$1"
           case "$target" in *[!0-9a-f]*|'') exit 20;; esac
           test "$root" = "$HOME/Saeit"
-          if ! test -d "$root/.git" || ! test -f "$root/manage.py" || ! test -f "$root/passenger_wsgi.py" || ! test -f "$root/deploy/cpanel_deploy.sh"; then
-            echo "Refusing release: the verified Passenger app is missing its Git, Django, Passenger, or deploy files" >&2
-            exit 27
-          fi
-          echo "VERIFIED_APPROOT=$root" >&2
+          test -d "$root/.git" && test -f "$root/manage.py" && test -f "$root/passenger_wsgi.py" && test -f "$root/deploy/cpanel_deploy.sh"
           case "$root" in *staging*|*stage*) echo "Refusing a staging path"; exit 21;; esac
           origin="$(git -C "$root" remote get-url origin)"
           case "$origin" in
             https://github.com/mojtabarozegar11-ship-it/Saeit.git|https://github.com/mojtabarozegar11-ship-it/Saeit|git@github.com:mojtabarozegar11-ship-it/Saeit.git|ssh://git@github.com/mojtabarozegar11-ship-it/Saeit.git) ;;
-            *) echo "Refusing unexpected repository origin: $origin" >&2; exit 22;;
+            *) echo "Refusing unexpected repository origin"; exit 22;;
           esac
           branch="$(git -C "$root" branch --show-current)"
-          test "$branch" = "main" || { echo "Refusing non-main production checkout: $branch" >&2; exit 23; }
-          test -z "$(git -C "$root" status --porcelain)" || { echo "Refusing a dirty production checkout" >&2; exit 24; }
+          test "$branch" = "main" || { echo "Refusing non-main production checkout"; exit 23; }
+          test -z "$(git -C "$root" status --porcelain)" || { echo "Refusing a dirty production checkout"; exit 24; }
           previous="$(git -C "$root" rev-parse HEAD)"
-          echo "CURRENT_APP_COMMIT=$previous" >&2
           git -C "$root" fetch --quiet origin main
           fetched="$(git -C "$root" rev-parse origin/main)"
-          test "$fetched" = "$target" || { echo "Remote main differs from requested release SHA: $fetched" >&2; exit 25; }
+          test "$fetched" = "$target" || { echo "Remote main differs from requested release SHA"; exit 25; }
           git -C "$root" merge --ff-only origin/main
           if ! /bin/bash "$root/deploy/cpanel_deploy.sh"; then
-            echo "DEPLOY_SCRIPT_FAILED; restoring previous application commit" >&2
+            echo "DEPLOY_SCRIPT_FAILED; restoring previous application commit"
             git -C "$root" reset --hard "$previous"
             touch "$root/passenger_wsgi.py"
             exit 26
