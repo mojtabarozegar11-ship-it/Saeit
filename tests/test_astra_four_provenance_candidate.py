@@ -105,6 +105,19 @@ class FourProductProvenanceTests(unittest.TestCase):
         self.assertTrue(evidence["runtime_external_refs"])
         self.assertFalse(evidence["independent_license_review_complete"])
 
+    def test_loopback_urls_and_node_builtin_not_third_party(self):
+        local={
+            "app/serve_local.py":b"print('http://127.0.0.1:8766/')\\nprint('http://localhost:8765')\\n",
+            "app/test_engine.js":b"const assert=require('node:assert/strict');\\n",
+        }
+        evidence=audit._runtime_dependency_evidence(local)
+        self.assertEqual(evidence["unresolved_javascript_imports"],[])
+        self.assertEqual(evidence["runtime_external_refs"],[])
+        self.assertEqual(evidence["static_scan_warnings"],[])
+        self.assertFalse(evidence["independent_license_review_complete"])
+        trap={"app/app.js":b"fetch('https://localhost.evil.example.invalid/private')"}
+        self.assertTrue(audit._runtime_dependency_evidence(trap)["runtime_external_refs"])
+
     def test_reject_archive_path_traversal(self):
         with tempfile.TemporaryDirectory() as temp:
             path=Path(temp)/"bad.zip"
