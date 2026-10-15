@@ -139,15 +139,28 @@ def build(legacy_path, research_path, output_path, *, limit=25):
             "legacy_product_id","stage","source_refs_unverified",
             "market_demand_verified","sale_ready","quality_score",
         }})
-        entries=queue.execute(
-            "SELECT legacy_product_id,stage,market_demand_verified,sale_ready,"
-            "quality_score FROM research_tasks "
-            "WHERE stage='WAITING_FOR_EVIDENCE' "
-            "ORDER BY legacy_product_id LIMIT ?",(limit,)).fetchall()
         if queue.execute("SELECT COUNT(*) FROM research_tasks "
                          "WHERE market_demand_verified<>0 OR sale_ready<>0 "
                          "OR quality_score IS NOT NULL").fetchone()[0]:
             raise ValueError("RETAIL_GATE_NOT_FAIL_CLOSED")
+        cursor_file=out/".research-dossiers-cursor.json"
+        if cursor_file.is_symlink() or (cursor_file.exists() and not cursor_file.is_file()):
+            raise ValueError("DOSSIER_CURSOR_UNSAFE")
+        cursor=0
+        if cursor_file.exists():
+            state=json.loads(cursor_file.read_text(encoding="utf-8"))
+            cursor=state.get("last_product_id",0)
+            if not isinstance(cursor,int) or cursor<0:
+                raise ValueError("DOSSIER_CURSOR_INVALID")
+        query=("SELECT legacy_product_id,stage,market_demand_verified,sale_ready,"
+               "quality_score FROM research_tasks "
+               "WHERE stage='WAITING_FOR_EVIDENCE' AND legacy_product_id>? "
+               "ORDER BY legacy_product_id LIMIT ?")
+        entries=queue.execute(query,(cursor,limit)).fetchall()
+        wrapped=False
+        if not entries and cursor:
+            entries=queue.execute(query,(0,limit)).fetchall()
+            wrapped=True
         summaries=[]
         for pid,stage,market,sale,score in entries:
             if market or sale or score is not None:
@@ -194,8 +207,22 @@ def build(legacy_path, research_path, output_path, *, limit=25):
                               "structural_refs":source["structurally_attributed_unique_references_unverified"]})
         old.execute("COMMIT")
         queue.execute("COMMIT")
+        last_id=int(entries[-1][0]) if entries else 0
+        fd,tmp=tempfile.mkstemp(prefix=".astra-dossier-cursor-",suffix=".tmp",dir=str(out))
+        try:
+            with os.fdopen(fd,"w",encoding="utf-8") as fp:
+                json.dump({"last_product_id":last_id,"updated_utc":_now()},fp)
+                fp.write("\n")
+                fp.flush()
+                os.fsync(fp.fileno())
+            os.chmod(tmp,0o600)
+            os.replace(tmp,str(cursor_file))
+        finally:
+            if os.path.exists(tmp):
+                os.unlink(tmp)
     return {"mode":"PRIVATE_OFFLINE_RESEARCH_PLANS",
             "dossiers_written":len(summaries),
+            "cursor_product_id":last_id, "wrapped":wrapped,
             "reference_count_not_independent_verification":True,
             "independently_verified_commercial_products":0,
             "network_requests":0, "customer_orders_required":False,
