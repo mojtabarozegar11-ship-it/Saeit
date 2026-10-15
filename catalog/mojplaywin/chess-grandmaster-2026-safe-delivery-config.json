@@ -17,14 +17,17 @@
       "enabled": false,
       "fulfillment": "digital",
       "private_file": "store/chess-improvement/MojPlayWin_Chess_Grandmaster_Final_Covered_2026.pdf"
-    }
+    },
+    "rights_owner_attested": true,
+    "rights_owner_attested_at": "2026-10-15",
+    "rights_owner_attestation_only": true
   },
   "required_install_checks": [
     "Confirm final PDF size and SHA-256 on cPanel",
     "Confirm configured MPW_COMMERCE_PRIVATE_ASSET_ROOT and exact relative path against cPanel audit",
     "Resolve using mpw_commerce.downloads._private_file and assert final file matches expected SHA-256",
     "Leave product.active, checkout_enabled and payment_live unchanged",
-    "Do not grant any quality/license/publication assertions without evidence",
+    "Retain separate license_verified/quality_approved/factory_publication_permission checks; owner declaration alone does not fulfill third-party provenance or editorial review",
     "Do not switch on live invoice, settlement, downloads or checkout until real mainnet transfer and protected buyer fulfillment have been proven"
   ],
   "verified_wallet_ownership": {
@@ -32,5 +35,13 @@
     "TRX": true
   },
   "release_state": "STAGING_MANIFEST_ONLY_DO_NOT_TREAT_AS_DEPLOYED",
-  "source_audit": "https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/38703359205"
+  "source_audit": "https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/38703359205",
+  "owner_declaration": {
+    "status": "owner_attested",
+    "date": "2026-10-15",
+    "author": "Mojtaba Roozegar",
+    "copyright_notice": "© 2026 Mojtaba Roozegar. All rights reserved.",
+    "attests_text_images_diagrams_and_commercial_distribution": true,
+    "third_party_provenance_review_complete": false
+  }
 }

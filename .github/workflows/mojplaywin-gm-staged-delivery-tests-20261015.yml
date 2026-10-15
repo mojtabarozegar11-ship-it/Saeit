@@ -4,6 +4,7 @@ on:
     branches:
       - fix/mpw-gm-415-download-20261015
       - fix/mpw-chess-product72-delivery-binding-20261015
+      - chore/mpw-chess-rights-declaration-20261015
     paths:
       - '.github/workflows/mojplaywin-gm-staged-delivery-tests-20261015.yml'
       - 'core/chess_ebook_delivery.py'

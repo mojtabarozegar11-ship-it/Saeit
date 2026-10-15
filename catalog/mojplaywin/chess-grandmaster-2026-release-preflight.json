@@ -25,10 +25,23 @@
   "public_active": false,
   "checkout_enabled": false,
   "publication_gates": [
-    "review rights, original material and user-facing refund terms",
+    "Owner attested rights; separately review third-party assets, editorial quality, refund and support terms",
     "verify product page and protected download for paid order",
     "verify authentic ETH/TRX chain settlement and a controlled full purchase",
     "ensure rollback and logs before paid checkout release"
   ],
-  "sale_status": "private_book_installed_checkout_not_ready"
+  "sale_status": "owner_rights_attested_private_book_installed_checkout_not_ready",
+  "rights_declaration": {
+    "declared_at": "2026-10-15",
+    "declared_by": "Mojtaba Roozegar",
+    "basis": "Owner's direct self-attestation in ChatGPT conversation",
+    "claim": "Owner confirms 100% publication and commercial sale rights for the text, images, and diagrams of this chess book",
+    "public_notice": "© 2026 Mojtaba Roozegar. All rights reserved.",
+    "attestation_status": "OWNER_DECLARED_NOT_INDEPENDENTLY_VERIFIED",
+    "evidence_not_collected": [
+      "third-party asset-license files",
+      "image provenance review",
+      "separate editorial quality review"
+    ]
+  }
 }
