@@ -17,16 +17,16 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, HTTPRedirectHandler, build_opener, HTTPSHandler
 
 SOURCES = (
-    ("enterprise_budget_method", "https://extension.psu.edu/budgeting-for-agricultural-decision-making",
-     "general budgeting / direct free alternative"),
-    ("orchard_sample_budget", "https://extension.psu.edu/apple-production",
-     "orchard budget workbooks / free comparison"),
-    ("procurement_partial_budget", "https://extension.psu.edu/partial-budgeting-for-agricultural-businesses",
-     "cost change comparison / existing method"),
     ("water_multi_year_optimization", "https://waterlandcrop.ucdavis.edu/Help.html",
-     "multi-year land-water crop rotation optimizer / free comparison"),
-    ("water_allocator", "https://mycwa.engg.ksu.edu/",
-     "crop water allocation economics / free comparison"),
+     "UC Davis multi-year crop/water optimization: free tool benchmark"),
+    ("commodity_cost_method", "https://ers.usda.gov/data-products/commodity-costs-and-returns/documentation",
+     "USDA ERS cost-accounting methodology, not willingness to pay"),
+    ("farm_income_method", "https://ers.usda.gov/data-products/farm-income-and-wealth-statistics/general-documentation",
+     "USDA ERS farm income accounting methodology and limits"),
+    ("farm_balance_sheet_method", "https://ers.usda.gov/data-products/farm-income-and-wealth-statistics/documentation-for-the-farm-sector-balance-sheet",
+     "USDA ERS assets, capital and financial risk framework"),
+    ("farm_budget_alternatives", "https://ucanr.edu/site/agricultural-economics/publications",
+     "University of California extension decision aids and budget alternatives"),
 )
 MAX_RESPONSE_BYTES = 192 * 1024
 PER_SOURCE_TIMEOUT = 10
@@ -51,7 +51,7 @@ def _observe(source, opener):
     result = {
         "key": key, "url": url,
         "competitive_capability_noted": competitive_note,
-        "publisher_source_class": "public_university_extension_or_research",
+        "publisher_source_class": "public_university_or_government_research",
         "observed_at_utc": _utc(),
         "http_status": None,
         "transport_state": "UNKNOWN",
@@ -126,8 +126,8 @@ def _atomic_json(path, data):
 
 
 def run(output_file, *, opener=None, sources=SOURCES):
-    if len(sources)!=5 or len({x[0] for x in sources})!=5:
-        raise ValueError("FIVE_INDEPENDENT_SOURCE_TARGETS_REQUIRED")
+    if len(sources)!=5 or len({x[0] for x in sources})!=5 or len({x[1] for x in sources})!=5:
+        raise ValueError("FIVE_DISTINCT_CURATED_URLS_REQUIRED")
     if any(x not in SOURCES for x in sources):
         raise ValueError("UNKNOWN_SOURCE_NOT_ALLOWED")
     external=[_observe(x,opener or _opener()) for x in sources]
