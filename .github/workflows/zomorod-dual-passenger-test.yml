@@ -1,0 +1,123 @@
+name: Zomorod duplicate Passenger registration reversible test
+on:
+  push:
+    branches: [diagnostic/zomorod-503-readonly-20261015]
+    paths: [.github/workflows/zomorod-dual-passenger-test.yml]
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-selector-recovery-safe
+  cancel-in-progress: false
+jobs:
+  test-duplicate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Prepare pinned relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/zomorod-restore"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "CONFIRMED_PINNED_RELAY_READY=yes"
+      - name: Temporarily disable duplicate cPanel app and test selector route
+        shell: bash
+        env:
+          SSH_CONFIG: ${{ runner.temp }}/zomorod-restore/config
+        run: |
+          set -euo pipefail
+          needs_restore=no
+          restore() {
+            if [ "$needs_restore" = yes ]; then
+              echo "RESTORING_ORIGINAL_CPANEL_PASSENGER_APP"
+              ssh -F "$SSH_CONFIG" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          uapi --output=json PassengerApps enable_application name=saeit-django | python3 -c 'import sys,json; x=json.load(sys.stdin)["result"]; print("RESTORE_RESULT="+str(x.get("status"))); sys.exit(0 if x.get("status")==1 and not x.get("errors") else 1)'
+          REMOTE
+            fi
+          }
+          trap restore EXIT
+          ssh -F "$SSH_CONFIG" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = zomorod2
+          test -f /home/zomorod2/public_html/index.html
+          test -f /home/zomorod2/public_html/amozeshgah/index.html
+          test -f /home/zomorod2/public_html/.htaccess
+          uapi --output=json PassengerApps list_applications | python3 -c '
+          import sys,json
+          d=json.load(sys.stdin)["result"]["data"]
+          a=d.get("saeit-django")
+          if a is None or a.get("path")!="/home/zomorod2/Saeit" or a.get("domain")!="zomorodmelal.ir" or a.get("base_uri")!="/" or str(a.get("enabled")) not in ("1","True"):
+              raise SystemExit("BASELINE_REGISTRATION_MISMATCH")
+          print("CPANEL_DUPLICATE_BASELINE_VERIFIED=yes")
+          '
+          uapi --output=json PassengerApps disable_application name=saeit-django | python3 -c 'import sys,json; r=json.load(sys.stdin)["result"]; print("TEMP_DISABLE_RESULT="+str(r.get("status"))); sys.exit(0 if r.get("status")==1 and not r.get("errors") else 1)'
+          REMOTE
+          needs_restore=yes
+          sleep 3
+          status_home=$(curl -L -s -o /dev/null --connect-timeout 7 --max-time 18 -w '%{http_code}' 'https://zomorodmelal.ir/' || true)
+          status_academy=$(curl -L -s -o /dev/null --connect-timeout 7 --max-time 18 -w '%{http_code}' 'https://zomorodmelal.ir/amozeshgah/' || true)
+          status_admin=$(curl -L -s -o /dev/null --connect-timeout 7 --max-time 18 -w '%{http_code}' 'https://zomorodmelal.ir/admin/login/' || true)
+          echo "TEMP_HOME_HTTP=$status_home"
+          echo "TEMP_ACADEMY_HTTP=$status_academy"
+          echo "TEMP_ADMIN_LOGIN_HTTP=$status_admin"
+          if [ "$status_home" = 200 ] && [ "$status_academy" = 200 ] && [ "$status_admin" = 200 ]; then
+            echo "SELECTOR_ROUTE_FIXED_BY_CPANEL_DISABLE=yes"
+            needs_restore=no
+            echo "CPANEL_DUPLICATE_LEFT_DISABLED=yes"
+          else
+            echo "SELECTOR_ROUTE_FIXED_BY_CPANEL_DISABLE=no"
+            echo "ROLLBACK_REQUIRED=yes"
+          fi
+      - name: Final production smoke test
+        shell: bash
+        run: |
+          set -euo pipefail
+          for p in / /amozeshgah/ /admin/login/; do
+            code=$(curl -L -sS -o /dev/null --max-time 20 -w '%{http_code}' "https://zomorodmelal.ir$p" || true)
+            echo "POSTTEST_URL=$p HTTP=$code"
+          done
+      - name: Remove temporary SSH material
+        if: always()
+        shell: bash
+        run: rm -rf -- "$RUNNER_TEMP/zomorod-restore"
