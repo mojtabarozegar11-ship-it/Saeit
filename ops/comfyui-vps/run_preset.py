@@ -26,7 +26,7 @@ def api_json(endpoint, payload=None, timeout=15):
         return json.load(r)
 
 def run(preset, steps):
-    if preset not in PRESETS or steps not in (2, 4, 6, 8):
+    if preset not in PRESETS or steps not in (1, 2, 3):
         raise RuntimeError("INVALID_PRESET_OR_STEPS")
     nodes = {
         "1": {"class_type": "SaeitSafeCPURender", "inputs": {

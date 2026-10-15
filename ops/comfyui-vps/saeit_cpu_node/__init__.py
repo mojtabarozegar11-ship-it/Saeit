@@ -18,7 +18,7 @@ from PIL import Image
 
 HOME = Path.home()
 ROOT = HOME / "comfyui-isolated"
-BIN_DIR = ROOT / ".control/sd-cpp-runtime/bin"
+BIN_DIR = ROOT / ".control/sd-cpp-runtime-sse2/bin"
 BIN = BIN_DIR / "sd-cli"
 MODEL = ROOT / "source-v0.40.0/models/checkpoints/segmind_tiny_sd_candidate.safetensors"
 STATE = ROOT / ".control/qa-render"
@@ -66,7 +66,7 @@ class SaeitSafeCPURender:
     def INPUT_TYPES(cls):
         return {"required": {
             "prompt": ("STRING", {"multiline": True, "default": "Green shoots on a sunny farm"}),
-            "steps": ("INT", {"default": 4, "min": 1, "max": 8}),
+            "steps": ("INT", {"default": 2, "min": 1, "max": 3}),
             "seed": ("INT", {"default": 42, "min": 0, "max": 2147483647}),
             "cfg": ("FLOAT", {"default": 7.0, "min": 1.0, "max": 12.0, "step": 0.5}),
         }}
@@ -80,7 +80,7 @@ class SaeitSafeCPURender:
         if not (1 <= len(prompt) <= 600):
             raise ValueError("Prompt length must be 1–600 characters")
         validated_files()
-        if not factory_running() or available_kib() < 2_900_000:
+        if not factory_running() or available_kib() < 2_850_000:
             raise RuntimeError("Safe resource or factory requirement not met")
         STATE.mkdir(mode=0o700, parents=True, exist_ok=True)
         os.chmod(STATE, 0o700)
@@ -94,16 +94,16 @@ class SaeitSafeCPURender:
                 env = dict(os.environ, LD_LIBRARY_PATH=str(BIN_DIR), OMP_NUM_THREADS="1",
                            OPENBLAS_NUM_THREADS="1", MKL_NUM_THREADS="1", MALLOC_ARENA_MAX="2")
                 argv = [str(BIN), "-m", str(MODEL), "-p", prompt,
-                        "-W", "512", "-H", "512", "--steps", str(steps),
+                        "-W", "256", "-H", "256", "--steps", str(steps),
                         "--seed", str(seed), "--cfg-scale", str(cfg),
-                        "--sampling-method", "euler_a", "--diffusion-fa",
+                        "--sampling-method", "euler_a", "--diffusion-fa", "--vae-tiling",
                         "--log-level", "error", "-o", str(output)]
                 with tempfile.TemporaryFile() as log:
                     child = subprocess.Popen(argv, stdin=subprocess.DEVNULL,
                                              stdout=log, stderr=subprocess.STDOUT,
                                              cwd=str(STATE), env=env,
                                              start_new_session=True, preexec_fn=resource_guard)
-                    end = time.monotonic() + 240
+                    end = time.monotonic() + 360
                     try:
                         while child.poll() is None and time.monotonic() < end:
                             if not factory_running() or available_kib() < 950_000:
@@ -117,7 +117,7 @@ class SaeitSafeCPURender:
                             raise RuntimeError("No generated image received")
                         with Image.open(output) as raw:
                             pixels = np.asarray(raw.convert("RGB"), dtype=np.float32) / 255.0
-                        if pixels.shape != (512, 512, 3):
+                        if pixels.shape != (256, 256, 3):
                             raise RuntimeError("Unexpected CPU output resolution")
                         result = torch.from_numpy(pixels).unsqueeze(0)
                         return (result,)
