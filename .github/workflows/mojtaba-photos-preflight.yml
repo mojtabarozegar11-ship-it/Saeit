@@ -108,7 +108,7 @@ jobs:
           t=(app/'templates/personal_site/core/home.html').read_text()
           print('HOME_END_BLOCKS='+str(t.count('{% endblock %}')))
           PY
-          for py in "$APP/.venv/bin/python" "$APP/venv/bin/python" /home/zomorod2/virtualenv/mojtaba_personal/mojtaba_roozegar_personal_v17/3.11/bin/python; do
+          for py in "$APP/../.venv_personal_test/bin/python" "$APP/.venv/bin/python" "$APP/venv/bin/python" /home/zomorod2/virtualenv/mojtaba_personal/mojtaba_roozegar_personal_v17/3.11/bin/python; do
             if test -x "$py" && "$py" -c 'import django' >/dev/null 2>&1; then echo "DJANGO_PYTHON_AVAILABLE=$py"; break; fi
           done
           echo 'READ_ONLY_PERSONAL_PREFLIGHT=passed'
