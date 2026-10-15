@@ -465,6 +465,10 @@ jobs:
               echo "LOG_END=$path"
             fi
           done
+          echo "PASSENGER_EDIT_SCHEMA_BEGIN"
+          uapi --output=json PassengerApps edit_application 2>&1 | head -c 5000 || true
+          echo
+          echo "PASSENGER_EDIT_SCHEMA_END"
           echo "PASSENGER_UAPI_FUNCTIONS_BEGIN"
           uapi --list PassengerApps 2>&1 | head -n 100
           echo "PASSENGER_UAPI_FUNCTIONS_END"
