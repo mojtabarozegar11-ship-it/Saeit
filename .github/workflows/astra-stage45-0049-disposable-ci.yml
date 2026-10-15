@@ -12,6 +12,8 @@ on:
       - scripts/astra_stage45_0049_integration_probe.py
       - tests/test_astra_opportunity_selector.py
       - tests/test_astra_research_evidence_adapter.py
+      - scripts/astra_stage45_research_backlog.py
+      - tests/test_astra_stage45_research_backlog.py
       - .github/workflows/astra-stage45-0049-disposable-ci.yml
   pull_request:
     branches: [factory/staging-reconciliation-20261008]
@@ -24,6 +26,8 @@ on:
       - scripts/astra_stage45_0049_integration_probe.py
       - tests/test_astra_opportunity_selector.py
       - tests/test_astra_research_evidence_adapter.py
+      - scripts/astra_stage45_research_backlog.py
+      - tests/test_astra_stage45_research_backlog.py
       - .github/workflows/astra-stage45-0049-disposable-ci.yml
 
 permissions:
@@ -93,6 +97,30 @@ jobs:
           set -euo pipefail
           export DATABASE_URL="sqlite:///$RUNNER_TEMP/astra-0049-ephemeral.sqlite3"
           python manage.py shell -c 'from scripts.astra_stage45_0049_integration_probe import run; run()'
+      - name: Test autonomous no-order research backlog and immutable private output
+        run: |
+          set -euo pipefail
+          python -m unittest discover -s tests -p 'test_astra_stage45_research_backlog.py' -v
+          export DATABASE_URL="sqlite:///$RUNNER_TEMP/astra-0049-ephemeral.sqlite3"
+          now="$(python -c 'from datetime import datetime, timezone; print(datetime.now(timezone.utc).isoformat())')"
+          python scripts/astra_stage45_research_backlog.py --db "$RUNNER_TEMP/astra-0049-ephemeral.sqlite3" --output "$RUNNER_TEMP/astra-0049-backlog.json" --now-utc "$now"
+          python - "$RUNNER_TEMP/astra-0049-backlog.json" <<'PY'
+          import json,pathlib,sys
+          d=json.loads(pathlib.Path(sys.argv[1]).read_text())
+          assert d["mode"]=="private_read_only_no_order_research_backlog"
+          assert d["discovery_topics"]==2,d
+          assert d["verified_market_demand_topics"]==0
+          assert d["commercially_released_products"]==0
+          assert d["factory_mutations"]==0
+          assert all(x["evidence_target"]==100 and
+              x["build_authorized"] is False and
+              x["publish_authorized"] is False and
+              x["payment_authorized"] is False and
+              x["commercial_quality_score"] is None
+              for x in d["backlog"])
+          print("ASTRA_0049_RESEARCH_BACKLOG_E2E=PASS")
+          print("ASTRA_0049_REAL_CUSTOMER_EVIDENCE_ATTESTED=0")
+          PY
       - name: Confirm no VPS credentials or services used
         run: |
           echo ASTRA_0049_VPS_CONNECTIONS=0
