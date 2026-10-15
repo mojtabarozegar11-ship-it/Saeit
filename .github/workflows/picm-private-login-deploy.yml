@@ -30,7 +30,8 @@ jobs:
           pip install -q -r requirements.txt
           python -m py_compile core/picm_auth.py core/picm_access.py scripts/picm_bind_owner.py scripts/deploy_picm_login.py
           node --check templates/picm/free_motion.js
-          pytest -q tests/test_picm_auth.py tests/test_picm_views.py
+          node --check templates/picm/story_preview.js
+          pytest -q tests/test_picm_auth.py tests/test_picm_views.py tests/test_picm_storyboard.py
           python manage.py check
       - name: Configure pinned relay and cPanel SSH
         shell: bash
@@ -87,7 +88,7 @@ jobs:
           WORK="$RUNNER_TEMP/picm-ssh"
           timeout 40s ssh -F "$WORK/config" picm-host 'test "$(id -un)" = zomorod2 && test -f /home/zomorod2/Saeit-staging/core/picm_views.py && test -f /home/zomorod2/mojplaywin.com/passenger_wsgi.py'
           timeout 20s ssh -F "$WORK/config" picm-host "install -d -m 700 /home/zomorod2/.mojplaywin-picm-login-$GITHUB_RUN_ID"
-          tar -cf "$RUNNER_TEMP/picm-login.tar" scripts/deploy_picm_login.py scripts/picm_bind_owner.py core/picm_auth.py core/picm_views.py core/picm_access.py templates/picm/login.html templates/picm/index.html templates/picm/free_motion.js
+          tar -cf "$RUNNER_TEMP/picm-login.tar" scripts/deploy_picm_login.py scripts/picm_bind_owner.py core/picm_auth.py core/picm_views.py core/picm_access.py core/picm_storyboard.py templates/picm/login.html templates/picm/index.html templates/picm/free_motion.js templates/picm/story_preview.js
           scp -q -F "$WORK/config" "$RUNNER_TEMP/picm-login.tar" "picm-host:/home/zomorod2/.mojplaywin-picm-login-$GITHUB_RUN_ID/archive.tar"
           timeout 40s ssh -F "$WORK/config" picm-host "tar -xf /home/zomorod2/.mojplaywin-picm-login-$GITHUB_RUN_ID/archive.tar -C /home/zomorod2/.mojplaywin-picm-login-$GITHUB_RUN_ID"
       - name: Securely bind PICM to existing sole non-admin owner
@@ -176,6 +177,10 @@ jobs:
           assert 'value="60" selected' in data
           assert 'id="video-options"' in data
           assert "video-cancel" in data
+          assert 'id="mode-story_video"' in data
+          assert 'id="story-duration"' in data
+          assert "story_video" in data
+          assert "ویدیو تولید نمی‌شود" in data or "فیلم نهایی در این مرحله ساخته نمی‌شود" in data
           assert 'action="/picm/logout/"' in data
           print("PICM_FREE_60S_MOTION_AUTHENTICATED_PAGE_RENDER_OK")
           PYTHON
