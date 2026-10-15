@@ -44,6 +44,8 @@ def main():
             or len(password) > 128):
         raise RuntimeError("INVALID_PICM_LOGIN_CREDENTIALS")
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+    # The one-time installer lives outside the Django application directory.
+    sys.path.insert(0, "/home/zomorod2/Saeit-staging")
     import django
     django.setup()
     from django.contrib.auth import get_user_model
