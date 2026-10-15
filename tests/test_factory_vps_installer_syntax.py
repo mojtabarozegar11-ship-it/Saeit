@@ -20,9 +20,18 @@ class VPSProductInstallerTests(unittest.TestCase):
                   "deploy" / "install_autonomous_factory_products.sh").read_text(encoding="utf-8")
         self.assertIn("SAEIT_AUTONOMOUS_PRODUCTS_V2", script)
         self.assertIn("factory_vps_product_cycle.py", script)
+        self.assertIn("factory_evidence_quality.py", script)
+        self.assertIn('test -f "$repo/scripts/factory_evidence_quality.py"', script)
         self.assertIn("PUBLISHING_ENABLED=false", script)
         self.assertIn("ORDER_REQUIRED=false", script)
         self.assertNotIn("core_order", script)
+
+    def test_manual_deployment_packages_gate_and_does_not_auto_run_on_merge(self):
+        source = Path(__file__).resolve().parents[1]
+        wf = (source / ".github/workflows/vps-autonomous-product-install.yml").read_text(encoding="utf-8")
+        self.assertIn("scripts/factory_evidence_quality.py", wf)
+        self.assertIn("workflow_dispatch:", wf)
+        self.assertNotIn("branches: [main]", wf)
 
 
 if __name__ == "__main__":
