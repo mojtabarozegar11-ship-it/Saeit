@@ -1,0 +1,141 @@
+name: Astra research radar - isolated private VPS runner
+
+on:
+  push:
+    branches: [feature/astra-independent-research-radar-20261015]
+    paths:
+      - scripts/astra_independent_research_radar.py
+      - scripts/astra_research_radar_cycle.py
+      - tests/test_astra_independent_research_radar.py
+      - tests/test_astra_research_radar_cycle.py
+      - .github/workflows/astra-research-radar-vps-private.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: astra-research-radar-private-vps-deploy
+  cancel-in-progress: false
+
+jobs:
+  prove-private-isolation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Run both isolated research suites without dependencies
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p 'test_astra_*research_radar*.py' -v
+          python3 -m unittest discover -s tests -p 'test_astra_research_radar_cycle.py' -v
+          echo ASTRA_PRIVATE_RADAR_QA=PASS
+
+  private-vps-install:
+    needs: prove-private-isolation
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    environment: null
+    steps:
+      - uses: actions/checkout@v4
+      - name: Stage isolated source; smoke test; create separate research cron
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" || { echo ASTRA_PRIVATE_RADAR_NO_VPS_KEY; exit 2; }
+          dir="$RUNNER_TEMP/astra-radar-vps"
+          install -d -m 700 "$dir"
+          trap 'rm -rf -- "$dir"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$dir/key"
+          chmod 600 "$dir/key"
+          ssh-keygen -y -P '' -f "$dir/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$dir/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$dir/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$dir/config" <<'CFG'
+          Host private-vps
+            HostName 178.239.147.150
+            User githubops
+            BatchMode yes
+            IdentitiesOnly yes
+            StrictHostKeyChecking yes
+            ConnectTimeout 15
+          CFG
+          printf '    IdentityFile %s\n    UserKnownHostsFile %s\n' "$dir/key" "$dir/known" >> "$dir/config"
+          chmod 600 "$dir/config"
+          short="$(git rev-parse --short=12 HEAD)"
+          [[ "$short" =~ ^[0-9a-f]{12}$ ]]
+          tar -cf "$dir/allowlisted.tar" \
+            scripts/astra_independent_research_radar.py \
+            scripts/astra_research_radar_cycle.py \
+            tests/test_astra_independent_research_radar.py \
+            tests/test_astra_research_radar_cycle.py
+          digest="$(sha256sum "$dir/allowlisted.tar" | awk '{print $1}')"
+          ssh -F "$dir/config" private-vps "bash -se -- '$short'" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          test "$(id -un)" = githubops
+          ops="$HOME/factory-runtime/operations"
+          private="$HOME/factory-runtime/private"
+          test -d "$ops" && test ! -L "$ops"
+          test -d "$private" && test ! -L "$private"
+          stage="$ops/astra-research-radar-stage-$1"
+          test ! -e "$stage" && test ! -L "$stage"
+          mkdir -m 700 -- "$stage"
+          echo ASTRA_RADAR_ISOLATED_STAGE_CREATED=1
+          REMOTE
+          cat "$dir/allowlisted.tar" | ssh -F "$dir/config" private-vps \
+            "cat > 'factory-runtime/operations/astra-research-radar-stage-$short/source.tar'"
+          ssh -F "$dir/config" private-vps "bash -se -- '$short' '$digest'" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          ops="$HOME/factory-runtime/operations"
+          stage="$ops/astra-research-radar-stage-$1"
+          source="$stage/source.tar"
+          test -f "$source" && test ! -L "$source"
+          test "$(sha256sum "$source" | awk '{print $1}')" = "$2"
+          cd "$stage"
+          tar -xf "$source" --no-same-owner --no-same-permissions
+          python3 -m unittest discover -s tests -p 'test_astra_independent_research_radar.py' -q
+          python3 -m unittest discover -s tests -p 'test_astra_research_radar_cycle.py' -q
+          rm -f -- "$source"
+          # All paths are separate from the live Astra factory and existing DB.
+          private="$HOME/factory-runtime/private/astra-research-radar-v1"
+          test ! -L "$private"
+          mkdir -p -m 700 -- "$private"
+          chmod 700 "$private"
+          # First public-source scan must work before touching ANY cron entry.
+          python3 "$stage/scripts/astra_research_radar_cycle.py" --root "$private" --fetch
+          previous="$(crontab -l)"
+          factory_before="$(printf '%s\n' "$previous" | grep -F 'ASTRA_V2_PRIVATE_RND_TICK' || true)"
+          test -n "$factory_before"
+          test "$(printf '%s\n' "$factory_before" | wc -l)" -eq 1
+          old_radar="$(printf '%s\n' "$previous" | grep -F 'ASTRA_RESEARCH_RADAR_PRIVATE_TICK' || true)"
+          old_count="$(printf '%s\n' "$old_radar" | grep -c 'ASTRA_RESEARCH_RADAR_PRIVATE_TICK' || true)"
+          test "$old_count" -le 1
+          if test "$old_count" -eq 1; then
+            printf '%s\n' "$old_radar" | grep -Eq '^17 \*/6 \* \* \* ASTRA_RESEARCH_RADAR_PRIVATE_TICK=1 .*/factory-runtime/operations/astra-research-radar-stage-[a-f0-9]{12}/scripts/astra_research_radar_cycle.py '
+          fi
+          executable="$(command -v python3)"
+          new_line="17 */6 * * * ASTRA_RESEARCH_RADAR_PRIVATE_TICK=1 $executable $stage/scripts/astra_research_radar_cycle.py --root $private --fetch >> $private/cron.log 2>&1"
+          tmp="$(mktemp "$HOME/factory-runtime/private/.radar-cron-XXXXXXXX")"
+          trap 'rm -f -- "$tmp"' EXIT
+          printf '%s\n' "$previous" | grep -v -F 'ASTRA_RESEARCH_RADAR_PRIVATE_TICK' > "$tmp" || true
+          printf '%s\n' "$new_line" >> "$tmp"
+          chmod 600 "$tmp"
+          crontab "$tmp"
+          after="$(crontab -l)"
+          test "$(printf '%s\n' "$after" | grep -F 'ASTRA_RESEARCH_RADAR_PRIVATE_TICK' | wc -l)" -eq 1
+          factory_after="$(printf '%s\n' "$after" | grep -F 'ASTRA_V2_PRIVATE_RND_TICK' || true)"
+          test "$factory_before" = "$factory_after"
+          echo ASTRA_RADAR_PRIVATE_CRON_ACTIVE=1
+          echo ASTRA_RADAR_LIVE_FACTORY_CRON_UNCHANGED=1
+          echo ASTRA_RADAR_PUBLICATION_OR_PAYMENTS=0
+          echo ASTRA_RADAR_LIVE_DB_MIGRATIONS=0
+          echo ASTRA_RADAR_PRIVATE_SOURCE_SHA256="$2"
+          REMOTE
