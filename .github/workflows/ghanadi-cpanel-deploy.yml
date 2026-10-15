@@ -157,13 +157,26 @@ jobs:
           set -euo pipefail
           [[ "$DEPLOY_SHA" =~ ^[0-9a-f]{40}$ ]]
           set +e
-          deployment="$(ssh -F "$SSH_CONFIG" saeit-cpanel "bash -s -- '$DEPLOY_SHA'" <<'REMOTE'
+          deployment="$(ssh -F "$SSH_CONFIG" saeit-cpanel "bash -s -- '$DEPLOY_SHA'" 2>&1 <<'REMOTE'
           set -euo pipefail
+          echo "DEPLOY_HOME=$HOME"
+          for candidate in "$HOME/Saeit" "$HOME/repositories/Saeit" "$HOME/public_html/Saeit" /home/zomorodm/repositories/Saeit; do
+            printf 'APP_CANDIDATE=%s' "$candidate"
+            [ -d "$candidate" ] && printf ' directory=yes' || printf ' directory=no'
+            [ -d "$candidate/.git" ] && printf ' git=yes' || printf ' git=no'
+            [ -f "$candidate/manage.py" ] && printf ' django=yes' || printf ' django=no'
+            [ -f "$candidate/passenger_wsgi.py" ] && printf ' passenger=yes' || printf ' passenger=no'
+            [ -f "$candidate/deploy/cpanel_deploy.sh" ] && printf ' deploy=yes' || printf ' deploy=no'
+            printf '\\n'
+          done
           root="$HOME/Saeit"
           target="$1"
           case "$target" in *[!0-9a-f]*|'') exit 20;; esac
           test "$root" = "$HOME/Saeit"
-          test -d "$root/.git" && test -f "$root/manage.py" && test -f "$root/passenger_wsgi.py" && test -f "$root/deploy/cpanel_deploy.sh"
+          if ! test -d "$root/.git" || ! test -f "$root/manage.py" || ! test -f "$root/passenger_wsgi.py" || ! test -f "$root/deploy/cpanel_deploy.sh"; then
+            echo "Refusing release: expected application files are missing from $root" >&2
+            exit 27
+          fi
           case "$root" in *staging*|*stage*) echo "Refusing a staging path"; exit 21;; esac
           origin="$(git -C "$root" remote get-url origin)"
           case "$origin" in
