@@ -195,6 +195,14 @@ jobs:
                       for j in range(i+1,min(i+30,len(lines))):
                           if "render(" in lines[j] or "HttpResponse" in lines[j] or "sitemap" in lines[j].lower() or "robots" in lines[j].lower():
                               print("SEO_VIEW_ROUTE_DETAIL="+str(j+1)+":"+lines[j].strip()[:220])
+          print("SEO_HOME_DIAGNOSTIC_BEGIN")
+          for rel,limit in (("templates/personal_site/core/home.html",120),("templates/personal_site/base.html",90),("core/views.py",90),("core/models.py",90),("config/settings.py",90)):
+              path=root/rel
+              if path.is_file():
+                  print("SEO_DIAG_FILE="+rel)
+                  for number,line in enumerate(path.read_text(encoding="utf-8",errors="replace").splitlines()[:limit],1):
+                      print("SEO_DIAG_LINE="+rel+":"+str(number)+":"+line[:450])
+          print("SEO_HOME_DIAGNOSTIC_END")
           print("SEO_TEMPLATE_SCAN_END")
           PYSEO
           python3 - <<'PYHTTP'
