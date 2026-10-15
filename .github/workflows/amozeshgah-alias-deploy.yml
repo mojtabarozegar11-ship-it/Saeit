@@ -79,10 +79,10 @@ jobs:
           if not re.search(r"<title>[^<]*آموزش",html,re.I):
               raise SystemExit("Education page title was not found")
           if 'rel="canonical"' not in html and "rel='canonical'" not in html:
-              head=re.search(r"<head\\b[^>]*>",html,re.I)
+              head=re.search(r"<head\b[^>]*>",html,re.I)
               if not head:
                   raise SystemExit("HTML head element was not found")
-              html=html[:head.end()]+ '\\n<link rel="canonical" href="https://zomorodmelal.ir/amozeshgah/">' + html[head.end():]
+              html=html[:head.end()]+ '\n<link rel="canonical" href="https://zomorodmelal.ir/amozeshgah/">' + html[head.end():]
           if "https://zomorodmelal.ir/amozeshgah/" not in html:
               raise SystemExit("Canonical education URL was not set")
           open(sys.argv[2],"w",encoding="utf-8").write(html)
