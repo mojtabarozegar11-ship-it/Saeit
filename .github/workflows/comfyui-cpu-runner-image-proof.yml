@@ -107,6 +107,10 @@ jobs:
               assert json.load(f)["sha256"] == obj["sha256"]
           print("STUDIO_PROTOTYPE_DELIVERY_ALLOWED_STORE_RELEASE_BLOCKED")
           PY
+          python3 ops/comfyui-vps/verify_artifact_pair.py \
+            "$CPU_RENDER_OUTPUT" "$RUNNER_TEMP/saeit-image-proof/quality_report.json" \
+            --engine github-runner-cpu
+          echo "INTEGRITY_QA_BUNDLE_VERIFIED_AND_STORE_PUBLISH_DISABLED"
           echo "### Saeit CPU Studio result" >> "$GITHUB_STEP_SUMMARY"
           echo "PNG verified; experimental preview only; **not approved for sale**." >> "$GITHUB_STEP_SUMMARY"
           echo "Download image and quality_report.json from Artifacts." >> "$GITHUB_STEP_SUMMARY"
