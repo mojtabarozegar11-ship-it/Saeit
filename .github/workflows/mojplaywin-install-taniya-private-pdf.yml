@@ -1,0 +1,110 @@
+name: MojPlayWin install Taniya PDF through encrypted relay
+on:
+  push:
+    branches: [qa/mpw-payment-release-preflight-20261015]
+    paths:
+      - '.private-transfer/taniya/**'
+      - '.github/workflows/mojplaywin-install-taniya-private-pdf.yml'
+      - 'scripts/install_taniya_private_asset.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: mojplaywin-taniya-private-pdf-install
+  cancel-in-progress: false
+jobs:
+  install:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Reassemble and verify encrypted payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64,hashlib,tarfile
+          from pathlib import Path
+          parts=sorted(Path('.private-transfer/taniya').glob('part-*.txt'))
+          if len(parts)!=283:
+              raise SystemExit('Encrypted transfer part count mismatch')
+          encoded=''.join(p.read_text('ascii') for p in parts)
+          data=base64.b64decode(encoded,validate=True)
+          if len(data)!=13879432 or hashlib.sha256(data).hexdigest()!='2d79a3a38931fd1870b24533d5dbbe7744b66d50ab9c89f108f423aef96fbfc1':
+              raise SystemExit('Encrypted payload checksum mismatch')
+          with open('/tmp/taniya-transfer.tar.gz','wb') as out:
+              out.write(data)
+          with tarfile.open('/tmp/taniya-transfer.tar.gz','r:gz') as archive:
+              names=sorted(m.name for m in archive.getmembers())
+              if names!=['book.enc','key.wrap','manifest.json']:
+                  raise SystemExit('Encrypted archive members differ from approved set')
+          print('ENCRYPTED_TANIYA_PAYLOAD_VERIFIED')
+          PY
+      - name: Transfer encrypted payload via VPS relay and install privately
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+          VPS_KNOWN: ${{ secrets.SAEIT_VPS_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/ssh"; mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          python3 - "$d/vps.key" "$d/host.key" <<'PY'
+          import pathlib,sys
+          for f in sys.argv[1:]:
+              p=pathlib.Path(f)
+              p.write_text(p.read_text().replace("\r\n","\n").strip().replace("\\n","\n")+"\n")
+          PY
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          if [[ -n "$VPS_KNOWN" ]]; then
+            printf "%s\n" "$VPS_KNOWN" > "$d/vps.known"
+          else
+            ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          fi
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host saeit-host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+          EOF
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          scp -F "$d/config" /tmp/taniya-transfer.tar.gz saeit-host:/home/zomorod2/MojPlayWin_Private_Uploads/taniya-transfer.tar.gz
+          scp -F "$d/config" scripts/install_taniya_private_asset.py saeit-host:/home/zomorod2/MojPlayWin_Private_Uploads/install_taniya_private_asset.py
+          timeout 120s ssh -F "$d/config" saeit-host 'cd /home/zomorod2/Saeit-staging && PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python /home/zomorod2/MojPlayWin_Private_Uploads/install_taniya_private_asset.py'
+          timeout 30s ssh -F "$d/config" saeit-host 'test -f /home/zomorod2/MojPlayWin_Private_Assets/taniya-little-baker-worms/Taniya_and_the_Little_Baker_Worms.pdf && test "$(stat -c %a /home/zomorod2/MojPlayWin_Private_Assets/taniya-little-baker-worms/Taniya_and_the_Little_Baker_Worms.pdf)" = 600 && echo PRIVATE_TANIYA_PDF_VERIFIED'
+          code="$(curl -sSL --connect-timeout 12 --max-time 30 -o /dev/null -w '%{http_code}' https://mojplaywin.com/store/)"
+          echo "STORE_HTTP=$code"
+          test "$code" = 200
+      - name: Remove temporary runner credentials and payload
+        if: always()
+        shell: bash
+        run: |
+          rm -rf -- "$RUNNER_TEMP/ssh"
+          rm -f -- /tmp/taniya-transfer.tar.gz
