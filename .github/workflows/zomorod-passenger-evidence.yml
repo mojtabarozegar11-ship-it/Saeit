@@ -1,0 +1,132 @@
+name: Zomorod Passenger evidence (read-only)
+on:
+  push:
+    branches:
+      - diagnostic/zomorod-503-readonly-20261015
+    paths:
+      - .github/workflows/zomorod-passenger-evidence.yml
+permissions:
+  contents: read
+jobs:
+  inspect:
+    name: Read account diagnostics without changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - name: Prepare pinned relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/zomorod-restore"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "CONFIRMED_PINNED_RELAY_READY=yes"
+      - name: Check Python Selector, Passenger, and LSWSGI metadata (read only)
+        shell: bash
+        env:
+          SSH_CONFIG: \${{ runner.temp }}/zomorod-restore/config
+        run: |
+          set -euo pipefail
+          ssh -F "$SSH_CONFIG" saeit-cpanel bash -se <<'REMOTE'
+          set -u
+          echo EVIDENCE_READ_ONLY_BEGIN
+          date -u
+          id -un
+          printf 'CPANEL_HOST='; hostname
+          echo PASSENGER_APP_REGISTERED_BEGIN
+          uapi --output=json PassengerApps list_applications | python3 -c '
+          import json,sys
+          d=json.load(sys.stdin)
+          apps=(d.get("result") or {}).get("data") or {}
+          for name,app in apps.items():
+              if isinstance(app,dict) and app.get("domain")=="zomorodmelal.ir":
+                  print("name=",name,"path=",app.get("path"),"base_uri=",app.get("base_uri"),"enabled=",app.get("enabled"),"python=",app.get("python"),"env_keys=",sorted((app.get("envvars") or {}).keys()))
+          '
+          echo PASSENGER_APP_REGISTERED_END
+          p=/home/zomorod2/public_html/.htaccess
+          echo PASSENGER_HTACCESS_BEGIN
+          if test -r "$p"; then grep -E '^[[:space:]]*(PassengerAppRoot|PassengerBaseURI|PassengerPython|PassengerAppType|PassengerStartupFile|RewriteRule|DirectoryIndex)' "$p" | head -n 24; else echo HTACCESS_UNREADABLE; fi
+          echo PASSENGER_HTACCESS_END
+          echo PYTHON_VENV_EVIDENCE_BEGIN
+          for p in /home/zomorod2/virtualenv/Saeit/3.10/bin/python /home/zomorod2/virtualenv/Saeit/3.11/bin/python /home/zomorod2/Saeit/passenger_wsgi.py /bin/set_env_vars.py /usr/local/lsws/fcgi-bin/lswsgi_wrapper /usr/local/lsws/admin/misc/enable_ruby_python_selector.sh; do
+            if test -e "$p"; then
+              stat -c 'EXISTS=%n owner=%U:%G mode=%a' "$p" 2>/dev/null || echo "EXISTS=$p (stat failed)"
+            else
+              echo "MISSING=$p"
+            fi
+          done
+          for p in /home/zomorod2/virtualenv/Saeit/3.10/bin/python /home/zomorod2/virtualenv/Saeit/3.11/bin/python; do
+            if test -x "$p"; then "$p" -c 'import sys; print("PYTHON_CANDIDATE="+sys.executable+" VERSION="+sys.version.split()[0])'; fi
+          done
+          echo PYTHON_VENV_EVIDENCE_END
+          echo LSWSGI_WRAPPER_IMPLEMENTATION_BEGIN
+          if test -r /usr/local/lsws/fcgi-bin/lswsgi_wrapper; then
+            sed -n '1,25p' /usr/local/lsws/fcgi-bin/lswsgi_wrapper | sed -E 's/(PASSWORD|TOKEN|SECRET|PRIVATE_KEY)=([^[:space:]]+)/\1=[redacted]/Ig'
+          else echo WRAPPER_NOT_READABLE; fi
+          echo LSWSGI_WRAPPER_IMPLEMENTATION_END
+          echo SELECTOR_CANDIDATES_BEGIN
+          for p in /home/zomorod2/virtualenv/Saeit/3.10/bin/set_env_vars.py /home/zomorod2/virtualenv/Saeit/3.11/bin/set_env_vars.py /usr/share/l.v.e-manager/utils/set_env_vars.py; do
+            test ! -e "$p" || stat -c 'CANDIDATE=%n mode=%a' "$p"
+          done
+          echo SELECTOR_CANDIDATES_END
+          echo RECENT_WRAPPER_ERRORS_BEGIN
+          for p in /home/zomorod2/Saeit/stderr.log /home/zomorod2/public_html/stderr.log; do
+            if test -r "$p"; then
+              echo "LOG_PATH=$p"
+              tail -n 150 "$p" | grep -E 'lswsgi_wrapper|set_env_vars.py|VIRTUAL_ENV|exec: : not found|Could not spawn|Cannot spawn' | tail -n 12 || true
+            fi
+          done
+          echo RECENT_WRAPPER_ERRORS_END
+          echo EVIDENCE_READ_ONLY_END
+          REMOTE
+      - name: Check public routes without mutation
+        shell: bash
+        run: |
+          set -euo pipefail
+          for url in "https://zomorodmelal.ir/" "https://zomorodmelal.ir/amozeshgah/" "https://zomorodmelal.ir/admin/login/"; do
+            result=$(curl -L -sS -o /dev/null --max-time 20 -w '%{http_code}' "$url" || true)
+            printf 'ROUTE_URL=%s HTTP=%s\n' "$url" "$result"
+          done
+      - name: Remove temporary SSH material
+        if: always()
+        shell: bash
+        run: rm -rf -- "$RUNNER_TEMP/zomorod-restore"
