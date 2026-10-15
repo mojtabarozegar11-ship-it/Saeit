@@ -143,7 +143,8 @@ def deliver_once(private_dir, token_path, workflow_api, node_map, *,
         raise RuntimeError("PICM_GPU_PROFILE_UNKNOWN")
     report = inspect_gpu(
         private, workflow_api, node_map, comfy=comfy,
-        minimum_gpu_mib=GPU_PROFILES[gpu_profile])
+        minimum_gpu_mib=GPU_PROFILES[gpu_profile],
+        gpu_profile=gpu_profile)
     if not report["ready"]:
         raise RuntimeError("PICM_GPU_PREFLIGHT_BLOCKED_NO_JOB_CLAIM")
     transport = Transport(_token(token_path))
