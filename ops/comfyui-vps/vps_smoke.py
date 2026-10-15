@@ -21,7 +21,7 @@ import time
 
 HOME = Path.home()
 BASE = HOME / "comfyui-isolated"
-ENGINE_DIR = BASE / ".control/sd-cpp-runtime/bin"
+ENGINE_DIR = BASE / ".control/sd-cpp-runtime-sse2/bin"
 ENGINE = ENGINE_DIR / "sd-cli"
 MODEL = BASE / "source-v0.40.0/models/checkpoints/segmind_tiny_sd_candidate.safetensors"
 FACTORY_PID = HOME / "factory-runtime/operations/vps-only-loop.pid"
