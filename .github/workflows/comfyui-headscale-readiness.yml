@@ -32,6 +32,20 @@ jobs:
           else
             echo DNS_MOJPLAYWIN_HEADSCALE_NOT_CONFIGURED
           fi
+      - name: Test inbound TCP reachability without sending application data
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          import socket
+          host = "178.239.147.150"
+          for port in (80, 443, 8443):
+              try:
+                  with socket.create_connection((host, port), timeout=4):
+                      print(f"VPS_TCP_{port}_ACCEPTS")
+              except OSError:
+                  print(f"VPS_TCP_{port}_CLOSED_OR_FILTERED")
+          PY
       - name: Inspect VPS hosting prerequisites through pinned SSH (read only)
         shell: bash
         env:
@@ -63,6 +77,16 @@ jobs:
             if ss -H -ltn "sport = :$port" | grep -q LISTEN; then echo "LOCAL_TCP_${port}_LISTENING"; else echo "LOCAL_TCP_${port}_IDLE"; fi
           done
           if [[ -r /etc/letsencrypt/live ]]; then echo SYSTEM_CERT_DIRECTORY_READABLE; else echo SYSTEM_CERT_DIRECTORY_NOT_READABLE; fi
+          echo "UNPRIVILEGED_PORT_START=$(cat /proc/sys/net/ipv4/ip_unprivileged_port_start)"
+          if python3 - <<'PY'
+          import socket
+          s=socket.socket()
+          try:
+              s.bind(("127.0.0.1", 443))
+          finally:
+              s.close()
+          PY
+          then echo USER_CAN_BIND_LOW_PORT_443; else echo USER_CANNOT_BIND_LOW_PORT_443; fi
           if [[ -x "$HOME/.local/opt/comfyui-tailnet/binaries-1.104.1/tailscale" ]]; then echo ROOTLESS_TAILSCALE_CLIENT_PRESENT; else echo ROOTLESS_TAILSCALE_CLIENT_ABSENT; fi
           free -m | awk '/^Mem:/{print "RAM_AVAILABLE_MB="$7}'
           df -Pm "$HOME" | awk 'NR==2{print "HOME_DISK_AVAILABLE_MB="$4}'
