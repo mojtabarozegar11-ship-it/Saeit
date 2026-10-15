@@ -134,6 +134,24 @@ class ResearchRadarTests(unittest.TestCase):
             self.assertIn("ASTRA_RADAR_FACTORY_MUTATIONS=0", p.stdout)
             self.assertTrue(output.exists())
 
+    def test_recent_official_newsroom_html_generates_research_only(self):
+        html = (b'<html><body><div>10/01/26&nbsp; '
+                b'<a href="/Newsroom/2026/crop-data">New crop production data report</a>'
+                b'</div></body></html>')
+        result = radar.research_report({"nass_newsroom": html}, NOW)
+        self.assertEqual(result["distinct_headline_references"], 1)
+        self.assertGreaterEqual(len(result["candidate_hypotheses"]), 1)
+        self.assertTrue(all(not topic["product_build_authorized"]
+                            for topic in result["candidate_hypotheses"]))
+
+    def test_old_or_offsite_newsroom_html_rejected(self):
+        html = (b'<html><span>01/01/20 '
+                b'<a href="/Newsroom/old">Old production statistics</a></span>'
+                b'<span>10/01/26 '
+                b'<a href="https://evil.example/data">Current production report</a></span></html>')
+        result = radar.research_report({"nass_newsroom": html}, NOW)
+        self.assertEqual(result["candidate_hypotheses"], [])
+
     def test_no_article_means_no_product_not_simulated_demand(self):
         empty = rss(("An unrelated meeting announcement",
                      "https://www.nass.usda.gov/unrelated",
