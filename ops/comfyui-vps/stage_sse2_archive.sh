@@ -21,8 +21,11 @@ with tarfile.open(sys.argv[1], "r:") as archive:
     members=archive.getmembers()
     assert any(member.name == "bin/sd-cli" and member.isfile() for member in members)
     for member in members:
-        assert member.name.startswith("bin/") and ".." not in member.name.split("/")
-        assert member.isfile() or member.isdir()
+        assert (member.name == "bin" or member.name.startswith("bin/")) and ".." not in member.name.split("/")
+        if member.issym():
+            assert member.linkname and "/" not in member.linkname and member.linkname not in (".", "..")
+        else:
+            assert member.isfile() or member.isdir()
 print("SSE2_ARCHIVE_MEMBERS_SAFE")
 PY
 tmp="$(mktemp -d "$parent/.sse2-install.XXXXXXXX")"
