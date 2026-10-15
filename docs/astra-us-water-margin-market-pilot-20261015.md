@@ -51,4 +51,4 @@ These are **nine public-page references**, not nine independent buyer testimonia
 
 ## Non-interference
 
-This is a **human-readable private-source research artifact**. It does not change the historical 0048 SQLite, the dormant 0049 candidate, the five-minute private tick, any product archive, the MojPlayWin store, checkout or payment processor. No live buyers were contacted. No factory publication or 0049 deployment is claimed.
+This is a **human-readable, non-commercial research artifact committed to the repository**. It does not change the historical 0048 SQLite, the dormant 0049 candidate, the five-minute private tick, any product archive, the MojPlayWin store, checkout or payment processor. No live buyers were contacted. No factory publication or 0049 deployment is claimed.
