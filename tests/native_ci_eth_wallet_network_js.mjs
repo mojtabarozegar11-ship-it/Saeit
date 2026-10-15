@@ -20,7 +20,7 @@ async function runCase(initialId,{allowSwitch=true,secondId="0x1",expected=accou
       if(method==="eth_chainId")return switched?secondId:initialId;
       if(method==="wallet_switchEthereumChain"){
         switches++;
-        assert.deepEqual(Array.from(params,[...params][0]),Array.from(params));
+        assert.equal(Array.isArray(params),true);
         assert.equal(params[0].chainId,"0x1");
         if(!allowSwitch)throw new Error("user rejected switch");
         switched=true;return null;
