@@ -140,6 +140,7 @@ class CommerceOrderRequest(models.Model):
     This cannot mark an order paid; all coins use separate verified invoices.
     """
     idempotency_key = models.UUIDField(unique=True)
+    requested_product_id = models.PositiveBigIntegerField()
     buyer = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.PROTECT,
         related_name="mpw_cart_requests",
