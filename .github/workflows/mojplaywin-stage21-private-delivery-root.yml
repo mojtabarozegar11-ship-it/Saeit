@@ -1,0 +1,191 @@
+name: MojPlayWin private chess PDF delivery root setup (sales off)
+on:
+  push:
+    branches: [qa/mpw-payment-release-preflight-20261015]
+    paths: ['.github/workflows/mojplaywin-stage21-private-delivery-root.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: mpw-private-root-guarded-once
+  cancel-in-progress: false
+jobs:
+  guarded-root:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 9
+    steps:
+      - name: Verify on-host PDF access and configure only its private delivery root
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/mpw-asset-root-guarded"
+          mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          python3 - "$d/vps.key" "$d/host.key" <<'PY'
+          from pathlib import Path
+          import sys
+          for filename in sys.argv[1:]:
+              f=Path(filename)
+              f.write_text(f.read_text().replace("\r\n","\n").strip().replace("\\n","\n")+"\n")
+          PY
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host relay
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host host
+            HostName zohal.pws-dns.net
+            Port 1396
+            User zomorod2
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump relay
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+          EOF
+          timeout 30s ssh -F "$d/config" relay 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          timeout 105s ssh -F "$d/config" host 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = "zomorod2"
+          cd "$HOME/Saeit-staging"
+          export DJANGO_SETTINGS_MODULE=config.settings
+          export PYTHONDONTWRITEBYTECODE=1
+          "$HOME/virtualenv/Saeit-staging/3.11/bin/python" - <<'PY'
+          from pathlib import Path
+          from datetime import datetime,timezone
+          import hashlib,json,os,tempfile,subprocess
+          import django
+          django.setup()
+          from django.conf import settings
+          from core.models import Order
+          from mpw_native_checkout.wallet_ownership import proven_assets
+          home=Path.home()
+          site=home/"Saeit-staging"
+          target=site/"config/settings.py"
+          root=home/"MojPlayWin_Private_Assets"
+          pdf=root/"chess-improvement-2026/MojPlayWin_Science_and_Practice_of_Chess_Improvement.pdf"
+          assert target.is_file() and not target.is_symlink()
+          assert root.is_dir() and not root.is_symlink()
+          assert pdf.is_file() and not pdf.is_symlink()
+          assert pdf.stat().st_size>400000 and not (pdf.stat().st_mode & 0o004)
+          assert isinstance(settings.INSTALLED_APPS,(list,tuple))
+          assert "mpw_commerce" in settings.INSTALLED_APPS
+          assert proven_assets()=={"ETH":True,"TRX":True}
+          flags=(
+              "MPW_COMMERCE_RELEASE_READY",
+              "MPW_COMMERCE_INVOICING_ENABLED",
+              "MPW_COMMERCE_SETTLEMENT_ENABLED",
+              "MPW_COMMERCE_REAL_RPC_ENABLED",
+              "MPW_COMMERCE_CUSTOMER_HTTP_ENABLED",
+              "MPW_COMMERCE_DOWNLOADS_ENABLED",
+              "MPW_COMMERCE_AUTORECONCILE_ENABLED",
+          )
+          assert all(getattr(settings,key,False) is False for key in flags)
+          assert not getattr(settings,"MPW_COMMERCE_PRIVATE_ASSET_ROOT",None),"Root already set, do not overwrite"
+          existing=target.read_bytes()
+          assert b"MPW_STAGE6_DISABLED_COMMERCE_BEGIN" in existing
+          if b"MPW_STAGE21_SAFE_PRIVATE_ASSET_ROOT" in existing:
+              raise RuntimeError("Patch already present")
+          checkpoint=home/".mpw-private-asset-root-checkpoint"
+          assert not checkpoint.exists() and not checkpoint.is_symlink()
+          checkpoint.mkdir(mode=0o700)
+          backup=checkpoint/"config-settings-before.py"
+          backup.write_bytes(existing);backup.chmod(0o600)
+          expected_hash=hashlib.sha256(existing).hexdigest()
+          patch=(
+              b"\n# MPW_STAGE21_SAFE_PRIVATE_ASSET_ROOT\n"
+              +b'MPW_COMMERCE_PRIVATE_ASSET_ROOT = "/home/zomorod2/MojPlayWin_Private_Assets"\n'
+          )
+          candidate=existing+patch
+          compile(candidate.decode("utf-8"),str(target),"exec")
+          def atomic(data):
+              fd,tmp=tempfile.mkstemp(prefix=".mpw-safe-root-",dir=str(target.parent))
+              try:
+                  with os.fdopen(fd,"wb") as f:
+                      f.write(data);f.flush();os.fsync(f.fileno())
+                  os.chmod(tmp,target.stat().st_mode & 0o777)
+                  os.replace(tmp,target)
+              finally:
+                  if os.path.exists(tmp):os.unlink(tmp)
+          assert hashlib.sha256(backup.read_bytes()).hexdigest()==expected_hash
+          atomic(candidate)
+          check_script=r"""
+import django
+django.setup()
+from django.conf import settings
+from django.core.management import call_command
+from mpw_commerce.downloads import _private_file
+from types import SimpleNamespace
+from pathlib import Path
+call_command('check',verbosity=0)
+root=Path(settings.MPW_COMMERCE_PRIVATE_ASSET_ROOT)
+assert root.is_dir() and not root.is_symlink()
+relative='chess-improvement-2026/MojPlayWin_Science_and_Practice_of_Chess_Improvement.pdf'
+obj=SimpleNamespace(product=SimpleNamespace(metadata={'mpw_commerce':{'private_file':relative}}))
+out=_private_file(obj)
+assert out == root/relative
+assert out.is_file() and out.stat().st_size>400000
+for flag in ('MPW_COMMERCE_RELEASE_READY','MPW_COMMERCE_SETTLEMENT_ENABLED',
+             'MPW_COMMERCE_INVOICING_ENABLED','MPW_COMMERCE_REAL_RPC_ENABLED',
+             'MPW_COMMERCE_DOWNLOADS_ENABLED','MPW_COMMERCE_CUSTOMER_HTTP_ENABLED'):
+    assert getattr(settings,flag,False) is False
+print('MPW_STAGE21_REAL_PRIVATE_PDF_RESOLVES_SAFELY=True')
+print('MPW_STAGE21_ALL_PAYMENT_FLAGS_REMAIN_OFF=True')
+"""
+          try:
+              run=subprocess.run(
+                  [str(home/"virtualenv/Saeit-staging/3.11/bin/python"),"-c",check_script],
+                  cwd=site,env=dict(os.environ,DJANGO_SETTINGS_MODULE="config.settings"),
+                  stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,timeout=40
+              )
+              if run.returncode:
+                  raise RuntimeError("Private asset root verification failed")
+              for line in run.stdout.splitlines():
+                  if line.startswith("MPW_STAGE21_"):print(line)
+              assert target.read_bytes()==candidate
+          except Exception:
+              if target.read_bytes()==candidate:
+                  atomic(existing)
+                  print("MPW_STAGE21_SETTINGS_ROLLED_BACK_ON_FAILURE=True")
+              raise
+          passenger=home/"mojplaywin.com"
+          startup=passenger/"passenger_wsgi.py"
+          assert startup.is_file() and str(site) in startup.read_text()
+          restart=passenger/"tmp/restart.txt"
+          assert restart.parent.is_dir() and not restart.is_symlink()
+          restart.touch()
+          print("MPW_STAGE21_ORIGINAL_SETTINGS_BACKUP_VERIFIED=True")
+          print("MPW_STAGE21_ONLY_PRIVATE_ROOT_SETTING_APPENDED=True")
+          print("MPW_STAGE21_NO_PRODUCT_OR_ORDER_MODIFIED=True")
+          print("MPW_STAGE21_PASSENGER_RELOAD_REQUESTED=True")
+          PY
+          REMOTE
+          for route in / /store/ /admin/login/; do
+            code="$(curl -L -sS --connect-timeout 8 --max-time 20 -o /dev/null -w '%{http_code}' "https://mojplaywin.com$route" || true)"
+            echo "MPW_STAGE21_PUBLIC_HTTP=$route:$code"
+            test "$code" = 200 || exit 1
+          done
+          echo MPW_STAGE21_PUBLIC_SITE_HEALTHY=True
+      - name: Erase SSH keys
+        if: always()
+        shell: bash
+        run: rm -rf -- "$RUNNER_TEMP/mpw-asset-root-guarded"
