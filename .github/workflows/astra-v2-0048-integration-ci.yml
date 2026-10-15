@@ -11,6 +11,8 @@ on:
       - core/models.py
       - core/migrations/0049_astra_private_research_intake.py
       - core/tests/test_astra_stage45_schema.py
+      - core/management/commands/astra_private_research_intake.py
+      - core/tests/test_astra_private_research_intake.py
   workflow_dispatch:
 
 permissions:
@@ -55,7 +57,7 @@ jobs:
         run: |
           set -euo pipefail
           export DATABASE_URL="sqlite:///$RUNNER_TEMP/astra-0049-model-tests.sqlite3"
-          python3 -m pytest -q core/tests/test_astra_stage45_schema.py
+          python3 -m pytest -q core/tests/test_astra_stage45_schema.py core/tests/test_astra_private_research_intake.py
       - name: Migrate only fresh disposable 0049 CI database with rollback rehearsal
         run: |
           set -euo pipefail
