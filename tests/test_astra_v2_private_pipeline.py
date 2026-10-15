@@ -118,6 +118,51 @@ class PrivateManufacturingTests(unittest.TestCase):
             pipeline.enqueue(self.root,item)
         self.assertEqual(list(self.root.glob("artifact-*.zip")),[])
 
+    def test_three_independent_specialist_families_are_real_and_distinct(self):
+        three=[
+            ("third_orchard_case",pipeline.BUILDER),
+            ("third_procurement_case",pipeline.PROCUREMENT_BUILDER),
+            ("third_water_case",pipeline.WATER_BUILDER),
+        ]
+        for name,builder in three:
+            obj=brief(name)
+            obj["builder"]=builder
+            self.assertTrue(pipeline.enqueue(self.root,obj)["new_job"])
+        outputs=[pipeline.tick(self.root) for _ in three]
+        self.assertTrue(all(o["status"]=="PRIVATE_QA_PASSED" for o in outputs),outputs)
+        self.assertEqual(sum(o["new_distinct_product_versions"] for o in outputs),3)
+        status=pipeline.status(self.root)
+        self.assertEqual(status["distinct_private_product_families"],3)
+        self.assertEqual(status["distinct_private_qa_artifact_versions"],3)
+        self.assertEqual(status["published_products"],0)
+        self.assertEqual(pipeline.tick(self.root)["status"],"NO_ELIGIBLE_WORK")
+        self.assertEqual(
+            {json.loads(p.read_text())["source_builder"] for p in self.root.glob("qa-*.json")},
+            {pipeline.BUILDER,pipeline.PROCUREMENT_BUILDER,pipeline.WATER_BUILDER},
+        )
+        paths=[zipfile.ZipFile(p).namelist() for p in self.root.glob("artifact-*.zip")]
+        self.assertTrue(any("farm_water_land_margin_audit/water_margin_audit.py" in names
+                            for names in paths))
+
+    def test_water_builder_is_self_contained_and_does_not_authorize_sale(self):
+        obj=brief("water_research_reference")
+        obj["builder"]=pipeline.WATER_BUILDER
+        pipeline.enqueue(self.root,obj)
+        result=pipeline.tick(self.root)
+        self.assertEqual(result["status"],"PRIVATE_QA_PASSED",result)
+        dest=next(self.root.glob("artifact-*.zip"))
+        with tempfile.TemporaryDirectory() as t:
+            with zipfile.ZipFile(dest) as z:z.extractall(t)
+            test=Path(t)/"farm_water_land_margin_audit"/"self_test.py"
+            proc=subprocess.run([sys.executable,str(test)],capture_output=True,text=True,timeout=10)
+            self.assertEqual(proc.returncode,0,proc.stderr)
+            self.assertIn("INDEPENDENT_SELF_TEST=PASS",proc.stdout)
+        qa=json.loads(next(self.root.glob("qa-*.json")).read_text())
+        self.assertIsNone(qa["quality_score"])
+        self.assertFalse(qa["public_deployment_allowed"])
+        self.assertFalse(qa["real_payment_allowed"])
+        self.assertFalse(qa["evidence_of_willingness_to_pay"])
+
     def test_new_private_product_build_and_immutable_manifest(self):
         first=pipeline.enqueue(self.root,brief())
         self.assertTrue(first["new_job"])
