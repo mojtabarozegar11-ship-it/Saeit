@@ -186,6 +186,40 @@ jobs:
           print("RECENT_APP_ERROR_LOG_FILES_END")
           PY
           set -e
+          python3 - <<'PY'
+          from pathlib import Path
+          from django.test import RequestFactory
+          from django.urls import resolve
+          request=RequestFactory().get("/",HTTP_HOST="zomorodmelal.ir",secure=True)
+          match=resolve("/")
+          if match.func.__module__!="core.services_views" or match.func.__name__!="services":
+              raise SystemExit("ROOT_VIEW_IS_NOT_THE_PREVIOUS_SERVICES_VIEW")
+          response=match.func(request,*match.args,**match.kwargs)
+          if response.status_code!=200:
+              raise SystemExit(f"ROOT_TEMPLATE_RENDER_STATUS={response.status_code}")
+          content=response.content
+          required=[b"services-page", "یک درگاه برای".encode(), b"/education/"]
+          if any(marker not in content for marker in required):
+              raise SystemExit("PREVIOUS_ROOT_TEMPLATE_CONTENT_CHECK_FAILED")
+          root=Path("/home/zomorod2/public_html")
+          target=root/"index.html"
+          candidate=root/".zomorod-root-restore-candidate"
+          if target.exists():
+              if target.read_bytes()==content:
+                  candidate.unlink(missing_ok=True)
+                  print("PREVIOUS_ROOT_TEMPLATE_ALREADY_RESTORED=yes")
+                  raise SystemExit(0)
+              raise SystemExit("PUBLIC_ROOT_INDEX_EXISTS; refusing to overwrite")
+          if candidate.exists():
+              candidate.unlink()
+          candidate.write_bytes(content)
+          candidate.chmod(0o644)
+          if candidate.read_bytes()!=content:
+              raise SystemExit("ROOT_TEMPLATE_CANDIDATE_VERIFY_FAILED")
+          candidate.replace(target)
+          print("PREVIOUS_ROOT_TEMPLATE_RESTORED=yes")
+          print("ROOT_TEMPLATE_BYTES="+str(len(content)))
+          PY
           REMOTE
       - name: Check live site routes
         shell: bash
