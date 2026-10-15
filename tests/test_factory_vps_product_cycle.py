@@ -53,6 +53,10 @@ class FactoryVPSCycleTests(unittest.TestCase):
         self.assertFalse(state["depends_on_orders"])
         self.assertEqual(state["built_product_count"], 2)
         self.assertTrue(state["artifact_qa_passed"])
+        self.assertTrue(state["technical_zip_checks_only"])
+        self.assertEqual(state["research_review_candidate_count"], 0)
+        self.assertFalse(state["research_evidence_thresholds_satisfied_for_all_scanned"])
+        self.assertFalse(state["commercial_quality_review_completed"])
         self.assertFalse(state["publishable_product_count"])
         self.assertTrue((self.output / "digital-products" /
                          "farm_enterprise_economics" /
