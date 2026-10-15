@@ -81,7 +81,7 @@ def _date(value):
     if not value:
         return None
     try:
-        if re.match(r"^\\d{4}-\\d{2}-\\d{2}[Tt ]", value):
+        if re.match(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}[Tt ]", value):
             result = datetime.fromisoformat(value.replace("Z", "+00:00"))
         else:
             result = parsedate_to_datetime(value)
