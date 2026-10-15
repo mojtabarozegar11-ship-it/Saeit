@@ -1,0 +1,152 @@
+name: MojPlayWin offline private PDF count exact audit
+on:
+  push:
+    branches: [qa/mpw-payment-release-preflight-20261015]
+    paths: ['.github/workflows/mojplaywin-stage19-private-pdf-word-count.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  private-pdf-metadata:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 9
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Download pinned pure-Python PDF parser (no document accessed by runner)
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/mpw-pdf-wheels"
+          python -m pip download --only-binary=:all: --no-deps --dest "$RUNNER_TEMP/mpw-pdf-wheels" 'pypdf==5.9.0'
+      - name: Inspect confidential on-host PDF without copying it to CI
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/mpw-private-pdf-reader"
+          mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          python3 - "$d/vps.key" "$d/host.key" <<'PY'
+          from pathlib import Path
+          import sys
+          for filename in sys.argv[1:]:
+              f=Path(filename)
+              f.write_text(f.read_text().replace("\r\n","\n").strip().replace("\\n","\n")+"\n")
+          PY
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host relay
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host host
+            HostName zohal.pws-dns.net
+            Port 1396
+            User zomorod2
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump relay
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+          EOF
+          timeout 30s ssh -F "$d/config" relay 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          wheel="$(find "$RUNNER_TEMP/mpw-pdf-wheels" -maxdepth 1 -type f -name 'pypdf-5.9.0-py3-none-any.whl' -print -quit)"
+          test -n "$wheel"
+          digest="$(sha256sum "$wheel" | awk '{print $1}')"
+          timeout 55s ssh -F "$d/config" host \
+            'set -e; umask 077; test ! -L "$HOME/.mpw-private-pdf-reader"; mkdir -p "$HOME/.mpw-private-pdf-reader"; chmod 700 "$HOME/.mpw-private-pdf-reader"; cat > "$HOME/.mpw-private-pdf-reader/reader.whl"' \
+            < "$wheel"
+          remote_digest="$(timeout 40s ssh -F "$d/config" host 'sha256sum "$HOME/.mpw-private-pdf-reader/reader.whl"' | awk '{print $1}')"
+          test "$remote_digest" = "$digest"
+          timeout 150s ssh -F "$d/config" host 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = "zomorod2"
+          cd "$HOME"
+          export PYTHONDONTWRITEBYTECODE=1
+          "$HOME/virtualenv/Saeit-staging/3.11/bin/python" - <<'PY'
+          from pathlib import Path
+          import zipfile,sys,hashlib,re,statistics
+          from collections import Counter
+          root=Path.home()/".mpw-private-pdf-reader"
+          wheel=root/"reader.whl"
+          module=root/"modules"
+          assert wheel.is_file() and not wheel.is_symlink()
+          if not module.exists():
+              module.mkdir(mode=0o700)
+              with zipfile.ZipFile(wheel) as archive:
+                  assert archive.testzip() is None
+                  for record in archive.infolist():
+                      name=Path(record.filename)
+                      assert not name.is_absolute() and ".." not in name.parts
+                      assert not record.filename.endswith(".pth")
+                  archive.extractall(module)
+          sys.path.insert(0,str(module))
+          import pypdf
+          assert pypdf.__version__ == "5.9.0",pypdf.__version__
+          file=Path.home()/"MojPlayWin_Private_Assets/chess-improvement-2026/MojPlayWin_Science_and_Practice_of_Chess_Improvement.pdf"
+          assert file.is_file() and not file.is_symlink()
+          assert 10000<=file.stat().st_size<100000000
+          try:
+              reader=pypdf.PdfReader(str(file),strict=True)
+              print("MPW_PRIVATE_PDF_STRICT_READ_OK=True")
+          except Exception:
+              reader=pypdf.PdfReader(str(file),strict=False)
+              print("MPW_PRIVATE_PDF_STRICT_READ_OK=False")
+          print("MPW_PRIVATE_PDF_IS_ENCRYPTED="+str(reader.is_encrypted))
+          if reader.is_encrypted:
+              print("MPW_PRIVATE_PDF_TEXT_AUDIT_BLOCKED_ENCRYPTION=True")
+              raise SystemExit(0)
+          pages=len(reader.pages)
+          assert 0<pages<=1000
+          word_re=re.compile(r"[A-Za-z]+(?:[-'][A-Za-z]+)*")
+          words_by_page=[]
+          digest_of_pages=[]
+          unique_words=set()
+          for page in reader.pages:
+              text=page.extract_text() or ""
+              words=word_re.findall(text)
+              words_by_page.append(len(words))
+              unique_words.update(word.lower() for word in words)
+              canonical=" ".join(text.lower().split())
+              if len(canonical)>60:
+                  digest_of_pages.append(hashlib.sha256(canonical.encode()).digest())
+          duplicates=sum(n-1 for n in Counter(digest_of_pages).values() if n>1)
+          meta=reader.metadata
+          print("MPW_PRIVATE_PDF_PAGES="+str(pages))
+          print("MPW_PRIVATE_PDF_ENGLISH_WORD_TOKENS="+str(sum(words_by_page)))
+          print("MPW_PRIVATE_PDF_DISTINCT_ENGLISH_WORDS="+str(len(unique_words)))
+          print("MPW_PRIVATE_PDF_PAGES_WITH_150_WORDS="+str(sum(n>=150 for n in words_by_page)))
+          print("MPW_PRIVATE_PDF_PAGES_WITH_ZERO_WORDS="+str(sum(n==0 for n in words_by_page)))
+          print("MPW_PRIVATE_PDF_AVERAGE_WORDS_PER_PAGE="+str(round(statistics.mean(words_by_page),1)))
+          print("MPW_PRIVATE_PDF_IDENTICAL_TEXT_PAGES="+str(duplicates))
+          print("MPW_PRIVATE_PDF_TITLE_METADATA_PRESENT="+str(bool(meta and meta.title)))
+          print("MPW_PRIVATE_PDF_AUTHOR_METADATA_PRESENT="+str(bool(meta and meta.author)))
+          print("MPW_PRIVATE_PDF_200_PAGES_GOAL_MET="+str(pages>=200))
+          print("MPW_PRIVATE_PDF_35000_WORDS_GOAL_MET="+str(sum(words_by_page)>=35000))
+          print("MPW_PRIVATE_PDF_CONTENT_NOT_UPLOADED_TO_CI=True")
+          print("MPW_PRIVATE_PDF_RIGHTS_NOT_ASSESSED=True")
+          PY
+          REMOTE
+          echo MPW_PRIVATE_PDF_OFFLINE_READER_WAS_ISOLATED=True
+      - name: Erase temporary SSH keys and dependency wheel from runner
+        if: always()
+        shell: bash
+        run: rm -rf "$RUNNER_TEMP/mpw-private-pdf-reader" "$RUNNER_TEMP/mpw-pdf-wheels"
