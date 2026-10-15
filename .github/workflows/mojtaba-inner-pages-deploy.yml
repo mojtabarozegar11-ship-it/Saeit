@@ -109,6 +109,28 @@ jobs:
             test -f "$p" && test ! -L "$p"
           done
           python3 "$script" check --backup-dir "$backup"
+          # Compile AND render all proposed templates on host before changing even one file.
+          py="$app/../.venv_personal_test/bin/python"
+          test -x "$py" && "$py" -c 'import django'
+          cd "$app"
+          "$py" - "$script" <<'PY_DJANGO_CHECK'
+          import importlib.util,os,sys
+          spec=importlib.util.spec_from_file_location('inner_check',sys.argv[1])
+          m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
+          os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          import django
+          django.setup()
+          from django.template import engines,RequestContext
+          from django.test import RequestFactory
+          engine=engines['django'].engine
+          for name,raw in m.read_state(m.APP).items():
+              out=m.patch(name,raw)
+              template=engine.from_string(out)
+              req=RequestFactory().get('/mojtaba.roozegar/'+name+'/',HTTP_HOST='mojplaywin.com')
+              template.render(RequestContext(req,{'stories':[],'items':[],'profile':None}))
+              print('BEFORE_INSTALL_DJANGO_RENDER_OK='+name)
+          print('ALL_EIGHT_RENDER_VERIFIED_BEFORE_INSTALL=yes')
+          PY_DJANGO_CHECK
           installed=1
           python3 "$script" install --backup-dir "$backup"
           py="$app/../.venv_personal_test/bin/python"
