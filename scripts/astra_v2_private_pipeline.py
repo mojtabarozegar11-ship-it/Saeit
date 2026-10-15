@@ -186,7 +186,7 @@ def _approved_source_revision_keys():
         versions = [(name, (config["root"] / name).read_bytes())
                     for name in config["files"]]
         revision = digest(builder.encode() + b"".join(
-            name.encode() + b"\\x00" + digest(blob).encode() for name, blob in versions))
+            name.encode() + bytes([0]) + digest(blob).encode() for name, blob in versions))
         trusted.add(("auto_" + revision[:20], builder))
     return trusted
 
