@@ -1,8 +1,5 @@
 name: ComfyUI VPS Native SSE2 Image Node Proof
 on:
-  push:
-    branches: [feature/comfyui-studio-quality-safety-20261015]
-    paths: [.github/workflows/comfyui-vps-native-node-proof.yml]
   workflow_dispatch:
     inputs:
       preset:
@@ -101,6 +98,10 @@ jobs:
           assert q["commercial_ready"] is False
           print("VPS_IMAGE_GENERATED_GENUINELY_STORE_PUBLISH_DISABLED")
           PY
+          python3 ops/comfyui-vps/verify_artifact_pair.py \
+            "$RUNNER_TEMP/comfy-vps-native-result/comfy_native.png" "$RUNNER_TEMP/comfy-vps-native-result/quality_report.json" \
+            --engine vps-comfyui-sse2
+          echo "INTEGRITY_QA_BUNDLE_VERIFIED_AND_STORE_PUBLISH_DISABLED"
           echo "### ComfyUI VPS production evidence" >> "$GITHUB_STEP_SUMMARY"
           echo "Native custom node produced PNG on VPS; QA attached; **not authorized for sale**." >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4

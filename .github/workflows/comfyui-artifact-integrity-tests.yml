@@ -1,0 +1,28 @@
+name: ComfyUI Artifact Integrity Gate Tests
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/comfyui-artifact-integrity-tests.yml
+      - ops/comfyui-vps/image_quality_report.py
+      - ops/comfyui-vps/verify_artifact_pair.py
+      - ops/comfyui-vps/tests/**
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned image decoder
+        run: python3 -m pip install --disable-pip-version-check 'Pillow==11.3.0'
+      - name: Unit tests for hashes, provenance and publication hold
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m compileall -q ops/comfyui-vps
+          python3 -m unittest discover -s ops/comfyui-vps/tests -p 'test_artifact_pair.py' -v
+          python3 -m unittest discover -s ops/comfyui-vps/tests -p 'test_image_quality_report.py' -v
+          echo VERIFIED_ARTIFACT_PAIR_AND_STORE_BLOCK

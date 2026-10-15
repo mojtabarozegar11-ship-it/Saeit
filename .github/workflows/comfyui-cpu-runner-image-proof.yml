@@ -1,8 +1,5 @@
 name: ComfyUI CPU Image Studio - Preset Runner
 on:
-  push:
-    branches: [feature/comfyui-studio-quality-safety-20261015]
-    paths: [.github/workflows/comfyui-cpu-runner-image-proof.yml]
   workflow_dispatch:
     inputs:
       preset:
@@ -19,6 +16,9 @@ on:
         options: ['4', '8', '12']
 permissions:
   contents: read
+concurrency:
+  group: saeit-comfyui-public-preview-runner
+  cancel-in-progress: false
 jobs:
   render:
     runs-on: ubuntu-24.04
@@ -107,6 +107,10 @@ jobs:
               assert json.load(f)["sha256"] == obj["sha256"]
           print("STUDIO_PROTOTYPE_DELIVERY_ALLOWED_STORE_RELEASE_BLOCKED")
           PY
+          python3 ops/comfyui-vps/verify_artifact_pair.py \
+            "$CPU_RENDER_OUTPUT" "$RUNNER_TEMP/saeit-image-proof/quality_report.json" \
+            --engine github-runner-cpu
+          echo "INTEGRITY_QA_BUNDLE_VERIFIED_AND_STORE_PUBLISH_DISABLED"
           echo "### Saeit CPU Studio result" >> "$GITHUB_STEP_SUMMARY"
           echo "PNG verified; experimental preview only; **not approved for sale**." >> "$GITHUB_STEP_SUMMARY"
           echo "Download image and quality_report.json from Artifacts." >> "$GITHUB_STEP_SUMMARY"

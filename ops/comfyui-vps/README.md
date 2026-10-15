@@ -66,7 +66,33 @@ No generated images, user prompts, or private credentials should be committed to
 
 - **Verified native ComfyUI:** CPU server starts, health API returns HTTP 200, Tiny-SD checkpoint is shown in the model dropdown. The native checkpoint load fails with UNet state_dict mismatch; **native ComfyUI inference is not operational for this compressed checkpoint**.
 - **Verified independent CPU companion output:** Pinned `stable-diffusion.cpp` produced a real 512x512 PNG on a **GitHub-hosted Ubuntu24 runner**, run `38655879476`, artifact `11936762212`, SHA-256 `44a3375a3790c4212228b4e720fd7df6f9624a9ea1cf12d322c67a5d7767c71e`. This is not proof of VPS image rendering. Output quality was visibly blurry; NOT commercially ready.
-- **Verified VPS portable backend:** Source-built `stable-diffusion.cpp` targeting glibc 2.31 was privately installed under `~/comfyui-isolated/.control/sd-cpp-runtime/bin/`. A compatible `libgomp.so.1` was placed beside it, and `sd-cli -h` now succeeds without system-package changes (repair run `38656666595`, follow-up audit run `38656485323`, rerun). Actual PNG generation **on the VPS** still requires separate proof.
+- **Verified VPS portable backend:** Source-built `stable-diffusion.cpp` targeting glibc 2.31 was privately installed under `~/comfyui-isolated/.control/sd-cpp-runtime/bin/`. A compatible `libgomp.so.1` was placed beside it, and `sd-cli -h` now succeeds without system-package changes (repair run `38656666595`, follow-up audit run `38656485323`, rerun). 256×256 PNG generation **on the VPS** was later verified in `38658907082`; successful end-to-end ComfyUI custom node output was verified in `38659838508`. This technical sample is not a quality or commercial release approval.
 - The mobile image studio workflow offers `workflow_dispatch` with four preset types; jobs execute in an isolated GitHub runner and produce a downloadable artifact. The phone only needs the user's existing GitHub access, with no Termux, public ComfyUI port, or Tailscale enrollment.
-- The custom `SaeitSafeCPURender` code and standalone VPS renderer are **experimental, not deployed and not production approved**. They should be activated only if RAM, startup and PNG end-to-end prove safe on the 3.8 GiB VPS.
+- The `SaeitSafeCPURender` custom node was subsequently installed and tested in the existing private ComfyUI service, with bounded 256×256 PNG output and factory liveness checks. It remains experimental and **not approved for commercial production**.
 - The factory loop was verified alive at the time of the model audit. An active factory loop does not imply sellable products; never infer product quality from process health.
+
+
+## Current release gate (2026-10-15)
+
+The authoritative operational report for each *new* CPU Studio demo is
+`quality_report.json` paired with its specific `.png`.
+The image-producing workflow now requires `verify_artifact_pair.py` to confirm
+matching SHA-256, image dimensions, engine identity, safe preset, run context and
+the complete non-commercial release block. Failed checks prevent artifact
+upload. A hash match is a **technical-integrity** result, not a visual quality
+certification or proof of legal licensing.
+
+Safety invariants:
+- Do not publish confidential prompts or client images through this public repository.
+- No automatic website/factory catalog publication from these CPU demos.
+- Never interpret an image QA report as customer approval.
+- Keep local ComfyUI bound to 127.0.0.1, user-controlled, and bounded.
+- Avoid multi-job or high-resolution rendering on the production factory VPS.
+- The upstream `segmind/tiny-sd` model card declares `creativeml-openrail-m`;
+  the converted mirror's Apache badge is not proof that upstream use restrictions
+  were waived. Confirm rights and acceptable use before commercial deployment.
+
+Tests: `.github/workflows/comfyui-artifact-integrity-tests.yml` exercises
+tampered image, forged publication approval, incorrect model engine and symlink
+attacks. Production image workflows only deliver when the PNG and QA report
+agree. See `CPU_IMAGE_STUDIO_GUIDE.md` for mobile usage and limits.
