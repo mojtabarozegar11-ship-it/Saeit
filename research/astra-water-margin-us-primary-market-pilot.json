@@ -1,0 +1,110 @@
+{
+  "product_key": "farm_water_land_margin_audit_v1",
+  "hypothesis": "An offline explainable farm water-versus-margin worksheet could add value only if target users prefer it to stronger free university alternatives.",
+  "observed_utc": "2026-10-15T13:00:00Z",
+  "sources": [
+    {
+      "id": "E01",
+      "url": "https://www.ers.usda.gov/topics/farm-economy/farm-sector-income-finances/farm-sector-income-forecast",
+      "role": "context",
+      "claim": "problem_context"
+    },
+    {
+      "id": "E02",
+      "url": "https://data.nass.usda.gov/Newsroom/2024/10-31-2024.php",
+      "role": "context",
+      "claim": "problem_context"
+    },
+    {
+      "id": "E03",
+      "url": "https://agwater.ucdavis.edu/tools",
+      "role": "direct_competitor",
+      "claim": "competitor_capability"
+    },
+    {
+      "id": "E04",
+      "url": "https://milab.ksu.edu/crop-water-allocator",
+      "role": "direct_competitor",
+      "claim": "competitor_capability"
+    },
+    {
+      "id": "E05",
+      "url": "https://www.fao.org/land-water/resources/tools/software/cropwat/en",
+      "role": "technical_benchmark",
+      "claim": "feasibility_context"
+    },
+    {
+      "id": "E06",
+      "url": "https://cropmanage.ucanr.edu/",
+      "role": "direct_competitor",
+      "claim": "competitor_capability"
+    },
+    {
+      "id": "E07",
+      "url": "https://www.extension.umd.edu/programs/agriculture-food-systems/program-areas/farm-and-agribusiness-management/grain-marketing/crop-budgets",
+      "role": "direct_competitor",
+      "claim": "competitor_capability"
+    },
+    {
+      "id": "E08",
+      "url": "https://cropwatch.unl.edu/register-now-acree-nebraskas-free-irrigation-scheduling-app-ready-2026-season/",
+      "role": "direct_competitor",
+      "claim": "competitor_capability"
+    },
+    {
+      "id": "E09",
+      "url": "https://farms.extension.wisc.edu/articles/using-the-crop-enterprise-budget-tool/",
+      "role": "direct_competitor",
+      "claim": "competitor_capability"
+    }
+  ],
+  "competitors": [
+    {
+      "name": "UC Davis Water-Land-Crop Allocation Tool",
+      "source_ids": [
+        "E03"
+      ],
+      "features": {
+        "water_land_allocation": "documented_present",
+        "multi_year_planning": "documented_present",
+        "crop_rotation": "documented_present",
+        "offline_access": "not_assessed",
+        "reproducible_audit_export": "not_assessed"
+      }
+    },
+    {
+      "name": "Kansas State Crop Water Allocator",
+      "source_ids": [
+        "E04"
+      ],
+      "features": {
+        "water_land_allocation": "documented_present",
+        "farm_margin_budget": "documented_present",
+        "irrigation_scheduling": "not_assessed",
+        "offline_access": "not_assessed"
+      }
+    },
+    {
+      "name": "Maryland Grain Budget Planner",
+      "source_ids": [
+        "E07"
+      ],
+      "features": {
+        "farm_margin_budget": "documented_present",
+        "water_land_allocation": "not_assessed",
+        "reproducible_audit_export": "not_assessed"
+      }
+    },
+    {
+      "name": "Nebraska ACREE",
+      "source_ids": [
+        "E08"
+      ],
+      "features": {
+        "irrigation_scheduling": "documented_present",
+        "farm_margin_budget": "not_assessed",
+        "offline_access": "not_assessed"
+      }
+    }
+  ]
+}
