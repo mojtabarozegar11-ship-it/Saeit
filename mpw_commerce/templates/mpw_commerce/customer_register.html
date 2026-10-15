@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow"><meta name="referrer" content="no-referrer">
+<title>Create customer account | MojPlayWin</title>
+<style>body{font:16px system-ui,sans-serif;background:#101725;color:#eee;padding:24px}
+main{max-width:560px;margin:5vh auto;background:#1b2637;border:1px solid #44526a;border-radius:16px;padding:24px}
+input{display:block;width:100%;max-width:450px;padding:11px;margin:6px 0 16px;border-radius:8px}
+button{background:#eac478;color:#1b202c;border:0;padding:13px 24px;border-radius:8px;font-weight:700}
+a{color:#f8d38b}.errorlist{color:#ffc8af}li{margin:4px 0}</style></head>
+<body><main><p>MOJPLAYWIN · CUSTOMER ACCOUNT</p><h1>Create your account</h1>
+<p>An account is needed to receive and recover purchased digital books.</p>
+<form method="post" action="{% url 'mpw_commerce:customer_register' %}">
+{% csrf_token %}{{ form.as_p }}
+<button type="submit">Create account</button></form>
+<p>Already registered? <a href="{% url 'mpw_commerce:customer_login' %}">Sign in</a></p>
+</main></body></html>
