@@ -50,6 +50,23 @@ def _requirements(conn, table, columns):
     return set(columns).issubset(_columns(conn, table))
 
 
+def _django_sqlite_utc_timestamp(raw):
+    """Read Django USE_TZ=True SQLite DateTimeField as UTC, never as server local.
+
+    Django SQLite stores UTC timestamps without a numeric offset. Only its
+    precise SQL timestamp format is upgraded; arbitrary naive ISO strings
+    remain invalid and are rejected by the independent selector's age gate.
+    """
+    if not isinstance(raw, str):
+        return raw
+    if not re.fullmatch(r"\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,6})?", raw):
+        return raw
+    try:
+        return datetime.fromisoformat(raw).replace(tzinfo=timezone.utc).isoformat()
+    except ValueError:
+        return raw
+
+
 def _references(conn, candidates):
     outputs = []
     audit = {
@@ -140,7 +157,7 @@ def _references(conn, candidates):
                             "opportunity_key": key,
                             "url": row["url"],
                             "content_sha256": row["content_hash"],
-                            "observed_at": row["retrieved_at"],
+                            "observed_at": _django_sqlite_utc_timestamp(row["retrieved_at"]),
                             "claim_type": claim,
                         }
                         # Malformed or stale records are excluded in the selector.
