@@ -28,7 +28,7 @@ jobs:
         run: |
           set -euo pipefail
           pip install -q -r requirements.txt
-          python -m py_compile core/picm_auth.py scripts/deploy_picm_login.py
+          python -m py_compile core/picm_auth.py core/picm_access.py scripts/picm_bind_owner.py scripts/deploy_picm_login.py
           node --check templates/picm/free_motion.js
           pytest -q tests/test_picm_auth.py tests/test_picm_views.py
           python manage.py check
@@ -87,9 +87,27 @@ jobs:
           WORK="$RUNNER_TEMP/picm-ssh"
           timeout 40s ssh -F "$WORK/config" picm-host 'test "$(id -un)" = zomorod2 && test -f /home/zomorod2/Saeit-staging/core/picm_views.py && test -f /home/zomorod2/mojplaywin.com/passenger_wsgi.py'
           timeout 20s ssh -F "$WORK/config" picm-host "install -d -m 700 /home/zomorod2/.mojplaywin-picm-login-$GITHUB_RUN_ID"
-          tar -cf "$RUNNER_TEMP/picm-login.tar" scripts/deploy_picm_login.py core/picm_auth.py core/picm_views.py templates/picm/login.html templates/picm/index.html templates/picm/free_motion.js
+          tar -cf "$RUNNER_TEMP/picm-login.tar" scripts/deploy_picm_login.py scripts/picm_bind_owner.py core/picm_auth.py core/picm_views.py core/picm_access.py templates/picm/login.html templates/picm/index.html templates/picm/free_motion.js
           scp -q -F "$WORK/config" "$RUNNER_TEMP/picm-login.tar" "picm-host:/home/zomorod2/.mojplaywin-picm-login-$GITHUB_RUN_ID/archive.tar"
           timeout 40s ssh -F "$WORK/config" picm-host "tar -xf /home/zomorod2/.mojplaywin-picm-login-$GITHUB_RUN_ID/archive.tar -C /home/zomorod2/.mojplaywin-picm-login-$GITHUB_RUN_ID"
+      - name: Securely bind PICM to existing sole non-admin owner
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          WORK="$RUNNER_TEMP/picm-ssh"
+          timeout 85s ssh -F "$WORK/config" picm-host "RUN_ID=$GITHUB_RUN_ID bash -se" <<'REMOTE'
+          set -Eeuo pipefail
+          test "$(id -un)" = zomorod2
+          cd /home/zomorod2/Saeit-staging
+          for py in "$PWD/.venv/bin/python" "$PWD/venv/bin/python" /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python /home/zomorod2/virtualenv/Saeit/3.11/bin/python /home/zomorod2/virtualenv/mojplaywin.com/3.11/bin/python; do
+            if test -x "$py" && "$py" -c 'import django' >/dev/null 2>&1; then
+              DJANGO_SETTINGS_MODULE=config.settings "$py" "/home/zomorod2/.mojplaywin-picm-login-$RUN_ID/scripts/picm_bind_owner.py"
+              exit 0
+            fi
+          done
+          echo PICM_DJANGO_RUNTIME_MISSING
+          exit 9
+          REMOTE
       - name: Install login views, independent routes and templates
         id: install
         shell: bash
@@ -140,10 +158,18 @@ jobs:
           from types import SimpleNamespace
           from django.test import RequestFactory
           from core.picm_views import picm_workbench
+          from core.picm_access import owner_id, owner_allowed
+          bound = owner_id()
+          assert bound is not None, "PICM_OWNER_BINDING_MISSING"
+          owner = SimpleNamespace(is_authenticated=True, is_active=True, pk=int(bound))
           request=RequestFactory().get("/picm/workspace/")
-          request.user=SimpleNamespace(is_authenticated=True,pk=-404404)
+          request.user=owner
+          assert owner_allowed(owner)
           response=picm_workbench(request)
           assert response.status_code==200
+          request.user=SimpleNamespace(is_authenticated=True,is_active=True,pk=-404404)
+          assert picm_workbench(request).status_code==403
+          print("PICM_UNRELATED_SIGNED_IN_USERS_DENIED")
           data=response.content.decode("utf-8")
           assert "captureStream(20)" in data
           assert "MediaRecorder" in data
