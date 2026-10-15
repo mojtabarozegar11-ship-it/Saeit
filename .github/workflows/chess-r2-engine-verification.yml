@@ -1,0 +1,30 @@
+name: Chess R2 isolated Stockfish verification
+on:
+  push:
+    branches:
+      - work/chess-gm-reference-corpus-20261015
+    paths:
+      - .github/workflows/chess-r2-engine-verification.yml
+      - scripts/chess_r2_engine_verification.py
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install standalone chess analysis tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y stockfish
+          python3 -m pip install chess
+      - name: Check all fourteen training boards against python-chess and Stockfish
+        run: python3 scripts/chess_r2_engine_verification.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: chess-r2-engine-result
+          path: chess_r2_engine_result.json
