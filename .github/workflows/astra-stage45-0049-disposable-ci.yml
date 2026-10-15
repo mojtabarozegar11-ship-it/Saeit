@@ -1,0 +1,78 @@
+name: Astra 0049 Stage45 Disposable DB Proof
+
+on:
+  push:
+    branches: [feature/astra-stage45-schema-0049-20261015]
+    paths:
+      - core/models.py
+      - core/migrations/0049_astra_stage45_research_queue.py
+      - core/tests/test_astra_stage45_schema.py
+      - .github/workflows/astra-stage45-0049-disposable-ci.yml
+  pull_request:
+    branches: [factory/staging-reconciliation-20261008]
+    paths:
+      - core/models.py
+      - core/migrations/0049_astra_stage45_research_queue.py
+      - core/tests/test_astra_stage45_schema.py
+      - .github/workflows/astra-stage45-0049-disposable-ci.yml
+
+permissions:
+  contents: read
+
+jobs:
+  isolated-0049:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SAEIT_ENV: ci
+      DEBUG: "False"
+      SECRET_KEY: astra-0049-ephemeral-ci-only-key
+      ALLOWED_HOSTS: localhost,127.0.0.1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install requirements
+        run: python -m pip install -r requirements.txt
+      - name: Verify model migration parity and Django checks
+        run: |
+          python manage.py check
+          python manage.py makemigrations --check --dry-run
+      - name: Migrate NEW DISPOSABLE SQLite only through 0049
+        run: |
+          set -euo pipefail
+          export DATABASE_URL="sqlite:///$RUNNER_TEMP/astra-0049-ephemeral.sqlite3"
+          test ! -e "$RUNNER_TEMP/astra-0049-ephemeral.sqlite3"
+          python manage.py migrate --noinput
+          python - "$RUNNER_TEMP/astra-0049-ephemeral.sqlite3" <<'PY'
+          import pathlib, sqlite3, sys
+          path = pathlib.Path(sys.argv[1])
+          assert path.is_file()
+          c=sqlite3.connect(str(path))
+          row=c.execute("SELECT name FROM django_migrations WHERE app='core' ORDER BY name DESC LIMIT 1").fetchone()
+          assert row == ('0049_astra_stage45_research_queue',),row
+          for table, required in (
+              ('core_factoryqueueitem', {'id','key','kind','status','priority_score',
+                'evidence_verified_independently','build_authorized','publish_authorized','payment_authorized'}),
+              ('core_discoverysnapshot', {'id','hypothesis_id','url','content_hash','retrieved_at','record'}),
+          ):
+              columns={x[1] for x in c.execute("PRAGMA table_info(" + table + ")")}
+              assert required <= columns,(table,columns)
+          for field in ('build_authorized','publish_authorized','payment_authorized','evidence_verified_independently'):
+              assert c.execute("SELECT COUNT(*) FROM core_factoryqueueitem WHERE " + field + "=1").fetchone()[0]==0
+          c.close()
+          print("ASTRA_0049_SCHEMA_DISPOSABLE_PASS=true")
+          print("ASTRA_0049_SITE_MUTATIONS=0")
+          print("ASTRA_0049_LIVE_FACTORY_MUTATIONS=0")
+          PY
+      - name: Verify hard-denial defaults against temporary Django test DB
+        run: |
+          set -euo pipefail
+          export DATABASE_URL="sqlite:///$RUNNER_TEMP/astra-0049-ephemeral.sqlite3"
+          python manage.py test core.tests.test_astra_stage45_schema --verbosity 2
+      - name: Confirm no VPS credentials or services used
+        run: |
+          echo ASTRA_0049_VPS_CONNECTIONS=0
+          echo ASTRA_0049_LIVE_MIGRATIONS=0
+          echo ASTRA_0049_PUBLIC_RELEASE=BLOCKED
