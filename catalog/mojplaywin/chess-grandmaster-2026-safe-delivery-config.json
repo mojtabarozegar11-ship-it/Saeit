@@ -8,26 +8,29 @@
     "bytes": 3631972,
     "sha256": "3837fc3cb21ed1a2e7c33e0db8f8e10d158583309b02b97d4d674d25a147207a",
     "absolute_private_path": "/home/zomorod2/MojPlayWin_Private_Assets/store/chess-improvement/MojPlayWin_Chess_Grandmaster_Final_Covered_2026.pdf",
-    "host_checksum_verified": true
+    "host_checksum_verified": true,
+    "live_private_asset_root_verified": true,
+    "private_asset_root_evidence": "https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/38703359205"
   },
   "proposed_product_metadata": {
     "mpw_commerce": {
       "enabled": false,
       "fulfillment": "digital",
-      "private_file": "COMPUTE_RELATIVE_TO_MPW_COMMERCE_PRIVATE_ASSET_ROOT_AT_INSTALL_TIME"
+      "private_file": "store/chess-improvement/MojPlayWin_Chess_Grandmaster_Final_Covered_2026.pdf"
     }
   },
   "required_install_checks": [
-    "Confirm final PDF size and sha256 on cPanel",
-    "Compute relative path from configured MPW_COMMERCE_PRIVATE_ASSET_ROOT rather than guessing root",
-    "Resolve with mpw_commerce.downloads._private_file and assert exact PDF match",
+    "Confirm final PDF size and SHA-256 on cPanel",
+    "Confirm configured MPW_COMMERCE_PRIVATE_ASSET_ROOT and exact relative path against cPanel audit",
+    "Resolve using mpw_commerce.downloads._private_file and assert final file matches expected SHA-256",
     "Leave product.active, checkout_enabled and payment_live unchanged",
-    "Never switch on real invoice settlement, downloads or public checkout without tested mainnet transaction and purchase-to-delivery evidence"
+    "Do not grant any quality/license/publication assertions without evidence",
+    "Do not switch on live invoice, settlement, downloads or checkout until real mainnet transfer and protected buyer fulfillment have been proven"
   ],
   "verified_wallet_ownership": {
     "ETH": true,
     "TRX": true
   },
   "release_state": "STAGING_MANIFEST_ONLY_DO_NOT_TREAT_AS_DEPLOYED",
-  "source_audit": "https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/38698321011"
+  "source_audit": "https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/38703359205"
 }
