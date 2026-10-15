@@ -76,7 +76,7 @@ jobs:
           set -euo pipefail
           id="${{ github.run_id }}"
           [[ "$id" =~ ^[0-9]{8,20}$ ]]
-          ssh -F "$RUNNER_TEMP/astra-live-payment/config" saeit-cpanel "umask 077; mkdir -p '$HOME/.mpw-book72-install-$id'" || exit 1
+          ssh -F "$RUNNER_TEMP/astra-live-payment/config" saeit-cpanel "umask 077; mkdir -p .mpw-book72-install-$id; chmod 700 .mpw-book72-install-$id" || exit 1
           scp -F "$RUNNER_TEMP/astra-live-payment/config" "$RUNNER_TEMP/mpw-book72-buyer-pages.tgz" "saeit-cpanel:.mpw-book72-install-$id/pages.tgz"
       - name: Guarded install and import verification, no payment activation
         shell: bash
