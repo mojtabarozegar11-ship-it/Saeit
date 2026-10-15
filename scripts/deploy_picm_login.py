@@ -17,7 +17,7 @@ BACKUPS = HOME / ".mojplaywin-backups"
 FILES = (Path("config/urls.py"), Path("core/picm_auth.py"),
          Path("templates/picm/login.html"), Path("templates/picm/index.html"),
          Path("templates/picm/free_motion.js"),
-         Path("core/picm_views.py"))
+         Path("core/picm_views.py"), Path("core/picm_access.py"))
 MARK = "# SAEIT_PICM_PRIVATE_LOGIN_V1"
 WORKSPACE_MARK = "# SAEIT_PICM_WORKSPACE_V1"
 ROUTES = '''
@@ -127,6 +127,10 @@ def deploy(run):
     src_motion = (stage / "templates/picm/free_motion.js").read_bytes()
     src_views = (stage / "core/picm_views.py").read_bytes()
     ast.parse(src_views.decode("utf-8"))
+    src_access = (stage / "core/picm_access.py").read_bytes()
+    ast.parse(src_access.decode("utf-8"))
+    if b"def owner_allowed(user):" not in src_access:
+        raise RuntimeError("PICM_OWNER_AUTHORIZATION_GATE_MISSING")
     if (b"def picm_workbench(request):" not in src_views
             or b"def picm_page(request):" not in src_views
             or b"def picm_reference_stage(request):" not in src_views):
@@ -155,7 +159,8 @@ def deploy(run):
     try:
         payload = {FILES[0]: urls.encode(), FILES[1]: src_auth,
                    FILES[2]: src_login, FILES[3]: src_index,
-                   FILES[4]: src_motion, FILES[5]: src_views}
+                   FILES[4]: src_motion, FILES[5]: src_views,
+                   FILES[6]: src_access}
         for relative, content in payload.items():
             atomic_write(ROOT / relative, content, manifest[str(relative)]["mode"])
         restart()
