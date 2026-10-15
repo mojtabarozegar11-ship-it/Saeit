@@ -1,0 +1,111 @@
+name: Astra V2 and 0049 Single Tree Full Private CI
+
+on:
+  push:
+    branches: [feature/astra-stage45-schema-0049-20261015]
+    paths:
+      - .github/workflows/astra-v2-0049-native-integrated-ci.yml
+      - scripts/astra_v2_private_pipeline.py
+      - scripts/astra_v2_topic_gate.py
+      - scripts/astra_v2_self_directed_education.py
+      - scripts/astra_v2_release_gate.py
+      - scripts/astra_v2_stage45_probe.py
+      - product_prototypes/**
+      - tests/test_astra_v2_*.py
+      - tests/test_astra_farm_*.py
+      - tests/test_astra_orchard_decision_audit.py
+      - core/migrations/0049_astra_stage45_research_queue.py
+  pull_request:
+    branches: [factory/staging-reconciliation-20261008]
+    paths:
+      - .github/workflows/astra-v2-0049-native-integrated-ci.yml
+      - scripts/astra_v2_private_pipeline.py
+      - scripts/astra_v2_topic_gate.py
+      - scripts/astra_v2_self_directed_education.py
+      - scripts/astra_v2_release_gate.py
+      - scripts/astra_v2_stage45_probe.py
+      - product_prototypes/**
+      - tests/test_astra_v2_*.py
+
+permissions:
+  contents: read
+
+jobs:
+  integrated-private:
+    runs-on: ubuntu-latest
+    timeout-minutes: 22
+    env:
+      SAEIT_ENV: ci
+      DEBUG: "False"
+      SECRET_KEY: astra0049-integrated-isolated-ephemeral
+      ALLOWED_HOSTS: localhost,127.0.0.1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Assert all three specialists and Stage45 source are actually tracked
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import pathlib,subprocess
+          paths=[
+            "scripts/astra_v2_private_pipeline.py",
+            "scripts/astra_v2_topic_gate.py",
+            "scripts/astra_v2_self_directed_education.py",
+            "scripts/astra_stage45_research_backlog.py",
+            "scripts/astra_stage45_legacy_gap_inventory.py",
+            "core/migrations/0049_astra_stage45_research_queue.py",
+            "product_prototypes/orchard_decision_audit/decision_audit.py",
+            "product_prototypes/farm_procurement_audit/procurement_audit.py",
+            "product_prototypes/farm_water_land_margin_audit/water_margin_audit.py",
+          ]
+          for path in paths:
+              p=pathlib.Path(path)
+              assert p.is_file() and not p.is_symlink(),path
+              subprocess.run(["git","ls-files","--error-unmatch",path],
+                             capture_output=True,check=True)
+          print("ASTRA_V2_0049_INTEGRATED_GIT_FILES_PRESENT=true")
+          PY
+      - name: Migrate fresh CI SQLite, verify Django migration alignment
+        run: |
+          set -euo pipefail
+          python -m pip install -r requirements.txt
+          export DATABASE_URL="sqlite:///$RUNNER_TEMP/astra-v2-integrated-0049.sqlite3"
+          test ! -e "$RUNNER_TEMP/astra-v2-integrated-0049.sqlite3"
+          python manage.py check
+          python manage.py makemigrations --check --dry-run
+          python manage.py migrate --noinput --verbosity 0
+          python - "$RUNNER_TEMP/astra-v2-integrated-0049.sqlite3" <<'PY'
+          import sqlite3,sys
+          c=sqlite3.connect(sys.argv[1])
+          assert c.execute("SELECT COUNT(*) FROM django_migrations WHERE app='core' "
+                           "AND name='0049_astra_stage45_research_queue'").fetchone()[0]==1
+          print("ASTRA_V2_0049_INTEGRATED_DISPOSABLE_SCHEMA=PASS")
+          PY
+      - name: Exercise three builders, private queue, research gate and release blockers
+        run: |
+          set -euo pipefail
+          for file in \
+            test_astra_orchard_decision_audit.py \
+            test_astra_farm_procurement_audit.py \
+            test_astra_farm_water_land_margin_audit.py \
+            test_astra_v2_self_directed_education.py \
+            test_astra_v2_private_pipeline.py \
+            test_astra_v2_release_gate.py \
+            test_astra_v2_stage45_probe.py \
+            test_astra_opportunity_selector.py \
+            test_astra_research_evidence_adapter.py \
+            test_astra_stage45_research_backlog.py \
+            test_astra_stage45_legacy_gap_inventory.py; do
+            python -m unittest discover -s tests -p "$file" -q
+          done
+          python -m pytest -q core/tests/test_astra_stage45_schema.py
+          echo ASTRA_V2_0049_INTEGRATED_THREE_BUILDERS_QA=PASS
+          echo ASTRA_V2_0049_INTEGRATED_PRIVATE_RESEARCH=PASS
+          echo ASTRA_V2_0049_NO_COMMERCIAL_SALE_AUTHORIZED=true
+      - name: No production or network side effects
+        run: |
+          echo ASTRA_V2_0049_NO_VPS_SSH=true
+          echo ASTRA_V2_0049_NO_SITE_OR_DB_DEPLOY=true
+          echo ASTRA_V2_0049_NO_PUBLISH_OR_PAYMENTS=true
