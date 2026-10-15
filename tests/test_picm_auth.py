@@ -16,7 +16,8 @@ class PICMLoginTests(TestCase):
         self.patch = patch.dict(os.environ, {"PICM_STORAGE_DIR": self.temp.name})
         self.patch.start()
         self.addCleanup(self.patch.stop)
-        get_user_model().objects.create_user(username="picm-09170000000", password="unit-test-secret", is_staff=False)
+        u = get_user_model().objects.create_user(username="picm-09170000000", password="unit-test-secret", is_staff=False)
+        (Path(self.temp.name) / ".owner-user-id").write_text(str(u.pk)+"\n", encoding="ascii")
 
     def test_accepts_persian_and_arabic_digits(self):
         self.assertEqual(normalize_username("۰۹۱۷۰۰۰۰۰۰۰"), "09170000000")
@@ -83,6 +84,36 @@ class PICMLoginTests(TestCase):
         login_req.user = user
         from core.picm_auth import picm_login
         self.assertEqual(picm_login(login_req).url, "/picm/workspace/")
+
+    def test_nonowner_admin_and_other_authenticated_accounts_denied(self):
+        from django.test import RequestFactory
+        from django.contrib.auth.models import AnonymousUser
+        from core.picm_auth import picm_login, picm_logout
+        from core.picm_views import picm_page, picm_workbench
+        from core.picm_access import owner_allowed
+        admin = get_user_model().objects.create_superuser(
+            username="unrelated-site-admin", password="unit-test-admin",
+            email="nobody@example.org")
+        rf = RequestFactory()
+        self.assertFalse(owner_allowed(admin))
+        req = rf.get("/picm/")
+        req.user = admin
+        self.assertEqual(picm_page(req).status_code, 403)
+        req = rf.get("/picm/workspace/")
+        req.user = admin
+        self.assertEqual(picm_workbench(req).status_code, 403)
+        req = rf.post("/picm/logout/")
+        req.user = admin
+        self.assertEqual(picm_logout(req).status_code, 403)
+        req = rf.get("/picm/login/")
+        req.user = admin
+        self.assertEqual(picm_login(req).status_code, 200)
+        # Fail closed if the unique private binding was ever absent.
+        (Path(self.temp.name) / ".owner-user-id").unlink()
+        owner = get_user_model().objects.get(username="picm-09170000000")
+        self.assertFalse(owner_allowed(owner))
+        req.user = owner
+        self.assertEqual(picm_login(req).status_code, 200)
 
     def test_bad_password_is_generic_and_throttled(self):
         from django.test import RequestFactory
