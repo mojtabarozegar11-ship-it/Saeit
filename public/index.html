@@ -9,7 +9,7 @@
   <link rel="canonical" href="https://zomorodmelal.ir/">
   <title>شرکت کشت و صنعت زمرد ملل | دانش، تولید و آینده</title>
   <style>
-    :root{color-scheme:dark;--bg:#10221b;--panel:#193229;--panel2:#203b30;--gold:#d7b66a;--cream:#f4f0df;--muted:#c4cbb9;--line:rgba(215,182,106,.32);--olive:#82914f}
+    :root{color-scheme:dark;--bg:#252b19;--panel:#303822;--panel2:#39432a;--gold:#e2c373;--cream:#f4f0df;--muted:#c8cbb9;--line:rgba(226,195,115,.55);--olive:#929c58}
     *{box-sizing:border-box}
     html{scroll-behavior:smooth}
     body{margin:0;background:radial-gradient(ellipse at 78% 4%,rgba(130,145,79,.18),transparent 37rem),var(--bg);color:var(--cream);font-family:Tahoma,"Segoe UI",sans-serif;line-height:1.9}
@@ -51,6 +51,27 @@
     footer{padding:28px 0 34px;border-top:1px solid var(--line);color:var(--muted);font-size:13px}
     .foot{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap}
     :focus-visible{outline:3px solid var(--gold);outline-offset:4px}
+
+    /* ZOMOROD MELAL — DARK OLIVE AND THICK GOLD FRAME */
+    main{position:relative;width:min(1240px,calc(100% - 24px));margin:16px auto 26px;border:6px double var(--gold);background:var(--bg);box-shadow:0 0 0 2px rgba(226,195,115,.22)}
+    main>.hero{width:100%;padding-inline:clamp(20px,5vw,64px);border-bottom:4px solid var(--gold)}
+    main>.section{border-top:4px solid var(--gold);border-bottom:4px solid var(--gold);margin:14px 0;padding:clamp(38px,5vw,62px) 0;background:linear-gradient(145deg,#252b19,#202617)}
+    .photo-frame{position:relative;min-height:320px;border:5px solid var(--gold);background:#303822;overflow:hidden;box-shadow:inset 0 0 0 5px #252b19}
+    .home-photo{display:block;width:100%;height:100%;min-height:320px;max-height:430px;object-fit:cover;opacity:.86}
+    .photo-label{position:absolute;inset:auto 14px 14px;padding:14px 18px;background:rgba(22,28,16,.9);border:3px solid var(--gold);display:grid;gap:4px;color:var(--cream)}
+    .photo-label strong{font-size:clamp(24px,3vw,40px);color:var(--gold)}
+    .photo-label span{font-size:13px}
+    .card,.callout{border:4px solid var(--gold);border-radius:4px;background:linear-gradient(155deg,#39432a,#303822)}
+    .product-card{padding:14px;display:flex;flex-direction:column;gap:10px}
+    .product-photo{display:block;width:100%;height:165px;object-fit:cover;border:3px solid var(--gold);background:#252b19}
+    .product-card h3{margin:0}
+    .product-card p{flex:1}
+    .product-link{display:inline-flex;margin-top:8px;color:var(--gold);font-weight:800;text-decoration:none}
+    .product-note{margin:18px 0 0;color:var(--muted);font-size:13px}
+    .callout{padding:clamp(20px,4vw,34px)}
+    footer{width:min(1240px,calc(100% - 24px));margin:0 auto;border-top:4px solid var(--gold);border-inline:4px solid var(--gold);padding:24px}
+    @media(max-width:760px){main{width:calc(100% - 14px);margin:7px auto 16px;border-width:4px}main>.hero{padding-inline:18px}.photo-frame,.home-photo{min-height:230px}.product-photo{height:190px}footer{width:calc(100% - 14px);padding:18px;border-width:3px}}
+
     @media(max-width:760px){.hero{grid-template-columns:1fr;padding-top:60px}.seal{min-height:240px}.cards{grid-template-columns:1fr}.bar{align-items:flex-start;flex-direction:column}nav{gap:12px}.callout{align-items:flex-start;flex-direction:column}}
     @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{animation-duration:.01ms!important;transition-duration:.01ms!important}}
   </style>
@@ -65,6 +86,8 @@
       <nav aria-label="ناوبری اصلی">
         <a href="#about">دربارهٔ ما</a>
         <a href="#focus">محورهای فعالیت</a>
+        <a href="https://zomorodmelal.ir/agriculture/">راهنمای کشاورزی</a>
+        <a href="#products">محصولات و خدمات</a>
         <a href="https://zomorodmelal.ir/amozeshgah/">آموزشگاه</a>
       </nav>
     </div>
@@ -74,14 +97,16 @@
       <div>
         <div class="eyebrow">ZOMOROD MELAL · AGRO-INDUSTRY</div>
         <h1 id="hero-title">دانش را به توان تولید و فرصت تبدیل می‌کنیم.</h1>
-        <p class="intro">شرکت کشت و صنعت زمرد ملل بر پیوند دانش کشاورزی، مدیریت تولید، صنعت و فناوری تمرکز دارد؛ برای آن‌که ایده‌های دقیق، به مسیرهای روشن و ارزش پایدار نزدیک‌تر شوند.</p>
+        <p class="intro">زمرد ملل در بخش کشاورزی فعالیت می‌کند. این راهنمای جامع، مسیرهای دامپروری، باغبانی، گلخانه، طیور، آبزیان، نهاده‌ها و خدمات کشاورزی را در صفحه‌های مستقل گرد هم آورده است.</p>
         <div class="actions">
           <a class="button primary" href="https://zomorodmelal.ir/amozeshgah/">ورود به آموزشگاه زمرد ملل</a>
           <a class="button secondary" href="#focus">آشنایی با محورهای فعالیت</a>
+          <a class="button secondary" href="https://zomorodmelal.ir/agriculture/">ورود به راهنمای جامع کشاورزی</a>
         </div>
       </div>
-      <div class="seal" role="img" aria-label="نشان زمرد ملل">
-        <div class="seal-core"><strong>زم</strong><span>دانش برای ساختن آینده</span></div>
+      <div class="photo-frame">
+        <img class="home-photo" src="/static/site/heroes/platform-home.webp" alt="تصویر معرفی شرکت کشت و صنعت زمرد ملل" fetchpriority="high">
+        <div class="photo-label"><strong>زمرد ملل</strong><span>دانش برای ساختن آینده</span></div>
       </div>
     </section>
     <section class="section" id="about">
@@ -103,6 +128,36 @@
           <article class="card"><div class="number">۰۲ · توانمندسازی</div><h3>آموزش و مهارت</h3><p>مسیرهای یادگیری برای پیوند مفاهیم علمی با تمرین، مهارت و کاربرد عملی.</p></article>
           <article class="card"><div class="number">۰۳ · توسعه</div><h3>صنعت و فناوری</h3><p>نگاه فرایندی به تولید، نوآوری و استفادهٔ سنجیده از ابزارهای دیجیتال.</p></article>
         </div>
+      </div>
+    </section>
+    <section class="section product-section" id="products" aria-labelledby="products-title">
+      <div class="wrap">
+        <div class="section-head">
+          <div class="eyebrow">DIGITAL PRODUCTS · SPECIALIST SERVICES</div>
+          <h2 id="products-title">بسته‌های تخصصی و خدمات قابل استعلام</h2>
+          <p class="lead">برای شروع، موضوع و نیاز خود را انتخاب کنید. محدودهٔ اجرا، زمان تحویل و قیمت پیش از ثبت سفارش با شما هماهنگ می‌شود.</p>
+        </div>
+        <div class="cards">
+          <article class="card product-card">
+            <img class="product-photo" src="/static/site/heroes/agriculture.webp" alt="تصویر حوزه کشاورزی و تولید" loading="lazy">
+            <div class="number">۰۱ · کشاورزی</div><h3>اقتصاد و مدیریت مزرعه</h3>
+            <p>بستهٔ مشاوره و محتوای دیجیتال برای بررسی هزینه، بهره‌وری، برنامهٔ تولید و تصمیم‌های مزرعه.</p>
+            <a class="product-link" href="tel:+989022048691">درخواست جزئیات و قیمت ↗</a>
+          </article>
+          <article class="card product-card">
+            <img class="product-photo" src="/static/site/heroes/smart-agriculture.webp" alt="تصویر فناوری کشاورزی و مدیریت منابع" loading="lazy">
+            <div class="number">۰۲ · منابع و فناوری</div><h3>مدیریت آب و زمین</h3>
+            <p>ابزار و راهنمای سناریوهای تولید برای بررسی گزینه‌های مدیریت آب و استفاده از زمین.</p>
+            <a class="product-link" href="tel:+989022048691">درخواست جزئیات و قیمت ↗</a>
+          </article>
+          <article class="card product-card">
+            <img class="product-photo" src="/static/site/heroes/industry.webp" alt="تصویر تولید و توسعه صنعتی" loading="lazy">
+            <div class="number">۰۳ · صنعت و بازار</div><h3>تحلیل زنجیرهٔ ارزش</h3>
+            <p>مطالعه و راهنمای دیجیتال برای شناخت مسیر تولید، فرآوری، بسته‌بندی و عرضهٔ محصول.</p>
+            <a class="product-link" href="tel:+989022048691">درخواست جزئیات و قیمت ↗</a>
+          </article>
+        </div>
+        <p class="product-note">فهرست بالا برای معرفی حوزه‌های سفارش‌پذیر است؛ موجودی یا قیمت ثابت اعلام نمی‌شود و پیش از هر سفارش تأیید خواهد شد.</p>
       </div>
     </section>
     <section class="section">

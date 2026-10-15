@@ -1,0 +1,201 @@
+name: Publish Zomorod agriculture guides safely
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/zomorod-agriculture-deploy.yml"
+      - "public/agriculture/**"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-agriculture-guides
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate all guide pages
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from html.parser import HTMLParser
+          from pathlib import Path
+          files=sorted(Path("public/agriculture").rglob("index.html"))
+          if len(files)!=14: raise SystemExit(f"Expected 14 pages, found {len(files)}")
+          class C(HTMLParser):
+              def __init__(self): super().__init__(); self.rtl=False; self.title=False; self.h1=False; self.canonical=False; self.images=0
+              def handle_starttag(self,t,attrs):
+                  a=dict(attrs)
+                  if t=="html": self.rtl=a.get("lang")=="fa" and a.get("dir")=="rtl"
+                  if t=="title": self.title=True
+                  if t=="h1": self.h1=True
+                  if t=="link" and a.get("rel")=="canonical": self.canonical=a.get("href","").startswith("https://zomorodmelal.ir/agriculture/")
+                  if t=="img": self.images+=1
+          for p in files:
+              s=p.read_text(encoding="utf-8"); c=C(); c.feed(s)
+              if not all((c.rtl,c.title,c.h1,c.canonical,c.images)) or "<!-- saeit-zomorod-agriculture-v1 -->" not in s: raise SystemExit(f"Missing page structure: {p}")
+              if "border:7px double var(--gold)" not in s or "background:#252b19" not in s or len(s.encode())<3000: raise SystemExit(f"Frame, olive background or content issue: {p}")
+          print("AGRICULTURE_PAGES=14")
+          print("AGRICULTURE_VALIDATION=passed")
+          PY
+      - name: Prepare pinned VPS relay and cPanel SSH
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-agriculture"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+      - name: Back up and publish only managed agriculture pages
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-agriculture"
+          expected="$(cd public/agriculture && find . -type f -name index.html -print0 | sort -z | xargs -0 sha256sum | awk '{print $1}' | sha256sum | awk '{print $1}')"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$expected" "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          expected="$1"; sha="$2"
+          root=/home/zomorod2/public_html; target="$root/agriculture"
+          stage="$root/.zomorod-agriculture-stage-$sha"
+          backup="$HOME/.backups/zomorodmelal-agriculture/agriculture-$sha"
+          test -d "$root" && test ! -L "$root" && test "$(stat -c %U "$root")" = zomorod2 && test -w "$root"
+          if test -e "$target"; then
+            test -d "$target" && test ! -L "$target"
+            test -f "$target/index.html" && ! test -L "$target/index.html"
+            grep -Fq '<!-- saeit-zomorod-agriculture-v1 -->' "$target/index.html" || { echo "Unmanaged agriculture directory; refusing"; exit 1; }
+            test -z "$(find "$target" -type l -print -quit)" || { echo "Symlink found inside managed agriculture directory"; exit 1; }
+            install -d -m 700 "$HOME/.backups/zomorodmelal-agriculture"
+            test ! -e "$backup"
+            cp -a "$target" "$backup"
+            diff -qr "$target" "$backup"
+          fi
+          test ! -e "$stage" && mkdir -m 700 "$stage"
+          REMOTE
+          tar -C public/agriculture -czf - . | ssh -F "$d/config" saeit-cpanel "tar -xzf - -C /home/zomorod2/public_html/.zomorod-agriculture-stage-$GITHUB_SHA"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$expected" "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          expected="$1"; sha="$2"
+          root=/home/zomorod2/public_html; target="$root/agriculture"
+          stage="$root/.zomorod-agriculture-stage-$sha"
+          actual="$(cd "$stage" && find . -type f -name index.html -print0 | sort -z | xargs -0 sha256sum | awk '{print $1}' | sha256sum | awk '{print $1}')"
+          test "$actual" = "$expected"
+          test -z "$(find "$stage" -type l -print -quit)"
+          created=0
+          rollback_on_error() {
+            rc=$?
+            if [ "$rc" -ne 0 ]; then
+              if [ "$created" -eq 1 ] && [ ! -d "$backup" ]; then
+                rm -rf -- "$target"
+                echo AGRICULTURE_PARTIAL_INSTALL_REMOVED=yes
+              elif [ -d "$backup" ]; then
+                failed="$HOME/.backups/zomorodmelal-agriculture/agriculture-failed-$sha"
+                test ! -e "$failed"
+                mv -T "$target" "$failed"
+                mv -T "$backup" "$target"
+                echo AGRICULTURE_PARTIAL_UPDATE_RESTORED=yes
+              fi
+            fi
+            exit "$rc"
+          }
+          trap rollback_on_error EXIT
+          if test ! -e "$target"; then mkdir -m 755 "$target"; created=1; fi
+          test -d "$target" && test ! -L "$target"
+          while IFS= read -r -d '' f; do
+            rel="${f#"$stage"/}"; dir="${rel%/*}"
+            mkdir -p "$target/$dir"
+            test ! -L "$target/$dir" && test ! -L "$target/$rel"
+            chmod 644 "$f"
+            mv -f -- "$f" "$target/$rel"
+          done < <(find "$stage" -type f -name index.html -print0)
+          rmdir "$stage"
+          grep -Fq '<!-- saeit-zomorod-agriculture-v1 -->' "$target/index.html"
+          echo AGRICULTURE_ATOMIC_PAGE_REPLACEMENT=passed
+          REMOTE
+      - name: Verify guide routes, images, and existing site paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-agriculture"; failed=0
+          pages=(/agriculture/ /agriculture/livestock/ /agriculture/horticulture/ /agriculture/greenhouse/ /agriculture/poultry/ /agriculture/aquaculture/ /agriculture/inputs/ /agriculture/seeds/ /agriculture/fertilizers/ /agriculture/pesticides/ /agriculture/offices/ /agriculture/water-soil/ /agriculture/machinery/ /agriculture/market/)
+          for path in "${pages[@]}"; do
+            file="$d/$(printf '%s' "$path" | tr '/' '_').html"
+            result="$(curl --silent --show-error --location --max-redirs 5 --connect-timeout 10 --max-time 30 -H 'Cache-Control: no-cache' -o "$file" -w '%{http_code}|%{content_type}' "https://zomorodmelal.ir$path" || true)"
+            printf 'AGRICULTURE %s %s\n' "$path" "$result"
+            if [[ "$result" != 200\|text/html* ]] || ! grep -Fq '<!-- saeit-zomorod-agriculture-v1 -->' "$file"; then failed=1; fi
+          done
+          for image in agriculture smart-agriculture industry research economy knowledge platform-home; do
+            result="$(curl --silent --show-error --location --retry 1 --max-time 30 -o /dev/null -w '%{http_code}|%{content_type}' "https://zomorodmelal.ir/static/site/heroes/$image.webp" || true)"
+            printf 'IMAGE %s %s\n' "$image" "$result"
+            if [[ "$result" != 200\|image/* ]]; then failed=1; fi
+          done
+          for path in / /amozeshgah/ /education/ /ghanadi/; do
+            code="$(curl --silent --show-error --location --max-redirs 5 --connect-timeout 10 --max-time 30 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir$path" || true)"
+            printf 'EXISTING %s HTTP=%s\n' "$path" "$code"
+            if [ "$code" != 200 ]; then failed=1; fi
+          done
+          if [ "$failed" -ne 0 ]; then
+            ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1"; root=/home/zomorod2/public_html
+          target="$root/agriculture"; backup="$HOME/.backups/zomorodmelal-agriculture/agriculture-$sha"
+          failed="$HOME/.backups/zomorodmelal-agriculture/agriculture-failed-$sha"
+          if test -d "$backup"; then
+            test ! -e "$failed"
+            mv -T "$target" "$failed"
+            mv -T "$backup" "$target"
+            echo AGRICULTURE_ROLLBACK=restored
+          elif test -d "$target" && grep -Fq '<!-- saeit-zomorod-agriculture-v1 -->' "$target/index.html"; then
+            rm -rf -- "$target"
+            echo NEW_AGRICULTURE_DIRECTORY_REMOVED=yes
+          fi
+          REMOTE
+            exit 1
+          fi
+          echo AGRICULTURE_AND_EXISTING_ROUTES=passed
+      - name: Remove temporary SSH material
+        if: always()
+        shell: bash
+        run: rm -rf -- "$RUNNER_TEMP/zomorod-agriculture"

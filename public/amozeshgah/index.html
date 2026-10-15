@@ -1,4 +1,5 @@
 <!doctype html>
+<!-- saeit-zomorod-education-managed-v2 -->
 <html lang="fa" dir="rtl">
 <head>
   <meta charset="utf-8">
@@ -18,12 +19,36 @@
     @media(max-width:640px){.wrap{width:calc(100% - 32px)}.topline .wrap{font-size:10px}.nav{min-height:63px}.navlinks{gap:10px;font-size:11px}.navlinks a:nth-child(2){display:none}.nav-cta{padding:8px 10px;font-size:11px}.brand{gap:8px;font-size:13px}.brand-mark{width:32px;height:32px}.brand small{font-size:8px}.hero{padding:54px 0 42px}.hero-grid{grid-template-columns:1fr;gap:28px}.hero h1{font-size:42px}.hero-copy>p{font-size:14px}.hero-card{min-height:210px;padding:23px}.hero-card strong{font-size:60px}.metrics{grid-template-columns:1fr 1fr}.metric{padding:14px;border-bottom:1px solid var(--line)}.metric:nth-child(even){border-left:0}.metric b{font-size:13px}.metric span{font-size:10px}.section{padding:54px 0}.section-heading{display:block}.section-heading p{font-size:12px;margin-top:10px}.track-grid{grid-template-columns:1fr 1fr;gap:9px}.track{padding:16px;min-height:190px}.track h3{font-size:15px}.track p{font-size:11px}.track a{font-size:11px}.learning,.faq-grid{grid-template-columns:1fr;gap:24px}.learning-step{padding:15px}.offer-grid{grid-template-columns:1fr 1fr;gap:9px}.offer{padding:16px;min-height:175px}.offer h3{font-size:15px}.offer p{font-size:11px}.access{grid-template-columns:1fr}.access-card{padding:24px}.teacher-grid{grid-template-columns:1fr}.quality{padding:21px}.quality-grid{gap:8px}.quality-item{padding:12px}.closing{display:block;padding:23px;margin-bottom:52px}.closing-actions{margin-top:18px}.footer-row{display:block}.footer-links{margin-top:12px}.hero-actions .button{font-size:12px}}
     @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*:before,*:after{transition:none!important}}
     @media print{header,.topline,.hero-actions,.closing-actions{display:none!important}body{background:#fff;color:#111}.section,.hero,footer{background:#fff;color:#111}.hero p,.section p{color:#333}.track,.offer,.access-card,.teacher,.quality{break-inside:avoid}}
+  
+    /* ZOMOROD MELAL — DARK OLIVE AND THICK GOLD FRAME */
+    :root{color-scheme:dark;--bg:#252b19;--panel:#303822;--panel2:#39432a;--ink:#f4f0df;--muted:#c8cbb9;--gold:#e2c373;--green:#c2cf91;--line:rgba(226,195,115,.48)}
+    body.academy-page{background:#252b19;color:#f4f0df}
+    body.academy-page header{background:#202617f2;border-bottom:4px solid var(--gold)}
+    body.academy-page .topline{background:#202617;border-bottom:3px solid var(--gold)}
+    body.academy-page main{width:min(1240px,calc(100% - 24px));margin:16px auto 24px;border:6px double var(--gold);background:#252b19;box-shadow:0 0 0 2px rgba(226,195,115,.2)}
+    body.academy-page main>.hero,body.academy-page main>.section,body.academy-page main>.metrics{border:4px solid var(--gold);margin:14px 0;background:linear-gradient(145deg,#252b19,#202617)}
+    body.academy-page main>.hero{padding:clamp(28px,5vw,58px) 0}
+    body.academy-page .hero-card,body.academy-page .track,body.academy-page .offer,body.academy-page .access-card,body.academy-page .quality,body.academy-page .learning-step,body.academy-page .teacher,body.academy-page .metric,body.academy-page .quality-item{border:3px solid var(--gold);background:linear-gradient(145deg,#39432a,#303822)}
+    body.academy-page .hero-card{gap:12px;box-shadow:0 18px 45px #0005}
+    body.academy-page .hero-photo{display:block;width:100%;height:170px;object-fit:cover;border:3px solid var(--gold)}
+    body.academy-page .track-grid,body.academy-page .offer-grid{align-items:stretch}
+    body.academy-page .track,body.academy-page .offer{padding:14px;gap:9px}
+    body.academy-page .track-photo,body.academy-page .offer-photo{display:block;width:100%;height:132px;object-fit:cover;border:3px solid var(--gold);background:#252b19}
+    body.academy-page .track h3,body.academy-page .offer h3{margin-top:8px}
+    body.academy-page .offer-cta{display:inline-flex;margin-top:12px;color:var(--gold);font-size:12px;font-weight:800}
+    body.academy-page .offer-note{margin:20px 0 0;padding:16px 18px;border:3px solid var(--gold);background:#303822;color:var(--muted);font-size:13px}
+    body.academy-page .section.alt{background:#202617}
+    body.academy-page .faq-item{border-bottom:2px solid var(--gold)}
+    body.academy-page .closing{border:4px solid var(--gold);background:#303822}
+    body.academy-page footer{width:min(1240px,calc(100% - 24px));margin:0 auto 16px;border:4px solid var(--gold);background:#202617}
+    @media(max-width:640px){body.academy-page main{width:calc(100% - 12px);margin:6px auto 14px;border-width:4px}body.academy-page main>.hero,body.academy-page main>.section,body.academy-page main>.metrics{border-width:3px;margin:8px 0}.hero-photo,.track-photo,.offer-photo{height:150px}body.academy-page footer{width:calc(100% - 12px);border-width:3px}}
+
   </style>
   <script type="application/ld+json">
   {"@context":"https://schema.org","@type":"EducationalOrganization","name":"آموزشگاه زمرد ملل","url":"https://zomorodmelal.ir/amozeshgah/","description":"مسیرهای آموزشی از مدرسه و دانشگاه تا مهارت‌های تخصصی و کسب‌وکار.","parentOrganization":{"@type":"Organization","name":"زمرد ملل","url":"https://zomorodmelal.ir/"},"inLanguage":"fa"}
   </script>
 </head>
-<body>
+<body class="academy-page">
   <a class="skip" href="#main">رفتن به محتوای اصلی</a>
   <div class="topline"><div class="wrap"><span>زمرد ملل · دانش برای ساختن آینده</span><a href="https://zomorodmelal.ir/">بازگشت به سایت اصلی ↗</a></div></div>
   <header><nav class="nav wrap" aria-label="ناوبری اصلی">
@@ -43,6 +68,7 @@
         <p class="hero-note">از سطح فعلی خود شروع کنید؛ موضوع، مسیر و گام بعدی را روشن نگه دارید.</p>
       </div>
       <aside class="hero-card" aria-label="رویکرد آموزشگاه">
+        <img class="hero-photo" src="/static/site/heroes/academy.webp" alt="فضای یادگیری در آموزشگاه زمرد ملل" fetchpriority="high">
         <small>LEARN · PRACTICE · BUILD</small><strong>یادگیری<br>هدفمند</strong>
         <p>آموزش روشن، تمرین مرحله‌ای و پیوند دانش با مسئله‌های واقعی.</p><b>دانش ← مهارت ← فرصت</b>
       </aside>
@@ -53,14 +79,14 @@
     <section class="section" id="tracks"><div class="wrap">
       <div class="section-heading"><div><span class="eyebrow">LEARNING PATHS</span><h2>مسیرهای آموزشی</h2></div><p>از یادگیری پایه تا دانش تخصصی؛ موضوعی را انتخاب کنید که با هدف امروز شما و مسیر فردایتان هماهنگ است.</p></div>
       <div class="track-grid">
-        <article class="track"><span class="num">01 · SCHOOL</span><h3>مدرسه</h3><p>ریاضی، علوم، فارسی، زبان و سواد دیجیتال با گام‌های متناسب با پایه.</p><a href="#catalog">دیدن قالب‌های آموزشی <span>↙</span></a></article>
-        <article class="track"><span class="num">02 · EXAM</span><h3>کنکور و آمادگی آزمون</h3><p>درس‌نامه، حل مسئله، مرور، برنامه‌ریزی مطالعه و تمرین برای سنجش پیشرفت.</p><a href="#method">آشنایی با روش <span>↙</span></a></article>
-        <article class="track"><span class="num">03 · UNIVERSITY</span><h3>دانشگاه و پژوهش</h3><p>یادگیری دروس دانشگاهی، روش پژوهش، تحلیل داده و آمادگی ورود به بازار کار.</p><a href="#catalog">دیدن قالب‌های آموزشی <span>↙</span></a></article>
-        <article class="track"><span class="num">04 · VOCATIONAL</span><h3>فنی و حرفه‌ای</h3><p>برنامه‌نویسی، طراحی، مهارت دیجیتال و توانایی‌هایی برای ساخت نمونه‌کار.</p><a href="#method">آشنایی با روش <span>↙</span></a></article>
-        <article class="track"><span class="num">05 · AGRICULTURE</span><h3>کشاورزی و تولید</h3><p>کشت، باغداری، فرآوری، بسته‌بندی، کنترل کیفیت و زنجیره ارزش محصول.</p><a href="#catalog">دیدن قالب‌های آموزشی <span>↙</span></a></article>
-        <article class="track"><span class="num">06 · INDUSTRY</span><h3>صنعت و عملیات</h3><p>توسعه محصول، تولید، استاندارد، عملیات و پیوند فرایند تا بازار.</p><a href="#catalog">دیدن قالب‌های آموزشی <span>↙</span></a></article>
-        <article class="track"><span class="num">07 · ARTIFICIAL INTELLIGENCE</span><h3>هوش مصنوعی</h3><p>مبانی AI، طراحی عامل و اتوماسیون با استفاده مسئولانه و حرفه‌ای.</p><a href="#method">آشنایی با روش <span>↙</span></a></article>
-        <article class="track"><span class="num">08 · BUSINESS</span><h3>کسب‌وکار و تجارت</h3><p>بازاریابی، فروش، تجارت دیجیتال، برند و طراحی مدل درآمدی.</p><a href="#catalog">دیدن قالب‌های آموزشی <span>↙</span></a></article>
+        <article class="track"><img class="track-photo" src="/static/site/heroes/education-detail.webp" alt="مسیر آموزشی مدرسه" loading="lazy"><span class="num">01 · SCHOOL</span><h3>مدرسه</h3><p>ریاضی، علوم، فارسی، زبان و سواد دیجیتال با گام‌های متناسب با پایه.</p><a href="#catalog">دیدن قالب‌های آموزشی <span>↙</span></a></article>
+        <article class="track"><img class="track-photo" src="/static/site/heroes/academy.webp" alt="آمادگی آزمون" loading="lazy"><span class="num">02 · EXAM</span><h3>کنکور و آمادگی آزمون</h3><p>درس‌نامه، حل مسئله، مرور، برنامه‌ریزی مطالعه و تمرین برای سنجش پیشرفت.</p><a href="#method">آشنایی با روش <span>↙</span></a></article>
+        <article class="track"><img class="track-photo" src="/static/site/heroes/research.webp" alt="پژوهش دانشگاهی" loading="lazy"><span class="num">03 · UNIVERSITY</span><h3>دانشگاه و پژوهش</h3><p>یادگیری دروس دانشگاهی، روش پژوهش، تحلیل داده و آمادگی ورود به بازار کار.</p><a href="#catalog">دیدن قالب‌های آموزشی <span>↙</span></a></article>
+        <article class="track"><img class="track-photo" src="/static/site/heroes/knowledge.webp" alt="مهارت‌های فنی" loading="lazy"><span class="num">04 · VOCATIONAL</span><h3>فنی و حرفه‌ای</h3><p>برنامه‌نویسی، طراحی، مهارت دیجیتال و توانایی‌هایی برای ساخت نمونه‌کار.</p><a href="#method">آشنایی با روش <span>↙</span></a></article>
+        <article class="track"><img class="track-photo" src="/static/site/heroes/agriculture.webp" alt="کشاورزی و تولید" loading="lazy"><span class="num">05 · AGRICULTURE</span><h3>کشاورزی و تولید</h3><p>کشت، باغداری، فرآوری، بسته‌بندی، کنترل کیفیت و زنجیره ارزش محصول.</p><a href="#catalog">دیدن قالب‌های آموزشی <span>↙</span></a></article>
+        <article class="track"><img class="track-photo" src="/static/site/heroes/industry.webp" alt="صنعت و عملیات" loading="lazy"><span class="num">06 · INDUSTRY</span><h3>صنعت و عملیات</h3><p>توسعه محصول، تولید، استاندارد، عملیات و پیوند فرایند تا بازار.</p><a href="#catalog">دیدن قالب‌های آموزشی <span>↙</span></a></article>
+        <article class="track"><img class="track-photo" src="/static/site/heroes/ai.webp" alt="هوش مصنوعی" loading="lazy"><span class="num">07 · ARTIFICIAL INTELLIGENCE</span><h3>هوش مصنوعی</h3><p>مبانی AI، طراحی عامل و اتوماسیون با استفاده مسئولانه و حرفه‌ای.</p><a href="#method">آشنایی با روش <span>↙</span></a></article>
+        <article class="track"><img class="track-photo" src="/static/site/heroes/economy.webp" alt="کسب‌وکار و تجارت" loading="lazy"><span class="num">08 · BUSINESS</span><h3>کسب‌وکار و تجارت</h3><p>بازاریابی، فروش، تجارت دیجیتال، برند و طراحی مدل درآمدی.</p><a href="#catalog">دیدن قالب‌های آموزشی <span>↙</span></a></article>
       </div>
     </div></section>
     <section class="section alt" id="method"><div class="wrap learning">
@@ -75,11 +101,12 @@
     <section class="section" id="catalog"><div class="wrap">
       <div class="section-heading"><div><span class="eyebrow">CONTENT CATALOG</span><h2>جزوه، دوره، آزمون و پروژه</h2></div><p>قالب مناسب به شما کمک می‌کند یادگیری را با سبک و هدف خود هماهنگ کنید.</p></div>
       <div class="offer-grid">
-        <article class="offer"><small>STUDY NOTES</small><h3>جزوه و درس‌نامه</h3><p>مطالب منظم و قابل مرور برای فهم بهتر مفاهیم و جمع‌بندی آموخته‌ها.</p><b>شروع از مبانی</b></article>
-        <article class="offer"><small>COURSES</small><h3>دوره‌های آموزشی</h3><p>یادگیری فصل‌بندی‌شده با توضیح روشن، تمرین و گام‌های پیوسته.</p><b>حرکت گام‌به‌گام</b></article>
-        <article class="offer"><small>ASSESSMENT</small><h3>آزمون و ارزیابی</h3><p>سنجش آموخته‌ها برای شناخت نقاط قوت و موضوع‌هایی که نیاز به مرور دارند.</p><b>بازبینی پیشرفت</b></article>
-        <article class="offer"><small>PROJECTS</small><h3>پروژه و نمونه‌کار</h3><p>به‌کارگیری دانش در یک مسئله و ساختن خروجی قابل ارائه و بررسی.</p><b>یادگیری با انجام دادن</b></article>
+        <article class="offer"><img class="offer-photo" src="/static/site/heroes/knowledge.webp" alt="نمونهٔ جزوه و درس‌نامه" loading="lazy"><small>STUDY NOTES</small><h3>جزوه و درس‌نامه</h3><p>مطالب منظم و قابل مرور برای فهم بهتر مفاهیم و جمع‌بندی آموخته‌ها.</p><b>شروع از مبانی</b><a class="offer-cta" href="tel:+989022048691">استعلام جزئیات و هزینه ↗</a></article>
+        <article class="offer"><img class="offer-photo" src="/static/site/heroes/education-detail.webp" alt="نمونهٔ دورهٔ آموزشی" loading="lazy"><small>COURSES</small><h3>دوره‌های آموزشی</h3><p>یادگیری فصل‌بندی‌شده با توضیح روشن، تمرین و گام‌های پیوسته.</p><b>حرکت گام‌به‌گام</b><a class="offer-cta" href="tel:+989022048691">استعلام جزئیات و هزینه ↗</a></article>
+        <article class="offer"><img class="offer-photo" src="/static/site/heroes/research.webp" alt="نمونهٔ ارزیابی آموزشی" loading="lazy"><small>ASSESSMENT</small><h3>آزمون و ارزیابی</h3><p>سنجش آموخته‌ها برای شناخت نقاط قوت و موضوع‌هایی که نیاز به مرور دارند.</p><b>بازبینی پیشرفت</b><a class="offer-cta" href="tel:+989022048691">استعلام جزئیات و هزینه ↗</a></article>
+        <article class="offer"><img class="offer-photo" src="/static/site/heroes/industry.webp" alt="نمونهٔ پروژهٔ آموزشی" loading="lazy"><small>PROJECTS</small><h3>پروژه و نمونه‌کار</h3><p>به‌کارگیری دانش در یک مسئله و ساختن خروجی قابل ارائه و بررسی.</p><b>یادگیری با انجام دادن</b><a class="offer-cta" href="tel:+989022048691">استعلام جزئیات و هزینه ↗</a></article>
       </div>
+      <p class="offer-note">جزوه، دوره و ابزار آموزشی بر اساس موضوع و سطح یادگیرنده معرفی می‌شود؛ دسترسی و هزینه پیش از ثبت سفارش تأیید خواهد شد. برای دریافت فهرست به‌روز تماس بگیرید: <a href="tel:+989022048691">۰۹۰۲۲۰۴۸۶۹۱</a>.</p>
     </div></section>
     <section class="section alt"><div class="wrap access">
       <article class="access-card"><span class="eyebrow">START WITH THE BASICS</span><h3>شروع ساده و هدفمند</h3><p>برای ساختن پایه، آشنایی با موضوع و انتخاب مسیر یادگیری از گام‌های کوچک شروع کنید.</p><ul><li>انتخاب موضوع و سطح مناسب</li><li>مطالعه و مرور مرحله‌ای</li><li>تمرین برای سنجش فهم</li><li>انتخاب گام بعدی بر اساس نیاز</li></ul></article>

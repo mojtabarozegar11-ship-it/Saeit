@@ -54,6 +54,10 @@ jobs:
               raise SystemExit("Education page source is unexpectedly small")
           if "<style>" not in source or "prefers-reduced-motion" not in source:
               raise SystemExit("Self-contained responsive styles are missing")
+          if "saeit-zomorod-education-managed-v2" not in source or source.count('<img class="') < 13:
+              raise SystemExit("Managed page marker or subject photographs are missing")
+          if source.count('class="offer-cta"') != 4 or "border:6px double var(--gold)" not in source:
+              raise SystemExit("Product inquiry links or the thick gold frame are missing")
           print("PAGE_SOURCE_VALIDATION=passed")
           print(f"PAGE_BYTES={len(source.encode('utf-8'))}")
           PY
@@ -106,66 +110,91 @@ jobs:
           test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
           cp "$d/host.candidate" "$d/host.known"
 
-      - name: Stage page and publish without touching the main app
+      - name: Back up and atomically replace only the academy page
         shell: bash
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/amozeshgah-publish"
-          target="/home/zomorod2/public_html/amozeshgah"
-          stage="/home/zomorod2/public_html/.amozeshgah-stage-$GITHUB_SHA"
-          ssh -F "$d/config" saeit-cpanel "set -eu; test ! -e '$target' && test ! -L '$target'; test ! -e '$stage' && mkdir -m 755 '$stage'"
-          tar -C public/amozeshgah -czf - index.html | ssh -F "$d/config" saeit-cpanel "tar -xzf - -C '$stage'"
-          ssh -F "$d/config" saeit-cpanel "set -eu; chmod 644 '$stage/index.html'; chmod 755 '$stage'; test ! -e '$target' && test ! -L '$target'; mv -T '$stage' '$target'; test -s '$target/index.html'; echo STATIC_PAGE_INSTALLED=yes"
+          expected_sha="$(sha256sum public/amozeshgah/index.html | awk '{print $1}')"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$expected_sha" "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          expected_sha="$1"
+          commit_sha="$2"
+          root=/home/zomorod2/public_html
+          target="$root/amozeshgah"
+          stage="$root/.amozeshgah-stage-$commit_sha"
+          backup="$HOME/.backups/zomorodmelal-amozeshgah/index-$commit_sha"
+          test -d "$root" && test "$(stat -c %U "$root")" = "zomorod2" && test -w "$root"
+          test -d "$target" && test ! -L "$target"
+          test -f "$target/index.html" && test ! -L "$target/index.html"
+          grep -Fq '<title>آموزشگاه زمرد ملل | از یادگیری تا مهارت</title>' "$target/index.html"
+          grep -Fq 'https://zomorodmelal.ir/amozeshgah/' "$target/index.html"
+          install -d -m 700 "$HOME/.backups/zomorodmelal-amozeshgah"
+          test ! -e "$backup"
+          test ! -e "$stage" && mkdir -m 700 "$stage"
+          cp -p "$target/index.html" "$backup"
+          cmp -s "$target/index.html" "$backup"
+          echo ACADEMY_PREVIOUS_VERSION_BACKED_UP=yes
+          REMOTE
+          tar -C public/amozeshgah -czf - index.html | ssh -F "$d/config" saeit-cpanel "tar -xzf - -C /home/zomorod2/public_html/.amozeshgah-stage-$GITHUB_SHA"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$expected_sha" "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          expected_sha="$1"
+          commit_sha="$2"
+          root=/home/zomorod2/public_html
+          target="$root/amozeshgah"
+          stage="$root/.amozeshgah-stage-$commit_sha"
+          test "$(sha256sum "$stage/index.html" | awk '{print $1}')" = "$expected_sha"
+          chmod 644 "$stage/index.html"
+          mv -T "$stage/index.html" "$target/index.html"
+          rmdir "$stage"
+          test "$(sha256sum "$target/index.html" | awk '{print $1}')" = "$expected_sha"
+          echo ACADEMY_INDEX_ATOMICALLY_REPLACED=yes
+          REMOTE
 
-      - name: Verify public URL and roll back a failed publication
+      - name: Verify academy page and images, rolling back on failure
         shell: bash
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/amozeshgah-publish"
+          expected_sha="$(sha256sum public/amozeshgah/index.html | awk '{print $1}')"
           html="$d/amozeshgah-after.html"
           result="$(curl --silent --show-error --location --retry 2 --retry-delay 1 --max-time 40 -H 'Cache-Control: no-cache' -o "$html" -w '%{http_code}|%{content_type}' https://zomorodmelal.ir/amozeshgah/ || true)"
           code="${result%%|*}"
           content_type="${result#*|}"
           valid=1
           if [ "$code" != "200" ] || [[ "$content_type" != text/html* ]]; then valid=0; fi
-          if ! python3 - "$html" <<'PY'
-          import sys
-          from html.parser import HTMLParser
-          from pathlib import Path
-          try:
-              source = Path(sys.argv[1]).read_text(encoding="utf-8")
-          except Exception:
-              raise SystemExit(1)
-          class Verify(HTMLParser):
-              def __init__(self):
-                  super().__init__()
-                  self.title = False
-                  self.canonical = False
-                  self.rtl = False
-                  self.heading = False
-              def handle_starttag(self, tag, attrs):
-                  a = dict(attrs)
-                  if tag == "html":
-                      self.rtl = a.get("lang") == "fa" and a.get("dir") == "rtl"
-                  if tag == "title":
-                      self.title = True
-                  if tag == "link" and a.get("rel") == "canonical":
-                      self.canonical = a.get("href") == "https://zomorodmelal.ir/amozeshgah/"
-                  if tag == "h1":
-                      self.heading = True
-          v = Verify()
-          v.feed(source)
-          raise SystemExit(0 if all((v.title, v.canonical, v.rtl, v.heading)) else 1)
-          PY
-          then valid=0; fi
+          if ! grep -Fq 'saeit-zomorod-education-managed-v2' "$html" || ! grep -Fq 'id="tracks"' "$html" || ! grep -Fq 'id="catalog"' "$html"; then valid=0; fi
+          for image in academy education-detail research knowledge agriculture industry ai economy; do
+            image_result="$(curl --silent --show-error --location --retry 1 --max-time 30 -o /dev/null -w '%{http_code}|%{content_type}' "https://zomorodmelal.ir/static/site/heroes/$image.webp" || true)"
+            image_code="${image_result%%|*}"
+            image_type="${image_result#*|}"
+            printf 'ACADEMY_IMAGE_CHECK %s result=%s\n' "$image" "$image_result"
+            if [ "$image_code" != "200" ] || [[ "$image_type" != image/* ]]; then valid=0; fi
+          done
           if [ "$valid" -ne 1 ]; then
             echo "PUBLIC_CHECK_FAILED status=$code content_type=$content_type"
-            backup="/home/zomorod2/.backups/zomorodmelal-amozeshgah/static-failed-$GITHUB_SHA"
-            ssh -F "$d/config" saeit-cpanel "set -eu; if test -d /home/zomorod2/public_html/amozeshgah; then install -d -m 700 /home/zomorod2/.backups/zomorodmelal-amozeshgah; test ! -e '$backup'; mv -T /home/zomorod2/public_html/amozeshgah '$backup'; fi; echo ROLLBACK_COMPLETED=yes"
+            ssh -F "$d/config" saeit-cpanel bash -se -- "$expected_sha" "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          expected_sha="$1"
+          commit_sha="$2"
+          target=/home/zomorod2/public_html/amozeshgah/index.html
+          backup="$HOME/.backups/zomorodmelal-amozeshgah/index-$commit_sha"
+          if test -f "$target" && test "$(sha256sum "$target" | awk '{print $1}')" = "$expected_sha" && test -s "$backup"; then
+            mv -T "$backup" "$target"
+            test -s "$target"
+            echo ACADEMY_UPDATE_ROLLED_BACK=yes
+          else
+            echo ACADEMY_ROLLBACK_SKIPPED_TARGET_CHANGED=yes
+          fi
+          stage="/home/zomorod2/public_html/.amozeshgah-stage-$commit_sha"
+          test ! -d "$stage" || rm -rf -- "$stage"
+          REMOTE
             exit 1
           fi
           echo "AMOZESHGHAH_HTTP=$code"
           echo "CONTENT_TYPE=$content_type"
+          echo "ACADEMY_IMAGES_VALIDATION=passed"
           echo "PUBLIC_HTML_VALIDATION=passed"
           grep -Eio '<title>[^<]*</title>' "$html" | head -1
           grep -Eio '<link rel="canonical"[^>]*>' "$html" | head -1

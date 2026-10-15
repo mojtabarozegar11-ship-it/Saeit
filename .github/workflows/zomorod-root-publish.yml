@@ -28,19 +28,23 @@ jobs:
               def __init__(self):
                   super().__init__()
                   self.rtl=False; self.title=False; self.canonical=False; self.h1=False
-                  self.links=[]
+                  self.products=False; self.image_count=0; self.links=[]
               def handle_starttag(self,tag,attrs):
                   a=dict(attrs)
                   if tag=="html": self.rtl=a.get("lang")=="fa" and a.get("dir")=="rtl"
                   if tag=="title": self.title=True
                   if tag=="h1": self.h1=True
+                  if tag=="section" and a.get("id")=="products": self.products=True
+                  if tag=="img": self.image_count+=1
                   if tag=="link" and a.get("rel")=="canonical":
                       self.canonical=a.get("href")=="https://zomorodmelal.ir/"
                   if tag=="a": self.links.append(a.get("href",""))
           check=Check(); check.feed(source)
           required=("https://zomorodmelal.ir/amozeshgah/","https://mojplaywin.com/")
-          if not all((check.rtl,check.title,check.canonical,check.h1)) or not all(x in check.links for x in required):
-              raise SystemExit("Homepage metadata, RTL structure, heading, or live links are missing")
+          if not all((check.rtl,check.title,check.canonical,check.h1,check.products)) or check.image_count < 4 or not all(x in check.links for x in required):
+              raise SystemExit("Homepage metadata, products, images, RTL structure, heading, or live links are missing")
+          if "border:6px double var(--gold)" not in source:
+              raise SystemExit("The approved thick gold frame is missing")
           if "<!-- saeit-zomorod-root-homepage-v1 -->" not in source or len(source.encode("utf-8")) < 6000:
               raise SystemExit("Managed homepage marker is missing or the source is unexpectedly small")
           print("ROOT_HOMEPAGE_SOURCE=valid")
@@ -188,6 +192,13 @@ jobs:
             type="$(printf '%s' "$result" | cut -d '|' -f2)"
             printf 'PUBLIC_ROOT_CHECK %s result=%s\n' "$url" "$result"
             if [ "$code" != "200" ] || [[ "$type" != text/html* ]] || ! grep -Fq '<!-- saeit-zomorod-root-homepage-v1 -->' "$file" || ! grep -Fq 'https://zomorodmelal.ir/amozeshgah/' "$file"; then failed=1; fi
+          done
+          for image in platform-home agriculture smart-agriculture industry; do
+            image_result="$(curl --silent --show-error --location --retry 1 --max-time 30 -o /dev/null -w '%{http_code}|%{content_type}' "https://zomorodmelal.ir/static/site/heroes/$image.webp" || true)"
+            image_code="${image_result%%|*}"
+            image_type="${image_result#*|}"
+            printf 'ROOT_IMAGE_CHECK %s result=%s\\n' "$image" "$image_result"
+            if [ "$image_code" != "200" ] || [[ "$image_type" != image/* ]]; then failed=1; fi
           done
           for url in https://zomorodmelal.ir/amozeshgah/ https://zomorodmelal.ir/education/; do
             name="$(printf '%s' "$url" | sed 's#https://##; s#/#_#g; s#\.#_#g')"
