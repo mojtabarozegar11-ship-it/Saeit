@@ -22,6 +22,12 @@ spec = importlib.util.spec_from_file_location("saeit_factory_product_pilot", str
 pilot = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(pilot)
 
+quality_spec = importlib.util.spec_from_file_location(
+    "saeit_factory_evidence_quality", str(HERE / "factory_evidence_quality.py")
+)
+quality = importlib.util.module_from_spec(quality_spec)
+quality_spec.loader.exec_module(quality)
+
 
 def select_product_ids(conn, previous_id=0, limit=25):
     """Product creation/research drives production; orders have no involvement."""
@@ -90,6 +96,7 @@ def build(db, out, limit):
         updated += int(changed)
         unchanged += int(not changed)
         issues = bundle["issues"]
+        research_gate = quality.assess(bundle)
         entries.append({
             "product_id": bundle["product_id"],
             "sha256": digest,
@@ -99,6 +106,7 @@ def build(db, out, limit):
             "source_count": len(bundle["sources"]),
             "stage": "needs_more_evidence" if issues else "internal_review_pending",
             "customer_order_required": False,
+            "research_quality_gate": research_gate,
             "publish_authorized": False,
         })
     next_cursor = product_ids[-1] if product_ids else previous_id
@@ -110,6 +118,11 @@ def build(db, out, limit):
         "updated_count": updated,
         "unchanged_count": unchanged,
         "entries": entries,
+        "research_review_candidates": sum(
+            int(x["research_quality_gate"]["research_gate_passed"]) for x in entries
+        ),
+        "publishable_product_count": 0,
+        "quality_policy_version": "saeit.factory.research-readiness.v1",
         "publication_requires_qa_and_owner_authorization": True,
     }
     # No timestamps: unchanged inputs leave a stable output and consume no API.
