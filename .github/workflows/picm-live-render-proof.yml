@@ -5,7 +5,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: mojplaywin-picm-proof
+  group: mojplaywin-picm-proof-${{ github.run_id }}
   cancel-in-progress: false
 jobs:
   probe:
@@ -98,7 +98,7 @@ jobs:
           django.setup()
           from core.picm_views import picm_submit
           req=RequestFactory().post('/picm/api/submit/',data=json.dumps({'prompt':'Green leaves in a sunny greenhouse','style':'illustration','steps':1}),content_type='application/json')
-          req.user=SimpleNamespace(pk=-20261015,is_authenticated=True)
+          req.user=SimpleNamespace(pk=-int(__import__('time').time()*1000),is_authenticated=True)
           response=picm_submit(req)
           assert response.status_code==202, response.status_code
           ident=json.loads(response.content)['id']
