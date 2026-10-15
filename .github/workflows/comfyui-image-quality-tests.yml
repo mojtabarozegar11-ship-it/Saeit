@@ -1,0 +1,26 @@
+name: ComfyUI CPU Image QA Gates
+on:
+  push:
+    branches: [feature/comfyui-studio-quality-safety-20261015]
+    paths:
+      - .github/workflows/comfyui-image-quality-tests.yml
+      - ops/comfyui-vps/image_quality_report.py
+      - ops/comfyui-vps/tests/test_image_quality_report.py
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  release-blocking-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install image decoder (test only)
+        run: |
+          python3 -m pip install --disable-pip-version-check 'Pillow==11.3.0'
+      - name: Verify PNG integrity and prohibit automatic store publishing
+        run: |
+          set -euo pipefail
+          python3 -m py_compile ops/comfyui-vps/image_quality_report.py
+          python3 -m unittest discover -s ops/comfyui-vps/tests -p 'test_image_quality_report.py' -v
+          echo COMFYUI_IMAGE_QA_FAIL_CLOSED_TESTS_PASSED
