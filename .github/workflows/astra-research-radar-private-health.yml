@@ -1,0 +1,70 @@
+name: Astra private research radar - VPS health audit (read-only)
+
+on:
+  push:
+    branches: [feature/astra-independent-research-radar-20261015]
+    paths:
+      - .github/workflows/astra-research-radar-private-health.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Read-only private research heartbeat and source coverage
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          dir="$RUNNER_TEMP/astra-radar-health"
+          install -d -m 700 "$dir"
+          trap 'rm -rf -- "$dir"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$dir/key"
+          chmod 600 "$dir/key"
+          ssh-keygen -y -P '' -f "$dir/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$dir/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$dir/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -i "$dir/key" -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$dir/known" -o BatchMode=yes \
+            -o IdentitiesOnly=yes -o ConnectTimeout=15 \
+            githubops@178.239.147.150 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = githubops
+          private="$HOME/factory-runtime/private/astra-research-radar-v1"
+          test -d "$private" && test ! -L "$private"
+          python3 - "$private" <<'PY'
+          import datetime,json,pathlib,sys
+          root=pathlib.Path(sys.argv[1])
+          reports=sorted(root.glob("daily-*.json"))
+          assert reports
+          current=reports[-1]
+          assert not current.is_symlink() and current.stat().st_size<2_000_000
+          r=json.loads(current.read_text())
+          assert r["mode"]=="private_public_signal_research_only"
+          assert r["factory_mutations"]==r["publications"]==r["payments"]==0
+          print("ASTRA_HEALTH_PYTHON_VERSION="+sys.version.split()[0])
+          print("ASTRA_HEALTH_REPORT="+current.name)
+          print("ASTRA_HEALTH_SOURCE_KEYS="+",".join(r["feed_names"]))
+          print("ASTRA_HEALTH_FAILED_SOURCE_KEYS="+",".join(sorted(r["feed_failures"])))
+          print("ASTRA_HEALTH_FAILED_SOURCE_TYPES="+",".join(
+              sorted(set(str(x)[:60] for x in r["feed_failures"].values()))))
+          print("ASTRA_HEALTH_TOPIC_KEYS="+",".join(
+              t["opportunity_key"] for t in r["candidate_hypotheses"]))
+          print("ASTRA_HEALTH_REPORT_COUNT="+str(len(reports)))
+          print("ASTRA_HEALTH_REPORT_MTIME_UTC="+datetime.datetime.fromtimestamp(
+              current.stat().st_mtime,datetime.timezone.utc).isoformat())
+          PY
+          crons="$(crontab -l)"
+          test "$(printf '%s\n' "$crons" | grep -Fc 'ASTRA_RESEARCH_RADAR_PRIVATE_TICK')" -eq 1
+          test "$(printf '%s\n' "$crons" | grep -Fc 'ASTRA_V2_PRIVATE_RND_TICK')" -eq 1
+          echo ASTRA_HEALTH_INDEPENDENT_CRON=ACTIVE
+          echo ASTRA_HEALTH_FACTORY_CRON_PRESENT=1
+          echo ASTRA_HEALTH_NO_SERVER_CHANGES=1
+          REMOTE
