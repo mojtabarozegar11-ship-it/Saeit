@@ -1,0 +1,30 @@
+name: Mojtaba second original photo batch tests
+on:
+  push:
+    branches: ['feat/mojtaba-second-original-gallery-20261015']
+    paths:
+      - scripts/mojtaba_second_10_owner_photos.py
+      - tests/test_mojtaba_second_owner_photos.py
+      - .github/workflows/mojtaba-second-original-photos-tests.yml
+      - assets/mojtaba_new_10_original_photos.zip
+  pull_request:
+    paths:
+      - scripts/mojtaba_second_10_owner_photos.py
+      - tests/test_mojtaba_second_owner_photos.py
+      - .github/workflows/mojtaba-second-ten-photo-publish.yml
+permissions:
+  contents: read
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify nine-page preservation and exact source SHA manifests
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mojtaba_second_10_owner_photos.py
+          python3 -m unittest discover -s tests -p test_mojtaba_second_owner_photos.py -v
+          if [ -f assets/mojtaba_new_10_original_photos.zip ]; then
+            python3 scripts/mojtaba_second_10_owner_photos.py verify --archive assets/mojtaba_new_10_original_photos.zip
+          fi
