@@ -65,6 +65,34 @@ def _inspect_existing(path, today):
     return len(data.get("candidate_hypotheses", []))
 
 
+def _historical_reference_digests(workspace, now):
+    """Read bounded recent, isolated manifests; never infer verified buyer demand."""
+    from datetime import timedelta
+    cutoff = (now - timedelta(days=30)).strftime("%Y%m%d")
+    seen = set()
+    entries = []
+    for p in workspace.iterdir():
+        match = re.fullmatch(r"(?:daily|retry)-([0-9]{8})(?:-[0-3])?\\.json", p.name)
+        if match and cutoff <= match.group(1) <= now.strftime("%Y%m%d"):
+            entries.append(p)
+    if len(entries) > 160:
+        raise ValueError("private research history exceeds safe read limit")
+    for p in sorted(entries):
+        if p.is_symlink() or not p.is_file() or p.stat().st_size > 2_000_000:
+            raise ValueError("unsafe private research history")
+        record = json.loads(p.read_text(encoding="utf-8"))
+        if (record.get("mode") != "private_public_signal_research_only"
+                or record.get("factory_mutations") != 0 or
+                record.get("publications") != 0 or record.get("payments") != 0):
+            raise ValueError("unrecognized research history")
+        for item in record.get("candidate_hypotheses", []):
+            for ref in item.get("preliminary_references", []):
+                digest = ref.get("reference_sha256")
+                if isinstance(digest, str) and re.fullmatch(r"[a-f0-9]{64}", digest):
+                    seen.add(digest)
+    return seen
+
+
 def run_cycle(root, now=None, fetcher=None, fixture=None, source=None):
     """Build at most one legitimate report for UTC date. No destructive updates."""
     now = now if now is not None else datetime.now(timezone.utc)
@@ -111,6 +139,19 @@ def run_cycle(root, now=None, fetcher=None, fixture=None, source=None):
             return {"status": "SOURCES_UNAVAILABLE", "date": today, "topic_count": 0}
         report = radar.research_report(feeds, now)
         report["feed_failures"].update(errors)
+        previously_seen = _historical_reference_digests(workspace, now)
+        all_refs = set()
+        fresh_refs = set()
+        for item in report["candidate_hypotheses"]:
+            refs = {r["reference_sha256"] for r in item["preliminary_references"]}
+            item["new_source_signal_count_30d"] = len(refs - previously_seen)
+            all_refs.update(refs)
+            fresh_refs.update(refs - previously_seen)
+        report["novel_source_signals_30d"] = len(fresh_refs)
+        report["repeated_source_signals_30d"] = len(all_refs & previously_seen)
+        report["has_new_30d_source_signal"] = bool(fresh_refs)
+        report["novelty_window_days"] = 30
+        report["novel_source_is_verified_market_demand"] = False
         report["run_date_utc"] = today
         report["cycle_version"] = "astra_research_daily_v2"
         report["run_slot_utc"] = slot
@@ -126,7 +167,7 @@ def run_cycle(root, now=None, fetcher=None, fixture=None, source=None):
         return {"status": "RECORDED", "date": today,
                 "topic_count": len(report["candidate_hypotheses"]),
                 "feed_count": len(feeds), "failure_count": len(report["feed_failures"]),
-                "record_name": path.name}
+                "record_name": path.name, "new_source_signals": len(fresh_refs)}
 
 
 def main(argv=None):
