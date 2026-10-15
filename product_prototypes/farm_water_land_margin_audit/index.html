@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Farm Water &amp; Land | Astra Private Workbench</title>
+<link rel="stylesheet" href="/style.css"><script src="/app.js" defer></script>
+</head>
+<body>
+<header class="masthead">
+ <div class="brand"><span class="logomark" aria-hidden="true">◇</span> ASTRA <small>PRIVATE RESEARCH WORKBENCH</small></div>
+ <span class="tag">127.0.0.1 ONLY · NO CLOUD</span>
+</header>
+<main class="container">
+ <section class="hero"><p class="eyebrow">AGRICULTURAL ECONOMICS / RESEARCH PROTOTYPE</p>
+ <h1>Farm water &amp; <em>land decisions</em></h1>
+ <p class="intro">Explore crop-area choices, reduced irrigation allowances, and the modeled value of water under your own assumptions. No account, paid API, or external weather feed.</p></section>
+ <div class="warning" role="note"><strong>Not verified for real farming or retail sale.</strong>
+ Example figures are fictional. Enter locally supported crop, cost and water estimates. This model does not assess legal water rights, crop rotations, field constraints or actual market prices.</div>
+ <div class="actions topbar" aria-label="Local data actions">
+  <button id="sample" type="button" class="button outline">Load fictional example</button>
+  <button id="export-input" type="button" class="button outline">Save input JSON</button>
+  <label class="button outline import" for="import-file">Import input JSON <input id="import-file" type="file" accept=".json,application/json"></label>
+ </div>
+ <div class="layout">
+  <section class="panel" aria-labelledby="input-title">
+   <div class="paneltitle"><span class="num">01</span><h2 id="input-title">Model assumptions</h2></div>
+   <div class="fields">
+    <label>Currency (three letters)<input id="currency" maxlength="3" value="USD" aria-label="Currency"></label>
+    <label>Total land (hectares)<input id="land" inputmode="decimal" value="10" aria-label="Total land in hectares"></label>
+    <label>Available water (m³)<input id="water" inputmode="decimal" value="100" aria-label="Available water in cubic metres"></label>
+    <label>Reduced-water scenario fraction (0–1)<input id="drought" inputmode="decimal" value="0.65" aria-label="Water fraction"></label>
+   </div>
+   <div class="cropheader"><h3>Crop alternatives</h3><button id="add-crop" type="button" class="button outline small">+ Add crop</button></div>
+   <p class="smalltext">Two to five crops. Prices and water-use figures must use consistent units. Every source label is self-reported, not verified.</p>
+   <div id="crop-editors" class="crop-editors"></div>
+   <div class="actions"><button id="analyze" type="button" class="button primary">Calculate local scenarios →</button>
+   <span id="message" aria-live="polite" role="status"></span></div>
+  </section>
+  <section class="rightside">
+   <section class="panel" aria-labelledby="result-title">
+    <div class="paneltitle"><span class="num">02</span><h2 id="result-title">Model output</h2></div>
+    <div id="empty-result" class="empty">Enter crop information and select <strong>Calculate</strong> to inspect scenarios.</div>
+    <div id="result" hidden>
+      <div id="summary" class="summary" aria-live="polite"></div>
+      <h3>Crop allocation comparison</h3><div class="scrollable" id="allocations"></div>
+      <h3>Water-allowance sensitivity</h3><p class="smalltext">Five modeled water budgets. Incremental gain is an average across an interval, <strong>not</strong> a water market price or LP dual shadow price.</p>
+      <div class="scrollable" id="frontier"></div>
+      <h3>Limitations &amp; evidence gaps</h3><ul id="warnings"></ul>
+      <div class="actions result-actions"><button id="export-report" type="button" class="button outline">Save report JSON</button>
+      <button id="print-report" type="button" class="button outline">Print / Save PDF</button></div>
+    </div>
+   </section>
+   <section class="panel method"><h3>Important boundaries</h3>
+     <p>Continuous areas and fixed gross margins are hypothetical. Increasing allowable water cannot establish availability, permits, field safety, yield response or a commercial advantage over free alternatives.</p>
+     <p>Calculations happen in this local Python server process. Inputs are not logged or stored by the app, and are never sent to a cloud service.</p>
+     <p class="smalltext">Research only · independent domain review required · no checkout or public publication</p>
+   </section>
+  </section>
+ </div>
+</main>
+<footer>ASTRA / Private agricultural economics prototype · Results are not professional farm advice · No commercial authorization</footer>
+</body></html>
