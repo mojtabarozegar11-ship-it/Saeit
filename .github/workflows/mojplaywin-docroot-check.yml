@@ -98,6 +98,26 @@ jobs:
               print(f"CPANEL_DOMAIN {domain} document_root={found.get(domain, 'NOT_ASSIGNED')}")
           PY
 
+      - name: Read public DNS answers for domain routing
+        shell: bash
+        run: |
+          set -euo pipefail
+          for domain in mojtaba.roozegar.com roozegar.com zohal.pws-dns.net mojplaywin.com zomorodmelal.ir; do
+            echo "DNS_RECORDS_BEGIN $domain"
+            if command -v dig >/dev/null 2>&1; then
+              for type in A AAAA CNAME; do
+                answers="$(dig +noall +answer "$domain" "$type" 2>/dev/null || true)"
+                if test -n "$answers"; then printf '%s\n' "$answers"; else echo "$type=NO_ANSWER"; fi
+              done
+            else
+              getent ahosts "$domain" || echo "DNS_NO_ADDRESS=$domain"
+            fi
+            echo "DNS_RECORDS_END $domain"
+          done
+          echo "DNS_RECORDS_BEGIN roozegar.com NS"
+          if command -v dig >/dev/null 2>&1; then dig +noall +answer roozegar.com NS || true; else echo DIG_NOT_INSTALLED; fi
+          echo "DNS_RECORDS_END roozegar.com NS"
+
       - name: Check public HTTP responses and page markers
         shell: bash
         run: |
