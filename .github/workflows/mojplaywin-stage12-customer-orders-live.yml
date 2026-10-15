@@ -83,6 +83,9 @@ jobs:
           test "$(id -un)" = zomorod2
           umask 077
           cd "$HOME/.mpw-cart-stage12"
+          if test -d source && test ! -L source && test -f source/scripts/mpw_stage12_guarded_install.py; then
+            rm -rf -- source
+          fi
           test ! -e source
           mkdir -m 700 source
           "$HOME/virtualenv/Saeit-staging/3.11/bin/python" - <<'PY'
@@ -109,7 +112,8 @@ jobs:
                   destination.chmod(0o600)
           print("MPW_STAGE12_PRIVATE_SOURCE_CHECKSUM_AND_MEMBERS_VERIFIED=True")
           PY
-          "$HOME/virtualenv/Saeit-staging/3.11/bin/python" \
+          cd "$HOME/Saeit-staging"
+          PYTHONPATH="$HOME/Saeit-staging" "$HOME/virtualenv/Saeit-staging/3.11/bin/python" \
             "$HOME/.mpw-cart-stage12/source/scripts/mpw_stage12_guarded_install.py"
           REMOTE
 
