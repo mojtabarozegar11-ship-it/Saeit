@@ -132,6 +132,8 @@ jobs:
                   assert metadata["candidate_status"]=="PRIVATE_QA_NOT_FOR_SALE"
                   assert metadata["dependency_review"]["paid_release_authorized"] is False
                   print("ASTRA_PRIVATE_REVIEW_SKU="+metadata["sku"])
+                  for warning in metadata["dependency_review"]["static_scan_warnings"]:
+                      print("ASTRA_PRIVATE_REVIEW_WARNING="+metadata["sku"]+":"+warning)
           print("ASTRA_PRIVATE_REVIEW_CANDIDATES=4")
           print("ASTRA_PRIVATE_REVIEW_PAYMENT_UNCHANGED=true")
           PY
