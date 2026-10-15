@@ -94,6 +94,20 @@ class GrandmasterReleaseGuards(unittest.TestCase):
         self.assertEqual(private_path.name, manifest["private_asset"]["filename"])
         self.assertTrue(proposed["final_book"]["live_private_asset_root_verified"])
 
+    def test_owner_rights_attestation_does_not_enable_sale(self):
+        manifest = json.loads(PREFLIGHT.read_text(encoding="utf-8"))
+        config = json.loads(CONFIG.read_text(encoding="utf-8"))
+        declared = manifest["rights_declaration"]
+        self.assertEqual(declared["declared_by"], "Mojtaba Roozegar")
+        self.assertEqual(declared["attestation_status"], "OWNER_DECLARED_NOT_INDEPENDENTLY_VERIFIED")
+        self.assertIn("text, images, and diagrams", declared["claim"])
+        self.assertTrue(config["owner_declaration"]["attests_text_images_diagrams_and_commercial_distribution"])
+        self.assertFalse(config["owner_declaration"]["third_party_provenance_review_complete"])
+        self.assertIs(config["proposed_product_metadata"]["rights_owner_attested"], True)
+        self.assertIs(config["proposed_product_metadata"]["mpw_commerce"]["enabled"], False)
+        self.assertIs(manifest["public_active"], False)
+        self.assertIs(manifest["checkout_enabled"], False)
+
     def test_configuration_remains_explicitly_unreleased(self):
         manifest = json.loads(PREFLIGHT.read_text(encoding="utf-8"))
         proposed = json.loads(CONFIG.read_text(encoding="utf-8"))
