@@ -1,3 +1,4 @@
+from html import unescape
 from django.test import TestCase, override_settings
 
 @override_settings(ALLOWED_HOSTS=["testserver", "mojplaywin.com", "www.mojplaywin.com", "zomorodmelal.ir"])
@@ -5,8 +6,8 @@ class MojPlayWinSiteTests(TestCase):
     def test_home_is_filled_branded_and_canonical_to_mojplaywin(self):
         response=self.client.get("/",HTTP_HOST="mojplaywin.com")
         self.assertEqual(response.status_code,200)
-        html=response.content.decode("utf-8")
-        for marker in ("MojPlayWin","Ideas become knowledge","Research & Innovation","game-studio.webp",'href="https://mojplaywin.com/"',"mojplaywin-matte-gold-theme"):
+        html=unescape(response.content.decode("utf-8"))
+        for marker in ("MojPlayWin","Ideas become knowledge","Research & Innovation","site/heroes/game-studio.",'href="https://mojplaywin.com/"',"mojplaywin-matte-gold-theme"):
             self.assertIn(marker,html)
         self.assertIn('class="site-standard-v2 mojplaywin-site mojplaywin-home"',html)
 
@@ -14,7 +15,7 @@ class MojPlayWinSiteTests(TestCase):
         response=self.client.get("/store/",HTTP_HOST="mojplaywin.com")
         self.assertEqual(response.status_code,200)
         html=response.content.decode("utf-8")
-        for marker in ("INITIAL COLLECTION","Taniya and the Little Baker Worms","Farm Enterprise Economics Toolkit","store.webp","Applied AI Learning Path"):
+        for marker in ("INITIAL COLLECTION","Taniya and the Little Baker Worms","Farm Enterprise Economics Toolkit","site/heroes/store.","Applied AI Learning Path"):
             self.assertIn(marker,html)
         self.assertNotIn("در حال حاضر محصول فعالی",html)
 
