@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow"><meta name="theme-color" content="#0a1020">
+<title>ورود به PICM | MojPlayWin</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;display:grid;place-items:center;padding:20px;background:radial-gradient(ellipse at 50% 2%,#283257 0,transparent 48%),#0a1020;color:#f3f5ff;font-family:Tahoma,"Segoe UI",sans-serif}
+main{width:min(100%,440px);background:#151f35;border:1px solid #38435d;border-radius:24px;padding:30px;box-shadow:0 24px 65px #0005}
+.brand{direction:ltr;text-align:center;font-size:21px;font-weight:800;letter-spacing:1px}.brand span{color:#a9acff}
+h1{font-size:25px;text-align:center;margin:24px 0 10px}
+.lead{color:#b9c6dc;text-align:center;line-height:1.9;font-size:14px;margin:0 0 22px}
+label{display:block;font-weight:700;margin:16px 0 9px}
+input{display:block;direction:ltr;text-align:left;width:100%;height:49px;padding:12px 14px;border:1px solid #52617d;background:#0a1327;color:#fff;border-radius:12px;font:inherit;font-size:17px}
+input:focus{outline:2px solid #909aff;outline-offset:1px}
+button{display:block;width:100%;border:0;border-radius:12px;background:linear-gradient(100deg,#899dff,#b39fff);color:#11152b;padding:15px;font:inherit;font-weight:800;font-size:16px;cursor:pointer;margin:24px 0 14px}
+a{color:#b5c3ff;text-decoration:none}.small{text-align:center;font-size:13px;color:#acb8ce}
+.error{padding:12px;background:#472c44;border:1px solid #98516e;border-radius:10px;font-size:13px;line-height:1.8}
+</style>
+</head>
+<body><main>
+<div class="brand">MojPlayWin <span>· PICM</span></div>
+<h1>ورود به استودیوی تصویر</h1>
+<p class="lead">برای استفاده از عکس‌ساز، نام کاربری و گذرواژهٔ اختصاصی خود را وارد کنید.</p>
+{% if picm_error %}<p class="error" role="alert">{{ picm_error }}</p>{% endif %}
+<form method="post" action="/picm/login/" autocomplete="on">
+{% csrf_token %}
+<label for="username">نام کاربری</label>
+<input id="username" name="username" type="text" inputmode="numeric" autocomplete="username" maxlength="64" required placeholder="شماره کاربری">
+<label for="password">گذرواژه</label>
+<input id="password" name="password" type="password" autocomplete="current-password" maxlength="256" required placeholder="••••••••">
+<button type="submit">ورود به استودیو</button>
+</form>
+<p class="small"><a href="/picm/">بازگشت به صفحه PICM</a></p>
+</main></body></html>
