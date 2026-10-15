@@ -1,0 +1,119 @@
+name: MojPlayWin chess book file inventory (read only)
+on:
+  push:
+    branches: [audit/mpw-chess-file-readonly-20261015]
+    paths: ['.github/workflows/mojplaywin-chess-file-readonly-audit-20261015.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Check chess ebook location and SHA256 on cPanel without changes
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/mpw-root-audit"
+          mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          python3 - "$d/vps.key" "$d/host.key" <<'PY'
+          from pathlib import Path
+          import sys
+          for filename in sys.argv[1:]:
+              f=Path(filename)
+              f.write_text(f.read_text().replace("\r\n","\n").strip().replace("\\n","\n")+"\n")
+          PY
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host relay
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host host
+            HostName zohal.pws-dns.net
+            Port 1396
+            User zomorod2
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump relay
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+          EOF
+          timeout 30s ssh -F "$d/config" relay 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          timeout 100s ssh -F "$d/config" host 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = "zomorod2"
+          cd "$HOME/Saeit-staging"
+          export DJANGO_SETTINGS_MODULE=config.settings
+          export PYTHONDONTWRITEBYTECODE=1
+          "$HOME/virtualenv/Saeit-staging/3.11/bin/python" - <<'PY'
+          import os,hashlib
+          from pathlib import Path
+          root=Path.home().resolve()
+          expected="d284d559bfac931cffe11e97561ac442d63dae5d8eda4bc04e84dd2c26022a1b"
+          skip={".ssh",".git",".cache","node_modules","staticfiles","venv","virtualenv","__pycache__",".cpanel","logs","tmp","mail"}
+          print("CHESS_AUDIT_MODE=READ_ONLY_METADATA_HASH_ONLY")
+          print("HOME="+str(root))
+          for label,rel in (("PRIVATE_UPLOADS","MojPlayWin_Private_Uploads"),("STAGING","Saeit-staging"),("PUBLIC_HTML","public_html"),("MOJPLAYWIN","mojplaywin.com")):
+              print("DIR_"+label+"_EXISTS="+str((root/rel).is_dir()))
+          checked=0
+          found=0
+          for base,dirs,files in os.walk(root,topdown=True,followlinks=False):
+              bp=Path(base)
+              depth=len(bp.relative_to(root).parts)
+              dirs[:]=sorted(d for d in dirs if d not in skip and not d.startswith(".") and depth<8)
+              for name in sorted(files):
+                  low=name.lower()
+                  if not (("chess" in low or "improvement" in low) and low.endswith((".pdf",".zip",".epub",".md"))):
+                      continue
+                  p=bp/name
+                  if p.is_symlink() or not p.is_file():
+                      continue
+                  try:
+                      st=p.stat()
+                      if st.st_size>100_000_000: continue
+                      h=hashlib.sha256()
+                      with p.open("rb") as f:
+                          for chunk in iter(lambda:f.read(1024*1024),b""):
+                              h.update(chunk)
+                      digest=h.hexdigest()
+                      rel=p.relative_to(root)
+                      print("CHESS_CANDIDATE_PATH="+str(rel))
+                      print("CHESS_CANDIDATE_BYTES="+str(st.st_size))
+                      print("CHESS_CANDIDATE_SHA256="+digest)
+                      print("CHESS_CANDIDATE_MATCHES_LOCAL_SOURCE="+str(digest==expected))
+                      print("CHESS_CANDIDATE_UNDER_PUBLIC_HTML="+str(str(rel).startswith("public_html/")))
+                      print("CHESS_CANDIDATE_UNDER_PRIVATE_UPLOADS="+str(str(rel).startswith("MojPlayWin_Private_Uploads/")))
+                      found+=1
+                  except (OSError,ValueError) as e:
+                      print("CHESS_CANDIDATE_READ_ERROR="+type(e).__name__)
+                  checked+=1
+                  if checked>=80: break
+              if checked>=80: break
+          print("CHESS_CANDIDATES="+str(found))
+          print("CHESS_SCAN_LIMITED_DEPTH_8_MATCHED_FILENAMES_ONLY=True")
+          PY
+          REMOTE
+      - name: Remove transient keys
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/mpw-root-audit"
