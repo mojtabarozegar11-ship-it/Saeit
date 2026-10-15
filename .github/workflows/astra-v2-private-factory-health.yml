@@ -75,7 +75,33 @@ jobs:
           else:
               print("ASTRA_V2_HEALTH_CRON_LOG_PRESENT=false")
           print("ASTRA_V2_HEALTH_OBSERVED_AT_UTC="+datetime.datetime.utcnow().isoformat()+"Z")
+          print("ASTRA_V2_HEALTH_RESEARCH_HOLD_JOBS="+str(
+              con.execute("SELECT COUNT(*) FROM jobs WHERE stage='RESEARCH_REQUIRED'").fetchone()[0]))
           print("ASTRA_V2_HEALTH_STORE_PUBLISHING_OWNED=false")
           print("ASTRA_V2_HEALTH_REAL_SALES_CANNOT_BE_INFERRED=true")
           PY
+          # Verify the *effective* private cron switch, not merely a deployment message.
+          gate="$base/.enable-topic-research-gate"
+          new_script="$HOME/factory-runtime/operations/astra-v2-topic-gate-release/scripts/astra_v2_private_pipeline.py"
+          old_script="$HOME/factory-runtime/operations/astra-v2-vps-canary-source/scripts/astra_v2_private_pipeline.py"
+          test ! -L "$gate" && test -f "$gate"
+          test "$(cat "$gate")" = private_only
+          test -f "$new_script" && test ! -L "$new_script"
+          tick_line="$(crontab -l | grep -F 'ASTRA_V2_PRIVATE_RND_TICK')"
+          test "$(printf '%s\n' "$tick_line" | wc -l)" -eq 1
+          printf '%s\n' "$tick_line" | grep -Fq "$new_script"
+          if printf '%s\n' "$tick_line" | grep -Fq "$old_script"; then
+            echo ASTRA_GATE_OLD_CRON_SCRIPT_STILL_ACTIVE; exit 1
+          fi
+          python3 - "$new_script" <<'PY'
+          import pathlib,sys
+          source=pathlib.Path(sys.argv[1]).read_text()
+          for required in ('reconcile_private_topic_queue', 'TOPIC_RESEARCH_GATE_PENDING',
+                           'topic_quality_gate', 'private_topic_research_gate_enabled'):
+              assert required in source, required
+          print('ASTRA_GATE_DEPLOYED_CODE_VERIFIED=true')
+          PY
+          echo ASTRA_TOPIC_GATE_EFFECTIVE_PRIVATE_CRON=PASS
+          echo ASTRA_TOPIC_GATE_MARKER_ENABLED=true
+          echo ASTRA_TOPIC_GATE_NO_PUBLIC_RELEASE=true
           REMOTE
