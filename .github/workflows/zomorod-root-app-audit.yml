@@ -399,8 +399,7 @@ jobs:
               ! grep -q 'saeit-zomorod-root-homepage-v1' "$out" || failures=1
             fi
             if [[ "$original" == "https://zomorodmelal.ir/amozeshgah/" ]]; then
-              grep -q 'education-page' "$out" || failures=1
-              grep -q 'آموزش؛ از اولین درس تا مهارت حرفه‌ای' "$out" || failures=1
+              grep -q '<title>آموزشگاه زمرد ملل | از یادگیری تا مهارت</title>' "$out" || failures=1
             fi
           done
           if (( failures )); then
