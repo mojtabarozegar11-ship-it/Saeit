@@ -1,7 +1,7 @@
 name: ComfyUI CPU Image Studio - Preset Runner
 on:
   push:
-    branches: [feature/comfyui-final-audit-20261015]
+    branches: [feature/comfyui-studio-quality-safety-20261015]
     paths: [.github/workflows/comfyui-cpu-runner-image-proof.yml]
   workflow_dispatch:
     inputs:
@@ -24,6 +24,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 12
     steps:
+      - uses: actions/checkout@v4
       - name: Download verified official CPU renderer and public test model
         shell: bash
         run: |
@@ -81,10 +82,40 @@ jobs:
           print("ISOLATED_IMAGE_BYTES="+str(len(data)))
           print("ISOLATED_IMAGE_SHA256="+hashlib.sha256(data).hexdigest())
           PY
+      - name: Verify output and create a non-commercial quality report
+        shell: bash
+        env:
+          REQUESTED_PRESET: ${{ inputs.preset }}
+          REQUESTED_STEPS: ${{ inputs.steps }}
+        run: |
+          set -euo pipefail
+          python3 -m pip install --disable-pip-version-check 'Pillow==11.3.0'
+          python3 ops/comfyui-vps/image_quality_report.py "$CPU_RENDER_OUTPUT" \
+            --engine github-runner-cpu \
+            --preset "${REQUESTED_PRESET:-orchard}" \
+            --steps "${REQUESTED_STEPS:-8}" \
+            --run-id "$GITHUB_RUN_ID" \
+            --output "$RUNNER_TEMP/saeit-image-proof/quality_report.json"
+          python3 - "$RUNNER_TEMP/saeit-image-proof/quality_report.json" <<'PY'
+          import json,sys
+          obj=json.load(open(sys.argv[1],encoding="utf-8"))
+          assert obj["technical_png_valid"] is True
+          assert obj["publish_allowed"] is False
+          assert obj["commercial_ready"] is False
+          assert obj["manual_review_required"] is True
+          with open(sys.argv[1],encoding="utf-8") as f:
+              assert json.load(f)["sha256"] == obj["sha256"]
+          print("STUDIO_PROTOTYPE_DELIVERY_ALLOWED_STORE_RELEASE_BLOCKED")
+          PY
+          echo "### Saeit CPU Studio result" >> "$GITHUB_STEP_SUMMARY"
+          echo "PNG verified; experimental preview only; **not approved for sale**." >> "$GITHUB_STEP_SUMMARY"
+          echo "Download image and quality_report.json from Artifacts." >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         if: success()
         with:
           name: comfyui-cpu-companion-512px-proof
-          path: ${{ runner.temp }}/saeit-image-proof/smoke.png
+          path: |
+            ${{ runner.temp }}/saeit-image-proof/smoke.png
+            ${{ runner.temp }}/saeit-image-proof/quality_report.json
           retention-days: 7
           if-no-files-found: error
