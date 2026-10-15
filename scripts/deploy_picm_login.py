@@ -108,7 +108,8 @@ def deploy(run):
     ast.parse(src_views.decode("utf-8"))
     if b"def picm_workbench(request):" not in src_views or b"def picm_page(request):" not in src_views:
         raise RuntimeError("PICM_WORKSPACE_VIEWS_NOT_FOUND")
-    if b'<title>PICM' not in src_index or b'/picm/login/' not in src_index or b'csrf_token' not in src_login:
+    if (b'<title>PICM' not in src_index or b'id="renderform"' not in src_index
+            or b'/picm/logout/' not in src_index or b'csrf_token' not in src_login):
         raise RuntimeError("PICM_LOGIN_TEMPLATES_INVALID")
     backup = BACKUPS / ("picm-login-" + run)
     backup.mkdir(mode=0o700, parents=True, exist_ok=False)
