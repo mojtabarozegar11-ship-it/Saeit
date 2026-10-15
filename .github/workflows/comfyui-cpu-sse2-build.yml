@@ -1,8 +1,5 @@
 name: ComfyUI CPU SSE2 Portable VPS Builder
 on:
-  push:
-    branches: [feature/comfyui-vps-render-proof-20261015]
-    paths: [.github/workflows/comfyui-cpu-sse2-build.yml]
   workflow_dispatch:
 permissions:
   contents: read
@@ -63,12 +60,16 @@ jobs:
           test -d "$HOME/comfyui-isolated/source-v0.40.0"
           install -d -m 700 "$root"
           REMOTE
-          scp "${sshopts[@]}" "$d/sd-cpp.tar" githubops@178.239.147.150:/home/githubops/comfyui-isolated/.control/sd-cpp-runtime/archive.tar
+          scp "${sshopts[@]}" "$d/sd-cpp.tar" githubops@178.239.147.150:/home/githubops/comfyui-isolated/.control/sd-cpp-runtime-sse2/archive.tar
           ssh "${sshopts[@]}" githubops@178.239.147.150 'bash -se' <<'REMOTE'
           set -euo pipefail
           umask 077
           root="$HOME/comfyui-isolated/.control/sd-cpp-runtime-sse2"
           test ! -L "$root"
+          if [[ -x "$root/bin/sd-cli" ]]; then
+            echo SSE2_ALREADY_INSTALLED_REFUSE_OVERWRITE
+            exit 0
+          fi
           test -f "$root/archive.tar"
           tar -tf "$root/archive.tar" > "$root/archive.list"
           grep -Fxq 'bin/sd-cli' "$root/archive.list"
