@@ -63,7 +63,7 @@ CSS = """<style>
 def static_expression(number: int) -> str:
     if number not in range(1, 11):
         raise ValueError("Photo outside original ten")
-    return "{% static 'personal_site/owner_gallery_20261015/photo-%02d.jpg' %% number %}" if False else (
+    return (
         "{% static 'personal_site/owner_gallery_20261015/photo-"
         + f"{number:02d}" + ".jpg' %}"
     )
