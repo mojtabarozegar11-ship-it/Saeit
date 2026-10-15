@@ -1,0 +1,101 @@
+"""Never confuse CPU or missing GPU models with PICM movie readiness."""
+import json
+from pathlib import Path
+import sys
+import tempfile
+import unittest
+from unittest.mock import patch
+
+ROOT = Path(__file__).resolve().parents[1] / "ops" / "picm-gpu"
+sys.path.insert(0, str(ROOT))
+import gpu_preflight as p
+
+GRAPH = {
+    "1": {"class_type": "LoadImage", "inputs": {"image": "old.png"}},
+    "2": {"class_type": "CLIPTextEncode", "inputs": {"text": "scene"}},
+    "3": {"class_type": "WanImageToVideo", "inputs": {
+        "start_image": ["1", 0], "positive": ["2", 0], "length": 81}},
+    "4": {"class_type": "KSampler", "inputs": {"latent_image": ["3", 0]}},
+    "5": {"class_type": "VAEDecode", "inputs": {"samples": ["4", 0]}},
+    "6": {"class_type": "CreateVideo", "inputs": {
+        "images": ["5", 0], "fps": 16}},
+    "7": {"class_type": "SaveVideo", "inputs": {
+        "video": ["6", 0], "filename_prefix": "picm"}},
+}
+MAP = {"image": "1", "text": "2", "length": "3",
+       "fps": "6", "output": "7"}
+
+
+class PICMIndependentGPUReadinessTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.home = Path(self.temp.name)
+        self.home.chmod(0o700)
+        self.graph = self.home / "api.json"
+        self.nodes = self.home / "node_map.json"
+        self.graph.write_text(json.dumps(GRAPH))
+        self.nodes.write_text(json.dumps(MAP))
+        self.disk = type("Usage", (), {
+            "total": 60 * (1024 ** 3),
+            "used": 10 * (1024 ** 3),
+            "free": 50 * (1024 ** 3)})()
+
+    def inspect(self, *, response=None, vram="24576, 23000", disk=None):
+        response = response or {
+            "devices": [{"type": "cuda", "name": "NVIDIA RTX"}]}
+        with patch.object(p.shutil, "which", return_value="/usr/bin/ffmpeg"):
+            with patch.object(p.shutil, "disk_usage", return_value=disk or self.disk):
+                return p.inspect(
+                    self.home, self.graph, self.nodes,
+                    probe=lambda _: response,
+                    gpu_command=lambda: vram)
+
+    def test_real_gpu_and_workflow_ready_is_only_preflight_not_render(self):
+        result = self.inspect()
+        self.assertTrue(result["ready"], result)
+        self.assertEqual(result["state"], "runtime_preflight_ready_not_rendered")
+        self.assertNotIn("real_mp4_rendered", str(result))
+
+    def test_cpu_only_is_rejected_even_if_gpu_memory_is_fake(self):
+        result = self.inspect(response={"devices": [{
+            "type": "cpu", "name": "CPU"}]})
+        self.assertFalse(result["ready"])
+        self.assertIn("no_local_comfy_gpu", result["requirements"])
+
+    def test_insufficient_gpu_memory_blocks_not_silent_fallback(self):
+        result = self.inspect(vram="8192, 7000")
+        self.assertFalse(result["ready"])
+        self.assertIn("insufficient_free_gpu_vram", result["requirements"])
+
+    def test_unverified_memory_never_assumes_gpu_capacity(self):
+        result = self.inspect(vram="broken")
+        self.assertFalse(result["ready"])
+        self.assertIn("gpu_memory_unverified_nvidia_only", result["requirements"])
+
+    def test_small_disk_rejected(self):
+        tiny = type("Usage", (), {"free": 5 * (1024 ** 3)})()
+        result = self.inspect(disk=tiny)
+        self.assertFalse(result["ready"])
+        self.assertIn("insufficient_free_gpu_disk", result["requirements"])
+
+    def test_incorrect_or_missing_model_graph_is_rejected(self):
+        self.graph.write_text(json.dumps({
+            "1": {"class_type": "LoadImage", "inputs": {"image": "foo"}}}))
+        result = self.inspect()
+        self.assertFalse(result["ready"])
+        self.assertIn("real_connected_i2v_workflow_not_configured",
+                      result["requirements"])
+
+    def test_comfy_must_bind_loopback_not_public_network(self):
+        with patch.object(p.shutil, "which", return_value="/usr/bin/ffmpeg"):
+            with patch.object(p.shutil, "disk_usage", return_value=self.disk):
+                result = p.inspect(self.home, self.graph, self.nodes,
+                    comfy="http://gpu-provider.example:8188",
+                    gpu_command=lambda: "24576, 23000")
+        self.assertFalse(result["ready"])
+        self.assertIn("loopback_comfy_service_unavailable", result["requirements"])
+
+
+if __name__ == "__main__":
+    unittest.main()
