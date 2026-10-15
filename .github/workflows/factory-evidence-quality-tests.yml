@@ -6,6 +6,8 @@ on:
       - .github/workflows/factory-evidence-quality-tests.yml
       - scripts/factory_evidence_quality.py
       - scripts/factory_autonomous_portfolio.py
+      - scripts/factory_vps_product_cycle.py
+      - tests/test_factory_vps_product_cycle.py
       - tests/test_factory_evidence_quality.py
   pull_request:
     branches: [main]
