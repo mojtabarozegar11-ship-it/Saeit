@@ -21,3 +21,22 @@ if log.is_file():
         if any(word in line.lower() for word in ("illegal", "instruction", "error", "exception", "cpu", "ggml", "abort", "crash")):
             print("CPU_RENDER_DIAGNOSTIC=" + line[:180])
 print("CPU_CAPABILITY_READONLY_COMPLETE")
+
+
+from pathlib import Path
+import subprocess
+root = Path.home() / "comfyui-isolated/.control/sd-cpp-runtime-sse2"
+print("SSE2_RUNTIME_DIRECTORY_EXISTS=" + str(root.is_dir()))
+print("SSE2_BINARY_PRESENT=" + str((root / "bin/sd-cli").is_file()))
+archive = root / "archive.tar"
+print("SSE2_ARCHIVE_PRESENT=" + str(archive.is_file()))
+if archive.is_file():
+    print("SSE2_ARCHIVE_BYTES=" + str(archive.stat().st_size))
+    scan = subprocess.run(["tar", "-tf", str(archive)], stdout=subprocess.PIPE,
+                          stderr=subprocess.PIPE, timeout=15, check=False)
+    entries = scan.stdout.decode("utf-8", "replace").splitlines()
+    print("SSE2_ARCHIVE_TAR_EXIT=" + str(scan.returncode))
+    print("SSE2_ARCHIVE_ENTRY_COUNT=" + str(len(entries)))
+    print("SSE2_ARCHIVE_HAS_BIN_CLI=" + str("bin/sd-cli" in entries))
+    print("SSE2_ARCHIVE_EXAMPLE_ENTRIES=" + repr(entries[:7]))
+print("SSE2_RUNTIME_DIAGNOSTIC_COMPLETE")
