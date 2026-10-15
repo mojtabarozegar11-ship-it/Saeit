@@ -104,6 +104,48 @@ class ResearchBacklogTests(unittest.TestCase):
                 self.assertEqual(result["invalid_or_unusable_snapshots"], 1)
                 self.assertEqual(result["backlog"][0]["preliminary_unique_references"], 0)
 
+    def test_mirrored_content_is_not_three_independent_sources(self):
+        # Three hosts presenting the same bytes cannot manufacture
+        # corroboration, even when their claim labels differ.
+        for host, claim in (
+            ("example.com", "problem"),
+            ("example.org", "willingness_to_pay"),
+            ("example.net", "comparison"),
+        ):
+            self.add_ref(1, host, claim, 700)
+        self.add_ref(1, "example.com", "feasibility", 701)
+        report = self.report()
+        entry = next(r for r in report["backlog"]
+                     if r["key"] == "candidate_one")
+        self.assertEqual(entry["preliminary_unique_references"], 1)
+        self.assertEqual(entry["preliminary_distinct_hosts"], 1)
+        self.assertEqual(entry["preliminary_claims"], ["feasibility"])
+        self.assertEqual(report["mirrored_snapshot_rows_excluded"], 3)
+        self.assertEqual(report["invalid_or_unusable_snapshots"], 3)
+        self.assertFalse(entry["build_authorized"])
+        self.assertFalse(entry["publish_authorized"])
+
+    def test_hundred_copied_rows_never_complete_research_target(self):
+        # Rows and URLs are not unique research documents. One content
+        # digest on a single host should count as only one reference.
+        for i in range(100):
+            self.add_ref(1, "example.com", "problem", 202)
+        report = self.report()
+        entry = next(r for r in report["backlog"]
+                     if r["key"] == "candidate_one")
+        self.assertEqual(entry["preliminary_unique_references"], 1)
+        self.assertEqual(report["same_content_snapshot_rows_collapsed"], 99)
+        self.assertIn("BUILD_100_ITEM_INDEPENDENTLY_CHECKED_EVIDENCE_DOSSIER",
+                      entry["next_research_actions"])
+        self.assertFalse(entry["market_demand_independently_verified"])
+
+    def test_research_queue_cannot_self_promote_its_state(self):
+        with sqlite3.connect(self.db) as c:
+            c.execute("UPDATE core_factoryqueueitem "
+                      "SET status='REVIEW_REQUIRED' WHERE id=1")
+        with self.assertRaisesRegex(ValueError, "authorization invariant"):
+            self.report()
+
     def test_bad_timestamp_and_fake_ip_links_are_excluded(self):
         self.add_ref(1,"example.com","problem",1,when=NOW-timedelta(days=121))
         self.add_ref(1,"example.net","comparison",2,when=NOW+timedelta(days=1))
