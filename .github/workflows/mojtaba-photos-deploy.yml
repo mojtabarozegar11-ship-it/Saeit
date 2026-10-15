@@ -104,6 +104,8 @@ jobs:
           backup_dir="$HOME/.backups/mojtaba-original-photos-release"
           test -d "$app" && test ! -L "$app" && test -f "$app/manage.py"
           test -f "$home" && test ! -L "$home" && test "$(realpath "$home")" = "$home"
+          expected_home_sha256="c7fd93ce87652442a4c9d693f5d05054915d6bff1ce6529cb73a730d18c7e825"
+          test "$(sha256sum "$home" | awk '{print $1}')" = "$expected_home_sha256" || { echo "HOME_CHANGED_SINCE_READONLY_PREFLIGHT"; exit 1; }
           test ! -e "$images" && test ! -L "$stage"
           install -d -m 700 "$backup_dir"
           backup="$backup_dir/home-before-$run_id.html"
