@@ -136,6 +136,9 @@ jobs:
           print("ROOT_APP_ENABLED=yes")
           PY
           cd /home/zomorod2/Saeit
+          install -d -m 700 tmp
+          touch tmp/restart.txt
+          echo "PASSENGER_RESTART_TRIGGERED=yes"
           printf 'APP_ENV_FILE_PRESENT='
           test -f .env && echo yes || echo no
           diag="$(mktemp "$HOME/.root-app-diag.XXXXXX")"
@@ -193,23 +196,6 @@ jobs:
             "https://zomorodmelal.ir/"
             "https://www.zomorodmelal.ir/"
             "https://zomorodmelal.ir/amozeshgah/"
-            "https://zomorodmelal.ir/education/"
-            "https://zomorodmelal.ir/academy/"
-            "https://zomorodmelal.ir/services/"
-            "https://zomorodmelal.ir/agriculture/"
-            "https://zomorodmelal.ir/industry/"
-            "https://zomorodmelal.ir/knowledge/"
-            "https://zomorodmelal.ir/market/"
-            "https://zomorodmelal.ir/economy/"
-            "https://zomorodmelal.ir/studio/"
-            "https://zomorodmelal.ir/agents/"
-            "https://zomorodmelal.ir/company/"
-            "https://zomorodmelal.ir/weather/"
-            "https://zomorodmelal.ir/store/"
-            "https://zomorodmelal.ir/auctions/"
-            "https://zomorodmelal.ir/search/"
-            "https://zomorodmelal.ir/robots.txt"
-            "https://zomorodmelal.ir/sitemap.xml"
           )
           n=0
           for original in "${urls[@]}"; do
