@@ -1,0 +1,172 @@
+name: Astra 0049 209-Item Disposable Capacity Proof
+
+on:
+  push:
+    branches:
+      - factory/astra-0049-209-item-capacity-proof-20261015
+      - factory/astra-v2-0049-integration-20261015
+    paths:
+      - .github/workflows/astra-0049-209-disposable-capacity-ci.yml
+      - scripts/astra_stage45_shadow_bootstrap.py
+      - scripts/astra_stage45_research_backlog.py
+      - scripts/astra_stage45_market_queue_bridge.py
+      - scripts/astra_market_readiness_gate.py
+      - research/astra-water-margin-us-primary-market-pilot.json
+  pull_request:
+    branches:
+      - factory/astra-v2-0049-integration-20261015
+
+permissions:
+  contents: read
+
+jobs:
+  isolated-django-209:
+    runs-on: ubuntu-latest
+    timeout-minutes: 17
+    env:
+      SAEIT_ENV: ci
+      DEBUG: "False"
+      SECRET_KEY: astra-209-disposable-ci-only
+      ALLOWED_HOSTS: "localhost,127.0.0.1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Create fresh 0048 schema with 209 synthetic unpublished factory products
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="$RUNNER_TEMP/astra209-disposable"
+          mkdir -m 700 "$base"
+          source="$base/factory-fresh-isolated.sqlite3"
+          export DATABASE_URL="sqlite:///$source"
+          test ! -e "$source"
+          python manage.py migrate core 0048 --noinput --verbosity 0
+          python manage.py shell <<'PY'
+          from core.models import Product
+          assert not Product.objects.exists()
+          originals = [
+              Product(title=f"CI-ONLY-SYNTHETIC-{i:04d}", product_type="digital_tool",
+                      active=False, factory_managed=True,
+                      metadata={"illustrative_only":True})
+              for i in range(1, 210)
+          ]
+          Product.objects.bulk_create(originals)
+          # Inactive nonfactory products must never be imported into shadow.
+          Product.objects.bulk_create([
+              Product(title="CI-ONLY-NONFACTORY-1",product_type="digital_tool",
+                      active=False,factory_managed=False),
+              Product(title="CI-ONLY-NONFACTORY-2",product_type="digital_tool",
+                      active=False,factory_managed=False),
+          ])
+          assert Product.objects.filter(factory_managed=True,active=False).count()==209
+          assert Product.objects.count()==211
+          print("ASTRA_0049_SYNTHETIC_SOURCE_FACTORY_UNPUBLISHED=209")
+          print("ASTRA_0049_SYNTHETIC_SOURCE_EXCLUDED_NONFACTORY=2")
+          PY
+          python3 - "$source" "$base/astra-v2-stage45-shadow-abcdefabcdef.sqlite3" "$base/source-before.sha256" <<'PY'
+          import hashlib,pathlib,sqlite3,sys
+          source,shadow,checksum=map(pathlib.Path,sys.argv[1:])
+          checksum.write_text(hashlib.sha256(source.read_bytes()).hexdigest())
+          with sqlite3.connect(source.as_uri()+"?mode=ro",uri=True) as original:
+              original.execute("PRAGMA query_only=ON")
+              with sqlite3.connect(shadow) as dest:
+                  original.backup(dest)
+          shadow.chmod(0o600)
+          print("ASTRA_0049_209_DISPOSABLE_CLONE=PASS")
+          PY
+      - name: Migrate only shadow copy to 0049; prove 209 exact ID queue and idempotency
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="$RUNNER_TEMP/astra209-disposable"
+          source="$base/factory-fresh-isolated.sqlite3"
+          shadow="$base/astra-v2-stage45-shadow-abcdefabcdef.sqlite3"
+          export DATABASE_URL="sqlite:///$shadow"
+          python manage.py migrate core 0049 --noinput --verbosity 0
+          python scripts/astra_stage45_shadow_bootstrap.py --source "$source" --shadow "$shadow"
+          python scripts/astra_stage45_shadow_bootstrap.py --source "$source" --shadow "$shadow"
+          python3 - "$source" "$shadow" "$base/source-before.sha256" <<'PY'
+          import hashlib,pathlib,sqlite3,sys
+          source,shadow,checksum=map(pathlib.Path,sys.argv[1:])
+          assert hashlib.sha256(source.read_bytes()).hexdigest()==checksum.read_text()
+          with sqlite3.connect(source.as_uri()+"?mode=ro",uri=True) as old:
+              old.execute("PRAGMA query_only=ON")
+              src={x[0] for x in old.execute(
+                  "SELECT id FROM core_product WHERE factory_managed=1 AND active=0")}
+              assert len(src)==209
+              assert old.execute(
+                  "SELECT name FROM django_migrations WHERE app='core' "
+                  "ORDER BY name DESC LIMIT 1").fetchone()[0]=="0048_business_market_architecture"
+          with sqlite3.connect(shadow.as_uri()+"?mode=ro",uri=True) as new:
+              new.execute("PRAGMA query_only=ON")
+              rows=new.execute(
+                  "SELECT key,kind,status,priority_score,evidence_verified_independently,"
+                  "build_authorized,publish_authorized,payment_authorized "
+                  "FROM core_factoryqueueitem").fetchall()
+              assert len(rows)==209, len(rows)
+              assert {row[0] for row in rows}=={
+                  f"research:legacy-product:{i}" for i in src}
+              assert all(r[1:] == ("discovery","RESEARCH_REQUIRED",None,0,0,0,0)
+                         for r in rows)
+              assert new.execute("SELECT COUNT(*) FROM core_discoverysnapshot").fetchone()[0]==0
+          print("ASTRA_0049_209_SYNTHETIC_EXACT_QUEUE=PASS")
+          print("ASTRA_0049_209_SHADOW_SEED_IDEMPOTENT=PASS")
+          print("ASTRA_0049_0048_SOURCE_SHA256_UNCHANGED=true")
+          print("ASTRA_0049_209_NO_BUILD_PAYMENT_OR_PUBLICATION_AUTHORITY=true")
+          PY
+      - name: Check 209-entry research and market triage without modifying source or shadow
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="$RUNNER_TEMP/astra209-disposable"
+          src="$base/factory-fresh-isolated.sqlite3"
+          shadow="$base/astra-v2-stage45-shadow-abcdefabcdef.sqlite3"
+          sha_before="$(sha256sum "$shadow" | cut -d' ' -f1)"
+          python scripts/astra_stage45_market_queue_bridge.py \
+            --db "$shadow" --market-dir research \
+            --now-utc "$(python -c 'from datetime import datetime,timezone;print(datetime.now(timezone.utc).isoformat())')" \
+            --output "$base/209-private-research-report.json"
+          sha_after="$(sha256sum "$shadow" | cut -d' ' -f1)"
+          test "$sha_before" = "$sha_after"
+          python3 - "$base/209-private-research-report.json" "$src" "$base/source-before.sha256" <<'PY'
+          import hashlib,json,pathlib,sys
+          report,source,expected=map(pathlib.Path,sys.argv[1:])
+          result=json.loads(report.read_text())
+          assert result["discovery_topics"]==209,result["discovery_topics"]
+          assert result["queue_items_examined"]==209
+          assert result["market_packets_examined"]==1
+          assert result["explicit_unverified_packet_links"]==0
+          assert result["topics_without_market_packets"]==209
+          assert result["unlinked_market_product_keys"]==["farm_water_land_margin_audit_v1"]
+          assert result["commercially_qualified_products"]==0
+          assert result["factory_mutations"]==0
+          assert result["payment_attempts"]==0
+          assert result["site_mutations"]==0
+          assert len(result["research_queue"])==209
+          assert all(
+              x["queue_preliminary_unique_documents"]==0 and
+              x["market_packet_present"] is False and
+              x["market_packet_key"] is None and
+              x["commercial_quality_score"] is None and
+              x["publish_authorized"] is False and
+              x["build_authorized"] is False and
+              x["payment_authorized"] is False
+              for x in result["research_queue"])
+          assert hashlib.sha256(source.read_bytes()).hexdigest()==expected.read_text()
+          print("ASTRA_0049_209_MARKET_TRIAGE=PASS")
+          print("ASTRA_0049_209_UNVERIFIED_PACKET_AUTOMATCH=0")
+          print("ASTRA_0049_209_COMMERCIALLY_QUALIFIED=0")
+          print("ASTRA_0049_209_SNAPSHOT_NOT_MUTATED=true")
+          PY
+      - name: Ensure no remote access or production operations
+        run: |
+          echo ASTRA_0049_TEST_DATA_ARE_SYNTHETIC_ONLY=true
+          echo ASTRA_0049_VPS_ACCESSED=false
+          echo ASTRA_0049_LIVE_MIGRATION=false
+          echo ASTRA_0049_STORE_PAYMENTS_AND_PUBLICATION=false
