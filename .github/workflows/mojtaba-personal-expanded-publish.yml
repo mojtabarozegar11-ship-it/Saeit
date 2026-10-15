@@ -156,7 +156,7 @@ jobs:
                       with urlopen(Request(url,headers={"User-Agent":"MojtabaExpandedBiographyDeployment/1"}),timeout=25) as response:
                           body=response.read(4500000).decode("utf-8","replace")
                           if response.status!=200:raise ValueError("HTTP status not 200")
-                      for needle in (marker,'id="mpw-expanded-profile-20261016"',
+                      for needle in (marker,'id="mpw-academic-profile-20261016"',
                                      'id="mpw-fifty-editorials-20261015"', 'id="mpw-new-originals-20261015-b"'):
                           if needle not in body:raise ValueError("Missing expected expanded content or preserved old content: "+needle)
                       img=ImageCheck();img.feed(body)
