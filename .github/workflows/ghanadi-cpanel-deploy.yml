@@ -1,0 +1,254 @@
+name: Deploy and verify Ghanadi on cPanel
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/ghanadi-cpanel-deploy.yml"
+      - "config/urls.py"
+      - "core/seo_views.py"
+      - "core/templates/core/ghanadi.html"
+      - "core/static/site/ghanadi/**"
+      - "deploy/cpanel_deploy.sh"
+permissions:
+  contents: read
+concurrency:
+  group: ghanadi-cpanel-production
+  cancel-in-progress: false
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate route, template, and illustrations
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from html.parser import HTMLParser
+          from pathlib import Path
+          import re
+          p = Path("core/templates/core/ghanadi.html")
+          source = p.read_text(encoding="utf-8")
+          class Check(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.rtl = self.title = self.h1 = self.canonical = False
+              def handle_starttag(self, tag, attrs):
+                  a = dict(attrs)
+                  if tag == "html":
+                      self.rtl = a.get("lang") == "fa" and a.get("dir") == "rtl"
+                  if tag == "title":
+                      self.title = True
+                  if tag == "h1":
+                      self.h1 = True
+                  if tag == "link" and a.get("rel") == "canonical":
+                      self.canonical = a.get("href") == "https://zomorodmelal.ir/ghanadi/"
+          c = Check()
+          c.feed(source)
+          if not all((c.rtl, c.title, c.h1, c.canonical)):
+              raise SystemExit("Ghanadi template metadata or main heading is missing")
+          if len(re.findall(r"\bgroup:", source)) != 20:
+              raise SystemExit("Expected 20 Ghanadi product records")
+          for name in ("box.svg", "cake.svg", "cafe.svg", "cookie.svg"):
+              asset = Path("core/static/site/ghanadi") / name
+              if not asset.is_file() or asset.stat().st_size < 400:
+                  raise SystemExit(f"Missing Ghanadi illustration: {name}")
+          print("GHANADI_RELEASE_SOURCE=valid")
+          print("PRODUCT_RECORDS=20")
+          PY
+
+      - name: Run production gates and regression tests
+        env:
+          SECRET_KEY: ci-secret-key
+          DEBUG: "False"
+          ALLOWED_HOSTS: localhost,127.0.0.1
+        run: |
+          python manage.py check --deploy
+          python manage.py makemigrations --check --dry-run
+          python manage.py collectstatic --noinput
+          pytest -q
+          python manage.py production_gate
+
+      - name: Verify the current home page before deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          status="$(curl --silent --show-error --location --retry 2 --retry-delay 2 --max-time 30 -o /dev/null -w '%{http_code}' https://zomorodmelal.ir/ || true)"
+          test "$status" = "200" || { echo "HOME_PRECHECK_FAILED status=$status; deployment stopped"; exit 1; }
+          echo "HOME_PRECHECK_HTTP=$status"
+
+      - name: Prepare pinned VPS relay and cPanel SSH
+        id: ssh
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/ghanadi-cpanel"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "config=$d/config" >> "$GITHUB_OUTPUT"
+
+      - name: Fast-forward the verified production checkout and deploy
+        id: release
+        env:
+          DEPLOY_SHA: ${{ github.sha }}
+          SSH_CONFIG: ${{ steps.ssh.outputs.config }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$DEPLOY_SHA" =~ ^[0-9a-f]{40}$ ]]
+          deployment="$(ssh -F "$SSH_CONFIG" saeit-cpanel "bash -s -- '$DEPLOY_SHA'" <<'REMOTE'
+          set -euo pipefail
+          root="$HOME/Saeit"
+          target="$1"
+          case "$target" in *[!0-9a-f]*|'') exit 20;; esac
+          test "$root" = "$HOME/Saeit"
+          test -d "$root/.git" && test -f "$root/manage.py" && test -f "$root/passenger_wsgi.py" && test -f "$root/deploy/cpanel_deploy.sh"
+          case "$root" in *staging*|*stage*) echo "Refusing a staging path"; exit 21;; esac
+          origin="$(git -C "$root" remote get-url origin)"
+          case "$origin" in
+            https://github.com/mojtabarozegar11-ship-it/Saeit.git|https://github.com/mojtabarozegar11-ship-it/Saeit|git@github.com:mojtabarozegar11-ship-it/Saeit.git|ssh://git@github.com/mojtabarozegar11-ship-it/Saeit.git) ;;
+            *) echo "Refusing unexpected repository origin"; exit 22;;
+          esac
+          branch="$(git -C "$root" branch --show-current)"
+          test "$branch" = "main" || { echo "Refusing non-main production checkout"; exit 23; }
+          test -z "$(git -C "$root" status --porcelain)" || { echo "Refusing a dirty production checkout"; exit 24; }
+          previous="$(git -C "$root" rev-parse HEAD)"
+          git -C "$root" fetch --quiet origin main
+          fetched="$(git -C "$root" rev-parse origin/main)"
+          test "$fetched" = "$target" || { echo "Remote main differs from requested release SHA"; exit 25; }
+          git -C "$root" merge --ff-only origin/main
+          if ! /bin/bash "$root/deploy/cpanel_deploy.sh"; then
+            echo "DEPLOY_SCRIPT_FAILED; restoring previous application commit"
+            git -C "$root" reset --hard "$previous"
+            touch "$root/passenger_wsgi.py"
+            exit 26
+          fi
+          printf 'APPROOT=%s\nPREVIOUS_SHA=%s\nDEPLOYED_SHA=%s\n' "$root" "$previous" "$(git -C "$root" rev-parse HEAD)"
+          REMOTE
+          )"
+          printf '%s\n' "$deployment"
+          root="$(printf '%s\n' "$deployment" | sed -n 's/^APPROOT=//p')"
+          previous="$(printf '%s\n' "$deployment" | sed -n 's/^PREVIOUS_SHA=//p')"
+          deployed="$(printf '%s\n' "$deployment" | sed -n 's/^DEPLOYED_SHA=//p')"
+          [[ "$root" =~ ^/home/[A-Za-z0-9_-]+/Saeit$ ]]
+          [[ "$previous" =~ ^[0-9a-f]{40}$ && "$deployed" = "$DEPLOY_SHA" ]]
+          echo "app_root=$root" >> "$GITHUB_OUTPUT"
+          echo "previous_sha=$previous" >> "$GITHUB_OUTPUT"
+
+      - name: Verify the new page, images, and unchanged home route
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="https://zomorodmelal.ir"
+          html="$RUNNER_TEMP/ghanadi-live.html"
+          result="$(curl --silent --show-error --location --retry 4 --retry-delay 5 --max-time 45 -H 'Cache-Control: no-cache' -o "$html" -w '%{http_code}|%{content_type}' "$base/ghanadi/" || true)"
+          code="${result%%|*}"
+          type="${result#*|}"
+          if [ "$code" != "200" ] || [[ "$type" != text/html* ]]; then
+            echo "GHANADI_PUBLIC_CHECK_FAILED status=$code content_type=$type"
+            exit 1
+          fi
+          python3 - "$html" <<'PY'
+          import sys
+          from html.parser import HTMLParser
+          from pathlib import Path
+          source = Path(sys.argv[1]).read_text(encoding="utf-8")
+          class Check(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.rtl = self.title = self.heading = self.canonical = False
+              def handle_starttag(self, tag, attrs):
+                  a = dict(attrs)
+                  if tag == "html":
+                      self.rtl = a.get("lang") == "fa" and a.get("dir") == "rtl"
+                  if tag == "title":
+                      self.title = True
+                  if tag == "h1":
+                      self.heading = True
+                  if tag == "link" and a.get("rel") == "canonical":
+                      self.canonical = a.get("href") == "https://zomorodmelal.ir/ghanadi/"
+          c = Check()
+          c.feed(source)
+          if not all((c.rtl, c.title, c.heading, c.canonical)):
+              raise SystemExit("Public Ghanadi page content did not pass verification")
+          if len(source.encode("utf-8")) < 12000:
+              raise SystemExit("Public Ghanadi page is unexpectedly short")
+          PY
+          asset_status="$(curl --silent --show-error --location --max-time 30 -o "$RUNNER_TEMP/ghanadi-box.svg" -w '%{http_code}' "$base/static/site/ghanadi/box.svg" || true)"
+          test "$asset_status" = "200" || { echo "GHANADI_ASSET_FAILED status=$asset_status"; exit 1; }
+          grep -q '<svg' "$RUNNER_TEMP/ghanadi-box.svg"
+          home_status="$(curl --silent --show-error --location --max-time 30 -o /dev/null -w '%{http_code}' "$base/" || true)"
+          test "$home_status" = "200" || { echo "HOME_POSTCHECK_FAILED status=$home_status"; exit 1; }
+          echo "GHANADI_HTTP=$code"
+          echo "GHANADI_ASSET_HTTP=$asset_status"
+          echo "HOME_HTTP=$home_status"
+
+      - name: Roll back application commit if public verification fails
+        if: failure() && steps.release.outcome == 'success'
+        env:
+          APPROOT: ${{ steps.release.outputs.app_root }}
+          PREVIOUS_SHA: ${{ steps.release.outputs.previous_sha }}
+          SSH_CONFIG: ${{ steps.ssh.outputs.config }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$PREVIOUS_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$APPROOT" =~ ^/home/[A-Za-z0-9_-]+/Saeit$ ]]
+          ssh -F "$SSH_CONFIG" saeit-cpanel "bash -s -- '$APPROOT' '$PREVIOUS_SHA'" <<'REMOTE'
+          set -euo pipefail
+          root="$1"
+          previous="$2"
+          test "$root" = "$HOME/Saeit"
+          test -z "$(git -C "$root" status --porcelain)"
+          git -C "$root" reset --hard "$previous"
+          /bin/bash "$root/deploy/cpanel_deploy.sh"
+          echo "APPLICATION_ROLLBACK_COMPLETED=yes"
+          REMOTE
+
+      - name: Remove temporary SSH material
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/ghanadi-cpanel"
+
