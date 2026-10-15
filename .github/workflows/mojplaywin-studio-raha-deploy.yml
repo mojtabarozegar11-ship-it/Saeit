@@ -210,7 +210,7 @@ jobs:
           set -euo pipefail
           status="000"
           for attempt in {1..10}; do
-            status="$(curl -sS -o "$RUNNER_TEMP/studio-raha-live.html" -w '%{http_code}' https://mojplaywin.com/studio.Roham/ || true)"
+            status="$(curl -sS -H 'Cache-Control: no-cache' -o "$RUNNER_TEMP/studio-raha-live.html" -w '%{http_code}' "https://mojplaywin.com/studio.Roham/?_studio_raha_deploy=$GITHUB_RUN_ID" || true)"
             [[ "$status" == "200" ]] && break
             echo "Studio Raham page not ready yet (HTTP $status, attempt $attempt)."
             sleep 3
