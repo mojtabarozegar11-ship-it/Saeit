@@ -1,0 +1,58 @@
+name: MojPlayWin public chain preflight - read only
+on:
+  push:
+    branches: [qa/mpw-payment-release-preflight-20261015]
+    paths:
+      - .github/workflows/mojplaywin-public-chain-preflight.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  mainnet-rpc-readonly:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify public ETH and TRON RPC heads with bounded read only requests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/mojplaywin_rpc_readiness.py
+          echo RPC_PROBE_ONLY_NOT_PAYMENT_PROOF
+
+  merchant-inbound-indexer-readonly:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check bounded ETH TRX public inbound indexers without recording transaction data
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import time
+          from scripts.mojplaywin_direct_wallet_discovery import (
+              discover_eth, discover_trx, IndexerUnavailable,
+          )
+          now_ms = int(time.time() * 1000)
+          errors = []
+          for label, reader in (("ETH", discover_eth), ("TRX", discover_trx)):
+              try:
+                  candidates = reader(now_ms=now_ms, lookback_s=900, max_pages=2)
+                  print(label + "_INDEXER_READ_ONLY_REACHABLE=True")
+                  print(label + "_CANDIDATE_COUNT_NOT_PROVEN_SALES=" + str(len(candidates)))
+              except (IndexerUnavailable, OSError, ValueError, TypeError) as exc:
+                  print(label + "_INDEXER_READ_ONLY_REACHABLE=False")
+                  print(label + "_INDEXER_BLOCKER=" + type(exc).__name__)
+                  errors.append(label)
+          print("NO_PRODUCTION_DATABASE_NO_PAYMENT_SETTLEMENT_NO_TRANSACTIONS_BROADCAST")
+          print("INDEXER_RESULTS_ARE_NOT_PAYMENT_CONFIRMATIONS")
+          if errors:
+              raise SystemExit(1)
+          PY

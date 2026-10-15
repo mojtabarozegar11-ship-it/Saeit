@@ -1,0 +1,227 @@
+name: MojPlayWin stage 9 gated live checkout URL integration
+on:
+  push:
+    branches: [qa/mpw-payment-release-preflight-20261015]
+    paths: ['.github/workflows/mojplaywin-stage9-gated-checkout-route.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: mpw-stage9-only-guarded-route
+  cancel-in-progress: false
+jobs:
+  guarded-route:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 9
+    steps:
+      - name: Install only declared checkout route, with all payment flags disabled
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/mpw-stage9-route"
+          mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          python3 - "$d/vps.key" "$d/host.key" <<'PY'
+          from pathlib import Path
+          import sys
+          for filename in sys.argv[1:]:
+              f=Path(filename)
+              f.write_text(f.read_text().replace("\r\n","\n").strip().replace("\\n","\n")+"\n")
+          PY
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host relay
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host host
+            HostName zohal.pws-dns.net
+            Port 1396
+            User zomorod2
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump relay
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+          EOF
+          timeout 30s ssh -F "$d/config" relay 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          timeout 110s ssh -F "$d/config" host 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = "zomorod2"
+          export PYTHONDONTWRITEBYTECODE=1
+          cd "$HOME/Saeit-staging"
+          "$HOME/virtualenv/Saeit-staging/3.11/bin/python" - <<'PY'
+          from pathlib import Path
+          from datetime import datetime, timezone
+          import hashlib,json,os,tempfile,subprocess
+          os.environ["DJANGO_SETTINGS_MODULE"]="config.settings"
+          import django
+          django.setup()
+          from django.conf import settings
+          from django.urls import reverse,NoReverseMatch
+          from django.db import connection
+          from mpw_native_checkout.wallet_ownership import proven_assets
+          site=Path.home()/"Saeit-staging"
+          target=site/"config/urls.py"
+          assert target.is_file() and not target.is_symlink()
+          assert (site/"mpw_commerce/urls.py").is_file()
+          assert "mpw_commerce" in settings.INSTALLED_APPS
+          assert connection.vendor=="mysql"
+          assert all(getattr(settings,k,False) is False for k in (
+              "MPW_COMMERCE_RELEASE_READY",
+              "MPW_COMMERCE_INVOICING_ENABLED",
+              "MPW_COMMERCE_SETTLEMENT_ENABLED",
+              "MPW_COMMERCE_REAL_RPC_ENABLED",
+              "MPW_COMMERCE_AUTORECONCILE_ENABLED",
+              "MPW_COMMERCE_CUSTOMER_HTTP_ENABLED",
+              "MPW_COMMERCE_DOWNLOADS_ENABLED",
+              "MPW_COMMERCE_BUYER_SIGNATURE_ENABLED",
+              "MPW_COMMERCE_COURSE_AUTO_ENROLL_ENABLED",
+          ))
+          original=target.read_bytes()
+          marker=b"# MPW_STAGE9_ROUTING_WITH_PAYMENTS_DISABLED"
+          assert marker not in original, "Already installed; no blind overwrite"
+          try: reverse("mpw_commerce:invoice")
+          except NoReverseMatch: pass
+          else: raise RuntimeError("Buyer routes unexpectedly exist")
+          root=Path.home()/".mpw-private-db-backups"
+          check=sorted(root.glob("*/manifest.json"),
+                       key=lambda p:p.stat().st_mtime,reverse=True)
+          assert check
+          manifest=json.loads(check[0].read_text())
+          age=(datetime.now(timezone.utc)-datetime.fromisoformat(
+              manifest["timestamp_utc"])).total_seconds()
+          assert 0<=age<86400
+          snap=check[0].parent/"source-rollback/config/urls.py"
+          expected=manifest["code_rollback_checksums"]["config/urls.py"]
+          assert snap.is_file() and not snap.is_symlink()
+          assert hashlib.sha256(original).hexdigest()==expected, "Live URLs changed since backup"
+          assert hashlib.sha256(snap.read_bytes()).hexdigest()==expected
+          assert b"urlpatterns" in original and b"include" in original
+          patch=b"""
+          # MPW_STAGE9_ROUTING_WITH_PAYMENTS_DISABLED
+          # Customer purchase routes remain inaccessible while all switches
+          # are false. Installing URL declarations never sends a payment.
+          from django.urls import include as mpw_commerce_include, path as mpw_commerce_path
+          urlpatterns += [
+              mpw_commerce_path("", mpw_commerce_include("mpw_commerce.urls")),
+          ]
+          """
+          candidate=original+patch
+          compile(candidate.decode("utf-8"),str(target),"exec")
+          def atomic(data):
+              fd,temp=tempfile.mkstemp(prefix=".mpw-urls-",dir=str(target.parent))
+              try:
+                  with os.fdopen(fd,"wb") as f:
+                      f.write(data);f.flush();os.fsync(f.fileno())
+                  os.chmod(temp,target.stat().st_mode & 0o777)
+                  os.replace(temp,target)
+              finally:
+                  if os.path.exists(temp): os.unlink(temp)
+          atomic(candidate)
+          try:
+              # reverse() above imported the original URLconf in this
+              # process. Reload it after atomic replacement, then discard
+              # Django's cached resolver before checking new route.
+              import importlib
+              importlib.reload(importlib.import_module("config.urls"))
+              from django.urls import clear_url_caches,reverse
+              clear_url_caches()
+              from django.core.management import call_command
+              call_command("check",verbosity=0)
+              invoice=reverse("mpw_commerce:invoice")
+              assert invoice=="/commerce/checkout/invoice/",invoice
+              assert all(getattr(settings,k,False) is False for k in (
+                  "MPW_COMMERCE_RELEASE_READY",
+                  "MPW_COMMERCE_SETTLEMENT_ENABLED",
+                  "MPW_COMMERCE_CUSTOMER_HTTP_ENABLED",
+              ))
+              # Test through the deployed app's own guard without creating
+              # orders, buyer signatures, invoices, or blockchain transfers.
+              from django.test import RequestFactory
+              from types import SimpleNamespace
+              from mpw_commerce.checkout_views import checkout_invoice
+              rq=RequestFactory().post(
+                  invoice, data='{"challenge_id":1}',
+                  content_type="application/json",secure=True,
+                  HTTP_HOST="mojplaywin.com",
+              )
+              rq.user=SimpleNamespace(
+                  is_authenticated=True,is_active=True,pk=42
+              )
+              response=checkout_invoice(rq)
+              # CSRF decorator may correctly reject this tokenless POST (403)
+              # before the disabled checkout gate returns 404.
+              assert response.status_code in (403,404),response.status_code
+              print("MPW_STAGE9_LIVE_DJANGO_CHECK_GREEN=True")
+              print("MPW_STAGE9_INVOICE_ROUTE_DECLARED_BUT_DENIED=True")
+              print("MPW_STAGE9_NO_PAYMENT_OR_PRODUCT_ACTIVATION=True")
+              print("MPW_STAGE9_ETH_OWNER_PROVEN="+str(proven_assets()["ETH"]))
+              print("MPW_STAGE9_TRX_OWNER_PROVEN="+str(proven_assets()["TRX"]))
+          except Exception:
+              if target.read_bytes()==candidate:
+                  atomic(original)
+                  print("MPW_STAGE9_URLS_ROLLBACK_EXACT=True")
+              raise
+          PY
+          REMOTE
+
+      - name: Verify live site, denied checkout and unaffected store with exact URL rollback
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-stage9-route"
+          h="$(curl -sS -L --max-time 15 -o /dev/null -w '%{http_code}' https://mojplaywin.com/ || true)"
+          s="$(curl -sS -L --max-time 15 -o /dev/null -w '%{http_code}' https://mojplaywin.com/store/ || true)"
+          old_checkout="$(curl -sS -L --max-time 15 -o /dev/null -w '%{http_code}' https://mojplaywin.com/checkout/ || true)"
+          echo "MPW_STAGE9_HOME_HTTP=$h"
+          echo "MPW_STAGE9_STORE_HTTP=$s"
+          echo "MPW_STAGE9_OLD_CHECKOUT_HTTP=$old_checkout"
+          if [ "$h" != "200" ] || [ "$s" != "200" ] || [ "$old_checkout" != "404" ]; then
+            echo MPW_STAGE9_PUBLIC_SMOKE_FAILED_ROLLING_BACK_URLS
+            timeout 70s ssh -F "$d/config" host 'python3 -' <<'PY'
+          from pathlib import Path
+          import hashlib,json,os,tempfile
+          home=Path.home()
+          target=home/"Saeit-staging/config/urls.py"
+          manifest=sorted((home/".mpw-private-db-backups").glob("*/manifest.json"),
+                          key=lambda p:p.stat().st_mtime,reverse=True)[0]
+          info=json.loads(manifest.read_text())
+          snap=manifest.parent/"source-rollback/config/urls.py"
+          current=target.read_bytes()
+          original=snap.read_bytes()
+          assert hashlib.sha256(original).hexdigest()==info["code_rollback_checksums"]["config/urls.py"]
+          assert current.startswith(original)
+          assert current.count(b"# MPW_STAGE9_ROUTING_WITH_PAYMENTS_DISABLED")==1
+          fd,tmp=tempfile.mkstemp(prefix=".mpw-urls-rollback-",dir=str(target.parent))
+          with os.fdopen(fd,"wb") as f:
+              f.write(original);f.flush();os.fsync(f.fileno())
+          os.chmod(tmp,target.stat().st_mode & 0o777)
+          os.replace(tmp,target)
+          print("MPW_STAGE9_ONLY_OWN_URL_PATCH_ROLLED_BACK=True")
+          PY
+            exit 1
+          fi
+          echo MPW_STAGE9_HOME_STORE_STILL_HEALTHY=True
+          echo MPW_STAGE9_PAID_PURCHASE_STILL_DISABLED=True
+      - name: Remove temporary SSH credentials
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/mpw-stage9-route"

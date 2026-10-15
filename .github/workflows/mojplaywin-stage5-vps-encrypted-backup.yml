@@ -1,0 +1,128 @@
+name: MojPlayWin stage 5 encrypted independent VPS backup
+on:
+  push:
+    branches: [qa/mpw-payment-release-preflight-20261015]
+    paths: ['.github/workflows/mojplaywin-stage5-vps-encrypted-backup.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: mpw-stage5-vps-recovery-copy
+  cancel-in-progress: false
+jobs:
+  private-recovery:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Copy and verify current private cPanel database archive onto independent VPS with encryption at rest
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/mpw-stage5-vps-recovery"
+          mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          python3 - "$d/vps.key" "$d/host.key" <<'PY'
+          from pathlib import Path
+          import sys
+          for filename in sys.argv[1:]:
+              f=Path(filename)
+              f.write_text(f.read_text().replace("\r\n","\n").strip().replace("\\n","\n")+"\n")
+          PY
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host relay
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host host
+            HostName zohal.pws-dns.net
+            Port 1396
+            User zomorod2
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump relay
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+          EOF
+          timeout 30s ssh -F "$d/config" relay 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+
+          record="$(timeout 75s ssh -F "$d/config" host 'python3 -' <<'PY'
+          from pathlib import Path
+          import datetime,hashlib,json
+          root=Path.home()/".mpw-private-db-backups"
+          assert root.is_dir() and not root.is_symlink()
+          matches=sorted(root.glob("*/manifest.json"),key=lambda p:p.stat().st_mtime,reverse=True)
+          assert matches
+          manifest=json.loads(matches[0].read_text())
+          age=(datetime.datetime.now(datetime.timezone.utc)-
+               datetime.datetime.fromisoformat(manifest["timestamp_utc"])).total_seconds()
+          assert 0<=age<7200
+          archive=matches[0].parent/"mysql-full.sql.gz"
+          assert archive.is_file() and not archive.is_symlink()
+          digest=hashlib.sha256(archive.read_bytes()).hexdigest()
+          assert digest==manifest["archive_sha256"]
+          size=archive.stat().st_size
+          assert 1024<size<2*1024*1024*1024
+          print(str(archive)+"|"+digest+"|"+str(size))
+          PY
+          )"
+          IFS='|' read -r source_path expected_digest archive_bytes <<< "$record"
+          [[ "$source_path" =~ ^/home/zomorod2/\.mpw-private-db-backups/[A-Za-z0-9_-]+/mysql-full\.sql\.gz$ ]]
+          [[ "$expected_digest" =~ ^[a-f0-9]{64}$ ]]
+          [[ "$archive_bytes" =~ ^[0-9]+$ ]]
+          [[ "$GITHUB_RUN_ID" =~ ^[0-9]+$ ]]
+          destination=".mpw-independent-backups/mpw-$GITHUB_RUN_ID.sql.gz.enc"
+          timeout 70s ssh -F "$d/config" relay "MPW_REQUIRED_BYTES=$archive_bytes bash -se" <<'VPS'
+          set -euo pipefail
+          umask 077
+          folder="$HOME/.mpw-independent-backups"
+          test ! -L "$folder"
+          mkdir -p "$folder"
+          chmod 700 "$folder"
+          command -v openssl >/dev/null
+          available="$(df -PB1 "$HOME" | tail -n 1 | awk '{print $4}')"
+          test "$available" -gt "$((MPW_REQUIRED_BYTES * 3))"
+          if [ ! -e "$folder/offsite-restore.key" ]; then
+            openssl rand -hex 48 > "$folder/offsite-restore.key"
+            chmod 600 "$folder/offsite-restore.key"
+          fi
+          test -f "$folder/offsite-restore.key" && test ! -L "$folder/offsite-restore.key"
+          chmod 600 "$folder/offsite-restore.key"
+          VPS
+          # Stream directly through pinned SSH sessions, no plain archive on CI.
+          # Encrypted at rest on VPS using a randomly generated private key.
+          timeout 360s ssh -F "$d/config" host "cat '$source_path'" |
+            timeout 360s ssh -F "$d/config" relay \
+              "umask 077; cd && openssl enc -aes-256-cbc -pbkdf2 -salt -pass file:.mpw-independent-backups/offsite-restore.key -out '$destination.part'"
+          # Verify decrypted byte-level SHA256 against the ORIGINAL cPanel backup.
+          recovered_sha="$(timeout 180s ssh -F "$d/config" relay \
+            "set -e -o pipefail; cd; openssl enc -d -aes-256-cbc -pbkdf2 -pass file:.mpw-independent-backups/offsite-restore.key -in '$destination.part' | sha256sum | cut -d' ' -f1")"
+          test "$recovered_sha" = "$expected_digest"
+          timeout 30s ssh -F "$d/config" relay \
+            "umask 077; cd; test ! -e '$destination'; mv '$destination.part' '$destination'; chmod 600 '$destination'; printf '%s\n' '$expected_digest' > '$destination.sha256'; chmod 600 '$destination.sha256'"
+          echo MPW_STAGE5_VPS_OFFHOST_ENCRYPTED_COPY_VERIFIED=True
+          echo MPW_STAGE5_ORIGINAL_SQL_SHA256_RESTORED_MATCH=True
+          echo MPW_STAGE5_NO_UNENCRYPTED_DATABASE_STORED_IN_ACTIONS=True
+          echo MPW_STAGE5_NO_LIVE_DB_CHANGES=True
+      - name: Remove transient SSH keys
+        if: always()
+        shell: bash
+        run: rm -rf -- "$RUNNER_TEMP/mpw-stage5-vps-recovery"

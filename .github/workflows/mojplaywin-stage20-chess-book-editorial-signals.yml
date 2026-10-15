@@ -1,0 +1,140 @@
+name: MojPlayWin chess first product editorial readiness audit
+on:
+  push:
+    branches: [qa/mpw-payment-release-preflight-20261015]
+    paths: ['.github/workflows/mojplaywin-stage20-chess-book-editorial-signals.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  private-pdf-metadata:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 9
+    steps:
+      - name: Inspect confidential on-host PDF without copying it to CI
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/mpw-private-pdf-reader"
+          mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          python3 - "$d/vps.key" "$d/host.key" <<'PY'
+          from pathlib import Path
+          import sys
+          for filename in sys.argv[1:]:
+              f=Path(filename)
+              f.write_text(f.read_text().replace("\r\n","\n").strip().replace("\\n","\n")+"\n")
+          PY
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host relay
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host host
+            HostName zohal.pws-dns.net
+            Port 1396
+            User zomorod2
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump relay
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+          EOF
+          timeout 30s ssh -F "$d/config" relay 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          timeout 130s ssh -F "$d/config" host 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          cd "$HOME/Saeit-staging"
+          export DJANGO_SETTINGS_MODULE=config.settings
+          export PYTHONDONTWRITEBYTECODE=1
+          "$HOME/virtualenv/Saeit-staging/3.11/bin/python" - <<'PY'
+          import os,sys,re,hashlib,statistics
+          from pathlib import Path
+          from collections import Counter
+          import django
+          django.setup()
+          from django.conf import settings
+          from core.models import Product
+          sys.path.insert(0,str(Path.home()/".mpw-private-pdf-reader/modules"))
+          from pypdf import PdfReader
+          book=Path.home()/"MojPlayWin_Private_Assets/chess-improvement-2026/MojPlayWin_Science_and_Practice_of_Chess_Improvement.pdf"
+          assert book.is_file() and not book.is_symlink()
+          doc=PdfReader(str(book),strict=True)
+          texts=[p.extract_text() or "" for p in doc.pages]
+          joined="\n".join(texts)
+          tokens=re.findall(r"[A-Za-z]+(?:[-'][A-Za-z]+)*",joined.lower())
+          word_pages=[len(re.findall(r"[A-Za-z]+",t)) for t in texts]
+          repeated=Counter()
+          for t in texts:
+              paragraphs=[p.strip() for p in re.split(r"\n\s*\n",t) if len(p.strip())>=90]
+              repeated.update(set(hashlib.sha256(" ".join(p.lower().split()).encode()).digest() for p in paragraphs))
+          repeated_paragraphs=sum(v-1 for v in repeated.values() if v>1)
+          token_triples=Counter(tuple(tokens[i:i+10]) for i in range(0,len(tokens)-9))
+          repeated_tengrams=sum(v-1 for v in token_triples.values() if v>1)
+          print("MPW_BOOK_PAGE_MEDIAN_WORDS="+str(statistics.median(word_pages)))
+          print("MPW_BOOK_PAGE_P10_WORDS="+str(sorted(word_pages)[int(len(word_pages)*.1)]))
+          print("MPW_BOOK_PAGE_P90_WORDS="+str(sorted(word_pages)[int(len(word_pages)*.9)]))
+          print("MPW_BOOK_REPEATED_LONG_PARAGRAPHS="+str(repeated_paragraphs))
+          print("MPW_BOOK_REPEATED_TEN_WORD_PHRASES="+str(repeated_tengrams))
+          for label,pattern in (
+              ("CHAPTER_MARKERS",r"\bchapter\s+\d{1,3}\b"),
+              ("EXERCISE_TERMS",r"\bexercises?\b"),
+              ("SOLUTION_TERMS",r"\bsolutions?\b"),
+              ("REFERENCE_TERMS",r"\b(?:references|bibliography)\b"),
+              ("FEN_EXAMPLES",r"(?:[prnbqkPRNBQK1-8]+/){7}[prnbqkPRNBQK1-8]+"),
+              ("MOVE_NOTATIONS",r"\b(?:[1-9]\d{0,2})\.(?:\.\.)?\s*(?:[KQRBN]?[a-h]?[1-8]?x?[a-h][1-8]|O-O(?:-O)?)\b"),
+          ):
+              matches=re.findall(pattern,joined,re.IGNORECASE)
+              print("MPW_BOOK_"+label+"="+str(len(matches)))
+          meta=doc.metadata
+          m_author=str(meta.author or "").lower() if meta else ""
+          print("MPW_BOOK_AUTHOR_METADATA_MATCHES_DECLARED_AUTHOR="+str(
+              "mojtaba" in m_author and any(x in m_author for x in ("rozegar","roozegar","rouzegar"))
+          ))
+          page_titles=sum(bool(re.search(r"\b(?:chapter|part)\b",t[:280],re.I)) for t in texts)
+          print("MPW_BOOK_PAGES_WITH_SECTION_HEADINGS_NEAR_TOP="+str(page_titles))
+          catalog=Product.objects.filter(pk=72).first()
+          assert catalog is not None
+          meta=catalog.metadata if isinstance(catalog.metadata,dict) else {}
+          print("MPW_BOOK_DB_PRODUCT_PRICE_USD="+str(catalog.price) if catalog.currency=="USD" else "MPW_BOOK_DB_PRICE_NOT_USD=True")
+          print("MPW_BOOK_DB_OWNER_LINKED="+str(catalog.owner_id is not None))
+          print("MPW_BOOK_DB_RESEARCH_LINKED="+str(catalog.knowledge_article_id is not None))
+          print("MPW_BOOK_DB_SALE_RELEASED="+str(catalog.active))
+          root_setting=getattr(settings,"MPW_COMMERCE_PRIVATE_ASSET_ROOT",None)
+          print("MPW_BOOK_PRIVATE_ASSET_ROOT_CONFIGURED="+str(
+              isinstance(root_setting,str) and root_setting.startswith("/")
+          ))
+          if isinstance(root_setting,str) and root_setting.startswith("/"):
+              root=Path(root_setting)
+              print("MPW_BOOK_CONFIGURED_PRIVATE_ROOT_MATCHES_BOOK="+str(
+                  root in book.parents and root.is_dir() and not root.is_symlink()
+              ))
+          else:
+              print("MPW_BOOK_CONFIGURED_PRIVATE_ROOT_MATCHES_BOOK=False")
+          print("MPW_BOOK_TEXT_REVIEW_AUTOMATED_ONLY=True")
+          print("MPW_BOOK_DONT_ASSUME_LICENSE_OR_QUALITY_APPROVED=True")
+          print("MPW_BOOK_READ_ONLY_NO_PUBLICATION=True")
+          PY
+          REMOTE
+      - name: Erase temporary SSH keys and dependency wheel from runner
+        if: always()
+        shell: bash
+        run: rm -rf "$RUNNER_TEMP/mpw-private-pdf-reader" "$RUNNER_TEMP/mpw-pdf-wheels"
