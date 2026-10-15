@@ -71,15 +71,17 @@ def picm_login(request):
     error = None
     if request.method == "POST":
         username = normalize_username(request.POST.get("username", ""))
+        # Isolate the photo studio from any existing site admin identity.
+        credential_username = "picm-" + username if username.startswith("09") and len(username) == 11 and username.isascii() and username.isdigit() else ""
         password = request.POST.get("password", "")
         key = _failure_key(username, request)
         if _throttle(key):
             error = "تلاش‌های ناموفق زیاد بوده است. کمی بعد دوباره امتحان کنید."
-        elif not username or not password or len(password) > 256:
+        elif not credential_username or not password or len(password) > 256:
             _throttle(key, failed=True)
             error = "نام کاربری یا گذرواژه صحیح نیست."
         else:
-            user = authenticate(request, username=username, password=password)
+            user = authenticate(request, username=credential_username, password=password)
             if user is None or not user.is_active:
                 _throttle(key, failed=True)
                 error = "نام کاربری یا گذرواژه صحیح نیست."
