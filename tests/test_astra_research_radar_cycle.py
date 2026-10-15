@@ -88,6 +88,40 @@ class AstraResearchPrivateCycleTests(unittest.TestCase):
             self.assertEqual(baseline.read_bytes(), existing)
             self.assertTrue((root / "retry-20261015-2.json").exists())
 
+    def test_freshness_30_day_window_distinguishes_reused_sources(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / "radar"
+            first = cycle.run_cycle(root, now=NOW, fixture=RSS, source="nass_news")
+            self.assertEqual(first["new_source_signals"], 1)
+            repeat = cycle.run_cycle(root, now=NOW + timedelta(hours=6),
+                                     fixture=RSS, source="nass_news")
+            self.assertEqual(repeat["new_source_signals"], 0)
+            old = root / "daily-20261015.json"
+            self.assertEqual(json.loads(old.read_text())["novel_source_signals_30d"], 1)
+            retry = root / "retry-20261015-3.json"
+            self.assertEqual(json.loads(retry.read_text())["novel_source_signals_30d"], 0)
+            self.assertFalse(json.loads(retry.read_text())["has_new_30d_source_signal"])
+            new_rss = RSS.replace(b"Farm production statistics", b"New irrigation acreage statistics").replace(
+                b"https://www.nass.usda.gov/farm-news",
+                b"https://www.nass.usda.gov/farm-new-signal")
+            fresh = cycle.run_cycle(root, now=NOW + timedelta(days=1),
+                                    fixture=new_rss, source="nass_news")
+            self.assertEqual(fresh["new_source_signals"], 1)
+            current = json.loads((root / "daily-20261016.json").read_text())
+            self.assertTrue(current["has_new_30d_source_signal"])
+            self.assertFalse(current["novel_source_is_verified_market_demand"])
+
+    def test_history_symlink_refused_before_any_new_report(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / "radar"
+            root.mkdir()
+            outside = Path(temp) / "untrusted.json"
+            outside.write_text('{"foreign":"data"}')
+            (root / "retry-20261014-2.json").symlink_to(outside)
+            with self.assertRaisesRegex(ValueError, "unsafe private research history"):
+                cycle.run_cycle(root, now=NOW, fixture=RSS, source="nass_news")
+            self.assertFalse((root / "daily-20261015.json").exists())
+
     def test_following_day_new_report_preserves_prior(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp) / "radar"
