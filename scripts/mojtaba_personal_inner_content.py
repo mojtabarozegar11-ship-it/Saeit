@@ -83,7 +83,7 @@ CSS = """<style>
 @media(max-width:640px){.mpw-inner{padding:12px 0 25px}.mpw-inner .mpw-cards,.mpw-inner .mpw-cards.mpw-three{grid-template-columns:1fr}.mpw-inner .mpw-gallery{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.mpw-inner .mpw-gallery img{height:190px}.mpw-inner figcaption{padding:11px}.mpw-inner .mpw-essay img{float:none;max-width:100%;max-height:none;width:100%;height:230px;margin:16px 0}.mpw-inner .mpw-essay{padding:19px}}
 </style>"""
 def img(i:int,alt:str)->str:
-    return '<img src="'+PHOTO_STATIC%i+'" alt="'+html.escape(alt,quote=True)+'" loading="lazy" decoding="async">'
+    return '<img src="'+PHOTO_STATIC.replace("%02d",f"{i:02d}")+'" alt="'+html.escape(alt,quote=True)+'" loading="lazy" decoding="async">'
 def card(i:int,title:str,text:str,label:str="PROFESSIONAL FOCUS")->str:
     return '<article class="mpw-card">'+img(i,title+' — supplied editorial portrait')+'<div class="mpw-copy"><span class="mpw-kicker">'+label+'</span><h3>'+title+'</h3><p>'+text+'</p></div></article>'
 def wrapper(title:str,intro:str,body:str,sub:str="INSIDE THE STORY")->str:
@@ -131,7 +131,7 @@ def posts()->str:
     return wrapper("Ideas explained, not merely announced.","Three substantial editorial research notes on agricultural economics, responsible product development and learning through interactive systems. These are educational frameworks rather than peer-reviewed empirical findings.",body,"RESEARCH NOTES & JOURNAL")
 def gallery()->str:
     titles=["MojPlayWin founder portrait","Zomorod Melal — desk and digital work","Business presentation","Agricultural innovation discussion","Professional partnership","Executive portrait","Zomorod Melal leadership portrait","MojPlayWin close-up portrait","MojPlayWin formal portrait","Agribusiness leadership portrait"]
-    body='<div class="mpw-gallery">'+''.join('<figure><a href="'+PHOTO_STATIC%i+'" target="_blank" rel="noopener" aria-label="View image '+str(i)+'">'+img(i,t)+'</a><figcaption><strong>'+f"{i:02}"+' / '+t+'</strong>Owner-supplied branded editorial image</figcaption></figure>' for i,t in enumerate(titles,1))+'</div>'
+    body='<div class="mpw-gallery">'+''.join('<figure><a href="'+PHOTO_STATIC.replace("%02d",f"{i:02d}")+'" target="_blank" rel="noopener" aria-label="View image '+str(i)+'">'+img(i,t)+'</a><figcaption><strong>'+f"{i:02}"+' / '+t+'</strong>Owner-supplied branded editorial image</figcaption></figure>' for i,t in enumerate(titles,1))+'</div>'
     return wrapper("Ten distinct images, one professional narrative.","Browse the complete supplied collection individually. Each image remains unaltered and can be opened separately; the scenes are illustrative and are not independent evidence of specific meetings or office locations.",body,"THE ORIGINAL IMAGE COLLECTION")
 def resume()->str:
     entries=[
