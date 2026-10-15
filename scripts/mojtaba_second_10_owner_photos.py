@@ -178,13 +178,20 @@ def main():
         if photo_dir.exists():
             if photo_dir.is_symlink() or not photo_dir.is_dir():
                 raise ValueError("Unsafe second gallery directory")
-            for i in range(1,11):
-                existing=photo_dir/("photo-"+f"{i:02d}"+".jpg")
-                if not existing.is_file() or existing.is_symlink() or hashlib.sha256(existing.read_bytes()).hexdigest()!=SHA[i-1]:
-                    raise ValueError("Existing original image mismatch "+str(i))
-            print("SECOND_GALLERY_STATIC_ALREADY_VERIFIED=10",flush=True)
-            return
-        photo_dir.mkdir(parents=True,mode=0o755)
+            contents=list(photo_dir.iterdir())
+            if contents:
+                expected={"photo-"+f"{i:02d}"+".jpg" for i in range(1,11)}
+                if {p.name for p in contents}!=expected:
+                    raise ValueError("Unexpected partial or unverified photo directory")
+                for i in range(1,11):
+                    existing=photo_dir/("photo-"+f"{i:02d}"+".jpg")
+                    if not existing.is_file() or existing.is_symlink() or hashlib.sha256(existing.read_bytes()).hexdigest()!=SHA[i-1]:
+                        raise ValueError("Existing original image mismatch "+str(i))
+                print("SECOND_GALLERY_STATIC_ALREADY_VERIFIED=10",flush=True)
+                return
+            print("EMPTY_STAGING_DIRECTORY_FOUND_FROM_FAILED_PREVIOUS_RUN",flush=True)
+        else:
+            photo_dir.mkdir(parents=True,mode=0o755)
         with ZipFile(args.archive) as z:
             for i in range(1,11):
                 p=photo_dir/("photo-"+f"{i:02d}"+".jpg")
