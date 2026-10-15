@@ -128,29 +128,30 @@ jobs:
                   if os.path.exists(tmp):os.unlink(tmp)
           assert hashlib.sha256(backup.read_bytes()).hexdigest()==expected_hash
           atomic(candidate)
-          check_script=r"""
-import django
-django.setup()
-from django.conf import settings
-from django.core.management import call_command
-from mpw_commerce.downloads import _private_file
-from types import SimpleNamespace
-from pathlib import Path
-call_command('check',verbosity=0)
-root=Path(settings.MPW_COMMERCE_PRIVATE_ASSET_ROOT)
-assert root.is_dir() and not root.is_symlink()
-relative='chess-improvement-2026/MojPlayWin_Science_and_Practice_of_Chess_Improvement.pdf'
-obj=SimpleNamespace(product=SimpleNamespace(metadata={'mpw_commerce':{'private_file':relative}}))
-out=_private_file(obj)
-assert out == root/relative
-assert out.is_file() and out.stat().st_size>400000
-for flag in ('MPW_COMMERCE_RELEASE_READY','MPW_COMMERCE_SETTLEMENT_ENABLED',
-             'MPW_COMMERCE_INVOICING_ENABLED','MPW_COMMERCE_REAL_RPC_ENABLED',
-             'MPW_COMMERCE_DOWNLOADS_ENABLED','MPW_COMMERCE_CUSTOMER_HTTP_ENABLED'):
-    assert getattr(settings,flag,False) is False
-print('MPW_STAGE21_REAL_PRIVATE_PDF_RESOLVES_SAFELY=True')
-print('MPW_STAGE21_ALL_PAYMENT_FLAGS_REMAIN_OFF=True')
-"""
+          import textwrap
+          check_script=textwrap.dedent(r"""
+          import django
+          django.setup()
+          from django.conf import settings
+          from django.core.management import call_command
+          from mpw_commerce.downloads import _private_file
+          from types import SimpleNamespace
+          from pathlib import Path
+          call_command('check',verbosity=0)
+          root=Path(settings.MPW_COMMERCE_PRIVATE_ASSET_ROOT)
+          assert root.is_dir() and not root.is_symlink()
+          relative='chess-improvement-2026/MojPlayWin_Science_and_Practice_of_Chess_Improvement.pdf'
+          obj=SimpleNamespace(product=SimpleNamespace(metadata={'mpw_commerce':{'private_file':relative}}))
+          out=_private_file(obj)
+          assert out == root/relative
+          assert out.is_file() and out.stat().st_size>400000
+          for flag in ('MPW_COMMERCE_RELEASE_READY','MPW_COMMERCE_SETTLEMENT_ENABLED',
+                       'MPW_COMMERCE_INVOICING_ENABLED','MPW_COMMERCE_REAL_RPC_ENABLED',
+                       'MPW_COMMERCE_DOWNLOADS_ENABLED','MPW_COMMERCE_CUSTOMER_HTTP_ENABLED'):
+              assert getattr(settings,flag,False) is False
+          print('MPW_STAGE21_REAL_PRIVATE_PDF_RESOLVES_SAFELY=True')
+          print('MPW_STAGE21_ALL_PAYMENT_FLAGS_REMAIN_OFF=True')
+          """)
           try:
               run=subprocess.run(
                   [str(home/"virtualenv/Saeit-staging/3.11/bin/python"),"-c",check_script],
