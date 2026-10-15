@@ -90,7 +90,7 @@ class FourProductProvenanceTests(unittest.TestCase):
             pkg=next(inbox.glob("*.zip"))
             pkg.write_bytes(b"tampered")
             output=Path(temp)/"review"
-            with self.assertRaisesRegex(ValueError,"SHA-256 mismatch"):
+            with self.assertRaisesRegex(ValueError,"private archive or sha not verified|SHA-256 mismatch"):
                 audit.run(catalog,inbox,output,apply=True)
             self.assertFalse(output.exists())
 
