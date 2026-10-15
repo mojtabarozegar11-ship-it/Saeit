@@ -23,7 +23,9 @@ class CustomerSignupForm(UserCreationForm):
     """Enforce a hard password length floor even if host validators are missing."""
 
     def clean_password2(self):
-        password = super().clean_password2()
+        # Django 5.2 UserCreationForm delegates pair matching to SetPasswordMixin.
+        # Do not rely on a clean_password2 superclass method.
+        password = self.cleaned_data.get("password2") or ""
         if len(password) < 12 or len(password) > 128:
             raise ValidationError("Choose a password between 12 and 128 characters.")
         return password
