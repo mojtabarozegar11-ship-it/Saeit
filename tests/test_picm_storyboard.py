@@ -34,7 +34,7 @@ class StoryboardPlannerTests(TestCase):
             self.assertEqual(plan["ratio"], "9:16")
 
     def test_invalid_requests_not_accepted(self):
-        for data in (("سلام", 60, "wide"), ("داستان چند صحنه", 61, "wide"),
+        for data in (("هی", 60, "wide"), ("داستان چند صحنه", 61, "wide"),
                      ("داستان چند صحنه", 60, "invalid"), ("داستان چند صحنه", "60", "wide")):
             with self.assertRaises(ValueError):
                 plan_story(*data)
