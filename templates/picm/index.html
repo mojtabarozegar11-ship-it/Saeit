@@ -24,14 +24,14 @@ h2{font-size:20px;margin:0 0 17px}
 .mode strong{display:block;font-size:13px;line-height:1.7}
 .mode small{display:block;color:#a9b7d5;font-size:11px;margin-top:5px}
 label{display:block;color:#e0e8f8;font-size:14px;font-weight:700;margin:18px 0 9px}
-input[type=file]{width:100%;background:#0e182e;padding:16px;border:1px dashed #6e7fa4;border-radius:12px;color:#bfcbde;font-size:12px}
+select{width:100%;padding:12px;border:1px solid #526587;border-radius:11px;color:#e6edff;background:#0e182f;font:inherit;font-size:14px}input[type=file]{width:100%;background:#0e182e;padding:16px;border:1px dashed #6e7fa4;border-radius:12px;color:#bfcbde;font-size:12px}
 textarea{resize:vertical;min-height:130px;padding:13px 15px;background:#0b1427;color:white;border:1px solid #56627c;border-radius:11px;font:inherit;line-height:1.7;width:100%}
 textarea:focus,input:focus{outline:2px solid #9a9eff;outline-offset:1px}
 .notice{border:1px solid #5b657e;background:#252e46;color:#e1eaff;padding:14px;border-radius:12px;font-size:13px;line-height:1.9;margin-top:18px}
 .notice strong{color:#f9e8b9}
 button.primary{display:block;width:100%;border:0;border-radius:12px;padding:16px;margin-top:20px;font:inherit;font-weight:800;cursor:pointer;background:linear-gradient(100deg,#8fa0ff,#bd9fff);color:#10142b}
 button.primary:disabled{cursor:not-allowed;opacity:.6}
-.hint{color:#acb8d0;font-size:12px;line-height:1.8;margin-top:11px}
+button.stop-video{margin-top:10px;width:100%;padding:12px;background:transparent;color:#e9b2bd;border:1px solid #926876;border-radius:12px;cursor:pointer;font:inherit}.hint{color:#acb8d0;font-size:12px;line-height:1.8;margin-top:11px}
 .preview{min-height:330px;background:linear-gradient(140deg,#10192e,#1c2542);border-radius:15px;border:1px dashed #52617f;display:flex;align-items:center;justify-content:center;text-align:center;flex-direction:column;overflow:hidden;padding:17px;color:#bbcae2;gap:12px}
 .preview img{width:100%;max-height:430px;object-fit:contain;border-radius:10px}
 .preview svg{width:75px;height:75px;stroke:#9eaeeb;fill:none}
@@ -67,8 +67,16 @@ footer{margin-top:29px;color:#8696b6;font-size:12px}
 <label for="prompt">دستور تغییر عکس</label>
 <textarea id="prompt" name="prompt" maxlength="580" minlength="4" required placeholder="برای نمونه: نور سینمایی طبیعی، جزئیات چهره حفظ شود و پس‌زمینه باغی سرسبز باشد..."></textarea>
 </div>
-<div class="notice"><strong>وضعیت موتور:</strong> موتور GPU برای ویرایش رئال، ویدیو و افزایش جزئیات واقعی 8K هنوز متصل نشده است. در این مرحله عکس مرجع را به‌صورت خصوصی برای پردازش آماده می‌کنید؛ **فایل نهایی تولید نمی‌شود**.</div>
+<div id="video-options" hidden>
+<label for="video-duration">مدت ویدیوی رایگان</label>
+<select id="video-duration"><option value="10">۱۰ ثانیه</option><option value="30">۳۰ ثانیه</option><option value="60" selected>۶۰ ثانیه</option></select>
+<label for="video-ratio">نسبت کادر</label>
+<select id="video-ratio"><option value="wide">افقی ۱۶:۹</option><option value="vertical">عمودی ۹:۱۶</option></select>
+<p class="hint">ویدیوی متحرک بی‌صدا از خود عکس با حرکت سینمایی و نوشتهٔ دلخواه ساخته می‌شود؛ پردازش روی دستگاه شما و بدون هزینه است. ساخت ویدیوی ۶۰ ثانیه‌ای حدود ۶۰ ثانیه زمان واقعی نیاز دارد. این روش تولید ویدیوی مولد هوش مصنوعی نیست.</p>
+</div>
+<div class="notice" id="capability-notice"><strong>وضعیت:</strong> ویدیوی متحرک رایگان در مرورگر ساخته می‌شود. ویرایش مولد عکس و 8K واقعی هنوز موتور GPU ندارند و فقط عکس مرجع را به‌صورت خصوصی دریافت می‌کنند.</div>
 <button type="submit" id="submit" class="primary">ثبت خصوصی عکس مرجع</button>
+<button type="button" id="video-cancel" class="stop-video" hidden>لغو ساخت ویدیو</button>
 <div class="hint">عکس ثبت‌شده حداکثر ۲۴ ساعت نگهداری می‌شود و پس از آن پاک‌سازی می‌شود. برای حفظ منابع، هر حساب هم‌زمان می‌تواند حداکثر سه عکس آماده‌سازی‌شده داشته باشد.</div>
 </form>
 </section>
@@ -129,4 +137,5 @@ form.addEventListener('submit',async e=>{
 window.addEventListener('pagehide',()=>{if(objectURL)URL.revokeObjectURL(objectURL)});
 })();
 </script>
+<script>{% include 'picm/free_motion.js' %}</script>
 </body></html>
