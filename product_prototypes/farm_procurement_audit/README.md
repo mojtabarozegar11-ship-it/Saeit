@@ -84,3 +84,64 @@ verify quote authenticity, quality equivalence, supply reliability, user demand,
 tax jurisdictions, packaging returns or full contractual landed costs. No
 automatic purchase, fabricated quality score, artificial original price or
 commercial-release authorization is added.
+
+
+## Optional strict quote-comparability gate (research revision V3)
+
+The original bare-quote input remains backward compatible, but the report
+warns when product-specification equivalence is NOT checked.
+
+To require *buyer-declared* matching of product specification, delivery basis
+and quote validity, add to top-level input:
+
+    "comparison_controls": {
+      "required_product_spec_id": "FERT-NPK-20-20-20",
+      "delivery_basis": "delivered_to_farm",
+      "as_of_date": "2026-10-15"
+    }
+
+Also add to each seller quotation:
+
+    "quote_controls": {
+      "product_spec_id": "FERT-NPK-20-20-20",
+      "delivery_basis": "delivered_to_farm",
+      "quoted_on": "2026-10-01",
+      "valid_until": "2026-10-31",
+      "quote_document_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+    }
+
+Two delivery bases are accepted: delivered_to_farm and buyer_collection.
+Buyer-selected as_of_date and seller quote dates must be valid YYYY-MM-DD.
+The supplier's product specification ID and document SHA-256 are *only
+operator-supplied assertions*, NOT proof of product equivalence, authentic
+quotations, traceable issuer, certification, or buyer demand.
+
+Strict comparison renders an offer arithmetically ineligible for:
+PRODUCT_SPECIFICATION_MISMATCH; DELIVERY_BASIS_MISMATCH;
+QUOTE_EXPIRED_AS_OF_DATE; QUOTE_ISSUED_AFTER_AS_OF_DATE; or
+QUOTE_COMPARABILITY_METADATA_MISSING. Invalid calendar dates, improperly
+structured document hashes and unknown delivery terms fail closed as input
+errors. An as-of-date comparison is not a server-side live verification.
+
+Existing checks for indivisible packs, waste, supplier-reported capacity,
+minimum order, tax assumptions and lead time remain in force. The total
+landed-cost difference is not realized savings. If no offers remain eligible,
+the tool correctly reports no eligible supplier.
+
+### Real buyer-validation steps before commercial qualification
+
+1. Obtain genuine and permitted seller quotations and grade/pack details.
+   Store documents privately, not in source code, logs or public GitHub.
+2. Compare the same formulation, grade, quantity unit, delivery basis and
+   validity period, independently checking genuine substitution rights and
+   regional taxes.
+3. Hash and inspect each original quote locally. The supplied digest itself
+   cannot authenticate authorship, approval or price validity.
+4. Verify calculations on anonymized, consented real quotations with a
+   subject expert; measure user effort and accuracy against free spreadsheets.
+5. Establish actual buyer demand, willingness to pay, independent product
+   review, copyright/license rights, support and payment readiness before any
+   retail release.
+
+None of the fictional fixtures is a genuine customer quote or proof of
+commercial viability. No automatic sale, score or public release is granted.
