@@ -7,6 +7,7 @@ the autonomous factory VPS; run on a separate, provisioned GPU host.
 """
 import argparse
 import json
+import hashlib
 import os
 from pathlib import Path
 import re
@@ -17,7 +18,8 @@ import sys
 from urllib.error import HTTPError
 from urllib.request import Request, build_opener, HTTPHandler, HTTPSHandler, HTTPRedirectHandler
 
-from story_pipeline import process
+from story_pipeline import process, verify_generating_graph
+from story_comfy import load_workflow, check_gpu, validate_local_url
 
 ORIGIN = "https://mojplaywin.com"
 IDENT = re.compile(r"^[a-f0-9]{32}$")
@@ -100,6 +102,12 @@ def upload_rendered(transport, ident, lease, output, receipt):
         raise RuntimeError("PICM_BAD_VERIFIED_MP4_SIZE")
     if receipt.get("job_id") != ident:
         raise RuntimeError("PICM_WRONG_JOB_RECEIPT")
+    with output.open("rb") as check:
+        h = hashlib.sha256()
+        for block in iter(lambda: check.read(CHUNK), b""):
+            h.update(block)
+    if h.hexdigest() != receipt.get("sha256"):
+        raise RuntimeError("PICM_CHANGED_MP4_SINCE_FFPROBE")
     stem = "/picm/video/worker/"
     progress = transport.json("GET", stem + "progress/" + ident + "/", lease=lease)
     offset = progress["offset"]
@@ -129,6 +137,10 @@ def upload_rendered(transport, ident, lease, output, receipt):
 def deliver_once(private_dir, token_path, workflow_api, node_map, *,
                  comfy="http://127.0.0.1:8188"):
     private = _private_dir(private_dir)
+    # Do NOT claim the owner's staged job if GPU/model configuration is absent.
+    graph, mapping = load_workflow(workflow_api, node_map)
+    verify_generating_graph(graph, mapping)
+    check_gpu(validate_local_url(comfy))
     transport = Transport(_token(token_path))
     selected = transport.json("GET", "/picm/video/worker/next/")
     if selected is None:
