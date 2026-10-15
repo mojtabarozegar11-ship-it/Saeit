@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<meta name="theme-color" content="#101827">
+<title>PICM | MojPlayWin AI Image Studio</title>
+<style>
+:root{color-scheme:dark;font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#ecf2fa;background:#0a1020}
+*{box-sizing:border-box} body{margin:0;background:radial-gradient(ellipse at 85% 0,#242e52 0,transparent 43%),#0a1020;min-height:100vh}
+header{border-bottom:1px solid #2e3650;padding:17px clamp(16px,5vw,70px);display:flex;justify-content:space-between;align-items:center;gap:10px}
+.logo{font-size:19px;font-weight:800;letter-spacing:.05em}.logo span{color:#93a5ff}a{color:#b3c3ff;text-decoration:none}
+main{max-width:1110px;margin:0 auto;padding:38px 20px 70px}
+.eyebrow{text-transform:uppercase;letter-spacing:.2em;color:#99aaf4;font-size:12px;font-weight:800}h1{font-size:clamp(30px,4vw,54px);margin:8px 0 11px;line-height:1.12}
+.lead{color:#afbdd6;max-width:700px;line-height:1.65;margin-bottom:27px}
+.layout{display:grid;grid-template-columns:minmax(290px,1fr) minmax(290px,1.07fr);gap:22px}
+.panel{border:1px solid #313b56;border-radius:22px;background:rgba(19,29,48,.86);box-shadow:0 18px 65px #0003;padding:24px}
+label{display:block;font-size:14px;color:#d7e0ef;font-weight:650;margin:17px 0 9px}
+textarea,select{background:#0d172a;color:#eef2ff;border:1px solid #47516b;border-radius:12px;padding:14px;font:inherit;width:100%;outline:none}
+textarea:focus,select:focus{border-color:#a4b3ff;box-shadow:0 0 0 3px #849bff30}
+textarea{min-height:156px;resize:vertical;line-height:1.55}
+select{height:50px}.row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+button{margin-top:21px;width:100%;border:0;border-radius:13px;padding:16px;background:linear-gradient(95deg,#8795ff,#b893ff);color:#111427;font-size:16px;font-weight:800;cursor:pointer}
+button:disabled{opacity:.45;cursor:not-allowed}
+.caption{color:#8e9cb7;font-size:12px;line-height:1.6}
+.preview{min-height:330px;display:flex;align-items:center;justify-content:center;flex-direction:column;text-align:center;border:1px dashed #4a5676;background:linear-gradient(120deg,#111a2d,#171d35);border-radius:16px;gap:15px;overflow:hidden}
+.preview svg{width:65px;opacity:.75}.preview img{width:100%;max-width:512px;height:auto;image-rendering:auto}
+#status{color:#b7c9e4;line-height:1.7;font-size:14px;padding-top:14px;min-height:48px}
+.notice{border:1px solid #596074;background:#252a3c;color:#ebdef1;border-radius:11px;padding:11px 14px;font-size:13px;margin-top:16px}
+.download{display:inline-block;border:1px solid #8997fa;padding:12px 16px;border-radius:12px;margin:8px 0}
+footer{margin-top:25px;color:#8795ae;font-size:12px}
+@media(max-width:760px){.layout{grid-template-columns:1fr}.panel{padding:18px}.row{grid-template-columns:1fr 1fr}.preview{min-height:240px}}
+</style>
+</head>
+<body>
+<header><div class="logo">MojPlayWin <span>/ PICM</span></div><a href="/">← Main site</a></header>
+<main>
+<div class="eyebrow">Private AI image studio · Beta</div>
+<h1>Ideas become images.</h1>
+<p class="lead">Describe your scene, choose a visual style, and submit a private image request. Your result returns to this page—no Termux, GitHub or direct server access needed.</p>
+<div class="layout">
+<section class="panel">
+<h2>Generate image</h2>
+{% if not picm_authenticated %}
+<div class="notice">Please <a href="/admin/login/?next=/picm/">sign in</a> to create images. The public studio is currently in a limited beta.</div>
+{% endif %}
+<form id="renderform">
+{% csrf_token %}
+<label for="prompt">Image description</label>
+<textarea id="prompt" name="prompt" required minlength="4" maxlength="580" placeholder="A luminous botanical garden with delicate golden sunlight..."></textarea>
+<div class="row">
+<div><label for="style">Style</label><select id="style" name="style"><option value="cinematic">Cinematic</option><option value="natural">Natural photo</option><option value="illustration">Illustration</option><option value="product">Product</option></select></div>
+<div><label for="steps">Render steps</label><select id="steps" name="steps"><option value="2">2 · Standard demo</option><option value="1">1 · Quick test</option><option value="3">3 · Detailed demo</option></select></div>
+</div>
+<div class="notice">Current CPU engine: 256 × 256 experimental PNG. High-quality and 8K rendering are not yet available. Up to {{ picm_daily_limit }} requests per account per 24 hours.</div>
+<button type="submit" id="submit" {% if not picm_authenticated %}disabled{% endif %}>Generate image</button>
+<div class="caption">Your prompt and image stay private to your account. Requests run sequentially on a protected server with resource limits.</div>
+</form>
+</section>
+<section class="panel">
+<h2>Preview</h2>
+<div class="preview" id="preview">
+<svg viewBox="0 0 64 64" fill="none" aria-hidden="true"><rect x="5" y="9" width="54" height="46" rx="6" stroke="#9babea" stroke-width="2"/><circle cx="20" cy="23" r="5" fill="#8499e9"/><path d="m10 47 16-17 11 11 8-9 10 14" stroke="#a3aef0" stroke-width="3"/></svg>
+<div>Generated image appears here</div>
+</div>
+<p id="status" role="status" aria-live="polite">Ready for your idea.</p>
+<div id="downloads"></div>
+</section>
+</div>
+<footer>PICM Beta · MojPlayWin. Render speed and availability depend on protected server capacity.</footer>
+</main>
+<script>
+(function(){
+const form=document.getElementById('renderform'), button=document.getElementById('submit'), status=document.getElementById('status'), preview=document.getElementById('preview'), downloads=document.getElementById('downloads');
+const csrf=document.querySelector('[name=csrfmiddlewaretoken]')?.value||'';
+const valid=/^[a-f0-9]{32}$/;
+const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+async function jsonResponse(url,options) {
+ const response=await fetch(url,{credentials:'same-origin',cache:'no-store',...options});
+ let data={};try{data=await response.json()}catch(e){}
+ if(!response.ok)throw new Error(data.error||('Server error '+response.status));
+ return data;
+}
+form.addEventListener('submit',async event=>{
+ event.preventDefault();if(button.disabled)return;
+ button.disabled=true;downloads.replaceChildren();status.textContent='Submitting your image request...';
+ try{
+  const payload={prompt:document.getElementById('prompt').value,style:document.getElementById('style').value,steps:Number(document.getElementById('steps').value)};
+  const job=await jsonResponse('/picm/api/submit/',{method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':csrf},body:JSON.stringify(payload)});
+  if(!valid.test(job.id))throw new Error('Invalid image job ID');
+  preview.replaceChildren();preview.textContent='Image is queued for the private render engine.';
+  let finished=false;
+  for(let i=0;i<120;i++){
+   await sleep(5000);
+   const state=await jsonResponse('/picm/api/status/'+job.id+'/');
+   if(state.state==='done'){
+    const image=document.createElement('img');image.alt='Generated picture';image.src='/picm/image/'+job.id+'/';preview.replaceChildren(image);
+    const link=document.createElement('a');link.href=image.src;link.textContent='Download your PNG';link.className='download';downloads.appendChild(link);
+    status.textContent='Image ready · experimental 256 × 256 PNG';finished=true;break;
+   }
+   if(state.state==='failed')throw new Error('Render could not finish safely. Please try again later.');
+   status.textContent=state.state==='queued'?'Waiting in the private render queue...':'Engine rendering your image...';
+  }
+  if(!finished)status.textContent='Still processing. Keep this tab open to check the result.';
+ }catch(error){status.textContent='Could not complete: '+error.message}
+ finally{button.disabled=false}
+});
+})();
+</script>
+</body>
+</html>
