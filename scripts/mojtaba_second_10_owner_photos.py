@@ -110,7 +110,7 @@ def patch(page: str, content: str) -> str:
     result=content[:end]+"\n"+addition(page)+"\n"+content[end:]
     if result.count(MARKER)!=1: raise ValueError("Missing new block")
     for n in ROUTES[page][1]:
-        if result.count(PHOTO_SUBDIR+"/photo-"+f"{n:02d}"+".png")!=2:
+        if result.count(PHOTO_SUBDIR+"/photo-"+f"{n:02d}"+".jpg")!=2:
             raise ValueError("Expected exactly two new references per photograph")
     return result
 
@@ -129,7 +129,7 @@ def verify_archive(zip_path: Path) -> None:
             if info.compress_size<1: raise ValueError("Invalid compression")
             if (info.external_attr>>16)&0o170000 == 0o120000: raise ValueError("Symlink refused")
             raw=z.read(info)
-            if hashlib.sha256(raw).hexdigest()!=SHA[i-1] or not raw.startswith(b"\x89PNG\r\n\x1a\n"):
+            if hashlib.sha256(raw).hexdigest()!=SHA[i-1] or not raw.startswith(b"\xff\xd8\xff"):
                 raise ValueError("Owner image bytes mismatch "+name)
             total+=len(raw)
     print("SECOND_GALLERY_ORIGINALS_SHA256_VERIFIED=10 bytes="+str(total),flush=True)
@@ -179,7 +179,7 @@ def main():
             if photo_dir.is_symlink() or not photo_dir.is_dir():
                 raise ValueError("Unsafe second gallery directory")
             for i in range(1,11):
-                existing=photo_dir/("photo-"+f"{i:02d}"+".png")
+                existing=photo_dir/("photo-"+f"{i:02d}"+".jpg")
                 if not existing.is_file() or existing.is_symlink() or hashlib.sha256(existing.read_bytes()).hexdigest()!=SHA[i-1]:
                     raise ValueError("Existing original image mismatch "+str(i))
             print("SECOND_GALLERY_STATIC_ALREADY_VERIFIED=10",flush=True)
@@ -187,7 +187,7 @@ def main():
         photo_dir.mkdir(parents=True,mode=0o755)
         with ZipFile(args.archive) as z:
             for i in range(1,11):
-                p=photo_dir/("photo-"+f"{i:02d}"+".png")
+                p=photo_dir/("photo-"+f"{i:02d}"+".jpg")
                 with p.open("xb") as handle:
                     handle.write(z.read("owner-new-gallery/"+p.name))
                 p.chmod(0o644)
@@ -196,7 +196,7 @@ def main():
     if args.mode=="install":
         if not photo_dir.is_dir() or photo_dir.is_symlink():raise ValueError("Originals not staged")
         for i in range(1,11):
-            p=photo_dir/("photo-"+f"{i:02d}"+".png")
+            p=photo_dir/("photo-"+f"{i:02d}"+".jpg")
             if not p.is_file() or p.is_symlink() or hashlib.sha256(p.read_bytes()).hexdigest()!=SHA[i-1]:
                 raise ValueError("Staged photo mismatch "+str(i))
     existing=templates(app)
