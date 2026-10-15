@@ -126,6 +126,48 @@ jobs:
             result=$(curl -L -sS -o /dev/null --max-time 20 -w '%{http_code}' "$url" || true)
             printf 'ROUTE_URL=%s HTTP=%s\n' "$url" "$result"
           done
+      - name: Inspect account-level Python and LSWSGI alternatives (read-only)
+        shell: bash
+        env:
+          SSH_CONFIG: ${{ runner.temp }}/zomorod-restore/config
+        run: |
+          set -euo pipefail
+          ssh -F "$SSH_CONFIG" saeit-cpanel bash -se <<'REMOTE'
+          set -u
+          echo PYTHON_ALTERNATIVES_BEGIN
+          for p in /opt/alt/python310/bin/lswsgi /opt/alt/python311/bin/lswsgi /usr/local/lsws/fcgi-bin/lswsgi /usr/local/lsws/fcgi-bin/lswsgi_wrapper /opt/alt/python310/bin/python3.10 /home/zomorod2/virtualenv/Saeit/3.10/bin/python /etc/cpanel/ea4/passenger.python /etc/cpanel/ea4/passenger.python.system-default; do
+            if test -e "$p"; then
+              stat -Lc '%n type=%F uid=%u mode=%a bytes=%s' "$p" 2>/dev/null || true
+              if [ "$p" = /etc/cpanel/ea4/passenger.python ] || [ "$p" = /etc/cpanel/ea4/passenger.python.system-default ]; then readlink "$p" || true; fi
+            else echo "NOT_FOUND=$p"; fi
+          done
+          echo PYTHON_ALTERNATIVES_END
+          echo SELECTOR_CLI_BEGIN
+          if command -v cloudlinux-selector >/dev/null 2>&1; then
+            echo "SELECTOR_CLI=$(command -v cloudlinux-selector)"
+            cloudlinux-selector get --json --interpreter python 2>&1 | python3 -c '
+          import json,sys
+          s=sys.stdin.read()
+          try:
+              d=json.loads(s)
+              for k in ("result","message","selector_enabled","default_version","available_versions","errors"):
+                  if k in d: print("selector_"+k+"="+str(d[k])[:300])
+              apps=d.get("apps") or d.get("applications") or {}
+              if isinstance(apps,dict): print("selector_app_root_names="+",".join(list(apps.keys())[:12]))
+              else: print("selector_app_count="+str(len(apps)))
+          except Exception as exc:
+              print("selector_response_non_json="+type(exc).__name__)
+          ' || true
+          else
+            echo SELECTOR_CLI=UNAVAILABLE
+          fi
+          echo SELECTOR_CLI_END
+          echo USER_CONTROLLED_CONFIG_BEGIN
+          for p in /home/zomorod2/Saeit/passenger_wsgi.py /home/zomorod2/Saeit/config/wsgi.py /home/zomorod2/Saeit/.htaccess /home/zomorod2/public_html/.htaccess; do
+            test ! -e "$p" || stat -c 'FILE=%n owner=%U mode=%a' "$p"
+          done
+          echo USER_CONTROLLED_CONFIG_END
+          REMOTE
       - name: Remove temporary SSH material
         if: always()
         shell: bash
