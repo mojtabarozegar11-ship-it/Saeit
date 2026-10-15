@@ -15,6 +15,8 @@ const ratio=document.getElementById("story-ratio");
 const csrf=form?.querySelector("[name=csrfmiddlewaretoken]")?.value;
 if(!form||!options||!csrf)return;
 let active=false;
+let videoPoll=null;
+let checkingVideo=false;
 const isStory=()=>mode.value==="story_video";
 function renderMode(){
  options.hidden=!isStory();
@@ -29,6 +31,56 @@ function renderMode(){
  status.textContent="یک عکس و داستان وارد کنید؛ صحنه‌بندی قابل مشاهده خواهد شد. تولید فیلم هنوز فعال نیست.";
 }
 document.querySelectorAll("[data-mode]").forEach(btn=>btn.addEventListener("click",()=>{if(!active)renderMode()}));
+
+function watchPrivateMovie(ident, body){
+ if(videoPoll!==null){clearInterval(videoPoll);videoPoll=null;}
+ if(!/^[a-f0-9]{32}$/.test(ident))return;
+ const line=document.createElement("p");
+ line.textContent="وضعیت فیلم: در صف انتظار GPU واقعی.";
+ body.appendChild(line);
+ const check=async()=>{
+  if(checkingVideo)return;
+  checkingVideo=true;
+  try{
+   const response=await fetch("/picm/video/status/"+ident+"/",{
+    credentials:"same-origin",cache:"no-store"
+   });
+   if(response.status===404){
+    line.textContent="موتور ویدیو هنوز در این نسخه فعال نشده است؛ فعلاً فقط صحنه‌بندی ثبت شده.";
+    if(videoPoll!==null){clearInterval(videoPoll);videoPoll=null;}
+    return;
+   }
+   if(!response.ok)throw Error("status-"+response.status);
+   const result=await response.json();
+   if(result.state==="done"&&/^\/picm\/video\/download\/[a-f0-9]{32}\/$/.test(result.video_url||"")){
+    line.textContent="فیلم واقعی آماده است: ";
+    const a=document.createElement("a");
+    a.href=result.video_url;
+    a.textContent="دریافت فایل خصوصی MP4";
+    a.rel="nofollow";
+    line.appendChild(a);
+    status.textContent="فیلم آمادهٔ دانلود در حساب خصوصی است.";
+    if(videoPoll!==null){clearInterval(videoPoll);videoPoll=null;}
+   }else if(result.state==="uploading"){
+    line.textContent="در حال انتقال و بررسی یکپارچگی فیلم تولیدشده…";
+   }else if(result.state==="gpu_claimed"){
+    line.textContent="پردازش فیلم روی موتور GPU آغاز شده؛ هنوز خروجی نهایی تأیید نشده است.";
+   }else if(result.state==="staged_awaiting_gpu"){
+    line.textContent="در انتظار فعال‌شدن GPU واقعی؛ صحنه‌بندی به‌معنای تولید فیلم نیست.";
+   }else if(result.state==="expired"){
+    line.textContent="مهلت دریافت این فیلم تمام شده است.";
+    if(videoPoll!==null){clearInterval(videoPoll);videoPoll=null;}
+   }else{
+    line.textContent="وضعیت پردازش هنوز قابل تأیید نیست.";
+   }
+  }catch(_error){
+   line.textContent="ارتباط دریافت وضعیت موقتاً قطع است؛ صحنه‌بندی ذخیره شده اما فیلم تأیید نشده.";
+  }finally{checkingVideo=false;}
+ };
+ check();
+ videoPoll=setInterval(check,20000);
+}
+
 function showPlan(result){
  const plan=result.storyboard;
  if(!plan||!Array.isArray(plan.scenes))throw Error("سرور صحنه‌بندی را برنگرداند.");
@@ -51,6 +103,7 @@ function showPlan(result){
  p.style.color="#f4ddb1";
  body.appendChild(p);
  preview.replaceChildren(body);
+ watchPrivateMovie(result.id,body);
  status.textContent="داستان و عکس خصوصی ثبت شد. "+plan.scenes.length+" صحنه آمادهٔ پردازش هستند؛ تا اتصال موتور واقعی فایل ویدیو تولید نمی‌شود.";
 }
 form.addEventListener("submit",async event=>{
