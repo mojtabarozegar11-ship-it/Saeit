@@ -163,6 +163,31 @@ class PrivateManufacturingTests(unittest.TestCase):
         self.assertFalse(qa["real_payment_allowed"])
         self.assertFalse(qa["evidence_of_willingness_to_pay"])
 
+    def test_approved_private_source_revisions_bootstrap_three_builders_without_orders(self):
+        (self.root/".enable-autonomous-specialists").write_text("private_only")
+        first=pipeline.tick(self.root)
+        self.assertEqual(first["private_source_autoplan"]["new_source_jobs"],3)
+        self.assertEqual(first["status"],"PRIVATE_QA_PASSED",first)
+        self.assertEqual(pipeline.tick(self.root)["status"],"PRIVATE_QA_PASSED")
+        self.assertEqual(pipeline.tick(self.root)["status"],"PRIVATE_QA_PASSED")
+        again=pipeline.tick(self.root)
+        self.assertEqual(again["status"],"NO_ELIGIBLE_WORK")
+        self.assertEqual(again["private_source_autoplan"]["already_known_sources"],3)
+        self.assertEqual(pipeline.status(self.root)["distinct_private_product_families"],3)
+        self.assertEqual(pipeline.status(self.root)["distinct_private_qa_artifact_versions"],3)
+        self.assertEqual(pipeline.status(self.root)["published_products"],0)
+
+    def test_private_source_revision_mode_must_be_explicit_and_safe(self):
+        flag=self.root/".enable-autonomous-specialists"
+        flag.write_text("publish_all")
+        with self.assertRaisesRegex(ValueError,"unsafe specialist"):
+            pipeline.tick(self.root)
+        flag.unlink()
+        with tempfile.TemporaryDirectory() as dst:
+            flag.symlink_to(Path(dst)/"release-approval")
+            with self.assertRaisesRegex(ValueError,"unsafe specialist"):
+                pipeline.tick(self.root)
+
     def test_new_private_product_build_and_immutable_manifest(self):
         first=pipeline.enqueue(self.root,brief())
         self.assertTrue(first["new_job"])
