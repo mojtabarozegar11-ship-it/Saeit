@@ -168,6 +168,24 @@ jobs:
                   found+=1
                   if found>=30: break
           print("SEO_TEMPLATE_FILES_REPORTED="+str(found))
+          import re
+          base_path=root/"templates"/"personal_site"/"base.html"
+          if base_path.is_file():
+              source=base_path.read_text(encoding="utf-8",errors="replace")
+              print("SEO_BASE_TEMPLATE_PUBLIC_MARKUP_BEGIN")
+              for block in re.findall(r'<script[^>]+application/ld\+json[^>]*>.*?</script>',source,re.I|re.S):
+                  print("SEO_BASE_JSONLD_TEMPLATE="+block[:5000].replace("\\n"," "))
+              for pattern in (r'<title[^>]*>.*?</title>',r'<meta[^>]+name=["\']description["\'][^>]*>',r'<link[^>]+canonical[^>]*>',r'Vancouver',r'jobTitle'):
+                  for match in re.finditer(pattern,source,re.I|re.S):
+                      print("SEO_BASE_MATCH="+match.group(0)[:500].replace("\\n"," "))
+              print("SEO_BASE_TEMPLATE_PUBLIC_MARKUP_END")
+          home_path=root/"templates"/"personal_site"/"core"/"home.html"
+          if home_path.is_file():
+              source=home_path.read_text(encoding="utf-8",errors="replace")
+              print("SEO_HOME_TEMPLATE_TEXT_BEGIN")
+              for match in re.finditer(r'<h1[^>]*>.*?</h1>|<p[^>]*>.*?</p>',source,re.I|re.S):
+                  print("SEO_HOME_VISIBLE_COPY="+re.sub(r"\\s+"," ",match.group(0))[:450])
+              print("SEO_HOME_TEMPLATE_TEXT_END")
           views=root/"core"/"views.py"
           if views.is_file():
               lines=views.read_text(encoding="utf-8",errors="replace").splitlines()
