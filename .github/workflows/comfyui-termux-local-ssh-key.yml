@@ -48,7 +48,6 @@ jobs:
           ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
           test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs' || { echo HOST_FINGERPRINT_MISMATCH; exit 4; }
           ssh_args=(-i "$d/key" -p 22 -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15)
-          "": # keep YAML script transport isolated
           ssh "${ssh_args[@]}" githubops@178.239.147.150 'set -euo pipefail; test "$(id -un)" = githubops; install -d -m 700 "$HOME/.local/share/saeit-comfyui-phone"; cat > "$HOME/.local/share/saeit-comfyui-phone/keyctl.py"; chmod 600 "$HOME/.local/share/saeit-comfyui-phone/keyctl.py"' < ops/comfyui-vps/mobile_key_authorize.py
           if [[ "$REQUESTED_MODE" == authorize ]]; then
             printf '%s\n' "$PHONE_PUBLIC_KEY" | ssh "${ssh_args[@]}" githubops@178.239.147.150 'python3 "$HOME/.local/share/saeit-comfyui-phone/keyctl.py" authorize'
