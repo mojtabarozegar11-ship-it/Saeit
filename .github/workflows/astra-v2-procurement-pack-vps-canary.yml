@@ -1,0 +1,179 @@
+name: Astra Procurement Whole-Pack Technical Candidate VPS (Private Only)
+
+on:
+  push:
+    branches: [feature/astra-v2-0048-integration-canary-20261015]
+    paths:
+      - .github/workflows/astra-v2-procurement-pack-vps-canary.yml
+      - product_prototypes/farm_procurement_audit/**
+      - tests/test_astra_farm_procurement_audit.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: astra-procurement-pack-private-candidate
+  cancel-in-progress: false
+
+jobs:
+  verify-and-stage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Independent procurement math tests, pack normalizer and HTML security
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p test_astra_farm_procurement_audit.py -v
+          python3 product_prototypes/farm_procurement_audit/self_test.py
+          python3 -m py_compile product_prototypes/farm_procurement_audit/*.py
+      - name: Build QA-verified product revision in new VPS private directory, never replace running factory
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          temp="$RUNNER_TEMP/astra-procurement-pack"
+          install -d -m 700 "$temp"
+          trap 'rm -rf -- "$temp"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$temp/key"
+          chmod 600 "$temp/key"
+          ssh-keygen -y -P '' -f "$temp/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$temp/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$temp/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          SSH=(ssh -i "$temp/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$temp/known" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=15 githubops@178.239.147.150)
+          run_id="$GITHUB_RUN_ID"_"$GITHUB_RUN_ATTEMPT"
+          src_digest="$(sha256sum product_prototypes/farm_procurement_audit/procurement_audit.py | awk '{print $1}')"
+          tar -cf - product_prototypes/farm_procurement_audit tests/test_astra_farm_procurement_audit.py | "${SSH[@]}" \
+            "set -euo pipefail; umask 077; root=\$HOME/factory-runtime/operations; test -d \"\$root\"; stage=\"\$root/astra-procurement-pack-$run_id\"; test ! -e \"\$stage\"; mkdir -m 700 \"\$stage\"; tar -xf - -C \"\$stage\""
+          "${SSH[@]}" 'bash -se' "$run_id" "$src_digest" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          test "$(id -un)" = githubops
+          [[ "$1" =~ ^[0-9]+_[0-9]+$ ]]
+          [[ "$2" =~ ^[a-f0-9]{64}$ ]]
+          base="$HOME/factory-runtime"
+          stage="$base/operations/astra-procurement-pack-$1"
+          private="$base/private/astra-v2-procurement-pack-candidates"
+          previous_active="$base/operations/astra-v2-vps-canary-source"
+          old="$base/private/factory-fresh-isolated.sqlite3"
+          qa="$base/private/astra-v2-canary-products/queue.sqlite3"
+          py="$base/.venv/bin/python"
+          test -x "$py" && test -d "$stage" && test ! -L "$stage"
+          test -f "$old" && test ! -L "$old"
+          test -f "$qa" && test ! -L "$qa"
+          test -f "$previous_active/product_prototypes/farm_procurement_audit/procurement_audit.py"
+          test "$(sha256sum "$stage/product_prototypes/farm_procurement_audit/procurement_audit.py" | awk '{print $1}')" = "$2"
+          test ! -L "$base/private"
+          if test ! -e "$private"; then mkdir -m 700 "$private"; fi
+          test -d "$private" && test ! -L "$private"
+          chmod 700 "$private"
+          cd "$stage"
+          "$py" -m unittest discover -s tests -p test_astra_farm_procurement_audit.py -q
+          "$py" product_prototypes/farm_procurement_audit/self_test.py
+          "$py" - "$stage" "$private" "$old" "$qa" <<'PY'
+          import hashlib,importlib.util,json,os,pathlib,sqlite3,sys,tempfile,zipfile
+          root,private,legacy,technical=map(pathlib.Path,sys.argv[1:])
+          src=root/"product_prototypes/farm_procurement_audit"
+          code=src/"procurement_audit.py"
+          spec=importlib.util.spec_from_file_location("pack_candidate",str(code))
+          engine=importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(engine)
+          example=json.loads((src/"example_synthetic.json").read_text())
+          example["offers"][0].update(
+              pricing_basis="per_pack",pack_size_base_units="20",unit_price="90")
+          output=engine.evaluate(example)
+          rows={r["supplier"]:r for r in output["scenarios"]["base"]["offers"]}
+          assert rows["Synthetic Provider North"]["whole_packs_ordered"]=="6"
+          assert rows["Synthetic Provider North"]["total_landed_cost"]=="558.00"
+          assert rows["Synthetic Provider North"]["surplus_usable_units"]=="14.00"
+          assert output["commercial_release_allowed"] is False
+          assert output["market_demand_verified"] is False
+          assert output["quality_score"] is None
+          content=(src/"render_report.py")
+          report_spec=importlib.util.spec_from_file_location("pack_html",str(content))
+          render=importlib.util.module_from_spec(report_spec)
+          report_spec.loader.exec_module(render)
+          html=render.report_html(output)
+          assert "Whole packs" in html and "NOT realized savings" in html
+          ordered=["procurement_audit.py","render_report.py","example_synthetic.json",
+                   "self_test.py","README.md"]
+          fd,name=tempfile.mkstemp(prefix=".procurement-qa-",suffix=".zip",dir=str(private))
+          os.close(fd)
+          temp=pathlib.Path(name)
+          try:
+              with zipfile.ZipFile(temp,"w",compression=zipfile.ZIP_DEFLATED,compresslevel=9) as z:
+                  for file in sorted(ordered):
+                      data=(src/file).read_bytes()
+                      member=zipfile.ZipInfo("farm_procurement_audit/"+file,(2020,1,1,0,0,0))
+                      member.compress_type=zipfile.ZIP_DEFLATED
+                      member.external_attr=0o100644<<16
+                      z.writestr(member,data)
+              with zipfile.ZipFile(temp) as z:
+                  assert z.testzip() is None
+                  assert len(z.namelist())==len(ordered)
+              blob=temp.read_bytes()
+              sha=hashlib.sha256(blob).hexdigest()
+              dest=private/("procurement-pack-source-"+sha+".zip")
+              os.chmod(temp,0o600)
+              if dest.exists():
+                  assert dest.is_file() and not dest.is_symlink()
+                  assert hashlib.sha256(dest.read_bytes()).hexdigest()==sha
+              else:
+                  os.link(str(temp),str(dest))
+                  os.chmod(dest,0o600)
+          finally:
+              temp.unlink(missing_ok=True)
+          def ro(p):
+              with sqlite3.connect(p.resolve().as_uri()+"?mode=ro",uri=True) as db:
+                  db.execute("PRAGMA query_only=ON")
+                  return db.execute("SELECT COUNT(*) FROM "+(
+                      "core_product" if p==legacy else "jobs")).fetchone()[0]
+          main_count=ro(legacy)
+          known_technical_jobs=ro(technical)
+          assert main_count>=209 and known_technical_jobs>=3
+          manifest={
+              "candidate":"farm_procurement_whole_pack_normalization_v2",
+              "technical_candidate":True,
+              "prototype_source_zip_sha256":sha,
+              "source_revision_sha256":hashlib.sha256(code.read_bytes()).hexdigest(),
+              "synthetic_pack_example_total":"558.00",
+              "synthetic_pack_order_units":"120.00",
+              "synthetic_excess_usable_units":"14.00",
+              "synthetic_math_regressions_passed":True,
+              "html_escapes_supplier_input":True,
+              "independent_domain_review_passed":False,
+              "independent_customer_demand_attested":False,
+              "commercial_quality_score":None,
+              "sale_ready":False,"public_release_allowed":False,
+              "payment_activated":False,
+          }
+          record=private/("candidate-"+sha+".json")
+          if record.is_symlink(): raise ValueError("unsafe candidate manifest")
+          tmp_record=private/(".candidate-"+sha+".tmp")
+          if tmp_record.exists() or tmp_record.is_symlink(): raise ValueError("unsafe temporary manifest")
+          with tmp_record.open("x",encoding="utf-8") as out:
+              json.dump(manifest,out,indent=2,sort_keys=True)
+              out.write("\n")
+          os.chmod(tmp_record,0o600)
+          os.replace(str(tmp_record),str(record))
+          print("ASTRA_PROCUREMENT_PRIVATE_V2_CANDIDATE=CREATED")
+          print("ASTRA_PROCUREMENT_PRIVATE_V2_ZIP_SHA256="+sha)
+          print("ASTRA_PROCUREMENT_V2_PACK_TEST=PASS")
+          print("ASTRA_PROCUREMENT_V2_HTML_REPORT=PASS")
+          print("ASTRA_PROCUREMENT_V2_OLD_PRODUCTS="+str(main_count))
+          print("ASTRA_PROCUREMENT_V2_EXISTING_PRIVATE_JOBS="+str(known_technical_jobs))
+          print("ASTRA_PROCUREMENT_V2_INDEPENDENT_REVIEW=NOT_PERFORMED")
+          print("ASTRA_PROCUREMENT_V2_MARKET_VERIFICATION=false")
+          print("ASTRA_PROCUREMENT_V2_SALES_APPROVED=0")
+          print("ASTRA_PROCUREMENT_V2_RUNNING_FACTORY_SOURCES_UNCHANGED=true")
+          print("ASTRA_PROCUREMENT_V2_SITES_PAYMENTS_UNCHANGED=true")
+          PY
+          REMOTE

@@ -1,0 +1,100 @@
+name: Astra V2 Private-Only VPS Scheduler Install
+
+on:
+  push:
+    branches: [feature/astra-factory-v2-architecture-20261014]
+    paths: [.github/workflows/astra-v2-private-scheduler-install.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: astra-v2-private-scheduler-install
+  cancel-in-progress: false
+
+jobs:
+  isolated-scheduler:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test private manufacturing recovery before installation
+        run: |
+          python3 -m unittest discover -s tests -p 'test_astra_orchard_decision_audit.py' -q
+          python3 -m unittest discover -s tests -p 'test_astra_v2_private_pipeline.py' -q
+          python3 product_prototypes/orchard_decision_audit/self_test.py
+          node --check product_prototypes/orchard_decision_audit/app.js
+      - name: Stage independently tested source and append isolated user cron only
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          temp="$RUNNER_TEMP/astra-v2-private-scheduler"
+          install -d -m 700 "$temp"
+          trap 'rm -rf -- "$temp"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$temp/key"
+          chmod 600 "$temp/key"
+          ssh-keygen -y -P '' -f "$temp/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$temp/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$temp/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          SSH=(ssh -i "$temp/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$temp/known" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=15 githubops@178.239.147.150)
+          tar -cf - scripts/astra_v2_private_pipeline.py tests/test_astra_orchard_decision_audit.py tests/test_astra_v2_private_pipeline.py product_prototypes/orchard_decision_audit | "${SSH[@]}" 'set -eu; umask 077; dest="$HOME/factory-runtime/operations/astra-v2-vps-canary-source"; test -d "$dest"; tar -xf - -C "$dest"'
+          "${SSH[@]}" 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          test "$(id -un)" = githubops
+          stage="$HOME/factory-runtime/operations/astra-v2-vps-canary-source"
+          private="$HOME/factory-runtime/private/astra-v2-canary-products"
+          test -d "$stage" && test -d "$private"
+          test ! -L "$private/queue.sqlite3"
+          command -v flock >/dev/null
+          command -v timeout >/dev/null
+          command -v crontab >/dev/null
+          cd "$stage"
+          python3 -m unittest discover -s tests -p 'test_astra_orchard_decision_audit.py' -q
+          python3 -m unittest discover -s tests -p 'test_astra_v2_private_pipeline.py' -q
+          python3 product_prototypes/orchard_decision_audit/self_test.py
+          python3 scripts/astra_v2_private_pipeline.py status --root "$private"
+          before="$private/cron-original-before-astra-v2.txt"
+          next="$private/cron-proposed-astra-v2.txt"
+          # Preserve any existing user cron lines exactly; this is not the
+          # original independent factory's service definition.
+          if test ! -f "$before"; then
+            crontab -l > "$before"
+            chmod 600 "$before"
+          fi
+          crontab -l > "$next"
+          chmod 600 "$next"
+          marker='ASTRA_V2_PRIVATE_RND_TICK'
+          existing_count="$(grep -F -c "$marker" "$next" || true)"
+          test "$existing_count" -le 1
+          tick='*/5 * * * * /usr/bin/flock -n /home/githubops/factory-runtime/private/astra-v2-canary-products/.timer-lock /usr/bin/timeout 100 /usr/bin/python3 /home/githubops/factory-runtime/operations/astra-v2-vps-canary-source/scripts/astra_v2_private_pipeline.py tick --root /home/githubops/factory-runtime/private/astra-v2-canary-products >> /home/githubops/factory-runtime/private/astra-v2-canary-products/private-tick.log 2>&1 # ASTRA_V2_PRIVATE_RND_TICK'
+          if test "$existing_count" -eq 0; then
+            # Ensure a separating newline, while retaining all prior lines.
+            printf '\n%s\n' "$tick" >> "$next"
+            crontab "$next"
+            echo ASTRA_V2_PRIVATE_CRON_INSTALL=INSTALLED
+          else
+            grep -Fqx "$tick" "$next"
+            echo ASTRA_V2_PRIVATE_CRON_INSTALL=ALREADY_PRESENT
+          fi
+          actual="$(crontab -l | grep -F -c "$marker" || true)"
+          test "$actual" -eq 1
+          test ! -L "$stage/scripts/astra_v2_private_pipeline.py"
+          # A fresh tick is only a health check: it can be NO_ELIGIBLE_WORK.
+          python3 scripts/astra_v2_private_pipeline.py tick --root "$private"
+          python3 scripts/astra_v2_private_pipeline.py status --root "$private"
+          echo ASTRA_V2_PRIVATE_HEARTBEAT_INTERVAL_MINUTES=5
+          echo ASTRA_V2_PRIVATE_HEARTBEAT_PAID_APIS=false
+          echo ASTRA_V2_OLD_FACTORY_SCHEDULE_UNMODIFIED=true
+          echo ASTRA_V2_SITE_PUBLICATION_ENABLED=false
+          echo ASTRA_V2_MARKET_DEMAND_VERIFIED=false
+          echo ASTRA_V2_NEW_COMMERCIAL_PRODUCT_COUNT=0
+          REMOTE

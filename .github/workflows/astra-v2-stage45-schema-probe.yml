@@ -1,0 +1,79 @@
+name: Astra V2 Stage 4-5 Live Schema Evidence Probe
+
+on:
+  push:
+    branches: [feature/astra-factory-v2-architecture-20261014, feature/astra-v2-0048-integration-canary-20261015]
+    paths:
+      - .github/workflows/astra-v2-stage45-schema-probe.yml
+      - scripts/astra_v2_stage45_probe.py
+      - tests/test_astra_v2_stage45_probe.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: astra-v2-stage45-schema-readonly
+  cancel-in-progress: false
+
+jobs:
+  verify-boundary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test synthetic migration, integrity and privacy scenarios
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p test_astra_v2_stage45_probe.py -v
+          python3 -m py_compile scripts/astra_v2_stage45_probe.py
+      - name: Read isolated original and Astra V2 SQLite schemas without migrations
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          temp="$RUNNER_TEMP/astra-stage45-proof"
+          install -d -m 700 "$temp"
+          trap 'rm -rf -- "$temp"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$temp/key"
+          chmod 600 "$temp/key"
+          ssh-keygen -y -P '' -f "$temp/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$temp/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$temp/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          SSH=(ssh -i "$temp/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$temp/known" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=15 githubops@178.239.147.150)
+          cat scripts/astra_v2_stage45_probe.py | "${SSH[@]}" \
+            'python3 - --factory-db /home/githubops/factory-runtime/private/factory-fresh-isolated.sqlite3 --private-db /home/githubops/factory-runtime/private/astra-v2-canary-products/queue.sqlite3' > "$temp/evidence.json"
+          python3 - "$temp/evidence.json" <<'PY'
+          import json,sys,pathlib
+          d=json.loads(pathlib.Path(sys.argv[1]).read_text())
+          assert d["mode"]=="strictly_read_only_stage45_inventory"
+          assert d["factory_database_writes"]==0
+          assert d["private_database_writes"]==0
+          assert d["site_mutations"]==0
+          assert d["payments_activated"] is False
+          assert d["bridge_in_place"] is False
+          assert d["new_commercial_products_verified"]==0
+          original=d["legacy_factory"]
+          isolated=d["isolated_astra_v2"]
+          assert original["migration"]["latest_core_migration"]=="0048_business_market_architecture"
+          assert original["migration"]["astra_0049_recorded"] is False
+          assert original["stage45_schema_tables_present"] is False
+          assert original["aggregates"]["core_product"]>=209
+          assert isolated["families_qa_passed"]==3
+          print("ASTRA_STAGE45_LEGACY_READ_ADAPTER="+str(original["legacy_readonly_adapter_schema_compatible"]).lower())
+          print("ASTRA_STAGE45_LIVE_SCHEMA_0049="+str(original["stage45_schema_tables_present"]).lower())
+          print("ASTRA_STAGE45_LIVE_MIGRATION_0049="+str(original["migration"]["astra_0049_recorded"]).lower())
+          print("ASTRA_STAGE45_LATEST_CORE_MIGRATION="+str(original["migration"]["latest_core_migration"]))
+          print("ASTRA_STAGE45_PRIVATE_QA_FAMILIES="+str(isolated["families_qa_passed"]))
+          print("ASTRA_STAGE45_LEGACY_PRODUCT_ROWS="+str(original["aggregates"]["core_product"]))
+          print("ASTRA_STAGE45_LINKED_EVIDENCE_SOURCE_ROWS="+str(original["aggregates"]["source_rows_linked_to_evidence"]))
+          print("ASTRA_STAGE45_GATE="+d["next_gate"])
+          print("ASTRA_STAGE45_EVIDENCE_NOT_MARKET_PROOF=true")
+          print("ASTRA_STAGE45_ORIGINAL_FACTORY_DATABASE_UNCHANGED=true")
+          PY

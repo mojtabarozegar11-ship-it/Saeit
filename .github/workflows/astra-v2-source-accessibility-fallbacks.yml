@@ -1,0 +1,80 @@
+name: Astra Public University Source Accessibility Fallbacks (Read Only)
+
+on:
+  push:
+    branches: [feature/astra-v2-0048-integration-canary-20261015]
+    paths: [.github/workflows/astra-v2-source-accessibility-fallbacks.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-curated-academic-alternatives:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - name: Check alternate public university references without downloading or saving articles
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          temp="$RUNNER_TEMP/astra-curated-alternatives"
+          install -d -m 700 "$temp"
+          trap 'rm -rf -- "$temp"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$temp/key"
+          chmod 600 "$temp/key"
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$temp/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$temp/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -i "$temp/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$temp/known" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=15 githubops@178.239.147.150 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          "$HOME/factory-runtime/.venv/bin/python" - <<'PY'
+          import ssl
+          from urllib.request import Request,HTTPRedirectHandler,HTTPSHandler,build_opener
+          from urllib.error import URLError,HTTPError
+          class BlockRedirect(HTTPRedirectHandler):
+              def redirect_request(self,*args): return None
+          links=[
+              ("UCD_WATER_TOOLS","https://agwater.ucdavis.edu/tools"),
+              ("UCD_WATER_LAB","https://kisekka.ucdavis.edu/data-and-software"),
+              ("UCD_LAND_WATER_HELP","https://waterlandcrop.ucdavis.edu/Help.html"),
+              ("UCANR_ECON_PUBLICATIONS","https://ucanr.edu/site/agricultural-economics/publications"),
+              ("UCANR_ECON_PROJECTS","https://ucanr.edu/site/agricultural-economics/project-activities"),
+              ("UCD_COST_STUDIES","https://coststudies.ucdavis.edu/current"),
+              ("USDA_COST_METHOD","https://ers.usda.gov/data-products/commodity-costs-and-returns/documentation"),
+              ("UMN_FARM_FINANCE","https://extension.umn.edu/agriculture/farm-operations-and-systems/agricultural-business-management/farm-finance"),
+              ("UMN_CROP_BUDGETS","https://extension.umn.edu/agriculture/farm-operations-and-systems/agricultural-business-management/farm-finance/crop-budgets"),
+              ("IOWA_DECISION_TOOLS","https://www.extension.iastate.edu/AGDm/decisiontools.html"),
+              ("IOWA_FRUIT_BUDGETS","https://www.extension.iastate.edu/agdm/crops/html/A1-17.html"),
+              ("IOWA_DECISION_UPDATES","https://www.extension.iastate.edu/Agdm/whatsnew.html"),
+              ("USDA_COST_DATA","https://ers.usda.gov/data-products/commodity-costs-and-returns"),
+              ("USDA_FARM_INCOME","https://ers.usda.gov/topics/farm-economy/farm-sector-income-finances/highlights-from-the-farm-income-forecast"),
+              ("USDA_FINANCIAL_RATIOS","https://ers.usda.gov/data-products/farm-income-and-wealth-statistics/documentation-for-the-farm-sector-financial-ratios"),
+              ("USDA_FARM_INCOME_METHOD","https://ers.usda.gov/data-products/farm-income-and-wealth-statistics/general-documentation"),
+              ("USDA_FARM_BALANCE_SHEET","https://ers.usda.gov/data-products/farm-income-and-wealth-statistics/documentation-for-the-farm-sector-balance-sheet"),
+          ]
+          opener=build_opener(BlockRedirect,HTTPSHandler(context=ssl.create_default_context()))
+          found=0
+          for key,url in links:
+              try:
+                  req=Request(url,method="GET",headers={
+                      "User-Agent":"AstraResearchEvidenceMonitor/1.0 (university reference audit)",
+                      "Accept":"text/html","Accept-Encoding":"identity"})
+                  with opener.open(req,timeout=7) as res:
+                      status=res.status
+                      content=res.read(32)
+                      result="OPEN" if status==200 and content else "EMPTY"
+                      found+=int(result=="OPEN")
+              except HTTPError as e:
+                  result="HTTP_"+str(e.code)
+              except (URLError,TimeoutError,OSError,ValueError) as e:
+                  result="NETWORK_"+type(e).__name__
+              print("ASTRA_SOURCE_FALLBACK_"+key+"="+result)
+          print("ASTRA_SOURCE_FALLBACK_RETRIEVABLE="+str(found))
+          print("ASTRA_SOURCE_FALLBACK_NETWORK_CONTENT_STORED=false")
+          print("ASTRA_SOURCE_FALLBACK_ORIGINAL_FACTORY_MUTATIONS=0")
+          PY
+          REMOTE

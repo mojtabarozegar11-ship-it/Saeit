@@ -1,0 +1,67 @@
+name: Astra Private VPS Python Runtime Inventory (Read Only)
+
+on:
+  push:
+    branches: [feature/astra-v2-0048-integration-canary-20261015]
+    paths: [.github/workflows/astra-v2-vps-python-inventory.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - name: Find compatible private Python runtime paths without installing anything
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          temp="$RUNNER_TEMP/astra-vps-python"
+          install -d -m 700 "$temp"
+          trap 'rm -rf -- "$temp"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$temp/key"
+          chmod 600 "$temp/key"
+          ssh-keygen -y -P '' -f "$temp/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$temp/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$temp/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -i "$temp/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$temp/known" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=15 githubops@178.239.147.150 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = githubops
+          echo ASTRA_VPS_SYSTEM_PYTHON="$(python3 --version 2>&1)"
+          command -v python3.11 || true
+          command -v python3.12 || true
+          command -v python || true
+          for py in /usr/local/bin/python3.11 /usr/bin/python3.11 \
+                    "$HOME/.pyenv/versions/3.11.17/bin/python3.11" \
+                    "$HOME/factory-runtime/.venv/bin/python" \
+                    "$HOME/factory-runtime/venv/bin/python" \
+                    "$HOME/factory-runtime/factory-venv/bin/python" \
+                    "$HOME/.venv/bin/python"; do
+            if test -x "$py"; then
+              printf 'ASTRA_VPS_PYTHON_CANDIDATE=%s : ' "$py"
+              "$py" --version 2>&1 || true
+            fi
+          done
+          echo ASTRA_VPS_HOME_PYTHON311_SEARCH_BEGIN=true
+          find "$HOME" -maxdepth 7 \( -type f -o -type l \) \
+            \( -name python3.11 -o -name python3.12 \) -print 2>/dev/null | head -n 35 || true
+          echo ASTRA_VPS_HOME_PYTHON311_SEARCH_END=true
+          python3 - "$HOME/factory-runtime/private/factory-fresh-isolated.sqlite3" <<'PY'
+          import pathlib,shutil,sys
+          p=pathlib.Path(sys.argv[1])
+          assert p.is_file() and not p.is_symlink()
+          size=p.stat().st_size
+          free=shutil.disk_usage(p.parent).free
+          print("ASTRA_VPS_FACTORY_DB_SIZE_MIB="+str(size//1048576))
+          print("ASTRA_VPS_PRIVATE_VOLUME_FREE_MIB="+str(free//1048576))
+          print("ASTRA_VPS_FULL_COPY_EXTRA_REQUIRED_MIB="+str((size*2+536870912)//1048576))
+          print("ASTRA_VPS_SIZE_LIMIT_256_MIB_EXCEEDED="+str(size>268435456).lower())
+          PY
+          echo ASTRA_VPS_NO_DATABASE_WRITES=true
+          REMOTE

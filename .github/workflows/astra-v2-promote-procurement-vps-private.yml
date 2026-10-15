@@ -1,0 +1,203 @@
+name: Astra Promote Procurement Pack Normalization In Isolated Private Factory
+
+on:
+  push:
+    branches: [feature/astra-v2-0048-integration-canary-20261015]
+    paths:
+      - .github/workflows/astra-v2-promote-procurement-vps-private.yml
+      - product_prototypes/farm_procurement_audit/**
+      - tests/test_astra_farm_procurement_audit.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: astra-private-procurement-qa-source-upgrade
+  cancel-in-progress: false
+
+jobs:
+  promote-only-proven-rnd-source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 13
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify pack normalization and other specialist source pipeline tests
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p test_astra_farm_procurement_audit.py -q
+          python3 -m unittest discover -s tests -p test_astra_v2_private_pipeline.py -q
+          python3 product_prototypes/farm_procurement_audit/self_test.py
+      - name: Atomic private-only source update, locked factory self-build and rollback on failure
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          temp="$RUNNER_TEMP/astra-private-procurement-promote"
+          install -d -m 700 "$temp"
+          trap 'rm -rf -- "$temp"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$temp/key"
+          chmod 600 "$temp/key"
+          ssh-keygen -y -P '' -f "$temp/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$temp/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$temp/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          SSH=(ssh -i "$temp/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$temp/known" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=15 githubops@178.239.147.150)
+          run_id="$GITHUB_RUN_ID"_"$GITHUB_RUN_ATTEMPT"
+          sha="$(sha256sum product_prototypes/farm_procurement_audit/procurement_audit.py | awk '{print $1}')"
+          tar -cf - product_prototypes/farm_procurement_audit tests/test_astra_farm_procurement_audit.py | "${SSH[@]}" \
+            "set -euo pipefail; umask 077; d=\$HOME/factory-runtime/operations/astra-v2-promotion-$run_id; test ! -e \"\$d\"; mkdir -m 700 \"\$d\"; tar -xf - -C \"\$d\""
+          "${SSH[@]}" 'bash -se' "$run_id" "$sha" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          test "$(id -un)" = githubops
+          [[ "$1" =~ ^[0-9]+_[0-9]+$ ]]
+          [[ "$2" =~ ^[a-f0-9]{64}$ ]]
+          base="$HOME/factory-runtime"
+          stage="$base/operations/astra-v2-promotion-$1"
+          active="$base/operations/astra-v2-vps-canary-source"
+          root="$base/private/astra-v2-canary-products"
+          original="$base/private/factory-fresh-isolated.sqlite3"
+          py="$base/.venv/bin/python"
+          old="$active/product_prototypes/farm_procurement_audit"
+          new="$stage/product_prototypes/farm_procurement_audit"
+          test_file="$active/tests/test_astra_farm_procurement_audit.py"
+          update_test="$stage/tests/test_astra_farm_procurement_audit.py"
+          previous="$root/procurement-source-backup-$1"
+          accepted="$root/.enable-autonomous-specialists"
+          test -x "$py"
+          for d in "$root" "$stage" "$active" "$old" "$new"; do
+            test -d "$d" && test ! -L "$d"
+          done
+          for f in "$old/procurement_audit.py" "$test_file" "$update_test" "$original" "$root/queue.sqlite3"; do
+            test -f "$f" && test ! -L "$f"
+          done
+          test "$(sha256sum "$new/procurement_audit.py" | awk '{print $1}')" = "$2"
+          test ! -e "$previous"
+          test -f "$accepted" && test ! -L "$accepted"
+          test "$(cat "$accepted")" = private_only
+          for label in ASTRA_V2_PRIVATE_RND_TICK ASTRA_V2_PRIVATE_RESEARCH_BRIDGE ASTRA_V2_PRIVATE_RESEARCH_DOSSIERS ASTRA_V2_CURATED_PUBLIC_SOURCES; do
+            test "$(crontab -l | grep -c "$label" || true)" = 1
+          done
+          test -x /usr/bin/flock
+          "$py" - "$original" <<'PY'
+          import sqlite3,pathlib,sys
+          p=pathlib.Path(sys.argv[1])
+          assert p.is_file() and not p.is_symlink()
+          with sqlite3.connect(p.resolve().as_uri()+"?mode=ro",uri=True) as c:
+              c.execute("PRAGMA query_only=ON")
+              latest=c.execute("SELECT name FROM django_migrations WHERE app='core' ORDER BY name DESC LIMIT 1").fetchone()
+              assert latest==("0048_business_market_architecture",),latest
+          print("ASTRA_PROMOTION_ORIGINAL_FACTORY_0048_CONFIRMED=true")
+          PY
+          mkdir -m 700 "$previous"
+          cp -p -- "$test_file" "$previous/prior-test.py"
+          before_main="$(sha256sum "$original" | awk '{print $1}')"
+          swapped=0
+          committed=0
+          restore() {
+            if test "$swapped" = 1 && test "$committed" = 0; then
+              echo ASTRA_PRIVATE_PROCUREMENT_ROLLBACK=START
+              {
+                flock -w 75 8
+                if test -d "$previous/prior-source"; then
+                  if test -d "$old" && test ! -L "$old"; then
+                    mv -- "$old" "$previous/rejected-new-source"
+                  fi
+                  mv -- "$previous/prior-source" "$old"
+                  cp -p -- "$previous/prior-test.py" "$test_file"
+                  "$py" "$old/self_test.py"
+                fi
+              } 8>"$root/.queue.lock"
+              echo ASTRA_PRIVATE_PROCUREMENT_ROLLBACK=COMPLETE
+            fi
+          }
+          trap restore EXIT
+          {
+            flock -w 75 9
+            {
+              flock -w 75 8
+              swapped=1
+              mv -- "$old" "$previous/prior-source"
+              mv -- "$new" "$old"
+              cp -p -- "$update_test" "$test_file"
+              cd "$active"
+              "$py" -m unittest discover -s tests -p test_astra_farm_procurement_audit.py -q
+              "$py" product_prototypes/farm_procurement_audit/self_test.py
+            } 8>"$root/.queue.lock"
+            cd "$active"
+            # Factory itself detects a new allowlisted source revision and
+            # produces an immutable private artifact with its existing QA gate.
+            for attempt in 1 2 3 4 5; do
+              "$py" scripts/astra_v2_private_pipeline.py tick --root "$root" > "$previous/tick-$attempt.json"
+              "$py" - "$active" "$root" "$2" <<'PY' && break
+          import hashlib,json,pathlib,sqlite3,sys,zipfile
+          source,root,expected=pathlib.Path(sys.argv[1]),pathlib.Path(sys.argv[2]),sys.argv[3]
+          module=source/"product_prototypes/farm_procurement_audit/procurement_audit.py"
+          assert hashlib.sha256(module.read_bytes()).hexdigest()==expected
+          with sqlite3.connect(str(root/"queue.sqlite3")) as c:
+              rows=c.execute(
+                "SELECT artifact_sha FROM jobs WHERE builder='farm_procurement_audit_v1' "
+                "AND stage='PRIVATE_QA_PASSED' ORDER BY id DESC").fetchall()
+          found=False
+          for (archive_sha,) in rows:
+              for file in root.glob("artifact-*.zip"):
+                  if hashlib.sha256(file.read_bytes()).hexdigest()!=archive_sha:
+                      continue
+                  with zipfile.ZipFile(file) as z:
+                      if z.testzip() is not None: continue
+                      name="farm_procurement_audit/procurement_audit.py"
+                      if name in z.namelist() and hashlib.sha256(z.read(name)).hexdigest()==expected:
+                          found=True
+                          break
+              if found:break
+          assert found,"private source not yet built into a QA ZIP"
+          print("ASTRA_PROMOTION_NEW_SOURCE_BUILD_QA=PASS")
+          PY
+            done
+            # Explicit final assertion; absence of successful new ZIP always fails.
+            "$py" - "$active" "$root" "$2" <<'PY'
+          import hashlib,pathlib,sqlite3,sys,zipfile
+          src,root,expected=pathlib.Path(sys.argv[1]),pathlib.Path(sys.argv[2]),sys.argv[3]
+          assert hashlib.sha256((src/"product_prototypes/farm_procurement_audit/procurement_audit.py").read_bytes()).hexdigest()==expected
+          with sqlite3.connect(str(root/"queue.sqlite3")) as c:
+              records=c.execute(
+                "SELECT artifact_sha FROM jobs WHERE builder='farm_procurement_audit_v1' "
+                "AND stage='PRIVATE_QA_PASSED' ORDER BY id DESC").fetchall()
+          ok=False
+          for (sha,) in records:
+              for archive in root.glob("artifact-*.zip"):
+                  if hashlib.sha256(archive.read_bytes()).hexdigest()!=sha: continue
+                  with zipfile.ZipFile(archive) as z:
+                      if z.testzip() is None and hashlib.sha256(z.read("farm_procurement_audit/procurement_audit.py")).hexdigest()==expected:
+                          ok=True
+                          break
+              if ok: break
+          assert ok,"new procurement source revision not accepted by running private QA"
+          print("ASTRA_PROMOTION_PRIVATE_PROCUREMENT_REVISED_VERSION=QA_PASSED")
+          print("ASTRA_PROMOTION_NEW_FAMILY_COUNT=0")
+          print("ASTRA_PROMOTION_COMMERCIAL_RELEASES=0")
+          PY
+            "$py" - "$root" <<'PY'
+          import pathlib,sqlite3,sys
+          root=pathlib.Path(sys.argv[1])
+          with sqlite3.connect(str(root/"queue.sqlite3")) as c:
+              count=c.execute("SELECT COUNT(DISTINCT builder) FROM jobs WHERE stage='PRIVATE_QA_PASSED'").fetchone()[0]
+          assert count==3,count
+          print("ASTRA_PROMOTION_PRIVATE_BUILDER_FAMILIES="+str(count))
+          PY
+            committed=1
+          } 9>"$root/.timer-lock"
+          after_main="$(sha256sum "$original" | awk '{print $1}')"
+          test "$before_main" = "$after_main"
+          echo ASTRA_PROMOTION_ORIGINAL_FACTORY_SQLITE_UNCHANGED=true
+          echo ASTRA_PROMOTION_LIVE_SITES_PAYMENTS_UNCHANGED=true
+          echo ASTRA_PROMOTION_AUTONOMOUS_PRIVATE_RESEARCH_PRESERVED=true
+          echo ASTRA_PROMOTION_PRIVATE_SOURCE_BACKUP_RETAINED=true
+          trap - EXIT
+          REMOTE

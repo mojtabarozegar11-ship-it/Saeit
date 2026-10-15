@@ -1,0 +1,171 @@
+name: Astra V2 Independent Private Research Bridge VPS (No Store)
+
+on:
+  push:
+    branches: [feature/astra-v2-0048-integration-canary-20261015]
+    paths:
+      - .github/workflows/astra-v2-private-research-bridge-vps.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: astra-v2-private-research-bridge-install
+  cancel-in-progress: false
+
+jobs:
+  independent-private-deployment:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test bounded standalone research bridge and private fail-closed policies
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p test_astra_v2_private_research_bridge.py -v
+          python3 -m py_compile scripts/astra_v2_private_research_bridge.py
+      - name: Deploy exclusively to independent VPS private operations and install one cron
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" || { echo ASTRA_VPS_SSH_KEY_MISSING; exit 1; }
+          temp="$RUNNER_TEMP/astra-research-bridge-ssh"
+          mkdir -p -m 700 "$temp"
+          trap 'rm -rf -- "$temp"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$temp/key"
+          chmod 600 "$temp/key"
+          ssh-keygen -y -P '' -f "$temp/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$temp/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$temp/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          SSH=(ssh -i "$temp/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$temp/known" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=15 githubops@178.239.147.150)
+          run_id="$GITHUB_RUN_ID"_"$GITHUB_RUN_ATTEMPT"
+          sha="$(sha256sum scripts/astra_v2_private_research_bridge.py | awk '{print $1}')"
+          cat scripts/astra_v2_private_research_bridge.py | "${SSH[@]}" \
+            "set -e; umask 077; dest=\$HOME/factory-runtime/operations/astra-v2-research-bridge; test -d \$HOME/factory-runtime/operations; mkdir -p \"\$dest\"; chmod 700 \"\$dest\"; test ! -e \"\$dest/candidate-$run_id.py\"; cat > \"\$dest/candidate-$run_id.py\"; chmod 600 \"\$dest/candidate-$run_id.py\""
+          "${SSH[@]}" 'bash -se' "$run_id" "$sha" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          test "$(id -un)" = githubops
+          run_id="$1"
+          digest="$2"
+          [[ "$run_id" =~ ^[0-9]+_[0-9]+$ ]]
+          [[ "$digest" =~ ^[a-f0-9]{64}$ ]]
+          root="$HOME/factory-runtime"
+          original="$root/private/factory-fresh-isolated.sqlite3"
+          operations="$root/operations/astra-v2-research-bridge"
+          script="$operations/candidate-$run_id.py"
+          active="$operations/bridge.py"
+          research_dir="$root/private/astra-v2-research-bridge"
+          research_db="$research_dir/research-tasks.sqlite3"
+          marker="ASTRA_V2_PRIVATE_RESEARCH_BRIDGE"
+          PY="$root/.venv/bin/python"
+          test -x "$PY" && test -f "$original" && test ! -L "$original"
+          test -f "$script" && test ! -L "$script"
+          test "$(sha256sum "$script" | awk '{print $1}')" = "$digest"
+          "$PY" --version
+          "$PY" - "$original" <<'PY'
+          import pathlib, sqlite3, sys
+          p=pathlib.Path(sys.argv[1])
+          assert p.is_file() and not p.is_symlink()
+          with sqlite3.connect(p.resolve().as_uri()+"?mode=ro",uri=True,timeout=10) as c:
+              c.execute("PRAGMA query_only=ON")
+              latest=c.execute("SELECT name FROM django_migrations WHERE app='core' ORDER BY name DESC LIMIT 1").fetchone()
+              assert latest==("0048_business_market_architecture",),latest
+          print("ASTRA_BRIDGE_LEGACY_SOURCE_MIGRATION_0048=PASS")
+          PY
+          test -d "$root/private"
+          test ! -L "$root/private"
+          if test ! -e "$research_dir"; then
+            mkdir -m 700 "$research_dir"
+          fi
+          test -d "$research_dir" && test ! -L "$research_dir"
+          chmod 700 "$research_dir"
+          # Source is always sqlite mode=ro. Only unrelated private R&D DB is mutable.
+          "$PY" "$script" --source-db "$original" --research-db "$research_db" --limit 25 --once > "$research_dir/first-$run_id.json"
+          "$PY" "$script" --source-db "$original" --research-db "$research_db" --limit 25 --check > "$research_dir/check-$run_id.json"
+          "$PY" - "$research_dir" "$run_id" <<'PY'
+          import json,pathlib,sys
+          path=pathlib.Path(sys.argv[1]); ident=sys.argv[2]
+          tick=json.loads((path/("first-"+ident+".json")).read_text())
+          check=json.loads((path/("check-"+ident+".json")).read_text())
+          assert tick["mode"]=="PRIVATE_ORDER_FREE_TICK",tick
+          assert tick["scanned"]<=25,tick
+          assert tick["source_opened_read_only"] is True
+          assert tick["commercially_qualified"]==0
+          assert tick["products_for_sale"]==0
+          assert tick["payment_activated"] is False
+          assert check["mode"]=="READ_ONLY_HEALTH"
+          assert check["research_tasks"]>=tick["new_research_tasks"]
+          print("ASTRA_BRIDGE_FIRST_PRIVATE_TICK_SCANNED="+str(tick["scanned"]))
+          print("ASTRA_BRIDGE_FIRST_PRIVATE_TICK_NEW="+str(tick["new_research_tasks"]))
+          print("ASTRA_BRIDGE_TOTAL_PRIVATE_RESEARCH_TASKS="+str(check["research_tasks"]))
+          print("ASTRA_BRIDGE_MARKET_CLAIMS_VERIFIED=false")
+          PY
+          # Keep the running source path stable; other factory scripts are untouched.
+          if test -e "$active"; then
+            test -f "$active" && test ! -L "$active"
+            cp -p -- "$active" "$operations/bridge-backup-$run_id.py"
+          fi
+          mv -- "$script" "$active"
+          chmod 600 "$active"
+          touch "$research_dir/cron-errors.log"
+          chmod 600 "$research_dir/cron-errors.log"
+          test -x /usr/bin/flock && test -x /usr/bin/timeout
+          command -v crontab >/dev/null
+          previous="$research_dir/cron-previous-$run_id.txt"
+          if crontab -l > "$previous" 2>/dev/null; then
+            had_cron=1
+          else
+            had_cron=0
+            : > "$previous"
+          fi
+          chmod 600 "$previous"
+          count="$(grep -c "$marker" "$previous" || true)"
+          test "$count" -le 1
+          schedule="*/10 * * * * /usr/bin/flock -n $research_dir/cron.lock /usr/bin/timeout 120 $PY $active --source-db $original --research-db $research_db --limit 25 --once > /dev/null 2>> $research_dir/cron-errors.log # $marker"
+          next="$research_dir/cron-new-$run_id.txt"
+          grep -v "$marker" "$previous" > "$next" || true
+          printf '%s\n' "$schedule" >> "$next"
+          chmod 600 "$next"
+          crontab "$next"
+          if ! test "$(crontab -l | grep -c "$marker" || true)" = 1; then
+            if test "$had_cron" = 1; then crontab "$previous"; else crontab -r || true; fi
+            echo ASTRA_BRIDGE_CRON_INSTALL_FAILED >&2
+            exit 1
+          fi
+          before_unrelated="$research_dir/cron-unrelated-before-$run_id.txt"
+          after_unrelated="$research_dir/cron-unrelated-after-$run_id.txt"
+          grep -v "$marker" "$previous" > "$before_unrelated" || true
+          crontab -l | grep -v "$marker" > "$after_unrelated" || true
+          if ! cmp -s "$before_unrelated" "$after_unrelated"; then
+            if test "$had_cron" = 1; then crontab "$previous"; else crontab -r || true; fi
+            echo ASTRA_BRIDGE_OTHER_CRONS_CHANGED >&2
+            exit 1
+          fi
+          "$PY" "$active" --source-db "$original" --research-db "$research_db" --check > "$research_dir/health-$run_id.json"
+          "$PY" - "$research_dir/health-$run_id.json" <<'PY'
+          import json,sys,pathlib
+          d=json.loads(pathlib.Path(sys.argv[1]).read_text())
+          assert d["source_opened_read_only"] is True
+          assert d["products_for_sale"]==0
+          assert d["commercially_qualified"]==0
+          assert d["last_tick_utc"]
+          print("ASTRA_BRIDGE_PERSISTENT_QUEUE_HEALTH=PASS")
+          print("ASTRA_BRIDGE_PERSISTENT_RESEARCH_TASKS="+str(d["research_tasks"]))
+          print("ASTRA_BRIDGE_INDEPENDENT_CRON_SINGLE_LINE=true")
+          print("ASTRA_BRIDGE_ORIGINAL_FACTORY_CRONS_PRESERVED=true")
+          print("ASTRA_BRIDGE_ORIGINAL_FACTORY_DB_WRITES=0")
+          print("ASTRA_BRIDGE_SITE_OR_PAYMENT_MUTATIONS=0")
+          PY
+          # Remove temporary probe files that contain no user content.
+          rm -f -- "$previous" "$next" "$before_unrelated" "$after_unrelated" \
+             "$research_dir/first-$run_id.json" "$research_dir/check-$run_id.json"
+          REMOTE

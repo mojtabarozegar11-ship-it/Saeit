@@ -1049,3 +1049,66 @@ class EducationCertificate(T):
     title = models.CharField(max_length=300)
     verification_note = models.TextField(blank=True)
     issued_at = models.DateTimeField(auto_now_add=True)
+
+
+# Astra V2 Stage 4→5 evidence-research canary. These objects are intentionally
+# private-only, not storefront inventory or a permission to accept payments.
+# Migration 0049 belongs exclusively to the reconciled 0048 staging lineage.
+class FactoryQueueItem(T):
+    key = models.CharField(max_length=100, unique=True)
+    kind = models.CharField(max_length=24, default="discovery", choices=[
+        ("discovery", "Discovery"),
+    ])
+    stage = models.CharField(max_length=32, default="HYPOTHESIS", choices=[
+        ("HYPOTHESIS", "Hypothesis"),
+        ("SOURCING", "Sourcing"),
+        ("WAITING_FOR_EVIDENCE", "Waiting for evidence"),
+        ("REVIEW_REQUIRED", "Review required"),
+        ("REJECTED", "Rejected"),
+    ])
+    payload_digest = models.CharField(max_length=64, blank=True)
+    record = models.JSONField(default=dict)
+    market_demand_verified = models.BooleanField(default=False)
+    publication_allowed = models.BooleanField(default=False)
+    commercial_quality_score = models.PositiveSmallIntegerField(null=True, blank=True)
+
+    class Meta:
+        indexes = [models.Index(fields=["kind", "stage"], name="core_astra_research_stage")]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(publication_allowed=False),
+                name="core_astra_never_publish",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(market_demand_verified=False),
+                name="core_astra_no_self_demand",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(commercial_quality_score__isnull=True),
+                name="core_astra_quality_unset",
+            ),
+        ]
+
+
+class DiscoverySnapshot(T):
+    hypothesis = models.ForeignKey(
+        FactoryQueueItem, on_delete=models.PROTECT,
+        related_name="discovery_snapshots",
+    )
+    url = models.URLField(max_length=2048)
+    content_hash = models.CharField(max_length=64)
+    retrieved_at = models.DateTimeField()
+    record = models.JSONField(default=dict)
+    independently_verified = models.BooleanField(default=False)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["hypothesis", "url", "content_hash"],
+                name="core_astra_snapshot_unique",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(independently_verified=False),
+                name="core_astra_claims_unverified",
+            ),
+        ]

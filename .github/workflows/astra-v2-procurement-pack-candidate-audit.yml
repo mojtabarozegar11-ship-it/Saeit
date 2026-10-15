@@ -1,0 +1,97 @@
+name: Astra Procurement Whole-Pack Candidate Evidence Audit (Read Only)
+
+on:
+  push:
+    branches: [feature/astra-v2-0048-integration-canary-20261015]
+    paths: [.github/workflows/astra-v2-procurement-pack-candidate-audit.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-independent-private-package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Inspect SHA-pinned source ZIP, policy manifest and original factory separately
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          tmp="$RUNNER_TEMP/astra-pack-audit"
+          install -d -m 700 "$tmp"
+          trap 'rm -rf -- "$tmp"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$tmp/key"
+          chmod 600 "$tmp/key"
+          ssh-keygen -y -P '' -f "$tmp/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$tmp/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$tmp/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -i "$tmp/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$tmp/known" \
+             -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=15 githubops@178.239.147.150 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = githubops
+          base="$HOME/factory-runtime"
+          v2="$base/private/astra-v2-procurement-pack-candidates"
+          product_sha=1c220a585e78076c912204aa73a2cf55c45b14d13f4ae7131f6b3ba538f7e768
+          pack="$v2/procurement-pack-source-$product_sha.zip"
+          manifest="$v2/candidate-$product_sha.json"
+          legacy="$base/private/factory-fresh-isolated.sqlite3"
+          queue="$base/private/astra-v2-canary-products/queue.sqlite3"
+          active="$base/operations/astra-v2-vps-canary-source/product_prototypes/farm_procurement_audit/procurement_audit.py"
+          for item in "$pack" "$manifest" "$legacy" "$queue" "$active"; do
+            test -f "$item" && test ! -L "$item"
+          done
+          "$base/.venv/bin/python" - "$pack" "$manifest" "$legacy" "$queue" "$active" "$product_sha" <<'PY'
+          import hashlib,json,pathlib,sqlite3,sys,zipfile
+          pack,meta,original,queue,active=map(pathlib.Path,sys.argv[1:6])
+          sha=sys.argv[6]
+          assert hashlib.sha256(pack.read_bytes()).hexdigest()==sha
+          doc=json.loads(meta.read_text(encoding="utf-8"))
+          assert doc["prototype_source_zip_sha256"]==sha
+          assert doc["candidate"]=="farm_procurement_whole_pack_normalization_v2"
+          assert doc["synthetic_pack_example_total"]=="558.00"
+          assert doc["synthetic_pack_order_units"]=="120.00"
+          assert doc["synthetic_excess_usable_units"]=="14.00"
+          assert doc["synthetic_math_regressions_passed"] is True
+          assert doc["html_escapes_supplier_input"] is True
+          assert doc["independent_domain_review_passed"] is False
+          assert doc["independent_customer_demand_attested"] is False
+          assert doc["commercial_quality_score"] is None
+          assert doc["sale_ready"] is False
+          assert doc["public_release_allowed"] is False
+          assert doc["payment_activated"] is False
+          expected={"procurement_audit.py","render_report.py",
+                    "example_synthetic.json","self_test.py","README.md"}
+          with zipfile.ZipFile(pack) as z:
+              assert z.testzip() is None
+              members={n.split("/")[-1]:n for n in z.namelist()}
+              assert set(members)==expected and len(z.namelist())==len(expected)
+              revision=hashlib.sha256(z.read(members["procurement_audit.py"])).hexdigest()
+              assert revision==doc["source_revision_sha256"]
+              assert b'whole_packs_ordered' in z.read(members["procurement_audit.py"])
+          running_revision=hashlib.sha256(active.read_bytes()).hexdigest()
+          assert running_revision!=doc["source_revision_sha256"],"candidate was not supposed to replace running private builder"
+          def ro(p):
+              c=sqlite3.connect(p.resolve().as_uri()+"?mode=ro",uri=True,timeout=10)
+              c.execute("PRAGMA query_only=ON")
+              return c
+          with ro(original) as old,ro(queue) as technical:
+              migration=old.execute("SELECT name FROM django_migrations WHERE app='core' ORDER BY name DESC LIMIT 1").fetchone()[0]
+              assert migration=="0048_business_market_architecture"
+              count=old.execute("SELECT COUNT(*) FROM core_product").fetchone()[0]
+              qa=technical.execute("SELECT COUNT(DISTINCT builder) FROM jobs WHERE stage='PRIVATE_QA_PASSED'").fetchone()[0]
+              assert count>=209 and qa==3,(count,qa)
+          print("ASTRA_PROCUREMENT_V2_PRIVATE_SOURCE_INTEGRITY=PASS")
+          print("ASTRA_PROCUREMENT_V2_PRIVATE_QA_MANIFEST=PASS")
+          print("ASTRA_PROCUREMENT_V2_CANDIDATE_DISTINCT_FROM_RUNNING_BUILDER=true")
+          print("ASTRA_PROCUREMENT_V2_PREEXISTING_PRIVATE_BUILDERS="+str(qa))
+          print("ASTRA_PROCUREMENT_V2_ORIGINAL_PRODUCT_COUNT="+str(count))
+          print("ASTRA_PROCUREMENT_V2_ORIGINAL_MIGRATION_0048=true")
+          print("ASTRA_PROCUREMENT_V2_READONLY_AUDIT=true")
+          print("ASTRA_PROCUREMENT_V2_REVIEWED_COMMERCIAL_PRODUCTS=0")
+          PY
+          REMOTE

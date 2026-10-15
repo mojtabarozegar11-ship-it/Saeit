@@ -1,0 +1,137 @@
+name: Astra V2 Five Official External Evidence Observations (VPS Private)
+
+on:
+  push:
+    branches: [feature/astra-v2-0048-integration-canary-20261015]
+    paths:
+      - .github/workflows/astra-v2-curated-sources-vps.yml
+      - scripts/astra_v2_curated_external_sources.py
+      - tests/test_astra_v2_curated_external_sources.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: astra-curated-external-vps-install
+  cancel-in-progress: false
+
+jobs:
+  install-isolated-public-source-observations:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test five-source read-only research tool without network
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p test_astra_v2_curated_external_sources.py -v
+          python3 -m py_compile scripts/astra_v2_curated_external_sources.py
+      - name: Install private VPS source observation, never enable storefront
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          temp="$RUNNER_TEMP/astra-curated-source"
+          install -d -m 700 "$temp"
+          trap 'rm -rf -- "$temp"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$temp/key"
+          chmod 600 "$temp/key"
+          ssh-keygen -y -P '' -f "$temp/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$temp/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$temp/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          SSH=(ssh -i "$temp/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$temp/known" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=15 githubops@178.239.147.150)
+          run_id="$GITHUB_RUN_ID"_"$GITHUB_RUN_ATTEMPT"
+          digest="$(sha256sum scripts/astra_v2_curated_external_sources.py | awk '{print $1}')"
+          cat scripts/astra_v2_curated_external_sources.py | "${SSH[@]}" \
+            "set -e; umask 077; dest=\$HOME/factory-runtime/operations/astra-v2-curated-public-sources; mkdir -p \"\$dest\"; chmod 700 \"\$dest\"; test ! -e \"\$dest/candidate-$run_id.py\"; cat > \"\$dest/candidate-$run_id.py\"; chmod 600 \"\$dest/candidate-$run_id.py\""
+          "${SSH[@]}" 'bash -se' "$run_id" "$digest" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          test "$(id -un)" = githubops
+          [[ "$1" =~ ^[0-9]+_[0-9]+$ ]]
+          [[ "$2" =~ ^[a-f0-9]{64}$ ]]
+          root="$HOME/factory-runtime"
+          op="$root/operations/astra-v2-curated-public-sources"
+          candidate="$op/candidate-$1.py"
+          live="$op/source_probe.py"
+          private="$root/private/astra-v2-curated-public-sources"
+          snapshot="$private/five-official-sources.json"
+          marker=ASTRA_V2_CURATED_PUBLIC_SOURCES
+          py="$root/.venv/bin/python"
+          test -f "$candidate" && test ! -L "$candidate"
+          test -x "$py" && test "$(sha256sum "$candidate" | awk '{print $1}')" = "$2"
+          test -d "$root/private" && test ! -L "$root/private"
+          if test ! -e "$private"; then mkdir -m 700 "$private"; fi
+          test -d "$private" && test ! -L "$private"
+          chmod 700 "$private"
+          "$py" "$candidate" --output "$snapshot" --once > "$private/first-$1.json"
+          "$py" "$candidate" --output "$snapshot" --check > "$private/verification-$1.json"
+          "$py" - "$private" "$1" <<'PY'
+          import json,pathlib,sys
+          path=pathlib.Path(sys.argv[1]); run=sys.argv[2]
+          a=json.loads((path/("first-"+run+".json")).read_text())
+          b=json.loads((path/("verification-"+run+".json")).read_text())
+          assert a["attempted"]==5,a
+          assert a["retrieved_unverified"]+a["failed_or_inaccessible"]==5,a
+          assert a["number_of_salable_products_created"]==0
+          assert a["site_or_payment_mutations"]==0
+          assert b["sources"]==5 and b["sale_ready"] is False
+          print("ASTRA_OFFICIAL_SOURCES_ATTEMPTED="+str(a["attempted"]))
+          print("ASTRA_OFFICIAL_SOURCES_FETCHED_UNVERIFIED="+str(a["retrieved_unverified"]))
+          print("ASTRA_OFFICIAL_SOURCES_UNREACHABLE_OR_BLOCKED="+str(a["failed_or_inaccessible"]))
+          print("ASTRA_OFFICIAL_SOURCES_MARKET_DEMAND_ATTESTED=false")
+          print("ASTRA_OFFICIAL_SOURCES_NO_ARTICLE_REPUBLICATION=true")
+          PY
+          if test -e "$live"; then
+            test -f "$live" && test ! -L "$live"
+            cp -p -- "$live" "$op/backup-$1.py"
+          fi
+          mv -- "$candidate" "$live"
+          chmod 600 "$live"
+          touch "$private/cron-errors.log"
+          chmod 600 "$private/cron-errors.log"
+          previous="$private/cron-previous-$1.txt"
+          crontab -l > "$previous" 2>/dev/null || :
+          chmod 600 "$previous"
+          test "$(grep -c "$marker" "$previous" || true)" -le 1
+          test -x /usr/bin/flock && test -x /usr/bin/timeout
+          next="$private/cron-next-$1.txt"
+          grep -v "$marker" "$previous" > "$next" || true
+          schedule="17 */6 * * * /usr/bin/flock -n $private/cron.lock /usr/bin/timeout 150 $py $live --output $snapshot --once > /dev/null 2>> $private/cron-errors.log # $marker"
+          printf '%s\n' "$schedule" >> "$next"
+          chmod 600 "$next"
+          crontab "$next"
+          if ! test "$(crontab -l | grep -c "$marker" || true)" = 1; then
+             crontab "$previous"
+             echo ASTRA_OFFICIAL_SOURCES_CRON_INSTALL_FAILED >&2
+             exit 1
+          fi
+          grep -v "$marker" "$previous" > "$private/others-before-$1" || true
+          crontab -l | grep -v "$marker" > "$private/others-after-$1" || true
+          if ! cmp -s "$private/others-before-$1" "$private/others-after-$1"; then
+             crontab "$previous"
+             echo ASTRA_OFFICIAL_SOURCES_EXISTING_CRON_CHANGED >&2
+             exit 1
+          fi
+          test "$(crontab -l | grep -c ASTRA_V2_PRIVATE_RESEARCH_BRIDGE || true)" = 1
+          test "$(crontab -l | grep -c ASTRA_V2_PRIVATE_RESEARCH_DOSSIERS || true)" = 1
+          "$py" "$live" --output "$snapshot" --check >/dev/null
+          echo ASTRA_OFFICIAL_SOURCES_SCHEDULE=EVERY_6_HOURS
+          echo ASTRA_OFFICIAL_SOURCES_PRIVATE_SNAPSHOT=VERIFIED
+          echo ASTRA_OFFICIAL_SOURCES_EXISTING_FACTORY_CRONS_PRESERVED=true
+          echo ASTRA_OFFICIAL_SOURCES_PRIVATE_RESEARCH_BRIDGE_PRESERVED=true
+          echo ASTRA_OFFICIAL_SOURCES_ORIGINAL_SQLITE_MIGRATIONS=UNCHANGED
+          echo ASTRA_OFFICIAL_SOURCES_PUBLIC_STORE_MUTATIONS=0
+          echo ASTRA_OFFICIAL_SOURCES_PAYMENT_MUTATIONS=0
+          rm -f -- "$previous" "$next" "$private/others-before-$1" \
+             "$private/others-after-$1" "$private/first-$1.json" \
+             "$private/verification-$1.json"
+          REMOTE
