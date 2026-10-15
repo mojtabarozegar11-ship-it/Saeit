@@ -47,6 +47,11 @@ jobs:
               ("USDA_COST_METHOD","https://ers.usda.gov/data-products/commodity-costs-and-returns/documentation"),
               ("UMN_FARM_FINANCE","https://extension.umn.edu/agriculture/farm-operations-and-systems/agricultural-business-management/farm-finance"),
               ("UMN_CROP_BUDGETS","https://extension.umn.edu/agriculture/farm-operations-and-systems/agricultural-business-management/farm-finance/crop-budgets"),
+              ("IOWA_DECISION_TOOLS","https://www.extension.iastate.edu/AGDm/decisiontools.html"),
+              ("IOWA_FRUIT_BUDGETS","https://www.extension.iastate.edu/agdm/crops/html/A1-17.html"),
+              ("IOWA_DECISION_UPDATES","https://www.extension.iastate.edu/Agdm/whatsnew.html"),
+              ("USDA_COST_DATA","https://ers.usda.gov/data-products/commodity-costs-and-returns"),
+              ("USDA_FARM_INCOME","https://ers.usda.gov/topics/farm-economy/farm-sector-income-finances/highlights-from-the-farm-income-forecast"),
           ]
           opener=build_opener(BlockRedirect,HTTPSHandler(context=ssl.create_default_context()))
           found=0
