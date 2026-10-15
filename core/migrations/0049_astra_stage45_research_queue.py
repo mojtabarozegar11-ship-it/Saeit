@@ -27,6 +27,17 @@ class Migration(migrations.Migration):
                 "indexes": [
                     models.Index(fields=["kind", "status", "id"], name="astra_queue_stage_idx"),
                 ],
+                "constraints": [
+                    models.CheckConstraint(
+                        condition=models.Q(
+                            evidence_verified_independently=False,
+                            build_authorized=False,
+                            publish_authorized=False,
+                            payment_authorized=False,
+                        ),
+                        name="astra_research_only_flags",
+                    ),
+                ],
             },
         ),
         migrations.CreateModel(
