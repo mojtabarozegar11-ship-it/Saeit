@@ -164,6 +164,32 @@ class SelfDirectedWorkTests(unittest.TestCase):
             self.assertEqual(proc.returncode,0,proc.stderr)
             self.assertIn("ASTRA_EDUCATIONAL_CASE_SELFTEST=PASS",proc.stdout)
 
+    def test_simulated_48_hour_no_order_soak_has_real_unique_qa_editions(self):
+        # Synthetic accelerated model only; does not claim 48h live uptime.
+        ids=set()
+        paths=[]
+        for hour in range(21_000,21_048):
+            result=casework.build_hour(self.root,hour)
+            self.assertEqual(result["status"],"PRIVATE_CASE_BUILT",result)
+            self.assertTrue(result["new_private_educational_edition"])
+            self.assertNotIn(result["sha256"],ids)
+            ids.add(result["sha256"])
+            cases=list((self.root/"autonomous_education").glob(
+                "case-"+str(hour).zfill(8)+"-*.zip"))
+            self.assertEqual(len(cases),1)
+            paths.append(cases[0])
+        self.assertEqual(len(ids),48)
+        self.assertEqual(len(paths),48)
+        for f in paths:
+            with zipfile.ZipFile(f) as z:
+                self.assertIsNone(z.testzip())
+                case=json.loads(z.read("astra_case/CASE.json"))
+                self.assertFalse(case["publication_allowed"])
+                self.assertFalse(case["actual_market_data"])
+                self.assertFalse(case["commercial_quality_assessed"])
+        self.assertEqual(casework.build_hour(self.root,21_047)["status"],"UNCHANGED")
+        self.assertEqual(len(list((self.root/"autonomous_education").glob("case-*.zip"))),48)
+
     def test_case_version_is_stable_across_restart(self):
         a=casework.case_for_hour(29993)
         b=casework.case_for_hour(29993)
