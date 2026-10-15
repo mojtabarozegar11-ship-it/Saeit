@@ -1,0 +1,178 @@
+name: PICM Deploy - MojPlayWin Private Image Studio
+on:
+  issues:
+    types: [opened]
+permissions:
+  contents: read
+concurrency:
+  group: mojplaywin-picm-production
+  cancel-in-progress: false
+jobs:
+  deploy:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event.issue.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.issue.title == 'Ops: deploy PICM private studio 2026-10-15'
+    runs-on: ubuntu-latest
+    timeout-minutes: 22
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test queue and Django BEFORE production changes
+        env:
+          SECRET_KEY: picm-disposable-ci-test-key
+          DEBUG: 'False'
+          ALLOWED_HOSTS: localhost,127.0.0.1
+        run: |
+          set -euo pipefail
+          python -m pip install -r requirements.txt
+          python -m py_compile core/picm_views.py ops/picm-vps/worker.py scripts/deploy_mojplaywin_picm.py
+          pytest -q tests/test_picm_views.py
+          python manage.py check
+          echo PICM_TESTS_PASSED
+      - name: Configure pinned relay and cPanel SSH
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -Eeuo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          WORK="$RUNNER_TEMP/picm-ssh"
+          install -d -m 700 "$WORK"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$WORK/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$WORK/host.key"
+          chmod 600 "$WORK/"*.key
+          ssh-keygen -y -P '' -f "$WORK/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$WORK/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$WORK/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$WORK/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$WORK/config" <<EOF
+          Host picm-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $WORK/vps.key
+            UserKnownHostsFile $WORK/vps.known
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ForwardAgent no
+          EOF
+          chmod 600 "$WORK/config"
+          timeout 30s ssh -F "$WORK/config" picm-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$WORK/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$WORK/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          cat >> "$WORK/config" <<EOF
+          Host picm-host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $WORK/host.key
+            UserKnownHostsFile $WORK/host.known
+            ProxyJump picm-vps
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ForwardAgent no
+          EOF
+          chmod 600 "$WORK/config"
+          echo PICM_RELAY_READY
+      - name: Verify target and upload self-contained PICM code only
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          WORK="$RUNNER_TEMP/picm-ssh"
+          timeout 40s ssh -F "$WORK/config" picm-host 'test "$(id -un)" = zomorod2 && test -d /home/zomorod2/Saeit-staging && test ! -L /home/zomorod2/Saeit-staging && test -f /home/zomorod2/mojplaywin.com/passenger_wsgi.py && grep -Fq "Saeit-staging" /home/zomorod2/mojplaywin.com/passenger_wsgi.py'
+          timeout 20s ssh -F "$WORK/config" picm-host "install -d -m 700 /home/zomorod2/.mojplaywin-picm-$GITHUB_RUN_ID"
+          tar -cf "$RUNNER_TEMP/picm-site.tar" scripts/deploy_mojplaywin_picm.py core/picm_views.py templates/picm/index.html
+          scp -q -F "$WORK/config" "$RUNNER_TEMP/picm-site.tar" "picm-host:/home/zomorod2/.mojplaywin-picm-$GITHUB_RUN_ID/bundle.tar"
+          timeout 40s ssh -F "$WORK/config" picm-host "tar -xf /home/zomorod2/.mojplaywin-picm-$GITHUB_RUN_ID/bundle.tar -C /home/zomorod2/.mojplaywin-picm-$GITHUB_RUN_ID"
+      - name: Deploy page with atomic rollback backup
+        id: install_site
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          WORK="$RUNNER_TEMP/picm-ssh"
+          timeout 75s ssh -F "$WORK/config" picm-host "python3 /home/zomorod2/.mojplaywin-picm-$GITHUB_RUN_ID/scripts/deploy_mojplaywin_picm.py deploy $GITHUB_RUN_ID $GITHUB_SHA"
+      - name: Confirm real live PICM page
+        id: live
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          success=0
+          for i in $(seq 1 16); do
+            status="$(curl -sS --max-time 16 -o "$RUNNER_TEMP/picm-live.html" -w '%{http_code}' https://mojplaywin.com/picm/ || true)"
+            if [[ "$status" == 200 ]] && grep -Fq '<title>PICM | MojPlayWin AI Image Studio</title>' "$RUNNER_TEMP/picm-live.html"; then success=1; break; fi
+            sleep 3
+          done
+          test "$success" = 1 || { echo PICM_LIVE_PAGE_NOT_READY; exit 1; }
+          echo PICM_PAGE_LIVE_HTTP_200
+      - name: Provision scoped HTTPS worker token and VPS-only engine
+        id: engine
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          umask 077
+          WORK="$RUNNER_TEMP/picm-ssh"
+          openssl rand -hex 32 > "$RUNNER_TEMP/picm-worker-token"
+          chmod 600 "$RUNNER_TEMP/picm-worker-token"
+          scp -q -F "$WORK/config" "$RUNNER_TEMP/picm-worker-token" "picm-host:/home/zomorod2/.mojplaywin-picm-$GITHUB_RUN_ID/worker-token.tmp"
+          timeout 30s ssh -F "$WORK/config" picm-host "umask 077; install -d -m 700 /home/zomorod2/.picm-queue; test ! -L /home/zomorod2/.picm-queue/worker-token; mv -f /home/zomorod2/.mojplaywin-picm-$GITHUB_RUN_ID/worker-token.tmp /home/zomorod2/.picm-queue/worker-token; chmod 600 /home/zomorod2/.picm-queue/worker-token"
+          timeout 20s ssh -F "$WORK/config" picm-vps 'test "$(id -un)" = githubops; install -d -m 700 "$HOME/.local/share/saeit-picm"'
+          scp -q -F "$WORK/config" ops/picm-vps/worker.py "picm-vps:/home/githubops/.local/share/saeit-picm/worker.py"
+          scp -q -F "$WORK/config" ops/comfyui-vps/control.sh "picm-vps:/home/githubops/.local/share/saeit-picm/control.sh"
+          scp -q -F "$WORK/config" "$RUNNER_TEMP/picm-worker-token" "picm-vps:/home/githubops/.local/share/saeit-picm/worker-token.tmp"
+          timeout 55s ssh -F "$WORK/config" picm-vps 'bash -se' <<'REMOTE'
+          set -Eeuo pipefail
+          umask 077
+          cd "$HOME/.local/share/saeit-picm"
+          test ! -L worker-token
+          mv -f worker-token.tmp worker-token
+          chmod 600 worker-token worker.py
+          chmod 700 control.sh
+          python3 -m py_compile worker.py
+          test -f "$HOME/comfyui-isolated/source-v0.40.0/main.py"
+          python3 - <<'PY'
+          from pathlib import Path
+          from urllib.request import Request,urlopen
+          s=(Path.home()/'.local/share/saeit-picm/worker-token').read_text().strip()
+          with urlopen(Request('https://mojplaywin.com/picm/worker/health/',headers={'Authorization':'Bearer '+s}),timeout=25) as x:
+              assert x.status==200 and b'"ready": true' in x.read()
+          print('PICM_HOST_TO_VPS_AUTHENTICATED_HTTPS_OK')
+          PY
+          if test -f worker.pid && kill -0 "$(cat worker.pid)" 2>/dev/null &&
+              tr '\0' ' ' < "/proc/$(cat worker.pid)/cmdline" | grep -Fq 'saeit-picm/worker.py'; then
+            echo PICM_WORKER_ALREADY_ALIVE
+          else
+            nohup python3 -u "$HOME/.local/share/saeit-picm/worker.py" </dev/null >> "$HOME/.local/share/saeit-picm/worker.log" 2>&1 &
+            echo "$!" > worker.pid
+            sleep 3
+            kill -0 "$(cat worker.pid)"
+            echo PICM_WORKER_STARTED_PRIVATE
+          fi
+          REMOTE
+      - name: Confirm worker endpoints deny the public
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          code="$(curl -sS --max-time 15 -o /dev/null -w '%{http_code}' https://mojplaywin.com/picm/worker/health/ || true)"
+          [[ "$code" == "403" ]] || { echo "PICM_PRIVATE_API_SECURITY_HTTP_$code"; exit 1; }
+          echo PICM_PRIVATE_WORKER_PUBLIC_ACCESS_DENIED
+          echo PICM_DEPLOY_SUCCESS_NO_TERMUX_NO_PUBLIC_COMFYUI_PORT
+      - name: Roll back PICM page if deployment fails
+        if: failure() && steps.install_site.outcome == 'success' && (steps.live.outcome == 'failure' || steps.engine.outcome == 'failure')
+        shell: bash
+        run: |
+          WORK="$RUNNER_TEMP/picm-ssh"
+          timeout 55s ssh -F "$WORK/config" picm-host "python3 /home/zomorod2/.mojplaywin-picm-$GITHUB_RUN_ID/scripts/deploy_mojplaywin_picm.py rollback $GITHUB_RUN_ID" || true
+      - name: Remove private temporary files
+        if: always()
+        shell: bash
+        run: |
+          if [[ -f "$RUNNER_TEMP/picm-ssh/config" ]]; then
+            ssh -F "$RUNNER_TEMP/picm-ssh/config" -o ConnectTimeout=8 picm-host "rm -rf /home/zomorod2/.mojplaywin-picm-$GITHUB_RUN_ID" || true
+          fi
+          rm -rf -- "$RUNNER_TEMP/picm-ssh" "$RUNNER_TEMP/picm-site.tar" "$RUNNER_TEMP/picm-live.html" "$RUNNER_TEMP/picm-worker-token"
