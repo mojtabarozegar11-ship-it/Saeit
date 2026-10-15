@@ -45,7 +45,7 @@ class PICMLoginTests(TestCase):
         req.user = AnonymousUser()
         response=picm_login(req)
         self.assertEqual(response.status_code,302)
-        self.assertEqual(response.url,"/picm/")
+        self.assertEqual(response.url,"/picm/workspace/")
         self.assertIn("_auth_user_id",req.session)
         out=factory.post("/picm/logout/")
         out.session=req.session
@@ -53,6 +53,36 @@ class PICMLoginTests(TestCase):
         response=picm_logout(out)
         self.assertEqual(response.status_code,302)
         self.assertNotIn("_auth_user_id",out.session)
+
+    def test_two_pages_and_anonymous_workbench_protection(self):
+        from django.test import RequestFactory
+        from django.contrib.auth.models import AnonymousUser
+        from core.picm_views import picm_page, picm_workbench
+        factory = RequestFactory()
+        anonymous = AnonymousUser()
+        entry = factory.get("/picm/")
+        entry.user = anonymous
+        first = picm_page(entry)
+        self.assertEqual(first.status_code, 302)
+        self.assertEqual(first.url, "/picm/login/")
+        req = factory.get("/picm/workspace/")
+        req.user = anonymous
+        denied = picm_workbench(req)
+        self.assertEqual(denied.status_code, 302)
+        self.assertEqual(denied.url, "/picm/login/")
+        user = get_user_model().objects.get(username="picm-09170000000")
+        entry.user = user
+        self.assertEqual(picm_page(entry).url, "/picm/workspace/")
+        req.user = user
+        workspace = picm_workbench(req)
+        self.assertEqual(workspace.status_code, 200)
+        self.assertIn(b'id="renderform"', workspace.content)
+        self.assertIn(b'/picm/logout/', workspace.content)
+        self.assertNotIn(b'href="/picm/login/"', workspace.content)
+        login_req = factory.get("/picm/login/")
+        login_req.user = user
+        from core.picm_auth import picm_login
+        self.assertEqual(picm_login(login_req).url, "/picm/workspace/")
 
     def test_bad_password_is_generic_and_throttled(self):
         from django.test import RequestFactory
