@@ -80,15 +80,18 @@ def run():
     by_key = {row["opportunity_key"]: row for row in report["candidates"]}
     ready = by_key["a-eligible"]
     isolated = by_key["b-unrelated"]
-    assert ready["status"] == "REVIEW_REQUIRED", ready
-    assert ready["distinct_source_domains_preliminary"] == 3
-    assert set(ready["observed_claim_types"]) == {
-        "problem", "willingness_to_pay", "comparison", "feasibility"}
+    # Explicitly synthetic snapshots must never qualify an opportunity for
+    # market review. Earlier fixtures accidentally treated them as evidence.
+    assert ready["status"] == "RESEARCH_REQUIRED", ready
+    assert ready["distinct_source_domains_preliminary"] == 0
+    assert ready["observed_claim_types"] == []
+    assert "PROBLEM_OR_WILLINGNESS_SIGNAL_MISSING" in ready["blockers"]
     assert isolated["status"] == "RESEARCH_REQUIRED"
     assert isolated["distinct_source_domains_preliminary"] == 0
     assert report["bridge_audit"]["astra_0049_schema_available"]
     assert report["bridge_audit"]["astra_snapshots_examined"] == 4
-    assert report["bridge_audit"]["astra_snapshots_eligible"] == 4
+    assert report["bridge_audit"]["astra_snapshots_eligible"] == 0
+    assert report["bridge_audit"]["astra_snapshots_synthetic_rejected"] == 4
     assert report["bridge_audit"]["bridge_writes_to_factory"] == 0
     assert DiscoverySnapshot.objects.count() == rows_before
     assert all(
@@ -103,7 +106,7 @@ def run():
     ).exists()
     print("ASTRA_0049_TYPED_EVIDENCE_BRIDGE=PASS")
     print("ASTRA_0049_EXACT_HYPOTHESIS_ISOLATION=PASS")
-    print("ASTRA_0049_FOUR_PROVISIONAL_CLAIM_TYPES=PASS")
+    print("ASTRA_0049_SYNTHETIC_CLAIMS_NOT_PROMOTED=PASS")
     print("ASTRA_0049_NO_MANUFACTURING_AUTHORIZATION=true")
     print("ASTRA_0049_NO_PAYMENT_OR_PUBLICATION_AUTHORIZATION=true")
     print("ASTRA_0049_SYNTHETIC_DATA_ONLY=true")
