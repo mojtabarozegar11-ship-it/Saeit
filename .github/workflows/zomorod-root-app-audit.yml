@@ -181,6 +181,12 @@ jobs:
           fi
           echo "PASSENGER_PYTHON_PATH=$python_path"
           "$python_path" -c 'import django; print("DJANGO_VERSION="+django.get_version())'
+          if command -v passenger-config >/dev/null 2>&1; then
+            echo "PASSENGER_CONFIG_BINARY=$(command -v passenger-config)"
+            passenger-config restart-app /home/zomorod2/Saeit 2>&1 || true
+          else
+            echo "PASSENGER_CONFIG_BINARY=unavailable"
+          fi
           touch tmp/restart.txt
           echo "PASSENGER_RESTART_TRIGGERED=yes"
           set +e
