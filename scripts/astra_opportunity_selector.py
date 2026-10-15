@@ -33,6 +33,16 @@ MIN_RESEARCH_PRIORITY_SCORE = 60.0
 MIN_DISTINCT_SOURCE_DOMAINS = 3
 MAX_OPPORTUNITIES = 2000
 MAX_SNAPSHOTS = 10000
+# Markers travel with untrusted snapshots; a real source review must never
+# silently reinterpret an explicitly illustrative/synthetic record as evidence.
+SYNTHETIC_MARKERS = (
+    "illustrative_only", "synthetic", "is_synthetic", "test_fixture", "mock_data"
+)
+
+
+def _explicitly_synthetic(record):
+    """Fail closed on ambiguous synthetic flags (only literal False clears one)."""
+    return any(k in record and record[k] is not False for k in SYNTHETIC_MARKERS)
 
 
 def _utc(iso):
@@ -78,10 +88,14 @@ def _public_https_domain(url):
 def _validated_sources(snapshots, now):
     """Return eligible *source references*, not trusted facts or buying demand."""
     refs = {}
+    eligible = []
+    content_domains = {}
     if not isinstance(snapshots, list) or len(snapshots) > MAX_SNAPSHOTS:
         raise ValueError("invalid snapshot batch")
     for s in snapshots:
-        if not isinstance(s, dict) or not isinstance(s.get("opportunity_key"), str):
+        if (not isinstance(s, dict) or
+                not isinstance(s.get("opportunity_key"), str) or
+                _explicitly_synthetic(s)):
             continue
         key = s["opportunity_key"]
         domain = _public_https_domain(s.get("url"))
@@ -95,6 +109,15 @@ def _validated_sources(snapshots, now):
         except (ValueError, TypeError, OverflowError):
             continue
         if not now - timedelta(days=MAX_SNAPSHOT_AGE_DAYS) <= seen <= now:
+            continue
+        # Mirror copies of one SHA-256 body across multiple hosts are not
+        # independent preliminary references. Reject all mirrored copies,
+        # deterministically, regardless of arrival order.
+        fingerprint = (key, digest.lower())
+        eligible.append((key, domain, claim, fingerprint))
+        content_domains.setdefault(fingerprint, set()).add(domain)
+    for key, domain, claim, fingerprint in eligible:
+        if len(content_domains[fingerprint]) != 1:
             continue
         # One host is one preliminary domain, not independently corroborated
         # proof of customer demand or independent publisher identity.
