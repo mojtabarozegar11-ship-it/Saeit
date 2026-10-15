@@ -135,6 +135,8 @@ def install():
     finally:
         shutil.rmtree(temp_dir)
 
+    import sys
+    sys.path.insert(0, "/home/zomorod2/Saeit-staging")
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
     import django
     django.setup()
