@@ -70,7 +70,7 @@ jobs:
         run: |
           set -euo pipefail
           export DATABASE_URL="sqlite:///$RUNNER_TEMP/astra-0049-ephemeral.sqlite3"
-          python manage.py test core.tests.test_astra_stage45_schema --verbosity 2
+          python -m pytest -q core/tests/test_astra_stage45_schema.py
       - name: Confirm no VPS credentials or services used
         run: |
           echo ASTRA_0049_VPS_CONNECTIONS=0
