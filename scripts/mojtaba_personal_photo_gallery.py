@@ -147,11 +147,15 @@ def main() -> None:
     staged = []
     installed = False
     try:
-        with tempfile.TemporaryDirectory(prefix="owner-gallery-",dir=str(target.parent)) as d:
-            stage_dir = Path(d)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        stage_dir = Path(tempfile.mkdtemp(prefix="owner-gallery-", dir=str(target.parent)))
+        try:
             for i in range(1, 11):
                 shutil.copy2(args.photo_dir / f"photo-{i:02}.jpg", stage_dir / f"photo-{i:02}.jpg")
             os.rename(stage_dir, target)
+        finally:
+            if stage_dir.exists():
+                shutil.rmtree(stage_dir)
         tmp_file = home.with_name(home.name + ".gallery-tmp")
         tmp_file.write_text(proposed, encoding="utf-8")
         os.chmod(tmp_file, home.stat().st_mode & 0o777)
