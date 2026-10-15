@@ -75,6 +75,23 @@ jobs:
           if str(a.get("enabled")) not in ("1","True"): raise SystemExit("PASSENGER_NOT_RESTORED")
           '
           REMOTE
+      - name: Identify the short 200 response without credentials (read-only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          for p in /admin/login/ /admin/ /services/ /agriculture/; do
+            f="$(mktemp)"
+            h="$(mktemp)"
+            code=$(curl -L --silent --show-error --max-time 18 -D "$h" -o "$f" -w '%{http_code}' "https://zomorodmelal.ir$p?diag_content=20261015" || true)
+            printf 'ROUTE=%s HTTP=%s BYTES=%s\n' "$p" "$code" "$(wc -c < "$f")"
+            grep -Ei '^(HTTP/|content-type:|content-length:|server:|x-powered-by:)' "$h" | tail -n 8 || true
+            python3 - "$f" <<'PY'
+          import sys
+          b=open(sys.argv[1],'rb').read(160)
+          print("BODY_PREFIX_REPR="+repr(b.decode('utf-8','replace')))
+          PY
+            rm -f "$f" "$h"
+          done
       - name: Recheck Django login, root and academy repeatedly
         shell: bash
         run: |
