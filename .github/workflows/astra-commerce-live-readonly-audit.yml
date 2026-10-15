@@ -103,6 +103,21 @@ jobs:
           print("ASTRA_HOST_FOUR_PRIVATE_PRODUCT_SKUS_VERIFIED="+str(verified))
           print("ASTRA_LIVE_PAY_CHECKOUT_PACKAGE_INSTALLED="+str(apps.is_installed("mpw_commerce")))
           print("ASTRA_LIVE_PAY_NATIVE_PACKAGE_INSTALLED="+str(apps.is_installed("mpw_native_checkout")))
+          if apps.is_installed("mpw_native_checkout"):
+              try:
+                  from mpw_native_checkout.wallet_ownership import proven_assets
+                  proofs=proven_assets()
+                  for asset in ("ETH","TRX"):
+                      print("ASTRA_LIVE_PAY_MERCHANT_WALLET_"+asset+"_PROVEN="+str(proofs.get(asset) is True))
+              except Exception as exc:
+                  print("ASTRA_LIVE_PAY_MERCHANT_PROOF_CHECK_ERROR="+type(exc).__name__)
+          for url in ("/commerce/checkout/order/","/commerce/book/1/","/commerce/download/1/"):
+              try:
+                  from django.urls import resolve,Resolver404
+                  name=resolve(url).url_name
+              except Resolver404:
+                  name="UNROUTED"
+              print("ASTRA_LIVE_PAY_ROUTE_"+url.strip("/").replace("/","_").upper()+"="+str(name))
           required=(
               "MPW_COMMERCE_RELEASE_READY",
               "MPW_COMMERCE_CUSTOMER_HTTP_ENABLED",
