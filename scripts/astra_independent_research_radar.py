@@ -52,7 +52,7 @@ def fetch_feed(name):
     if name not in FEEDS and name not in HTML_SOURCES:
         raise ValueError("unregistered feed")
     opener = build_opener(ProxyHandler({}), HTTPSHandler(context=ssl.create_default_context()), NoRedirect())
-    request = Request((FEEDS | HTML_SOURCES)[name], headers={"User-Agent": "AstraResearchRadar/1.0 (public metadata research)",
+    request = Request((dict(FEEDS, **HTML_SOURCES))[name], headers={"User-Agent": "AstraResearchRadar/1.0 (public metadata research)",
                                             "Accept": "text/html" if name in HTML_SOURCES else "application/rss+xml, application/xml, text/xml"})
     with opener.open(request, timeout=12) as response:
         if response.status != 200:
@@ -296,7 +296,7 @@ def main(argv=None):
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--fetch", action="store_true", help="Fetch fixed USDA official public RSS")
     mode.add_argument("--fixture", help="Offline RSS XML fixture, no network")
-    parser.add_argument("--source", choices=sorted(FEEDS | HTML_SOURCES), default="nass_reports",
+    parser.add_argument("--source", choices=sorted(dict(FEEDS, **HTML_SOURCES)), default="nass_reports",
                         help="Feed identity for offline fixture")
     parser.add_argument("--output", required=True, help="New local private JSON report (no overwrite)")
     parser.add_argument("--now-utc", help="ISO8601 clock override for reproducible offline test")
@@ -308,7 +308,7 @@ def main(argv=None):
         raise ValueError("invalid now-utc")
     if args.fetch:
         feeds, errors = {}, {}
-        for name in sorted(FEEDS | HTML_SOURCES):
+        for name in sorted(dict(FEEDS, **HTML_SOURCES)):
             try:
                 feeds[name] = fetch_feed(name)
             except (OSError, ValueError) as exc:
