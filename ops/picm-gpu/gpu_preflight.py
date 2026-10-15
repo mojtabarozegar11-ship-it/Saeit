@@ -16,6 +16,10 @@ from story_assemble import AssemblyError
 from story_comfy import http_json, load_workflow, validate_local_url
 from story_pipeline import verify_generating_graph
 
+# Minimum usable *free* driver-reported VRAM. Threshold is a readiness gate,
+# not a guarantee of speed or quality; Wan 5B also needs CPU offloading/RAM.
+GPU_PROFILES = {"standard-24gb": 20000, "wan22-5b-offload-8gb": 7000}
+
 
 def inspect(host_root, workflow_api, node_map, *,
             comfy="http://127.0.0.1:8188",
@@ -102,17 +106,27 @@ def main():
     ap.add_argument("--workflow-api", required=True)
     ap.add_argument("--node-map", required=True)
     ap.add_argument("--comfy", default="http://127.0.0.1:8188")
-    ap.add_argument("--minimum-free-vram-mib", type=int, default=20000)
+    ap.add_argument("--gpu-profile", choices=tuple(GPU_PROFILES),
+                    default="standard-24gb")
+    ap.add_argument("--minimum-free-vram-mib", type=int, default=None)
     ap.add_argument("--minimum-free-disk-gib", type=int, default=20)
     args = ap.parse_args()
-    if not 1000 <= args.minimum_free_vram_mib <= 200000:
+    minimum_vram = GPU_PROFILES[args.gpu_profile]
+    if args.minimum_free_vram_mib is not None:
+        # Threshold overrides can only be stricter than the selected profile.
+        minimum_vram = args.minimum_free_vram_mib
+        if minimum_vram < GPU_PROFILES[args.gpu_profile]:
+            ap.error("unsafe_GPU_vram_requirement_below_profile")
+    if not 1000 <= minimum_vram <= 200000:
         ap.error("invalid_GPU_vram_requirement")
     if not 1 <= args.minimum_free_disk_gib <= 1000:
         ap.error("invalid_disk_requirement")
     report = inspect(args.work_dir, args.workflow_api, args.node_map,
                      comfy=args.comfy,
-                     minimum_gpu_mib=args.minimum_free_vram_mib,
+                     minimum_gpu_mib=minimum_vram,
                      minimum_free_disk_gib=args.minimum_free_disk_gib)
+    report["gpu_profile"] = args.gpu_profile
+    report["minimum_free_vram_mib"] = minimum_vram
     print(json.dumps(report, sort_keys=True))
     if not report["ready"]:
         raise SystemExit(2)
