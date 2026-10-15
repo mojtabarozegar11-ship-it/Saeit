@@ -107,6 +107,152 @@ class ProcurementQuoteAuditTests(unittest.TestCase):
         p=sample();p["offers"][0]["lead_days"]=7.5
         with self.assertRaises(audit.AuditInputError):audit.evaluate(p)
 
+    def test_whole_pack_ceil_calculation_and_actual_purchase_units(self):
+        p=sample()
+        p["offers"][0].update(
+            unit_price="90",pricing_basis="per_pack",pack_size_base_units="20")
+        r=audit.evaluate(p)
+        o=offers(r)["Synthetic Provider North"]
+        self.assertEqual(o["quote_pricing_basis"],"per_pack")
+        self.assertEqual(o["whole_packs_ordered"],"6")
+        self.assertEqual(o["gross_order_units"],"120.00")
+        self.assertEqual(o["gross_units_before_pack_rounding"],"105.26")
+        self.assertEqual(o["pack_size_base_units"],"20.00")
+        self.assertEqual(o["quoted_price_normalized_per_base_unit"],"4.50")
+        self.assertEqual(o["net_usable_units_from_order"],"114.00")
+        self.assertEqual(o["surplus_usable_units"],"14.00")
+        self.assertEqual(o["discounted_material_cost"],"513.00")
+        self.assertEqual(o["total_landed_cost"],"558.00")
+        self.assertFalse(r["commercial_release_allowed"])
+        self.assertFalse(r["market_demand_verified"])
+
+    def test_pack_pricing_handles_minimum_order_with_ceiling(self):
+        p=sample()
+        p["offers"][0].update(
+            unit_price="90",pricing_basis="per_pack",
+            pack_size_base_units="20",minimum_order_units="150",
+            available_units="500")
+        o=offers(audit.evaluate(p))["Synthetic Provider North"]
+        self.assertEqual(o["whole_packs_ordered"],"8")
+        self.assertEqual(o["gross_order_units"],"160.00")
+        self.assertEqual(o["net_usable_units_from_order"],"152.00")
+
+    def test_capacity_checks_rounded_pack_qty_not_unrounded_demand(self):
+        p=sample()
+        p["offers"][0].update(
+            unit_price="90",pricing_basis="per_pack",
+            pack_size_base_units="20",available_units="110")
+        o=offers(audit.evaluate(p))["Synthetic Provider North"]
+        self.assertEqual(o["gross_order_units"],"120.00")
+        self.assertIn("INSUFFICIENT_DECLARED_CAPACITY",o["reasons"])
+        self.assertFalse(o["eligible_for_cost_comparison"])
+
+    def test_pack_scenario_adverse_recalculates_count_and_quote_multiplier(self):
+        p=sample()
+        p["offers"][0].update(unit_price="100",pricing_basis="per_pack",
+                              pack_size_base_units="20",discount_pct="0")
+        p["stress_cases"]["adverse"].update(
+            waste_extra_pp="25",price_multiplier="1.5",
+            freight_multiplier="2")
+        r=audit.evaluate(p)
+        b=offers(r,"base")["Synthetic Provider North"]
+        a=offers(r,"adverse")["Synthetic Provider North"]
+        self.assertEqual(b["whole_packs_ordered"],"6")
+        self.assertEqual(a["whole_packs_ordered"],"8")
+        self.assertEqual(b["total_landed_cost"],"645.00")
+        self.assertEqual(a["total_landed_cost"],"1290.00")
+
+    def test_invalid_quote_basis_and_pack_sizes_are_rejected(self):
+        for patch in [
+            {"pack_size_base_units":"20"},
+            {"pricing_basis":"per_pack"},
+            {"pricing_basis":"per_base_unit","pack_size_base_units":"20"},
+            {"pricing_basis":"per_pack","pack_size_base_units":"0"},
+            {"pricing_basis":"per_pack","pack_size_base_units":"-1"},
+            {"pricing_basis":"per_pack","pack_size_base_units":"NaN"},
+            {"pricing_basis":"per_pack","pack_size_base_units":False},
+            {"pricing_basis":"per_pack","pack_size_base_units":2.5},
+            {"pricing_basis":"per_pack","pack_size_base_units":"1000000001"},
+        ]:
+            with self.subTest(patch=patch):
+                p=sample();p["offers"][0].update(patch)
+                with self.assertRaises(audit.AuditInputError):
+                    audit.evaluate(p)
+
+    def test_large_pack_does_not_falsely_claim_savings(self):
+        p=sample()
+        p["offers"][0].update(
+            pricing_basis="per_pack",pack_size_base_units="1000",
+            unit_price="4200",available_units="2000")
+        o=offers(audit.evaluate(p))["Synthetic Provider North"]
+        self.assertEqual(o["whole_packs_ordered"],"1")
+        self.assertEqual(o["gross_order_units"],"1000.00")
+        self.assertEqual(o["quoted_price_normalized_per_base_unit"],"4.20")
+        self.assertEqual(o["surplus_usable_units"],"850.00")
+        self.assertEqual(o["total_landed_cost"],"4035.00")
+        self.assertNotEqual(
+            audit.evaluate(p)["scenarios"]["base"][
+                "lowest_cost_eligible_supplier_under_inputs"],
+            "Synthetic Provider North")
+
+    def test_invalid_waste_scenario_has_no_pack_purchase_approval(self):
+        p=sample()
+        p["offers"][0].update(pricing_basis="per_pack",
+                              pack_size_base_units="25",waste_pct="99")
+        p["stress_cases"]["adverse"]["waste_extra_pp"]="2"
+        o=offers(audit.evaluate(p),"adverse")["Synthetic Provider North"]
+        self.assertIsNone(o["total_landed_cost"])
+        self.assertIsNone(o["whole_packs_ordered"])
+        self.assertIn("WASTE_AT_OR_ABOVE_100_PERCENT",o["reasons"])
+
+    def test_quote_basis_default_is_backward_compatible(self):
+        p=sample()
+        o=offers(audit.evaluate(p))["Synthetic Provider North"]
+        self.assertEqual(o["quote_pricing_basis"],"per_base_unit")
+        self.assertIsNone(o["pack_size_base_units"])
+        self.assertIsNone(o["whole_packs_ordered"])
+        self.assertEqual(o["quoted_price_normalized_per_base_unit"],"5.00")
+        self.assertEqual(o["gross_units_before_pack_rounding"],"105.26")
+
+    def test_arithmetic_gap_is_explicitly_not_realized_savings(self):
+        p=sample()
+        r=audit.evaluate(p)
+        rows=r["scenarios"]["base"]["offers"]
+        eligible=[x for x in rows if x["eligible_for_cost_comparison"]]
+        self.assertEqual(len(eligible),2)
+        a=Decimal(eligible[0]["total_landed_cost"])
+        b=Decimal(eligible[1]["total_landed_cost"])
+        self.assertEqual(
+            r["scenarios"]["base"][
+                "arithmetic_cost_gap_to_second_eligible_not_realized_savings"],
+            audit.shown(b-a))
+        self.assertEqual(
+            r["scenarios"]["base"][
+                "second_lowest_cost_eligible_supplier_under_inputs"],
+            eligible[1]["supplier"])
+        self.assertIn("COST_SPREAD_IS_NOT_REALIZED_SAVINGS",r["warnings"])
+
+    def test_no_second_eligible_offer_means_no_spread(self):
+        p=sample()
+        p["offers"][1]["lead_days"]=30
+        r=audit.evaluate(p)
+        self.assertIsNone(
+            r["scenarios"]["base"][
+                "arithmetic_cost_gap_to_second_eligible_not_realized_savings"])
+        self.assertIsNone(
+            r["scenarios"]["base"][
+                "second_lowest_cost_eligible_supplier_under_inputs"])
+
+    def test_rounding_never_buys_a_fractional_pack(self):
+        p=sample()
+        p["offers"][0].update(pricing_basis="per_pack",
+                              pack_size_base_units="7",
+                              unit_price="35")
+        x=offers(audit.evaluate(p))["Synthetic Provider North"]
+        self.assertEqual(x["whole_packs_ordered"],"16")
+        self.assertEqual(x["gross_order_units"],"112.00")
+        self.assertEqual(x["surplus_usable_units"],"6.40")
+
     def test_report_is_deterministic_and_market_flags_remain_false(self):
         p=sample();p2=deepcopy(p)
         a=audit.evaluate(p);b=audit.evaluate(p2)
