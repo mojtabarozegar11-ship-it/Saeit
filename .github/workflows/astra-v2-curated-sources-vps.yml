@@ -5,6 +5,8 @@ on:
     branches: [feature/astra-v2-0048-integration-canary-20261015]
     paths:
       - .github/workflows/astra-v2-curated-sources-vps.yml
+      - scripts/astra_v2_curated_external_sources.py
+      - tests/test_astra_v2_curated_external_sources.py
   workflow_dispatch:
 
 permissions:
