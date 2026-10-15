@@ -46,6 +46,13 @@ class InnerPagesTest(unittest.TestCase):
             self.assertNotIn("published project profiles will",text)
             self.assertNotIn("in 2022",text)
             self.assertIn("experience",text)
+    def test_existing_seo_description_block_is_preserved(self):
+        source=self.sample("stories").replace("{% block content %}","{% block description %}An existing description{% endblock %}\n{% block content %}")
+        patched=M.patch("stories",source)
+        self.assertEqual(patched.count("{% block description %}"),1)
+        self.assertIn("An existing description",patched)
+        self.assertEqual(patched.count(M.MARK),1)
+
     def test_expected_digests_available(self):
         self.assertEqual(len(M.EXPECTED),8)
         self.assertTrue(all(len(v)==64 for v in M.EXPECTED.values()))

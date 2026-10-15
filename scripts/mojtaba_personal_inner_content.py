@@ -206,7 +206,8 @@ def patch(name:str,source:str)->str:
         title_re=r"{%\s*block title\s*%}.*?{%\s*endblock\s*%}"
         source,count=re.subn(title_re,"{% block title %}"+TITLES[name]+"{% endblock %}",source,count=1,flags=re.S)
         if count!=1: raise ValueError("Title block mismatch")
-        source=source.replace("{% block content %}","{% block description %}"+DESCRIPTIONS[name]+"{% endblock %}\n{% block content %}",1)
+        if "{% block description %}" not in source:
+            source=source.replace("{% block content %}","{% block description %}"+DESCRIPTIONS[name]+"{% endblock %}\n{% block content %}",1)
     else:
         source=source.replace("{% block title %}About — Mojtaba Roozegar{% endblock %}","{% block title %}"+TITLES[name]+"{% endblock %}",1)
     if source.count(MARK)!=1: raise ValueError("Exactly one content marker required")
