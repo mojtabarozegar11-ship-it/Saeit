@@ -99,32 +99,33 @@ jobs:
           restore() {
             if test "$swapped" = 1 && test "$committed" = 0; then
               echo ASTRA_PRIVATE_PROCUREMENT_ROLLBACK=START
-              (
+              {
                 flock -w 75 8
-                if test -d "$old" && test ! -L "$old"; then
-                  mv -- "$old" "$previous/rejected-new-source"
+                if test -d "$previous/prior-source"; then
+                  if test -d "$old" && test ! -L "$old"; then
+                    mv -- "$old" "$previous/rejected-new-source"
+                  fi
+                  mv -- "$previous/prior-source" "$old"
+                  cp -p -- "$previous/prior-test.py" "$test_file"
+                  "$py" "$old/self_test.py"
                 fi
-                test -d "$previous/prior-source"
-                mv -- "$previous/prior-source" "$old"
-                cp -p -- "$previous/prior-test.py" "$test_file"
-                "$py" "$old/self_test.py"
-              ) 8>"$root/.queue.lock"
+              } 8>"$root/.queue.lock"
               echo ASTRA_PRIVATE_PROCUREMENT_ROLLBACK=COMPLETE
             fi
           }
           trap restore EXIT
-          (
+          {
             flock -w 75 9
-            (
+            {
               flock -w 75 8
+              swapped=1
               mv -- "$old" "$previous/prior-source"
               mv -- "$new" "$old"
               cp -p -- "$update_test" "$test_file"
-              swapped=1
               cd "$active"
               "$py" -m unittest discover -s tests -p test_astra_farm_procurement_audit.py -q
               "$py" product_prototypes/farm_procurement_audit/self_test.py
-            ) 8>"$root/.queue.lock"
+            } 8>"$root/.queue.lock"
             cd "$active"
             # Factory itself detects a new allowlisted source revision and
             # produces an immutable private artifact with its existing QA gate.
@@ -187,7 +188,7 @@ jobs:
           print("ASTRA_PROMOTION_PRIVATE_BUILDER_FAMILIES="+str(count))
           PY
             committed=1
-          ) 9>"$root/.timer-lock"
+          } 9>"$root/.timer-lock"
           after_main="$(sha256sum "$original" | awk '{print $1}')"
           test "$before_main" = "$after_main"
           echo ASTRA_PROMOTION_ORIGINAL_FACTORY_SQLITE_UNCHANGED=true
