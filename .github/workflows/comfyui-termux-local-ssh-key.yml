@@ -12,6 +12,8 @@ on:
         description: Public ssh-ed25519 key from the phone (only for authorize; NEVER a private key)
         type: string
         required: false
+  issues:
+    types: [opened]
 permissions:
   contents: read
 concurrency:
@@ -19,7 +21,13 @@ concurrency:
   cancel-in-progress: false
 jobs:
   provision:
-    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.actor == 'mojtabarozegar11-ship-it'
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.actor == 'mojtabarozegar11-ship-it' &&
+      (github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'issues' &&
+      github.event.issue.title == 'Ops: check ComfyUI phone SSH key 2026-10-15' &&
+      github.event.issue.user.login == 'mojtabarozegar11-ship-it'))
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -28,7 +36,7 @@ jobs:
         shell: bash
         env:
           VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
-          REQUESTED_MODE: ${{ inputs.mode }}
+          REQUESTED_MODE: ${{ github.event_name == 'issues' && 'status' || inputs.mode }}
           PHONE_PUBLIC_KEY: ${{ inputs.public_key }}
         run: |
           set -Eeuo pipefail
