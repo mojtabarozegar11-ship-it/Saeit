@@ -1,0 +1,21 @@
+name: MojPlayWin ETH wallet chain compatibility QA
+on:
+  push:
+    branches: [qa/mpw-payment-release-preflight-20261015]
+    paths: ['.github/workflows/mojplaywin-eth-mainnet-wallet-compat.yml', 'mpw_native_checkout/templates/mpw_native_checkout/merchant_wallet_proof.html', 'tests/native_ci_eth_wallet_network_js.mjs']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  offline-injected-provider:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate eight mainnet/wrong-network tests with no wallet and no RPC
+        run: node tests/native_ci_eth_wallet_network_js.mjs
