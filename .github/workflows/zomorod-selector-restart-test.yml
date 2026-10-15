@@ -1,0 +1,113 @@
+name: Zomorod Selector restart reversible test
+on:
+  push:
+    branches: [diagnostic/zomorod-503-readonly-20261015]
+    paths: [.github/workflows/zomorod-selector-restart-test.yml]
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-selector-recovery-safe
+  cancel-in-progress: false
+jobs:
+  selector-restart:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - name: Prepare pinned relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/zomorod-restore"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "CONFIRMED_PINNED_RELAY_READY=yes"
+      - name: Safely restart registered Python Selector app
+        shell: bash
+        env:
+          SSH_CONFIG: ${{ runner.temp }}/zomorod-restore/config
+        run: |
+          set -euo pipefail
+          ssh -F "$SSH_CONFIG" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          root=/home/zomorod2/public_html
+          app=/home/zomorod2/Saeit
+          test "$(id -un)" = zomorod2
+          test -f "$root/.htaccess" && test -f "$root/index.html" && test -f "$root/amozeshgah/index.html"
+          test -f "$app/passenger_wsgi.py" && test -x /home/zomorod2/virtualenv/Saeit/3.10/bin/python
+          test "$(grep -c 'PassengerAppRoot "/home/zomorod2/Saeit"' "$root/.htaccess")" = 1
+          install -d -m 700 "$HOME/.backups/zomorod-503-selector-test"
+          backup="$HOME/.backups/zomorod-503-selector-test/htaccess-20261015-restart-pre"
+          test ! -e "$backup" && cp -p "$root/.htaccess" "$backup"
+          cmp -s "$backup" "$root/.htaccess"
+          initial_home="$(sha256sum "$root/index.html" | cut -d' ' -f1)"
+          initial_academy="$(sha256sum "$root/amozeshgah/index.html" | cut -d' ' -f1)"
+          echo "BACKUP_VERIFIED=yes"
+          echo "SELECTOR_RESTART_BEGIN"
+          timeout 55s cloudlinux-selector restart --json --interpreter python --domain zomorodmelal.ir --app-root Saeit | python3 -c '
+          import json,sys
+          d=json.load(sys.stdin)
+          print("SELECTOR_RESTART_RESULT="+str(d.get("result")))
+          if d.get("result") != "success":
+              print("SELECTOR_RESTART_ERROR="+str(d.get("message") or d.get("error") or d.get("errors"))[:350])
+              raise SystemExit(1)
+          '
+          echo "SELECTOR_RESTART_FINISHED=yes"
+          if ! cmp -s "$backup" "$root/.htaccess"; then
+            echo "HTACCESS_CHANGED=yes"
+            echo "HTACCESS_CHANGE_REQUIRES_REVIEW=yes"
+          else echo "HTACCESS_CHANGED=no"; fi
+          test "$initial_home" = "$(sha256sum "$root/index.html" | cut -d' ' -f1)"
+          test "$initial_academy" = "$(sha256sum "$root/amozeshgah/index.html" | cut -d' ' -f1)"
+          echo "STATIC_CONTENT_UNCHANGED=yes"
+          REMOTE
+      - name: Check root, academy and Django admin publicly
+        shell: bash
+        run: |
+          set -euo pipefail
+          for p in / /amozeshgah/ /admin/login/; do
+            code=$(curl --silent --show-error --location --max-time 20 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir$p" || true)
+            printf 'PAGE=%s HTTP=%s\n' "$p" "$code"
+          done
+      - name: Cleanup private keys
+        if: always()
+        shell: bash
+        run: rm -rf -- "$RUNNER_TEMP/zomorod-restore"
