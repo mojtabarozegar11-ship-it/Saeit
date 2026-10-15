@@ -7,11 +7,10 @@ import hmac
 import re
 from pathlib import Path
 
-from .picm_views import root_path
-
-
 def owner_id(root=None):
-    root = root or root_path()
+    if root is None:
+        from .picm_views import root_path
+        root = root_path()
     path = root / ".owner-user-id"
     if path.is_symlink() or not path.is_file():
         return None
