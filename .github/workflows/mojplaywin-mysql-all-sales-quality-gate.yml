@@ -8,6 +8,7 @@ on:
       - 'tests/native_ci_payment_release_preflight.py'
       - 'tests/native_ci_sitewide_*.py'
       - 'tests/native_ci_commerce_*.py'
+      - 'tests/native_ci_customer_checkout_page.py'
       - 'mpw_commerce/**'
   workflow_dispatch:
 
@@ -70,6 +71,7 @@ jobs:
           set +e
           python -m django test \
             tests.native_ci_buyer_cart \
+            tests.native_ci_customer_checkout_page \
             tests.native_ci_payment_release_preflight \
             tests.native_ci_sitewide_commerce \
             tests.native_ci_sitewide_chain_adapter \
