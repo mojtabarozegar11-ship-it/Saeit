@@ -66,8 +66,10 @@ jobs:
         run: |
           set -euo pipefail
           work="$RUNNER_TEMP/amozeshgah-publish"
-          home_code="$(curl -sS --max-time 25 -o "$work/home-before.html" -w '%{http_code}' https://zomorodmelal.ir/)"
-          education_code="$(curl -sS --max-time 25 -o "$work/education-before.html" -w '%{http_code}' https://zomorodmelal.ir/education/)"
+          if ! home_code="$(curl -sSL --retry 2 --retry-delay 1 --max-time 35 -o "$work/home-before.html" -w '%{http_code}' https://zomorodmelal.ir/)"; then home_code=000; fi
+          if ! education_code="$(curl -sSL --retry 2 --retry-delay 1 --max-time 35 -o "$work/education-before.html" -w '%{http_code}' https://zomorodmelal.ir/education/)"; then education_code=000; fi
+          echo "PRE_DEPLOY_HOME_HTTP=$home_code"
+          echo "PRE_DEPLOY_EDUCATION_HTTP=$education_code"
           test "$home_code" = "200"
           test "$education_code" = "200"
           python3 - "$work/education-before.html" "$work/index.html" "$work/passenger_wsgi.py" <<'PY'
