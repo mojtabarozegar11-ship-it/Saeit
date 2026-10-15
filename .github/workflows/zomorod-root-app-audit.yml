@@ -107,15 +107,26 @@ jobs:
           PY
           result="$(uapi --output=json PassengerApps enable_application name=saeit-django)"
           python3 -c 'import json,sys; d=json.load(sys.stdin); r=d.get("result",{}); print("PASSENGER_ENABLE_STATUS="+str(r.get("status"))); print("PASSENGER_ENABLE_ERRORS="+str(r.get("errors") or [])); sys.exit(0 if r.get("status")==1 and not r.get("errors") else 1)' <<<"$result"
-          uapi --output=json PassengerApps list_applications | python3 -c 'import json,sys; d=json.load(sys.stdin); stack=[d]; found=[]
-while stack:
- x=stack.pop()
- if isinstance(x,dict):
-  if str(x.get("domain","")).lower()=="zomorodmelal.ir" and x.get("base_uri")=="/": found.append(x)
-  stack.extend(x.values())
- elif isinstance(x,list): stack.extend(x)
-assert len(found)==1 and found[0].get("enabled") in (1,True,"1"), "ROOT_APP_NOT_ENABLED"
-print("ROOT_APP_ENABLED=yes")'
+          app_json="$(mktemp "$HOME/.root-app-enabled.XXXXXX.json")"
+          trap 'rm -f -- "$app_json"' EXIT
+          uapi --output=json PassengerApps list_applications > "$app_json"
+          python3 - "$app_json" <<'PY'
+          import json,sys
+          data=json.load(open(sys.argv[1],encoding="utf-8"))
+          found=[]
+          stack=[data]
+          while stack:
+              x=stack.pop()
+              if isinstance(x,dict):
+                  if str(x.get("domain","")).lower()=="zomorodmelal.ir" and x.get("base_uri")=="/":
+                      found.append(x)
+                  stack.extend(x.values())
+              elif isinstance(x,list):
+                  stack.extend(x)
+          if len(found)!=1 or found[0].get("enabled") not in (1,True,"1"):
+              raise SystemExit("ROOT_APP_NOT_ENABLED")
+          print("ROOT_APP_ENABLED=yes")
+          PY
           REMOTE
       - name: Check live site routes
         shell: bash
