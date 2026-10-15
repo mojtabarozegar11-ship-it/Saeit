@@ -224,7 +224,8 @@ jobs:
               raise SystemExit("ROOT_TEMPLATE_CANDIDATE_VERIFY_FAILED")
           candidate.replace(target)
           print("PRODUCTION_ROOT_TEMPLATE_RESTORED=yes")
-          print("ROOT_TEMPLATE_BYTES="+str(len(content)))          PY
+          print("ROOT_TEMPLATE_BYTES="+str(len(content)))
+          PY
           REMOTE
       - name: Check live site routes
         shell: bash
