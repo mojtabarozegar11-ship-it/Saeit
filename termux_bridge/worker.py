@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Saeit Termux pull bridge: fixed read-only operations; no arbitrary shell.
+"""Saeit Termux pull bridge: fixed allowlisted operations; no arbitrary shell.
 
 Repo Saeit is public. Results deliberately omit usernames, paths, hostnames,
 device IDs, raw stdout and environment variables. No key is uploaded.
@@ -19,7 +19,7 @@ from datetime import datetime, timedelta, timezone
 REPO = "git@github.com:mojtabarozegar11-ship-it/Saeit.git"
 BRANCH = "feature/termux-safe-command-bridge-20261014"
 PROTOCOL_VERSION = 1
-VALID_ACTIONS = frozenset({"ping", "whoami_check", "python_check"})
+VALID_ACTIONS = frozenset({"ping", "whoami_check", "python_check", "comfyui_key_prepare"})
 COMMAND_PATH = "bridge/command.json"
 RESULT_PATH = "bridge/result.json"
 STATUS_PATH = "bridge/status.json"
@@ -73,6 +73,9 @@ def run_allowlisted(action, runner=subprocess.run):
         return {"ok": True, "code": "pong"}
     if action == "python_check":
         return {"ok": sys.version_info.major >= 3, "code": "python_available"}
+    if action == "comfyui_key_prepare":
+        from .comfyui_phone import prepare_key
+        return prepare_key()
     if action == "whoami_check":
         try:
             p = runner(["id", "-un"], shell=False, text=True,
@@ -158,6 +161,10 @@ class Bridge:
             "code": outcome["code"],
             "completed_at": timestamp(self.clock()),
         }
+        if command["action"] == "comfyui_key_prepare" and outcome["ok"]:
+            # The ssh-ed25519 PUBLIC key is safe for a public branch.
+            # No private key, phone identity, or diagnostic stdout is sent.
+            result["public_key"] = outcome["public_key"]
         status = {
             "protocol_version": 1,
             "state": "idle",
