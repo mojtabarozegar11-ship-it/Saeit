@@ -1,0 +1,73 @@
+name: Astra Stage45 Shadow Research Queue CI
+
+on:
+  push:
+    branches: [factory/astra-v2-0049-integration-20261015]
+    paths:
+      - .github/workflows/astra-stage45-shadow-queue-ci.yml
+      - scripts/astra_stage45_shadow_bootstrap.py
+      - tests/test_astra_stage45_shadow_bootstrap.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  private-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      SAEIT_ENV: ci
+      SECRET_KEY: stage45-shadow-disposable-django-only
+      DEBUG: "False"
+      ALLOWED_HOSTS: localhost,127.0.0.1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Synthetic shadow queue permission and idempotency regressions
+        run: |
+          set -euo pipefail
+          python -m unittest discover -s tests -p test_astra_stage45_shadow_bootstrap.py -v
+      - name: Fresh real Django schema 0048 clone and 0049 private-only migration
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install -r requirements.txt
+          base="$RUNNER_TEMP/astrastage45"
+          mkdir -m 700 "$base"
+          src="$base/factory-fresh-isolated.sqlite3"
+          shadow="$base/astra-v2-stage45-shadow-abcdefabcdef.sqlite3"
+          export DATABASE_URL="sqlite:///$src"
+          python manage.py migrate core 0048 --noinput --verbosity 0
+          python3 - "$src" "$shadow" <<'PY'
+          import pathlib,sqlite3,sys
+          src=pathlib.Path(sys.argv[1])
+          dest=pathlib.Path(sys.argv[2])
+          with sqlite3.connect(src.as_uri()+"?mode=ro",uri=True) as original:
+              with sqlite3.connect(dest) as clone:
+                  original.backup(clone)
+          dest.chmod(0o600)
+          PY
+          export DATABASE_URL="sqlite:///$shadow"
+          python manage.py migrate core 0049 --noinput --verbosity 0
+          python scripts/astra_stage45_shadow_bootstrap.py --source "$src" --shadow "$shadow"
+          python scripts/astra_stage45_research_backlog.py \
+            --db "$shadow" --output "$base/backlog.json" \
+            --now-utc "$(python -c 'from datetime import datetime,timezone;print(datetime.now(timezone.utc).isoformat())')"
+          python3 - "$base/backlog.json" <<'PY'
+          import json,pathlib,sys
+          report=json.loads(pathlib.Path(sys.argv[1]).read_text())
+          assert report["discovery_topics"]==0,report
+          assert report["factory_mutations"]==0
+          assert report["verified_market_demand_topics"]==0
+          assert report["commercially_released_products"]==0
+          print("ASTRA_STAGE45_SHADOW_DJANGO_0049_INTEGRATION=PASS")
+          print("ASTRA_STAGE45_SHADOW_REAL_MARKET_EVIDENCE=NOT_PROVEN")
+          PY
+      - name: Never access VPS or public storefront
+        run: |
+          echo ASTRA_STAGE45_SHADOW_LIVE_DATABASE_WRITES=0
+          echo ASTRA_STAGE45_SHADOW_PUBLICATION_ENABLED=false
+          echo ASTRA_STAGE45_SHADOW_PAYMENTS_ENABLED=false
