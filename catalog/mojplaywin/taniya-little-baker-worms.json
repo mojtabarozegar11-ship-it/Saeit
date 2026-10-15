@@ -1,0 +1,36 @@
+{
+  "product_id": "mojplaywin-taniya-little-baker-worms",
+  "title": "Taniya and the Little Baker Worms",
+  "storefront": "https://mojplaywin.com/taniya/#shop",
+  "language": "en",
+  "product_type": "ebook_pdf",
+  "currency": "USD",
+  "regular_price": "18.00",
+  "discount_amount": "14.00",
+  "sale_price": "4.00",
+  "public_active": false,
+  "delivery_status": "pending_private_pdf_install_and_verified_customer_payment",
+  "author": "Mojtaba Roozegar",
+  "graphic_designer": "Mojtaba Roozegar",
+  "pages": 40,
+  "suggested_age_range": "3-8",
+  "format": "illustrated landscape PDF",
+  "short_description": "Step into a tiny garden bakery with Taniya and three cheerful baker worms. Together they gather berries, mix and knead, bake a towering cake, and share it with their friends in this warm, rhythmic picture book.",
+  "long_description": "Under a berry bush, Taniya discovers a tiny bakery and meets Pip, Poppy, and Peep - three little worms with big baker smiles. Follow their sing-song adventure as they plan a recipe, pick berries, gather ingredients, stir and knead the dough, decorate a tall cake, and prepare a garden feast. When a playful breeze sends napkins flying, the friends work together and keep the celebration joyful. With colorful storybook illustrations and short rhyming verses, this read-aloud tale celebrates teamwork, kindness, patience, and sharing.",
+  "features": [
+    "40 illustrated pages",
+    "English rhythmic read-aloud story",
+    "Front and back covers included",
+    "PDF picture book"
+  ],
+  "digital_asset": {
+    "file_name": "Taniya_and_the_Little_Baker_Worms.pdf",
+    "sha256": "2f6dace4e5bc09ffe11b9e5d677ddff4980fe00de94b7c2ea5b286d1303901d48",
+    "uploaded_to_host": false
+  },
+  "private_delivery": {
+    "fulfillment": "digital",
+    "public_active": false
+  },
+  "disclaimer": "Digital illustrated storybook. Suggested ages 3-8. Sale price $4 USD (regular $18; discount $14)."
+}
