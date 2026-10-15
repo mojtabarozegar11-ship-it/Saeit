@@ -39,13 +39,13 @@ jobs:
           test -d "$root" && test ! -L "$root" && test -f "$root/queue.sqlite3"
           test -f "$active/scripts/astra_v2_self_directed_education.py"
           python3 - "$root" "$active" <<'PY'
-          import pathlib,sys,time,json,zipfile,sqlite3,datetime
+          import pathlib,sys,time,json,zipfile,sqlite3,datetime,ast
           root=pathlib.Path(sys.argv[1])
           stage=pathlib.Path(sys.argv[2])
           folder=root/"autonomous_education"
           assert folder.is_dir() and not folder.is_symlink()
           editions=list(folder.glob("case-*.zip"))
-          assert editions, "not a single no-order educational unit"
+          assert 1<=len(editions)<=720, "bounded educational retention violated"
           latest=max(editions,key=lambda p:p.stat().st_mtime)
           with zipfile.ZipFile(latest) as z:
             assert z.testzip() is None
@@ -59,13 +59,29 @@ jobs:
           conn.execute("PRAGMA query_only=ON")
           families={v[0] for v in conn.execute(
               "SELECT DISTINCT builder FROM jobs WHERE stage='PRIVATE_QA_PASSED'")}
-          assert {"orchard_decision_audit_v2","farm_procurement_audit_v1"}.issubset(families)
+          expected={"orchard_decision_audit_v2","farm_procurement_audit_v1","farm_water_land_margin_audit_v1"}
+          assert expected.issubset(families), (families, expected)
+          marker=root/".enable-autonomous-specialists"
+          assert marker.is_file() and not marker.is_symlink()
+          assert marker.read_text().strip()=="private_only"
+          script=(stage/"scripts/astra_v2_self_directed_education.py").read_text()
+          values={}
+          for node in ast.parse(script).body:
+              if isinstance(node,ast.Assign) and len(node.targets)==1 and isinstance(node.targets[0],ast.Name):
+                  key=node.targets[0].id
+                  if key in {"MAX_RETAINED_EDUCATIONAL_CASES","MIN_PROTECTED_AGE_HOURS"}:
+                      values[key]=ast.literal_eval(node.value)
+          assert values=={"MAX_RETAINED_EDUCATIONAL_CASES":720,"MIN_PROTECTED_AGE_HOURS":168}, values
+          assert "WATER_BUILDER" in (stage/"scripts/astra_v2_private_pipeline.py").read_text()
           log=root/"private-tick.log"
           age=int(time.time()-log.stat().st_mtime) if log.exists() else None
+          assert age is not None and 0<=age<=600, ("stale private heartbeat",age)
           print("ASTRA_NO_ORDER_INSTALLED_QA_FAMILIES="+str(len(families)))
           print("ASTRA_NO_ORDER_THIRD_WATER_BUILDER_ON_VPS="+str(
               "farm_water_land_margin_audit_v1" in families).lower())
           print("ASTRA_NO_ORDER_PRIVATE_CRON_ROWS=1")
+          print("ASTRA_NO_ORDER_THREE_BUILDER_HEALTH=PASS")
+          print("ASTRA_NO_ORDER_RETENTION_LIMIT=720")
           print("ASTRA_NO_ORDER_CASE_EDITIONS="+str(len(editions)))
           print("ASTRA_NO_ORDER_LAST_SUBJECT="+item["subject"])
           print("ASTRA_NO_ORDER_LAST_EDITION="+str(item["edition_number"]))
