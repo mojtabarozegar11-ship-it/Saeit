@@ -1,0 +1,120 @@
+name: Astra 0049 VPS Snapshot Migration Rehearsal
+
+on:
+  push:
+    branches: [feature/astra-stage45-schema-0049-20261015]
+    paths: [.github/workflows/astra-0049-vps-snapshot-rehearsal.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: astra-0049-private-snapshot-rehearsal
+  cancel-in-progress: false
+
+jobs:
+  disposable-vps-copy-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 13
+    env:
+      SAEIT_ENV: ci
+      DEBUG: "False"
+      SECRET_KEY: astra-stage45-rehearsal-ci-only
+      ALLOWED_HOSTS: localhost,127.0.0.1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Resolve exact additive migration SQL from trusted Django 0049 models
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install -r requirements.txt
+          python manage.py makemigrations --check --dry-run
+          export DATABASE_URL="sqlite:///$RUNNER_TEMP/astra-sqlmigrate-reference.sqlite3"
+          python manage.py sqlmigrate core 0049 > "$RUNNER_TEMP/astra-0049.sql"
+          python - "$RUNNER_TEMP/astra-0049.sql" <<'PY'
+          import pathlib,re,sys
+          data=pathlib.Path(sys.argv[1]).read_text()
+          lowered=data.lower()
+          assert len(data)<100_000 and 'create table' in lowered
+          assert 'core_factoryqueueitem' in lowered and 'core_discoverysnapshot' in lowered
+          assert not re.search(r'\\b(drop|delete|update|alter|attach|detach|replace|truncate)\\b',lowered)
+          print("ASTRA_0049_DDL_ADDITIVE_ONLY=true")
+          PY
+      - name: Execute migration DDL against disposable VPS snapshot copy only
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          temp="$RUNNER_TEMP/astra0049-ssh"
+          install -d -m 700 "$temp"
+          trap 'rm -rf -- "$temp"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$temp/key"
+          chmod 600 "$temp/key"
+          ssh-keygen -y -P '' -f "$temp/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$temp/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$temp/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          SSH=(ssh -i "$temp/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$temp/known" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=15 githubops@178.239.147.150)
+          cat "$RUNNER_TEMP/astra-0049.sql" | "${SSH[@]}" 'umask 077; destination="$HOME/factory-runtime/operations/astra-stage45-disposable-0049.sql"; test ! -L "$destination"; cat > "$destination"; chmod 600 "$destination"'
+          "${SSH[@]}" 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          test "$(id -un)" = githubops
+          source="$HOME/factory-runtime/private/factory-fresh-isolated.sqlite3"
+          sql="$HOME/factory-runtime/operations/astra-stage45-disposable-0049.sql"
+          test -f "$source" && test ! -L "$source" && test -f "$sql" && test ! -L "$sql"
+          work="$(mktemp -d "$HOME/factory-runtime/private/astra-0049-disposable-XXXXXXXX")"
+          trap 'rm -rf -- "$work"; rm -f -- "$sql"' EXIT
+          chmod 700 "$work"
+          python3 - "$source" "$sql" "$work/disposable.sqlite3" <<'PY'
+          import pathlib,sqlite3,sys
+          source=pathlib.Path(sys.argv[1])
+          statements=pathlib.Path(sys.argv[2]).read_text()
+          target=pathlib.Path(sys.argv[3])
+          original=sqlite3.connect(source.resolve().as_uri()+"?mode=ro",uri=True,timeout=20)
+          original.execute("PRAGMA query_only=ON")
+          last=original.execute("SELECT name FROM django_migrations WHERE app='core' ORDER BY name DESC LIMIT 1").fetchone()
+          assert last==("0048_business_market_architecture",),last
+          rows=("core_product","core_factoryrun","core_researchsource","core_evidence")
+          before={table:original.execute("SELECT COUNT(*) FROM "+table).fetchone()[0] for table in rows}
+          clone=sqlite3.connect(str(target))
+          original.backup(clone)
+          original.close()
+          clone.executescript(statements)
+          after={table:clone.execute("SELECT COUNT(*) FROM "+table).fetchone()[0] for table in rows}
+          assert before==after,(before,after)
+          names={x[0] for x in clone.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+          assert {"core_factoryqueueitem","core_discoverysnapshot"} <= names
+          for table,cols in {
+              "core_factoryqueueitem":{"key","kind","status","build_authorized","publish_authorized","payment_authorized"},
+              "core_discoverysnapshot":{"hypothesis_id","url","content_hash","record","retrieved_at"},
+          }.items():
+              actual={r[1] for r in clone.execute("PRAGMA table_info("+table+")")}
+              assert cols<=actual,(table,cols-actual)
+          # SQLite enforces denial even when callers bypass Django validation.
+          clone.execute("INSERT INTO core_factoryqueueitem "
+                        "(created_at,updated_at,key,kind,status,build_authorized,publish_authorized,"
+                        "payment_authorized,evidence_verified_independently) "
+                        "VALUES (CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,'discovery:canary','discovery',"
+                        "'RESEARCH_REQUIRED',0,0,0,0)")
+          clone.commit()
+          try:
+              clone.execute("UPDATE core_factoryqueueitem SET publish_authorized=1 WHERE key='discovery:canary'")
+              clone.commit()
+              raise AssertionError("untrusted research record incorrectly gained publish authorization")
+          except sqlite3.IntegrityError:
+              clone.rollback()
+          clone.close()
+          print("ASTRA_0049_VPS_DISPOSABLE_REHEARSAL=PASS")
+          print("ASTRA_0049_LEGACY_ROW_COUNTS_PRESERVED=true")
+          print("ASTRA_0049_DB_PUBLICATION_DENIAL=PASS")
+          print("ASTRA_0049_LIVE_SQLITE_MUTATIONS=0")
+          print("ASTRA_0049_PUBLIC_SITE_MUTATIONS=0")
+          PY
+          REMOTE
