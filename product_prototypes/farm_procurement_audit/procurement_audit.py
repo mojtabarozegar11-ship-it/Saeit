@@ -6,6 +6,7 @@ taxes, lead times and supplier quality information only. No online scraping,
 market forecasts, paid APIs, supplier due-diligence or public product publishing.
 """
 from decimal import Decimal, InvalidOperation, localcontext, ROUND_HALF_EVEN, ROUND_CEILING
+from datetime import date
 from pathlib import Path
 import argparse
 import hashlib
@@ -39,11 +40,44 @@ def shown(v):
     return str(v.quantize(CENT,rounding=ROUND_HALF_EVEN))
 
 
+def _iso_date(value, field):
+    if not isinstance(value,str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}",value):
+        raise AuditInputError(field+" requires YYYY-MM-DD")
+    try:
+        obj=date.fromisoformat(value)
+    except ValueError as exc:
+        raise AuditInputError(field+" is not a valid calendar date") from exc
+    if obj.isoformat()!=value:
+        raise AuditInputError(field+" requires canonical YYYY-MM-DD")
+    return obj
+
+
+def _spec_ref(value,field):
+    if not isinstance(value,str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:-]{2,79}",value):
+        raise AuditInputError(field+" requires a bounded product specification reference")
+    return value
+
+
 def verify(inp):
-    if not isinstance(inp,dict) or set(inp)!={
-        "currency","unit","net_units_required","deadline_days",
-        "offers","stress_cases"}:
+    old_keys={"currency","unit","net_units_required","deadline_days",
+              "offers","stress_cases"}
+    if not isinstance(inp,dict) or set(inp) not in (old_keys,old_keys|{"comparison_controls"}):
         raise AuditInputError("exact input fields required")
+    control=None
+    if "comparison_controls" in inp:
+        raw_controls=inp["comparison_controls"]
+        expected={"required_product_spec_id","delivery_basis","as_of_date"}
+        if not isinstance(raw_controls,dict) or set(raw_controls)!=expected:
+            raise AuditInputError("comparison_controls require exact declared fields")
+        delivery=raw_controls["delivery_basis"]
+        if delivery not in ("delivered_to_farm","buyer_collection"):
+            raise AuditInputError("unsupported delivery basis")
+        control={
+            "required_product_spec_id":_spec_ref(raw_controls["required_product_spec_id"],
+                                                   "required_product_spec_id"),
+            "delivery_basis":delivery,
+            "as_of_date":_iso_date(raw_controls["as_of_date"],"as_of_date"),
+        }
     if not isinstance(inp["currency"],str) or not re.fullmatch("[A-Z]{3}",inp["currency"]):
         raise AuditInputError("currency must be three uppercase characters")
     if inp["unit"] not in ("kg","tonne","litre","piece","bag"):
@@ -64,10 +98,14 @@ def verify(inp):
         # Optional whole-pack pricing is explicit and backward compatible.
         keys=set(raw) if isinstance(raw,dict) else set()
         pack_fields={"pricing_basis","pack_size_base_units"}
-        if not isinstance(raw,dict) or keys not in (spec, spec|pack_fields):
-            raise AuditInputError("exact base-unit or whole-pack quote fields required")
-        if keys==spec|pack_fields and raw["pricing_basis"]!="per_pack":
+        quote_fields={"quote_controls"}
+        allowed=(spec,spec|pack_fields,spec|quote_fields,spec|pack_fields|quote_fields)
+        if not isinstance(raw,dict) or keys not in allowed:
+            raise AuditInputError("exact base-unit, whole-pack and optional quote fields required")
+        if pack_fields.issubset(keys) and raw["pricing_basis"]!="per_pack":
             raise AuditInputError("whole-pack quote must explicitly say per_pack")
+        if control is None and quote_fields.issubset(keys):
+            raise AuditInputError("quote_controls require top-level comparison_controls")
         name=raw["supplier"]
         if not isinstance(name,str) or not name.strip() or len(name)>70 or name in names:
             raise AuditInputError("distinct nonblank supplier names required")
@@ -82,8 +120,30 @@ def verify(inp):
         if not isinstance(ref,str) or len(ref)>120:
             raise AuditInputError("quote_ref length invalid")
         out={"supplier":name,"lead_days":lead,"source_label":src,"quote_ref":ref,
-             "pricing_basis":"per_base_unit","pack_size_base_units":None}
-        if keys==spec|pack_fields:
+             "pricing_basis":"per_base_unit","pack_size_base_units":None,
+             "quote_controls":None}
+        if "quote_controls" in raw:
+            quote=raw["quote_controls"]
+            if not isinstance(quote,dict) or set(quote)!={
+                "product_spec_id","delivery_basis","quoted_on","valid_until",
+                "quote_document_sha256"}:
+                raise AuditInputError("quote_controls exact metadata fields required")
+            if quote["delivery_basis"] not in ("delivered_to_farm","buyer_collection"):
+                raise AuditInputError("unsupported quoted delivery basis")
+            fingerprint=quote["quote_document_sha256"]
+            if not isinstance(fingerprint,str) or not re.fullmatch("[a-f0-9]{64}",fingerprint) or len(set(fingerprint))==1:
+                raise AuditInputError("quote document requires a nontrivial lowercase sha256 digest")
+            issued=_iso_date(quote["quoted_on"],"quoted_on")
+            expires=_iso_date(quote["valid_until"],"valid_until")
+            if issued>expires:
+                raise AuditInputError("quote issue date after expiry")
+            out["quote_controls"]={
+                "product_spec_id":_spec_ref(quote["product_spec_id"],"product_spec_id"),
+                "delivery_basis":quote["delivery_basis"],
+                "quoted_on":issued,"valid_until":expires,
+                "quote_document_sha256":fingerprint,
+            }
+        if pack_fields.issubset(keys):
             out["pricing_basis"]="per_pack"
             out["pack_size_base_units"]=dec(
                 raw["pack_size_base_units"],"pack_size_base_units",MAX_QTY,True)
@@ -112,11 +172,11 @@ def verify(inp):
                         "freight_multiplier":Decimal(1),
                         "waste_extra_pp":Decimal(0)}:
         raise AuditInputError("base case must have neutral multipliers")
-    return qty,deadline,clean,parsed
+    return qty,deadline,clean,parsed,control
 
 
 def evaluate(inp):
-    qty,deadline,offers,stresses=verify(inp)
+    qty,deadline,offers,stresses,control=verify(inp)
     results={}
     notes=["SUPPLIER_QUOTES_AND_QUALITY_NOT_INDEPENDENTLY_VERIFIED",
            "ESTIMATED_LANDED_COST_ONLY_NOT_PURCHASE_APPROVAL",
@@ -125,7 +185,11 @@ def evaluate(inp):
            "TAX_AND_DISCOUNT_CONVENTIONS_MUST_BE_CONFIRMED",
            "WHOLE_PACK_PRICING_AND_ROUNDING_ARE_EXPLICIT_INPUTS",
            "UNUSED_PURCHASED_UNITS_ARE_NOT_ASSUMED_RESALABLE",
-           "COST_SPREAD_IS_NOT_REALIZED_SAVINGS"]
+           "COST_SPREAD_IS_NOT_REALIZED_SAVINGS",
+           "DECLARED_SPEC_MATCH_AND_DOCUMENT_HASH_DO_NOT_AUTHENTICATE_SUPPLIER",
+           "NO_PROOF_OF_REAL_BUYER_DEMAND_OR_ACTUAL_SAVINGS"]
+    if control is None:
+        notes.append("LEGACY_MODE_DOES_NOT_CHECK_SUPPLIER_PRODUCT_SPEC_EQUIVALENCE")
     with localcontext() as ctx:
         ctx.prec=42
         for tag,scenario in stresses.items():
@@ -151,6 +215,19 @@ def evaluate(inp):
                     reasons.append("INSUFFICIENT_DECLARED_CAPACITY")
                 if not offer["source_label"].strip() or not offer["quote_ref"].strip():
                     reasons.append("QUOTE_PROVENANCE_MISSING")
+                if control is not None:
+                    quote=offer["quote_controls"]
+                    if quote is None:
+                        reasons.append("QUOTE_COMPARABILITY_METADATA_MISSING")
+                    else:
+                        if quote["product_spec_id"]!=control["required_product_spec_id"]:
+                            reasons.append("PRODUCT_SPECIFICATION_MISMATCH")
+                        if quote["delivery_basis"]!=control["delivery_basis"]:
+                            reasons.append("DELIVERY_BASIS_MISMATCH")
+                        if quote["quoted_on"]>control["as_of_date"]:
+                            reasons.append("QUOTE_ISSUED_AFTER_AS_OF_DATE")
+                        if quote["valid_until"]<control["as_of_date"]:
+                            reasons.append("QUOTE_EXPIRED_AS_OF_DATE")
                 output={
                     "supplier":offer["supplier"],
                     "eligible_for_cost_comparison":not reasons,
@@ -160,6 +237,14 @@ def evaluate(inp):
                     "lead_days":offer["lead_days"],
                     "verified_quote":False,
                     "verified_supplier_quality":False,
+                    "buyer_declared_spec_and_quote_date_gate_checked":control is not None,
+                    "quote_metadata_independently_authenticated":False,
+                    "quote_spec_ref_operator_supplied":(
+                        offer["quote_controls"]["product_spec_id"]
+                        if offer["quote_controls"] is not None else None),
+                    "quote_document_digest_operator_supplied":(
+                        offer["quote_controls"]["quote_document_sha256"]
+                        if offer["quote_controls"] is not None else None),
                     "quote_pricing_basis":offer["pricing_basis"],
                     "price_per_quoted_unit":shown(offer["unit_price"]),
                     "pack_size_base_units":(
@@ -223,6 +308,13 @@ def evaluate(inp):
         "currency":inp["currency"],"unit":inp["unit"],
         "net_units_required":shown(qty),
         "deadline_days":deadline,
+        "declared_spec_comparison_mode":(
+            "buyer_supplied_metadata_not_independently_authenticated"
+            if control is not None else "legacy_spec_comparability_unassessed"),
+        "buyer_required_product_spec_ref":(
+            control["required_product_spec_id"] if control is not None else None),
+        "as_of_date_operator_supplied":(
+            control["as_of_date"].isoformat() if control is not None else None),
         "scenarios":results,
         "warnings":notes,
         "winner_is_not_supplier_recommendation":True,
