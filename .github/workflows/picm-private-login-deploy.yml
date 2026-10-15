@@ -105,13 +105,15 @@ jobs:
             a="$(curl -sS --max-time 15 -o "$RUNNER_TEMP/picm-auth.html" -w '%{http_code}' https://mojplaywin.com/picm/login/ || true)"
             b="$(curl -sS --max-time 15 -D "$RUNNER_TEMP/picm-entry.headers" -o /dev/null -w '%{http_code}' https://mojplaywin.com/picm/ || true)"
             c="$(curl -sS --max-time 15 -D "$RUNNER_TEMP/picm-workspace.headers" -o /dev/null -w '%{http_code}' https://mojplaywin.com/picm/workspace/ || true)"
-            if [[ "$a" == 200 && "$b" == 302 && "$c" == 302 ]] &&
+            d="$(curl -sS --max-time 15 -o /dev/null -w '%{http_code}' https://mojplaywin.com/picm/api/reference/ || true)"
+            if [[ "$a" == 200 && "$b" == 302 && "$c" == 302 && "$d" == 405 ]] &&
               grep -Fq '<title>ورود به PICM | MojPlayWin</title>' "$RUNNER_TEMP/picm-auth.html" &&
               grep -Fiq 'location: /picm/login/' "$RUNNER_TEMP/picm-entry.headers" &&
               grep -Fiq 'location: /picm/login/' "$RUNNER_TEMP/picm-workspace.headers"; then
               echo PICM_FIRST_PAGE_LOGIN_HTTP_200
               echo PICM_ENTRY_REDIRECTS_TO_LOGIN_HTTP_302
               echo PICM_SECOND_WORKSPACE_REJECTS_UNAUTHENTICATED_HTTP_302
+              echo PICM_REFERENCE_UPLOAD_ROUTE_EXISTS_GET_HTTP_405
               exit 0
             fi
             sleep 3
