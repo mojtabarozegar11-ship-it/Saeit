@@ -1,0 +1,23 @@
+name: ComfyUI VPS CPU SSE2 Safety Tests
+on:
+  push:
+    branches: [feature/comfyui-vps-render-proof-20261015]
+    paths:
+      - .github/workflows/comfyui-vps-static-safety.yml
+      - ops/comfyui-vps/tests/test_vps_smoke_safety.py
+      - ops/comfyui-vps/vps_smoke.py
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  static-checks:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify safe CPU render invariants with no VPS access
+        run: |
+          set -euo pipefail
+          python3 -m py_compile ops/comfyui-vps/vps_smoke.py
+          python3 -m unittest discover -s ops/comfyui-vps/tests -p 'test_vps_smoke_safety.py' -v
+          echo CPU_VPS_SAFE_SOURCE_TESTS_PASS
