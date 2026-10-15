@@ -1,0 +1,70 @@
+name: ComfyUI CPU VPS Private OpenMP Runtime Repair
+on:
+  push:
+    branches: [feature/comfyui-final-audit-20261015]
+    paths: [.github/workflows/comfyui-openmp-runtime-repair.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: comfyui-private-openmp-repair
+  cancel-in-progress: false
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    container: ubuntu:20.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Stage compatible libgomp next to private CPU renderer only
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update -qq
+          apt-get install -y -qq ca-certificates openssh-client python3 libgomp1
+          umask 077
+          test -n "$VPS_KEY"
+          dir="$RUNNER_TEMP/omp-repair"
+          install -d -m 700 "$dir"
+          trap 'rm -rf -- "$dir"' EXIT
+          lib="$(readlink -f /usr/lib/x86_64-linux-gnu/libgomp.so.1)"
+          test -r "$lib"
+          cp "$lib" "$dir/libgomp.so.1"
+          sha256sum "$dir/libgomp.so.1" | awk '{print "OPENMP_LIBRARY_SHA256="$1}'
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$dir/key"
+          chmod 600 "$dir/key"
+          ssh-keygen -y -P '' -f "$dir/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$dir/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$dir/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          options=(-i "$dir/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$dir/known" -o ConnectTimeout=15)
+          ssh "${options[@]}" githubops@178.239.147.150 'test -x "$HOME/comfyui-isolated/.control/sd-cpp-runtime/bin/sd-cli"'
+          scp "${options[@]}" "$dir/libgomp.so.1" githubops@178.239.147.150:/home/githubops/comfyui-isolated/.control/sd-cpp-runtime/bin/libgomp.so.1
+          ssh "${options[@]}" githubops@178.239.147.150 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          root="$HOME/comfyui-isolated/.control/sd-cpp-runtime/bin"
+          test -f "$root/libgomp.so.1" && test -x "$root/sd-cli"
+          chmod 600 "$root/libgomp.so.1"
+          export LD_LIBRARY_PATH="$root"
+          if ldd "$root/sd-cli" | grep -F "not found"; then
+            echo CPU_CPP_ADDITIONAL_SHARED_LIBRARY_MISSING
+            exit 7
+          fi
+          echo CPU_CPP_ALL_DYNAMIC_LIBS_RESOLVED
+          set +e
+          timeout 20 "$root/sd-cli" -h > "$HOME/comfyui-isolated/.control/sd-cpp-runtime/version.log" 2>&1
+          rc=$?
+          set -e
+          if [[ "$rc" -eq 124 || "$rc" -gt 128 ]]; then
+            echo CPU_CPP_COMMAND_HUNG_OR_CRASHED
+            exit 8
+          fi
+          if ! grep -Ei 'usage|options|stable-diffusion|sampling-method|output' "$HOME/comfyui-isolated/.control/sd-cpp-runtime/version.log" >/dev/null; then
+            echo CPU_CPP_HELP_NOT_RECOGNIZED
+            exit 9
+          fi
+          echo CPU_CPP_VPS_EXECUTABLE_VERIFIED
+          echo FACTORY_RUNTIME_UNMODIFIED
+          REMOTE

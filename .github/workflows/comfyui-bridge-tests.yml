@@ -1,0 +1,23 @@
+name: ComfyUI Isolated CPU Bridge Tests
+on:
+  push:
+    branches: [feature/comfyui-final-audit-20261015]
+    paths:
+      - .github/workflows/comfyui-bridge-tests.yml
+      - ops/comfyui-vps/saeit_cpu_node/**
+      - ops/comfyui-vps/tests/**
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  static-safety:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - name: Parse bridge and run safety tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m compileall -q ops/comfyui-vps
+          python3 -m unittest discover -s ops/comfyui-vps/tests -p 'test_*.py' -v
