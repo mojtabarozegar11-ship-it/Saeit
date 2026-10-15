@@ -1,0 +1,221 @@
+# Retry owner photo publication after verified archive extraction and empty-placeholder recovery.
+name: Publish second exact 10-photo Mojtaba collection
+on:
+  push:
+    branches: ['feat/mojtaba-second-original-gallery-20261015']
+    paths:
+      - 'assets/mojtaba_new_10_original_photos.zip'
+      - '.github/workflows/mojtaba-second-ten-photo-publish.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: moj-play-win-personal-v17-owner-batch-b
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.ref == 'refs/heads/feat/mojtaba-second-original-gallery-20261015' &&
+      github.actor == 'mojtabarozegar11-ship-it'
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+      - name: Strict original-asset and nine-page unit checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f assets/mojtaba_new_10_original_photos.zip
+          python3 -m py_compile scripts/mojtaba_second_10_owner_photos.py
+          python3 -m unittest discover -s tests -p test_mojtaba_second_owner_photos.py -v
+          python3 scripts/mojtaba_second_10_owner_photos.py verify --archive assets/mojtaba_new_10_original_photos.zip
+      - name: Prepare pinned SSH relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/photo-relay"
+          mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          python3 - "$d/host.key" <<'PY'
+          import pathlib,sys
+          p=pathlib.Path(sys.argv[1]);t=p.read_text().replace('\r\n','\n').strip()
+          p.write_text(t.replace('\\n','\n')+'\n')
+          PY
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host saeit-host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+            ConnectionAttempts 1
+          EOF
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          echo "SSH_CONFIG=$d/config" >> "$GITHUB_ENV"
+      - name: Stage ten owner originals in private personal app relay
+        shell: bash
+        run: |
+          set -euo pipefail
+          stage="/home/zomorod2/.personal-batch-b-$GITHUB_RUN_ID"
+          timeout 30s ssh -F "$SSH_CONFIG" saeit-host "test ! -e '$stage' && install -d -m 700 '$stage'"
+          timeout 75s scp -F "$SSH_CONFIG" scripts/mojtaba_second_10_owner_photos.py "saeit-host:$stage/installer.py"
+          timeout 75s scp -F "$SSH_CONFIG" assets/mojtaba_new_10_original_photos.zip "saeit-host:$stage/originals.zip"
+
+      - name: Preflight all nine Django templates, install with rollback and verify all ten files
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 630s ssh -F "$SSH_CONFIG" saeit-host "bash -s -- '$GITHUB_RUN_ID'" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          rid="$1"
+          app="/home/zomorod2/mojtaba_personal/mojtaba_roozegar_personal_v17"
+          stage="/home/zomorod2/.personal-batch-b-$rid"
+          src="$stage/originals.zip"
+          script="$stage/installer.py"
+          backup="$HOME/.backups/mojtaba-owner-second-gallery/$rid"
+          py="$app/../.venv_personal_test/bin/python"
+          activated=0
+          successful=0
+          on_exit() {
+            rc=$?
+            trap - EXIT
+            if test "$activated" -eq 1 && test "$successful" -eq 0; then
+              python3 "$script" rollback --backup "$backup" --app "$app" && echo "BATCH_B_ROLLBACK=restored" || echo "BATCH_B_ROLLBACK=manual_attention_required"
+            fi
+            exit "$rc"
+          }
+          trap on_exit EXIT
+          test -f "$app/manage.py" && test ! -L "$app" && test -f "$src" && test -f "$script"
+          test -x "$py"
+          python3 "$script" verify --archive "$src"
+          python3 "$script" preflight --app "$app" --backup "$backup"
+          cd "$app"
+          # Validate template parse AND actual render before changing public files.
+          "$py" - "$script" <<'PY_TEST'
+          import os,sys,importlib.util
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          import django;django.setup()
+          from django.template import engines,RequestContext
+          from django.test import RequestFactory, override_settings
+          from django.conf import settings
+          spec=importlib.util.spec_from_file_location("owner_gallery",sys.argv[1])
+          mod=importlib.util.module_from_spec(spec);spec.loader.exec_module(mod)
+          for name,old in mod.templates(mod.APP).items():
+              proposed=mod.patch(name,old)
+              template=engines["django"].engine.from_string(proposed)
+              request=RequestFactory().get("/mojtaba.roozegar/"+name+"/",HTTP_HOST="mojplaywin.com")
+              with override_settings(STORAGES={**settings.STORAGES,"staticfiles":{"BACKEND":"django.contrib.staticfiles.storage.StaticFilesStorage"}}):
+                  result=template.render(RequestContext(request,{"items":[],"stories":[],"profile":None}))
+              assert mod.MARKER in result
+              print("DJANGO_SECOND_GALLERY_PREFLIGHT_OK="+name,flush=True)
+          print("NINE_DJANGO_TEMPLATES_PRECHECK_PASS=yes",flush=True)
+          PY_TEST
+          # Stage images in their own NEW directory, then collectstatic to register
+          # immutable manifest hashes BEFORE referencing them in live HTML.
+          python3 "$script" assets --app "$app" --backup "$backup" --archive "$src"
+          "$py" manage.py collectstatic --noinput --verbosity 0
+          activated=1
+          python3 "$script" install --app "$app" --backup "$backup"
+          "$py" manage.py check --deploy
+          test -d "$app/tmp" && touch "$app/tmp/restart.txt"
+
+          python3 - "$script" <<'PY_CHECK'
+          import hashlib,importlib.util,re,sys,time
+          from urllib.request import Request,urlopen
+          from urllib.parse import urljoin
+          from html.parser import HTMLParser
+          modspec=importlib.util.spec_from_file_location("owner_gallery",sys.argv[1])
+          mod=importlib.util.module_from_spec(modspec);modspec.loader.exec_module(mod)
+          base="https://mojplaywin.com/mojtaba.roozegar/"
+          paths={"home":"", "about":"about/", "projects":"projects/", "posts":"blog/",
+                 "gallery":"gallery/","resume":"resume/","activities":"works-activities/",
+                 "memories":"memories/","stories":"stories/"}
+          class PhotoTags(HTMLParser):
+              def __init__(self):
+                  super().__init__();self.urls=[]
+              def handle_starttag(self,tag,attrs):
+                  d=dict(attrs)
+                  if tag=="img" and "owner_gallery_20261015_b/" in d.get("src",""): self.urls.append(d["src"])
+          gallery_urls={}
+          for page,route in paths.items():
+              problem=""
+              for attempt in range(7):
+                  try:
+                      req=Request(base+route+"?owner_gallery_b="+str(time.time_ns()),headers={"User-Agent":"MojtabaOwnerPhotoVerification/2"})
+                      with urlopen(req,timeout=25) as res:
+                          page_html=res.read(4000000).decode("utf-8","replace")
+                          if res.status!=200: raise ValueError("HTTP status not 200")
+                      if mod.MARKER not in page_html:raise ValueError("New gallery section absent")
+                      reader=PhotoTags();reader.feed(page_html)
+                      photo_nums=[]
+                      for uri in reader.urls:
+                          m=re.search(r"/photo-(\d\d)(?:\.[a-f0-9]{8,})?\.png(?:\?|$)",uri)
+                          if not m: raise ValueError("Invalid image URI "+uri[:120])
+                          photo_nums.append(int(m.group(1)))
+                      if photo_nums!=mod.ROUTES[page][1]:raise ValueError("Not all new images found")
+                      if page=="gallery":gallery_urls=dict(zip(photo_nums,reader.urls))
+                      print("LIVE_NINE_PAGE_PHOTOS_VERIFIED="+page+" count="+str(len(photo_nums)),flush=True)
+                      break
+                  except Exception as exc:
+                      problem=str(exc)
+                      print("RETRY_PAGE="+page+" attempt="+str(attempt+1)+" "+problem[:100],flush=True)
+                      time.sleep(3)
+              else:
+                  raise SystemExit("LIVE_PAGE_INVALID="+page+" "+problem)
+          for number,uri in gallery_urls.items():
+              with urlopen(Request(urljoin(base,uri),headers={"User-Agent":"MojtabaOwnerPhotoVerification/2"}),timeout=24) as res:
+                  if res.status!=200:raise ValueError("Image response failed "+str(number))
+                  raw=res.read(1500000)
+              if hashlib.sha256(raw).hexdigest()!=mod.SHA[number-1]:
+                  raise ValueError("Original PNG changed in transit "+str(number))
+              print("LIVE_ORIGINAL_SHA256_OK="+str(number),flush=True)
+          if len(gallery_urls)!=10:raise ValueError("Not ten distinct originals")
+          print("PUBLIC_ALL_TEN_NEW_PHOTOS_VERIFIED=yes",flush=True)
+          PY_CHECK
+          successful=1
+          trap - EXIT
+          echo "PERSONAL_SECOND_TEN_ORIGINALS_PUBLISHED=yes"
+          echo "BACKUP_PATH=$backup"
+          rm -rf "$stage"
+          REMOTE
+
+      - name: Ensure both unrelated site roots still respond
+        shell: bash
+        run: |
+          set -euo pipefail
+          for site in "https://mojplaywin.com/" "https://zomorodmelal.ir/"; do
+            code="$(curl -sSL -o /dev/null --max-time 20 -w '%{http_code}' "$site")"
+            test "$code" = 200
+            echo "UNCHANGED_ROOT=$site HTTP_$code"
+          done
+      - name: Remove SSH relay secrets from runner
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/photo-relay"
