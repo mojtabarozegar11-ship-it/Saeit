@@ -131,6 +131,7 @@ jobs:
                   raise SystemExit("PASSENGER_VENV_ENV_HELPER_MISSING_OR_UNEXPECTED")
               prefix=(f'SetEnv PYTHONHOME "{venv}"\n'
                       "RewriteEngine On\n"
+                      f"RewriteRule ^admin(/|$) - [E=VIRTUAL_ENV:{venv},E=PYTHONHOME:{venv}]\n"
                       "RewriteRule ^$ index.html [END]\n"
                       "RewriteRule ^amozeshgah/?$ amozeshgah/index.html [END]\n"
                       "DirectoryIndex index.html\n").encode("utf-8")
