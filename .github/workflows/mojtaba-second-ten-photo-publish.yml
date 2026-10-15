@@ -137,7 +137,7 @@ jobs:
           # Stage images in their own NEW directory, then collectstatic to register
           # immutable manifest hashes BEFORE referencing them in live HTML.
           python3 "$script" assets --app "$app" --backup "$backup" --archive "$src"
-          "$py" manage.py collectstatic --noinput --clear=false --verbosity 0
+          "$py" manage.py collectstatic --noinput --verbosity 0
           activated=1
           python3 "$script" install --app "$app" --backup "$backup"
           "$py" manage.py check --deploy
