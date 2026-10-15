@@ -86,18 +86,19 @@ jobs:
           if "https://zomorodmelal.ir/amozeshgah/" not in html:
               raise SystemExit("Canonical education URL was not set")
           open(sys.argv[2],"w",encoding="utf-8").write(html)
-          wsgi='''from pathlib import Path
-          PAGE = Path(__file__).with_name("index.html").read_bytes()
-          def application(environ, start_response):
-              method = environ.get("REQUEST_METHOD", "GET").upper()
-              if method not in ("GET", "HEAD"):
-                  body = b"Method Not Allowed"
-                  start_response("405 Method Not Allowed", [("Content-Type", "text/plain; charset=utf-8"), ("Content-Length", str(len(body))), ("Allow", "GET, HEAD")])
-                  return [body]
-              headers = [("Content-Type", "text/html; charset=utf-8"), ("Content-Length", str(len(PAGE))), ("Cache-Control", "no-cache"), ("X-Content-Type-Options", "nosniff")]
-              start_response("200 OK", headers)
-              return [b""] if method == "HEAD" else [PAGE]
-          '''
+          wsgi = "\n".join((
+              "from pathlib import Path",
+              "PAGE = Path(__file__).with_name('index.html').read_bytes()",
+              "def application(environ, start_response):",
+              "    method = environ.get('REQUEST_METHOD', 'GET').upper()",
+              "    if method not in ('GET', 'HEAD'):",
+              "        body = b'Method Not Allowed'",
+              "        start_response('405 Method Not Allowed', [('Content-Type', 'text/plain; charset=utf-8'), ('Content-Length', str(len(body))), ('Allow', 'GET, HEAD')])",
+              "        return [body]",
+              "    headers = [('Content-Type', 'text/html; charset=utf-8'), ('Content-Length', str(len(PAGE))), ('Cache-Control', 'no-cache'), ('X-Content-Type-Options', 'nosniff')]",
+              "    start_response('200 OK', headers)",
+              "    return [b''] if method == 'HEAD' else [PAGE]",
+          )) + "\n"
           open(sys.argv[3],"w",encoding="utf-8").write(wsgi)
           print(f"EDUCATION_PAGE_BYTES={len(html.encode('utf-8'))}")
           print("EDUCATION_TITLE_AND_CANONICAL=verified")
