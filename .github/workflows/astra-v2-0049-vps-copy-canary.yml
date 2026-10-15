@@ -22,6 +22,14 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+      - name: Assemble Django pure-Python dependencies in isolated runner directory
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --disable-pip-version-check --no-compile \
+            --target "$RUNNER_TEMP/astra-0049-pydeps" \
+            'Django>=5.2,<6' 'django-environ>=0.12,<1' \
+            'djangorestframework>=3.16,<4' 'whitenoise>=6.9,<7'
       - name: Verify research-only schema defaults before contacting VPS
         shell: bash
         run: |
@@ -46,9 +54,11 @@ jobs:
           ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$temp/known" 2>/dev/null
           test "$(ssh-keygen -lf "$temp/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
           SSH=(ssh -i "$temp/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$temp/known" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=15 githubops@178.239.147.150)
-          "${SSH[@]}" 'python3 -c "import django,environ,rest_framework,whitenoise; print(\"ASTRA_VPS_DJANGO_PREFLIGHT=PASS\")"'
+          "${SSH[@]}" 'python3 -c "import sqlite3; print(sqlite3.sqlite_version)"'
           tar -cf - core config manage.py | "${SSH[@]}" \
             "set -euo pipefail; umask 077; stage=\$HOME/factory-runtime/operations/astra-v2-0049-copy-source-$run_id; test ! -e \"\$stage\"; mkdir -m 700 \"\$stage\"; tar -xf - -C \"\$stage\""
+          tar -cf - -C "$RUNNER_TEMP/astra-0049-pydeps" . | "${SSH[@]}" \
+            "set -euo pipefail; umask 077; stage=\$HOME/factory-runtime/operations/astra-v2-0049-copy-source-$run_id; test -d \"\$stage\"; mkdir -m 700 \"\$stage/_deps\"; tar -xf - -C \"\$stage/_deps\""
           "${SSH[@]}" 'bash -se' "$run_id" <<'REMOTE'
           set -euo pipefail
           umask 077
@@ -60,6 +70,9 @@ jobs:
           test -f "$original" && test ! -L "$original"
           test -f "$stage/core/migrations/0049_astra_private_research_intake.py"
           test -f "$stage/manage.py"
+          test -f "$stage/_deps/django/__init__.py"
+          export PYTHONPATH="$stage/_deps:$stage"
+          python3 -c 'import django,environ,rest_framework,whitenoise; print("ASTRA_VPS_ISOLATED_DJANGO_DEPENDENCIES=PASS")'
           scratch="$(mktemp -d "$HOME/factory-runtime/private/.astra-0049-copy-XXXXXXXX")"
           chmod 700 "$scratch"
           cleanup() {
