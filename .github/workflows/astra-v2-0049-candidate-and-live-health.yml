@@ -132,5 +132,42 @@ jobs:
           print("ASTRA_V2_0049_INACTIVE_CANDIDATE_VERIFIED=true")
           print("ASTRA_V2_0049_LIVE_DATABASE_MIGRATED=false")
           print("ASTRA_V2_0049_NEW_CANDIDATE_IS_NOT_ACTIVE_CRON=true")
+          # These are record-linkage counts, not buyer interviews, independent
+          # market validation or commercial-quality scores. Snapshot only.
+          schema={
+              "core_product":{"id","factory_managed","active"},
+              "core_factoryrun":{"id","product_id"},
+              "core_researchproject":{"id","factory_run_id"},
+              "core_researchsource":{"id","project_id"},
+              "core_evidence":{"id","project_id","source_id"},
+          }
+          for table,needed in schema.items():
+              available={r[1] for r in con.execute("PRAGMA table_info("+table+")")}
+              assert needed.issubset(available),(table,needed-available)
+          result=con.execute("""
+              SELECT COUNT(*),COALESCE(SUM(sources),0),
+                     COALESCE(SUM(evidences),0),
+                     COALESCE(SUM(CASE WHEN sources>0 THEN 1 ELSE 0 END),0)
+              FROM (
+                SELECT p.id,
+                       COUNT(DISTINCT CASE WHEN e.id IS NOT NULL THEN s.id END) AS sources,
+                       COUNT(DISTINCT CASE WHEN e.id IS NOT NULL THEN e.id END) AS evidences
+                FROM core_product p
+                LEFT JOIN core_factoryrun r ON r.product_id=p.id
+                LEFT JOIN core_researchproject rp ON rp.factory_run_id=r.id
+                LEFT JOIN core_researchsource s ON s.project_id=rp.id
+                LEFT JOIN core_evidence e ON e.project_id=rp.id AND e.source_id=s.id
+                WHERE p.factory_managed=1 AND p.active=0
+                GROUP BY p.id
+              )
+          """).fetchone()
+          n,s,e,has_source=result
+          assert all(type(x) is int and x>=0 for x in result)
+          print("ASTRA_V2_0048_UNPUBLISHED_FACTORY_PRODUCTS="+str(n))
+          print("ASTRA_V2_0048_PRELIMINARY_EXACT_LINKED_SOURCE_ROWS="+str(s))
+          print("ASTRA_V2_0048_PRELIMINARY_EXACT_LINKED_EVIDENCE_ROWS="+str(e))
+          print("ASTRA_V2_0048_PRODUCTS_WITH_LINKED_EVIDENCE="+str(has_source))
+          print("ASTRA_V2_0048_VERIFIED_CUSTOMER_WILLINGNESS_TO_PAY=UNASSESSED")
+          print("ASTRA_V2_0048_INDEPENDENT_COMMERCIAL_QUALITY_SCORE=UNASSESSED")
           PY
           REMOTE
