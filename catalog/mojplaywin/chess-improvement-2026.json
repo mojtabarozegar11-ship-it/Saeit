@@ -5,8 +5,8 @@
   "language": "en",
   "product_type": "ebook_pdf",
   "currency": "USD",
-  "regular_price": "14.99",
-  "discount_percentage": 50,
+  "regular_price": "30.00",
+  "discount_percentage": 75,
   "sale_price": "7.50",
   "public_active": false,
   "delivery_status": "pending_secure_asset_and_verified_payment",
@@ -45,5 +45,8 @@
     "Secure private file delivery only for a paid order",
     "Successful sandbox or zero-value verification before public activation"
   ],
-  "disclaimer": "No guaranteed rating gains. Training outcomes depend on the learner's practice and circumstances."
+  "disclaimer": "No guaranteed rating gains. Training outcomes depend on the learner's practice and circumstances.",
+  "discount_amount": "22.50",
+  "price_basis": "owner-declared list price and promotional sale offer for product 72",
+  "catalog_note": "Prior 225-page digital asset and 50%-off poster metadata are archived; product 72 now has a private 741-page draft. Do not publish this legacy asset or image as the current product."
 }
