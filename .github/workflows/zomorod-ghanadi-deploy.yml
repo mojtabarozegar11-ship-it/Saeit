@@ -117,8 +117,8 @@ jobs:
           root=/home/zomorod2/public_html
           stage="$root/.zomorod-ghanadi-stage-$GITHUB_SHA"
           target="$root/ghanadi"
-          expected_root="$(ssh -F "$d/config" saeit-cpanel "if test -f '$root/index.html'; then sha256sum '$root/index.html' | awk '{print \$1}'; else echo ABSENT; fi")"
-          expected_htaccess="$(ssh -F "$d/config" saeit-cpanel "sha256sum '$root/.htaccess' | awk '{print \$1}')"
+          expected_root="$(ssh -F "$d/config" saeit-cpanel "if test -f '$root/index.html'; then sha256sum '$root/index.html' | cut -d ' ' -f1; else echo ABSENT; fi")"
+          expected_htaccess="$(ssh -F "$d/config" saeit-cpanel "sha256sum '$root/.htaccess' | cut -d ' ' -f1")"
           expected_page="$(sha256sum public/ghanadi/index.html | awk '{print $1}')"
           ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" "$expected_page" "$expected_root" "$expected_htaccess" <<'REMOTE'
           set -euo pipefail
