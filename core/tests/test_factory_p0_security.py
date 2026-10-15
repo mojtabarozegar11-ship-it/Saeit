@@ -3,6 +3,7 @@ from datetime import timedelta
 from pathlib import Path
 from unittest.mock import patch
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.core.management import call_command
@@ -339,7 +340,7 @@ class FactoryP0SecurityTests(TestCase):
                 input_data={"goal": self.goal, "product_id": product.pk, "run_id": run.run_id},
                 output_contract={"required": ["launch_candidate"]},
                 prerequisite_snapshot=snapshot_for("product_launch_candidate", product, run),
-                environment="test",
+                environment=settings.FACTORY_ENVIRONMENT,
             )
             # Test-only, genuinely persisted owner authorization for the
             # manually constructed high-risk release-candidate Task. Real
