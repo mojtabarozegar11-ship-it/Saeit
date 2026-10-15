@@ -48,7 +48,7 @@ def main() -> int:
     if mode not in {"status", "authorize", "revoke"}:
         print("INVALID_MODE")
         return 2
-    if os.geteuid() == 0 or os.getlogin() == "root":
+    if os.geteuid() == 0:
         print("ROOT_UNSUPPORTED")
         return 3
     home = Path.home()
