@@ -1,0 +1,146 @@
+name: MojPlayWin gated buyer signature and dormant reconciliation install
+on:
+  push:
+    branches: [audit/mpw-book72-go-live-gates-20261015]
+    paths: [.github/workflows/mpw-book72-safe-reconcile-install.yml]
+permissions:
+  contents: read
+jobs:
+  install:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 48653d0eb6de4ddf803bbc885450e4b71e2150a5
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Pin code and previous unchanged buyer verifier
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = 48653d0eb6de4ddf803bbc885450e4b71e2150a5
+          git show 04a5a7c4abb43352b5c49204a16e642402b4539d:mpw_commerce/buyer_wallets.py > "$RUNNER_TEMP/buyer-wallets-original.py"
+          python3 -m py_compile mpw_commerce/buyer_wallets.py scripts/mpw_book72_reconcile_scheduled.py
+          echo MPW_SAFE_RECONCILE_CODE_VALIDATED
+      - name: Prepare pinned SSH connections to authorized site host
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/astra-live-payment"
+          install -d -m 700 "$d"
+          for item in VPS_KEY HOST_KEY; do
+            printf '%s' "${!item}" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/$item.key"
+            chmod 600 "$d/$item.key"
+            ssh-keygen -y -P '' -f "$d/$item.key" >/dev/null
+          done
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -i "$d/VPS_KEY.key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/vps.known" -o BatchMode=yes githubops@178.239.147.150 'ssh-keyscan -T 10 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/VPS_KEY.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/HOST_KEY.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 12
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+      - name: Install safe buyer helper and dormant 5-minute worker
+        shell: bash
+        run: |
+          set -euo pipefail
+          rid="${{ github.run_id }}"
+          [[ "$rid" =~ ^[0-9]+$ ]]
+          dir=".mpw-safe-reconcile-$rid"
+          conn="$RUNNER_TEMP/astra-live-payment/config"
+          ssh -F "$conn" saeit-cpanel "umask 077; mkdir -m 700 '$dir'"
+          scp -F "$conn" "$RUNNER_TEMP/buyer-wallets-original.py" "saeit-cpanel:$dir/old.py"
+          scp -F "$conn" mpw_commerce/buyer_wallets.py "saeit-cpanel:$dir/new.py"
+          scp -F "$conn" scripts/mpw_book72_reconcile_scheduled.py "saeit-cpanel:$dir/worker.py"
+          ssh -F "$conn" saeit-cpanel "RUN_ID=$rid bash -se" <<'REMOTE'
+          set -euo pipefail
+          dir="$HOME/.mpw-safe-reconcile-$RUN_ID"
+          app="$HOME/Saeit-staging"
+          old="$app/mpw_commerce/buyer_wallets.py"
+          wrapper="$app/scripts/mpw_book72_reconcile_scheduled.py"
+          test -f "$old" && test ! -L "$old"
+          test -d "$app/scripts" && test ! -L "$app/scripts"
+          test ! -e "$wrapper" && test ! -L "$wrapper"
+          test -f "$app/mpw_commerce/management/commands/mpw_commerce_reconcile.py"
+          test -f "$app/mpw_commerce/buyer_signature_worker.py"
+          export PYTHONPATH="$app" DJANGO_SETTINGS_MODULE=config.settings
+          cd "$app"
+          for py in "$HOME/virtualenv/Saeit-staging/3.11/bin/python" "$app/.venv/bin/python" "$HOME/virtualenv/Saeit-staging/3.10/bin/python"; do
+            if test -x "$py" && "$py" -c 'import django' >/dev/null 2>&1; then
+              PYTHON="$py"
+              break
+            fi
+          done
+          test -n "${PYTHON:-}"
+          "$PYTHON" - <<'PY'
+          import django
+          django.setup()
+          from django.conf import settings
+          for name in ("MPW_COMMERCE_RELEASE_READY","MPW_COMMERCE_SETTLEMENT_ENABLED",
+                       "MPW_COMMERCE_AUTORECONCILE_ENABLED"):
+              if getattr(settings,name,False) is True:
+                  raise SystemExit("Live commerce must remain off during installer")
+          from pathlib import Path
+          path=getattr(settings,"MPW_NATIVE_CRYPTO_HELPER_PYTHON","")
+          if not path or not Path(path).is_file():
+              raise SystemExit("Merchant isolated crypto runtime not proven")
+          PY
+          cmp -s "$old" "$dir/old.py"
+          cp -p "$old" "$dir/backup-buyer-wallets.py"
+          crontab -l > "$dir/crontab-before"
+          if grep -Fq MPW_BOOK72_SCHEDULED_RECONCILE "$dir/crontab-before"; then
+            echo MPW_WORKER_ALREADY_SCHEDULED_REFUSE_DUPLICATE
+            exit 1
+          fi
+          install -m 644 "$dir/new.py" "$old.tmp-$RUN_ID"
+          mv "$old.tmp-$RUN_ID" "$old"
+          install -m 600 "$dir/worker.py" "$wrapper"
+          if ! "$PYTHON" "$wrapper" > "$dir/worker-output" 2>&1; then
+            cp -p "$dir/backup-buyer-wallets.py" "$old"
+            rm -f "$wrapper"
+            cat "$dir/worker-output"
+            exit 1
+          fi
+          grep -Fxq MPW_RECONCILE_SALES_OFF_NO_SCAN "$dir/worker-output"
+          line="*/5 * * * * $PYTHON $wrapper >/dev/null 2>>$HOME/.mpw-reconcile-error.log # MPW_BOOK72_SCHEDULED_RECONCILE"
+          { cat "$dir/crontab-before"; printf '\n%s\n' "$line"; } > "$dir/crontab-next"
+          if ! crontab "$dir/crontab-next"; then
+            cp -p "$dir/backup-buyer-wallets.py" "$old"
+            rm -f "$wrapper"
+            crontab "$dir/crontab-before"
+            exit 1
+          fi
+          crontab -l | grep -Fq MPW_BOOK72_SCHEDULED_RECONCILE
+          echo MPW_BUYER_SIGNATURE_CRYPTO_FALLBACK_INSTALLED=YES
+          echo MPW_SCHEDULED_RECONCILE_EVERY_FIVE_MINUTES=YES
+          echo MPW_RECONCILE_RELEASE_GATES_OFF=YES
+          echo MPW_SITE_PUBLIC_SALES_UNCHANGED=YES
+          REMOTE
+      - name: Clean temporary identities
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/astra-live-payment"
