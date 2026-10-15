@@ -35,6 +35,27 @@ def verify():
     assert north["surplus_usable_units"]=="14.00"
     assert north["total_landed_cost"]=="558.00"
     assert mixed["commercial_release_allowed"] is False
+    strict=deepcopy(pack_case)
+    strict["comparison_controls"]={
+        "required_product_spec_id":"FERT-TEST-NPK",
+        "delivery_basis":"delivered_to_farm","as_of_date":"2026-10-15"}
+    for offer in strict["offers"]:
+        offer["quote_controls"]={
+            "product_spec_id":"FERT-TEST-NPK",
+            "delivery_basis":"delivered_to_farm",
+            "quoted_on":"2026-10-01","valid_until":"2026-10-31",
+            "quote_document_sha256":"0123456789abcdef"*4}
+    strict["offers"][2]["lead_days"]=1
+    strict["offers"][2]["quote_controls"]["product_spec_id"]="FERT-OTHER-GRADE"
+    guarded=evaluate(strict)
+    late={o["supplier"]:o for o in guarded["scenarios"]["base"]["offers"]}[
+        "Synthetic Provider Late"]
+    assert "PRODUCT_SPECIFICATION_MISMATCH" in late["reasons"]
+    assert not late["eligible_for_cost_comparison"]
+    assert not late["quote_metadata_independently_authenticated"]
+    assert guarded["market_demand_verified"] is False
+    assert guarded["commercial_release_allowed"] is False
+    print("PROCUREMENT_BUYER_QUOTE_EQUIVALENCE_GUARD_SELF_TEST=PASS")
     print("PROCUREMENT_WHOLE_PACK_NORMALIZATION_SELF_TEST=PASS")
     print("PROCUREMENT_SELF_TEST=PASS")
     print("PROCUREMENT_FOR_SALE=false")
