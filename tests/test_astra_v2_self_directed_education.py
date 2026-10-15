@@ -231,6 +231,8 @@ class SelfDirectedWorkTests(unittest.TestCase):
             folder=self.root/"autonomous_education"
             foreign=folder/"case-00000001-deadbeefdeadbeef.zip"
             foreign.write_bytes(b"unrecognized-third-party-data")
+            second=folder/"case-00000002-deadbeefdeadbeef.zip"
+            second.write_bytes(b"second-foreign-artifact")
             result=casework.build_hour(self.root,3001)
             self.assertEqual(result["status"],"RESOURCE_REVIEW_REQUIRED")
             self.assertTrue(foreign.exists())
