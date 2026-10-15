@@ -25,10 +25,15 @@ class PrivateLegacyIntakeTests(TestCase):
             Product(title="Synthetic unpublished factory draft",
                     product_type="digital", factory_managed=True, active=False),
             Product(title="Already published synthetic", product_type="digital",
-                    factory_managed=True, active=True),
+                    factory_managed=False, active=True),
             Product(title="Unrelated storefront item", product_type="digital",
                     factory_managed=False, active=False),
         ])
+        # Synthetic test-only lifecycle fixture: mark an already-active
+        # unrelated record as factory-owned *after* creation. This never
+        # grants activation and preserves the production activation guard.
+        Product.objects.filter(pk=self.public.pk).update(factory_managed=True)
+        self.public.refresh_from_db()
 
     def invoke(self, **kwargs):
         output=io.StringIO()
