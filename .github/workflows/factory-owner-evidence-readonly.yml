@@ -1,0 +1,53 @@
+name: Factory Owner and Evidence Readonly Audit
+on:
+  push:
+    branches: [feature/factory-evidence-owner-audit-20261015]
+    paths: [.github/workflows/factory-owner-evidence-readonly.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: factory-owner-evidence-readonly
+  cancel-in-progress: false
+jobs:
+  diagnose:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate audit source
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile ops/factory-audit/diagnose_owner_evidence.py
+          if grep -n -E '\\.save\\(|\\.delete\\(|\\.update\\(|\\.create\\(' ops/factory-audit/diagnose_owner_evidence.py; then
+            echo READONLY_AUDIT_REJECTS_MUTATION_PRIMITIVES
+            exit 3
+          fi
+      - name: Run audit on isolated VPS database without writes
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/factory-owner-audit"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 \
+            githubops@178.239.147.150 'bash -se' < <(cat <<'REMOTE'
+          set -euo pipefail
+          cd "$HOME/factory-runtime/django-app"
+          export DJANGO_SETTINGS_MODULE=config.settings
+          export SAEIT_ENV=production
+          export MOJ_FACTORY_LOCAL_MODE=1
+          "$HOME/factory-runtime/.venv/bin/python" -
+          REMOTE
+          cat ops/factory-audit/diagnose_owner_evidence.py)
