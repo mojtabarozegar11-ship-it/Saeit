@@ -112,6 +112,23 @@ jobs:
                   for chunk in iter(lambda:f.read(1024*1024),b""):h.update(chunk)
               print("BOOK72_ARCHIVED_415_SIZE="+str(asset.stat().st_size))
               print("BOOK72_ARCHIVED_415_SHA256_MATCH="+str(h.hexdigest()=="3837fc3cb21ed1a2e7c33e0db8f8e10d158583309b02b97d4d674d25a147207a"))
+          verified_new=pathlib.Path("/home/zomorod2/MojPlayWin_Private_Assets/store/chess-improvement/MojPlayWin_Chess_Master_Editorial_Working_741p.pdf")
+          expected_sha="fbe687e6ef947b827bf524fe32c3a23cae6618424134ac4ac3f1c3d094290cfb"
+          file_ok=False
+          if verified_new.is_file() and not verified_new.is_symlink() and verified_new.stat().st_size==5285095:
+              dig=hashlib.sha256()
+              with verified_new.open("rb") as src:
+                  for chunk in iter(lambda:src.read(1024*1024),b""):dig.update(chunk)
+              file_ok=dig.hexdigest()==expected_sha
+          print("BOOK72_741_FILE_SHA256_MATCH="+str(file_ok))
+          p=Product.objects.filter(pk=72).first()
+          meta=p.metadata if p is not None and isinstance(p.metadata,dict) else {}
+          commerce=meta.get("mpw_commerce",{})
+          commerce=commerce if isinstance(commerce,dict) else {}
+          print("BOOK72_741_METADATA_BOUND="+str(commerce.get("private_file")=="store/chess-improvement/MojPlayWin_Chess_Master_Editorial_Working_741p.pdf"))
+          print("BOOK72_741_METADATA_SHA256_MATCH="+str(meta.get("asset_sha256")==expected_sha))
+          print("BOOK72_741_REVIEW_GATES_CLOSED="+str(not all(meta.get(flag) is True for flag in ("quality_approved","license_verified","factory_publication_permission"))))
+          print("BOOK72_741_STILL_NOT_FOR_SALE="+str(bool(p and not p.active and not commerce.get("enabled"))))
           module_paths=(
               "mpw_commerce/product_checkout_page.py",
               "mpw_commerce/purchase_history.py",
