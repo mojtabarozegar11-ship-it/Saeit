@@ -1,0 +1,35 @@
+name: MojPlayWin chess launch preflight read-only tests
+on:
+  push:
+    branches:
+      - feat/mpw-chess-live-go-nogo-audit-20261015
+    paths:
+      - 'mpw_commerce/management/commands/mpw_chess_launch_audit.py'
+      - 'tests/native_ci_chess_launch_audit.py'
+      - 'tests/native_checkout_root_urls.py'
+      - '.github/workflows/mojplaywin-chess-launch-audit-ci.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  guarded-database-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Use isolated environment
+        run: |
+          python3 -m venv "$RUNNER_TEMP/chess-audit"
+          "$RUNNER_TEMP/chess-audit/bin/python" -m pip install --disable-pip-version-check -q 'Django>=5.2,<6' 'eth-account>=0.13,<0.14'
+      - name: Run read-only release audit tests on disposable SQLite
+        shell: bash
+        env:
+          DJANGO_SETTINGS_MODULE: tests.native_checkout_settings
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          set -euo pipefail
+          "$RUNNER_TEMP/chess-audit/bin/python" -m django test tests.native_ci_chess_launch_audit -v 2
+          echo MPW_CHESS_AUDIT_FAIL_CLOSED_TESTS_PASSED
+          echo MPW_NO_PRODUCTION_KEYS_NO_LIVE_SALES_NO_CRYPTO_TRANSFERS
