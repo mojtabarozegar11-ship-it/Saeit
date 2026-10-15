@@ -17,7 +17,7 @@ import subprocess
 import tempfile
 import time
 from urllib.parse import urlencode, urlsplit
-from urllib.request import Request, urlopen
+from urllib.request import Request, build_opener, HTTPRedirectHandler
 from uuid import uuid4
 
 from story_assemble import AssemblyError, load_plan, video_duration
@@ -28,6 +28,13 @@ MAX_INPUT = 6 * 1024 * 1024
 MAX_OUTPUT = 250 * 1024 * 1024
 CLIP_FILE = re.compile(r"^shot_[0-9]{2}\.mp4$")
 
+
+class NoExternalRedirect(HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise AssemblyError("ComfyUI_HTTP_redirect_forbidden")
+
+
+LOCAL_HTTP = build_opener(NoExternalRedirect)
 
 def validate_local_url(base_url):
     u = urlsplit(base_url)
@@ -81,7 +88,7 @@ def http_json(url, payload=None, timeout=30):
     body = None if payload is None else json.dumps(payload).encode("utf-8")
     headers = {} if payload is None else {"Content-Type": "application/json"}
     request = Request(url, data=body, headers=headers)
-    with urlopen(request, timeout=timeout) as response:
+    with LOCAL_HTTP.open(request, timeout=timeout) as response:
         if response.status not in (200, 201):
             raise AssemblyError("ComfyUI_HTTP_error")
         return json.loads(response.read(5_000_000))
@@ -115,7 +122,7 @@ def upload_reference(base, path):
     end = ("\r\n--" + boundary + "--\r\n").encode()
     req = Request(base + "/upload/image", data=start + raw + end, headers={
         "Content-Type": "multipart/form-data; boundary=" + boundary}, method="POST")
-    with urlopen(req, timeout=120) as resp:
+    with LOCAL_HTTP.open(req, timeout=120) as resp:
         result = json.loads(resp.read(2_000_000))
     stored = result.get("name")
     if not isinstance(stored, str) or not stored.startswith("picm-") or "/" in stored or "\\" in stored:
@@ -156,7 +163,7 @@ def save_mp4(base, filename, subfolder, destination):
                                      dir=destination.parent)
     try:
         os.fchmod(fd, 0o600)
-        with os.fdopen(fd, "wb") as output, urlopen(req, timeout=180) as response:
+        with os.fdopen(fd, "wb") as output, LOCAL_HTTP.open(req, timeout=180) as response:
             count = 0
             while True:
                 buf = response.read(1024 * 1024)
