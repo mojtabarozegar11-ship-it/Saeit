@@ -99,7 +99,8 @@ jobs:
           backup=home/".mpw-eth-chain-ui/original.html"
           assert target.is_file() and not target.is_symlink()
           assert candidate.is_file() and not candidate.is_symlink()
-          assert not backup.exists(),"Do not overwrite private rollback backup"
+          if backup.exists():
+              assert backup.is_file() and not backup.is_symlink() and backup.read_bytes()==target.read_bytes(), "Unexpected rollback source"
           origin=Path(get_template("mpw_native_checkout/merchant_wallet_proof.html").origin.name)
           assert origin.resolve()==target.resolve(),"Django uses a different active template"
           for name in ("MPW_COMMERCE_RELEASE_READY","MPW_COMMERCE_CUSTOMER_HTTP_ENABLED",
@@ -125,7 +126,7 @@ jobs:
                   os.replace(tmp,path)
               finally:
                   if os.path.exists(tmp):os.unlink(tmp)
-          save_atomic(backup,old,0o600)
+          if not backup.exists(): save_atomic(backup,old,0o600)
           original_sha=hashlib.sha256(old).hexdigest()
           try:
               save_atomic(target,new,target.stat().st_mode & 0o777)
@@ -153,11 +154,19 @@ jobs:
           getstatus() { curl -L -sS --connect-timeout 8 --max-time 25 -o /dev/null -w '%{http_code}' "$1" || true; }
           h="$(getstatus 'https://mojplaywin.com/')"
           admin="$(getstatus 'https://mojplaywin.com/admin/login/')"
-          wallet="$(getstatus 'https://mojplaywin.com/merchant/wallet-proof/')"
+          wallet="$(curl -sS --connect-timeout 8 --max-time 25 -o /dev/null -w '%{http_code}|%{redirect_url}' https://mojplaywin.com/merchant/wallet-proof/ || true)"
           echo "MPW_ETH_FIX_HOME_HTTP=$h"
           echo "MPW_ETH_FIX_ADMIN_HTTP=$admin"
-          echo "MPW_ETH_FIX_WALLET_ANON_FINAL_HTTP=$wallet"
-          if [ "$h" != 200 ] || [ "$admin" != 200 ] || [ "$wallet" != 200 ]; then
+          echo "MPW_ETH_FIX_WALLET_ANON_INITIAL_HTTP=${wallet%%|*}"
+          wallet_status="${wallet%%|*}"
+          wallet_dest="${wallet#*|}"
+          wallet_redirect_ok=false
+          if [ "$wallet_status" = 302 ] || [ "$wallet_status" = 303 ]; then
+            if [[ "$wallet_dest" == https://mojplaywin.com/accounts/login/* || "$wallet_dest" == https://mojplaywin.com/admin/login/* ]]; then
+              wallet_redirect_ok=true
+            fi
+          fi
+          if [ "$h" != 200 ] || [ "$admin" != 200 ] || [ "$wallet_redirect_ok" != true ]; then
             echo MPW_ETH_FIX_SMOKE_FAILURE_TRY_ROLLBACK
             timeout 50s ssh -F "$d/config" host 'bash -se' <<'ROLLBACK'
           set -euo pipefail
