@@ -2,7 +2,7 @@ name: Factory Evidence Sidecar VPS Private Proof
 on:
   push:
     branches: [feature/factory-private-evidence-sidecar-20261015]
-    paths: [.github/workflows/vps-factory-evidence-sidecar-proof.yml]
+    paths: [.github/workflows/vps-factory-evidence-sidecar-proof.yml, scripts/factory_research_sidecar.py, tests/test_factory_research_sidecar.py]
   workflow_dispatch:
 permissions:
   contents: read
@@ -85,6 +85,11 @@ jobs:
           assert not j["commercial_quality_approved"]
           assert 0<=j["product_count"]<=50
           assert p.stat().st_mode & 0o077 == 0
+          assert j["total_factory_drafts_in_scope"] >= j["product_count"]
+          assert j["unscanned_in_this_batch"] == j["total_factory_drafts_in_scope"] - j["product_count"]
+          print("FACTORY_PRIVATE_RESEARCH_TOTAL_DRAFTS="+str(j["total_factory_drafts_in_scope"]))
+          print("FACTORY_PRIVATE_RESEARCH_UNSCANNED_THIS_BATCH="+str(j["unscanned_in_this_batch"]))
+          print("FACTORY_PRIVATE_RESEARCH_DUPLICATE_TITLES_IN_BATCH="+str(j["duplicate_title_occurrences_in_batch"]))
           print("FACTORY_PRIVATE_RESEARCH_SIDECAR_PRODUCTS="+str(j["product_count"]))
           print("FACTORY_PRIVATE_RESEARCH_SIDECAR_BLOCKED="+str(j["research_blocked"]))
           print("FACTORY_PRIVATE_RESEARCH_SIDECAR_REVIEW_CANDIDATES="+str(j["quantitative_research_review_candidates"]))
