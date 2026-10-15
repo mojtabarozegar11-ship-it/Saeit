@@ -1,0 +1,70 @@
+name: ComfyUI Headscale Readiness (Read Only)
+on:
+  push:
+    branches: [ops/comfyui-headscale-readiness-20261015]
+    paths: [.github/workflows/comfyui-headscale-readiness.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: comfyui-headscale-readiness
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - name: Check candidate domain DNS without disclosing resolved addresses
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          if getent ahostsv4 headscale.zomorodmelal.ir | awk '{print $1}' | grep -Fxq '178.239.147.150'; then
+            echo DNS_ZOMOROD_HEADSCALE_POINTS_TO_VPS
+          elif getent ahostsv4 headscale.zomorodmelal.ir >/dev/null; then
+            echo DNS_ZOMOROD_HEADSCALE_RESOLVES_ELSEWHERE
+          else
+            echo DNS_ZOMOROD_HEADSCALE_NOT_CONFIGURED
+          fi
+          if getent ahostsv4 headscale.mojplaywin.com | awk '{print $1}' | grep -Fxq '178.239.147.150'; then
+            echo DNS_MOJPLAYWIN_HEADSCALE_POINTS_TO_VPS
+          elif getent ahostsv4 headscale.mojplaywin.com >/dev/null; then
+            echo DNS_MOJPLAYWIN_HEADSCALE_RESOLVES_ELSEWHERE
+          else
+            echo DNS_MOJPLAYWIN_HEADSCALE_NOT_CONFIGURED
+          fi
+      - name: Inspect VPS hosting prerequisites through pinned SSH (read only)
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -Eeuo pipefail
+          umask 077
+          d="$RUNNER_TEMP/headscale-readiness"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          test -n "$VPS_KEY" || { echo VPS_SSH_SECRET_MISSING; exit 1; }
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 githubops@178.239.147.150 'bash -se' <<'REMOTE'
+          set -Eeuo pipefail
+          test "$(id -un)" = githubops
+          echo HEADSCALE_READONLY_SSH_CONNECTED
+          if command -v headscale >/dev/null 2>&1; then echo HEADSCALE_BINARY_PRESENT; else echo HEADSCALE_BINARY_ABSENT; fi
+          if command -v caddy >/dev/null 2>&1; then echo CADDY_PRESENT; else echo CADDY_ABSENT; fi
+          if command -v nginx >/dev/null 2>&1; then echo NGINX_PRESENT; else echo NGINX_ABSENT; fi
+          if command -v docker >/dev/null 2>&1; then echo DOCKER_PRESENT; else echo DOCKER_ABSENT; fi
+          if command -v podman >/dev/null 2>&1; then echo PODMAN_PRESENT; else echo PODMAN_ABSENT; fi
+          if command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then echo NONINTERACTIVE_SUDO_AVAILABLE; else echo NONINTERACTIVE_SUDO_UNAVAILABLE; fi
+          if systemctl --user show-environment >/dev/null 2>&1; then echo USER_SYSTEMD_AVAILABLE; else echo USER_SYSTEMD_UNAVAILABLE; fi
+          for port in 80 443 8080 8443 18188; do
+            if ss -H -ltn "sport = :$port" | grep -q LISTEN; then echo "LOCAL_TCP_${port}_LISTENING"; else echo "LOCAL_TCP_${port}_IDLE"; fi
+          done
+          if [[ -r /etc/letsencrypt/live ]]; then echo SYSTEM_CERT_DIRECTORY_READABLE; else echo SYSTEM_CERT_DIRECTORY_NOT_READABLE; fi
+          if [[ -x "$HOME/.local/opt/comfyui-tailnet/binaries-1.104.1/tailscale" ]]; then echo ROOTLESS_TAILSCALE_CLIENT_PRESENT; else echo ROOTLESS_TAILSCALE_CLIENT_ABSENT; fi
+          free -m | awk '/^Mem:/{print "RAM_AVAILABLE_MB="$7}'
+          df -Pm "$HOME" | awk 'NR==2{print "HOME_DISK_AVAILABLE_MB="$4}'
+          echo HEADSCALE_READONLY_INSPECTION_COMPLETE
+          REMOTE
