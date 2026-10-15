@@ -1,0 +1,58 @@
+name: ComfyUI Phone SSH Key - Private Local Canvas
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Authorize or revoke dedicated Termux tunnel public key
+        type: choice
+        required: true
+        default: status
+        options: [status, authorize, revoke]
+      public_key:
+        description: Public ssh-ed25519 key from the phone (only for authorize; NEVER a private key)
+        type: string
+        required: false
+permissions:
+  contents: read
+concurrency:
+  group: comfyui-private-mobile-ssh-key
+  cancel-in-progress: false
+jobs:
+  provision:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.actor == 'mojtabarozegar11-ship-it'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Authorize a restricted forwarding-only key on existing VPS
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          REQUESTED_MODE: ${{ inputs.mode }}
+          PHONE_PUBLIC_KEY: ${{ inputs.public_key }}
+        run: |
+          set -Eeuo pipefail
+          umask 077
+          case "$REQUESTED_MODE" in status|authorize|revoke) ;; *) exit 2;; esac
+          if [[ "$REQUESTED_MODE" == authorize && -z "$PHONE_PUBLIC_KEY" ]]; then
+            echo "PHONE_PUBLIC_KEY_REQUIRED"; exit 2
+          fi
+          test -n "$VPS_KEY" || { echo "VPS_SSH_PRIVATE_KEY_MISSING"; exit 3; }
+          python3 -m py_compile ops/comfyui-vps/mobile_key_authorize.py
+          d="$RUNNER_TEMP/saeit-comfy-phone-ssh"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs' || { echo HOST_FINGERPRINT_MISMATCH; exit 4; }
+          ssh_args=(-i "$d/key" -p 22 -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15)
+          "": # keep YAML script transport isolated
+          ssh "${ssh_args[@]}" githubops@178.239.147.150 'set -euo pipefail; test "$(id -un)" = githubops; install -d -m 700 "$HOME/.local/share/saeit-comfyui-phone"; cat > "$HOME/.local/share/saeit-comfyui-phone/keyctl.py"; chmod 600 "$HOME/.local/share/saeit-comfyui-phone/keyctl.py"' < ops/comfyui-vps/mobile_key_authorize.py
+          if [[ "$REQUESTED_MODE" == authorize ]]; then
+            printf '%s\n' "$PHONE_PUBLIC_KEY" | ssh "${ssh_args[@]}" githubops@178.239.147.150 'python3 "$HOME/.local/share/saeit-comfyui-phone/keyctl.py" authorize'
+          else
+            ssh "${ssh_args[@]}" githubops@178.239.147.150 'python3 "$HOME/.local/share/saeit-comfyui-phone/keyctl.py" '"$REQUESTED_MODE"
+          fi
+          echo COMFYUI_MOBILE_SSH_KEY_OPERATION_FINISHED
