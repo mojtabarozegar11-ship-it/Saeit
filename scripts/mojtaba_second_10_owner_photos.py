@@ -175,7 +175,15 @@ def main():
     if args.mode=="assets":
         if not args.archive: raise SystemExit("--archive required")
         verify_archive(args.archive)
-        if photo_dir.exists(): raise ValueError("Refusing to overwrite second original photo directory")
+        if photo_dir.exists():
+            if photo_dir.is_symlink() or not photo_dir.is_dir():
+                raise ValueError("Unsafe second gallery directory")
+            for i in range(1,11):
+                existing=photo_dir/("photo-"+f"{i:02d}"+".png")
+                if not existing.is_file() or existing.is_symlink() or hashlib.sha256(existing.read_bytes()).hexdigest()!=SHA[i-1]:
+                    raise ValueError("Existing original image mismatch "+str(i))
+            print("SECOND_GALLERY_STATIC_ALREADY_VERIFIED=10",flush=True)
+            return
         photo_dir.mkdir(parents=True,mode=0o755)
         with ZipFile(args.archive) as z:
             for i in range(1,11):
