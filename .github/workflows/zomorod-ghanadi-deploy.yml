@@ -1,0 +1,167 @@
+name: Publish Zomorod Ghanadi subpage safely
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/zomorod-ghanadi-deploy.yml"
+      - "public/ghanadi/**"
+permissions:
+  contents: read
+concurrency:
+  group: zomorodmelal-ghanadi
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate the static page and assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s public/ghanadi/index.html
+          grep -Fq '<!-- saeit-zomorod-ghanadi-v1 -->' public/ghanadi/index.html
+          grep -Fq 'assets/hero.webp' public/ghanadi/index.html
+          test -s public/ghanadi/assets/hero.webp
+          test -s public/ghanadi/assets/cookies.webp
+          test -s public/ghanadi/assets/cafe.webp
+          test -s public/ghanadi/assets/cake.webp
+          echo "GHANADI_SOURCE=valid"
+      - name: Prepare pinned VPS to cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-ghanadi"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY_READY=yes"
+      - name: Preflight root and the destination route
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-ghanadi"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          root=/home/zomorod2/public_html
+          test -d "$root" && test "$(stat -c %U "$root")" = zomorod2 && test -w "$root"
+          snapshot="$HOME/.backups/zomorodmelal-amozeshgah/htaccess.20261014T235252Z"
+          test -f "$root/.htaccess" && test -f "$snapshot" && cmp -s "$root/.htaccess" "$snapshot"
+          if test -e "$root/ghanadi" || test -L "$root/ghanadi"; then
+            test -d "$root/ghanadi" && test ! -L "$root/ghanadi"
+            test -f "$root/ghanadi/index.html" && test ! -L "$root/ghanadi/index.html"
+            grep -Fq '<!-- saeit-zomorod-ghanadi-v1 -->' "$root/ghanadi/index.html"
+            echo "GHANADI_TARGET=managed"
+          else
+            echo "GHANADI_TARGET=available"
+          fi
+          if test -f "$root/index.html"; then root_sha="$(sha256sum "$root/index.html" | awk '{print $1}')"; else root_sha=ABSENT; fi
+          htaccess_sha="$(sha256sum "$root/.htaccess" | awk '{print $1}')"
+          echo "ROOT_INDEX_SHA=$root_sha"
+          echo "ROOT_HTACCESS_SHA=$htaccess_sha"
+          REMOTE
+      - name: Stage only /ghanadi/
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-ghanadi"
+          root=/home/zomorod2/public_html
+          stage="$root/.zomorod-ghanadi-stage-$GITHUB_SHA"
+          ssh -F "$d/config" saeit-cpanel "set -eu; test ! -e '$stage'; mkdir -m 700 '$stage'"
+          tar -C public/ghanadi -czf - . | ssh -F "$d/config" saeit-cpanel "tar -xzf - -C '$stage'"
+      - name: Atomically publish the managed subdirectory
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-ghanadi"
+          root=/home/zomorod2/public_html
+          stage="$root/.zomorod-ghanadi-stage-$GITHUB_SHA"
+          target="$root/ghanadi"
+          expected_root="$(ssh -F "$d/config" saeit-cpanel "if test -f '$root/index.html'; then sha256sum '$root/index.html' | cut -d ' ' -f1; else echo ABSENT; fi")"
+          expected_htaccess="$(ssh -F "$d/config" saeit-cpanel "sha256sum '$root/.htaccess' | cut -d ' ' -f1")"
+          expected_page="$(sha256sum public/ghanadi/index.html | awk '{print $1}')"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" "$expected_page" "$expected_root" "$expected_htaccess" <<'REMOTE'
+          set -euo pipefail
+          commit_sha="$1"; expected_page="$2"; expected_root="$3"; expected_htaccess="$4"
+          root=/home/zomorod2/public_html
+          stage="$root/.zomorod-ghanadi-stage-$commit_sha"; target="$root/ghanadi"
+          backup="$HOME/.backups/zomorodmelal-ghanadi/$commit_sha"
+          current_root=ABSENT
+          if test -f "$root/index.html"; then current_root="$(sha256sum "$root/index.html" | awk '{print $1}')"; fi
+          test "$current_root" = "$expected_root"
+          test "$(sha256sum "$root/.htaccess" | awk '{print $1}')" = "$expected_htaccess"
+          test "$(sha256sum "$stage/index.html" | awk '{print $1}')" = "$expected_page"
+          test "$(stat -c %U "$root")" = zomorod2
+          if test -e "$target" || test -L "$target"; then
+            test -d "$target" && test ! -L "$target"
+            test -f "$target/index.html" && test ! -L "$target/index.html"
+            grep -Fq '<!-- saeit-zomorod-ghanadi-v1 -->' "$target/index.html"
+            install -d -m 700 "$(dirname "$backup")"; test ! -e "$backup"
+            cp -a -- "$target" "$backup"; rm -rf -- "$target"
+          fi
+          if ! mv -T "$stage" "$target"; then
+            if test -d "$backup"; then cp -a -- "$backup" "$target"; fi
+            exit 1
+          fi
+          find "$target" -type d -exec chmod 755 {} +
+          find "$target" -type f -exec chmod 644 {} +
+          test -s "$target/index.html"
+          test "$(sha256sum "$target/index.html" | awk '{print $1}')" = "$expected_page"
+          current_root=ABSENT
+          if test -f "$root/index.html"; then current_root="$(sha256sum "$root/index.html" | awk '{print $1}')"; fi
+          test "$current_root" = "$expected_root"
+          test "$(sha256sum "$root/.htaccess" | awk '{print $1}')" = "$expected_htaccess"
+          echo "GHANADI_INSTALLED=/ghanadi/"
+          echo "ROOT_INDEX_UNCHANGED=yes"
+          echo "ROOT_HTACCESS_UNCHANGED=yes"
+          REMOTE
+      - name: Verify the live subpage and root
+        shell: bash
+        run: |
+          set -euo pipefail
+          page="$(curl --fail --silent --show-error --retry 4 --retry-delay 2 https://zomorodmelal.ir/ghanadi/)"
+          printf '%s' "$page" | grep -Fq 'قنادی زمرد'
+          curl --fail --silent --show-error --retry 4 --retry-delay 2 -o /dev/null https://zomorodmelal.ir/ghanadi/assets/hero.webp
+          curl --fail --silent --show-error --retry 4 --retry-delay 2 -o /dev/null https://zomorodmelal.ir/
+          echo "GHANADI_LIVE=https://zomorodmelal.ir/ghanadi/"
+          echo "ROOT_ROUTE_HTTP=200"
