@@ -1,0 +1,94 @@
+name: ComfyUI Phone Public Key - Receipt Auto Authorize
+on:
+  workflow_run:
+    workflows: [Termux Safe GitHub Command Bridge Tests]
+    types: [completed]
+    branches: [feature/termux-safe-command-bridge-20261014]
+permissions:
+  contents: read
+concurrency:
+  group: comfyui-private-mobile-ssh-key
+  cancel-in-progress: false
+jobs:
+  authorize:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.actor.login == 'mojtabarozegar11-ship-it' &&
+      startsWith(github.event.workflow_run.head_commit.message,
+                 'bridge: safe receipt comfyui-key-prepare-')
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          path: trusted
+      - name: Verify the exact phone receipt from the tested commit
+        shell: bash
+        env:
+          RECEIPT_SHA: ${{ github.event.workflow_run.head_sha }}
+          RECEIPT_MESSAGE: ${{ github.event.workflow_run.head_commit.message }}
+        run: |
+          set -Eeuo pipefail
+          umask 077
+          [[ "$RECEIPT_SHA" =~ ^[a-f0-9]{40}$ ]] || exit 3
+          d="$RUNNER_TEMP/comfyui-phone-receipt"
+          install -d -m 700 "$d"
+          git -C trusted fetch -q --no-tags --depth=1 origin "$RECEIPT_SHA"
+          git -C trusted show "$RECEIPT_SHA:bridge/command.json" > "$d/command.json"
+          git -C trusted show "$RECEIPT_SHA:bridge/result.json" > "$d/result.json"
+          python3 - "$d/command.json" "$d/result.json" "$d/phone.pub" <<'PY'
+          import json, pathlib, re, sys
+          from datetime import datetime, timedelta, timezone
+          request = json.loads(pathlib.Path(sys.argv[1]).read_text())
+          receipt = json.loads(pathlib.Path(sys.argv[2]).read_text())
+          expected = {"protocol_version", "command_id", "action", "issued_at", "expires_at"}
+          assert set(request) == expected
+          assert set(receipt) == {"protocol_version", "command_id", "action", "ok", "code", "completed_at", "public_key"}
+          assert request["protocol_version"] == receipt["protocol_version"] == 1
+          ident = request["command_id"]
+          assert isinstance(ident, str) and re.fullmatch(r"comfyui-key-prepare-[a-zA-Z0-9-]{1,58}", ident)
+          assert receipt["command_id"] == ident
+          assert request["action"] == receipt["action"] == "comfyui_key_prepare"
+          assert receipt["ok"] is True and receipt["code"] == "comfyui_public_key_ready"
+          def parse_time(value):
+              assert isinstance(value, str) and value.endswith("Z")
+              return datetime.fromisoformat(value.replace("Z", "+00:00"))
+          issued = parse_time(request["issued_at"])
+          expires = parse_time(request["expires_at"])
+          completed = parse_time(receipt["completed_at"])
+          now = datetime.now(timezone.utc)
+          assert timedelta(0) < expires - issued <= timedelta(days=2)
+          assert issued - timedelta(minutes=2) <= completed <= expires
+          assert now - timedelta(hours=2) <= completed <= now + timedelta(minutes=2)
+          public = receipt["public_key"]
+          assert isinstance(public, str) and len(public) < 240
+          assert re.fullmatch(r"ssh-ed25519 [A-Za-z0-9+/]+={0,2} saeit-comfyui-mobile-v1", public)
+          pathlib.Path(sys.argv[3]).write_text(public + "\n")
+          print("SIGNED_OFF_PUBLIC_KEY_RECEIPT_VALIDATED")
+          PY
+          [[ "$RECEIPT_MESSAGE" == "bridge: safe receipt $(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["command_id"])' "$d/command.json")" ]]
+          chmod 600 "$d/phone.pub"
+          ssh-keygen -lf "$d/phone.pub" >/dev/null
+          echo PHONE_PUBLIC_KEY_ONLY_VALIDATED
+      - name: Authorize forward-only key on existing VPS
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -Eeuo pipefail
+          umask 077
+          test -n "$VPS_KEY" || { echo VPS_SSH_KEY_MISSING; exit 3; }
+          d="$RUNNER_TEMP/comfyui-phone-receipt"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/vps.key"
+          chmod 600 "$d/vps.key"
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh_args=(-i "$d/vps.key" -p 22 -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15)
+          ssh "${ssh_args[@]}" githubops@178.239.147.150 'set -euo pipefail; test "$(id -un)" = githubops; install -d -m 700 "$HOME/.local/share/saeit-comfyui-phone"; cat > "$HOME/.local/share/saeit-comfyui-phone/keyctl.py"; chmod 600 "$HOME/.local/share/saeit-comfyui-phone/keyctl.py"' < trusted/ops/comfyui-vps/mobile_key_authorize.py
+          ssh "${ssh_args[@]}" githubops@178.239.147.150 'python3 "$HOME/.local/share/saeit-comfyui-phone/keyctl.py" authorize' < "$d/phone.pub"
+          echo COMFYUI_PHONE_KEY_AUTHORIZED_FOR_LOCAL_FORWARD_ONLY
