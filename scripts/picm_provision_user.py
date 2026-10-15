@@ -74,5 +74,10 @@ if __name__ == "__main__":
         main()
     except Exception as exc:
         # Never leak a decrypted username/password via exception messages.
-        print("PICM_PRIVATE_LOGIN_PROVISION_ERROR=" + type(exc).__name__, file=sys.stderr)
+        safe_errors = {"INVALID_ACCOUNT", "PRIVATE_DECRYPTION_KEY_MISSING",
+                       "INVALID_ENCRYPTED_INPUT", "UNEXPECTED_RSA_CIPHERTEXT",
+                       "INVALID_SECRET_SCHEMA", "INVALID_PICM_LOGIN_CREDENTIALS",
+                       "REFUSE_EXISTING_PRIVILEGED_ACCOUNT"}
+        code = str(exc) if str(exc) in safe_errors else "UNCLASSIFIED_SERVER_RUNTIME"
+        print("PICM_PRIVATE_LOGIN_PROVISION_ERROR=" + type(exc).__name__ + ":" + code, file=sys.stderr)
         raise SystemExit(1)
