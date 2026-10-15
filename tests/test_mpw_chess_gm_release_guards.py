@@ -80,6 +80,20 @@ class GrandmasterReleaseGuards(unittest.TestCase):
         ):
             self.assertIn(clause, text, clause)
 
+    def test_commerce_delivery_relative_path_is_exact_and_private(self):
+        manifest = json.loads(PREFLIGHT.read_text(encoding="utf-8"))
+        proposed = json.loads(CONFIG.read_text(encoding="utf-8"))
+        private_path = Path(proposed["proposed_product_metadata"]["mpw_commerce"]["private_file"])
+        self.assertFalse(private_path.is_absolute())
+        self.assertNotIn("..", private_path.parts)
+        self.assertNotIn("public_html", private_path.parts)
+        self.assertEqual(
+            private_path.as_posix(),
+            "store/chess-improvement/MojPlayWin_Chess_Grandmaster_Final_Covered_2026.pdf",
+        )
+        self.assertEqual(private_path.name, manifest["private_asset"]["filename"])
+        self.assertTrue(proposed["final_book"]["live_private_asset_root_verified"])
+
     def test_configuration_remains_explicitly_unreleased(self):
         manifest = json.loads(PREFLIGHT.read_text(encoding="utf-8"))
         proposed = json.loads(CONFIG.read_text(encoding="utf-8"))
