@@ -47,7 +47,7 @@ jobs:
           c.feed(source)
           if not all((c.title, c.h1, c.rtl, c.canonical)):
               raise SystemExit("Storefront metadata or Persian RTL heading is missing")
-          if len(re.findall(r"\\bgroup:", source)) != 20:
+          if len(re.findall(r"\bgroup:", source)) != 20:
               raise SystemExit("Expected 20 populated product records")
           for name in ("cookie.svg", "cake.svg", "cafe.svg", "box.svg"):
               asset = Path("public/ghanadi/assets") / name
@@ -102,7 +102,7 @@ jobs:
           chmod 600 "$d/config"
           scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
           test -n "$scan"
-          printf '%s\\n' "$scan" > "$d/host.candidate"
+          printf '%s\n' "$scan" > "$d/host.candidate"
           test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
           cp "$d/host.candidate" "$d/host.known"
 
