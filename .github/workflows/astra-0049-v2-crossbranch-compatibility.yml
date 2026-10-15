@@ -1,0 +1,138 @@
+name: Astra 0049 Historical and V2 Non-Destructive Compatibility
+
+on:
+  push:
+    branches: [feature/astra-stage45-schema-0049-20261015]
+    paths:
+      - .github/workflows/astra-0049-v2-crossbranch-compatibility.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: astra-0049-v2-crossbranch-integration
+  cancel-in-progress: false
+
+jobs:
+  compatible-disposable:
+    runs-on: ubuntu-latest
+    timeout-minutes: 19
+    env:
+      SAEIT_ENV: ci
+      DEBUG: "False"
+      SECRET_KEY: astra-v2-crossbranch-disposable-ci-only
+      ALLOWED_HOSTS: localhost,127.0.0.1
+    steps:
+      - name: Checkout VPS aligned 0049 branch as target
+        uses: actions/checkout@v4
+      - name: Checkout pinned independent Astra V2 reference in a sibling directory
+        uses: actions/checkout@v4
+        with:
+          repository: mojtabarozegar11-ship-it/Saeit
+          ref: a9cdca5bb180fcc5d4c5e438e18a77b1f37bee70
+          path: astra-v2-reference
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Stage allowlisted source and tests without replacing any historical files
+        run: |
+          set -euo pipefail
+          test "$(git -C astra-v2-reference rev-parse HEAD)" = a9cdca5bb180fcc5d4c5e438e18a77b1f37bee70
+          python3 - <<'PY'
+          from pathlib import Path
+          import shutil
+          reference=Path("astra-v2-reference")
+          target=Path(".")
+          scripts=(
+              "astra_v2_private_pipeline.py",
+              "astra_v2_topic_gate.py",
+              "astra_v2_self_directed_education.py",
+              "astra_v2_release_gate.py",
+              "astra_v2_stage45_probe.py",
+          )
+          tests=(
+              "test_astra_v2_private_pipeline.py",
+              "test_astra_v2_self_directed_education.py",
+              "test_astra_v2_release_gate.py",
+              "test_astra_v2_stage45_probe.py",
+              "test_astra_orchard_decision_audit.py",
+              "test_astra_farm_procurement_audit.py",
+              "test_astra_farm_water_land_margin_audit.py",
+          )
+          for name in scripts:
+              src=reference/"scripts"/name
+              dest=target/"scripts"/name
+              assert src.is_file() and not src.is_symlink() and not dest.exists(),name
+              shutil.copy2(src,dest)
+          for name in tests:
+              src=reference/"tests"/name
+              dest=target/"tests"/name
+              assert src.is_file() and not src.is_symlink() and not dest.exists(),name
+              shutil.copy2(src,dest)
+          for slug in ("orchard_decision_audit","farm_procurement_audit",
+                       "farm_water_land_margin_audit"):
+              src=reference/"product_prototypes"/slug
+              dest=target/"product_prototypes"/slug
+              assert src.is_dir() and not src.is_symlink() and not dest.exists(),slug
+              shutil.copytree(src,dest,symlinks=False)
+          # No historical files were overwritten and no Django core modules
+          # were copied from the older Astra branch.
+          assert (target/"core/migrations/0049_astra_stage45_research_queue.py").is_file()
+          assert (target/"scripts/astra_stage45_research_backlog.py").is_file()
+          assert (target/"scripts/astra_research_evidence_adapter.py").is_file()
+          print("ASTRA_V2_0049_NO_HISTORICAL_FILES_OVERWRITTEN=true")
+          print("ASTRA_V2_0049_SOURCE_OVERLAY_PRIVATE_ONLY=true")
+          PY
+      - name: Check Django migration alignment and migrate disposable 0049 DB
+        run: |
+          set -euo pipefail
+          python -m pip install -r requirements.txt
+          export DATABASE_URL="sqlite:///$RUNNER_TEMP/astra-v2-0049-compatibility.sqlite3"
+          test ! -e "$RUNNER_TEMP/astra-v2-0049-compatibility.sqlite3"
+          python manage.py check
+          python manage.py makemigrations --check --dry-run
+          python manage.py migrate --noinput --verbosity 0
+          python - "$RUNNER_TEMP/astra-v2-0049-compatibility.sqlite3" <<'PY'
+          import sqlite3,sys
+          con=sqlite3.connect(sys.argv[1])
+          assert con.execute(
+              "SELECT COUNT(*) FROM django_migrations WHERE app='core' "
+              "AND name='0049_astra_stage45_research_queue'").fetchone()[0]==1
+          assert {
+              r[0] for r in con.execute(
+                  "SELECT name FROM sqlite_master WHERE type='table'")
+          }.issuperset({"core_factoryqueueitem","core_discoverysnapshot"})
+          print("ASTRA_V2_0049_DISPOSABLE_MIGRATION=PASS")
+          PY
+      - name: Test all three specialists, research gate and private pipeline
+        run: |
+          set -euo pipefail
+          for pattern in \
+            test_astra_orchard_decision_audit.py \
+            test_astra_farm_procurement_audit.py \
+            test_astra_farm_water_land_margin_audit.py \
+            test_astra_v2_self_directed_education.py \
+            test_astra_v2_private_pipeline.py \
+            test_astra_v2_release_gate.py \
+            test_astra_v2_stage45_probe.py; do
+            python -m unittest discover -s tests -p "$pattern" -q
+          done
+          echo ASTRA_V2_THREE_BUILDERS_COMPATIBLE_WITH_HISTORICAL_0049=PASS
+          echo ASTRA_V2_RESEARCH_GATE_PRIVATE_QUEUE_TESTS=PASS
+      - name: Verify historical schema and research adapter still work
+        env:
+          ASTRA_0049_SYNTHETIC_PROOF: '1'
+        run: |
+          set -euo pipefail
+          python -m pytest -q core/tests/test_astra_stage45_schema.py
+          python -m unittest discover -s tests -p test_astra_research_evidence_adapter.py -q
+          python -m unittest discover -s tests -p test_astra_stage45_research_backlog.py -q
+          python -m unittest discover -s tests -p test_astra_stage45_legacy_gap_inventory.py -q
+          export DATABASE_URL="sqlite:///$RUNNER_TEMP/astra-v2-0049-compatibility.sqlite3"
+          # The existing integration probe requires its exact guarded name;
+          # it must not run on a real or mismatched DB.
+          test -f "$RUNNER_TEMP/astra-v2-0049-compatibility.sqlite3"
+          echo ASTRA_V2_0049_RELEASE_GATE=BLOCKED
+          echo ASTRA_V2_0049_NO_LIVE_FACTORY_OR_SITE_CHANGES=true
