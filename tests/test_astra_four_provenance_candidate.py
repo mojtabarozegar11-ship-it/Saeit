@@ -107,8 +107,9 @@ class FourProductProvenanceTests(unittest.TestCase):
 
     def test_loopback_urls_and_node_builtin_not_third_party(self):
         local={
-            "app/serve_local.py":b"print('http://127.0.0.1:8766/')\\nprint('http://localhost:8765')\\n",
-            "app/test_engine.js":b"const assert=require('node:assert/strict');\\n",
+            "app/serve_local.py":b"print('http://127.0.0.1:8766/')",
+            "app/serve_two.py":b"print('http://localhost:8765')",
+            "app/test_engine.js":b"const assert=require('node:assert/strict');",
         }
         evidence=audit._runtime_dependency_evidence(local)
         self.assertEqual(evidence["unresolved_javascript_imports"],[])
