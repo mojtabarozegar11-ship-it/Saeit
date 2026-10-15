@@ -72,7 +72,9 @@ jobs:
           test -f "$stage/manage.py"
           test -f "$stage/_deps/django/__init__.py"
           export PYTHONPATH="$stage/_deps:$stage"
-          python3 -c 'import django,environ,rest_framework,whitenoise; print("ASTRA_VPS_ISOLATED_DJANGO_DEPENDENCIES=PASS")'
+          PY="$HOME/factory-runtime/.venv/bin/python"
+          test -x "$PY"
+          "$PY" -c 'import django,environ,rest_framework,whitenoise; print("ASTRA_VPS_ISOLATED_DJANGO_DEPENDENCIES=PASS")'
           scratch="$(mktemp -d "$HOME/factory-runtime/private/.astra-0049-copy-XXXXXXXX")"
           chmod 700 "$scratch"
           cleanup() {
@@ -83,7 +85,7 @@ jobs:
             esac
           }
           trap cleanup EXIT
-          python3 - "$original" "$scratch" <<'PY'
+          "$PY" - "$original" "$scratch" <<'PY'
           import os,pathlib,shutil,sqlite3,sys
           original=pathlib.Path(sys.argv[1])
           scratch=pathlib.Path(sys.argv[2])
@@ -115,8 +117,8 @@ jobs:
           export ALLOWED_HOSTS=localhost,127.0.0.1
           export DATABASE_URL="sqlite:///$scratch/factory-0048-copy.sqlite3"
           cd "$stage"
-          python3 manage.py migrate core 0049 --noinput --skip-checks --verbosity 0
-          python3 - "$scratch" <<'PY'
+          "$PY" manage.py migrate core 0049 --noinput --skip-checks --verbosity 0
+          "$PY" - "$scratch" <<'PY'
           import json,pathlib,sqlite3,sys
           p=pathlib.Path(sys.argv[1])
           counts=json.loads((p/"baseline-counts.json").read_text())
@@ -130,8 +132,8 @@ jobs:
           print("ASTRA_0049_NONEMPTY_COPY_ORIGINAL_COUNTS_PRESERVED=true")
           print("ASTRA_0049_NEW_RESEARCH_TABLES=PASS")
           PY
-          python3 manage.py migrate core 0048 --noinput --skip-checks --verbosity 0
-          python3 - "$scratch" <<'PY'
+          "$PY" manage.py migrate core 0048 --noinput --skip-checks --verbosity 0
+          "$PY" - "$scratch" <<'PY'
           import pathlib,sqlite3,sys,json
           p=pathlib.Path(sys.argv[1])
           counts=json.loads((p/"baseline-counts.json").read_text())
@@ -141,7 +143,7 @@ jobs:
               assert "core_factoryqueueitem" not in names and "core_discoverysnapshot" not in names
           print("ASTRA_0049_NONEMPTY_COPY_ROLLBACK_TO_0048=PASS")
           PY
-          python3 manage.py migrate core 0049 --noinput --skip-checks --verbosity 0
+          "$PY" manage.py migrate core 0049 --noinput --skip-checks --verbosity 0
           echo ASTRA_0049_NONEMPTY_COPY_REAPPLY=PASS
           echo ASTRA_0049_NEW_COMMERCIAL_PRODUCTS=0
           echo ASTRA_0049_ORIGINAL_FACTORY_MIGRATION_UNCHANGED=true
