@@ -1,6 +1,6 @@
 {
-  "last_command_id": "termux-live-proof-20261015-0855",
-  "last_result": "pong",
+  "last_command_id": "termux-python-check-20261015-0900",
+  "last_result": "python_available",
   "protocol_version": 1,
   "state": "idle"
 }
