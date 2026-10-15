@@ -25,7 +25,7 @@ ROUTES = '''
 # SAEIT_PICM_V1_OWNER_SCOPED_ROUTES
 from core.picm_views import (
     picm_page, picm_submit, picm_status, picm_image,
-    picm_worker_next, picm_worker_finish,
+    picm_worker_next, picm_worker_finish, picm_worker_health,
 )
 urlpatterns += [
     path("picm/", picm_page, name="picm_page"),
@@ -33,6 +33,7 @@ urlpatterns += [
     path("picm/api/status/<str:ident>/", picm_status, name="picm_status"),
     path("picm/image/<str:ident>/", picm_image, name="picm_image"),
     path("picm/worker/next/", picm_worker_next, name="picm_worker_next"),
+    path("picm/worker/health/", picm_worker_health, name="picm_worker_health"),
     path("picm/worker/finish/<str:ident>/", picm_worker_finish, name="picm_worker_finish"),
 ]
 '''
