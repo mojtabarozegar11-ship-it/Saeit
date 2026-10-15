@@ -1,0 +1,197 @@
+name: Publish substantial Mojtaba personal profile expansion
+on:
+  issues:
+    types: [opened]
+permissions:
+  contents: read
+concurrency:
+  group: mojtaba-v17-rich-profile-production
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event.issue.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.issue.title == 'Ops: Publish Mojtaba expanded professional library 2026-10-16'
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate substantial page-specific prose and safe five page scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p test_mojtaba_personal_expanded_library.py -v
+      - name: Prepare pinned SSH relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/photo-relay"
+          mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          python3 - "$d/host.key" <<'PY'
+          import pathlib,sys
+          p=pathlib.Path(sys.argv[1]);t=p.read_text().replace('\r\n','\n').strip()
+          p.write_text(t.replace('\\n','\n')+'\n')
+          PY
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host saeit-host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+            ConnectionAttempts 1
+          EOF
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          echo "SSH_CONFIG=$d/config" >> "$GITHUB_ENV"
+      - name: Transfer approved public biography into private personal V17 stage
+        shell: bash
+        run: |
+          set -euo pipefail
+          stage="/home/zomorod2/.mpw-rich-profile-$GITHUB_RUN_ID"
+          timeout 25s ssh -F "$SSH_CONFIG" saeit-host "test ! -e '$stage' && install -d -m 700 '$stage'"
+          timeout 70s scp -F "$SSH_CONFIG" scripts/mojtaba_personal_expanded_library_deploy.py "saeit-host:$stage/installer.py"
+          timeout 70s scp -F "$SSH_CONFIG" content/mojtaba_personal_expanded_library_20261016.json "saeit-host:$stage/biography.json"
+
+      - name: Preflight and install enriched sections, with five page rollback and live verification
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 580s ssh -F "$SSH_CONFIG" saeit-host "bash -s -- '$GITHUB_RUN_ID'" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          id="$1"
+          app="/home/zomorod2/mojtaba_personal/mojtaba_roozegar_personal_v17"
+          stage="/home/zomorod2/.mpw-rich-profile-$id"
+          script="$stage/installer.py"
+          content="$stage/biography.json"
+          backup="$HOME/.backups/mojtaba-expanded-library/$id"
+          py="$app/../.venv_personal_test/bin/python"
+          installed=0
+          success=0
+          on_exit() {
+            status=$?
+            trap - EXIT
+            if test "$installed" = 1 && test "$success" = 0 && test -d "$backup"; then
+              python3 "$script" rollback --app "$app" --backup "$backup" && echo "RICH_LIBRARY_BIO_AUTO_ROLLBACK=success" || echo "RICH_LIBRARY_BIO_AUTO_ROLLBACK=manual_attention_required"
+            fi
+            exit "$status"
+          }
+          trap on_exit EXIT
+          test -f "$app/manage.py" && test ! -L "$app"
+          test -f "$script" && test -f "$content" && test -x "$py"
+          python3 "$script" check --app "$app" --content "$content" --backup "$backup"
+          cd "$app"
+          "$py" - "$script" "$content" <<'PY_PREFLIGHT'
+          import importlib.util,os,sys
+          spec=importlib.util.spec_from_file_location("expanded",sys.argv[1])
+          mod=importlib.util.module_from_spec(spec);spec.loader.exec_module(mod)
+          data=mod.read_content(mod.Path(sys.argv[2]))
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          import django;django.setup()
+          from django.template import engines,RequestContext
+          from django.test import RequestFactory
+          eng=engines["django"].engine
+          for name,existing in mod.get_templates(mod.APP).items():
+              candidate=mod.patch(name,existing,data)
+              tpl=eng.from_string(candidate)
+              request=RequestFactory().get("/mojtaba.roozegar/"+name+"/",HTTP_HOST="mojplaywin.com")
+              rendered=tpl.render(RequestContext(request,{"items":[],"stories":[],"profile":None}))
+              if mod.MARKER not in rendered or mod.OLD_ACADEMIC not in rendered or mod.OLD_EDITORIAL not in rendered or mod.OLD_PHOTOS not in rendered:
+                  raise ValueError("Expanded biography missing from proposed template")
+              print("RICH_LIBRARY_DJANGO_PREFLIGHT_OK="+name,flush=True)
+          print("RICH_LIBRARY_FIVE_REAL_DJANGO_TEMPLATES_READY=yes",flush=True)
+          PY_PREFLIGHT
+          installed=1
+          python3 "$script" install --app "$app" --content "$content" --backup "$backup"
+          "$py" manage.py check --deploy
+          test -d "$app/tmp" && touch "$app/tmp/restart.txt"
+
+          python3 - <<'PY_LIVE'
+          import time
+          from html.parser import HTMLParser
+          from urllib.request import Request,urlopen
+          base="https://mojplaywin.com/mojtaba.roozegar/"
+          routes={"home":"","about":"about/","resume":"resume/","activities":"works-activities/","posts":"blog/"}
+          marker='id="mpw-personal-expanded-20261016"'
+          class ImageCheck(HTMLParser):
+              def __init__(self):super().__init__();self.old=[];self.new=[]
+              def handle_starttag(self,tag,attrs):
+                  if tag!="img":return
+                  src=dict(attrs).get("src","")
+                  if "owner_gallery_20261015_b/" in src:self.new.append(src)
+                  elif "owner_gallery_20261015/" in src:self.old.append(src)
+          for page,route in routes.items():
+              err=""
+              for attempt in range(7):
+                  try:
+                      url=base+route+"?expanded_bio_verification="+str(time.time_ns())
+                      with urlopen(Request(url,headers={"User-Agent":"MojtabaExpandedBiographyDeployment/1"}),timeout=25) as response:
+                          body=response.read(4500000).decode("utf-8","replace")
+                          if response.status!=200:raise ValueError("HTTP status not 200")
+                      for needle in (marker,'id="mpw-expanded-profile-20261016"',
+                                     'id="mpw-fifty-editorials-20261015"', 'id="mpw-new-originals-20261015-b"'):
+                          if needle not in body:raise ValueError("Missing expected expanded content or preserved old content: "+needle)
+                      img=ImageCheck();img.feed(body)
+                      if not img.new:raise ValueError("Original second photo collection no longer displayed")
+                      print("LIVE_RICH_LIBRARY_BIO_PAGE_VERIFIED="+page+" original_owner_photos="+str(len(img.old)+len(img.new)),flush=True)
+                      break
+                  except Exception as e:
+                      err=str(e);print("RETRY_RICH_LIBRARY_PAGE="+page+" "+str(attempt+1)+" "+err[:130],flush=True)
+                      time.sleep(3)
+              else:raise SystemExit("RICH_LIBRARY_BIO_PAGE_FAILED="+page+" "+err)
+          # Gallery is unchanged; ensure exactly 20 original photographs are still displayed.
+          with urlopen(Request(base+"gallery/?expanded_check="+str(time.time_ns())),timeout=25) as response:
+              if response.status!=200:raise ValueError("Gallery unavailable")
+              gallery=response.read(4500000).decode("utf-8","replace")
+          g=ImageCheck();g.feed(gallery)
+          if len(g.old)!=10 or len(g.new)!=10:raise ValueError("Owner's twenty originals not preserved")
+          print("GALLERY_ALL_20_OWNER_PHOTOS_PRESERVED=yes",flush=True)
+          print("RICH_LIBRARY_BIO_LIVE_FIVE_PAGES_PASS=yes",flush=True)
+          PY_LIVE
+
+          success=1
+          trap - EXIT
+          echo "RICH_LIBRARY_BIO_UPM_FIVE_PAGES_PUBLISHED=yes"
+          echo "RICH_LIBRARY_BIO_BACKUP_PATH=$backup"
+          rm -rf "$stage"
+          REMOTE
+      - name: Ensure original MojPlayWin and Zomorod Melal remain online
+        shell: bash
+        run: |
+          set -euo pipefail
+          for site in "https://mojplaywin.com/" "https://zomorodmelal.ir/"; do
+            code="$(curl -sSL -o /dev/null -w '%{http_code}' --max-time 20 "$site")"
+            test "$code" = "200"
+            echo "ORIGINAL_SITE_HEALTHY=$site HTTP_$code"
+          done
+      - name: Remove temporary SSH credentials
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/photo-relay"
