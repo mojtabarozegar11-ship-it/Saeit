@@ -1,0 +1,42 @@
+name: Chess R4 build 100 games 200 exercises
+on:
+  push:
+    branches: [work/chess-gm-reference-corpus-20261015]
+    paths:
+      - scripts/chess_r4_master_workbook.py
+      - .github/workflows/chess-r4-100-games-workbook.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install isolated analysis dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y stockfish fonts-dejavu-core
+          python3 -m pip install chess reportlab pypdf
+      - name: Generate and validate independent analytical supplement
+        run: python3 scripts/chess_r4_master_workbook.py
+      - name: Gate the output
+        run: |
+          python3 - <<'PY'
+          import json
+          x=json.load(open('chess_r4_build/MojPlayWin_Chess_R4_QA.json'))
+          assert x['legal_source_games']==100
+          assert x['position_analyses']==300
+          assert x['independent_exercises']==200
+          assert x['exercise_unique_positions']==200
+          assert x['commercial_release_approved'] is False
+          print('R4_QUALITY_GATE_PASS')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mojplaywin-chess-r4-workbook
+          path: chess_r4_build/
+          retention-days: 30
