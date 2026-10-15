@@ -1,0 +1,71 @@
+name: Astra V2 On 0048 Integrated Source CI (Disposable Only)
+
+on:
+  push:
+    branches: [feature/astra-v2-0048-integration-canary-20261015]
+    paths:
+      - .github/workflows/astra-v2-0048-integration-ci.yml
+      - scripts/astra_**
+      - tests/test_astra_**
+      - product_prototypes/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-isolated-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SAEIT_ENV: ci
+      DEBUG: 'False'
+      SECRET_KEY: astra-v2-0048-isolated-integration-only
+      ALLOWED_HOSTS: localhost,127.0.0.1
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies in GitHub runner only
+        run: python3 -m pip install -r requirements.txt
+      - name: Confirm legacy 0048 Django schema, no pending model edits
+        run: |
+          set -euo pipefail
+          export DATABASE_URL="sqlite:///$RUNNER_TEMP/astra-0048-integrated-empty.sqlite3"
+          python3 manage.py check
+          python3 manage.py makemigrations --check --dry-run --verbosity 1
+          echo ASTRA_INTEGRATION_DJANGO_MODEL_MIGRATION_PARITY=PASS
+      - name: Run isolated Astra research and three product regression suites
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p 'test_astra_*.py' -q
+          python3 product_prototypes/orchard_decision_audit/self_test.py
+          python3 product_prototypes/farm_procurement_audit/self_test.py
+          python3 product_prototypes/farm_water_land_margin_audit/self_test.py
+          node --check product_prototypes/orchard_decision_audit/app.js
+          echo ASTRA_INTEGRATION_PRIVATE_BUILDER_TESTS=PASS
+      - name: Migrate only fresh disposable 0048 CI database
+        run: |
+          set -euo pipefail
+          export DATABASE_URL="sqlite:///$RUNNER_TEMP/astra-0048-integrated-empty.sqlite3"
+          test ! -e "$RUNNER_TEMP/astra-0048-integrated-empty.sqlite3"
+          python3 manage.py migrate --noinput --verbosity 0
+          python3 - "$RUNNER_TEMP/astra-0048-integrated-empty.sqlite3" <<'PY'
+          import sqlite3, pathlib, sys
+          p=pathlib.Path(sys.argv[1])
+          assert p.is_file()
+          with sqlite3.connect(str(p)) as con:
+              names={r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+              assert {'core_businessunit','core_marketpolicy','core_legalentity'}.issubset(names)
+              row=con.execute("SELECT name FROM django_migrations WHERE app='core' ORDER BY name DESC LIMIT 1").fetchone()
+              assert row==('0048_business_market_architecture',),row
+          print("ASTRA_INTEGRATION_0048_EMPTY_DB_MIGRATION=PASS")
+          print("ASTRA_INTEGRATION_VPS_WRITES=0")
+          print("ASTRA_INTEGRATION_PUBLIC_SITE_CHANGES=0")
+          print("ASTRA_INTEGRATION_PAYMENT_CHANGES=0")
+          print("ASTRA_INTEGRATION_MARKET_QUALIFICATION=NOT_PROVEN")
+          print("ASTRA_INTEGRATION_0049_APPLIED=false")
+          PY
