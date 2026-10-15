@@ -36,13 +36,57 @@ class AstraResearchPrivateCycleTests(unittest.TestCase):
             self.assertEqual(second["status"], "UNCHANGED")
             self.assertEqual(saved.read_bytes(), original)
             data = json.loads(saved.read_text())
-            self.assertEqual(data["cycle_version"], "astra_research_daily_v1")
+            self.assertEqual(data["cycle_version"], "astra_research_daily_v2")
             self.assertEqual(data["run_date_utc"], "20261015")
             for key in ("factory_mutations", "payments", "publications", "commercial_products_built"):
                 self.assertEqual(data[key], 0)
             for topic in data["candidate_hypotheses"]:
                 self.assertEqual(topic["status"], "RESEARCH_REQUIRED")
                 self.assertIsNone(topic["commercial_quality_score"])
+
+    def test_same_day_retry_next_slot_preserves_immutable_baseline(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / "radar"
+            def partial(name):
+                if name == "nass_news":
+                    return b"<rss><channel></channel></rss>"
+                raise OSError("temporarily down")
+            first = cycle.run_cycle(root, now=NOW, fetcher=partial)
+            self.assertEqual(first["status"], "RECORDED")
+            baseline = root / "daily-20261015.json"
+            original = baseline.read_bytes()
+            self.assertEqual(json.loads(original)["candidate_hypotheses"], [])
+            # Same UTC slot is idempotent, even if a source comes back.
+            same = cycle.run_cycle(root, now=NOW+timedelta(hours=1),
+                                   fixture=RSS, source="nass_news")
+            self.assertEqual(same["status"], "UNCHANGED")
+            retry = cycle.run_cycle(root, now=NOW+timedelta(hours=6),
+                                    fixture=RSS, source="nass_news")
+            self.assertEqual(retry["status"], "RECORDED")
+            self.assertGreaterEqual(retry["topic_count"], 1)
+            self.assertEqual(baseline.read_bytes(), original)
+            appended = root / "retry-20261015-3.json"
+            self.assertTrue(appended.is_file())
+            self.assertEqual(appended.stat().st_mode & 0o777, 0o600)
+            last = cycle.run_cycle(root, now=NOW+timedelta(hours=7),
+                                   fixture=b"broken", source="nass_news")
+            self.assertEqual(last["status"], "UNCHANGED")
+            self.assertEqual(len(list(root.glob("retry-*.json"))), 1)
+
+    def test_legacy_partial_baseline_is_never_mutated_on_retry(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / "radar"
+            root.mkdir()
+            baseline = root / "daily-20261015.json"
+            prior = {"run_date_utc":"20261015", "mode":"private_public_signal_research_only",
+                     "factory_mutations":0, "publications":0, "payments":0,
+                     "candidate_hypotheses":[],"cycle_version":"astra_research_daily_v1"}
+            baseline.write_text(json.dumps(prior))
+            existing = baseline.read_bytes()
+            answer = cycle.run_cycle(root, now=NOW, fixture=RSS, source="nass_news")
+            self.assertEqual(answer["status"], "RECORDED")
+            self.assertEqual(baseline.read_bytes(), existing)
+            self.assertTrue((root / "retry-20261015-2.json").exists())
 
     def test_following_day_new_report_preserves_prior(self):
         with tempfile.TemporaryDirectory() as temp:
