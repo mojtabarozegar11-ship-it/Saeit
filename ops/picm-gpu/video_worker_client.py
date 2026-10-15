@@ -20,6 +20,7 @@ from urllib.request import Request, build_opener, HTTPHandler, HTTPSHandler, HTT
 
 from story_pipeline import process, verify_generating_graph
 from story_comfy import load_workflow, check_gpu, validate_local_url
+from gpu_preflight import inspect as inspect_gpu, GPU_PROFILES
 
 ORIGIN = "https://mojplaywin.com"
 IDENT = re.compile(r"^[a-f0-9]{32}$")
@@ -135,12 +136,16 @@ def upload_rendered(transport, ident, lease, output, receipt):
 
 
 def deliver_once(private_dir, token_path, workflow_api, node_map, *,
-                 comfy="http://127.0.0.1:8188"):
+                 comfy="http://127.0.0.1:8188", gpu_profile="standard-24gb"):
     private = _private_dir(private_dir)
     # Do NOT claim the owner's staged job if GPU/model configuration is absent.
-    graph, mapping = load_workflow(workflow_api, node_map)
-    verify_generating_graph(graph, mapping)
-    check_gpu(validate_local_url(comfy))
+    if gpu_profile not in GPU_PROFILES:
+        raise RuntimeError("PICM_GPU_PROFILE_UNKNOWN")
+    report = inspect_gpu(
+        private, workflow_api, node_map, comfy=comfy,
+        minimum_gpu_mib=GPU_PROFILES[gpu_profile])
+    if not report["ready"]:
+        raise RuntimeError("PICM_GPU_PREFLIGHT_BLOCKED_NO_JOB_CLAIM")
     transport = Transport(_token(token_path))
     selected = transport.json("GET", "/picm/video/worker/next/")
     if selected is None:
@@ -176,12 +181,14 @@ def main():
     parser.add_argument("--workflow-api", required=True)
     parser.add_argument("--node-map", required=True)
     parser.add_argument("--comfy", default="http://127.0.0.1:8188")
+    parser.add_argument("--gpu-profile", choices=tuple(GPU_PROFILES),
+                        default="standard-24gb")
     args = parser.parse_args()
     os.umask(0o077)
     try:
         result = deliver_once(args.private_dir, args.token_file,
                               args.workflow_api, args.node_map,
-                              comfy=args.comfy)
+                              comfy=args.comfy, gpu_profile=args.gpu_profile)
     except Exception as exc:
         # Do not print file paths, photos, prompt contents, bearer tokens.
         print(json.dumps({"state": "blocked_no_video_claim",
