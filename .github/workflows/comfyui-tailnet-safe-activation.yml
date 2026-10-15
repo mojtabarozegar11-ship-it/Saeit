@@ -29,3 +29,5 @@ jobs:
             echo "COMFYUI_TAILSCALE_AUTHKEY_NOT_CONFIGURED"
           fi
           echo "COMFYUI_READ_ONLY_SECRET_PRESENCE_CHECK_COMPLETE"
+
+# Fresh secret-presence check 2026-10-15.
