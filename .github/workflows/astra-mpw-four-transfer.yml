@@ -1,0 +1,124 @@
+name: Astra four products private handoff to MojPlayWin
+
+on:
+  push:
+    branches: [factory/astra-commercial-catalog-20261015]
+    paths:
+      - .github/workflows/astra-mpw-four-transfer.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: astra-mpw-four-private-handoff
+  cancel-in-progress: false
+
+jobs:
+  handoff:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate private importer
+        run: |
+          python3 -m unittest discover -s tests -p test_astra_mpw_four_draft_import.py -v
+      - name: Prepare pinned private SSH
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/astra-transfer"
+          mkdir -p "$d"
+          for key in VPS_KEY HOST_KEY; do
+            test -n "${!key}"
+            printf '%s' "${!key}" | python3 -c 'import sys;print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/$key"
+            chmod 600 "$d/$key"
+            ssh-keygen -y -P '' -f "$d/$key" >/dev/null
+          done
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -i "$d/VPS_KEY" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/vps.known" githubops@178.239.147.150 'ssh-keyscan -T 10 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          cat > "$d/config" <<EOF
+          Host vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/VPS_KEY
+            UserKnownHostsFile $d/vps.known
+          Host host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            ProxyJump vps
+            IdentityFile $d/HOST_KEY
+            UserKnownHostsFile $d/host.known
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            StrictHostKeyChecking yes
+            ConnectTimeout 12
+            ForwardAgent no
+          EOF
+          chmod 600 "$d/config"
+      - name: Copy four SHA verified products into private cPanel staging
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/astra-transfer"
+          ssh -F "$d/config" vps 'test -f "$HOME/factory-runtime/private/astra-four-specialist-commercial-candidates/commercial-catalog-84b80d9ceebdb32c4d73.json"'
+          scp -q -F "$d/config" 'vps:factory-runtime/private/astra-four-specialist-commercial-candidates/commercial-catalog-84b80d9ceebdb32c4d73.json' "$d/catalog.json"
+          python3 - "$d/catalog.json" > "$d/manifest" <<'PY'
+          import json,re,sys
+          data=json.load(open(sys.argv[1]))
+          assert data["owner_exclusive_rights_declared_for_four_products"] is True
+          assert data["storefront_target"]=="mojplaywin.com"
+          items=data["items"]
+          assert len(items)==4
+          for x in items:
+              sku=x["sku"]
+              digest=x["source_proof"]["artifact_sha256"]
+              archive=x["source_proof"]["archive_name"]
+              assert re.fullmatch(r"ASTRA-[A-Z]+-[0-9]{2}",sku)
+              assert re.fullmatch(r"[a-f0-9]{64}",digest)
+              assert re.fullmatch(r"artifact-[a-f0-9]{64}\.zip",archive)
+              print(sku+" "+digest+" "+archive)
+          PY
+          ssh -F "$d/config" host 'umask 077; mkdir -p -m 700 "$HOME/.saeit-astra-four-inbox"; chmod 700 "$HOME/.saeit-astra-four-inbox"'
+          while read -r sku digest archive; do
+            scp -q -F "$d/config" "vps:factory-runtime/private/astra-four-specialist-v1/$archive" "$d/$sku-$digest.zip"
+            test "$(sha256sum "$d/$sku-$digest.zip" | cut -d' ' -f1)" = "$digest"
+            scp -q -F "$d/config" "$d/$sku-$digest.zip" "host:.saeit-astra-four-inbox/$sku-$digest.zip"
+            received="$(ssh -F "$d/config" host "sha256sum '.saeit-astra-four-inbox/$sku-$digest.zip' | cut -d' ' -f1")"
+            test "$received" = "$digest"
+            echo "ASTRA_TRANSFER_PRIVATE_VERIFIED=$sku"
+          done < "$d/manifest"
+          scp -q -F "$d/config" "$d/catalog.json" 'host:.saeit-astra-four-inbox/catalog.json'
+          scp -q -F "$d/config" scripts/astra_mpw_four_draft_import.py 'host:.saeit-astra-four-inbox/importer.py'
+          ssh -F "$d/config" host 'chmod 600 "$HOME/.saeit-astra-four-inbox"/*.zip "$HOME/.saeit-astra-four-inbox"/catalog.json "$HOME/.saeit-astra-four-inbox"/importer.py'
+          echo ASTRA_TRANSFER_ALL_FOUR_ZIPS=VERIFIED
+      - name: Import four products as private inactive drafts
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -F "$RUNNER_TEMP/astra-transfer/config" host 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          root="$HOME/.saeit-astra-four-inbox"
+          app="$HOME/Saeit-staging"
+          doc="$HOME/mojplaywin.com"
+          py="$HOME/virtualenv/Saeit-staging/3.11/bin/python"
+          test -x "$py" && test -f "$app/manage.py"
+          cd "$app"
+          export DJANGO_SETTINGS_MODULE=config.settings
+          export PYTHONPATH="$app"
+          "$py" "$root/importer.py" --catalog "$root/catalog.json" --packages "$root" --app "$app" --document-root "$doc"
+          "$py" "$root/importer.py" --catalog "$root/catalog.json" --packages "$root" --app "$app" --document-root "$doc" --apply
+          "$py" "$root/importer.py" --catalog "$root/catalog.json" --packages "$root" --app "$app" --document-root "$doc" --apply
+          echo ASTRA_MOJPLAYWIN_PRIVATE_DRAFTS_IMPORTED=4
+          REMOTE
+      - name: Cleanup identities
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/astra-transfer"
