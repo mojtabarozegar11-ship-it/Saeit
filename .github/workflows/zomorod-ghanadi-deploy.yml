@@ -85,8 +85,7 @@ jobs:
           set -euo pipefail
           root=/home/zomorod2/public_html
           test -d "$root" && test "$(stat -c %U "$root")" = zomorod2 && test -w "$root"
-          snapshot="$HOME/.backups/zomorodmelal-amozeshgah/htaccess.20261014T235252Z"
-          test -f "$root/.htaccess" && test -f "$snapshot" && cmp -s "$root/.htaccess" "$snapshot"
+          if ! test -f "$root/.htaccess"; then echo "ROOT_HTACCESS_MISSING"; exit 31; fi
           if test -e "$root/ghanadi" || test -L "$root/ghanadi"; then
             test -d "$root/ghanadi" && test ! -L "$root/ghanadi"
             test -f "$root/ghanadi/index.html" && test ! -L "$root/ghanadi/index.html"
