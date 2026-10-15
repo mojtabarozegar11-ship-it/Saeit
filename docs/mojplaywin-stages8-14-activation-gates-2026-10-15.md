@@ -1,0 +1,33 @@
+# MojPlayWin customer sales activation — verified evidence and remaining gates
+
+**As of 2026-10-15: checkout infrastructure and customer-order API installed, but accepting actual customer funds remains DISABLED.** All paid-product publication and crypto settlement switches are false. This is a deliberate protective state, not a completed sale launch.
+
+## What was executed
+
+- **Stage 8, merchant control:** live read-only check confirmed the private owner-only signature page exists and is inaccessible anonymously. Ownership proofs for BOTH ETH and TRX receiving addresses are **false** in the live database: https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/38658236223
+- **Stage 9, URL routing:** appended only `mpw_commerce.urls` to existing cPanel Django URLconf after comparing SHA256 with a private archived live original. Test failures from Django's cached resolver and tokenless CSRF were fixed; earlier changes were rolled back exactly. Successful third run declared the private buyer invoice endpoint and verified that all releases are disabled, homepage 200, store 200 and legacy `/checkout/` 404: https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/38658519194
+- **Customer order creation gap fixed:** legacy `core.OrderViewSet` was staff-only, so public customers could not even begin a purchase. Created a separate `mpw_commerce/buyer_orders.py` endpoint and `CommerceOrderRequest` with UUIDv4 idempotency and database uniqueness, binding the request to the buyer, product, and asset. Pending order and line items may be created only when all payment feature flags are enabled, receiving-wallet ownership is proven by real signed message, product is active, author ownership and linked published research article exist, product's rights/asset/quality/publication flags are verified, and a trusted private deliverable exists. No payment is claimed or posted by order creation.
+- **77/77 tests passed on disposable real MySQL 8**, including the new customer API, idempotency, CSRF, host restrictions, insufficient rights, missing files, absent wallet proofs and existing buyer wallet/receipt/settlement/download tests with simulated crypto evidence: https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/38658968128
+- **Fresh pre-change private MySQL backup:** 90 tables, verified gzip and SHA256, on the cPanel account with restricted permissions: https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/38659170955
+- **Stage 12, guarded live install:** staged precisely the two existing module files, new order view and migration 0003, validated original hashes, created private rollback copies, applied only the customer idempotency schema and restarted verified MojPlayWin Passenger. The first attempt stopped before file/DB changes due to invocation PYTHONPATH and was corrected. Second run succeeded; homepage and store 200, legacy /checkout/ 404. No funds transferred and no customer orders: https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/38659449880
+- **Stage 13, independent post-install audit:** confirmed Django can resolve the new buyer order route and migration 0003 is present, cart rows and invoice/receipt rows remain empty, all release/payment gates remain OFF, and both receiving wallets remain unproven. The shared product table had 199 records, 0 active, 0 orders and 0 payment intents at audit time: https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/38659571861
+- **Stage 14, fresh independent VPS copy:** separate-host encrypted backup workflow: https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/38659638150 . Check job conclusion and SHA256 before treating stage 14 as completed. The symmetric decryption key is private but on the SAME VPS as the ciphertext; this is not independently escrowed key recovery.
+
+## Release remains NO-GO — unavoidable external dependencies
+
+1. **Merchant wallet ownership:** the authorized merchant must sign server-issued nonspending ETH EIP-191 and TRX TIP-191 messages at `https://mojplaywin.com/merchant/wallet-proof/`. The actual wallet's private signing key must never be shared with ChatGPT or the website. Only the proof endpoint can update the receipt ownership record. No bot can replace these real signatures with fabricated evidence.
+2. **Saleable products:** independent file/content/editorial rights review is necessary. The store had 0 active items and prior audit indicated no products bearing documented rights/quality/publication flags. User's historical assessment rated factory output low. Do not auto-publish 199 unchecked products or invent crossed-out prices/90% discounts.
+3. **Mainnet settlement:** ETH/TRX RPC/indexers are reachable, but the isolated 77-test suite uses synthetic blockchain receipts. A small **separately authorized real incoming transfer** must be verified for correct sender, recipient, exact amount, time window, chain and finality, then a private buyer fulfillment must be proven.
+4. **Public checkout UX and support:** a customer-facing catalog and logged-in payment guidance must be tested with a validated product. The new API endpoint alone does not constitute a complete shopping UI, nor does `/checkout/` currently render a buy page. Refund/support terms and operational monitoring must be reviewed.
+5. **Scope and rollback:** do not merge the entire divergent release branch onto `main`. Product activation, routes and payment flags should be released as a small reviewed diff with accurate live backups. Keep existing site routes healthy throughout.
+
+## Customer-order route and controls
+
+- `POST /commerce/checkout/order/`: CSRF-protected JSON body includes exact `product_id`, `quantity=1`, `asset`, and canonical UUIDv4 `request_id`. Replays with same buyer, product, network and idempotency key return the SAME order instead of double-ordering. The runtime resolves it but blocks all writes until owner proof and release switches are ready.
+- `POST /commerce/checkout/challenge/`, `/verify/`, `/invoice/`: buyer-signed ETH/TRX wallet workflow. All modes remain disabled in live Django.
+- `GET /commerce/checkout/status/<id>/` and `GET /commerce/download/<id>/`: private read/fulfillment for confirmed, ledger-proven purchases. No public file link is issued without independent receipt.
+- All URLs require HTTPS and MojPlayWin host and are unavailable for unauthenticated cross-domain payment submission.
+
+## Safeguards
+
+The disabled state is healthy; turning everything on for the sake of a green badge would expose buyers to financial loss. There is no evidence of funds received or sales. Preserve independent receipts and logs, private backups and fail-closed switches; do not claim success without each user-relevant gate.
