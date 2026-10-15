@@ -1,8 +1,5 @@
 name: ComfyUI VPS Native SSE2 Image Node Proof
 on:
-  push:
-    branches: [feature/comfyui-production-integrity-20261015]
-    paths: [".github/workflows/comfyui-vps-native-node-proof.yml", ops/comfyui-vps/verify_artifact_pair.py]
   workflow_dispatch:
     inputs:
       preset:
