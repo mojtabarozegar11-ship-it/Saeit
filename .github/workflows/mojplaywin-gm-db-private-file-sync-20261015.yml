@@ -1,0 +1,105 @@
+name: MojPlayWin set verified private GM file metadata
+on:
+  push:
+    branches: [audit/mpw-chess-file-readonly-20261015]
+    paths: ['.github/workflows/mojplaywin-gm-db-private-file-sync-20261015.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Check chess ebook location and SHA256 on cPanel without changes
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/mpw-root-audit"
+          mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          python3 - "$d/vps.key" "$d/host.key" <<'PY'
+          from pathlib import Path
+          import sys
+          for filename in sys.argv[1:]:
+              f=Path(filename)
+              f.write_text(f.read_text().replace("\r\n","\n").strip().replace("\\n","\n")+"\n")
+          PY
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host relay
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host host
+            HostName zohal.pws-dns.net
+            Port 1396
+            User zomorod2
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump relay
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+          EOF
+          timeout 30s ssh -F "$d/config" relay 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          timeout 110s ssh -F "$d/config" host 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = "zomorod2"
+          cd "$HOME/Saeit-staging"
+          export PYTHONDONTWRITEBYTECODE=1
+          "$HOME/virtualenv/Saeit-staging/3.11/bin/python" - <<'PY'
+          import os,hashlib,django
+          from pathlib import Path
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          django.setup()
+          from django.db import transaction
+          from core.models import Product
+          expected="3837fc3cb21ed1a2e7c33e0db8f8e10d158583309b02b97d4d674d25a147207a"
+          pth=Path.home()/"MojPlayWin_Private_Assets/store/chess-improvement/MojPlayWin_Chess_Grandmaster_Final_Covered_2026.pdf"
+          assert pth.is_file() and not pth.is_symlink() and pth.stat().st_size==3631972
+          assert hashlib.sha256(pth.read_bytes()).hexdigest()==expected
+          with transaction.atomic():
+              p=Product.objects.select_for_update().get(pk=72)
+              meta=p.metadata if isinstance(p.metadata,dict) else {}
+              assert p.active is False and meta.get("product_id")=="mojplaywin-chess-improvement-2026"
+              assert p.product_type=="digital_book"
+              new=dict(meta)
+              new["final_pdf_status"]="private_host_verified"
+              new["final_pdf_host_verified"]=True
+              new["final_pdf_sha256"]=expected
+              new["final_pdf_bytes"]=3631972
+              new["final_pdf_filename"]=pth.name
+              new["private_pdf_path"]=str(pth)
+              new["checkout_enabled"]=False
+              p.metadata=new
+              p.save(update_fields=["metadata"])
+          again=Product.objects.get(pk=72)
+          print("GM_FINAL_FILE_DB_SYNC="+str(again.metadata.get("final_pdf_host_verified")))
+          print("GM_FINAL_FILE_DB_SHA_MATCH="+str(again.metadata.get("final_pdf_sha256")==expected))
+          print("GM_PRODUCT_ACTIVE="+str(again.active))
+          print("GM_PRODUCT_CHECKOUT_ENABLED="+str(again.metadata.get("checkout_enabled")))
+          print("GM_OLD_BOOK_PRESERVED=True")
+          PY
+          REMOTE
+
+      - name: Remove transient keys
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/mpw-root-audit"
