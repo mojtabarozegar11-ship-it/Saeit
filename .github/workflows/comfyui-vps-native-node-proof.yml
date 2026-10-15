@@ -1,7 +1,7 @@
 name: ComfyUI VPS Native SSE2 Image Node Proof
 on:
   push:
-    branches: [feature/comfyui-vps-render-proof-20261015]
+    branches: [feature/comfyui-studio-quality-safety-20261015]
     paths: [.github/workflows/comfyui-vps-native-node-proof.yml]
   workflow_dispatch:
     inputs:
