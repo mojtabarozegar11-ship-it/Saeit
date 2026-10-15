@@ -1,0 +1,31 @@
+{
+  "product_id": 72,
+  "slug": "the-science-and-practice-of-chess-improvement",
+  "title": "The Science and Practice of Chess Improvement",
+  "edition": "Grandmaster Analytical Research Edition (2026)",
+  "author": "Mojtaba Roozegar",
+  "author_role": "Writer, Researcher and Scholar",
+  "language": "en",
+  "format": "pdf",
+  "pages": 415,
+  "extracted_word_count": 121635,
+  "private_asset": {
+    "filename": "MojPlayWin_Chess_Grandmaster_Final_Covered_2026.pdf",
+    "bytes": 3631972,
+    "sha256": "3837fc3cb21ed1a2e7c33e0db8f8e10d158583309b02b97d4d674d25a147207a",
+    "target": "/home/zomorod2/MojPlayWin_Private_Assets/store/chess-improvement/MojPlayWin_Chess_Grandmaster_Final_Covered_2026.pdf",
+    "host_verified": false
+  },
+  "current_database_price_usd": "7.50",
+  "discount_claim": null,
+  "public_active": false,
+  "checkout_enabled": false,
+  "publication_gates": [
+    "copy final exact asset to non-public cPanel path",
+    "verify SHA256 and expected size on cPanel",
+    "review rights, original material and user-facing refund terms",
+    "verify product page and protected download for paid order",
+    "verify authentic ETH/TRX chain settlement and a controlled full purchase",
+    "ensure rollback and logs before paid checkout release"
+  ]
+}
