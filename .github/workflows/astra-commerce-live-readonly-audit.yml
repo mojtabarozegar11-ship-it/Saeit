@@ -101,6 +101,40 @@ jobs:
               assert len(obj.metadata.get("astra_archive_sha256",""))==64
               verified+=1
           print("ASTRA_HOST_FOUR_PRIVATE_PRODUCT_SKUS_VERIFIED="+str(verified))
+          print("ASTRA_LIVE_PAY_CHECKOUT_PACKAGE_INSTALLED="+str(apps.is_installed("mpw_commerce")))
+          print("ASTRA_LIVE_PAY_NATIVE_PACKAGE_INSTALLED="+str(apps.is_installed("mpw_native_checkout")))
+          required=(
+              "MPW_COMMERCE_RELEASE_READY",
+              "MPW_COMMERCE_CUSTOMER_HTTP_ENABLED",
+              "MPW_COMMERCE_BUYER_SIGNATURE_ENABLED",
+              "MPW_COMMERCE_INVOICING_ENABLED",
+              "MPW_COMMERCE_SETTLEMENT_ENABLED",
+              "MPW_COMMERCE_REAL_RPC_ENABLED",
+              "MPW_COMMERCE_AUTORECONCILE_ENABLED",
+              "MPW_COMMERCE_DOWNLOADS_ENABLED",
+          )
+          for flag in required:
+              print("ASTRA_LIVE_PAY_FLAG_"+flag+"="+str(getattr(settings,flag,False) is True))
+          print("ASTRA_LIVE_PAY_PRIVATE_ASSET_ROOT_CONFIGURED="+str(
+              bool(getattr(settings,"MPW_COMMERCE_PRIVATE_ASSET_ROOT",None))))
+          for sku in skus:
+              p=Product.objects.select_related("knowledge_article").get(metadata__astra_sku=sku)
+              meta=p.metadata if isinstance(p.metadata,dict) else {}
+              try:
+                  is_published=bool(p.knowledge_article_id and p.knowledge_article.published)
+              except Exception:
+                  is_published=False
+              print("ASTRA_LIVE_SALE_"+sku+"_ACTIVE="+str(p.active))
+              print("ASTRA_LIVE_SALE_"+sku+"_KNOWLEDGE_PUBLISHED="+str(is_published))
+              print("ASTRA_LIVE_SALE_"+sku+"_FACTORY_PUBLICATION_PERMISSION="+str(
+                  meta.get("factory_publication_permission") is True))
+              print("ASTRA_LIVE_SALE_"+sku+"_INDEPENDENT_QUALITY="+str(
+                  meta.get("quality_approved") is True))
+              print("ASTRA_LIVE_SALE_"+sku+"_LICENSE_AUDIT="+str(
+                  meta.get("license_verified") is True))
+              conf=meta.get("mpw_commerce") or {}
+              print("ASTRA_LIVE_SALE_"+sku+"_COMMERCE_ENABLED="+str(
+                  isinstance(conf,dict) and conf.get("enabled") is True))
           for name in ("Order","PaymentIntent","CryptoPaymentIntent"):
               try: model=apps.get_model("core",name)
               except LookupError:
