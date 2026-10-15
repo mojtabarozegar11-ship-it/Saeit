@@ -10,6 +10,7 @@ const button=document.getElementById("submit");
 const preview=document.getElementById("preview");
 const info=document.getElementById("status");
 const controls=document.getElementById("video-options");
+const photoControls=document.getElementById("photo-options");
 const durationSelect=document.getElementById("video-duration");
 const ratioSelect=document.getElementById("video-ratio");
 const cancel=document.getElementById("video-cancel");
@@ -19,6 +20,7 @@ let busy=false,aborted=false,recording=null,raf=0,downloadUrl=null;
 const message=s=>{info.textContent=s};
 const compatible=()=>Boolean(window.MediaRecorder&&HTMLCanvasElement.prototype.captureStream);
 const videoMode=()=>mode.value==="image_video";
+const imageMode=()=>mode.value==="image_edit";
 function format(){
  if(!compatible())throw Error("مرورگر شما امکان ضبط ویدیو از عکس را ندارد.");
  const mime=["video/webm;codecs=vp8","video/webm","video/mp4"].find(v=>MediaRecorder.isTypeSupported(v));
@@ -27,12 +29,24 @@ function format(){
 }
 function sync(){
  controls.hidden=!videoMode();
+ photoControls.hidden=!imageMode();
+ const promptLabel=document.querySelector('label[for="prompt"]');
+ if(imageMode()){
+  prompt.required=false;
+  promptLabel.textContent="یادداشت اختیاری؛ در ویرایش دستی تفسیر نمی‌شود";
+ }else if(videoMode()){
+  prompt.required=true;
+  promptLabel.textContent="متن روی ویدیو";
+ }
  if(videoMode()){
   notice.textContent="ویدیوی متحرک رایگان: عکس شما فقط در همین مرورگر با حرکت سینمایی و متن دلخواه ضبط می‌شود. این روش، ساخت صحنه‌های تازه با مدل مولد هوش مصنوعی نیست و صدا تولید نمی‌کند.";
   button.textContent="ساخت ویدیوی رایگان";
   message(compatible()?"مدت و کادر ویدیو را انتخاب کنید و دکمه ساخت را بزنید.":"این مرورگر قابلیت ضبط ویدیوی محلی را ندارد.");
+ }else if(imageMode()){
+  notice.textContent="ویرایش رایگان عکس با روشنایی، کنتراست و تنظیم رنگ در مرورگر انجام می‌شود. این پردازش مولد هوش مصنوعی نیست و سوژهٔ جدید ایجاد نمی‌کند.";
+  button.textContent="بهبود رایگان عکس و دریافت خروجی";
  }else{
-  notice.textContent="ویرایش مولد عکس و افزایش جزئیات واقعی تا 8K هنوز به GPU متصل نیستند. عکس مرجع به‌صورت خصوصی ثبت می‌شود؛ خروجی تولید نمی‌شود.";
+  notice.textContent="افزایش جزئیات واقعی تا 8K هنوز موتور GPU ندارد. عکس مرجع فقط به‌صورت خصوصی ثبت می‌شود؛ خروجی آماده نمی‌شود.";
   button.textContent="ثبت خصوصی عکس مرجع";
  }
 }
@@ -136,16 +150,48 @@ async function makeVideo(){
  preview.replaceChildren(video,link);
  message("ویدیوی متحرک "+secs+" ثانیه‌ای آماده شد. برای ذخیره، روی لینک دریافت بزنید.");
 }
+async function enhanceFreeImage(){
+ const input=photo.files&&photo.files[0];
+ if(!input||!["image/jpeg","image/png"].includes(input.type)||input.size>6*1024*1024){
+  throw Error("یک تصویر PNG/JPEG تا ۶ مگابایت انتخاب کنید.");
+ }
+ const img=await decode(input);
+ const scale=Math.min(1,2048/Math.max(img.naturalWidth,img.naturalHeight));
+ const canvas=document.createElement("canvas");
+ canvas.width=Math.max(1,Math.round(img.naturalWidth*scale));
+ canvas.height=Math.max(1,Math.round(img.naturalHeight*scale));
+ const ctx=canvas.getContext("2d",{alpha:false});
+ if(!ctx)throw Error("امکان ویرایش روی مرورگر وجود ندارد.");
+ const bright=Number(document.getElementById("photo-brightness").value);
+ const contrast=Number(document.getElementById("photo-contrast").value);
+ const saturation=Number(document.getElementById("photo-saturation").value);
+ if(![bright,contrast,saturation].every(Number.isFinite))throw Error("مقادیر تنظیم عکس نامعتبر هستند.");
+ ctx.filter="brightness("+bright+"%) contrast("+contrast+"%) saturate("+saturation+"%)";
+ ctx.drawImage(img,0,0,canvas.width,canvas.height);
+ const result=await new Promise((resolve,reject)=>canvas.toBlob(blob=>blob?resolve(blob):reject(Error("خروجی عکس ساخته نشد.")),"image/jpeg",.94));
+ if(downloadUrl)URL.revokeObjectURL(downloadUrl);
+ downloadUrl=URL.createObjectURL(result);
+ const image=document.createElement("img");image.src=downloadUrl;image.alt="عکس ویرایش‌شده";
+ image.style.width="100%";image.style.maxHeight="460px";image.style.objectFit="contain";
+ const link=document.createElement("a");link.href=downloadUrl;link.download="picm-free-enhanced.jpg";
+ link.textContent="دریافت عکس اصلاح‌شده (JPEG)";
+ link.style.cssText="display:block;color:#ced6ff;padding:12px;font-weight:bold;text-decoration:underline";
+ preview.replaceChildren(image,link);
+ message("ویرایش رایگان تصویر انجام شد. خروجی: "+canvas.width+" × "+canvas.height+" پیکسل؛ بدون تماس با سرور.");
+}
 cancel.addEventListener("click",()=>{aborted=true;message("در حال لغو ضبط...")});
 form.addEventListener("submit",async e=>{
- if(!videoMode())return;
+ if(!videoMode()&&!imageMode())return;
  e.preventDefault();
  e.stopImmediatePropagation();
  if(busy)return;
  busy=true;aborted=false;button.disabled=true;
  document.querySelectorAll("[data-mode]").forEach(el=>{el.disabled=true});
- try{await makeVideo()}
- catch(err){message("ساخت ویدیو انجام نشد: "+err.message)}
+ try{
+  if(videoMode())await makeVideo();
+  else await enhanceFreeImage();
+ }
+ catch(err){message("ساخت فایل انجام نشد: "+err.message)}
  finally{
   busy=false;button.disabled=false;
   document.querySelectorAll("[data-mode]").forEach(el=>{el.disabled=false});
