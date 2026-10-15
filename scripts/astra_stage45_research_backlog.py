@@ -122,7 +122,10 @@ def analyze(db, now_utc):
             conn.execute("ROLLBACK")
             raise
 
-    by_topic = defaultdict(set)
+    # Group on exact content rather than row ID, URL or claim. A document
+    # mirrored under different hosts is not independent corroboration.
+    by_topic_digest = defaultdict(lambda: defaultdict(set))
+    row_occurrences = defaultdict(int)
     invalid = 0
     topic_ids = {r["id"] for r in topics}
     for row in snapshots:
@@ -133,7 +136,23 @@ def analyze(db, now_utc):
         if ref is None:
             invalid += 1
             continue
-        by_topic[row["hypothesis_id"]].add(ref)
+        host, claim, digest = ref
+        key = (row["hypothesis_id"], digest)
+        by_topic_digest[key[0]][key[1]].add((host, claim))
+        row_occurrences[key] += 1
+
+    eligible = defaultdict(dict)
+    mirrored_excluded = 0
+    same_content_collapsed = 0
+    for topic_id, digests in by_topic_digest.items():
+        for digest, references in digests.items():
+            occurrences = row_occurrences[(topic_id, digest)]
+            if len({host for host, _ in references}) > 1:
+                # Exclude *all* conflicting mirrors regardless of row order.
+                mirrored_excluded += occurrences
+                continue
+            eligible[topic_id][digest] = references
+            same_content_collapsed += occurrences - 1
 
     work = []
     for row in topics:
@@ -143,19 +162,22 @@ def analyze(db, now_utc):
         if row["kind"] != "discovery":
             continue
         # Database-level invariants: abort on any self-promoted source record.
-        if any(row[field] != 0 for field in (
-            "build_authorized", "publish_authorized",
-            "payment_authorized", "evidence_verified_independently")):
+        if (row["status"] != "RESEARCH_REQUIRED" or any(
+                row[field] != 0 for field in (
+                    "build_authorized", "publish_authorized",
+                    "payment_authorized", "evidence_verified_independently"))):
             raise ValueError("research-only authorization invariant violated")
-        citations = by_topic[row["id"]]
-        kinds = {claim for _, claim, _ in citations}
-        domains = {domain for domain, _, _ in citations}
+        unique_documents = eligible[row["id"]]
+        kinds = {claim for entries in unique_documents.values()
+                 for _, claim in entries}
+        domains = {host for entries in unique_documents.values()
+                   for host, _ in entries}
         gaps = [claim for claim in CLAIMS if claim not in kinds]
         tasks = ["COLLECT_AND_INDEPENDENTLY_VALIDATE_" + claim.upper()
                  for claim in gaps]
         if len(domains) < 3:
             tasks.append("FIND_AT_LEAST_THREE_DISTINCT_PRELIMINARY_SOURCE_DOMAINS")
-        if len(citations) < EVIDENCE_TARGET_PER_PRODUCT:
+        if len(unique_documents) < EVIDENCE_TARGET_PER_PRODUCT:
             tasks.append("BUILD_100_ITEM_INDEPENDENTLY_CHECKED_EVIDENCE_DOSSIER")
         tasks.append("OBTAIN_REAL_CUSTOMER_AND_EXPERT_VALIDATION")
         tasks.append("COMPARE_WITH_FREE_COMPETITORS_BEFORE_PRICING")
@@ -166,7 +188,7 @@ def analyze(db, now_utc):
             "stored_status": row["status"],
             "preliminary_priority_score": (
                 float(row["priority_score"]) if row["priority_score"] is not None else None),
-            "preliminary_unique_references": len(citations),
+            "preliminary_unique_references": len(unique_documents),
             "preliminary_distinct_hosts": len(domains),
             "preliminary_claims": sorted(kinds),
             "missing_claims": gaps,
@@ -187,7 +209,9 @@ def analyze(db, now_utc):
         "queue_items_examined": len(topics),
         "discovery_topics": len(work),
         "snapshot_rows_examined": len(snapshots),
-        "invalid_or_unusable_snapshots": invalid,
+        "invalid_or_unusable_snapshots": invalid + mirrored_excluded,
+        "mirrored_snapshot_rows_excluded": mirrored_excluded,
+        "same_content_snapshot_rows_collapsed": same_content_collapsed,
         "verified_market_demand_topics": 0,
         "commercially_released_products": 0,
         "factory_mutations": 0,
