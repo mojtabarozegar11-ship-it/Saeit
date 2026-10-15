@@ -9,6 +9,7 @@ from django.contrib.auth import login
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.views import LoginView, LogoutView
 from django.core.cache import cache
+from django.core.exceptions import ValidationError
 from django.http import Http404, HttpResponse
 from django.shortcuts import redirect, render
 from django.views.decorators.cache import never_cache
@@ -16,6 +17,16 @@ from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.http import require_http_methods
 
 HOSTS = frozenset(("mojplaywin.com", "www.mojplaywin.com"))
+
+
+class CustomerSignupForm(UserCreationForm):
+    """Enforce a hard password length floor even if host validators are missing."""
+
+    def clean_password2(self):
+        password = super().clean_password2()
+        if len(password) < 12 or len(password) > 128:
+            raise ValidationError("Choose a password between 12 and 128 characters.")
+        return password
 
 
 def _check_host(request):
@@ -69,7 +80,7 @@ def customer_register(request):
         return HttpResponse("Too many registrations. Try later.", status=429)
     if request.user.is_authenticated:
         return redirect("/commerce/my-purchases/")
-    form = UserCreationForm(request.POST or None)
+    form = CustomerSignupForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
         user = form.save()
         login(request, user)
