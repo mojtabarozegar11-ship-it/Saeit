@@ -123,14 +123,16 @@ jobs:
           os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
           import django;django.setup()
           from django.template import engines,RequestContext
-          from django.test import RequestFactory
+          from django.test import RequestFactory, override_settings
+          from django.conf import settings
           spec=importlib.util.spec_from_file_location("owner_gallery",sys.argv[1])
           mod=importlib.util.module_from_spec(spec);spec.loader.exec_module(mod)
           for name,old in mod.templates(mod.APP).items():
               proposed=mod.patch(name,old)
               template=engines["django"].engine.from_string(proposed)
               request=RequestFactory().get("/mojtaba.roozegar/"+name+"/",HTTP_HOST="mojplaywin.com")
-              result=template.render(RequestContext(request,{"items":[],"stories":[],"profile":None}))
+              with override_settings(STORAGES={**settings.STORAGES,"staticfiles":{"BACKEND":"django.contrib.staticfiles.storage.StaticFilesStorage"}}):
+                  result=template.render(RequestContext(request,{"items":[],"stories":[],"profile":None}))
               assert mod.MARKER in result
               print("DJANGO_SECOND_GALLERY_PREFLIGHT_OK="+name,flush=True)
           print("NINE_DJANGO_TEMPLATES_PRECHECK_PASS=yes",flush=True)
@@ -174,7 +176,7 @@ jobs:
                       reader=PhotoTags();reader.feed(page_html)
                       photo_nums=[]
                       for uri in reader.urls:
-                          m=re.search(r"/photo-(\d\d)(?:\.[a-f0-9]{8,})?\.jpg(?:\?|$)",uri)
+                          m=re.search(r"/photo-(\d\d)(?:\.[a-f0-9]{8,})?\.png(?:\?|$)",uri)
                           if not m: raise ValueError("Invalid image URI "+uri[:120])
                           photo_nums.append(int(m.group(1)))
                       if photo_nums!=mod.ROUTES[page][1]:raise ValueError("Not all new images found")
