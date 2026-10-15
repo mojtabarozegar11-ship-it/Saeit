@@ -1,3 +1,4 @@
+# Retry owner photo publication after verified archive extraction fixes.
 name: Publish second exact 10-photo Mojtaba collection
 on:
   push:
