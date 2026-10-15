@@ -140,10 +140,10 @@ jobs:
           [[ "$DEPLOY_SHA" =~ ^[0-9a-f]{40}$ ]]
           deployment="$(ssh -F "$SSH_CONFIG" saeit-cpanel "bash -s -- '$DEPLOY_SHA'" <<'REMOTE'
           set -euo pipefail
-          root="$HOME/repositories/Saeit"
+          root="$HOME/Saeit"
           target="$1"
           case "$target" in *[!0-9a-f]*|'') exit 20;; esac
-          test "$root" = "$HOME/repositories/Saeit"
+          test "$root" = "$HOME/Saeit"
           test -d "$root/.git" && test -f "$root/manage.py" && test -f "$root/passenger_wsgi.py" && test -f "$root/deploy/cpanel_deploy.sh"
           case "$root" in *staging*|*stage*) echo "Refusing a staging path"; exit 21;; esac
           origin="$(git -C "$root" remote get-url origin)"
@@ -172,7 +172,7 @@ jobs:
           root="$(printf '%s\n' "$deployment" | sed -n 's/^APPROOT=//p')"
           previous="$(printf '%s\n' "$deployment" | sed -n 's/^PREVIOUS_SHA=//p')"
           deployed="$(printf '%s\n' "$deployment" | sed -n 's/^DEPLOYED_SHA=//p')"
-          [[ "$root" =~ ^/home/[A-Za-z0-9_-]+/repositories/Saeit$ ]]
+          [[ "$root" =~ ^/home/[A-Za-z0-9_-]+/Saeit$ ]]
           [[ "$previous" =~ ^[0-9a-f]{40}$ && "$deployed" = "$DEPLOY_SHA" ]]
           echo "app_root=$root" >> "$GITHUB_OUTPUT"
           echo "previous_sha=$previous" >> "$GITHUB_OUTPUT"
@@ -236,12 +236,12 @@ jobs:
         run: |
           set -euo pipefail
           [[ "$PREVIOUS_SHA" =~ ^[0-9a-f]{40}$ ]]
-          [[ "$APPROOT" =~ ^/home/[A-Za-z0-9_-]+/repositories/Saeit$ ]]
+          [[ "$APPROOT" =~ ^/home/[A-Za-z0-9_-]+/Saeit$ ]]
           ssh -F "$SSH_CONFIG" saeit-cpanel "bash -s -- '$APPROOT' '$PREVIOUS_SHA'" <<'REMOTE'
           set -euo pipefail
           root="$1"
           previous="$2"
-          test "$root" = "$HOME/repositories/Saeit"
+          test "$root" = "$HOME/Saeit"
           test -z "$(git -C "$root" status --porcelain)"
           git -C "$root" reset --hard "$previous"
           /bin/bash "$root/deploy/cpanel_deploy.sh"
@@ -251,3 +251,4 @@ jobs:
       - name: Remove temporary SSH material
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/ghanadi-cpanel"
+
