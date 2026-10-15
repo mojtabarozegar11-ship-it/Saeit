@@ -88,14 +88,17 @@ jobs:
               print(sku+" "+digest+" "+archive)
           PY
           ssh -F "$d/config" host 'umask 077; mkdir -p -m 700 "$HOME/.saeit-astra-four-inbox"; chmod 700 "$HOME/.saeit-astra-four-inbox"'
+          transferred=0
           while read -r sku digest archive; do
-            scp -q -F "$d/config" "vps:factory-runtime/private/astra-four-specialist-v1/$archive" "$d/$sku-$digest.zip"
+            scp -q -F "$d/config" "vps:factory-runtime/private/astra-four-specialist-v1/$archive" "$d/$sku-$digest.zip" < /dev/null
             test "$(sha256sum "$d/$sku-$digest.zip" | cut -d' ' -f1)" = "$digest"
-            scp -q -F "$d/config" "$d/$sku-$digest.zip" "host:.saeit-astra-four-inbox/$sku-$digest.zip"
-            received="$(ssh -F "$d/config" host "sha256sum '.saeit-astra-four-inbox/$sku-$digest.zip' | cut -d' ' -f1")"
+            scp -q -F "$d/config" "$d/$sku-$digest.zip" "host:.saeit-astra-four-inbox/$sku-$digest.zip" < /dev/null
+            received="$(ssh -n -F "$d/config" host "sha256sum '.saeit-astra-four-inbox/$sku-$digest.zip' | cut -d' ' -f1")"
             test "$received" = "$digest"
             echo "ASTRA_TRANSFER_PRIVATE_VERIFIED=$sku"
+            transferred=$((transferred+1))
           done < "$d/manifest"
+          test "$transferred" -eq 4
           scp -q -F "$d/config" "$d/catalog.json" 'host:.saeit-astra-four-inbox/catalog.json'
           scp -q -F "$d/config" scripts/astra_mpw_four_draft_import.py 'host:.saeit-astra-four-inbox/importer.py'
           ssh -F "$d/config" host 'chmod 600 "$HOME/.saeit-astra-four-inbox"/*.zip "$HOME/.saeit-astra-four-inbox"/catalog.json "$HOME/.saeit-astra-four-inbox"/importer.py'
