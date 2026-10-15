@@ -190,6 +190,74 @@ class SelfDirectedWorkTests(unittest.TestCase):
         self.assertEqual(casework.build_hour(self.root,21_047)["status"],"UNCHANGED")
         self.assertEqual(len(list((self.root/"autonomous_education").glob("case-*.zip"))),48)
 
+    def test_bounded_retention_preserves_protected_cases_and_keeps_producing(self):
+        old_count,old_age=(casework.MAX_RETAINED_EDUCATIONAL_CASES,
+                           casework.MIN_PROTECTED_AGE_HOURS)
+        casework.MAX_RETAINED_EDUCATIONAL_CASES=3
+        casework.MIN_PROTECTED_AGE_HOURS=2
+        try:
+            for hour in range(1100,1108):
+                item=casework.build_hour(self.root,hour)
+                self.assertEqual(item["status"],"PRIVATE_CASE_BUILT",item)
+                self.assertLessEqual(len(list(
+                    (self.root/"autonomous_education").glob("case-*.zip"))),3)
+            packs=list((self.root/"autonomous_education").glob("case-*.zip"))
+            self.assertEqual(len(packs),3)
+            observed=sorted(int(p.name.split("-")[1]) for p in packs)
+            self.assertEqual(observed,[1105,1106,1107])
+            self.assertEqual(casework.build_hour(self.root,1107)["status"],"UNCHANGED")
+        finally:
+            casework.MAX_RETAINED_EDUCATIONAL_CASES=old_count
+            casework.MIN_PROTECTED_AGE_HOURS=old_age
+
+    def test_invalid_generated_edition_is_not_silently_counted_as_unchanged(self):
+        result=casework.build_hour(self.root,5400)
+        self.assertEqual(result["status"],"PRIVATE_CASE_BUILT")
+        file=next((self.root/"autonomous_education").glob("case-*.zip"))
+        original=file.read_bytes()
+        file.write_bytes(b"tampered-not-a-zip")
+        with self.assertRaises((ValueError,zipfile.BadZipFile)):
+            casework.build_hour(self.root,5400)
+        self.assertEqual(file.read_bytes(),b"tampered-not-a-zip")
+        self.assertNotEqual(file.read_bytes(),original)
+
+    def test_foreign_archive_survives_synthetic_retention(self):
+        old_count,old_age=(casework.MAX_RETAINED_EDUCATIONAL_CASES,
+                           casework.MIN_PROTECTED_AGE_HOURS)
+        casework.MAX_RETAINED_EDUCATIONAL_CASES=2
+        casework.MIN_PROTECTED_AGE_HOURS=1
+        try:
+            casework.build_hour(self.root,3000)
+            folder=self.root/"autonomous_education"
+            foreign=folder/"case-00000001-deadbeefdeadbeef.zip"
+            foreign.write_bytes(b"unrecognized-third-party-data")
+            result=casework.build_hour(self.root,3001)
+            self.assertEqual(result["status"],"RESOURCE_REVIEW_REQUIRED")
+            self.assertTrue(foreign.exists())
+            self.assertEqual(foreign.read_bytes(),b"unrecognized-third-party-data")
+        finally:
+            casework.MAX_RETAINED_EDUCATIONAL_CASES=old_count
+            casework.MIN_PROTECTED_AGE_HOURS=old_age
+
+    def test_unknown_private_files_are_never_deleted_during_rotation(self):
+        old_count,old_age=(casework.MAX_RETAINED_EDUCATIONAL_CASES,
+                           casework.MIN_PROTECTED_AGE_HOURS)
+        casework.MAX_RETAINED_EDUCATIONAL_CASES=2
+        casework.MIN_PROTECTED_AGE_HOURS=1
+        try:
+            casework.build_hour(self.root,7000)
+            folder=self.root/"autonomous_education"
+            secret=folder/"somebodys-private-research.txt"
+            secret.write_text("DO NOT TOUCH")
+            casework.build_hour(self.root,7001)
+            self.assertEqual(casework.build_hour(self.root,7002)["status"],
+                             "PRIVATE_CASE_BUILT")
+            self.assertTrue(secret.is_file())
+            self.assertEqual(secret.read_text(),"DO NOT TOUCH")
+        finally:
+            casework.MAX_RETAINED_EDUCATIONAL_CASES=old_count
+            casework.MIN_PROTECTED_AGE_HOURS=old_age
+
     def test_case_version_is_stable_across_restart(self):
         a=casework.case_for_hour(29993)
         b=casework.case_for_hour(29993)
