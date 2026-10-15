@@ -51,12 +51,14 @@ def main():
     from django.contrib.auth import get_user_model
     from django.db import transaction
     Model = get_user_model()
+    # Never take over a pre-existing admin account sharing the public phone login.
+    database_username = "picm-" + username
     with transaction.atomic():
-        match = Model.objects.select_for_update().filter(username=username).first()
+        match = Model.objects.select_for_update().filter(username=database_username).first()
         if match and (match.is_staff or match.is_superuser):
             raise RuntimeError("REFUSE_EXISTING_PRIVILEGED_ACCOUNT")
         if match is None:
-            match = Model(username=username, is_active=True)
+            match = Model(username=database_username, is_active=True)
         match.is_staff = False
         match.is_superuser = False
         match.is_active = True
