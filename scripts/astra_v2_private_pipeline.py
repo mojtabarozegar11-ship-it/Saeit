@@ -454,7 +454,6 @@ def tick(root):
     intake_private_briefs(root)
     with locked(root), database(root) as conn:
         revision_intake=plan_private_source_revisions(root, conn)
-        topic_gate_state=reconcile_private_topic_queue(root, conn)
         try:
             autonomous=_self_directed_cycle(root)
         except (OSError,ValueError,AssertionError,RuntimeError,zipfile.BadZipFile):
@@ -479,6 +478,9 @@ def tick(root):
                         """UPDATE jobs SET stage='FAILED_REVIEW',
                            last_error='RETRY_LIMIT_EXCEEDED' WHERE id=?""",
                         (lost_id,))
+        # Reconcile AFTER recovering interrupted jobs so previously BUILDING
+        # weak topics cannot bypass the new gate via restart recovery.
+        topic_gate_state=reconcile_private_topic_queue(root, conn)
         row=conn.execute(
             "SELECT id,brief_id,builder,stage,attempts FROM jobs "
             "WHERE stage='QUEUED' ORDER BY id LIMIT 1").fetchone()
