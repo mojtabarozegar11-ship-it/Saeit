@@ -69,7 +69,7 @@ CSS = """<style>
 </style>"""
 
 def image_tag(number: int) -> str:
-    return "{% static '"+PHOTO_SUBDIR+"/photo-"+f"{number:02d}"+".jpg' %}"
+    return "{% static '"+PHOTO_SUBDIR+"/photo-"+f"{number:02d}"+".png' %}"
 
 def addition(page: str) -> str:
     labels=ROUTES[page][1]
@@ -110,7 +110,7 @@ def patch(page: str, content: str) -> str:
     result=content[:end]+"\n"+addition(page)+"\n"+content[end:]
     if result.count(MARKER)!=1: raise ValueError("Missing new block")
     for n in ROUTES[page][1]:
-        if result.count(PHOTO_SUBDIR+"/photo-"+f"{n:02d}"+".jpg")!=2:
+        if result.count(PHOTO_SUBDIR+"/photo-"+f"{n:02d}"+".png")!=2:
             raise ValueError("Expected exactly two new references per photograph")
     return result
 
@@ -180,11 +180,11 @@ def main():
                 raise ValueError("Unsafe second gallery directory")
             contents=list(photo_dir.iterdir())
             if contents:
-                expected={"photo-"+f"{i:02d}"+".jpg" for i in range(1,11)}
+                expected={"photo-"+f"{i:02d}"+".png" for i in range(1,11)}
                 if {p.name for p in contents}!=expected:
                     raise ValueError("Unexpected partial or unverified photo directory")
                 for i in range(1,11):
-                    existing=photo_dir/("photo-"+f"{i:02d}"+".jpg")
+                    existing=photo_dir/("photo-"+f"{i:02d}"+".png")
                     if not existing.is_file() or existing.is_symlink() or hashlib.sha256(existing.read_bytes()).hexdigest()!=SHA[i-1]:
                         raise ValueError("Existing original image mismatch "+str(i))
                 print("SECOND_GALLERY_STATIC_ALREADY_VERIFIED=10",flush=True)
@@ -194,7 +194,7 @@ def main():
             photo_dir.mkdir(parents=True,mode=0o755)
         with ZipFile(args.archive) as z:
             for i in range(1,11):
-                p=photo_dir/("photo-"+f"{i:02d}"+".jpg")
+                p=photo_dir/("photo-"+f"{i:02d}"+".png")
                 with p.open("xb") as handle:
                     handle.write(z.read("owner-new-gallery/photo-"+f"{i:02d}"+".png"))
                 p.chmod(0o644)
@@ -203,7 +203,7 @@ def main():
     if args.mode=="install":
         if not photo_dir.is_dir() or photo_dir.is_symlink():raise ValueError("Originals not staged")
         for i in range(1,11):
-            p=photo_dir/("photo-"+f"{i:02d}"+".jpg")
+            p=photo_dir/("photo-"+f"{i:02d}"+".png")
             if not p.is_file() or p.is_symlink() or hashlib.sha256(p.read_bytes()).hexdigest()!=SHA[i-1]:
                 raise ValueError("Staged photo mismatch "+str(i))
     existing=templates(app)
