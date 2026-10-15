@@ -7,6 +7,7 @@ on:
       - .github/workflows/astra-0049-vps-snapshot-rehearsal.yml
       - scripts/astra_opportunity_selector.py
       - scripts/astra_research_evidence_adapter.py
+      - scripts/astra_stage45_research_backlog.py
   workflow_dispatch:
 
 permissions:
@@ -65,7 +66,7 @@ jobs:
           test "$(ssh-keygen -lf "$temp/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
           SSH=(ssh -i "$temp/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$temp/known" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=15 githubops@178.239.147.150)
           cat "$RUNNER_TEMP/astra-0049.sql" | "${SSH[@]}" 'umask 077; destination="$HOME/factory-runtime/operations/astra-stage45-disposable-0049.sql"; test ! -L "$destination"; cat > "$destination"; chmod 600 "$destination"'
-          tar -cf - scripts/astra_opportunity_selector.py scripts/astra_research_evidence_adapter.py | "${SSH[@]}" 'set -eu; umask 077; stage="$HOME/factory-runtime/operations/astra-stage45-probe-code"; test ! -L "$stage"; mkdir -p "$stage"; chmod 700 "$stage"; tar -xf - -C "$stage"'
+          tar -cf - scripts/astra_opportunity_selector.py scripts/astra_research_evidence_adapter.py scripts/astra_stage45_research_backlog.py | "${SSH[@]}" 'set -eu; umask 077; stage="$HOME/factory-runtime/operations/astra-stage45-probe-code"; test ! -L "$stage"; mkdir -p "$stage"; chmod 700 "$stage"; tar -xf - -C "$stage"'
           "${SSH[@]}" 'bash -se' <<'REMOTE'
           set -euo pipefail
           umask 077
@@ -178,5 +179,42 @@ jobs:
           print("ASTRA_0049_VPS_TYPED_CLAIM_ISOLATION=PASS")
           print("ASTRA_0049_VPS_SYNTHETIC_ONLY=true")
           print("ASTRA_0049_VPS_RELEASE_AUTHORITY=false")
+          PY
+          python3 - "$work/disposable.sqlite3" "$HOME/factory-runtime/operations/astra-stage45-probe-code/scripts/astra_stage45_research_backlog.py" <<'PY'
+          import datetime,importlib.util,pathlib,sqlite3,sys
+          db=pathlib.Path(sys.argv[1])
+          module_path=pathlib.Path(sys.argv[2])
+          assert module_path.is_file() and not module_path.is_symlink()
+          spec=importlib.util.spec_from_file_location("astra_vps_readonly_research_backlog", module_path)
+          backlog=importlib.util.module_from_spec(spec);spec.loader.exec_module(backlog)
+          with sqlite3.connect(db.as_uri()+"?mode=ro",uri=True) as c:
+              before=c.execute("SELECT COUNT(*) FROM core_factoryqueueitem").fetchone()[0]
+              snapshots=c.execute("SELECT COUNT(*) FROM core_discoverysnapshot").fetchone()[0]
+          report=backlog.analyze(db,datetime.datetime.now(datetime.timezone.utc).isoformat())
+          assert report["discovery_topics"]==1,report
+          assert report["queue_items_examined"]==before
+          assert report["snapshot_rows_examined"]==snapshots
+          row=report["backlog"][0]
+          assert row["key"]=="discovery:canary"
+          # All four illustrations are explicitly marked fake, and must
+          # not become provenance or buyer signals in the persistent backlog.
+          assert row["preliminary_unique_references"]==0,row
+          assert len(row["missing_claims"])==4,row
+          assert row["evidence_target"]==100
+          assert row["commercial_quality_score"] is None
+          assert row["build_authorized"] is False
+          assert row["publish_authorized"] is False
+          assert row["payment_authorized"] is False
+          assert report["factory_mutations"]==0
+          assert report["verified_market_demand_topics"]==0
+          assert report["commercially_released_products"]==0
+          with sqlite3.connect(db.as_uri()+"?mode=ro",uri=True) as c:
+              assert c.execute("SELECT COUNT(*) FROM core_factoryqueueitem").fetchone()[0]==before
+              assert c.execute("SELECT COUNT(*) FROM core_discoverysnapshot").fetchone()[0]==snapshots
+          print("ASTRA_0049_VPS_READONLY_NO_ORDER_BACKLOG=PASS")
+          print("ASTRA_0049_VPS_FAKE_EVIDENCE_EXCLUDED=true")
+          print("ASTRA_0049_VPS_EVIDENCE_TARGET_PER_PRODUCT=100")
+          print("ASTRA_0049_VPS_MARKET_DEMAND_ATTESTATIONS=0")
+          print("ASTRA_0049_VPS_FACTORY_SITE_PAYMENTS_UNCHANGED=true")
           PY
           REMOTE
