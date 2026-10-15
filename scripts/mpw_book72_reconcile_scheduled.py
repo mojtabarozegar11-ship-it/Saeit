@@ -29,6 +29,7 @@ def run():
         except BlockingIOError:
             print("MPW_RECONCILE_CONCURRENT_SKIP")
             return
+        os.chdir(ROOT)
         sys.path.insert(0,str(ROOT))
         os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
         import django
