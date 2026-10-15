@@ -23,6 +23,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
 from .picm_access import owner_allowed, owner_id
+from .picm_storyboard import plan_story
 
 UUID_RE = re.compile(r"^[0-9a-f]{32}$")
 MAX_JOBS = 80
@@ -320,7 +321,8 @@ PICM_REFERENCE_MAX_BYTES = 6 * 1024 * 1024
 PICM_REFERENCE_MAX_DIMENSION = 8192
 PICM_REFERENCE_MAX_PIXELS = 24_000_000
 PICM_REFERENCE_TTL_SECONDS = 86400
-PICM_REFERENCE_ALLOWED_MODES = frozenset(("image_edit", "image_video", "upscale_8k"))
+PICM_REFERENCE_ALLOWED_MODES = frozenset(("image_edit", "image_video", "upscale_8k", "story_video"))
+PICM_STORY_STAGING_MAX_BYTES = 96 * 1024 * 1024
 
 
 def _reference_dimensions(data):
@@ -396,8 +398,17 @@ def picm_reference_stage(request):
     prompt = request.POST.get("prompt", "")
     if mode not in PICM_REFERENCE_ALLOWED_MODES:
         return JsonResponse({"error": "invalid_mode"}, status=400)
-    if not isinstance(prompt, str) or len(prompt) > 580:
+    if not isinstance(prompt, str) or len(prompt) > (1500 if mode == "story_video" else 580):
         return JsonResponse({"error": "invalid_prompt"}, status=400)
+    storyboard = None
+    if mode == "story_video":
+        try:
+            duration = int(request.POST.get("duration", ""))
+            if request.POST.get("duration", "") != str(duration):
+                raise ValueError("invalid_duration")
+            storyboard = plan_story(prompt, duration, request.POST.get("ratio", ""))
+        except (ValueError, TypeError):
+            return JsonResponse({"error": "invalid_storyboard_settings"}, status=400)
     if mode in ("image_edit", "image_video") and len(prompt.strip()) < 4:
         return JsonResponse({"error": "prompt_required"}, status=400)
     if mode == "upscale_8k" and prompt.strip():
@@ -432,7 +443,20 @@ def picm_reference_stage(request):
                 continue
             if data.get("user_id") == request.user.pk:
                 staged.append(data)
-        if len(staged) >= 3:
+        if mode == "story_video":
+            # No daily or generation-count cap for private story drafts.
+            # Bound actual private disk usage until a real GPU consumer exists.
+            byte_count = 0
+            for item in staged:
+                name = str(item.get("id", ""))
+                if not UUID_RE.fullmatch(name):
+                    continue
+                img_file = root / (name + ".input")
+                if img_file.is_file() and not img_file.is_symlink():
+                    byte_count += img_file.stat().st_size
+            if byte_count + len(raw) > PICM_STORY_STAGING_MAX_BYTES:
+                return JsonResponse({"error": "private_storage_full"}, status=507)
+        elif len(staged) >= 3:
             return JsonResponse({"error": "photo_limit_reached"}, status=429)
         ident = uuid4().hex
         filename = root / (ident + ".input")
@@ -453,6 +477,8 @@ def picm_reference_stage(request):
             "format": kind, "width": width, "height": height,
             "state": "staged_awaiting_gpu",
         }
+        if storyboard is not None:
+            metadata["storyboard"] = storyboard
         metadata_path = root / (ident + ".stage.json")
         try:
             fd, tempname = tempfile.mkstemp(dir=root, prefix=".picm-stage-", suffix=".tmp")
@@ -474,6 +500,7 @@ def picm_reference_stage(request):
         "message": "Reference received privately. The selected GPU model is not yet connected.",
         "mode": mode, "width": width, "height": height,
         "expires_in_seconds": PICM_REFERENCE_TTL_SECONDS,
+        "storyboard": storyboard,
     }, status=202)
     result["Cache-Control"] = "no-store"
     return result
@@ -500,6 +527,7 @@ def picm_reference_status(request, ident):
             return JsonResponse({"state": "expired"}, status=410)
         result = JsonResponse({"id": ident, "state": data["state"],
                                "mode": data["mode"], "width": data["width"],
-                               "height": data["height"]})
+                               "height": data["height"],
+                               "storyboard": data.get("storyboard")})
         result["Cache-Control"] = "no-store"
         return result
