@@ -1,0 +1,60 @@
+name: Astra V2/0049 Full Django Application Regression
+
+on:
+  push:
+    branches: [feature/astra-stage45-schema-0049-20261015]
+    paths:
+      - .github/workflows/astra-v2-0049-full-suite-ci.yml
+      - core/models.py
+      - core/migrations/0049_astra_stage45_research_queue.py
+      - product_prototypes/**
+      - scripts/astra_v2_*.py
+  pull_request:
+    branches: [factory/staging-reconciliation-20261008]
+    paths:
+      - .github/workflows/astra-v2-0049-full-suite-ci.yml
+
+permissions:
+  contents: read
+
+jobs:
+  regression-without-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      SAEIT_ENV: ci
+      SECRET_KEY: astra-full-0049-disposable-runner-only
+      DEBUG: "False"
+      ALLOWED_HOSTS: localhost,127.0.0.1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install application requirements
+        run: python -m pip install -r requirements.txt
+      - name: Django deployment checks and safe static build
+        run: |
+          set -euo pipefail
+          python manage.py check
+          python manage.py check --deploy
+          python manage.py collectstatic --noinput --verbosity 0
+          python manage.py makemigrations --check --dry-run
+      - name: Apply all migrations only to runner-local SQLite
+        run: |
+          set -euo pipefail
+          export DATABASE_URL="sqlite:///$RUNNER_TEMP/astra-full-app-0049-ci.sqlite3"
+          test ! -e "$RUNNER_TEMP/astra-full-app-0049-ci.sqlite3"
+          python manage.py migrate --noinput --verbosity 0
+          echo ASTRA_FULL_0049_DISPOSABLE_MIGRATION=PASS
+      - name: Run full application regression including Django and Astra
+        run: |
+          set -euo pipefail
+          export DATABASE_URL="sqlite:///$RUNNER_TEMP/astra-full-app-0049-ci.sqlite3"
+          python -m pytest -q
+          echo ASTRA_FULL_0049_APPLICATION_TEST_SUITE=PASS
+      - name: No VPS connections or public deployment
+        run: |
+          echo ASTRA_FULL_0049_VPS_CONNECTIONS=0
+          echo ASTRA_FULL_0049_PUBLIC_SITE_CHANGES=0
+          echo ASTRA_FULL_0049_PAYMENTS_OR_PUBLISHING=0
