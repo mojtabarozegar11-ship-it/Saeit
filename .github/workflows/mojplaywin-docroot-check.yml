@@ -18,34 +18,24 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Configure pinned SSH relay
+      - name: Configure the confirmed pinned VPS to cPanel relay
         shell: bash
         env:
           VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
-          HOST_HOST: ${{ secrets.SAEIT_HOST_SSH_HOST }}
-          HOST_USER: ${{ secrets.SAEIT_HOST_SSH_USER }}
-          HOST_PORT: ${{ secrets.SAEIT_HOST_SSH_PORT }}
           HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
         run: |
           set -euo pipefail
-          [[ -n "$VPS_KEY" && -n "$HOST_HOST" && -n "$HOST_USER" && -n "$HOST_KEY" ]] || { echo "Missing SSH configuration"; exit 1; }
-          [[ "$HOST_HOST" =~ ^[A-Za-z0-9.:-]+$ && "$HOST_USER" =~ ^[A-Za-z_][A-Za-z0-9_.-]*$ ]] || exit 1
-          HOST_PORT="${HOST_PORT:-1396}"
-          [[ "$HOST_PORT" =~ ^[0-9]{1,5}$ ]] && ((HOST_PORT >= 1 && HOST_PORT <= 65535)) || exit 1
-          WORK="$RUNNER_TEMP/mojplaywin-ssh"
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          WORK="$RUNNER_TEMP/site-domain-audit"
           install -d -m 700 "$WORK"
-          printf '%s\n' "$VPS_KEY" > "$WORK/vps.key"
-          printf '%s\n' "$HOST_KEY" > "$WORK/host.key"
-          chmod 600 "$WORK/"*.key
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$WORK/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$WORK/host.key"
+          chmod 600 "$WORK/"*
           ssh-keygen -y -P "" -f "$WORK/vps.key" >/dev/null
           ssh-keygen -y -P "" -f "$WORK/host.key" >/dev/null
-
-          VPS_SCAN="$(ssh-keyscan -T 10 -t rsa 178.239.147.150 2>/dev/null)"
-          [[ -n "$VPS_SCAN" ]]
-          printf '%s\n' "$VPS_SCAN" > "$WORK/vps.known"
-          VPS_FP="$(ssh-keygen -lf "$WORK/vps.known" -E sha256 | awk '{print $2}' | sort -u)"
-          [[ "$VPS_FP" == "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs" ]] || { echo "VPS host key pin mismatch"; exit 1; }
-
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$WORK/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$WORK/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
           cat > "$WORK/config" <<EOF
           Host saeit-vps
             HostName 178.239.147.150
@@ -53,74 +43,76 @@ jobs:
             Port 22
             IdentityFile $WORK/vps.key
             UserKnownHostsFile $WORK/vps.known
-            StrictHostKeyChecking yes
-            IdentitiesOnly yes
-            BatchMode yes
-            ForwardAgent no
-          EOF
-          chmod 600 "$WORK/config"
-
-          HOST_SCAN="$(ssh -F "$WORK/config" saeit-vps "timeout 15s ssh-keyscan -T 8 -p $HOST_PORT -t ed25519 $HOST_HOST" 2>/dev/null)"
-          [[ -n "$HOST_SCAN" ]]
-          printf '%s\n' "$HOST_SCAN" > "$WORK/host.known"
-          HOST_FP="$(ssh-keygen -lf "$WORK/host.known" -E sha256 | awk '{print $2}' | sort -u)"
-          [[ "$HOST_FP" == "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04" ]] || { echo "cPanel host key pin mismatch"; exit 1; }
-
-          cat >> "$WORK/config" <<EOF
-          Host saeit-host
-            HostName $HOST_HOST
-            User $HOST_USER
-            Port $HOST_PORT
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
             IdentityFile $WORK/host.key
             UserKnownHostsFile $WORK/host.known
             ProxyJump saeit-vps
+          Host *
             StrictHostKeyChecking yes
             IdentitiesOnly yes
             BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
             ForwardAgent no
+            RequestTTY no
           EOF
           chmod 600 "$WORK/config"
-          echo "Pinned SSH relay is ready."
-      - name: Read MojPlayWin document root from cPanel
+          scan="$(ssh -F "$WORK/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$WORK/host.candidate"
+          test "$(ssh-keygen -lf "$WORK/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$WORK/host.candidate" "$WORK/host.known"
+          echo "CONFIRMED_PINNED_RELAY_READY=yes"
+      - name: Read cPanel domain assignments without changes
         shell: bash
         run: |
           set -euo pipefail
-          WORK="$RUNNER_TEMP/mojplaywin-ssh"
-          RAW="$WORK/domain-info.json"
-          timeout 45s ssh -F "$WORK/config" saeit-host \
-            'command -v uapi >/dev/null && uapi --output=json DomainInfo domains_data' \
-            > "$RAW"
-          chmod 600 "$RAW"
-          python3 - "$RAW" <<'PY'
+          WORK="$RUNNER_TEMP/site-domain-audit"
+          timeout 45s ssh -F "$WORK/config" saeit-cpanel 'uapi --output=json DomainInfo domains_data' > "$WORK/domain-info.json"
+          chmod 600 "$WORK/domain-info.json"
+          python3 - "$WORK/domain-info.json" <<'PY'
           import json
           import sys
-
-          target = {"mojplaywin.com", "www.mojplaywin.com", "mojtaba.roozegar.com"}
+          wanted = {"mojplaywin.com", "www.mojplaywin.com", "mojtaba.roozegar.com", "zomorodmelal.ir", "www.zomorodmelal.ir"}
           with open(sys.argv[1], encoding="utf-8") as stream:
               data = json.load(stream)
-          found = []
-
+          found = {}
           def visit(value):
               if isinstance(value, dict):
                   domain = value.get("domain") or value.get("servername")
                   root = value.get("documentroot") or value.get("document_root") or value.get("docroot")
-                  if isinstance(domain, str) and domain.rstrip(".").lower() in target and isinstance(root, str):
-                      found.append((domain, root))
+                  if isinstance(domain, str) and isinstance(root, str):
+                      key = domain.rstrip(".").lower()
+                      if key in wanted:
+                          found[key] = root
                   for child in value.values():
                       visit(child)
               elif isinstance(value, list):
                   for child in value:
                       visit(child)
-
           visit(data)
-          if not found:
-              print("TARGET_DOMAIN_NOT_FOUND_IN_CPANEL")
-              raise SystemExit(2)
-          for domain, root in found:
-              print(f"{domain} document root: {root}")
+          for domain in sorted(wanted):
+              print(f"CPANEL_DOMAIN {domain} document_root={found.get(domain, 'NOT_ASSIGNED')}")
           PY
+
+      - name: Check public HTTP responses and page markers
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORK="$RUNNER_TEMP/site-domain-audit"
+          for url in https://zomorodmelal.ir/ https://zomorodmelal.ir/amozeshgah/ https://zomorodmelal.ir/education/ https://mojplaywin.com/ https://mojtaba.roozegar.com/; do
+            name="$(printf '%s' "$url" | sed 's#https://##; s#/#_#g; s#\.#_#g')"
+            status="$(curl --silent --show-error --location --max-redirs 5 --connect-timeout 10 --max-time 25 -H 'Cache-Control: no-cache' -o "$WORK/$name.html" -w '%{http_code}|%{content_type}|%{url_effective}' "$url" 2>"$WORK/$name.err" || true)"
+            printf 'PUBLIC_CHECK %s result=%s\n' "$url" "${status:-000|unknown|unresolved}"
+            if test -s "$WORK/$name.err"; then sed -n '1,2p' "$WORK/$name.err"; fi
+            if grep -Eqi 'Index of /|Index of \\?' "$WORK/$name.html" 2>/dev/null; then echo "PAGE_MARKER $url=directory_listing"; fi
+            if grep -Eqi 'tlsv1 unrecognized name|502 Bad Gateway|Internal Server Error|Not Found' "$WORK/$name.html" 2>/dev/null; then echo "PAGE_MARKER $url=server_error"; fi
+          done
 
       - name: Remove temporary SSH credentials and cPanel response
         if: always()
         shell: bash
-        run: rm -rf -- "$RUNNER_TEMP/mojplaywin-ssh"
+        run: rm -rf -- "$RUNNER_TEMP/site-domain-audit"
