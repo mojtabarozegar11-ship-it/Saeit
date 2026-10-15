@@ -131,12 +131,17 @@ jobs:
           grep -Fq 'https://zomorodmelal.ir/amozeshgah/' "$target/index.html"
           install -d -m 700 "$HOME/.backups/zomorodmelal-amozeshgah"
           test ! -e "$backup"
-          test ! -e "$stage" && mkdir -m 700 "$stage"
+          test ! -e "$stage" && mkdir -m 700 "$stage" && mkdir -m 700 "$stage/assets"
           cp -p "$target/index.html" "$backup"
           cmp -s "$target/index.html" "$backup"
           echo ACADEMY_PREVIOUS_VERSION_BACKED_UP=yes
           REMOTE
           tar -C public/amozeshgah -czf - index.html | ssh -F "$d/config" saeit-cpanel "tar -xzf - -C /home/zomorod2/public_html/.amozeshgah-stage-$GITHUB_SHA"
+          assets="$d/assets"
+          install -d -m 700 "$assets"
+          for image in academy education-detail research knowledge agriculture industry ai economy; do cp "core/static/site/heroes/$image.webp" "$assets/$image.webp"; done
+          printf "%s\n" "zomorod-education-assetset-v1" > "$assets/.managed-marker"
+          tar -C "$assets" -czf - . | ssh -F "$d/config" saeit-cpanel "tar -xzf - -C /home/zomorod2/public_html/.amozeshgah-stage-$GITHUB_SHA/assets"
           ssh -F "$d/config" saeit-cpanel bash -se -- "$expected_sha" "$GITHUB_SHA" <<'REMOTE'
           set -euo pipefail
           expected_sha="$1"
@@ -145,6 +150,16 @@ jobs:
           target="$root/amozeshgah"
           stage="$root/.amozeshgah-stage-$commit_sha"
           test "$(sha256sum "$stage/index.html" | awk '{print $1}')" = "$expected_sha"
+          asset_target="$target/assets/zomorod-education-v1"
+          if test -e "$asset_target"; then
+            test -d "$asset_target" && test ! -L "$asset_target"
+            grep -Fqx "zomorod-education-assetset-v1" "$asset_target/.managed-marker"
+            for image in academy education-detail research knowledge agriculture industry ai economy; do cmp -s "$stage/assets/$image.webp" "$asset_target/$image.webp"; done
+          else
+            mkdir -p "$target/assets"
+            test ! -L "$target/assets"
+            mv -T "$stage/assets" "$asset_target"
+          fi
           chmod 644 "$stage/index.html"
           mv -T "$stage/index.html" "$target/index.html"
           rmdir "$stage"
@@ -166,7 +181,7 @@ jobs:
           if [ "$code" != "200" ] || [[ "$content_type" != text/html* ]]; then valid=0; fi
           if ! grep -Fq 'saeit-zomorod-education-managed-v2' "$html" || ! grep -Fq 'id="tracks"' "$html" || ! grep -Fq 'id="catalog"' "$html"; then valid=0; fi
           for image in academy education-detail research knowledge agriculture industry ai economy; do
-            image_result="$(curl --silent --show-error --location --retry 1 --max-time 30 -o /dev/null -w '%{http_code}|%{content_type}' "https://zomorodmelal.ir/static/site/heroes/$image.webp" || true)"
+            image_result="$(curl --silent --show-error --location --retry 1 --max-time 30 -o /dev/null -w '%{http_code}|%{content_type}' "https://zomorodmelal.ir/amozeshgah/assets/zomorod-education-v1/$image.webp" || true)"
             image_code="${image_result%%|*}"
             image_type="${image_result#*|}"
             printf 'ACADEMY_IMAGE_CHECK %s result=%s\n' "$image" "$image_result"
