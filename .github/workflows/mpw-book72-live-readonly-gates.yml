@@ -112,6 +112,17 @@ jobs:
                   for chunk in iter(lambda:f.read(1024*1024),b""):h.update(chunk)
               print("BOOK72_ARCHIVED_415_SIZE="+str(asset.stat().st_size))
               print("BOOK72_ARCHIVED_415_SHA256_MATCH="+str(h.hexdigest()=="3837fc3cb21ed1a2e7c33e0db8f8e10d158583309b02b97d4d674d25a147207a"))
+          module_paths=(
+              "mpw_commerce/product_checkout_page.py",
+              "mpw_commerce/purchase_history.py",
+              "mpw_commerce/templates/mpw_commerce/product_checkout.html",
+              "mpw_commerce/templates/mpw_commerce/purchased_downloads.html",
+              "mpw_commerce/urls.py",
+              "mpw_commerce/downloads.py",
+          )
+          for relative in module_paths:
+              path=pathlib.Path("/home/zomorod2/Saeit-staging")/relative
+              print("BOOK72_MODULE_"+relative.replace("/","_").replace(".","_").upper()+"="+str(path.is_file() and not path.is_symlink()))
           print("BOOK72_SALE_ACTIVATION_PERFORMED=NO")
           PY
               echo BOOK72_READONLY_RELEASE_GATE_COMPLETED=YES
