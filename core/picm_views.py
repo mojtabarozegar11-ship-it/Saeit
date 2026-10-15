@@ -19,6 +19,7 @@ from uuid import uuid4
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.shortcuts import render
 from django.views.decorators.cache import never_cache
+from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
 UUID_RE = re.compile(r"^[0-9a-f]{32}$")
@@ -228,6 +229,7 @@ def picm_worker_next(request):
     return HttpResponse(status=204)
 
 
+@csrf_exempt  # Machine-to-machine bearer token; browser endpoints remain CSRF-protected.
 @never_cache
 @require_POST
 def picm_worker_finish(request, ident):
