@@ -7,6 +7,8 @@ on:
       - .github/workflows/astra-v2-0049-full-suite-ci.yml
       - core/models.py
       - core/migrations/0049_astra_stage45_research_queue.py
+      - core/templates/brands/mojplaywin/base.html
+      - core/tests/test_multibrand_site.py
       - product_prototypes/**
       - scripts/astra_v2_*.py
   pull_request:
