@@ -112,6 +112,7 @@ jobs:
           # Actual on-host Django template parsing and rendering BEFORE writing a live template.
           "$py" - "$script" "$src" <<'PY_VALIDATE'
           import importlib.util,os,sys
+          from html import unescape as unescape_title
           spec=importlib.util.spec_from_file_location("fifty",sys.argv[1])
           mod=importlib.util.module_from_spec(spec);spec.loader.exec_module(mod)
           content=mod.load_content(mod.Path(sys.argv[2]))
@@ -127,7 +128,7 @@ jobs:
               rendered=t.render(RequestContext(request,{"items":[],"stories":[],"profile":None}))
               if mod.MARKER not in rendered:raise ValueError("Editorial block not rendered")
               for item in content["entries"]:
-                  if item["page"]==name and item["title"] not in rendered:
+                  if item["page"]==name and item["title"] not in unescape_title(rendered):
                       raise ValueError("Missing original editorial entry: "+item["id"])
               print("FIFTY_DJANGO_RENDER_OK="+name+" count="+str(mod.COUNTS[name]),flush=True)
           print("ALL_NINE_PAGE_EDITORIAL_PREFLIGHT_SUCCESS=yes",flush=True)
@@ -140,6 +141,7 @@ jobs:
 
           python3 - "$src" <<'PY_LIVE'
           import json,re,sys,time
+          from html import unescape as unescape_title
           from html.parser import HTMLParser
           from urllib.request import Request,urlopen
           content=json.load(open(sys.argv[1],encoding="utf-8"))
@@ -170,7 +172,7 @@ jobs:
                       if marker not in html:raise ValueError("50-entry section not visible")
                       if 'id="mpw-new-originals-20261015-b"' not in html:raise ValueError("Previous 10-photo panel was removed")
                       for item in entries:
-                          if 'id="'+item["id"]+'"' not in html or item["title"] not in html:
+                          if 'id="'+item["id"]+'"' not in html or item["title"] not in unescape_title(html):
                               raise ValueError("Missing editorial article "+item["id"])
                       if html.count('<article id="MPW-')!=len(entries):
                           raise ValueError("Wrong count of new article blocks")

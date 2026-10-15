@@ -64,6 +64,13 @@ class FiftyEditorialTests(unittest.TestCase):
         body=mod.section("stories",self.data)
         self.assertIn("not verified personal events",body)
 
+    def test_escaped_story_titles_are_valid_english_after_html_decode(self):
+        from html import unescape
+        story=next(x for x in self.data["entries"] if x["title"]=="A baker's ledger of impossible recipes")
+        html_fragment=mod.section("stories",self.data)
+        self.assertIn("&#x27;",html_fragment)
+        self.assertIn(story["title"],unescape(html_fragment))
+
     def test_no_external_images_payments_or_scripts_added(self):
         for page in mod.PAGE_FILES:
             text=mod.section(page,self.data)
