@@ -10,8 +10,8 @@ IMPORT_ANCHOR = "from core.brand import brand_for_request"
 IMPORT_NEW = "from core.astra_preview_views import astra_preview_page"
 URL_ANCHOR = 'urlpatterns = [\n    path("", branded_home, name="home"),'
 ROUTES = (
-    '    path("factory-previews/", astra_preview_page, name="astra_preview_index"),\n'
-    '    path("factory-previews/<slug:slug>/", astra_preview_page, name="astra_preview_detail"),\n'
+    '    path("factory-previews/", astra_preview_page, name="astra_preview_index"),\n',
+    '    path("factory-previews/<slug:slug>/", astra_preview_page, name="astra_preview_detail"),\n',
 )
 
 
