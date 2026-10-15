@@ -1,0 +1,94 @@
+name: Astra V2 Persistent Research Bridge Independent Health (Read Only)
+
+on:
+  push:
+    branches: [feature/astra-v2-0048-integration-canary-20261015]
+    paths: [.github/workflows/astra-v2-private-research-bridge-health.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Independently inspect private bridge heartbeat, schedule and original factory
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          temp="$RUNNER_TEMP/astra-private-bridge-health"
+          mkdir -p -m 700 "$temp"
+          trap 'rm -rf -- "$temp"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$temp/key"
+          chmod 600 "$temp/key"
+          ssh-keygen -y -P '' -f "$temp/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$temp/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$temp/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -i "$temp/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$temp/known" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=15 githubops@178.239.147.150 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = githubops
+          root="$HOME/factory-runtime"
+          original="$root/private/factory-fresh-isolated.sqlite3"
+          research="$root/private/astra-v2-research-bridge/research-tasks.sqlite3"
+          qa="$root/private/astra-v2-canary-products/queue.sqlite3"
+          script="$root/operations/astra-v2-research-bridge/bridge.py"
+          test -f "$original" && test ! -L "$original"
+          test -f "$research" && test ! -L "$research"
+          test -f "$qa" && test ! -L "$qa"
+          test -f "$script" && test ! -L "$script"
+          count="$(crontab -l | grep -c ASTRA_V2_PRIVATE_RESEARCH_BRIDGE || true)"
+          test "$count" = 1
+          "$root/.venv/bin/python" - "$original" "$research" "$qa" <<'PY'
+          import datetime,pathlib,sqlite3,sys
+          orig,private,qa=map(pathlib.Path,sys.argv[1:])
+          def readonly(p):
+              assert p.is_file() and not p.is_symlink()
+              db=sqlite3.connect(p.resolve().as_uri()+"?mode=ro",uri=True,timeout=10)
+              db.execute("PRAGMA query_only=ON")
+              db.execute("BEGIN")
+              return db
+          a=readonly(orig)
+          b=readonly(private)
+          c=readonly(qa)
+          try:
+              latest=a.execute(
+                  "SELECT name FROM django_migrations WHERE app='core' "
+                  "ORDER BY name DESC LIMIT 1").fetchone()
+              assert latest==("0048_business_market_architecture",),latest
+              count=a.execute("SELECT COUNT(*) FROM core_product").fetchone()[0]
+              research_count=b.execute("SELECT COUNT(*) FROM research_tasks").fetchone()[0]
+              assert research_count>=25,research_count
+              bad=b.execute("SELECT COUNT(*) FROM research_tasks WHERE "
+                  "sale_ready<>0 OR market_demand_verified<>0 OR quality_score IS NOT NULL").fetchone()[0]
+              assert bad==0,bad
+              tick=b.execute("SELECT value FROM bridge_meta WHERE key='last_tick_utc'").fetchone()
+              assert tick and tick[0]
+              then=datetime.datetime.fromisoformat(tick[0])
+              now=datetime.datetime.now(datetime.timezone.utc)
+              delta=(now-then).total_seconds()
+              assert -90 <= delta <= 1800,delta
+              builders=c.execute(
+                  "SELECT COUNT(DISTINCT builder) FROM jobs WHERE stage='PRIVATE_QA_PASSED'"
+              ).fetchone()[0]
+              assert builders>=3,builders
+              print("ASTRA_BRIDGE_HEALTH=PASS")
+              print("ASTRA_BRIDGE_CRON_SINGLE_ENTRY=true")
+              print("ASTRA_BRIDGE_LAST_TICK_AGE_SECONDS="+str(int(delta)))
+              print("ASTRA_BRIDGE_RESEARCH_TASKS="+str(research_count))
+              print("ASTRA_BRIDGE_ORIGINAL_PRODUCTS="+str(count))
+              print("ASTRA_BRIDGE_ORIGINAL_DJANGO_MIGRATION=0048")
+              print("ASTRA_BRIDGE_PRIVATE_BUILDER_FAMILIES="+str(builders))
+              print("ASTRA_BRIDGE_COMMERCIAL_APPROVALS=0")
+              print("ASTRA_BRIDGE_ORIGINAL_SQLITE_QUERIED_READONLY=true")
+          finally:
+              for db in (a,b,c):
+                  db.execute("COMMIT")
+                  db.close()
+          PY
+          REMOTE
