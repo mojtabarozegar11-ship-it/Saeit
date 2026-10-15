@@ -14,18 +14,21 @@
     "bytes": 3631972,
     "sha256": "3837fc3cb21ed1a2e7c33e0db8f8e10d158583309b02b97d4d674d25a147207a",
     "target": "/home/zomorod2/MojPlayWin_Private_Assets/store/chess-improvement/MojPlayWin_Chess_Grandmaster_Final_Covered_2026.pdf",
-    "host_verified": false
+    "host_verified": true,
+    "verification_run_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/38697079504",
+    "product_database_sync_run_url": "https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/38697411845",
+    "source_preserved": true,
+    "delivery_path_installed": true
   },
   "current_database_price_usd": "7.50",
   "discount_claim": null,
   "public_active": false,
   "checkout_enabled": false,
   "publication_gates": [
-    "copy final exact asset to non-public cPanel path",
-    "verify SHA256 and expected size on cPanel",
     "review rights, original material and user-facing refund terms",
     "verify product page and protected download for paid order",
     "verify authentic ETH/TRX chain settlement and a controlled full purchase",
     "ensure rollback and logs before paid checkout release"
-  ]
+  ],
+  "sale_status": "private_book_installed_checkout_not_ready"
 }
