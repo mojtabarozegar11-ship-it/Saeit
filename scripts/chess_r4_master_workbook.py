@@ -45,22 +45,28 @@ def teaching(b,played,top,second):
  vals={chess.PAWN:1,chess.KNIGHT:3,chess.BISHOP:3.25,chess.ROOK:5,chess.QUEEN:9}
  w=sum(len(b.pieces(k,chess.WHITE))*val for k,val in vals.items())
  bl=sum(len(b.pieces(k,chess.BLACK))*val for k,val in vals.items())
- checks=sum(b.gives_check(m) for m in b.legal_moves)
- caps=sum(b.is_capture(m) for m in b.legal_moves)
- move=b.san(played); lead=b.san(top['line'][0])
- secondmove=b.san(second['line'][0]) if second else 'not available'
- intro=f'The recorded game move is {move}; the engine first candidate is {lead}, and the runner-up is {secondmove}. '
- concrete=f'White has {w:.2f} material units, Black has {bl:.2f}, with {checks} available checks and {caps} immediate captures. '
- nature='checking' if b.gives_check(top['line'][0]) else 'capturing' if b.is_capture(top['line'][0]) else 'quiet'
- exp=f'The leading candidate is a {nature} move. '
- if lead==move:exp+='Here the historical choice agrees with the short engine search. '
- else:exp+='The historical choice differs from the first candidate at this search budget; this alone does not demonstrate a blunder. '
+ checks=[b.san(m) for m in b.legal_moves if b.gives_check(m)]
+ captures=[b.san(m) for m in b.legal_moves if b.is_capture(m)]
+ game_move=b.san(played);engine_move=b.san(top['line'][0])
+ alt_move=b.san(second['line'][0]) if second else 'none'
+ kind='check' if b.gives_check(top['line'][0]) else 'capture' if b.is_capture(top['line'][0]) else 'nonforcing move'
+ moves=str(len(list(b.legal_moves)))
+ parts=[f"Position data: game choice {game_move}; top two searched alternatives {engine_move} and {alt_move}.",
+        f"The side to move can choose among {moves} legal moves, including {len(checks)} checks and {len(captures)} captures; material weights are White {w:.2f}, Black {bl:.2f}."]
+ if kind=='check':
+  parts.append(f"The suggested {engine_move} creates check. Investigate the complete forced king response, not just the checking move.")
+ elif kind=='capture':
+  parts.append(f"The candidate {engine_move} changes material immediately. Count recaptures and intermediate forcing moves before interpreting the evaluation.")
+ else:
+  parts.append(f"The candidate {engine_move} does not check or capture. Compare the threat created by this quiet move against the game continuation {game_move}.")
+ if game_move==engine_move:parts.append(f"The historical move {game_move} is also the first engine candidate in this particular search.")
+ else:parts.append(f"The archived game selects {game_move} rather than the short-search preference {engine_move}; neither is automatically refuted by this difference.")
  if second:
-  gap=top['cp']-second['cp']
-  if gap>125:exp+=f'The displayed alternatives differ by {gap/100:.2f} pawn units. Find the concrete reply that creates this gap before forming a verdict. '
-  elif gap>35:exp+=f'The engine candidate gap is approximately {gap/100:.2f} pawn units; move order and defensive resources deserve verification. '
-  else:exp+='The candidates are close in provisional evaluation and may both be playable. '
- return intro+concrete+exp+'To make the conclusion reproducible, start from the FEN and test the strongest opponent defense.'
+  delta=top['cp']-second['cp']
+  if delta>120:parts.append(f"Stockfish estimates a {delta/100:.2f}-pawn lead over {alt_move}; locate a concrete defensive reply before assigning an absolute verdict.")
+  elif delta>30:parts.append(f"The search ranks {engine_move} ahead of {alt_move} by about {delta/100:.2f} pawn units; the margin is not a forced proof.")
+  else:parts.append(f"The alternatives {engine_move} and {alt_move} are close in this limited search, so the exercise concerns practical comparison.")
+ return ' '.join(parts)
 try:
  for gi,g in enumerate(games,1):
   ps=g['positions'];indices=choose_indices(len(ps))
@@ -166,6 +172,7 @@ qa={'release':'R4','legal_source_games':len(games),'bad_game_scores':invalid,
     'human_grandmaster_reviewed':False,'deep_verified_100_games':False,
     'all_150000_words_distinct_quality_verified':False,'commercial_release_approved':False}
 (out/'MojPlayWin_Chess_R4_QA.json').write_text(json.dumps(qa,indent=2,ensure_ascii=False))
+(out/'MojPlayWin_Chess_R4_Position_Evidence.json').write_text(json.dumps(allcases,indent=2,ensure_ascii=False))
 (out/'MojPlayWin_Chess_R4_Editorial_Status.md').write_text('# R4 editorial status\n\n'+
  f"Legal games: {len(games)}/100. Distinct analyzed positions: {len(allcases)}. Unique exercises: {len(exercises)}. PDF pages: {pages}. Engine: {eid}. Depth range: {min(depths)}-{max(depths)}.\n\n"+
  'Game facts sourced from https://github.com/brianerdelyi/ChessPGN; no third-party commentary included. Analysis is original algorithm-assisted teaching commentary, based on 0.65-second searches, not adjudicated master-level depth. R3 and storefront remain unchanged. Further historical provenance, rights and human specialist review required.\n')
