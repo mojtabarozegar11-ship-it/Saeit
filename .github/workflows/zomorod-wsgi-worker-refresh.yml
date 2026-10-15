@@ -1,0 +1,128 @@
+name: Restart only stale Zomorod WSGI workers
+on:
+  push:
+    branches: [diagnostic/zomorod-503-readonly-20261015]
+    paths: [.github/workflows/zomorod-wsgi-worker-refresh.yml]
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-selector-recovery-safe
+  cancel-in-progress: false
+jobs:
+  restart:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - name: Prepare pinned relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/zomorod-restore"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "CONFIRMED_PINNED_RELAY_READY=yes"
+      - name: Verify and terminate only Saeit WSGI workers
+        shell: bash
+        env:
+          SSH_CONFIG: ${{ runner.temp }}/zomorod-restore/config
+        run: |
+          set -euo pipefail
+          ssh -F "$SSH_CONFIG" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = zomorod2
+          test -s /home/zomorod2/public_html/index.html
+          test -s /home/zomorod2/public_html/amozeshgah/index.html
+          test -f /home/zomorod2/Saeit/passenger_wsgi.py
+          grep -Fqx 'from config.wsgi import application' /home/zomorod2/Saeit/passenger_wsgi.py
+          python3 - <<'PY'
+          import os,pathlib,signal
+          target="/opt/alt/python310/bin/lswsgi -m /home/zomorod2/Saeit/passenger_wsgi.py"
+          root=pathlib.Path("/home/zomorod2/Saeit").resolve()
+          uid=os.getuid()
+          chosen=[]
+          for entry in pathlib.Path("/proc").iterdir():
+              if not entry.name.isdigit(): continue
+              try:
+                  if entry.stat().st_uid!=uid: continue
+                  cmd=(entry/"cmdline").read_bytes().replace(b"\0",b" ").decode("utf8","replace").strip()
+                  if cmd!=target: continue
+                  if (entry/"cwd").resolve()!=root: continue
+                  chosen.append(int(entry.name))
+              except (OSError,PermissionError): continue
+          print("TARGET_SAEIT_WSGI_WORKERS="+str(len(chosen)))
+          if not chosen:
+              print("NO_STALE_WORKERS_FOUND=yes")
+          for pid in chosen:
+              try:
+                  os.kill(pid,signal.SIGTERM)
+                  print("SENT_SIGTERM_TO_VERIFIED_SAEIT_PID="+str(pid))
+              except ProcessLookupError: pass
+          print("OTHER_APPS_UNTOUCHED=yes")
+          PY
+          REMOTE
+      - name: Verify full Django login and static pages
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 5
+          for p in / /amozeshgah/ /admin/login/ /admin/; do
+            f="$(mktemp)"
+            code=$(curl -L -sS -H 'Cache-Control: no-cache' -o "$f" --max-time 25 -w '%{http_code}' "https://zomorodmelal.ir$p?wsgi_refresh=20261015" || true)
+            bytes=$(wc -c < "$f")
+            printf 'AFTER_REFRESH=%s HTTP=%s BYTES=%s\n' "$p" "$code" "$bytes"
+            if [ "$p" = /admin/login/ ]; then
+              if [ "$code" = 200 ] && [ "$bytes" -gt 600 ] && grep -Eqi '(csrfmiddlewaretoken|name="username"|name=.username.)' "$f"; then
+                echo "REAL_DJANGO_LOGIN_IS_LIVE=yes"
+              else
+                echo "REAL_DJANGO_LOGIN_IS_LIVE=no"
+                python3 - "$f" <<'PY'
+          import sys
+          print("SHORT_RESPONSE="+repr(open(sys.argv[1],"rb").read(150).decode("utf8","replace")))
+          PY
+              fi
+            fi
+            rm -f "$f"
+          done
+      - name: Remove temporary SSH material
+        if: always()
+        shell: bash
+        run: rm -rf -- "$RUNNER_TEMP/zomorod-restore"
