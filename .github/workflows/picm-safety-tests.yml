@@ -6,6 +6,7 @@ on:
       - core/picm_views.py
       - core/picm_auth.py
       - templates/picm/index.html
+      - templates/picm/free_motion.js
       - ops/picm-vps/**
       - scripts/deploy_mojplaywin_picm.py
       - tests/test_picm_views.py
@@ -32,6 +33,7 @@ jobs:
       - name: Check safe installer and engine syntax
         run: |
           python -m py_compile core/picm_views.py core/picm_auth.py ops/picm-vps/worker.py scripts/deploy_mojplaywin_picm.py scripts/deploy_picm_login.py
+          node --check templates/picm/free_motion.js
           python - <<'PY'
           from pathlib import Path
           html=Path('templates/picm/index.html').read_text()
