@@ -102,12 +102,13 @@ jobs:
           stage="$root/.zomorod-agriculture-stage-$sha"
           backup="$HOME/.backups/zomorodmelal-agriculture/agriculture-$sha"
           test -d "$root" && test ! -L "$root" && test "$(stat -c %U "$root")" = zomorod2 && test -w "$root"
+          if test -d "$target" && test ! -L "$target" && test -z "$(find "$target" -mindepth 1 -print -quit)"; then
+            rmdir "$target"
+            echo EMPTY_TARGET_FROM_INTERRUPTED_INSTALL_REMOVED=yes
+          fi
           if test -e "$target"; then
             test -d "$target" && test ! -L "$target"
-            if test -z "$(find "$target" -mindepth 1 -print -quit)"; then
-              rmdir "$target"
-              echo EMPTY_TARGET_FROM_INTERRUPTED_INSTALL_REMOVED=yes
-            fi
+
             test -f "$target/index.html" && ! test -L "$target/index.html"
             grep -Fq '<!-- saeit-zomorod-agriculture-v1 -->' "$target/index.html" || { echo "Unmanaged agriculture directory; refusing"; exit 1; }
             test -z "$(find "$target" -type l -print -quit)" || { echo "Symlink found inside managed agriculture directory"; exit 1; }
