@@ -41,3 +41,41 @@ jobs:
           echo ASTRA_RESEARCH_LIVE_VPS_CONTACT=0
           echo ASTRA_RESEARCH_PUBLICATION=0
           echo ASTRA_RESEARCH_PAYMENT=0
+
+  public-rss-network-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Scan only fixed USDA public RSS with no secrets or VPS
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          python3 scripts/astra_independent_research_radar.py --fetch \
+            --output "$RUNNER_TEMP/astra-public-signal-smoke.json"
+          python3 - "$RUNNER_TEMP/astra-public-signal-smoke.json" <<'PY'
+          import json, sys
+          from pathlib import Path
+          r = json.loads(Path(sys.argv[1]).read_text())
+          assert r["factory_mutations"] == 0
+          assert r["commercial_products_built"] == 0
+          assert r["publications"] == 0
+          assert r["payments"] == 0
+          assert all(not t["product_build_authorized"] and
+                     not t["store_publication_authorized"] and
+                     not t["payment_authorized"] and
+                     t["commercial_quality_score"] is None
+                     for t in r["candidate_hypotheses"])
+          print("ASTRA_PUBLIC_FEEDS_RECEIVED=" + str(len(r["feed_names"])))
+          print("ASTRA_PUBLIC_FEEDS_FAILED=" + str(len(r["feed_failures"])))
+          print("ASTRA_NEW_RESEARCH_QUESTIONS=" + str(len(r["candidate_hypotheses"])))
+          if len(r["feed_names"]) == 0:
+              raise SystemExit("Neither official public RSS feed was reachable")
+          PY
+          echo ASTRA_VPS_AND_STORE_MUTATIONS=0
