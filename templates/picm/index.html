@@ -33,7 +33,7 @@ footer{margin-top:25px;color:#8795ae;font-size:12px}
 </style>
 </head>
 <body>
-<header><div class="logo">MojPlayWin <span>/ PICM</span></div><a href="/">← Main site</a></header>
+<header><div class="logo">MojPlayWin <span>/ PICM</span></div><div>{% if picm_authenticated %}<form method="post" action="/picm/logout/" style="display:inline;margin-right:12px">{% csrf_token %}<button type="submit" style="width:auto;padding:8px 12px;margin:0;font-size:12px">خروج</button></form>{% else %}<a href="/picm/login/">ورود</a> · {% endif %}<a href="/">← Main site</a></div></header>
 <main>
 <div class="eyebrow">Private AI image studio · Beta</div>
 <h1>Ideas become images.</h1>
@@ -42,7 +42,7 @@ footer{margin-top:25px;color:#8795ae;font-size:12px}
 <section class="panel">
 <h2>Generate image</h2>
 {% if not picm_authenticated %}
-<div class="notice">Please <a href="/admin/login/?next=/picm/">sign in</a> to create images. The public studio is currently in a limited beta.</div>
+<div class="notice">Please <a href="/picm/login/">sign in</a> to create images. The public studio is currently in a limited beta.</div>
 {% endif %}
 <form id="renderform">
 {% csrf_token %}
