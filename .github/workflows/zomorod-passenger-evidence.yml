@@ -168,6 +168,34 @@ jobs:
           done
           echo USER_CONTROLLED_CONFIG_END
           REMOTE
+      - name: Inspect two competing app registrations (read-only)
+        shell: bash
+        env:
+          SSH_CONFIG: ${{ runner.temp }}/zomorod-restore/config
+        run: |
+          set -euo pipefail
+          ssh -F "$SSH_CONFIG" saeit-cpanel bash -se <<'REMOTE'
+          set -u
+          echo SELECTOR_APP_METADATA_BEGIN
+          cloudlinux-selector get --json --interpreter python | python3 -c '
+          import json,sys
+          d=json.load(sys.stdin)
+          versions=d.get("available_versions") or {}
+          for ver,meta in versions.items():
+              if not isinstance(meta,dict): continue
+              app=((meta.get("users") or {}).get("zomorod2") or {}).get("applications") or {}
+              for root,info in app.items():
+                  if not (root=="Saeit" or root.endswith("/Saeit")): continue
+                  print("selector_version=",ver)
+                  for k,v in info.items():
+                      if any(x in k.lower() for x in ("env","secret","pass","key","token")):
+                          if isinstance(v,dict): print("selector_"+k+"_keys="+str(sorted(v.keys())))
+                          else: print("selector_"+k+"_present="+str(v is not None))
+                      elif isinstance(v,(str,int,float,bool)) or v is None:
+                          print("selector_"+k+"="+str(v)[:250])
+          '
+          echo SELECTOR_APP_METADATA_END
+          REMOTE
       - name: Remove temporary SSH material
         if: always()
         shell: bash
