@@ -189,6 +189,29 @@ class AdapterTests(unittest.TestCase):
         self.assertFalse(row["publish_authorized"])
         self.assertFalse(row["payment_authorized"])
 
+    def test_django_sqlite_utc_timestamp_is_normalized_without_forgiving_other_naive_formats(self):
+        self.assertEqual(
+            adapter._django_sqlite_utc_timestamp("2026-10-14 12:30:45.123456"),
+            "2026-10-14T12:30:45.123456+00:00",
+        )
+        self.assertEqual(
+            adapter._django_sqlite_utc_timestamp("2026-10-14 12:30:45"),
+            "2026-10-14T12:30:45+00:00",
+        )
+        self.assertEqual(
+            adapter._django_sqlite_utc_timestamp("2026-10-14T12:30:45+04:00"),
+            "2026-10-14T12:30:45+04:00",
+        )
+        # Arbitrarily formatted naive dates must NOT be promoted to UTC.
+        self.assertEqual(
+            adapter._django_sqlite_utc_timestamp("2026-10-14T12:30:45"),
+            "2026-10-14T12:30:45",
+        )
+        self.assertEqual(
+            adapter._django_sqlite_utc_timestamp("2026-13-14 12:30:45"),
+            "2026-13-14 12:30:45",
+        )
+
     def test_invalid_mapping_and_duplicate_rejected(self):
         for value in (True, -1, "1"):
             with self.subTest(value=value):
