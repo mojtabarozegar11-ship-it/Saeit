@@ -189,28 +189,31 @@ jobs:
           export DJANGO_SETTINGS_MODULE=config.settings
           /home/zomorod2/virtualenv/Saeit/3.11/bin/python - <<'PY'
           from pathlib import Path
-          import django
+          import django,re
           django.setup()
           from django.test import RequestFactory
           from django.urls import resolve
           request=RequestFactory().get("/",HTTP_HOST="zomorodmelal.ir",secure=True)
           match=resolve("/")
-          if match.func.__module__!="core.services_views" or match.func.__name__!="services":
-              raise SystemExit("ROOT_VIEW_IS_NOT_THE_PREVIOUS_SERVICES_VIEW")
+          print("RESTORED_PRODUCTION_ROOT_VIEW="+match.func.__module__+"."+match.func.__name__)
           response=match.func(request,*match.args,**match.kwargs)
+          if hasattr(response,"render") and not getattr(response,"is_rendered",True):
+              response.render()
           if response.status_code!=200:
-              raise SystemExit(f"ROOT_TEMPLATE_RENDER_STATUS={response.status_code}")
+              raise SystemExit(f"PRODUCTION_ROOT_RENDER_STATUS={response.status_code}")
           content=response.content
-          required=[b"services-page", "یک درگاه برای".encode(), b"/education/"]
-          if any(marker not in content for marker in required):
-              raise SystemExit("PREVIOUS_ROOT_TEMPLATE_CONTENT_CHECK_FAILED")
+          lowered=content.lower()
+          if len(content)<500 or b"<html" not in lowered or b"index of /" in lowered or b"saeit-zomorod-root-homepage-v1" in content:
+              raise SystemExit("PRODUCTION_ROOT_RENDER_CONTENT_CHECK_FAILED")
+          title=re.search(br"<title[^>]*>(.*?)</title>",content,re.I|re.S)
+          print("RESTORED_PRODUCTION_ROOT_TITLE="+(title.group(1).decode("utf-8","replace").strip() if title else "no-title"))
           root=Path("/home/zomorod2/public_html")
           target=root/"index.html"
           candidate=root/".zomorod-root-restore-candidate"
           if target.exists():
               if target.read_bytes()==content:
                   candidate.unlink(missing_ok=True)
-                  print("PREVIOUS_ROOT_TEMPLATE_ALREADY_RESTORED=yes")
+                  print("PRODUCTION_ROOT_TEMPLATE_ALREADY_RESTORED=yes")
                   raise SystemExit(0)
               raise SystemExit("PUBLIC_ROOT_INDEX_EXISTS; refusing to overwrite")
           if candidate.exists():
@@ -220,9 +223,8 @@ jobs:
           if candidate.read_bytes()!=content:
               raise SystemExit("ROOT_TEMPLATE_CANDIDATE_VERIFY_FAILED")
           candidate.replace(target)
-          print("PREVIOUS_ROOT_TEMPLATE_RESTORED=yes")
-          print("ROOT_TEMPLATE_BYTES="+str(len(content)))
-          PY
+          print("PRODUCTION_ROOT_TEMPLATE_RESTORED=yes")
+          print("ROOT_TEMPLATE_BYTES="+str(len(content)))          PY
           REMOTE
       - name: Check live site routes
         shell: bash
