@@ -54,6 +54,10 @@ jobs:
               raise SystemExit("Education page source is unexpectedly small")
           if "<style>" not in source or "prefers-reduced-motion" not in source:
               raise SystemExit("Self-contained responsive styles are missing")
+          if "saeit-zomorod-education-managed-v2" not in source or source.count('<img class="') < 13:
+              raise SystemExit("Managed page marker or subject photographs are missing")
+          if source.count('class="offer-cta"') != 4 or "border:6px double var(--gold)" not in source:
+              raise SystemExit("Product inquiry links or the thick gold frame are missing")
           print("PAGE_SOURCE_VALIDATION=passed")
           print(f"PAGE_BYTES={len(source.encode('utf-8'))}")
           PY
