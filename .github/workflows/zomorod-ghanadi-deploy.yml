@@ -21,6 +21,8 @@ jobs:
         run: |
           set -euo pipefail
           test -s public/ghanadi/index.html
+          test -s public/ghanadi/.htaccess
+          grep -Fxq 'DirectoryIndex index.html' public/ghanadi/.htaccess
           grep -Fq '<!-- saeit-zomorod-ghanadi-v1 -->' public/ghanadi/index.html
           grep -Fq 'assets/hero.webp' public/ghanadi/index.html
           test -s public/ghanadi/assets/hero.webp
