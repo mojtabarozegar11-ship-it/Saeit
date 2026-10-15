@@ -1,10 +1,14 @@
 {
-  "commit_sha": "1d27a7fab19fda1d2ff8455c4cc38b3c16da7e26",
+  "commit_sha": "9bdee26d2380fc70ed9bc8472eeb3103048b454c",
   "passenger_virtual_env_configured": false,
+  "passenger_launcher_present": true,
+  "passenger_envvar_names": [],
+  "root_app_enabled": true,
   "routes": {
     "https://zomorodmelal.ir/": 200,
     "https://zomorodmelal.ir/admin/": 503,
     "https://zomorodmelal.ir/admin/login/": 503,
     "https://zomorodmelal.ir/amozeshgah/": 200
-  }
+  },
+  "passenger_error_log_lines": []
 }
