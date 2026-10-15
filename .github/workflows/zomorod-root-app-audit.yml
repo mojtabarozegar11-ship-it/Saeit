@@ -142,7 +142,7 @@ jobs:
           test -f .env && echo yes || echo no
           diag="$(mktemp "$HOME/.root-app-diag.XXXXXX")"
           trap 'rm -f -- "$app_json" "$diag"' EXIT
-          python_path="$(sed -nE 's/^[[:space:]]*PassengerPython[[:space:]]+"?([^"[:space:]]+)"?.*/\\1/p' /home/zomorod2/public_html/.htaccess | head -n 1)"
+          python_path="$(awk '$1 == "PassengerPython" { gsub(/"/, "", $2); print $2; exit }' /home/zomorod2/public_html/.htaccess)"
           test -n "$python_path"
           test -x "$python_path"
           echo "PASSENGER_PYTHON_PATH=$python_path"
