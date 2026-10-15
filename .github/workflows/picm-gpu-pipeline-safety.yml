@@ -23,7 +23,7 @@ jobs:
       - name: Validate isolated Python syntax
         run: |
           python -m py_compile ops/picm-gpu/story_pipeline.py ops/picm-gpu/story_comfy.py ops/picm-gpu/story_assemble.py
-      - name: Prove no movie can be fabricated without GPU
+      - name: Install local-only FFmpeg/FFprobe for actual MP4 muxer CI\n        run: |\n          sudo apt-get update -qq\n          sudo apt-get install -y --no-install-recommends ffmpeg\n          ffmpeg -version | head -1\n          ffprobe -version | head -1\n      - name: Prove no movie can be fabricated without GPU
         run: |
           python -m unittest discover -s tests -p 'test_picm_story_pipeline.py' -v
           python -m unittest discover -s tests -p 'test_picm_story_comfy.py' -v
