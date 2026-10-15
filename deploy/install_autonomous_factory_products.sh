@@ -22,6 +22,7 @@ test -d "$ops"
 test -d "$base/private"
 test -f "$repo/scripts/factory_product_maker.py"
 test -f "$repo/scripts/factory_autonomous_portfolio.py"
+test -f "$repo/scripts/factory_evidence_quality.py"
 test -f "$repo/scripts/factory_first_product_pilot.py"
 test -f "$repo/scripts/factory_vps_product_cycle.py"
 test -f "$repo/product_recipes/farm_enterprise_economics/test_calculator.py"
@@ -47,7 +48,7 @@ tar -czf "$ops/backups/autonomous-product-runtime-before-$stamp.tar.gz" \
 chmod 600 "$ops/backups/autonomous-product-runtime-before-$stamp.tar.gz" 2>/dev/null || true
 
 for f in factory_product_maker.py factory_autonomous_portfolio.py \
-         factory_first_product_pilot.py factory_vps_product_cycle.py; do
+         factory_evidence_quality.py factory_first_product_pilot.py factory_vps_product_cycle.py; do
   install -m 600 "$repo/scripts/$f" "$scripts/$f"
 done
 for recipe in farm_enterprise_economics water_budget_economics; do
@@ -55,6 +56,10 @@ for recipe in farm_enterprise_economics water_budget_economics; do
     install -m 600 "$repo/product_recipes/$recipe/$f" "$recipes/$recipe/$f"
   done
 done
+
+# Quality gate must exist and compile BEFORE any production cycle or cron change.
+"$python" -B -c 'import ast, pathlib, sys; [ast.parse(pathlib.Path(x).read_text(encoding="utf-8")) for x in sys.argv[1:]]' \
+  "$scripts/factory_evidence_quality.py" "$scripts/factory_autonomous_portfolio.py" "$scripts/factory_vps_product_cycle.py"
 
 # Product QA is mandatory BEFORE changes to the local scheduler.
 for recipe in farm_enterprise_economics water_budget_economics; do
