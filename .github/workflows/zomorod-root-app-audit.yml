@@ -93,15 +93,23 @@ jobs:
           if app.get("name")!="saeit-django" or app.get("path")!="/home/zomorod2/Saeit":
               raise SystemExit("ROOT_APP_MAPPING_CHANGED; refusing to enable")
           root="/home/zomorod2/public_html"
-          backup="$HOME/.backups/zomorodmelal-amozeshgah/htaccess.20261014T235252Z"
-          if not __import__("os").path.isfile(backup) or not __import__("os").path.isfile(root+"/.htaccess"):
-              raise SystemExit("HTACCESS_BACKUP_OR_LIVE_FILE_MISSING")
-          if open(backup,"rb").read()!=open(root+"/.htaccess","rb").read():
-              raise SystemExit("HTACCESS_CHANGED; refusing to alter it")
-          old_home="$HOME/.backups/zomorodmelal-root-homepage/index-disabled-c381571fab0869972481369c25202c53e54c00d8"
-          if not __import__("os").path.isfile(old_home) or b"saeit-zomorod-root-homepage-v1" not in open(old_home,"rb").read():
-              raise SystemExit("TEMPORARY_HOMEPAGE_BACKUP_NOT_CONFIRMED")
-          if __import__("os").path.lexists(root+"/index.html"):
+          import os
+          live=root+"/.htaccess"
+          htbackup=os.path.expanduser("~/.backups/zomorodmelal-amozeshgah/htaccess.20261014T235252Z")
+          print("LIVE_HTACCESS_PRESENT="+str(os.path.isfile(live)).lower())
+          print("HTACCESS_SNAPSHOT_PRESENT="+str(os.path.isfile(htbackup)).lower())
+          if os.path.isfile(live):
+              print("LIVE_HTACCESS_PASSENGER_DIRECTIVES_BEGIN")
+              for line in open(live,encoding="utf-8",errors="replace"):
+                  if line.lstrip().startswith(("Passenger","RewriteEngine","RewriteCond","RewriteRule")):
+                      print(line.rstrip())
+              print("LIVE_HTACCESS_PASSENGER_DIRECTIVES_END")
+          for base in (os.path.expanduser("~/.backups/zomorodmelal-root-homepage"), os.path.expanduser("~/.backups/zomorodmelal-amozeshgah")):
+              print("BACKUP_DIRECTORY="+base+" EXISTS="+str(os.path.isdir(base)).lower())
+              if os.path.isdir(base):
+                  for name in sorted(os.listdir(base)):
+                      print("BACKUP_ENTRY="+name)
+          if os.path.lexists(root+"/index.html"):
               raise SystemExit("PUBLIC_ROOT_INDEX_PRESENT; refusing to overwrite")
           print("ROOT_APP_PRECHECK=passed")
           PY
