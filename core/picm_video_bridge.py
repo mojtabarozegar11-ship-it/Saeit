@@ -283,6 +283,8 @@ def video_worker_finish(request, ident):
     if request.META.get("CONTENT_LENGTH", "0").isdigit() and int(
             request.META.get("CONTENT_LENGTH", "0")) > 4096:
         return HttpResponse(status=413)
+    if len(request.body) > 4096:
+        return HttpResponse(status=413)
     try:
         receipt = json.loads(request.body)
     except (ValueError, TypeError):
@@ -337,7 +339,13 @@ def video_owner_status(request, ident):
         raise Http404
     with locked() as root:
         s = _state(root, ident)
-        if s is None or s["owner"] != str(request.user.pk):
+        if s is None:
+            stage = _valid_stage(root, root / (ident + ".stage.json"), time.time())
+            if stage is None or str(stage["user_id"]) != str(request.user.pk):
+                raise Http404
+            return _nocache(JsonResponse({"state": "staged_awaiting_gpu",
+                                          "video_url": None}))
+        if s["owner"] != str(request.user.pk):
             raise Http404
         if s["state"] == "done" and time.time() - s["completed"] >= MOVIE_TTL:
             return _nocache(JsonResponse({"state": "expired"}, status=410))
