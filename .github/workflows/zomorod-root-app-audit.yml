@@ -153,7 +153,8 @@ jobs:
             "$python_path" -m pip freeze >"$backup"
             echo "PREVIOUS_PYTHON_PACKAGES_BACKUP=$backup"
             "$python_path" -m pip install --disable-pip-version-check --no-input -r /home/zomorod2/Saeit/requirements.txt
-            echo "DJANGO_DEPENDENCIES_INSTALLED=yes"
+            "$python_path" -m pip install --disable-pip-version-check --no-input "Pillow>=10,<12"
+            echo "DJANGO_AND_IMAGE_DEPENDENCIES_INSTALLED=yes"
           fi
           echo "PASSENGER_PYTHON_PATH=$python_path"
           "$python_path" -c 'import django; print("DJANGO_VERSION="+django.get_version())'
