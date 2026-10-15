@@ -225,7 +225,7 @@ class SelfDirectedWorkTests(unittest.TestCase):
         old_count,old_age=(casework.MAX_RETAINED_EDUCATIONAL_CASES,
                            casework.MIN_PROTECTED_AGE_HOURS)
         casework.MAX_RETAINED_EDUCATIONAL_CASES=2
-        casework.MIN_PROTECTED_AGE_HOURS=1
+        casework.MIN_PROTECTED_AGE_HOURS=2
         try:
             casework.build_hour(self.root,3000)
             folder=self.root/"autonomous_education"
