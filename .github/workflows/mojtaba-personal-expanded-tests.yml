@@ -1,0 +1,28 @@
+name: Mojtaba expanded personal site content tests
+on:
+  push:
+    branches:
+      - feat/mojtaba-personal-rich-content-20261016-v1
+    paths:
+      - content/mojtaba_personal_expanded_library_20261016.json
+      - scripts/mojtaba_personal_expanded_library_deploy.py
+      - tests/test_mojtaba_personal_expanded_library.py
+      - .github/workflows/mojtaba-personal-expanded-*.yml
+  pull_request:
+    paths:
+      - content/mojtaba_personal_expanded_library_20261016.json
+      - scripts/mojtaba_personal_expanded_library_deploy.py
+      - tests/test_mojtaba_personal_expanded_library.py
+      - .github/workflows/mojtaba-personal-expanded-*.yml
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile additive deployment script
+        run: python3 -m py_compile scripts/mojtaba_personal_expanded_library_deploy.py
+      - name: Test protected content scope, rollback and substantive articles
+        run: python3 -m unittest discover -s tests -p 'test_mojtaba_personal_expanded_library.py' -v
