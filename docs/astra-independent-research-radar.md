@@ -56,9 +56,9 @@ python3 scripts/astra_independent_research_radar.py \
 - Requires independent competitor study, user research, rights/domain review
   and credible willingness-to-pay signals **before** commercial promotion.
 
-The GitHub Actions workflow is a no-secret, no-network offline test only.
+The GitHub Actions workflow uses no secrets: it runs offline unit tests and a separate public-source network smoke test, entirely on disposable GitHub runners.
 It is deliberately NOT attached to production or the private VPS clock.
-The fixed public sources may be stale, unavailable, or change formats:
+Live reports are only kept in the runner's temporary directory, not uploaded as public artifacts. The fixed public sources may be stale, unavailable, or change formats:
 failures are reported instead of fabricating research.
 
 Future rollout requires a **separate authorized isolated VPS/runner deployment**,
