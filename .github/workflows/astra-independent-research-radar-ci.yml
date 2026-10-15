@@ -79,3 +79,29 @@ jobs:
               raise SystemExit("Neither official public RSS feed was reachable")
           PY
           echo ASTRA_VPS_AND_STORE_MUTATIONS=0
+
+      - name: Diagnose public feed structure without persisting or publishing articles
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import importlib.util
+          from xml.etree import ElementTree as ET
+          spec = importlib.util.spec_from_file_location(
+              "radar", "scripts/astra_independent_research_radar.py")
+          radar = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(radar)
+          for name in sorted(radar.FEEDS):
+              raw = radar.fetch_feed(name)
+              root = ET.fromstring(raw)
+              items = root.findall("./channel/item")
+              print("FEED_DIAG_NAME=", name, "ROOT=", root.tag,
+                    "RSS_ITEMS=", len(items))
+              for row in items[:2]:
+                  link = row.findtext("link") or ""
+                  date = row.findtext("pubDate") or ""
+                  print("FEED_DIAG_TITLE=", (row.findtext("title") or "")[:70])
+                  print("FEED_DIAG_DATE=", date[:80],
+                        "PARSED=", str(radar._date(date)))
+                  print("FEED_DIAG_LINK_SCHEME=", link[:6],
+                        "VALID=", radar._article_url(link))
+          PY
