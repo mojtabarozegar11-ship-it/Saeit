@@ -1049,3 +1049,38 @@ class EducationCertificate(T):
     title = models.CharField(max_length=300)
     verification_note = models.TextField(blank=True)
     issued_at = models.DateTimeField(auto_now_add=True)
+
+
+# Astra stage 4 -> 5 research records. The schema carries *unverified*
+# provenance, not manufacturing, commercial or payment authorization.
+class FactoryQueueItem(T):
+    key = models.CharField(max_length=100, unique=True)
+    kind = models.CharField(max_length=24, default="discovery")
+    status = models.CharField(max_length=32, default="RESEARCH_REQUIRED")
+    priority_score = models.DecimalField(
+        max_digits=5, decimal_places=2, null=True, blank=True
+    )
+    evidence_verified_independently = models.BooleanField(default=False)
+    build_authorized = models.BooleanField(default=False)
+    publish_authorized = models.BooleanField(default=False)
+    payment_authorized = models.BooleanField(default=False)
+
+    class Meta:
+        indexes = [
+            models.Index(
+                fields=["kind", "status", "id"], name="astra_queue_stage_idx"
+            ),
+        ]
+
+
+class DiscoverySnapshot(T):
+    # The source record is provisional. Source hashes do NOT verify demand.
+    hypothesis = models.ForeignKey(
+        FactoryQueueItem,
+        on_delete=models.PROTECT,
+        related_name="discovery_snapshots",
+    )
+    url = models.URLField(max_length=2048)
+    content_hash = models.CharField(max_length=64)
+    retrieved_at = models.DateTimeField()
+    record = models.JSONField(default=dict)
