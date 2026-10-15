@@ -86,7 +86,7 @@ jobs:
           WORK="$RUNNER_TEMP/picm-ssh"
           timeout 40s ssh -F "$WORK/config" picm-host 'test "$(id -un)" = zomorod2 && test -f /home/zomorod2/Saeit-staging/core/picm_views.py && test -f /home/zomorod2/mojplaywin.com/passenger_wsgi.py'
           timeout 20s ssh -F "$WORK/config" picm-host "install -d -m 700 /home/zomorod2/.mojplaywin-picm-login-$GITHUB_RUN_ID"
-          tar -cf "$RUNNER_TEMP/picm-login.tar" scripts/deploy_picm_login.py core/picm_auth.py templates/picm/login.html templates/picm/index.html
+          tar -cf "$RUNNER_TEMP/picm-login.tar" scripts/deploy_picm_login.py core/picm_auth.py core/picm_views.py templates/picm/login.html templates/picm/index.html
           scp -q -F "$WORK/config" "$RUNNER_TEMP/picm-login.tar" "picm-host:/home/zomorod2/.mojplaywin-picm-login-$GITHUB_RUN_ID/archive.tar"
           timeout 40s ssh -F "$WORK/config" picm-host "tar -xf /home/zomorod2/.mojplaywin-picm-login-$GITHUB_RUN_ID/archive.tar -C /home/zomorod2/.mojplaywin-picm-login-$GITHUB_RUN_ID"
       - name: Install login views, independent routes and templates
@@ -103,12 +103,15 @@ jobs:
           set -Eeuo pipefail
           for i in $(seq 1 12); do
             a="$(curl -sS --max-time 15 -o "$RUNNER_TEMP/picm-auth.html" -w '%{http_code}' https://mojplaywin.com/picm/login/ || true)"
-            b="$(curl -sS --max-time 15 -o "$RUNNER_TEMP/picm-page.html" -w '%{http_code}' https://mojplaywin.com/picm/ || true)"
-            if [[ "$a" == 200 && "$b" == 200 ]] &&
+            b="$(curl -sS --max-time 15 -D "$RUNNER_TEMP/picm-entry.headers" -o /dev/null -w '%{http_code}' https://mojplaywin.com/picm/ || true)"
+            c="$(curl -sS --max-time 15 -D "$RUNNER_TEMP/picm-workspace.headers" -o /dev/null -w '%{http_code}' https://mojplaywin.com/picm/workspace/ || true)"
+            if [[ "$a" == 200 && "$b" == 302 && "$c" == 302 ]] &&
               grep -Fq '<title>ورود به PICM | MojPlayWin</title>' "$RUNNER_TEMP/picm-auth.html" &&
-              grep -Fq 'href="/picm/login/"' "$RUNNER_TEMP/picm-page.html"; then
-              echo PICM_PRIVATE_LOGIN_REAL_HTTP_200
-              echo PICM_IMAGE_STUDIO_REAL_HTTP_200
+              grep -Fiq 'location: /picm/login/' "$RUNNER_TEMP/picm-entry.headers" &&
+              grep -Fiq 'location: /picm/login/' "$RUNNER_TEMP/picm-workspace.headers"; then
+              echo PICM_FIRST_PAGE_LOGIN_HTTP_200
+              echo PICM_ENTRY_REDIRECTS_TO_LOGIN_HTTP_302
+              echo PICM_SECOND_WORKSPACE_REJECTS_UNAUTHENTICATED_HTTP_302
               exit 0
             fi
             sleep 3
@@ -128,4 +131,4 @@ jobs:
           if [[ -f "$RUNNER_TEMP/picm-ssh/config" ]]; then
             ssh -F "$RUNNER_TEMP/picm-ssh/config" picm-host "rm -rf /home/zomorod2/.mojplaywin-picm-login-$GITHUB_RUN_ID" || true
           fi
-          rm -rf -- "$RUNNER_TEMP/picm-ssh" "$RUNNER_TEMP/picm-login.tar" "$RUNNER_TEMP/picm-auth.html" "$RUNNER_TEMP/picm-page.html"
+          rm -rf -- "$RUNNER_TEMP/picm-ssh" "$RUNNER_TEMP/picm-login.tar" "$RUNNER_TEMP/picm-auth.html" "$RUNNER_TEMP/picm-page.html" "$RUNNER_TEMP/picm-entry.headers" "$RUNNER_TEMP/picm-workspace.headers"
