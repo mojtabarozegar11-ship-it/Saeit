@@ -12,7 +12,7 @@ from django.contrib.auth import get_user_model
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 
-from core.models import KnowledgeArticle, Order, Product
+from core.models import KnowledgeArticle, Order, OrderItem, Product
 from mpw_commerce.models import CommerceInvoice
 
 
@@ -138,3 +138,31 @@ class CustomerCheckoutPageTests(TestCase):
                 self.assertFalse(response.json()["can_access_purchased_items"])
                 self.assertEqual(response.json()["download_paths"], [])
         self.assertEqual(Order.objects.count(), 1)
+
+    def test_proven_paid_buyer_receives_only_authenticated_download_path(self):
+        order = Order.objects.create(
+            customer=self.buyer, total=Decimal("7.50"), currency="USD",
+            status="paid",
+        )
+        item = OrderItem.objects.create(
+            order=order, product=self.product, quantity=1,
+            unit_price=self.product.price, currency="USD",
+        )
+        invoice = SimpleNamespace(
+            status=CommerceInvoice.Status.PAID,
+            order=order, network="tron-mainnet", asset="TRX",
+        )
+        with patch("mpw_commerce.checkout_views.CommerceInvoice.objects.select_related") as qs:
+            qs.return_value.filter.return_value.first.return_value = invoice
+            with patch("mpw_commerce.entitlements.can_access_purchased_digital_item",
+                       return_value=True) as entitlement:
+                response = self.client.get(
+                    reverse("mpw_commerce:status", kwargs={"order_id": order.pk}),
+                    secure=True, HTTP_HOST="mojplaywin.com",
+                )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["can_access_purchased_items"])
+        self.assertEqual(response.json()["download_paths"], [
+            reverse("mpw_commerce:download",kwargs={"item_id":item.pk})
+        ])
+        entitlement.assert_called_once_with(item.pk,self.buyer.pk)
