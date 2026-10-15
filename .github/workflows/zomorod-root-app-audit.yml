@@ -119,10 +119,10 @@ jobs:
               required=(b'PassengerAppRoot "/home/zomorod2/Saeit"',b'PassengerBaseURI "/"')
               if not all(item in original for item in required):
                   raise SystemExit("ORIGINAL_HTACCESS_BACKUP_MAPPING_MISMATCH")
-              prefix=("RewriteEngine On\\n"
-                      "RewriteRule ^$ index.html [END]\\n"
-                      "RewriteRule ^amozeshgah/?$ amozeshgah/index.html [END]\\n"
-                      "DirectoryIndex index.html\\n").encode("utf-8")
+              prefix=("RewriteEngine On\n"
+                      "RewriteRule ^$ index.html [END]\n"
+                      "RewriteRule ^amozeshgah/?$ amozeshgah/index.html [END]\n"
+                      "DirectoryIndex index.html\n").encode("utf-8")
               updated=prefix+original
               temp=live+".codex-tmp"
               open(temp,"wb").write(updated)
