@@ -138,6 +138,11 @@ jobs:
                   if os.path.exists(temp): os.unlink(temp)
           atomic(candidate)
           try:
+              # reverse() above imported the original URLconf in this
+              # process. Reload it after atomic replacement, then discard
+              # Django's cached resolver before checking new route.
+              import importlib
+              importlib.reload(importlib.import_module("config.urls"))
               from django.urls import clear_url_caches,reverse
               clear_url_caches()
               from django.core.management import call_command
