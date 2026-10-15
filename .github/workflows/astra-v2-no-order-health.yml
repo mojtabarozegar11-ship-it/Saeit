@@ -1,0 +1,76 @@
+name: Astra V2 No-Order Production Health
+
+on:
+  push:
+    branches: [feature/astra-factory-v2-architecture-20261014]
+    paths: [.github/workflows/astra-v2-no-order-health.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  private-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Read-only verify autonomous private production and cron health
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          tmp="$RUNNER_TEMP/astra-no-order-health"
+          install -d -m 700 "$tmp"
+          trap 'rm -rf -- "$tmp"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$tmp/key"
+          chmod 600 "$tmp/key"
+          ssh-keygen -y -P '' -f "$tmp/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$tmp/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$tmp/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -i "$tmp/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$tmp/known" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=15 githubops@178.239.147.150 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          count="$(crontab -l | grep -F -c ASTRA_V2_PRIVATE_RND_TICK || true)"
+          test "$count" -eq 1
+          root="$HOME/factory-runtime/private/astra-v2-canary-products"
+          active="$HOME/factory-runtime/operations/astra-v2-vps-canary-source"
+          test -d "$root" && test ! -L "$root" && test -f "$root/queue.sqlite3"
+          test -f "$active/scripts/astra_v2_self_directed_education.py"
+          python3 - "$root" "$active" <<'PY'
+          import pathlib,sys,time,json,zipfile,sqlite3,datetime
+          root=pathlib.Path(sys.argv[1])
+          stage=pathlib.Path(sys.argv[2])
+          folder=root/"autonomous_education"
+          assert folder.is_dir() and not folder.is_symlink()
+          editions=list(folder.glob("case-*.zip"))
+          assert editions, "not a single no-order educational unit"
+          latest=max(editions,key=lambda p:p.stat().st_mtime)
+          with zipfile.ZipFile(latest) as z:
+            assert z.testzip() is None
+            item=json.loads(z.read("astra_case/CASE.json"))
+            assert item["customer_order_required"] is False
+            assert item["publication_allowed"] is False
+            assert item["actual_market_data"] is False
+            assert len(item["questions"]) == 3
+          conn=sqlite3.connect((root/"queue.sqlite3").resolve().as_uri()+"?mode=ro",
+                               uri=True,timeout=10)
+          conn.execute("PRAGMA query_only=ON")
+          families={v[0] for v in conn.execute(
+              "SELECT DISTINCT builder FROM jobs WHERE stage='PRIVATE_QA_PASSED'")}
+          assert {"orchard_decision_audit_v2","farm_procurement_audit_v1"}.issubset(families)
+          log=root/"private-tick.log"
+          age=int(time.time()-log.stat().st_mtime) if log.exists() else None
+          print("ASTRA_NO_ORDER_PRIVATE_CRON_ROWS=1")
+          print("ASTRA_NO_ORDER_CASE_EDITIONS="+str(len(editions)))
+          print("ASTRA_NO_ORDER_LAST_SUBJECT="+item["subject"])
+          print("ASTRA_NO_ORDER_LAST_EDITION="+str(item["edition_number"]))
+          print("ASTRA_NO_ORDER_CRON_LOG_AGE_SECONDS="+str(age))
+          print("ASTRA_NO_ORDER_CASE_STANDALONE_SELFTEST_BUNDLED=true")
+          print("ASTRA_NO_ORDER_CUSTOMER_REQUEST_DEPENDENCY=false")
+          print("ASTRA_NO_ORDER_MARKET_QUALIFICATION_VERIFIED=false")
+          print("ASTRA_NO_ORDER_PUBLIC_LISTINGS_CREATED=0")
+          print("ASTRA_NO_ORDER_OBSERVED_UTC="+datetime.datetime.now(datetime.timezone.utc).isoformat())
+          PY
+          REMOTE
