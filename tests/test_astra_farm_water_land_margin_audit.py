@@ -41,6 +41,59 @@ class WaterLandAuditTests(unittest.TestCase):
         self.assertEqual(result["allocated_land_hectares"],"4.0000")
         self.assertTrue(result["optimal_for_given_linear_model"])
 
+    def test_water_frontier_exact_hand_calculation_and_intervals(self):
+        report = eng.audit(simple())
+        frontier = report["water_sensitivity_frontier"]
+        self.assertEqual(len(frontier), 5)
+        self.assertEqual([x["water_budget_m3"] for x in frontier],
+                         ["0.00", "2.50", "5.00", "7.50", "10.00"])
+        self.assertEqual([x["optimal_gross_margin"] for x in frontier],
+                         ["0.00", "12.50", "20.75", "22.63", "24.50"])
+        self.assertEqual(
+            [x["average_incremental_gross_margin_per_m3"] for x in frontier],
+            [None, "5.000000", "3.300000", "0.750000", "0.750000"])
+        self.assertEqual(frontier[-1]["optimal_gross_margin"],
+                         report["baseline"]["total_gross_margin"])
+        self.assertEqual(frontier[0]["added_water_allowance_m3"], None)
+        self.assertTrue(all(x["market_water_price_or_dual_shadow_price"] is None
+                            and x["farm_result_verified"] is False
+                            for x in frontier))
+
+    def test_frontier_monotonic_margins_and_diminishing_interval_gains(self):
+        for p in (sample(), simple()):
+            frontier = eng.audit(p)["water_sensitivity_frontier"]
+            amounts = [D(row["optimal_gross_margin"]) for row in frontier]
+            self.assertTrue(all(b >= a for a, b in zip(amounts, amounts[1:])))
+            slopes = [D(row["average_incremental_gross_margin_per_m3"])
+                      for row in frontier[1:]]
+            self.assertTrue(all(b <= a + D("0.000002")
+                                for a, b in zip(slopes, slopes[1:])))
+
+    def test_zero_available_water_has_undefined_interval_value(self):
+        payload = sample()
+        payload["water_m3_available"] = "0"
+        frontier = eng.audit(payload)["water_sensitivity_frontier"]
+        self.assertEqual(len(frontier), 5)
+        self.assertTrue(all(x["optimal_gross_margin"] == "0.00"
+                            and x["average_incremental_gross_margin_per_m3"] is None
+                            for x in frontier))
+
+    def test_report_rejects_market_value_promotion(self):
+        doc = eng.audit(sample())
+        doc["water_sensitivity_frontier"][1][
+            "market_water_price_or_dual_shadow_price"] = "1234.00"
+        with self.assertRaisesRegex(ValueError, "cannot claim verification"):
+            render.render(doc)
+
+    def test_report_explains_interval_not_market_water_price(self):
+        report = eng.audit(sample())
+        html = render.render(report)
+        self.assertIn("Water allowance sensitivity", html)
+        self.assertIn("NOT a market water price", html)
+        self.assertIn(
+            "SENSITIVITY_INTERVAL_AVERAGE_NOT_MARKET_PRICE_OR_INSTANTANEOUS_DUAL",
+            report["warnings"])
+
     def test_drought_economic_loss_and_reallocation(self):
         report=eng.audit(simple())
         self.assertEqual(report["water_scarcity"]["total_gross_margin"],"20.75")
