@@ -39,6 +39,18 @@ def report_html(doc):
           '<div class="metric"><small>Currency / input unit</small><strong>'+x(str(doc["currency"]))+' / '+x(str(doc["unit"]))+'</strong></div>',
           '<div class="metric"><small>Usable quantity requested</small><strong>'+x(str(doc["net_units_required"]))+'</strong></div>',
           '<div class="metric"><small>Delivery deadline</small><strong>'+x(str(doc["deadline_days"]))+' days</strong></div></div>']
+    mode=doc.get("declared_spec_comparison_mode","legacy_spec_comparability_unassessed")
+    if mode=="buyer_supplied_metadata_not_independently_authenticated":
+        html.append('<div class="notice"><strong>Buyer-declared comparability gate:</strong> '
+            'product specification '+x(str(doc.get("buyer_required_product_spec_ref")))+
+            '; quote evaluation date '+x(str(doc.get("as_of_date_operator_supplied")))+
+            '. Inconsistent, expired, future-dated or undocumented quotes are excluded '
+            'from the arithmetic eligible shortlist. Supplier identities, quote documents '
+            'and product equivalence have NOT been independently verified.</div>')
+    else:
+        html.append('<div class="notice"><strong>Legacy comparison mode:</strong> '
+            'product specification equivalence and quote validity dates were NOT checked. '
+            'Do not treat the arithmetic lowest offer as a comparable supplier recommendation.</div>')
     for key in ("base","adverse"):
         data=doc["scenarios"][key]
         html.append('<section class="card"><h2>'+x(key.title())+' scenario</h2>')
