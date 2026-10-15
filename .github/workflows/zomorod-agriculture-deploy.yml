@@ -124,9 +124,11 @@ jobs:
           expected="$1"; sha="$2"
           root=/home/zomorod2/public_html; target="$root/agriculture"
           stage="$root/.zomorod-agriculture-stage-$sha"
+          backup="$HOME/.backups/zomorodmelal-agriculture/agriculture-$sha"
           actual="$(cd "$stage" && find . -type f -name index.html -print0 | sort -z | xargs -0 sha256sum | awk '{print $1}' | sha256sum | awk '{print $1}')"
           test "$actual" = "$expected"
           test -z "$(find "$stage" -type l -print -quit)"
+          test "$(find "$stage" -type f -name index.html | wc -l)" -eq 14
           created=0
           rollback_on_error() {
             rc=$?
