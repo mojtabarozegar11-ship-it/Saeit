@@ -63,7 +63,7 @@ jobs:
       - name: Check Python Selector, Passenger, and LSWSGI metadata (read only)
         shell: bash
         env:
-          SSH_CONFIG: \${{ runner.temp }}/zomorod-restore/config
+          SSH_CONFIG: ${{ runner.temp }}/zomorod-restore/config
         run: |
           set -euo pipefail
           ssh -F "$SSH_CONFIG" saeit-cpanel bash -se <<'REMOTE'
