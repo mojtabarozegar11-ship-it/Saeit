@@ -7,6 +7,11 @@ on:
       - core/models.py
       - core/migrations/0049_astra_stage45_research_queue.py
       - core/tests/test_astra_stage45_schema.py
+      - scripts/astra_opportunity_selector.py
+      - scripts/astra_research_evidence_adapter.py
+      - scripts/astra_stage45_0049_integration_probe.py
+      - tests/test_astra_opportunity_selector.py
+      - tests/test_astra_research_evidence_adapter.py
       - .github/workflows/astra-stage45-0049-disposable-ci.yml
   pull_request:
     branches: [factory/staging-reconciliation-20261008]
@@ -14,6 +19,11 @@ on:
       - core/models.py
       - core/migrations/0049_astra_stage45_research_queue.py
       - core/tests/test_astra_stage45_schema.py
+      - scripts/astra_opportunity_selector.py
+      - scripts/astra_research_evidence_adapter.py
+      - scripts/astra_stage45_0049_integration_probe.py
+      - tests/test_astra_opportunity_selector.py
+      - tests/test_astra_research_evidence_adapter.py
       - .github/workflows/astra-stage45-0049-disposable-ci.yml
 
 permissions:
@@ -71,6 +81,18 @@ jobs:
           set -euo pipefail
           export DATABASE_URL="sqlite:///$RUNNER_TEMP/astra-0049-ephemeral.sqlite3"
           python -m pytest -q core/tests/test_astra_stage45_schema.py
+      - name: Regression suite for carried-forward offline selection and evidence bridge
+        run: |
+          set -euo pipefail
+          python -m unittest discover -s tests -p 'test_astra_opportunity_selector.py' -v
+          python -m unittest discover -s tests -p 'test_astra_research_evidence_adapter.py' -v
+      - name: Verify Django 0049 records feed selector via strictly read-only SQLite
+        env:
+          ASTRA_0049_SYNTHETIC_PROOF: '1'
+        run: |
+          set -euo pipefail
+          export DATABASE_URL="sqlite:///$RUNNER_TEMP/astra-0049-ephemeral.sqlite3"
+          python manage.py shell -c 'from scripts.astra_stage45_0049_integration_probe import run; run()'
       - name: Confirm no VPS credentials or services used
         run: |
           echo ASTRA_0049_VPS_CONNECTIONS=0
