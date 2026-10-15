@@ -374,6 +374,8 @@ jobs:
           urls=(
             "https://zomorodmelal.ir/"
             "https://www.zomorodmelal.ir/"
+            "https://zomorodmelal.ir/admin/"
+            "https://zomorodmelal.ir/admin/login/"
             "https://zomorodmelal.ir/amozeshgah/"
           )
           failures=0
@@ -407,6 +409,28 @@ jobs:
             exit 1
           fi
           echo "PUBLIC_ROUTE_SMOKE_TESTS=passed"
+      - name: Inspect Passenger admin errors
+        if: always()
+        shell: bash
+        env:
+          SSH_CONFIG: ${{ runner.temp }}/zomorod-restore/config
+        run: |
+          set -euo pipefail
+          ssh -F "$SSH_CONFIG" saeit-cpanel bash -se <<'REMOTE'
+          set +e
+          echo "PASSENGER_ADMIN_ERROR_LOGS_BEGIN"
+          for path in /home/zomorod2/public_html/stderr.log /home/zomorod2/Saeit/stderr.log /home/zomorod2/logs/error_log /home/zomorod2/logs/zomorodmelal.ir-ssl_log; do
+            if test -f "$path"; then
+              echo "LOG_BEGIN=$path"
+              tail -n 100 "$path" | sed -E 's/(SECRET_KEY|PASSWORD|TOKEN|API_KEY|PRIVATE_KEY)([^=]*=)[^[:space:]]+/\\1\\2[redacted]/Ig'
+              echo "LOG_END=$path"
+            fi
+          done
+          echo "PASSENGER_UAPI_FUNCTIONS_BEGIN"
+          uapi --list PassengerApps 2>&1 | head -n 100
+          echo "PASSENGER_UAPI_FUNCTIONS_END"
+          echo "PASSENGER_ADMIN_ERROR_LOGS_END"
+          REMOTE
       - name: Remove temporary SSH material
         if: always()
         shell: bash
