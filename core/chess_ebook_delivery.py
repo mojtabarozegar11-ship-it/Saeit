@@ -14,11 +14,11 @@ from django.views.decorators.http import require_GET
 from .models import LedgerEntry, Order, OrderItem, PaymentIntent, PaymentWebhookEvent, Product
 
 BOOK_PRODUCT_ID = "mojplaywin-chess-improvement-2026"
-PDF_PATH = Path("/home/zomorod2/MojPlayWin_Private_Assets/chess-improvement-2026/MojPlayWin_Science_and_Practice_of_Chess_Improvement.pdf")
-EXPECTED_SHA256 = "d284d559bfac931cffe11e97561ac442d63dae5d8eda4bc04e84dd2c26022a1b"
-EXPECTED_BYTES = 432386
+PDF_PATH = Path("/home/zomorod2/MojPlayWin_Private_Assets/store/chess-improvement/MojPlayWin_Chess_Grandmaster_Final_Covered_2026.pdf")
+EXPECTED_SHA256 = "3837fc3cb21ed1a2e7c33e0db8f8e10d158583309b02b97d4d674d25a147207a"
+EXPECTED_BYTES = 3631972
 EXPECTED_PRICE = "7.50"
-DOWNLOAD_NAME = "The_Science_and_Practice_of_Chess_Improvement.pdf"
+DOWNLOAD_NAME = "MojPlayWin_Chess_Grandmaster_Final_Covered_2026.pdf"
 
 
 def has_verified_purchase(user, order_id):
