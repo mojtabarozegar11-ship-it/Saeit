@@ -104,6 +104,39 @@ jobs:
           done
           echo "CURRENT_ENTRYPOINT_AUDIT_FINISHED=yes"
           REMOTE
+      - name: Inspect active LSWSGI process and runtime variables (read-only)
+        shell: bash
+        env:
+          SSH_CONFIG: ${{ runner.temp }}/zomorod-restore/config
+        run: |
+          set -euo pipefail
+          ssh -F "$SSH_CONFIG" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          python3 - <<'PY'
+          import os,pathlib
+          uid=os.getuid()
+          print("ACTIVE_LSWSGI_PROCESS_BEGIN")
+          for proc in pathlib.Path("/proc").iterdir():
+              if not proc.name.isdigit(): continue
+              try:
+                  if proc.stat().st_uid!=uid: continue
+                  cmd=(proc/"cmdline").read_bytes().replace(b"\0",b" ").decode("utf8","replace")
+                  if not any(k in cmd for k in ("/lswsgi","lswsgi_wrapper")): continue
+                  print("PROC_PID="+proc.name+" CMD_PREFIX="+cmd[:240])
+                  try: print("PROC_CWD="+str((proc/"cwd").resolve())[:180])
+                  except OSError: pass
+                  try:
+                      environ=(proc/"environ").read_bytes().split(b"\0")
+                      allowed={"VIRTUAL_ENV","LSWSGI_BIN","WSGI_ROOT","LS_PYTHONBIN","PYTHONHOME","SCRIPT_FILENAME","LSWSGI_SCRIPT"}
+                      for pair in environ:
+                          k,sep,v=pair.partition(b"=")
+                          if sep and k.decode("ascii","ignore") in allowed:
+                              print("PROC_ENV_"+k.decode("ascii")+"="+v.decode("utf8","replace")[:220])
+                  except OSError: pass
+              except (OSError,PermissionError): continue
+          print("ACTIVE_LSWSGI_PROCESS_END")
+          PY
+          REMOTE
       - name: Identify the short 200 response without credentials (read-only)
         shell: bash
         run: |
