@@ -293,3 +293,190 @@ def picm_worker_health(request):
     response = JsonResponse({"ready": True, "engine": "private-vps-polling"})
     response["Cache-Control"] = "no-store"
     return response
+
+
+# Photo-based PICM Pro input staging. No worker is allowed to claim staged jobs:
+# video, image-to-image and true 8K detail upscaling require a separate GPU engine.
+PICM_REFERENCE_MAX_BYTES = 6 * 1024 * 1024
+PICM_REFERENCE_MAX_DIMENSION = 8192
+PICM_REFERENCE_MAX_PIXELS = 24_000_000
+PICM_REFERENCE_TTL_SECONDS = 86400
+PICM_REFERENCE_ALLOWED_MODES = frozenset(("image_edit", "image_video", "upscale_8k"))
+
+
+def _reference_dimensions(data):
+    """Read bounded PNG/JPEG headers without executing image decoders on cPanel."""
+    if len(data) >= 24 and data[:8] == b"\x89PNG\r\n\x1a\n":
+        if data[12:16] != b"IHDR" or struct.unpack(">I", data[8:12])[0] != 13:
+            return None
+        width, height = struct.unpack(">II", data[16:24])
+        return "png", width, height
+    if not data.startswith(b"\xff\xd8\xff"):
+        return None
+    offset = 2
+    # Walk JPEG markers to read the real SOF dimensions; never trust extensions.
+    while offset + 4 < len(data):
+        if data[offset] != 0xFF:
+            return None
+        while offset < len(data) and data[offset] == 0xFF:
+            offset += 1
+        if offset >= len(data):
+            return None
+        marker = data[offset]
+        offset += 1
+        if marker in (0xD8, 0xD9) or 0xD0 <= marker <= 0xD7:
+            continue
+        if marker == 0xDA:
+            return None  # JPEG scan before SOF is malformed
+        if offset + 2 > len(data):
+            return None
+        size = struct.unpack(">H", data[offset:offset + 2])[0]
+        if size < 2 or offset + size > len(data):
+            return None
+        if marker in (0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7,
+                      0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF):
+            if size < 7:
+                return None
+            height, width = struct.unpack(">HH", data[offset + 3:offset + 7])
+            return "jpeg", width, height
+        offset += size
+    return None
+
+
+def _clean_expired_staging(root, now):
+    # Only PICM reference names, never historic production jobs or other files.
+    for metadata_path in root.glob("*.stage.json"):
+        if metadata_path.is_symlink() or not UUID_RE.fullmatch(metadata_path.name[:32]):
+            continue
+        if metadata_path.name != metadata_path.name[:32] + ".stage.json":
+            continue
+        try:
+            record = json.loads(metadata_path.read_text(encoding="utf-8"))
+            if now - float(record["created"]) < PICM_REFERENCE_TTL_SECONDS:
+                continue
+            image_path = root / (metadata_path.name[:32] + ".input")
+            if image_path.is_file() and not image_path.is_symlink():
+                image_path.unlink()
+            metadata_path.unlink()
+        except (OSError, ValueError, KeyError, TypeError):
+            continue
+
+
+@never_cache
+@require_POST
+def picm_reference_stage(request):
+    """Accept a private owner-scoped image; do NOT promise an unavailable GPU render."""
+    if not request.user.is_authenticated:
+        return unauthenticated()
+    if request.META.get("CONTENT_LENGTH", "").isdigit():
+        if int(request.META["CONTENT_LENGTH"]) > PICM_REFERENCE_MAX_BYTES + 65536:
+            return JsonResponse({"error": "reference_too_large"}, status=413)
+    mode = request.POST.get("mode", "")
+    prompt = request.POST.get("prompt", "")
+    if mode not in PICM_REFERENCE_ALLOWED_MODES:
+        return JsonResponse({"error": "invalid_mode"}, status=400)
+    if not isinstance(prompt, str) or len(prompt) > 580:
+        return JsonResponse({"error": "invalid_prompt"}, status=400)
+    if mode in ("image_edit", "image_video") and len(prompt.strip()) < 4:
+        return JsonResponse({"error": "prompt_required"}, status=400)
+    if mode == "upscale_8k" and prompt.strip():
+        return JsonResponse({"error": "upscale_does_not_take_prompt"}, status=400)
+    image = request.FILES.get("photo")
+    if image is None:
+        return JsonResponse({"error": "reference_photo_required"}, status=400)
+    if image.size < 128 or image.size > PICM_REFERENCE_MAX_BYTES:
+        return JsonResponse({"error": "invalid_reference_size"}, status=413)
+    # Read only a bounded amount; never derive a server path from uploaded filename.
+    raw = image.read(PICM_REFERENCE_MAX_BYTES + 1)
+    if len(raw) != image.size or len(raw) > PICM_REFERENCE_MAX_BYTES:
+        return JsonResponse({"error": "invalid_reference_size"}, status=413)
+    dimensions = _reference_dimensions(raw)
+    if dimensions is None:
+        return JsonResponse({"error": "unsupported_reference_file"}, status=415)
+    kind, width, height = dimensions
+    if (width < 128 or height < 128
+            or max(width, height) > PICM_REFERENCE_MAX_DIMENSION
+            or width * height > PICM_REFERENCE_MAX_PIXELS):
+        return JsonResponse({"error": "invalid_reference_dimensions"}, status=422)
+    now = time.time()
+    with locked() as root:
+        _clean_expired_staging(root, now)
+        staged = []
+        for path in root.glob("*.stage.json"):
+            if path.is_symlink():
+                continue
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+            except (ValueError, OSError):
+                continue
+            if data.get("user_id") == request.user.pk:
+                staged.append(data)
+        if len(staged) >= 3:
+            return JsonResponse({"error": "photo_limit_reached"}, status=429)
+        ident = uuid4().hex
+        filename = root / (ident + ".input")
+        fd, tempname = tempfile.mkstemp(dir=root, prefix=".picm-reference-", suffix=".tmp")
+        try:
+            os.fchmod(fd, 0o600)
+            with os.fdopen(fd, "wb") as dest:
+                dest.write(raw)
+                dest.flush()
+                os.fsync(dest.fileno())
+            os.replace(tempname, filename)
+        finally:
+            if os.path.exists(tempname):
+                os.unlink(tempname)
+        metadata = {
+            "id": ident, "mode": mode, "prompt": prompt.strip(),
+            "user_id": request.user.pk, "created": now,
+            "format": kind, "width": width, "height": height,
+            "state": "staged_awaiting_gpu",
+        }
+        metadata_path = root / (ident + ".stage.json")
+        try:
+            fd, tempname = tempfile.mkstemp(dir=root, prefix=".picm-stage-", suffix=".tmp")
+            try:
+                os.fchmod(fd, 0o600)
+                with os.fdopen(fd, "w", encoding="utf-8") as dest:
+                    json.dump(metadata, dest, ensure_ascii=False)
+                    dest.flush()
+                    os.fsync(dest.fileno())
+                os.replace(tempname, metadata_path)
+            finally:
+                if os.path.exists(tempname):
+                    os.unlink(tempname)
+        except Exception:
+            filename.unlink(missing_ok=True)
+            raise
+    result = JsonResponse({
+        "id": ident, "state": "staged_awaiting_gpu",
+        "message": "Reference received privately. The selected GPU model is not yet connected.",
+        "mode": mode, "width": width, "height": height,
+        "expires_in_seconds": PICM_REFERENCE_TTL_SECONDS,
+    }, status=202)
+    result["Cache-Control"] = "no-store"
+    return result
+
+
+@never_cache
+@require_GET
+def picm_reference_status(request, ident):
+    """Only the image owner can view its preparation state."""
+    if not request.user.is_authenticated:
+        return unauthenticated()
+    if not UUID_RE.fullmatch(ident):
+        raise Http404
+    with locked() as root:
+        path = root / (ident + ".stage.json")
+        if not path.is_file() or path.is_symlink():
+            raise Http404
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if data.get("user_id") != request.user.pk:
+            raise Http404
+        if time.time() - float(data["created"]) >= PICM_REFERENCE_TTL_SECONDS:
+            return JsonResponse({"state": "expired"}, status=410)
+        result = JsonResponse({"id": ident, "state": data["state"],
+                               "mode": data["mode"], "width": data["width"],
+                               "height": data["height"]})
+        result["Cache-Control"] = "no-store"
+        return result
