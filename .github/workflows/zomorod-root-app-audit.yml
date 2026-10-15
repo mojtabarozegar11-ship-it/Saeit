@@ -231,8 +231,15 @@ jobs:
           from pathlib import Path
           import django,re
           django.setup()
-          from django.test import RequestFactory
+          from django.test import Client,RequestFactory
           from django.urls import resolve
+          client=Client(raise_request_exception=False)
+          admin=client.get("/admin/",HTTP_HOST="zomorodmelal.ir",secure=True)
+          print("LOCAL_DJANGO_ADMIN_STATUS="+str(admin.status_code)+" REDIRECT="+str(admin.get("Location","")))
+          login=client.get("/admin/login/",HTTP_HOST="zomorodmelal.ir",secure=True)
+          print("LOCAL_DJANGO_ADMIN_LOGIN_STATUS="+str(login.status_code))
+          if admin.status_code>=500:
+              print("LOCAL_DJANGO_ADMIN_BODY="+admin.content[:1200].decode("utf-8","replace"))
           request=RequestFactory().get("/",HTTP_HOST="zomorodmelal.ir",secure=True)
           match=resolve("/")
           print("RESTORED_PRODUCTION_ROOT_VIEW="+match.func.__module__+"."+match.func.__name__)
