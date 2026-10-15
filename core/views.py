@@ -55,7 +55,7 @@ def taniya_studio(request):
 
 
 def platform_page(request, section):
-    if request.get_host == "mojplaywin.com" or request.get_host == "www.mojplaywin.com":
+    if request.get_host().split(":")[0].lower() in {"mojplaywin.com", "www.mojplaywin.com"}:
         from .mojplaywin_views import platform_section
         return platform_section(request, section)
     pages = {
