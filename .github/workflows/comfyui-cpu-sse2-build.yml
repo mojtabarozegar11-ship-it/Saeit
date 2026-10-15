@@ -1,0 +1,94 @@
+name: ComfyUI CPU SSE2 Portable VPS Builder
+on:
+  push:
+    branches: [feature/comfyui-vps-render-proof-20261015]
+    paths: [.github/workflows/comfyui-cpu-sse2-build.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: comfyui-cpu-sse2-build
+  cancel-in-progress: false
+jobs:
+  build-and-stage:
+    runs-on: ubuntu-latest
+    container: ubuntu:20.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile pinned stable-diffusion.cpp for glibc 2.31
+        shell: bash
+        run: |
+          set -euo pipefail
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update -qq
+          apt-get install -y -qq ca-certificates git g++ make cmake pkg-config tar openssh-client python3
+          git clone -q --depth 1 --branch master-964-1d0a58a --recurse-submodules \
+            https://github.com/leejet/stable-diffusion.cpp "$RUNNER_TEMP/sd-cpp"
+          test "$(git -C "$RUNNER_TEMP/sd-cpp" rev-parse --short=7 HEAD)" = "1d0a58a"
+          cmake -S "$RUNNER_TEMP/sd-cpp" -B "$RUNNER_TEMP/sd-cpp/build" \
+            -DCMAKE_BUILD_TYPE=Release -DSD_WEBP=OFF -DSD_WEBM=OFF -DGGML_NATIVE=OFF \
+            -DGGML_SSE42=OFF -DGGML_AVX=OFF -DGGML_AVX2=OFF \
+            -DGGML_AVX_VNNI=OFF -DGGML_FMA=OFF -DGGML_F16C=OFF \
+            -DGGML_BMI2=OFF -DGGML_AVX512=OFF \
+            -DGGML_CPU_ALL_VARIANTS=OFF -DGGML_OPENMP=OFF \
+            -DCMAKE_C_FLAGS="-march=x86-64 -mtune=generic" \
+            -DCMAKE_CXX_FLAGS="-march=x86-64 -mtune=generic"
+          timeout 940s cmake --build "$RUNNER_TEMP/sd-cpp/build" --config Release --parallel 2
+          test -x "$RUNNER_TEMP/sd-cpp/build/bin/sd-cli"
+          echo SD_CPP_SSE2_SOURCE_BUILD_OK
+      - name: Stage CPU runtime under existing isolated VPS directory
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/sd-stage"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          tar -C "$RUNNER_TEMP/sd-cpp/build" -cf "$d/sd-cpp.tar" bin
+          sha256sum "$d/sd-cpp.tar" | awk '{print "CPU_RUNTIME_ARCHIVE_SHA256="$1}'
+          sshopts=(-i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15)
+          ssh "${sshopts[@]}" githubops@178.239.147.150 'bash -se' < /dev/null <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          root="$HOME/comfyui-isolated/.control/sd-cpp-runtime-sse2"
+          test -d "$HOME/comfyui-isolated/source-v0.40.0"
+          install -d -m 700 "$root"
+          REMOTE
+          scp "${sshopts[@]}" "$d/sd-cpp.tar" githubops@178.239.147.150:/home/githubops/comfyui-isolated/.control/sd-cpp-runtime/archive.tar
+          ssh "${sshopts[@]}" githubops@178.239.147.150 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          root="$HOME/comfyui-isolated/.control/sd-cpp-runtime-sse2"
+          test ! -L "$root"
+          test -f "$root/archive.tar"
+          tar -tf "$root/archive.tar" > "$root/archive.list"
+          grep -Fxq 'bin/sd-cli' "$root/archive.list"
+          rm -f -- "$root/archive.list"
+          tar -xf "$root/archive.tar" -C "$root"
+          test -x "$root/bin/sd-cli"
+          old="$HOME/comfyui-isolated/.control/sd-cpp-runtime/bin/libgomp.so.1"
+          if [[ -f "$old" && ! -L "$old" ]]; then
+            cp "$old" "$root/bin/libgomp.so.1"
+            chmod 600 "$root/bin/libgomp.so.1"
+          fi
+          chmod -R go-rwx "$root"
+          rm -f -- "$root/archive.tar"
+          export LD_LIBRARY_PATH="$root/bin"
+          if timeout 30 "$root/bin/sd-cli" -h >"$root/version.log" 2>&1; then
+            echo SD_CPP_VPS_CPU_BINARY_RUNS
+          else
+            echo SD_CPP_VPS_ABI_OR_RUNTIME_FAILURE
+            exit 6
+          fi
+          echo FACTORY_AND_COMFYUI_APPLICATION_FILES_UNMODIFIED
+          echo SD_CPP_SSE2_PORTABLE_INSTALLED_SEPARATELY
+          REMOTE
