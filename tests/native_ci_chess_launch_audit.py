@@ -26,7 +26,7 @@ class ReadOnlyChessLaunchAuditTests(TestCase):
 
     def test_inactive_product_with_asset_does_not_pass_go_gates(self):
         book = Product.objects.create(
-            title="The Science and Practice of Chess Improvement",
+            pk=72, title="The Science and Practice of Chess Improvement",
             product_type="digital_book", currency="USD",
             price=Decimal("7.50"), active=False,
             metadata={
@@ -76,7 +76,7 @@ class ReadOnlyChessLaunchAuditTests(TestCase):
             metadata=metadata,
         )
         live_flags={name:True for name in FLAGS}
-        with override_settings(**live_flags), patch(
+        with override_settings(**live_flags, ROOT_URLCONF="tests.native_checkout_root_urls"), patch(
             "mpw_commerce.management.commands.mpw_chess_launch_audit._verified_file",
             return_value=True
         ), patch("mpw_native_checkout.wallet_ownership.proven_assets",
