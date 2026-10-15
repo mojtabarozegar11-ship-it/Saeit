@@ -59,7 +59,7 @@ def _django_sqlite_utc_timestamp(raw):
     """
     if not isinstance(raw, str):
         return raw
-    if not re.fullmatch(r"\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,6})?", raw):
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d{1,6})?", raw):
         return raw
     try:
         return datetime.fromisoformat(raw).replace(tzinfo=timezone.utc).isoformat()
