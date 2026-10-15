@@ -76,3 +76,6 @@ img{max-width:100%;display:block}
 .mpw-section-label{max-width:1600px;margin:0 auto;padding:3.5rem 7vw 0;color:rgba(231,207,150,.72);font-size:.62rem;letter-spacing:.28em}.mpw-section-label+ .mpw-page-grid{padding-top:1.5rem}@media(max-width:520px){.mpw-section-label{padding:2.5rem 1.15rem 0}}
 
 .mpw-lux-rule{width:min(360px,60vw);height:1px;margin-top:2.2rem;background:linear-gradient(90deg,var(--gold),rgba(231,207,150,.12),transparent);box-shadow:0 0 24px rgba(231,207,150,.1)}
+
+/* Accessible self-contained fallback while external brand coin asset is absent. */
+.mpw-coin-frame .mpw-coin-fallback{position:relative;z-index:1;display:grid;place-items:center;width:72%;aspect-ratio:1;border-radius:50%;font-size:clamp(6rem,17vw,14rem);font-weight:900;font-family:ui-sans-serif,system-ui,sans-serif;letter-spacing:-.08em;color:#402b0d;text-shadow:0 2px 1px rgba(255,236,165,.72);background:radial-gradient(circle at 29% 21%,#fff2bb 0%,#e8be61 26%,#ba7c22 54%,#5b3712 80%,#2d1c0c 100%);border:10px double #f3d88e;box-shadow:inset 0 0 25px rgba(255,238,160,.72),inset -14px -20px 22px rgba(57,30,8,.6),0 28px 65px rgba(0,0,0,.52)}
