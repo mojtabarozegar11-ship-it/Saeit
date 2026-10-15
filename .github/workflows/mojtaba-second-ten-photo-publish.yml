@@ -173,7 +173,7 @@ jobs:
                       reader=PhotoTags();reader.feed(page_html)
                       photo_nums=[]
                       for uri in reader.urls:
-                          m=re.search(r"/photo-(\d\d)(?:\.[a-f0-9]{8,})?\.png(?:\?|$)",uri)
+                          m=re.search(r"/photo-(\d\d)(?:\.[a-f0-9]{8,})?\.jpg(?:\?|$)",uri)
                           if not m: raise ValueError("Invalid image URI "+uri[:120])
                           photo_nums.append(int(m.group(1)))
                       if photo_nums!=mod.ROUTES[page][1]:raise ValueError("Not all new images found")
