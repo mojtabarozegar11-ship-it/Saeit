@@ -29,6 +29,8 @@ REQUIRED_GATE_NAMES = (
     "distribution_path_available",
 )
 MAX_SNAPSHOT_AGE_DAYS = 120
+MIN_RESEARCH_PRIORITY_SCORE = 60.0
+MIN_DISTINCT_SOURCE_DOMAINS = 3
 MAX_OPPORTUNITIES = 2000
 MAX_SNAPSHOTS = 10000
 
@@ -125,9 +127,11 @@ def _check_candidate(candidate):
 def rank_opportunities(candidates, snapshots, now_utc):
     """Produce review-only ranked dossiers; *never* an executable build queue.
 
-    Two HTTPS-host references and a willingness-to-pay signal make an idea
-    ready for human/provider provenance review, not qualified for manufacture.
-    Scoring self-reported assessments never overrides evidence/hard gate checks.
+    A dossier can reach review only with problem, willingness-to-pay,
+    comparison, and feasibility claims across at least three source domains.
+    Its provisional priority score must also clear the research floor. These
+    checks improve topic triage; they do not attest the supplied sources or
+    qualify a product for manufacture, publication, or payment.
     """
     now = _utc(now_utc) if isinstance(now_utc, str) else now_utc
     if not isinstance(now, datetime) or now.tzinfo is None:
@@ -144,6 +148,12 @@ def rank_opportunities(candidates, snapshots, now_utc):
         seen.add(key)
         domains = sources.get(key, {})
         claim_types = set().union(*domains.values()) if domains else set()
+        claim_domains = {
+            claim: {domain for domain, claims in domains.items() if claim in claims}
+            for claim in CLAIM_TYPES
+        }
+        # A high self-reported score cannot compensate for weak topic evidence.
+        score = sum(WEIGHTS[k] * dimensions[k] for k in WEIGHTS) / 100
         reasons = []
         if not gates["lawful"] or not gates["rights_reviewed"]:
             status = "REJECTED"
@@ -151,24 +161,35 @@ def rank_opportunities(candidates, snapshots, now_utc):
         elif not gates["build_capability_available"] or not gates["distribution_path_available"]:
             status = "RESEARCH_REQUIRED"
             reasons.append("BUILD_OR_DISTRIBUTION_CAPABILITY_MISSING")
-        elif len(domains) < 2:
-            status = "RESEARCH_REQUIRED"
-            reasons.append("FEWER_THAN_TWO_DISTINCT_SOURCE_DOMAINS")
-        elif "problem" not in claim_types or "willingness_to_pay" not in claim_types:
-            status = "RESEARCH_REQUIRED"
-            reasons.append("PROBLEM_OR_WILLINGNESS_SIGNAL_MISSING")
         else:
-            status = "REVIEW_REQUIRED"
-            reasons.append("SOURCE_AND_ASSESSMENT_ATTESTATION_REQUIRED")
-        # The assessment is a prioritization signal only: it is not a
-        # probability, objectively measured commercial value or QA score.
-        score = sum(WEIGHTS[k] * dimensions[k] for k in WEIGHTS) / 100
+            if score < MIN_RESEARCH_PRIORITY_SCORE:
+                reasons.append("PROVISIONAL_PRIORITY_BELOW_RESEARCH_FLOOR")
+            if len(domains) < MIN_DISTINCT_SOURCE_DOMAINS:
+                reasons.append("FEWER_THAN_THREE_DISTINCT_SOURCE_DOMAINS")
+            missing = sorted(CLAIM_TYPES - claim_types)
+            if "problem" in missing or "willingness_to_pay" in missing:
+                reasons.append("PROBLEM_OR_WILLINGNESS_SIGNAL_MISSING")
+            if "comparison" in missing:
+                reasons.append("COMPETITOR_COMPARISON_SIGNAL_MISSING")
+            if "feasibility" in missing:
+                reasons.append("FEASIBILITY_SIGNAL_MISSING")
+            if reasons:
+                status = "RESEARCH_REQUIRED"
+            else:
+                status = "REVIEW_REQUIRED"
+                reasons.append("SOURCE_AND_ASSESSMENT_ATTESTATION_REQUIRED")
+        # Source references and self-reported assessments remain provisional;
+        # neither is a probability, verified commercial value, or QA score.
         out.append({
             "opportunity_key": key,
             "problem": problem,
             "status": status,
             "priority_score": round(score, 2),
             "distinct_source_domains_preliminary": len(domains),
+            "claim_source_domains_preliminary": {
+                claim: len(claim_domains[claim]) for claim in sorted(CLAIM_TYPES)
+            },
+            "research_priority_floor": MIN_RESEARCH_PRIORITY_SCORE,
             "observed_claim_types": sorted(claim_types),
             "blockers": reasons,
             "build_authorized": False,
