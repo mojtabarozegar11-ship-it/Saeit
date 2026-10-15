@@ -189,6 +189,8 @@ jobs:
           export DJANGO_SETTINGS_MODULE=config.settings
           /home/zomorod2/virtualenv/Saeit/3.11/bin/python - <<'PY'
           from pathlib import Path
+          import django
+          django.setup()
           from django.test import RequestFactory
           from django.urls import resolve
           request=RequestFactory().get("/",HTTP_HOST="zomorodmelal.ir",secure=True)
