@@ -1,0 +1,141 @@
+SELECTOR_PROBE_BEGIN
+uid=1371(zomorod2) gid=1374(zomorod2) groups=1374(zomorod2)
+selectorctl=/usr/bin/selectorctl
+cloudlinux-selector=/usr/sbin/cloudlinux-selector
+ERROR:Unsupported option was passed. Currently, selectorctl utility supports only update-interpreter option. Please, use cloudlinux-selector utility for python interpreter
+SELECTOR_USER_SUMMARY_EXIT=1
+Usage: /usr/bin/selectorctl [OPTIONS]
+Options:
+
+ -i | --interpreter               : Interpreter. If omitted php implied
+ -h | --help                      : Show this message
+ -A | --fix-homedir               : Fix paths after home directory change
+
+According to selected interpreter options differs
+ PHP:
+ -v | --version                   : Specify alternative version
+ -u | --user                      : Username
+      --domain                    : Domain name (for per-domain configuration)
+ -l | --list                      : List alternatives for interpreter
+ -G | --list-extensions           : List global set of extensions for alternative
+ -S | --summary                   : List summary of alternatives
+ -s | --user-summary              : List user summary of alternatives
+ -C | --current                   : Show currently selected alternative
+ -c | --user-current              : Show currently selected alternative for a user
+ -B | --set-current               : Set alternative as global default
+ -b | --set-user-current          : Set alternative as user default
+ -Y | --enable-alternative        : Enable alternative globally
+ -N | --disable-alternative       : Disable alternative globally
+ -E | --enable-extensions         : Enable comma-separated list of extensions globally for a version
+ -D | --disable-extensions        : Disable comma-separated list of extensions globally for a version
+ -R | --replace-extensions        : Replace extensions with comma-separated list of extensions 
+                                    for a version globally
+ -e | --enable-user-extensions    : Enable comma-separated list of extensions for a user
+ -d | --disable-user-extensions   : Disable comma-separated list of extensions for a user
+ -r | --replace-user-extensions   : Replace user extensions with comma-separated list of extensions
+ -t | --reset-user-extensions     : Replace user extensions with version default extensions
+ -g | --list-user-extensions      : List enabled extensions for a user. With key --all shows all extensions
+ -a | --all                       : Show all extensions
+ -p | --print-summary             : If specified along with setting an alternative prints user summary
+ -V | --show-native-version       : Shows native version while showing summary or selected version
+ -L | --list-users                : List users who use a specified alternative
+ -T | --change-to-version         : Changes to a specified version all users who have a certain version
+ -k | --add-options               : Add comma-separated list options for a user
+ -m | --replace-options           : Replace user options with comma-separated list of options
+ -x | --delete-options            : Delete comma-separated list options for a user
+ -Q | --base64                    : Expects data as comma-separated base64-encoded string
+ -q | --quiet                     : Suppress errors messages for wrong input
+ -P | --print-options             : Prints user options. By default prints as plain text
+ --print-options-safe             : Prints user options. By default prints as plain text (safe strings)
+ --apply-symlinks-rules           : Recreate symlinks to php extensions for all users 
+                                    based on /etc/cl.selector/symlinks.rules file
+ --exclude-pid-list               : Specify list of PIDs of processes that should not be signaled by SIGHUP
+ -j | --json                      : Print data as JSON
+ -w | --csv                       : Print data as CSV
+ -W | --perl                      : Print data as perl structure
+ --api-version                    : Integer, representing specific api version to use. 
+                                    Defaults to 0
+ -z | --reset-options             : Deletes all user custom options. Range can be narrowed with user 
+                                    or version options
+ --update-backup                  : write settings to backup
+ --apply-global-php-ini           : use with 0, 1 or 2 arguments from the list: error_log, date.timezone
+                                    without arguments applies all global php options including two above
+ --setup-without-cagefs           : setup PHP Selector without CageFS
+ --revert-to-cagefs               : revert to default setup of PHP Selector (with CageFS)
+ --for-all-users                  : applies specified action for all users in CageFS. 
+                                    Available only for enable/disable user extensions
+
+ Python:
+Warning: selectorctl utility for --interpreter python is deprecated. Only update-interpreter option is still possible to use. 
+Please, use cloudlinux-selector utility to manage your python applications
+ -v | --version VERSION                  : Specify alternative version
+ -u | --user USERNAME                    : Username
+      --domain DOMAIN                    : Domain (or subdomain); users main domain as default
+ -l | --list                             : List alternatives for interpreter
+ -G | --list-extensions                  : List global set of packages
+ -K | --list-extensions-version          : List version set of packages
+Utility to get/set Cloudlinux selector options
+
+Usage:
+   cloudlinux-selector [get] [--json] [--interpreter <str>] [(--get-supported-versions | --get-default-version | --get-selector-status)] [(--user <str> | --domain <str>)]
+   cloudlinux-selector get [--json] [--interpreter <str>] [--get-current-version] [--user <str>] [--domain <str>]
+   cloudlinux-selector set [--json] [--interpreter <str>] (--selector-status <enabled,disabled> | --default-version <str> | --supported-versions <str> | --current-version <str>) [--user <str>] [--domain <str>]
+   cloudlinux-selector set [--json] [--interpreter <str>] --version <str> (--extensions <str> | --options <str>) [(--user <str> | --domain <str>)]
+   cloudlinux-selector set [--json] [--interpreter <str>]  [(--user <str> | --domain <str>)] --app-root <str> [--app-mode <str>] [--new-app-root <str>] [--new-domain <str>] [--new-app-uri <str>] [--new-version <str>] [--startup-file <str>] [--env-vars <str>] [--skip-web-check] [--entry-point <str>] [--config-files <str>] [--passenger-log-file <str>]
+   cloudlinux-selector create [--json] [--interpreter <str>] [(--user <str> | --domain <str>)] --app-root <str> --app-uri <str> [--version <str>] [--app-mode <str>] [--startup-file <str>] [--entry-point <str>] [--env-vars <str>] [--passenger-log-file <str>]
+   cloudlinux-selector set [--json] [--interpreter <str>]  --reset-extensions --version <str> [(--user <str> | --domain <str>)]
+   cloudlinux-selector (enable-version | disable-version) [--json] [--interpreter <str>] --version <str>
+   cloudlinux-selector install-modules [--json] [--interpreter <str>] [(--user <str> | --domain <str>)] --app-root <str> [(--requirements-file <str> | --modules <str>)] [--skip-web-check]
+   cloudlinux-selector uninstall-modules [--json] [--interpreter <str>] [(--user <str> | --domain <str>)] --app-root <str> --modules <str>
+   cloudlinux-selector install-version [--json] [--interpreter <str>] --version <str>
+   cloudlinux-selector uninstall-version [--json] [--interpreter <str>] --version <str>
+   cloudlinux-selector read-config [--json] [--interpreter <str>]  [(--user <str> | --domain <str>)] --app-root <str> --config-file <str>
+   cloudlinux-selector save-config [--json] [--interpreter <str>]  [(--user <str> | --domain <str>)] --app-root <str> --config-file <str> --content <str>
+   cloudlinux-selector (start | restart | stop | destroy) [--json] [--interpreter <str>]  [(--user <str> | --domain <str>)] --app-root <str>
+   cloudlinux-selector run-script [--json] [--interpreter <str>] [(--user <str> | --domain <str>)] --app-root <str> --script-name <str>
+   cloudlinux-selector run-script [--json] [--interpreter <str>] [(--user <str> | --domain <str>)] --app-root <str> --script-name <str> -- <script_args>...
+   cloudlinux-selector change-version-multiple --json --interpreter <str> --from-version <str> --new-version <str>
+   cloudlinux-selector make-defaults-config [--json] [--interpreter <str>]
+   cloudlinux-selector import-applications [--json] --interpreter <str>
+   cloudlinux-selector migrate [--json] --interpreter <str> --user <str> --app-root <str>
+   cloudlinux-selector setup [--json] --interpreter <str>
+   cloudlinux-selector (-h | --help)
+
+Options:
+    --json                               Return data in JSON format.
+    --interpreter <str>                  One of php/nodejs/python, default is php
+    --get-supported-versions             Return info about supported versions
+    --get-current-version                Return current version of interpretator for user
+    --get-default-version                Return info about default version only
+    --get-selector-status                Return info about selector status
+    --reset-extensions                   Replace user extensions with version default extensions
+    --supported-versions <str>           Set supported versions of interpreter
+    --default-version <str>              Set default version of interpreter
+    --current-version <str>              Set alternative as user default
+    --selector-status <enabled|disabled> Set selector status enabled or disabled
+    --version <str>                      Version of interpreter
+    --extensions <str>                   JSON dict with extensions and their status
+    --options <str>                      JSON dict with options and their values
+    --user <str>                         Username to operate on
+    --app-root <str>                     Root of an application to be created
+    --domain <str>                       Domain to work in
+    --app-uri <str>                      URI path to get the application being created
+    --config-file <str>                  path to config file to be read or saved
+    --config-files <str>                 names of config files (such as requirements.txt or etc) (only for python interpreter)
+    --content <str>                      Base64-encoded config file contents to be saved
+    --app-mode <str>                     Application mode
+    --startup-file <str>                 Startup application file
+    --env-vars <str>                     Environment variable as json string
+    --new-app-root <str>                 Set new application directory
+    --new-app-uri <str>                  Set new application uri
+    --new-domain <str>                   Set new domain for application
+    --new-version <str>                  Set new nodejs version for application
+    --from-version <str>                 Old NodeJS version for group change version operations
+    --script-name <str>                  Command for an npm script to be run
+    --skip-web-check                     Skip check web application after change it's properties
+    --entry-point <str>                  Use the specified entrypoint for application (only for python interpeter)
+    --requirements-file <str>            Use the specified file for install required modules
+    --modules <str>                      Install comma-separated list of modules
+    --passenger-log-file <str>           Set passenger log full filename
+    -h, --help                           Show this help message and exit
+SELECTOR_PROBE_END
