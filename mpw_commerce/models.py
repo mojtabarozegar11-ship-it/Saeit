@@ -132,3 +132,23 @@ class BuyerWalletChallenge(models.Model):
     used_at = models.DateTimeField(null=True,blank=True)
     failed_attempts = models.PositiveSmallIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
+
+
+class CommerceOrderRequest(models.Model):
+    """Buyer-created cart with one UUID idempotency key and at most one order.
+
+    This cannot mark an order paid; all coins use separate verified invoices.
+    """
+    idempotency_key = models.UUIDField(unique=True)
+    buyer = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT,
+        related_name="mpw_cart_requests",
+    )
+    order = models.OneToOneField(
+        "core.Order", null=True, blank=True,
+        on_delete=models.PROTECT, related_name="mpw_cart_request",
+    )
+    asset = models.CharField(
+        max_length=3, choices=[("ETH", "ETH"), ("TRX", "TRX")],
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
