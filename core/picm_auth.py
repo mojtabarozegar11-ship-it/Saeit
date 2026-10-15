@@ -11,6 +11,7 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_http_methods, require_POST
 
 from .picm_views import locked
+from .picm_access import owner_allowed
 
 LIMIT = 5
 PERIOD = 900
@@ -66,7 +67,7 @@ def _throttle(key, failed=False, clear=False):
 @never_cache
 @require_http_methods(["GET", "POST"])
 def picm_login(request):
-    if request.user.is_authenticated:
+    if owner_allowed(request.user):
         return redirect("/picm/workspace/")
     error = None
     if request.method == "POST":
@@ -82,7 +83,7 @@ def picm_login(request):
             error = "نام کاربری یا گذرواژه صحیح نیست."
         else:
             user = authenticate(request, username=credential_username, password=password)
-            if user is None or not user.is_active:
+            if user is None or not owner_allowed(user):
                 _throttle(key, failed=True)
                 error = "نام کاربری یا گذرواژه صحیح نیست."
             else:
@@ -95,5 +96,11 @@ def picm_login(request):
 @never_cache
 @require_POST
 def picm_logout(request):
+    if not request.user.is_authenticated:
+        return redirect("/picm/login/")
+    if not owner_allowed(request.user):
+        # Never log users out of unrelated MojPlayWin services.
+        from django.http import HttpResponse
+        return HttpResponse(status=403)
     logout(request)
     return redirect("/picm/login/")
