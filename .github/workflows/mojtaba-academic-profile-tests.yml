@@ -1,0 +1,27 @@
+name: Mojtaba academic biography tests
+on:
+  push:
+    branches: ['feat/mojtaba-academic-profile-upm-20261016']
+    paths:
+      - 'content/mojtaba_education_and_professional_bio_20261016.json'
+      - 'scripts/mojtaba_academic_profile_safe_deploy.py'
+      - 'tests/test_mojtaba_academic_profile.py'
+      - '.github/workflows/mojtaba-academic-profile-tests.yml'
+  pull_request:
+    paths:
+      - 'content/mojtaba_education_and_professional_bio_20261016.json'
+      - 'scripts/mojtaba_academic_profile_safe_deploy.py'
+      - 'tests/test_mojtaba_academic_profile.py'
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate self-reported UPM qualification and existing article integrity
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mojtaba_academic_profile_safe_deploy.py
+          python3 -m unittest discover -s tests -p 'test_mojtaba_academic_profile.py' -v
