@@ -1,0 +1,24 @@
+name: Mojtaba remaining page photos checks
+on:
+  push:
+    branches: [feat/mojtaba-last-three-pages-photos-20261015]
+    paths:
+      - scripts/mojtaba_fill_last_three_images.py
+      - tests/test_mojtaba_fill_last_three_images.py
+      - .github/workflows/mojtaba-three-photos-tests.yml
+  pull_request:
+    paths:
+      - scripts/mojtaba_fill_last_three_images.py
+      - tests/test_mojtaba_fill_last_three_images.py
+permissions:
+  contents: read
+jobs:
+  photo_tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate only original photo paths and renderable content
+        run: |
+          python3 -m py_compile scripts/mojtaba_fill_last_three_images.py
+          python3 -m unittest discover -s tests -p 'test_mojtaba_fill_last_three_images.py' -v
