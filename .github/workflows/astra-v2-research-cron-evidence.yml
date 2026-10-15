@@ -1,0 +1,81 @@
+name: Astra Research Bridge Actual Cron Evidence (Read Only)
+
+on:
+  push:
+    branches: [feature/astra-v2-0048-integration-canary-20261015]
+    paths:
+      - .github/workflows/astra-v2-research-cron-evidence.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  observe-real-cron:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - name: Independent read-only check for actual scheduled tick after installation
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          tmp="$RUNNER_TEMP/astra-cron-evidence"
+          install -d -m 700 "$tmp"
+          trap 'rm -rf -- "$tmp"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$tmp/key"
+          chmod 600 "$tmp/key"
+          ssh-keygen -y -P '' -f "$tmp/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$tmp/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$tmp/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -i "$tmp/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$tmp/known" \
+            -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=15 githubops@178.239.147.150 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          base="$HOME/factory-runtime"
+          original="$base/private/factory-fresh-isolated.sqlite3"
+          research="$base/private/astra-v2-research-bridge/research-tasks.sqlite3"
+          tech="$base/private/astra-v2-canary-products/queue.sqlite3"
+          test "$(crontab -l | grep -c ASTRA_V2_PRIVATE_RESEARCH_BRIDGE || true)" = 1
+          "$base/.venv/bin/python" - "$original" "$research" "$tech" <<'PY'
+          import datetime,pathlib,sqlite3,sys
+          original,research,tech=map(pathlib.Path,sys.argv[1:])
+          def ro(path):
+              assert path.is_file() and not path.is_symlink()
+              db=sqlite3.connect(path.resolve().as_uri()+"?mode=ro",uri=True,timeout=10)
+              db.execute("PRAGMA query_only=ON")
+              db.execute("BEGIN")
+              return db
+          with ro(original) as source,ro(research) as local,ro(tech) as factory:
+              migration=source.execute("SELECT name FROM django_migrations WHERE app='core' ORDER BY name DESC LIMIT 1").fetchone()[0]
+              assert migration=="0048_business_market_architecture",migration
+              product_count=source.execute("SELECT COUNT(*) FROM core_product").fetchone()[0]
+              meta=dict(local.execute("SELECT key,value FROM bridge_meta"))
+              ticks=int(meta.get("ticks_total","0"))
+              last=meta.get("last_tick_utc","")
+              now=datetime.datetime.now(datetime.timezone.utc)
+              then=datetime.datetime.fromisoformat(last) if last else None
+              age=(now-then).total_seconds() if then else 10**9
+              installed=datetime.datetime(2026,10,15,5,16,49,tzinfo=datetime.timezone.utc)
+              tasks=local.execute("SELECT COUNT(*) FROM research_tasks").fetchone()[0]
+              invalid=local.execute("SELECT COUNT(*) FROM research_tasks WHERE sale_ready<>0 OR market_demand_verified<>0 OR quality_score IS NOT NULL").fetchone()[0]
+              builders=factory.execute("SELECT COUNT(DISTINCT builder) FROM jobs WHERE stage='PRIVATE_QA_PASSED'").fetchone()[0]
+              print("ASTRA_CRON_AUDIT_TOTAL_TICKS="+str(ticks))
+              print("ASTRA_CRON_AUDIT_LAST_TICK_UTC="+last)
+              print("ASTRA_CRON_AUDIT_LAST_TICK_AGE_SECONDS="+str(int(age)))
+              print("ASTRA_CRON_AUDIT_PRIVATE_RESEARCH_TASKS="+str(tasks))
+              print("ASTRA_CRON_AUDIT_PRIVATE_BUILDER_FAMILIES="+str(builders))
+              print("ASTRA_CRON_AUDIT_ORIGINAL_FACTORY_PRODUCTS="+str(product_count))
+              print("ASTRA_CRON_AUDIT_LEGACY_MIGRATION="+migration)
+              print("ASTRA_CRON_AUDIT_SALE_APPROVALS="+str(invalid))
+              assert tasks>=25 and builders>=3 and invalid==0
+              assert ticks>=2,"only initial manual tick observed, scheduled tick not yet proven"
+              assert then>installed,"no tick after install"
+              assert -60<=age<=1200,("cron heartbeat stale",age)
+              print("ASTRA_CRON_REAL_SCHEDULED_EXECUTION=PASS")
+              print("ASTRA_CRON_ORIGINAL_FACTORY_DB_OPENED_READONLY=true")
+              print("ASTRA_CRON_NO_PAYMENT_OR_STORE_ACTIONS=true")
+          PY
+          REMOTE
