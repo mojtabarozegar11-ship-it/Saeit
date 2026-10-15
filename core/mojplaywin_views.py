@@ -1,3 +1,4 @@
+from django.http import Http404
 from django.shortcuts import render
 
 FEATURES = [
@@ -8,10 +9,20 @@ FEATURES = [
  {"title":"Artificial Intelligence","text":"Thoughtful AI tools and explainers for research, creativity, and everyday work.","image":"site/heroes/ai.webp","url":"/agents/"},
  {"title":"Knowledge Library","text":"Guides and reference material organized to make complex topics easier to explore.","image":"site/heroes/knowledge.webp","url":"/knowledge/"},
 ]
+VENTURES = [
+ {"slug":"agriculture","title":"Agriculture & Agri-Industry","text":"Farm planning, crop production, processing, and practical digital tools for agricultural value chains.","url":"/ventures/agriculture/","image":"site/heroes/agriculture.webp","lead":"Explore agriculture from farm economics and crop planning through processing, market access, and technology-enabled value chains.","cards":[("Farm planning & economics","Build clear production plans, cost models, and decision frameworks for agricultural enterprises."),("Crops, water & resilient production","Explore research-led approaches to crop systems, water use, and climate-aware operations."),("Processing & market access","Map practical paths from harvest to storage, packaging, processing, and market readiness.")],"note":"This page presents areas for research and project development. It does not claim a specific farm, facility, or current product inventory."},
+ {"slug":"cafe-restaurant","title":"Cafes & Restaurants","text":"Hospitality concepts, menu experiences, service design, and digital tools for food businesses.","url":"/ventures/cafe-restaurant/","image":"site/heroes/hospitality.webp","lead":"A focused space for cafe and restaurant concepts, guest experience, menu planning, and technology-supported operations.","cards":[("Concept & guest experience","Shape a clear identity, customer journey, and welcoming service concept."),("Menu & operations","Organize menus, service workflows, inventory ideas, and practical operating information."),("Digital hospitality","Explore online menus, booking, loyalty, ordering, and customer communication tools.")],"note":"No specific restaurant location, opening hours, or menu is listed unless confirmed for that project."},
+ {"slug":"fuel-station","title":"Fuel Stations & Mobility","text":"Service-station planning, customer services, and emerging mobility concepts.","url":"/ventures/fuel-station/","image":"site/heroes/industry.webp","lead":"Explore fuel-station and roadside-service concepts through operations, customer experience, and the changing mobility landscape.","cards":[("Service-station concepts","Consider site planning, service mix, customer flow, and operational requirements."),("Retail & customer services","Map convenience retail, refreshments, and useful roadside services."),("Mobility technology","Follow digital payments, connected services, and new energy and mobility ideas.")],"note":"This is an industry and planning overview; it does not represent a licensed operating station or fuel sales offer."},
+ {"slug":"jewelry-gold","title":"Jewelry & Gold","text":"Jewelry design, craft, product storytelling, and digital retail experiences.","url":"/ventures/jewelry-gold/","image":"site/heroes/marketplace.webp","lead":"Discover the jewelry and gold sector through craftsmanship, design, product information, and responsible digital commerce.","cards":[("Design & craftsmanship","Showcase materials, techniques, design language, and the care behind each piece."),("Product stories","Present clear descriptions, sizing, care guidance, and provenance where documented."),("Digital jewelry retail","Explore elegant catalogs, product photography direction, and customer support journeys.")],"note":"No gold pricing, investment return, or product availability is asserted on this overview page."},
+ {"slug":"carpets","title":"Carpets & Textiles","text":"Handwoven carpet heritage, textile craft, design, and online presentation.","url":"/ventures/carpets/","image":"site/heroes/knowledge.webp","lead":"A home for carpet and textile stories: weaving traditions, design details, craft knowledge, and thoughtful online presentation.","cards":[("Craft & heritage","Document weaving methods, regional influences, materials, and makers with care."),("Design & collection","Organize patterns, dimensions, colors, and product stories for easier discovery."),("Digital catalogues","Build clear online browsing experiences and useful care and shipping information.")],"note":"Specific makers, origins, and stock should be shown only when verified for each item."},
+ {"slug":"currency-crypto","title":"Currency & Digital Assets","text":"Educational resources and research on currency markets, blockchain, and digital assets.","url":"/ventures/currency-crypto/","image":"site/heroes/economy.webp","lead":"Explore currency and digital assets through accessible education, market structure, technology, and careful research.","cards":[("Currency-market literacy","Explain terminology, market mechanisms, and the factors that influence currency exchange."),("Blockchain & digital assets","Introduce distributed ledgers, token systems, and the technology behind digital assets."),("Research & risk awareness","Compare sources, identify uncertainty, and understand that markets can change quickly.")],"note":"Educational information only. MojPlayWin does not offer exchange, brokerage, custody, trading, or investment advice through this page."},
+ {"slug":"ecommerce","title":"E-commerce & Virtual Commerce","text":"Online storefronts, digital catalogues, virtual goods, and customer journeys.","url":"/ventures/ecommerce/","image":"site/heroes/store.webp","lead":"Explore digital commerce across physical goods, downloadable products, subscriptions, and virtual experiences.","cards":[("Storefront & catalogue","Plan product discovery, clear descriptions, accessible layouts, and searchable collections."),("Digital delivery","Design reliable delivery flows for downloads, learning content, and virtual products."),("Customer experience","Connect checkout, support, order information, and thoughtful post-purchase journeys.")],"note":"A purchase flow is displayed only when its product, price, fulfillment, and payment route are active and verified."},
+ {"slug":"hospitality","title":"Hospitality & Services","text":"Guest services, experience design, and digital operations across hospitality.","url":"/ventures/hospitality/","image":"site/heroes/platform-home.webp","lead":"Connect hospitality experience with practical service design, useful information, and digital customer tools.","cards":[("Service design","Make services easier to understand, access, and deliver consistently."),("Guest communication","Organize useful information, inquiries, reservations, and follow-up."),("Digital operations","Explore tools that support teams, customer journeys, and service quality.")],"note":"Project details are published only when confirmed by the responsible business."},
+]
 PRODUCTS = [
  {"title":"The Science and Practice of Chess Improvement","text":"A structured chess study resource with lessons, analysis, and exercises.","image":"site/heroes/education-detail.webp","category":"BOOK · LEARNING","url":"/store/"},
  {"title":"Taniya and the Little Baker Worms","text":"A rhythmic illustrated story created for young readers and families.","image":"site/heroes/game-studio.webp","category":"CHILDREN'S BOOK","url":"/taniya/"},
- {"title":"Farm Enterprise Economics Toolkit","text":"A practical digital toolkit for farm planning and enterprise economics.","image":"site/heroes/agriculture.webp","category":"AGRICULTURE · TOOLKIT","url":"/market/"},
+ {"title":"Farm Enterprise Economics Toolkit","text":"A practical digital toolkit for farm planning and enterprise economics.","image":"site/heroes/agriculture.webp","category":"AGRICULTURE · TOOLKIT","url":"/ventures/agriculture/"},
  {"title":"Applied AI Learning Path","text":"A step-by-step route from foundational AI ideas to practical applications.","image":"site/heroes/ai.webp","category":"COURSE · TECHNOLOGY","url":"/amozeshgah/"},
  {"title":"Original Browser Games","text":"A growing collection of playful digital game experiences.","image":"site/heroes/game-studio.webp","category":"GAMES · DIGITAL","url":"/studio/"},
  {"title":"Research & Digital Project Services","text":"Research planning, digital product development, and professional web projects.","image":"site/heroes/research.webp","category":"SERVICES","url":"/company/"},
@@ -28,15 +39,26 @@ SECTIONS = {
  "company":("About MojPlayWin","A digital-first company bringing research, modern technology, games, and education into one growing destination.","site/heroes/platform-home.webp",[("Our focus","Most of our work is dedicated to research, technology, games, and education."),("Our experience","We also draw on agriculture, jewelry and gold, handwoven carpets, hospitality, scientific project management, and web development."),("Work with us","Explore projects, learning resources, and selected digital products.")]),
 }
 
+def _is_mojplaywin(request):
+ return request.get_host().split(":")[0].lower() in {"mojplaywin.com", "www.mojplaywin.com"}
+
 def home(request):
- return render(request,"mojplaywin/home.html",{"features":FEATURES})
+ return render(request,"mojplaywin/home.html",{"features":FEATURES,"ventures":VENTURES})
 
 def store(request):
  return render(request,"mojplaywin/store.html",{"products":PRODUCTS})
+
+def venture(request, slug):
+ if not _is_mojplaywin(request):
+  raise Http404
+ item=next((entry for entry in VENTURES if entry["slug"] == slug), None)
+ if item is None:
+  raise Http404
+ return render(request,"mojplaywin/section.html",{"section_title":item["title"],"section_lead":item["lead"],"section_image":item["image"],"cards":item["cards"],"section_note":item["note"],"ventures":VENTURES,"active_venture":slug})
 
 def platform_section(request, section):
  data=SECTIONS.get(section)
  if data is None:
   data=("Explore MojPlayWin","Explore research, learning, games, and useful digital projects.","site/heroes/platform-home.webp",[("Discover","Explore the work and ideas behind MojPlayWin."),("Learn","Find practical learning resources and guides."),("Get in touch","Discuss a research or digital project.")])
  title,lead,image,cards=data
- return render(request,"mojplaywin/section.html",{"section_title":title,"section_lead":lead,"section_image":image,"cards":cards})
+ return render(request,"mojplaywin/section.html",{"section_title":title,"section_lead":lead,"section_image":image,"cards":cards,"ventures":VENTURES})

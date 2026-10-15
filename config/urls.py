@@ -6,6 +6,7 @@ from django.views.generic import RedirectView
 from command_center.views import dashboard as staff_dashboard
 
 from core.views import home, platform_page, taniya_studio
+from core.mojplaywin_views import venture
 from core.commerce_views import store_home, auctions_home
 from core.seo_views import site_search, robots_txt, sitemap_xml
 from core.weather_views import weather
@@ -24,6 +25,7 @@ urlpatterns = [
     path("ghanadi/", TemplateView.as_view(template_name="core/ghanadi.html"), name="ghanadi"),
     path("agriculture/", lambda request: platform_page(request, "agriculture"), name="agriculture"),
     path("industry/", lambda request: platform_page(request, "industry"), name="industry"),
+    path("ventures/<slug:slug>/", venture, name="mojplaywin_venture"),
     path("research/", lambda request: platform_page(request, "research"), name="research"),
     path("knowledge/", lambda request: platform_page(request, "knowledge"), name="knowledge"),
     path("knowledge/article/<slug:slug>/", knowledge_article_detail, name="knowledge_article_detail"),
