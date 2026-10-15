@@ -89,6 +89,18 @@ jobs:
           print("ASTRA_HOST_ACTIVE_PUBLIC_PRODUCTS="+str(Product.objects.filter(active=True).count()))
           print("ASTRA_HOST_ACTIVE_FACTORY_PRODUCTS="+str(Product.objects.filter(active=True,metadata__factory_origin="saeit_vps").count()))
           print("ASTRA_HOST_FACTORY_DRAFTS="+str(Product.objects.filter(active=False,metadata__factory_origin="saeit_vps").count()))
+          skus=("ASTRA-CIRCUIT-01","ASTRA-PROCURE-01","ASTRA-WATER-01","ASTRA-ORCHARD-01")
+          verified=0
+          for sku in skus:
+              candidates=Product.objects.filter(metadata__astra_sku=sku)
+              assert candidates.count()==1,"MISSING_OR_DUPLICATE_PRODUCT_"+sku
+              obj=candidates.get()
+              assert obj.active is False and obj.currency=="USD","UNEXPECTED_PUBLIC_ITEM"
+              assert obj.metadata.get("factory_archive_private") is True,"NONPRIVATE_PACKAGE"
+              assert obj.metadata.get("factory_publication_permission") is False
+              assert len(obj.metadata.get("astra_archive_sha256",""))==64
+              verified+=1
+          print("ASTRA_HOST_FOUR_PRIVATE_PRODUCT_SKUS_VERIFIED="+str(verified))
           for name in ("Order","PaymentIntent","CryptoPaymentIntent"):
               try: model=apps.get_model("core",name)
               except LookupError:
