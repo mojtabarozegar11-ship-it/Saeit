@@ -49,7 +49,7 @@ jobs:
           c.feed(source)
           if not all((c.rtl, c.title, c.h1, c.canonical)):
               raise SystemExit("Ghanadi template metadata or main heading is missing")
-          if len(re.findall(r"\\bgroup:", source)) != 20:
+          if len(re.findall(r"\bgroup:", source)) != 20:
               raise SystemExit("Expected 20 Ghanadi product records")
           for name in ("box.svg", "cake.svg", "cafe.svg", "cookie.svg"):
               asset = Path("core/static/site/ghanadi") / name
@@ -145,7 +145,6 @@ jobs:
           case "$target" in *[!0-9a-f]*|'') exit 20;; esac
           test "$root" = "$HOME/repositories/Saeit"
           test -d "$root/.git" && test -f "$root/manage.py" && test -f "$root/passenger_wsgi.py" && test -f "$root/deploy/cpanel_deploy.sh"
-          test ! -e "$HOME/Saeit-staging" || true
           case "$root" in *staging*|*stage*) echo "Refusing a staging path"; exit 21;; esac
           origin="$(git -C "$root" remote get-url origin)"
           case "$origin" in
@@ -173,7 +172,7 @@ jobs:
           root="$(printf '%s\n' "$deployment" | sed -n 's/^APPROOT=//p')"
           previous="$(printf '%s\n' "$deployment" | sed -n 's/^PREVIOUS_SHA=//p')"
           deployed="$(printf '%s\n' "$deployment" | sed -n 's/^DEPLOYED_SHA=//p')"
-          test "$root" = "/home/zomorod2/repositories/Saeit"
+          [[ "$root" =~ ^/home/[A-Za-z0-9_-]+/repositories/Saeit$ ]]
           [[ "$previous" =~ ^[0-9a-f]{40}$ && "$deployed" = "$DEPLOY_SHA" ]]
           echo "app_root=$root" >> "$GITHUB_OUTPUT"
           echo "previous_sha=$previous" >> "$GITHUB_OUTPUT"
@@ -237,7 +236,7 @@ jobs:
         run: |
           set -euo pipefail
           [[ "$PREVIOUS_SHA" =~ ^[0-9a-f]{40}$ ]]
-          [[ "$APPROOT" == "/home/zomorod2/repositories/Saeit" ]]
+          [[ "$APPROOT" =~ ^/home/[A-Za-z0-9_-]+/repositories/Saeit$ ]]
           ssh -F "$SSH_CONFIG" saeit-cpanel "bash -s -- '$APPROOT' '$PREVIOUS_SHA'" <<'REMOTE'
           set -euo pipefail
           root="$1"
