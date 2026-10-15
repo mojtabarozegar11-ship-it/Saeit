@@ -25,6 +25,8 @@ jobs:
           grep -Fxq 'DirectoryIndex index.html' public/ghanadi/.htaccess
           grep -Fq '<!-- saeit-zomorod-ghanadi-v1 -->' public/ghanadi/index.html
           grep -Fq 'assets/hero.webp' public/ghanadi/index.html
+          test -s public/ghanadi/.htaccess
+          grep -Fxq 'DirectoryIndex index.html' public/ghanadi/.htaccess
           test -s public/ghanadi/assets/hero.webp
           test -s public/ghanadi/assets/cookies.webp
           test -s public/ghanadi/assets/cafe.webp
@@ -159,6 +161,7 @@ jobs:
           ssh -o User="$account" -F "$d/config" saeit-cpanel "set -eu; test ! -e '$stage'; mkdir -m 700 '$stage'"
           tar -C public/ghanadi -czf - . | ssh -o User="$account" -F "$d/config" saeit-cpanel "tar -xzf - -C '$stage'"
       - name: Atomically publish the managed subdirectory
+        id: publish
         shell: bash
         env:
           DOMAIN_ROOT: ${{ steps.target.outputs.docroot }}
@@ -219,4 +222,33 @@ jobs:
           curl --fail --silent --show-error --retry 4 --retry-delay 2 -o /dev/null https://zomorodmelal.ir/
           echo "GHANADI_LIVE=https://zomorodmelal.ir/ghanadi/"
           echo "ROOT_ROUTE_HTTP=200"
-
+      - name: Restore the previous subpage if live verification fails
+        if: failure() && steps.publish.outcome == 'success'
+        shell: bash
+        env:
+          DOMAIN_ROOT: ${{ steps.target.outputs.docroot }}
+          CPANEL_ACCOUNT: ${{ steps.target.outputs.account }}
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-ghanadi"
+          root="$DOMAIN_ROOT"; account="$CPANEL_ACCOUNT"
+          case "$root" in "/home/$account/"*) ;; *) echo "Invalid resolved domain root" >&2; exit 1;; esac
+          ssh -o User="$account" -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" "$root" "$account" <<'REMOTE'
+          set -euo pipefail
+          commit_sha="$1"; root="$2"; account="$3"
+          case "$root" in "/home/$account/"*) ;; *) echo "Invalid resolved document root" >&2; exit 1;; esac
+          test "$(id -un)" = "$account"
+          target="$root/ghanadi"
+          backup="$HOME/.backups/zomorodmelal-ghanadi/$commit_sha"
+          test -d "$target" && test -f "$target/index.html" && grep -Fq '<!-- saeit-zomorod-ghanadi-v1 -->' "$target/index.html"
+          test -d "$backup" && test -f "$backup/index.html" && grep -Fq '<!-- saeit-zomorod-ghanadi-v1 -->' "$backup/index.html"
+          stage="$root/.zomorod-ghanadi-restore-$commit_sha"
+          test ! -e "$stage"
+          mkdir -m 700 "$stage"
+          cp -a -- "$backup/." "$stage/"
+          rm -rf -- "$target"
+          mv -T "$stage" "$target"
+          find "$target" -type d -exec chmod 755 {} +
+          find "$target" -type f -exec chmod 644 {} +
+          echo "PREVIOUS_GHANADI_PAGE_RESTORED=yes"
+          REMOTE
