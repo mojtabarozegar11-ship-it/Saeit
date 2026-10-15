@@ -40,3 +40,5 @@ jobs:
           "${remote[@]}" bash -s -- start 5 < ops/comfyui-vps/control.sh
           "${remote[@]}" python3 - < ops/comfyui-vps/verify_api.py
           echo COMFYUI_INTEGRATION_RESULT_PASS
+
+# Refresh bounded live ComfyUI API integration check 2026-10-15.
