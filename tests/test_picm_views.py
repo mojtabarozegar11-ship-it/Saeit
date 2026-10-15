@@ -130,7 +130,7 @@ class PICMPhotoReferenceTests(TestCase):
         self.env.start()
         self.addCleanup(self.env.stop)
         self.rf = RequestFactory()
-        (Path(self.temp.name) / ".owner-user-id").write_text("101\\n".replace("\\\\n", "\\n"), encoding="ascii")
+        (Path(self.temp.name) / ".owner-user-id").write_text("101\n", encoding="ascii")
 
     def photo(self, width=512, height=512):
         from django.core.files.uploadedfile import SimpleUploadedFile
