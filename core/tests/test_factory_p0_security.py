@@ -341,6 +341,19 @@ class FactoryP0SecurityTests(TestCase):
                 prerequisite_snapshot=snapshot_for("product_launch_candidate", product, run),
                 environment="test",
             )
+            # Test-only, genuinely persisted owner authorization for the
+            # manually constructed high-risk release-candidate Task. Real
+            # factory task approvals remain enforced by TaskRuntime.claim().
+            task_approval = ApprovalRequest.objects.create(
+                action_type=task.action_type,
+                target_type="AgentTask",
+                target_id=str(task.pk),
+                reason="Synthetic owner-authorized launch-candidate regression fixture",
+                risk="high",
+                requested_by=self.owner,
+            )
+            task_approval.status = "approved"
+            task_approval.save(update_fields=["status", "updated_at"])
             last = WorkerRunner(build_factory_gateway(), factory_executor=executor).run(task.pk)
             product_id = last.output_data["product_id"]
         return Product.objects.get(pk=product_id), FactoryRun.objects.get(run_id=run_id), last
@@ -503,7 +516,7 @@ class FactoryP0SecurityTests(TestCase):
             product.save()
 
     def test_expired_approval_cannot_activate_current_release(self):
-        product, _, _ = self.run_factory("p0-approval-expiry", 11)
+        product, _, _ = self.run_factory("p0-approval-expiry", 12)
         product.owner = self.owner
         product.save(update_fields=["owner", "updated_at"])
         approval = ApprovalRequest.objects.create(
