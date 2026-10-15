@@ -80,3 +80,5 @@ jobs:
           REMOTE
 
 # Trigger a fresh, read-only VPS readiness snapshot on 2026-10-15.
+
+# Post-integration shutdown and factory isolation check 2026-10-15.
