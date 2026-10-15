@@ -71,8 +71,9 @@ jobs:
           SSH_CONFIG: ${{ runner.temp }}/zomorod-restore/config
         run: |
           set -euo pipefail
-          ssh -F "$SSH_CONFIG" saeit-cpanel bash -se <<'REMOTE'
+          ssh -F "$SSH_CONFIG" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
           set -euo pipefail
+          commit_sha="$1"
           python3 - <<'PY'
           import json, subprocess
           result = subprocess.run(["uapi","--output=json","PassengerApps","list_applications"], check=True, capture_output=True, text=True)
@@ -136,16 +137,195 @@ jobs:
           PY
           cd /home/zomorod2/Saeit
           install -d -m 700 tmp
-          touch tmp/restart.txt
-          echo "PASSENGER_RESTART_TRIGGERED=yes"
           printf 'APP_ENV_FILE_PRESENT='
           test -f .env && echo yes || echo no
           diag="$(mktemp "$HOME/.root-app-diag.XXXXXX")"
           trap 'rm -f -- "$app_json" "$diag"' EXIT
-          python_path="$(awk '$1 == "PassengerPython" { gsub(/"/, "", $2); print $2; exit }' /home/zomorod2/public_html/.htaccess)"
+          htaccess=/home/zomorod2/public_html/.htaccess
+          python_path="$(awk '$1 == "PassengerPython" { gsub(/"/, "", $2); print $2; exit }' "$htaccess")"
           test -n "$python_path"
           test -x "$python_path"
+          if ! "$python_path" -c 'import django' >/dev/null 2>&1; then
+            candidate=/home/zomorod2/virtualenv/Saeit/3.11/bin/python
+            test -x "$candidate"
+            "$candidate" -c 'import django'
+            "$candidate" manage.py check
+            backup="$HOME/.backups/zomorodmelal-root-homepage/htaccess-python-before-$commit_sha"
+            install -d -m 700 "$HOME/.backups/zomorodmelal-root-homepage"
+            test ! -e "$backup"
+            cp -p "$htaccess" "$backup"
+            python3 - "$htaccess" "$candidate" <<'PY'
+          from pathlib import Path
+          import os, re, sys, tempfile
+          path=Path(sys.argv[1]); candidate=sys.argv[2]
+          text=path.read_text()
+          matches=list(re.finditer(r'(?m)^(\s*PassengerPython\s+)"?[^"\r\n]+"?(\s*)
+          check_status=$?
+          echo "DJANGO_CHECK_EXIT=$check_status"
+          tail -n 35 "$diag" | sed -E 's/(SECRET_KEY|PASSWORD|TOKEN|API_KEY|PRIVATE_KEY)([^=]*=)[^[:space:]]+/\1\2[redacted]/Ig'
+          : >"$diag"
+          "$python_path" -c 'import passenger_wsgi; print("PASSENGER_WSGI_IMPORT=passed")' >"$diag" 2>&1
+          import_status=$?
+          echo "PASSENGER_WSGI_IMPORT_EXIT=$import_status"
+          tail -n 35 "$diag" | sed -E 's/(SECRET_KEY|PASSWORD|TOKEN|API_KEY|PRIVATE_KEY)([^=]*=)[^[:space:]]+/\1\2[redacted]/Ig'
+          python3 - <<'PY'
+          from pathlib import Path
+          import os,re
+          roots=[Path("/home/zomorod2/logs"),Path("/home/zomorod2/Saeit"),Path("/home/zomorod2/public_html")]
+          found=[]
+          for root in roots:
+              if not root.exists(): continue
+              for base,dirs,files in os.walk(root):
+                  depth=len(Path(base).relative_to(root).parts)
+                  dirs[:]=[d for d in dirs if d not in {".git","venv","node_modules","staticfiles","media"}]
+                  if depth>=3: dirs[:]=[]
+                  for name in files:
+                      if any(k in name.lower() for k in ("error_log","error.log","passenger.log","stderr")):
+                          p=Path(base)/name
+                          try: found.append((p.stat().st_mtime,p))
+                          except OSError: pass
+          found=sorted(found,reverse=True)[:8]
+          print("RECENT_APP_ERROR_LOG_FILES_BEGIN")
+          for _,path in found:
+              print("APP_ERROR_LOG_BEGIN="+str(path))
+              try:
+                  lines=path.read_text(errors="replace").splitlines()[-180:]
+                  selected=[x for x in lines if re.search(r"error|exception|traceback|passenger|spawn|killed|memory|limit|denied|failed",x,re.I)]
+                  for line in selected[-30:]:
+                      line=re.sub(r"(?i)(secret_key|password|token|api[_-]?key|private[_-]?key)(\\s*[:=]\\s*)[^\\s,;]+",r"\\1\\2[redacted]",line)
+                      line=re.sub(r"(?i)(authorization:\\s*)[^\\r\\n]+",r"\\1[redacted]",line)
+                      print(line[:600])
+              except Exception as exc:
+                  print("LOG_READ_ERROR="+type(exc).__name__)
+              print("APP_ERROR_LOG_END="+str(path))
+          print("RECENT_APP_ERROR_LOG_FILES_END")
+          PY
+          set -e
+          export DJANGO_SETTINGS_MODULE=config.settings
+          "$python_path" - <<'PY'
+          from pathlib import Path
+          import django,re
+          django.setup()
+          from django.test import RequestFactory
+          from django.urls import resolve
+          request=RequestFactory().get("/",HTTP_HOST="zomorodmelal.ir",secure=True)
+          match=resolve("/")
+          print("RESTORED_PRODUCTION_ROOT_VIEW="+match.func.__module__+"."+match.func.__name__)
+          response=match.func(request,*match.args,**match.kwargs)
+          if hasattr(response,"render") and not getattr(response,"is_rendered",True):
+              response.render()
+          if response.status_code!=200:
+              raise SystemExit(f"PRODUCTION_ROOT_RENDER_STATUS={response.status_code}")
+          content=response.content
+          lowered=content.lower()
+          if len(content)<500 or b"<html" not in lowered or b"index of /" in lowered or b"saeit-zomorod-root-homepage-v1" in content:
+              raise SystemExit("PRODUCTION_ROOT_RENDER_CONTENT_CHECK_FAILED")
+          title=re.search(br"<title[^>]*>(.*?)</title>",content,re.I|re.S)
+          print("RESTORED_PRODUCTION_ROOT_TITLE="+(title.group(1).decode("utf-8","replace").strip() if title else "no-title"))
+          root=Path("/home/zomorod2/public_html")
+          target=root/"index.html"
+          candidate=root/".zomorod-root-restore-candidate"
+          if target.exists():
+              if target.read_bytes()==content:
+                  candidate.unlink(missing_ok=True)
+                  print("PRODUCTION_ROOT_TEMPLATE_ALREADY_RESTORED=yes")
+                  raise SystemExit(0)
+              raise SystemExit("PUBLIC_ROOT_INDEX_EXISTS; refusing to overwrite")
+          if candidate.exists():
+              candidate.unlink()
+          candidate.write_bytes(content)
+          candidate.chmod(0o644)
+          if candidate.read_bytes()!=content:
+              raise SystemExit("ROOT_TEMPLATE_CANDIDATE_VERIFY_FAILED")
+          candidate.replace(target)
+          print("PRODUCTION_ROOT_TEMPLATE_RESTORED=yes")
+          print("ROOT_TEMPLATE_BYTES="+str(len(content)))
+          PY
+          REMOTE
+      - name: Diagnose cPanel resource saturation
+        shell: bash
+        env:
+          SSH_CONFIG: ${{ runner.temp }}/zomorod-restore/config
+        run: |
+          set -euo pipefail
+          ssh -F "$SSH_CONFIG" saeit-cpanel bash -se <<'REMOTE'
+          set +e
+          echo "CPANEL_DIAGNOSTICS_BEGIN"
+          date -u
+          uptime
+          cat /proc/loadavg
+          ps -u "$(id -u)" -o pid,ppid,stat,etime,comm,%cpu,%mem --sort=-%cpu | head -n 25
+          for path in /home/zomorod2/public_html/index.html /home/zomorod2/public_html/amozeshgah/index.html /home/zomorod2/public_html/.htaccess; do
+            if test -f "$path"; then stat -c 'FILE=%n SIZE=%s MODE=%a MTIME=%y' "$path"; else echo "FILE_MISSING=$path"; fi
+          done
+          uapi --output=json ResourceUsage get_usages 2>&1 | head -c 12000 || true
+          echo
+          command -v lveinfo >/dev/null 2>&1 && lveinfo --user zomorod2 --period 1h --by-fault all 2>&1 | head -n 35 || true
+          echo "CPANEL_DIAGNOSTICS_END"
+          REMOTE
+      - name: Check live site routes
+        shell: bash
+        run: |
+          set -euo pipefail
+          token="codex-restore-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          urls=(
+            "https://zomorodmelal.ir/"
+            "https://www.zomorodmelal.ir/"
+            "https://zomorodmelal.ir/amozeshgah/"
+          )
+          failures=0
+          n=0
+          for original in "${urls[@]}"; do
+            n=$((n+1))
+            sep='?'
+            [[ "$original" == *\?* ]] && sep='&'
+            url="${original}${sep}healthcheck=${token}-${n}"
+            out="$RUNNER_TEMP/route-${n}.body"
+            status="$(curl --silent --show-error --location --max-time 35 --output "$out" --write-out '%{http_code}' -H 'Cache-Control: no-cache' "$url")"
+            echo "HTTP $status $original"
+            if (( status < 200 || status >= 400 )); then
+              failures=1
+              echo "ROUTE_FAILED=$original" >&2
+              head -c 1000 "$out" >&2 || true
+              echo
+              continue
+            fi
+            if [[ "$original" == "https://zomorodmelal.ir/" ]]; then
+              grep -q 'زمرد ملل | پیوند پژوهش، تولید و بازار' "$out" || failures=1
+              ! grep -qi 'Index of /' "$out" || failures=1
+              ! grep -q 'saeit-zomorod-root-homepage-v1' "$out" || failures=1
+            fi
+            if [[ "$original" == "https://zomorodmelal.ir/amozeshgah/" ]]; then
+              grep -q 'education-page' "$out" || failures=1
+              grep -q 'آموزش؛ از اولین درس تا مهارت حرفه‌ای' "$out" || failures=1
+            fi
+          done
+          if (( failures )); then
+            echo "PUBLIC_ROUTE_SMOKE_TESTS=failed"
+            exit 1
+          fi
+          echo "PUBLIC_ROUTE_SMOKE_TESTS=passed"
+      - name: Remove temporary SSH material
+        if: always()
+        shell: bash
+        run: rm -rf -- "$RUNNER_TEMP/zomorod-restore"
+,text))
+          if len(matches)!=1:
+              raise SystemExit(f"PASSENGER_PYTHON_DIRECTIVE_COUNT={len(matches)}")
+          updated=text[:matches[0].start()]+matches[0].group(1)+'"'+candidate+'"'+matches[0].group(2)+text[matches[0].end():]
+          fd,tmp=tempfile.mkstemp(prefix=".htaccess.python.",dir=str(path.parent))
+          with os.fdopen(fd,"w") as f: f.write(updated)
+          os.chmod(tmp,path.stat().st_mode & 0o777)
+          os.replace(tmp,path)
+          PY
+            python_path="$candidate"
+            echo "PASSENGER_PYTHON_VERSION_CHANGED=3.11"
+            echo "PREVIOUS_HTACCESS_BACKUP=$backup"
+          fi
           echo "PASSENGER_PYTHON_PATH=$python_path"
+          "$python_path" -c 'import django; print("DJANGO_VERSION="+django.get_version())'
+          touch tmp/restart.txt
+          echo "PASSENGER_RESTART_TRIGGERED=yes"
           set +e
           "$python_path" manage.py check >"$diag" 2>&1
           check_status=$?
