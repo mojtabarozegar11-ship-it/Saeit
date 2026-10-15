@@ -79,6 +79,8 @@ class FullPrivatePurchaseCycle(TransactionTestCase):
             MPW_COMMERCE_BUYER_SIGNATURE_ENABLED=True,
             MPW_COMMERCE_INVOICING_ENABLED=True,
             MPW_COMMERCE_SETTLEMENT_ENABLED=True,
+            MPW_COMMERCE_REAL_RPC_ENABLED=True,
+            MPW_COMMERCE_AUTORECONCILE_ENABLED=True,
             MPW_COMMERCE_DOWNLOADS_ENABLED=True,
             MPW_COMMERCE_BUYER_CRYPTO_PYTHON=sys.executable,
             MPW_COMMERCE_PRIVATE_ASSET_ROOT=str(root),
