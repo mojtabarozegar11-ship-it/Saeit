@@ -107,7 +107,7 @@ class AstraOpportunitySelectorTests(unittest.TestCase):
         row = run_rank([candidate("high", assessments=high)], [])["candidates"][0]
         self.assertEqual(row["status"], "RESEARCH_REQUIRED")
         self.assertEqual(row["priority_score"], 100)
-        self.assertIn("FEWER_THAN_TWO_DISTINCT_SOURCE_DOMAINS", row["blockers"])
+        self.assertIn("FEWER_THAN_THREE_DISTINCT_SOURCE_DOMAINS", row["blockers"])
 
     def test_one_domain_is_not_independent_sources(self):
         sources = [evidence("farm", "example.com", "problem"),
