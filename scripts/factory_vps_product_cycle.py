@@ -64,7 +64,9 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=2):
             "technical_zip_checks_only": True,
             "research_coverage_policy": "saeit.factory.research-readiness.v1",
             "research_review_candidate_count": dossier.get("research_review_candidates", 0),
-            "research_evidence_thresholds_satisfied": False,
+            "research_evidence_thresholds_satisfied_for_all_scanned": bool(
+                dossier["processed_count"] and dossier.get("research_review_candidates", 0) == dossier["processed_count"]
+            ),
             "commercial_quality_review_completed": False,
             "publishable_product_count": 0,
             "publication_locked_until_owner_approval": True,
