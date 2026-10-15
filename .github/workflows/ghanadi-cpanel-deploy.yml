@@ -156,6 +156,7 @@ jobs:
         run: |
           set -euo pipefail
           [[ "$DEPLOY_SHA" =~ ^[0-9a-f]{40}$ ]]
+          set +e
           deployment="$(ssh -F "$SSH_CONFIG" saeit-cpanel "bash -s -- '$DEPLOY_SHA'" <<'REMOTE'
           set -euo pipefail
           root="$HOME/Saeit"
@@ -186,6 +187,13 @@ jobs:
           printf 'APPROOT=%s\nPREVIOUS_SHA=%s\nDEPLOYED_SHA=%s\n' "$root" "$previous" "$(git -C "$root" rev-parse HEAD)"
           REMOTE
           )"
+          ssh_status=$?
+          set -e
+          if [ "$ssh_status" -ne 0 ]; then
+            echo "Remote deploy failed; captured server output follows:"
+            printf '%s\n' "$deployment" | tail -n 100
+            exit "$ssh_status"
+          fi
           printf '%s\n' "$deployment"
           root="$(printf '%s\n' "$deployment" | sed -n 's/^APPROOT=//p')"
           previous="$(printf '%s\n' "$deployment" | sed -n 's/^PREVIOUS_SHA=//p')"
