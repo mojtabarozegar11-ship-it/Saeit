@@ -31,9 +31,9 @@ def plan(app, module, backupdir):
     payload=source.read_bytes()
     compile(payload, str(target), "exec")
     prior_guard = (
-        b'    hostname = request.get_host().split(":", 1)[0].lower().rstrip(".")\\n'
-        b'    if hostname not in {"mojplaywin.com", "www.mojplaywin.com"}:\\n'
-        b'        raise Http404("Not found")\\n'
+        b'    hostname = request.get_host().split(":", 1)[0].lower().rstrip(".")\n'
+        b'    if hostname not in {"mojplaywin.com", "www.mojplaywin.com"}:\n'
+        b'        raise Http404("Not found")\n'
     )
     old_allowed = payload.replace(prior_guard, b"", 1)
     if target.exists() and target.read_bytes() not in (payload, old_allowed):
