@@ -1,8 +1,18 @@
 {
-  "commit_sha": "9bdee26d2380fc70ed9bc8472eeb3103048b454c",
+  "commit_sha": "03d44cedba78c291369626ac05a5349217163190",
   "passenger_virtual_env_configured": false,
   "passenger_launcher_present": true,
   "passenger_envvar_names": [],
+  "passenger_edit_result": {
+    "returncode": 0,
+    "status": 0,
+    "errors": [
+      "The required parameters are invalid or missing.\nError #1: Invalid configuration for the parameter “python”: "
+    ],
+    "requested_envvar_names": [
+      "VIRTUAL_ENV"
+    ]
+  },
   "root_app_enabled": true,
   "routes": {
     "https://zomorodmelal.ir/": 200,
