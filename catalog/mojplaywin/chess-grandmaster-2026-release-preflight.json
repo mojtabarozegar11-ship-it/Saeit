@@ -21,7 +21,14 @@
     "delivery_path_installed": true
   },
   "current_database_price_usd": "7.50",
-  "discount_claim": null,
+  "discount_claim": {
+    "list_price_usd": "30.00",
+    "sale_price_usd": "7.50",
+    "discount_amount_usd": "22.50",
+    "discount_percent": 75,
+    "source": "owner declaration on 2026-10-15",
+    "note": "Promotional list price, not an independently verified prior transaction price"
+  },
   "public_active": false,
   "checkout_enabled": false,
   "publication_gates": [
@@ -43,5 +50,15 @@
       "image provenance review",
       "separate editorial quality review"
     ]
-  }
+  },
+  "regular_price_usd": "30.00",
+  "current_private_draft": {
+    "pages": 741,
+    "filename": "MojPlayWin_Chess_Master_Editorial_Working_741p.pdf",
+    "bytes": 5285095,
+    "sha256": "fbe687e6ef947b827bf524fe32c3a23cae6618424134ac4ac3f1c3d094290cfb",
+    "database_binding_verified": "https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/38788880139",
+    "active": false
+  },
+  "private_asset_archival_note": "The legacy 415-page asset above is retained, not the currently bound 741-page draft."
 }
