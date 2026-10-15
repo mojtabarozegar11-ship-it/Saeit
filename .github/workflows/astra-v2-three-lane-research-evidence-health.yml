@@ -70,6 +70,15 @@ jobs:
           proof=datetime.datetime.fromisoformat(progress["updated_utc"])>first
           snapshot=json.loads(sources.read_text(encoding="utf-8"))
           assert snapshot["attempted"]==5 and len(snapshot["external_observations"])==5
+          expected={"water_multi_year_optimization","commodity_cost_method",
+                    "farm_income_method","farm_balance_sheet_method",
+                    "farm_budget_alternatives"}
+          assert {x["key"] for x in snapshot["external_observations"]}==expected
+          assert snapshot["retrieved_unverified"]==5,("fetched fewer than five in the revised initial audit",snapshot["retrieved_unverified"])
+          assert all(x["transport_state"]=="RETRIEVED_UNVERIFIED" and
+                     x["http_status"]==200 and
+                     isinstance(x["content_prefix_sha256"],str) and
+                     len(x["content_prefix_sha256"])==64 for x in snapshot["external_observations"])
           assert snapshot["number_of_salable_products_created"]==0
           assert snapshot["internal_audit"]["retail_release_authorized"] is False
           for entry in snapshot["external_observations"]:
