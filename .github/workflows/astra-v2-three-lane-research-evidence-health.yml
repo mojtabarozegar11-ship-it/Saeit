@@ -1,0 +1,96 @@
+name: Astra Independent Private Research and Five-Source Evidence Audit
+
+on:
+  push:
+    branches: [feature/astra-v2-0048-integration-canary-20261015]
+    paths: [.github/workflows/astra-v2-three-lane-research-evidence-health.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  read-only-triple-lane-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Verify actual private research crons, source reachability and zero retail gates
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          tmp="$RUNNER_TEMP/astra-three-lane-audit"
+          install -d -m 700 "$tmp"
+          trap 'rm -rf -- "$tmp"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$tmp/key"
+          chmod 600 "$tmp/key"
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$tmp/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$tmp/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -i "$tmp/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$tmp/known" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=15 githubops@178.239.147.150 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          root="$HOME/factory-runtime"
+          for marker in ASTRA_V2_PRIVATE_RESEARCH_BRIDGE ASTRA_V2_PRIVATE_RESEARCH_DOSSIERS ASTRA_V2_CURATED_PUBLIC_SOURCES; do
+            test "$(crontab -l | grep -c "$marker" || true)" = 1
+          done
+          "$root/.venv/bin/python" - \
+            "$root/private/factory-fresh-isolated.sqlite3" \
+            "$root/private/astra-v2-research-bridge/research-tasks.sqlite3" \
+            "$root/private/astra-v2-research-dossiers/briefs" \
+            "$root/private/astra-v2-curated-public-sources/five-official-sources.json" \
+            "$root/private/astra-v2-canary-products/queue.sqlite3" <<'PY'
+          import datetime,json,pathlib,sqlite3,sys
+          src,queue,dossiers,sources,private_factory=map(pathlib.Path,sys.argv[1:])
+          def ro(p):
+              assert p.is_file() and not p.is_symlink()
+              c=sqlite3.connect(p.resolve().as_uri()+"?mode=ro",uri=True,timeout=10)
+              c.execute("PRAGMA query_only=ON")
+              return c
+          with ro(src) as old,ro(queue) as q,ro(private_factory) as pf:
+              latest=old.execute("SELECT name FROM django_migrations WHERE app='core' ORDER BY name DESC LIMIT 1").fetchone()[0]
+              assert latest=="0048_business_market_architecture"
+              product_count=old.execute("SELECT COUNT(*) FROM core_product").fetchone()[0]
+              task_count=q.execute("SELECT COUNT(*) FROM research_tasks").fetchone()[0]
+              bad=q.execute("SELECT COUNT(*) FROM research_tasks WHERE sale_ready<>0 OR market_demand_verified<>0 OR quality_score IS NOT NULL").fetchone()[0]
+              assert bad==0 and task_count>=50
+              ticks=int(q.execute("SELECT value FROM bridge_meta WHERE key='ticks_total'").fetchone()[0])
+              families=pf.execute("SELECT COUNT(DISTINCT builder) FROM jobs WHERE stage='PRIVATE_QA_PASSED'").fetchone()[0]
+              assert families>=3
+          assert dossiers.is_dir() and not dossiers.is_symlink()
+          docs=list(dossiers.glob("research-*.json"))
+          assert len(docs)>=50,len(docs)
+          progress_file=dossiers/".research-dossiers-cursor.json"
+          assert progress_file.is_file() and not progress_file.is_symlink()
+          progress=json.loads(progress_file.read_text())
+          age=(datetime.datetime.now(datetime.timezone.utc)-datetime.datetime.fromisoformat(progress["updated_utc"])).total_seconds()
+          # First manual run was 05:26 UTC. Here prove a later automatic cron tick.
+          first=datetime.datetime(2026,10,15,5,26,11,tzinfo=datetime.timezone.utc)
+          proof=datetime.datetime.fromisoformat(progress["updated_utc"])>first
+          snapshot=json.loads(sources.read_text(encoding="utf-8"))
+          assert snapshot["attempted"]==5 and len(snapshot["external_observations"])==5
+          assert snapshot["number_of_salable_products_created"]==0
+          assert snapshot["internal_audit"]["retail_release_authorized"] is False
+          for entry in snapshot["external_observations"]:
+              assert entry["demand_verified"] is False
+              assert entry["willingness_to_pay_verified"] is False
+              print("ASTRA_SOURCE_"+entry["key"].upper()+"="+entry["transport_state"]+
+                    "_HTTP_"+str(entry["http_status"])+
+                    "_ERROR_"+str(entry.get("error_type","NONE")))
+          print("ASTRA_RESEARCH_THREE_LANE_HEALTH=PASS")
+          print("ASTRA_RESEARCH_INDEPENDENT_CRONS=3")
+          print("ASTRA_RESEARCH_BRIDGE_TICKS="+str(ticks))
+          print("ASTRA_RESEARCH_DOSSIERS="+str(len(docs)))
+          print("ASTRA_RESEARCH_DOSSIER_LAST_BUILD_AGE_SECONDS="+str(int(age)))
+          print("ASTRA_RESEARCH_DOSSIER_CRON_AFTER_FIRST_INSTALL="+str(proof).lower())
+          print("ASTRA_RESEARCH_SOURCE_ATTEMPTS="+str(snapshot["attempted"]))
+          print("ASTRA_RESEARCH_SOURCE_FETCHED_UNVERIFIED="+str(snapshot["retrieved_unverified"]))
+          print("ASTRA_RESEARCH_SOURCE_FAILED_OR_BLOCKED="+str(snapshot["failed_or_inaccessible"]))
+          print("ASTRA_RESEARCH_PRIVATE_BUILDERS="+str(families))
+          print("ASTRA_RESEARCH_ORIGINAL_FACTORY_PRODUCTS="+str(product_count))
+          print("ASTRA_RESEARCH_ORIGINAL_MIGRATION_0048=true")
+          print("ASTRA_RESEARCH_COMMERCIAL_RELEASES=0")
+          print("ASTRA_RESEARCH_NO_LIVE_DB_WRITES=true")
+          PY
+          REMOTE
