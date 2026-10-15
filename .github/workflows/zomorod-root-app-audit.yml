@@ -259,6 +259,59 @@ jobs:
           date -u
           uptime
           cat /proc/loadavg
+          python3 - <<'PY'
+          import os,signal,subprocess,time
+          root=2247230
+          def meta(pid):
+              base=f"/proc/{pid}"
+              status=open(base+"/status").read()
+              ppid=int(next(x.split()[1] for x in status.splitlines() if x.startswith("PPid:")))
+              uid=int(next(x.split()[1] for x in status.splitlines() if x.startswith("Uid:")))
+              cmd=open(base+"/cmdline","rb").read().replace(b"\\0",b" ").decode(errors="replace")
+              elapsed=int(subprocess.check_output(["ps","-p",str(pid),"-o","etimes="],text=True).strip() or "0")
+              return ppid,uid,cmd,elapsed
+          try:
+              ppid,uid,cmd,elapsed=meta(root)
+          except (OSError,StopIteration,ValueError):
+              print("ORPHAN_SCREENSHOT_CLEANUP=already_gone")
+              raise SystemExit(0)
+          expected=("--screenshot=/home/zomorod2/Saeit/var/carpet_backup_20261003/desktop-review.png" in cmd and
+                    "https://zomorodmelal.ir/carpets/" in cmd and "/home/zomorod2/browser/chromium" in cmd)
+          if ppid!=1 or uid!=os.getuid() or not expected or elapsed<604800:
+              print(f"ORPHAN_SCREENSHOT_CLEANUP=refused ppid={ppid} uid_matches={uid==os.getuid()} elapsed={elapsed} expected={expected}")
+              raise SystemExit(0)
+          descendants={root}
+          changed=True
+          while changed:
+              changed=False
+              for name in os.listdir("/proc"):
+                  if not name.isdigit(): continue
+                  pid=int(name)
+                  try:
+                      parent,child_uid,child_cmd,_=meta(pid)
+                  except (OSError,StopIteration,ValueError,subprocess.CalledProcessError):
+                      continue
+                  if parent in descendants and pid not in descendants:
+                      if child_uid!=os.getuid() or "/home/zomorod2/browser/chromium" not in child_cmd:
+                          print(f"ORPHAN_SCREENSHOT_CLEANUP=refused_unexpected_child pid={pid}")
+                          raise SystemExit(0)
+                      descendants.add(pid);changed=True
+          print("ORPHAN_SCREENSHOT_MATCH=yes elapsed_seconds="+str(elapsed)+" process_count="+str(len(descendants)))
+          for pid in sorted(descendants,reverse=True):
+              try: os.kill(pid,signal.SIGTERM)
+              except ProcessLookupError: pass
+          time.sleep(2)
+          for pid in sorted(descendants,reverse=True):
+              try:
+                  if os.path.exists(f"/proc/{pid}"): os.kill(pid,signal.SIGKILL)
+              except ProcessLookupError: pass
+          time.sleep(1)
+          remaining=[pid for pid in descendants if os.path.exists(f"/proc/{pid}")]
+          if remaining:
+              print("ORPHAN_SCREENSHOT_CLEANUP=partial remaining="+",".join(map(str,remaining)))
+          else:
+              print("ORPHAN_SCREENSHOT_CLEANUP=stopped")
+          PY
           uid="$(id -u)"
           echo "ACCOUNT_PROCESS_COUNT=$(ps -u "$uid" --no-headers | wc -l)"
           ps -u "$uid" -o pid,ppid,stat,etime,comm,%cpu,%mem,args --sort=-%cpu | head -n 45
