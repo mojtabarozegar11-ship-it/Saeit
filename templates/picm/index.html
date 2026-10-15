@@ -18,7 +18,7 @@ h1{font-size:clamp(27px,4.5vw,46px);margin:8px 0 10px}
 .layout{display:grid;grid-template-columns:minmax(320px,1fr) minmax(310px,.95fr);gap:20px}
 .panel{padding:24px;border-radius:22px;border:1px solid #3a4764;background:#151f35e8;box-shadow:0 15px 50px #0003}
 h2{font-size:20px;margin:0 0 17px}
-.modes{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:15px 0 21px}
+.modes{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin:15px 0 21px}
 .mode{cursor:pointer;border:1px solid #475878;border-radius:12px;padding:15px 8px;text-align:center;background:#0e182d;color:#c7d5ed;min-height:90px}
 .mode[aria-pressed="true"]{border-color:#a4a0ff;background:#2d3158;color:#fff;box-shadow:0 0 0 2px #aaa3ff40}
 .mode strong{display:block;font-size:13px;line-height:1.7}
@@ -40,7 +40,7 @@ input[type=range]{width:100%;accent-color:#a0a7ff}button.stop-video{margin-top:1
 footer{margin-top:29px;color:#8696b6;font-size:12px}
 .logout{margin:25px 0 0;display:flex;justify-content:flex-start}
 .logout button{background:transparent;border:1px solid #607092;color:#bbc9e4;border-radius:11px;padding:11px 20px;cursor:pointer}
-@media(max-width:770px){.layout{grid-template-columns:1fr}.panel{padding:18px}.modes{grid-template-columns:1fr 1fr 1fr}.preview{min-height:220px}}
+@media(max-width:770px){.layout{grid-template-columns:1fr}.panel{padding:18px}.modes{grid-template-columns:1fr 1fr}.preview{min-height:220px}}
 </style>
 </head>
 <body>
@@ -48,13 +48,14 @@ footer{margin-top:29px;color:#8696b6;font-size:12px}
 <main>
 <div class="eyebrow">PICM · PRIVATE PHOTO WORKSPACE</div>
 <h1>استودیوی عکس و ویدیو</h1>
-<p class="lead">عکس مرجع خود را انتخاب کنید و حالت مورد نظر را مشخص کنید. این میز کار فقط سه حالت مبتنی بر عکس دارد؛ ساخت عکس یا ویدیو از متنِ تنها حذف شده است.</p>
+<p class="lead">عکس مرجع خود را انتخاب کنید و حالت مورد نظر را مشخص کنید. یک عکس بدهید، روایت را بنویسید و گزینهٔ «عکس + داستان ← فیلم» را انتخاب کنید. برنامهٔ صحنه‌ها خصوصی آماده می‌شود؛ تا زمان اتصال پردازشگر GPU، فیلم واقعی تولید نمی‌شود.</p>
 <div class="layout">
 <section class="panel">
 <h2>تنظیمات پروژه</h2>
 <div class="modes" role="group" aria-label="انتخاب نوع پردازش">
 <button class="mode" id="mode-image_edit" type="button" aria-pressed="true" data-mode="image_edit"><strong>عکس + متن ← عکس</strong><small>Photo Editing</small></button>
-<button class="mode" id="mode-image_video" type="button" aria-pressed="false" data-mode="image_video"><strong>عکس + متن ← ویدیو</strong><small>Image to Video</small></button>
+<button class="mode" id="mode-image_video" type="button" aria-pressed="false" data-mode="image_video"><strong>حرکت سادهٔ عکس</strong><small>Pan / Zoom Only</small></button>
+<button class="mode" id="mode-story_video" type="button" aria-pressed="false" data-mode="story_video"><strong>عکس + داستان ← فیلم</strong><small>Story to Film · GPU Pending</small></button>
 <button class="mode" id="mode-upscale_8k" type="button" aria-pressed="false" data-mode="upscale_8k"><strong>ارتقای عکس 8K</strong><small>True Upscale</small></button>
 </div>
 <form id="renderform" enctype="multipart/form-data">
@@ -75,6 +76,13 @@ footer{margin-top:29px;color:#8696b6;font-size:12px}
 <label for="photo-saturation">اشباع رنگ</label>
 <input type="range" id="photo-saturation" min="0" max="165" value="108" step="3">
 <p class="hint">ویرایش رایگان و دستی عکس: نور، کنتراست و رنگ؛ خروجی JPEG با حفظ تناسب تصویر و حداکثر ضلع ۲۰۴۸ پیکسل. این قابلیت مولد هوش مصنوعی نیست.</p>
+</div>
+<div id="story-options" hidden>
+<label for="story-duration">مدت فیلم داستانی</label>
+<select id="story-duration"><option value="5">۵ ثانیه</option><option value="10">۱۰ ثانیه</option><option value="30">۳۰ ثانیه</option><option value="60" selected>۶۰ ثانیه</option></select>
+<label for="story-ratio">کادر خروجی آینده</label>
+<select id="story-ratio"><option value="wide">افقی ۱۶:۹</option><option value="vertical">عمودی ۹:۱۶</option></select>
+<p class="hint">از یک عکس و یک دستور داستانی، صحنه‌ها و زمان‌بندی کلیپ‌های روایی آماده می‌شود. این حالت هنوز GPU ندارد و فایل ویدیو نمی‌سازد.</p>
 </div>
 <div id="video-options" hidden>
 <label for="video-duration">مدت ویدیوی رایگان</label>
@@ -147,4 +155,5 @@ window.addEventListener('pagehide',()=>{if(objectURL)URL.revokeObjectURL(objectU
 })();
 </script>
 <script>{% include 'picm/free_motion.js' %}</script>
+<script>{% include 'picm/story_preview.js' %}</script>
 </body></html>
