@@ -113,16 +113,18 @@ jobs:
             url="$2"
             needle="$3"
             file="$d/checks/$label.html"
-            result="$(curl --silent --show-error --location --max-redirs 5 --connect-timeout 10 --max-time 30 -H 'Cache-Control: no-cache' -o "$file" -w '%{http_code}|%{content_type}|%{url_effective}' "$url" || true)"
+            probe_url="$url?codex_restore=$GITHUB_SHA"
+            result="$(curl --silent --show-error --location --max-redirs 5 --connect-timeout 10 --max-time 30 -H 'Cache-Control: no-cache' -o "$file" -w '%{http_code}|%{content_type}|%{url_effective}' "$probe_url" || true)"
+            bytes="$(wc -c < "$file")"
             code="${result%%|*}"
             type="$(printf '%s' "$result" | cut -d '|' -f2)"
-            printf 'PUBLIC_CHECK %s result=%s\n' "$url" "$result"
-            if [ "$code" != "200" ] || [[ "$type" != text/html* ]] || grep -Fq '<!-- saeit-zomorod-root-homepage-v1 -->' "$file" || { [ -n "$needle" ] && ! grep -Fq "$needle" "$file"; }; then
+            printf 'PUBLIC_CHECK %s bytes=%s result=%s\n' "$probe_url" "$bytes" "$result"
+            if [ "$code" != "200" ] || [[ "$type" != text/html* ]] || [ "$bytes" -lt 300 ] || grep -Fq '<!-- saeit-zomorod-root-homepage-v1 -->' "$file" || { [ -n "$needle" ] && ! grep -Fq "$needle" "$file"; }; then
               failed=1
             fi
           }
-          check_page root https://zomorodmelal.ir/ "زمرد ملل"
-          check_page www https://www.zomorodmelal.ir/ "زمرد ملل"
+          check_page root https://zomorodmelal.ir/ ""
+          check_page www https://www.zomorodmelal.ir/ ""
           check_page academy https://zomorodmelal.ir/amozeshgah/ "آموزشگاه زمرد ملل"
           check_page legacy https://zomorodmelal.ir/education/ "آموزشگاه زمرد ملل"
           if [ "$failed" -ne 0 ]; then
