@@ -52,14 +52,27 @@ def inspect(host_root, workflow_api, node_map, *,
         if gpu_profile == "wan22-5b-offload-8gb":
             # Prevent accidental acceptance of a larger 14B image-to-video
             # graph merely because its sampler and hardware API exist.
-            models = [node for node in graph.values()
-                      if node.get("class_type") == "UNETLoader"]
+            # Only nodes that actually contribute to SaveVideo count.
+            reachable = set()
+            pending = [mapping["output"]]
+            while pending:
+                node_id = pending.pop()
+                if node_id in reachable:
+                    continue
+                reachable.add(node_id)
+                for value in graph[node_id]["inputs"].values():
+                    if (isinstance(value, list) and len(value) == 2
+                            and isinstance(value[1], int)
+                            and str(value[0]) in graph):
+                        pending.append(str(value[0]))
+            models = [graph[node_id] for node_id in reachable
+                      if graph[node_id].get("class_type") == "UNETLoader"]
             if not any(
                     "wan2.2_ti2v_5b" in str(node.get("inputs", {}).get("unet_name", "")).lower()
                     for node in models):
                 problems.append("wan22_5b_checkpoint_not_selected_in_workflow")
-            if not any(node.get("class_type") == "Wan22ImageToVideoLatent"
-                       for node in graph.values()):
+            if not any(graph[node_id].get("class_type") == "Wan22ImageToVideoLatent"
+                       for node_id in reachable):
                 problems.append("wan22_5b_i2v_latent_node_missing")
         details["connected_i2v_graph"] = True
     except (AssemblyError, OSError, ValueError, KeyError, TypeError):
