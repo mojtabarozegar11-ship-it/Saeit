@@ -96,3 +96,34 @@ for p in Product.objects.filter(factory_managed=True).only("metadata").iterator(
 print("FACTORY_PRODUCT_STATES=" + ",".join(f"{k}:{v}" for k,v in product_state.most_common()),flush=True)
 print("VALIDATION_MISSING_FACTOR_CATEGORIES=" + ",".join(f"{k}:{v}" for k,v in missing_factors.most_common(20)),flush=True)
 print("SAFE_AUDIT_COMPLETED",flush=True)
+
+
+# Locate the *static code path* emitting owner/provenance errors without
+# logging potentially sensitive source lines, credentials, or traceback data.
+from pathlib import Path
+src_root = Path.home() / "factory-runtime/django-app"
+match_count = 0
+scan_folders = (src_root / "core", src_root / "config", src_root / "scripts")
+for folder in scan_folders:
+    if not folder.is_dir():
+        continue
+    for file in folder.rglob("*.py"):
+        if match_count >= 12:
+            break
+        if "migrations" in file.parts or file.is_symlink() or file.stat().st_size > 300_000:
+            continue
+        if not file.resolve().is_relative_to(src_root.resolve()):
+            continue
+        try:
+            for number, line in enumerate(file.read_text(encoding="utf-8", errors="replace").splitlines(), 1):
+                low = line.lower()
+                if ("owner" in low and "provenance" in low and
+                    ("project" in low or "research" in low)):
+                    safe = str(file.relative_to(src_root)).replace("\\","/")
+                    if all(part.replace("_","").replace("-","").isalnum() for part in file.relative_to(src_root).parts):
+                        print("OWNER_PROVENANCE_CODE_LOCATION="+safe+":"+str(number),flush=True)
+                        match_count+=1
+                    if match_count>=12: break
+        except (OSError, UnicodeError):
+            pass
+print("PROVENANCE_STATIC_CODE_MATCHES="+str(match_count),flush=True)
