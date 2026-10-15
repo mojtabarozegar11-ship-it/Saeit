@@ -4,6 +4,8 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/amozeshgah-alias-deploy.yml"
+      - "public/amozeshgah/index.html"
+  workflow_dispatch:
 permissions:
   contents: read
 concurrency:
@@ -14,6 +16,48 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
+      - name: Check out the reviewed page source
+        uses: actions/checkout@v4
+
+      - name: Validate page source
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from html.parser import HTMLParser
+          from pathlib import Path
+
+          path = Path("public/amozeshgah/index.html")
+          source = path.read_text(encoding="utf-8")
+          class PageCheck(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.title = False
+                  self.canonical = False
+                  self.rtl = False
+                  self.h1 = False
+              def handle_starttag(self, tag, attrs):
+                  values = dict(attrs)
+                  if tag == "html":
+                      self.rtl = values.get("lang") == "fa" and values.get("dir") == "rtl"
+                  if tag == "title":
+                      self.title = True
+                  if tag == "link" and values.get("rel") == "canonical":
+                      self.canonical = values.get("href") == "https://zomorodmelal.ir/amozeshgah/"
+                  if tag == "h1":
+                      self.h1 = True
+          check = PageCheck()
+          check.feed(source)
+          if not all((check.title, check.canonical, check.rtl, check.h1)):
+              raise SystemExit("Page is missing title, canonical URL, Persian RTL metadata, or main heading")
+          if len(source.encode("utf-8")) < 12000:
+              raise SystemExit("Education page source is unexpectedly small")
+          if "<style>" not in source or "prefers-reduced-motion" not in source:
+              raise SystemExit("Self-contained responsive styles are missing")
+          print("PAGE_SOURCE_VALIDATION=passed")
+          print(f"PAGE_BYTES={len(source.encode('utf-8'))}")
+          PY
+
       - name: Prepare pinned VPS relay and cPanel SSH
         env:
           VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
@@ -61,102 +105,71 @@ jobs:
           printf '%s\n' "$scan" > "$d/host.candidate"
           test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
           cp "$d/host.candidate" "$d/host.known"
-      - name: Prepare the education page and isolated Passenger app
+
+      - name: Stage page and publish without touching the main app
         shell: bash
         run: |
           set -euo pipefail
-          work="$RUNNER_TEMP/amozeshgah-publish"
-          if ! home_code="$(curl -sSL --retry 2 --retry-delay 1 --max-time 35 -o "$work/home-before.html" -w '%{http_code}' https://zomorodmelal.ir/)"; then home_code=000; fi
-          if ! education_code="$(curl -sSL --retry 2 --retry-delay 1 --max-time 35 -o "$work/education-before.html" -w '%{http_code}' https://zomorodmelal.ir/education/)"; then education_code=000; fi
-          echo "PRE_DEPLOY_HOME_HTTP=$home_code"
-          echo "PRE_DEPLOY_EDUCATION_HTTP=$education_code"
-          test "$home_code" = "200"
-          test "$education_code" = "200"
-          python3 - "$work/education-before.html" "$work/index.html" "$work/passenger_wsgi.py" <<'PY'
-          import re,sys
-          source=open(sys.argv[1],encoding="utf-8").read()
-          html=source.replace("https://zomorodmelal.ir/education/","https://zomorodmelal.ir/amozeshgah/")
-          html=html.replace("http://zomorodmelal.ir/education/","https://zomorodmelal.ir/amozeshgah/")
-          html=html.replace("/education/","/amozeshgah/")
-          if not re.search(r"<title>[^<]*آموزش",html,re.I):
-              raise SystemExit("Education page title was not found")
-          if 'rel="canonical"' not in html and "rel='canonical'" not in html:
-              head=re.search(r"<head\b[^>]*>",html,re.I)
-              if not head:
-                  raise SystemExit("HTML head element was not found")
-              html=html[:head.end()]+ '\n<link rel="canonical" href="https://zomorodmelal.ir/amozeshgah/">' + html[head.end():]
-          if "https://zomorodmelal.ir/amozeshgah/" not in html:
-              raise SystemExit("Canonical education URL was not set")
-          open(sys.argv[2],"w",encoding="utf-8").write(html)
-          wsgi = "\n".join((
-              "from pathlib import Path",
-              "PAGE = Path(__file__).with_name('index.html').read_bytes()",
-              "def application(environ, start_response):",
-              "    method = environ.get('REQUEST_METHOD', 'GET').upper()",
-              "    if method not in ('GET', 'HEAD'):",
-              "        body = b'Method Not Allowed'",
-              "        start_response('405 Method Not Allowed', [('Content-Type', 'text/plain; charset=utf-8'), ('Content-Length', str(len(body))), ('Allow', 'GET, HEAD')])",
-              "        return [body]",
-              "    headers = [('Content-Type', 'text/html; charset=utf-8'), ('Content-Length', str(len(PAGE))), ('Cache-Control', 'no-cache'), ('X-Content-Type-Options', 'nosniff')]",
-              "    start_response('200 OK', headers)",
-              "    return [b''] if method == 'HEAD' else [PAGE]",
-          )) + "\n"
-          open(sys.argv[3],"w",encoding="utf-8").write(wsgi)
-          print(f"EDUCATION_PAGE_BYTES={len(html.encode('utf-8'))}")
-          print("EDUCATION_TITLE_AND_CANONICAL=verified")
+          d="$RUNNER_TEMP/amozeshgah-publish"
+          target="/home/zomorod2/public_html/amozeshgah"
+          stage="/home/zomorod2/public_html/.amozeshgah-stage-$GITHUB_SHA"
+          ssh -F "$d/config" saeit-cpanel "set -eu; test ! -e '$target' && test ! -L '$target'; test ! -e '$stage' && mkdir -m 755 '$stage'"
+          tar -C public/amozeshgah -czf - index.html | ssh -F "$d/config" saeit-cpanel "tar -xzf - -C '$stage'"
+          ssh -F "$d/config" saeit-cpanel "set -eu; chmod 644 '$stage/index.html'; chmod 755 '$stage'; test ! -e '$target' && test ! -L '$target'; mv -T '$stage' '$target'; test -s '$target/index.html'; echo STATIC_PAGE_INSTALLED=yes"
+
+      - name: Verify public URL and roll back a failed publication
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/amozeshgah-publish"
+          html="$d/amozeshgah-after.html"
+          result="$(curl --silent --show-error --location --retry 2 --retry-delay 1 --max-time 40 -H 'Cache-Control: no-cache' -o "$html" -w '%{http_code}|%{content_type}' https://zomorodmelal.ir/amozeshgah/ || true)"
+          code="${result%%|*}"
+          content_type="${result#*|}"
+          valid=1
+          if [ "$code" != "200" ] || [[ "$content_type" != text/html* ]]; then valid=0; fi
+          if ! python3 - "$html" <<'PY'
+          import sys
+          from html.parser import HTMLParser
+          from pathlib import Path
+          try:
+              source = Path(sys.argv[1]).read_text(encoding="utf-8")
+          except Exception:
+              raise SystemExit(1)
+          class Verify(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.title = False
+                  self.canonical = False
+                  self.rtl = False
+                  self.heading = False
+              def handle_starttag(self, tag, attrs):
+                  a = dict(attrs)
+                  if tag == "html":
+                      self.rtl = a.get("lang") == "fa" and a.get("dir") == "rtl"
+                  if tag == "title":
+                      self.title = True
+                  if tag == "link" and a.get("rel") == "canonical":
+                      self.canonical = a.get("href") == "https://zomorodmelal.ir/amozeshgah/"
+                  if tag == "h1":
+                      self.heading = True
+          v = Verify()
+          v.feed(source)
+          raise SystemExit(0 if all((v.title, v.canonical, v.rtl, v.heading)) else 1)
           PY
-          tar -C "$work" -czf "$work/passenger-app.tar.gz" index.html passenger_wsgi.py
-          echo "PRE_DEPLOY_HOME_HTTP=$home_code"
-          echo "PRE_DEPLOY_EDUCATION_HTTP=$education_code"
-      - name: Install and register the isolated Passenger app
-        id: register
-        shell: bash
-        run: |
-          set -euo pipefail
-          work="$RUNNER_TEMP/amozeshgah-publish"
-          app="/home/zomorod2/Saeit-amozeshgah"
-          stage="/home/zomorod2/.saeit-amozeshgah-stage-$GITHUB_SHA"
-          ssh -F "$work/config" saeit-cpanel "set -euo pipefail; test ! -e '$app' && test ! -L '$app'; test ! -e '$stage' && mkdir -m 700 '$stage'"
-          if ! tar -C "$work" -xzf "$work/passenger-app.tar.gz" -O index.html >/dev/null; then
-            ssh -F "$work/config" saeit-cpanel "rm -rf '$stage'"
+          then valid=0; fi
+          if [ "$valid" -ne 1 ]; then
+            echo "PUBLIC_CHECK_FAILED status=$code content_type=$content_type"
+            backup="/home/zomorod2/.backups/zomorodmelal-amozeshgah/static-failed-$GITHUB_SHA"
+            ssh -F "$d/config" saeit-cpanel "set -eu; if test -d /home/zomorod2/public_html/amozeshgah; then install -d -m 700 /home/zomorod2/.backups/zomorodmelal-amozeshgah; test ! -e '$backup'; mv -T /home/zomorod2/public_html/amozeshgah '$backup'; fi; echo ROLLBACK_COMPLETED=yes"
             exit 1
           fi
-          tar -C "$work" -czf - index.html passenger_wsgi.py | ssh -F "$work/config" saeit-cpanel "tar -xzf - -C '$stage'"
-          ssh -F "$work/config" saeit-cpanel "set -euo pipefail; chmod 644 '$stage/index.html' '$stage/passenger_wsgi.py'; chmod 755 '$stage'; mv '$stage' '$app'"
-          result="$(ssh -F "$work/config" saeit-cpanel 'uapi --output=json PassengerApps register_application name=zomorod-amozeshgah path=Saeit-amozeshgah domain=zomorodmelal.ir deployment_mode=production base_uri=/amozeshgah enabled=1')"
-          printf '%s\n' "$result" > "$work/register.json"
-          python3 - "$work/register.json" <<'PY'
-          import json,sys
-          obj=json.load(open(sys.argv[1],encoding="utf-8"))
-          result=obj.get("result") or {}
-          if result.get("status") != 1:
-              raise SystemExit("Passenger application registration did not succeed")
-          print("PASSENGER_REGISTRATION=success")
-          PY
-      - name: Verify public URL and existing site health
-        shell: bash
-        run: |
-          set -euo pipefail
-          work="$RUNNER_TEMP/amozeshgah-publish"
-          set +e
-          alias_code="$(curl -sS --max-time 30 -H 'Cache-Control: no-cache' -H 'Pragma: no-cache' -o "$work/amozeshgah-after.html" -w '%{http_code}' https://zomorodmelal.ir/amozeshgah/)"
-          education_code="$(curl -sS --max-time 25 -H 'Cache-Control: no-cache' -o "$work/education-after.html" -w '%{http_code}' https://zomorodmelal.ir/education/)"
-          home_code="$(curl -sS --max-time 25 -H 'Cache-Control: no-cache' -o "$work/home-after.html" -w '%{http_code}' https://zomorodmelal.ir/)"
-          css_code="$(curl -sS --max-time 25 -o "$work/site.css" -w '%{http_code}' 'https://zomorodmelal.ir/static/site/modern.css?v=20261006-final')"
-          set -e
-          if [ "$alias_code" != "200" ] || [ "$education_code" != "200" ] || [ "$home_code" != "200" ] || [ "$css_code" != "200" ] || ! grep -Eiq '<title>[^<]*آموزش' "$work/amozeshgah-after.html" || ! grep -Fq 'https://zomorodmelal.ir/amozeshgah/' "$work/amozeshgah-after.html"; then
-            echo "POST_DEPLOY_CHECK_FAILED alias=$alias_code education=$education_code home=$home_code css=$css_code"
-            ssh -F "$work/config" saeit-cpanel 'uapi --output=json PassengerApps unregister_application name=zomorod-amozeshgah >/dev/null 2>&1 || true'
-            backup="/home/zomorod2/.backups/zomorodmelal-amozeshgah/failed-$GITHUB_SHA"
-            ssh -F "$work/config" saeit-cpanel "set -euo pipefail; if test -d /home/zomorod2/Saeit-amozeshgah; then install -d -m 700 /home/zomorod2/.backups/zomorodmelal-amozeshgah; mv /home/zomorod2/Saeit-amozeshgah '$backup'; fi; echo ROLLBACK_COMPLETED=yes"
-            exit 1
-          fi
-          echo "AMOZESHGHAH_HTTP=$alias_code"
-          echo "EDUCATION_HTTP=$education_code"
-          echo "HOME_HTTP=$home_code"
-          echo "EDUCATION_CSS_HTTP=$css_code"
-          grep -Eio '<title>[^<]*</title>' "$work/amozeshgah-after.html" | head -1
-          grep -Eio '<link rel="canonical"[^>]*>' "$work/amozeshgah-after.html" | head -1
+          echo "AMOZESHGHAH_HTTP=$code"
+          echo "CONTENT_TYPE=$content_type"
+          echo "PUBLIC_HTML_VALIDATION=passed"
+          grep -Eio '<title>[^<]*</title>' "$html" | head -1
+          grep -Eio '<link rel="canonical"[^>]*>' "$html" | head -1
+
       - name: Remove temporary SSH material
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/amozeshgah-publish"
