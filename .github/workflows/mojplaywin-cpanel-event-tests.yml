@@ -1,0 +1,30 @@
+name: MojPlayWin local purchase event tests (zero idle network)
+on:
+  push:
+    branches:
+      - release/mojplaywin-chess-product-20261014
+    paths:
+      - '.github/workflows/mojplaywin-cpanel-event-tests.yml'
+      - 'scripts/mojplaywin_cpanel_local_event_worker.py'
+      - 'tests/test_mojplaywin_cpanel_local_event_worker.py'
+      - 'mpw_native_checkout/purchase_notify.py'
+      - 'tests/native_ci_purchase_notify.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  local-event:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Simulate two purchases, close event, and no idle indexer
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p 'test_mojplaywin_cpanel_local_event_worker.py' -v
+          python3 -m py_compile scripts/mojplaywin_cpanel_local_event_worker.py mpw_native_checkout/purchase_notify.py
+          echo ZERO_IDLE_BLOCKCHAIN_REQUESTS_CI_TESTED
+          echo NO_PRODUCTION_ORDERS_OR_WALLET_OPERATIONS

@@ -81,3 +81,11 @@ urlpatterns += [path("newsletter/", newsletter_home, name="newsletter"), path("n
 
 from core.blog_views import blog_home, blog_page
 urlpatterns += [path("blog/", blog_home, name="blog"), path("blog/<path:slug>/", blog_page, name="blog_page")]
+
+# Private merchant verification page. The default flag is false; no extra
+# routes, migrations, product activation or payment changes in that state.
+from django.conf import settings
+if getattr(settings, "MPW_MERCHANT_WALLET_PROOF_ENABLED", False) is True:
+    urlpatterns += [
+        path("", include("mpw_native_checkout.merchant_wallet_urls")),
+    ]

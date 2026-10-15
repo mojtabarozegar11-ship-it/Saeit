@@ -1,0 +1,22 @@
+name: MojPlayWin direct-wallet rate source readiness
+on:
+  push:
+    paths:
+      - '.github/workflows/mojplaywin-direct-wallet-rate-readiness.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  check-market-data:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check recent USD spot pricing from read-only source
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=scripts python3 scripts/mojplaywin_direct_wallet_rates.py
+          echo "QUOTE_PRECHECK_ONLY_NO_ORDERS_CREATED"

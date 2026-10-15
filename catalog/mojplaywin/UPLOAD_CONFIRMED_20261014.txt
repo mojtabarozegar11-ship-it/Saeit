@@ -1,0 +1,5 @@
+OWNER_CONFIRMED_UPLOAD=YES
+APPROVED_ZIP=MojPlayWin_Chess_Product_Assets_2026-10-14.zip
+EXPECTED_SHA256=5822a13a29e872739c0d2989dbac6909eee52eac300e643e52f5aa30f055af5c
+PRODUCT_DATABASE_ID=72
+NOTE=Private-only verification and extraction; live sales stay disabled.

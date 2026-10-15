@@ -1,0 +1,181 @@
+name: MojPlayWin chess delivery preparation (safe staging)
+on:
+  push:
+    paths:
+      - '.github/workflows/mojplaywin-chess-preparation.yml'
+      - 'scripts/mojplaywin_cpanel_local_event_worker.py'
+      - 'scripts/install_mpw_cpanel_staging_listener.sh'
+      - 'mpw_native_checkout/models.py'
+      - 'mpw_native_checkout/purchase_notify.py'
+      - 'mpw_native_checkout/migrations/0002_nativewatchoutbox.py'
+      - 'mpw_native_checkout/management/commands/mpw_native_flush_events.py'
+      - 'mpw_native_checkout/management/commands/mpw_native_event_loop.py'
+      - 'mpw_native_checkout/wallet_ownership.py'
+      - 'mpw_native_checkout/crypto_subprocess_verify.py'
+      - 'mpw_native_checkout/merchant_wallet_views.py'
+      - 'mpw_native_checkout/merchant_wallet_urls.py'
+      - 'mpw_native_checkout/templates/mpw_native_checkout/merchant_wallet_proof.html'
+      - 'mpw_native_checkout/migrations/0003_merchantwalletchallenge_merchantwalletproof.py'
+      - 'tests/test_mojplaywin_cpanel_local_event_worker.py'
+      - 'scripts/mojplaywin_direct_wallet_invoice.py'
+      - 'tests/test_mojplaywin_direct_wallet_invoice.py'
+      - 'scripts/mojplaywin_direct_wallet_ledger.py'
+      - 'tests/test_mojplaywin_direct_wallet_ledger.py'
+      - 'scripts/mojplaywin_direct_wallet_rates.py'
+      - 'tests/test_mojplaywin_direct_wallet_rates.py'
+      - 'scripts/mojplaywin_direct_wallet_discovery.py'
+      - 'tests/test_mojplaywin_direct_wallet_discovery.py'
+      - 'scripts/mojplaywin_native_rpc_clients.py'
+      - 'tests/test_mojplaywin_native_rpc_clients.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: mojplaywin-chess-preparation
+  cancel-in-progress: false
+jobs:
+  staging:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Unit-test private ebook asset gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p 'test_mojplaywin_chess_asset_installer.py' -v
+          python3 -m unittest discover -s tests -p 'test_mojplaywin_native_chain_verify.py' -v
+          python3 -m unittest discover -s tests -p 'test_mojplaywin_direct_wallet_invoice.py' -v
+          python3 -m unittest discover -s tests -p 'test_mojplaywin_direct_wallet_ledger.py' -v
+          python3 -m unittest discover -s tests -p 'test_mojplaywin_direct_wallet_rates.py' -v
+          python3 -m unittest discover -s tests -p 'test_mojplaywin_direct_wallet_discovery.py' -v
+          python3 -m unittest discover -s tests -p 'test_mojplaywin_native_rpc_clients.py' -v
+          python3 -m unittest discover -s tests -p 'test_mojplaywin_cpanel_local_event_worker.py' -v
+          bash -n scripts/install_mpw_cpanel_staging_listener.sh
+          python3 -m py_compile scripts/mojplaywin_chess_assets.py scripts/mojplaywin_native_chain_verify.py scripts/mojplaywin_direct_wallet_invoice.py scripts/mojplaywin_direct_wallet_rates.py scripts/mojplaywin_direct_wallet_ledger.py scripts/mojplaywin_direct_wallet_discovery.py scripts/mojplaywin_native_rpc_clients.py mpw_native_checkout/autopay_worker.py mpw_native_checkout/settlement.py mpw_native_checkout/wallet_ownership.py mpw_native_checkout/merchant_wallet_views.py mpw_native_checkout/merchant_wallet_urls.py core/chess_ebook_delivery.py
+          echo VERIFIED_CODE_TESTS_PASSED
+      - name: Stage only isolated inactive code on cPanel through pinned SSH relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+          VPS_KNOWN: ${{ secrets.SAEIT_VPS_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          base="$RUNNER_TEMP/ssh"; mkdir -p "$base"
+          printf '%s\n' "$VPS_KEY" > "$base/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$base/host.key"
+          python3 - "$base/vps.key" "$base/host.key" <<'PY'
+          import pathlib,sys
+          for f in sys.argv[1:]:
+              p=pathlib.Path(f)
+              p.write_text(p.read_text().replace('\r\n','\n').strip().replace('\\n','\n')+'\n')
+          PY
+          chmod 600 "$base/"*.key
+          ssh-keygen -y -P "" -f "$base/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$base/host.key" >/dev/null
+          if [[ -n "$VPS_KNOWN" ]]; then
+            printf '%s\n' "$VPS_KNOWN" > "$base/vps.known"
+          else
+            ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$base/vps.known" 2>/dev/null
+          fi
+          test "$(ssh-keygen -lf "$base/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$base/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $base/vps.key
+            UserKnownHostsFile $base/vps.known
+            StrictHostKeyChecking yes
+          Host saeit-host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $base/host.key
+            UserKnownHostsFile $base/host.known
+            ProxyJump saeit-vps
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+          EOF
+          timeout 30s ssh -F "$base/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$base/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$base/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          tar -czf "$RUNNER_TEMP/chess-prep.tar.gz" \
+            scripts/mojplaywin_chess_assets.py \
+            scripts/mojplaywin_native_chain_verify.py \
+            scripts/mojplaywin_direct_wallet_invoice.py \
+            scripts/mojplaywin_direct_wallet_rates.py \
+            scripts/mojplaywin_direct_wallet_ledger.py \
+            scripts/mojplaywin_direct_wallet_discovery.py \
+            scripts/mojplaywin_native_rpc_clients.py \
+            scripts/mojplaywin_purchase_events.py \
+            scripts/mojplaywin_cpanel_local_event_worker.py \
+            scripts/install_mpw_cpanel_staging_listener.sh \
+            scripts/mojplaywin_vps_readonly_watch.py \
+            core/chess_ebook_delivery.py \
+            mpw_native_checkout/__init__.py \
+            mpw_native_checkout/apps.py \
+            mpw_native_checkout/models.py \
+            mpw_native_checkout/entitlements.py \
+            mpw_native_checkout/wallet_ownership.py \
+            mpw_native_checkout/crypto_subprocess_verify.py \
+            mpw_native_checkout/merchant_wallet_views.py \
+            mpw_native_checkout/merchant_wallet_urls.py \
+            mpw_native_checkout/templates/mpw_native_checkout/merchant_wallet_proof.html \
+            mpw_native_checkout/settlement.py \
+            mpw_native_checkout/purchase_notify.py \
+            mpw_native_checkout/signals.py \
+            mpw_native_checkout/autopay_worker.py \
+            mpw_native_checkout/management/__init__.py \
+            mpw_native_checkout/management/commands/__init__.py \
+            mpw_native_checkout/management/commands/mpw_native_autopay.py \
+            mpw_native_checkout/management/commands/mpw_native_flush_events.py \
+            mpw_native_checkout/management/commands/mpw_native_event_loop.py \
+            mpw_native_checkout/migrations/__init__.py \
+            mpw_native_checkout/migrations/0001_initial.py \
+            mpw_native_checkout/migrations/0002_nativewatchoutbox.py \
+            mpw_native_checkout/migrations/0003_merchantwalletchallenge_merchantwalletproof.py \
+            catalog/mojplaywin/chess-improvement-2026.json \
+            tests/test_mojplaywin_chess_asset_installer.py \
+            tests/test_mojplaywin_native_chain_verify.py \
+            tests/test_mojplaywin_direct_wallet_invoice.py \
+            tests/test_mojplaywin_direct_wallet_rates.py \
+            tests/test_mojplaywin_direct_wallet_ledger.py \
+            tests/test_mojplaywin_direct_wallet_discovery.py \
+            tests/test_mojplaywin_native_rpc_clients.py \
+            tests/test_mojplaywin_cpanel_local_event_worker.py \
+            tests/test_mojplaywin_purchase_events.py \
+            catalog/mojplaywin/chess-crypto-eth-trx-gateway-staging.json
+          target=/home/zomorod2/Saeit-staging/mojplaywin-chess-product-prep-20261014
+          timeout 45s ssh -F "$base/config" saeit-host "umask 077; mkdir -p '$target' && test -d '$target'"
+          timeout 60s ssh -F "$base/config" saeit-host "cat > '$target/prep.tar.gz'" < "$RUNNER_TEMP/chess-prep.tar.gz"
+          local_sha="$(sha256sum "$RUNNER_TEMP/chess-prep.tar.gz" | cut -d ' ' -f 1)"
+          remote_sha="$(timeout 45s ssh -F "$base/config" saeit-host "sha256sum '$target/prep.tar.gz'" | cut -d ' ' -f 1)"
+          test "$local_sha" = "$remote_sha"
+          timeout 45s ssh -F "$base/config" saeit-host "cd '$target' && tar -tzf prep.tar.gz | grep -Fxq scripts/mojplaywin_chess_assets.py && tar -tzf prep.tar.gz | grep -Fxq core/chess_ebook_delivery.py && tar -xzf prep.tar.gz && test -f scripts/mojplaywin_chess_assets.py && test -f core/chess_ebook_delivery.py && chmod 700 scripts && chmod 600 scripts/mojplaywin_chess_assets.py && echo PRIVATE_PREPARATION_STAGED"
+          echo ETH_TRX_VERIFIERS_STAGED_OFFLINE
+          echo DJANGO_NATIVE_INVOICE_APP_STAGED_OFFLINE
+          echo AUTOMATIC_ORDER_SETTLEMENT_ENGINE_STAGED_UNROUTED
+          echo INCOMING_CHAIN_INDEXER_STAGED_READ_ONLY
+          echo AUTOMATIC_NATIVE_WORKER_STAGED_DISABLED_BY_DEFAULT
+          echo LOCAL_PURCHASE_EVENT_PROCESSOR_STAGED_NOT_ENABLED
+          echo DURABLE_PURCHASE_NOTIFICATION_OUTBOX_STAGED_UNMIGRATED
+          echo PURCHASE_TO_CHAIN_EVENT_RECONCILIATION_STAGED_DISABLED
+          echo MERCHANT_WALLET_SIGNATURE_PAGE_STAGED_NOT_ROUTED
+          echo LIVE_PAYMENT_REMAINS_DISABLED
+          echo CPANEL_STAGING_LISTENER_INSTALLER_AVAILABLE_NOT_YET_EXECUTED
+          echo LIVE_SITE_FILES_UNCHANGED
+          echo CHESS_PAYMENT_NOT_ACTIVATED
+      - name: Scrub runner credentials
+        if: always()
+        shell: bash
+        run: rm -rf -- "$RUNNER_TEMP/ssh"

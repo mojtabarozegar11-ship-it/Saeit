@@ -1,0 +1,48 @@
+name: MojPlayWin sitewide commerce isolated Django tests
+on:
+  push:
+    branches: [release/mojplaywin-chess-product-20261014]
+    paths:
+      - '.github/workflows/mojplaywin-sitewide-commerce-isolated.yml'
+      - 'mpw_commerce/**'
+      - 'tests/native_ci_sitewide_commerce.py'
+      - 'tests/native_ci_sitewide_chain_adapter.py'
+      - 'tests/native_ci_sitewide_reconcile.py'
+      - 'tests/native_ci_commerce_private_assets.py'
+      - 'tests/native_ci_commerce_download_views.py'
+      - 'tests/native_ci_sitewide_buyer_wallets.py'
+      - 'tests/native_ci_sitewide_checkout_http.py'
+      - 'tests/native_ci_sitewide_full_purchase.py'
+      - 'tests/native_ci_sitewide_course_fulfillment.py'
+      - 'scripts/mojplaywin_direct_wallet_rates.py'
+      - 'scripts/mojplaywin_native_chain_verify.py'
+      - 'tests/native_checkout_settings.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  sitewide-commerce:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install isolated Django test dependencies (not production)
+        shell: bash
+        run: |
+          python3 -m venv "$RUNNER_TEMP/mpw-test-venv"
+          "$RUNNER_TEMP/mpw-test-venv/bin/python" -m pip install --disable-pip-version-check -q 'Django>=5.2,<6' 'eth-account>=0.13,<0.14'
+      - name: Validate independent sitewide models and multi-product automatic payment
+        shell: bash
+        env:
+          DJANGO_SETTINGS_MODULE: tests.native_checkout_settings
+        run: |
+          set -euo pipefail
+          PYTHON="$RUNNER_TEMP/mpw-test-venv/bin/python"
+          "$PYTHON" -I -c 'import eth_account; from eth_keys import keys; print("MPW_ISOLATED_SIGNING_IMPORT_OK")'
+          "$PYTHON" -m django check
+          "$PYTHON" -m django makemigrations mpw_commerce --check --dry-run
+          "$PYTHON" -m django test tests.native_ci_sitewide_commerce tests.native_ci_sitewide_chain_adapter tests.native_ci_sitewide_reconcile tests.native_ci_commerce_private_assets tests.native_ci_commerce_download_views tests.native_ci_sitewide_buyer_wallets tests.native_ci_sitewide_checkout_http tests.native_ci_sitewide_full_purchase tests.native_ci_sitewide_course_fulfillment --verbosity 2
+          echo MPW_COMMERCE_MULTI_PRODUCT_TESTS_PASSED
+          echo MPW_PRODUCTION_SETTINGS_DB_AND_WEBSITE_UNCHANGED

@@ -1,0 +1,115 @@
+name: MojPlayWin live root safe audit through VPS relay
+on:
+  push:
+    branches: [release/mojplaywin-chess-product-20261014]
+    paths: ['.github/workflows/mojplaywin-live-root-relay-audit.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Read-only cPanel domain and Passenger mapping
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/mpw-root-audit"
+          mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          python3 - "$d/vps.key" "$d/host.key" <<'PY'
+          from pathlib import Path
+          import sys
+          for filename in sys.argv[1:]:
+              f=Path(filename)
+              f.write_text(f.read_text().replace("\r\n","\n").strip().replace("\\n","\n")+"\n")
+          PY
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host relay
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host host
+            HostName zohal.pws-dns.net
+            Port 1396
+            User zomorod2
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump relay
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+          EOF
+          timeout 30s ssh -F "$d/config" relay 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          timeout 75s ssh -F "$d/config" host 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = zomorod2
+          PYTHONDONTWRITEBYTECODE=1 python3 - <<'PY'
+          from pathlib import Path
+          root=Path('/home/zomorod2')
+          for name in ('mojplaywin.com','Saeit-staging','public_html'):
+              p=root/name
+              print('APP_CANDIDATE',name,'exists',p.exists(),'directory',p.is_dir())
+              if not p.is_dir(): continue
+              for item in ('passenger_wsgi.py','manage.py','config/settings.py','config/urls.py','.htaccess','mpw_native_checkout/models.py'):
+                  print('APP_FILE',name,item,(p/item).is_file())
+              ht=p/'.htaccess'
+              if ht.is_file():
+                  for line in ht.read_text(errors='replace').splitlines():
+                      clean=line.strip()
+                      if clean.startswith(('PassengerAppRoot ','PassengerBaseURI ','PassengerStartupFile ')):
+                          print('PASSENGER',name,clean[:200])
+          home=root/'mojplaywin.com'
+          if home.is_dir():
+              print('MOJPLAYWIN_TOP_DIRS',','.join(sorted(x.name for x in home.iterdir() if x.is_dir())[:25]))
+              print('MOJPLAYWIN_TOP_FILES',','.join(sorted(x.name for x in home.iterdir() if x.is_file() and not x.name.startswith('.') and x.name not in ('settings.py','config.py'))[:25]))
+          import ast
+          startup=root/'mojplaywin.com'/'passenger_wsgi.py'
+          if startup.is_file():
+              tree=ast.parse(startup.read_text(errors='replace'))
+              refs=[]
+              for n in ast.walk(tree):
+                  if isinstance(n,ast.Constant) and isinstance(n.value,str):
+                      v=n.value
+                      if v.startswith('/home/zomorod2/') and len(v)<250:
+                          refs.append(v)
+                      if v in ('config.settings','settings','DJANGO_SETTINGS_MODULE'):
+                          refs.append(v)
+              print('STARTUP_REFERENCES',sorted(set(refs))[:25])
+              src=startup.read_text(errors='replace')
+              print('STARTUP_MARKERS',
+                    'saeit_staging='+str('Saeit-staging' in src),
+                    'saeit_prod='+str('/Saeit' in src),
+                    'django='+str('django' in src.lower()),
+                    'wsgi='+str('wsgi' in src.lower()))
+          for dirname in ('Saeit','Saeit-staging','mojplaywin.com'):
+              base=root/dirname
+              print('CODEBASE',dirname,'manage='+str((base/'manage.py').is_file()),
+                    'settings='+str((base/'config/settings.py').is_file()),
+                    'urls='+str((base/'config/urls.py').is_file()),
+                    'proof_app='+str((base/'mpw_native_checkout/models.py').is_file()))
+          print('CPANEL_DOMAIN_MAPPING_AUDIT_ONLY_NO_CHANGES')
+          PY
+          REMOTE
+      - name: Remove transient keys
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/mpw-root-audit"

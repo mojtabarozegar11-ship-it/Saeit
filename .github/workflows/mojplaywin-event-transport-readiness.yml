@@ -1,0 +1,69 @@
+name: MojPlayWin event transport readiness (read-only VPS audit)
+on:
+  push:
+    branches:
+      - release/mojplaywin-chess-product-20261014
+    paths:
+      - '.github/workflows/mojplaywin-event-transport-readiness.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Inspect only whether a secure VPS receiver could be exposed
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-event-audit"
+          mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -i "$d/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o BatchMode=yes -o ConnectTimeout=12 githubops@178.239.147.150 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = githubops
+          for cmd in nginx caddy apache2 certbot; do
+            if command -v "$cmd" >/dev/null 2>&1; then echo "TLS_TOOL_$cmd=present"; else echo "TLS_TOOL_$cmd=absent"; fi
+          done
+          for service in nginx caddy apache2; do
+            if command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet "$service" 2>/dev/null; then
+              echo "TLS_SERVICE_$service=active"
+            else
+              echo "TLS_SERVICE_$service=not_verified_active"
+            fi
+          done
+          python3 - <<'PY'
+          import socket
+          try:
+              addresses={x[4][0] for x in socket.getaddrinfo("mojplaywin.com",443,type=socket.SOCK_STREAM)}
+          except OSError:
+              addresses=set()
+          print("EVENT_DOMAIN_IS_VPS", "yes" if "178.239.147.150" in addresses else "no")
+          PY
+          if command -v ss >/dev/null 2>&1; then
+            for port in 80 443 18765; do
+              if ss -lnt | awk '{print $4}' | grep -Eq ":$port$"; then
+                echo "LISTEN_TCP_$port=yes"
+              else
+                echo "LISTEN_TCP_$port=no"
+              fi
+            done
+          fi
+          if test -f "$HOME/mojplaywin-wallet-watch/current/scripts/mojplaywin_vps_purchase_receiver.py"; then
+            echo PURCHASE_RECEIVER_CODE_STAGED=yes
+          else
+            echo PURCHASE_RECEIVER_CODE_STAGED=no
+          fi
+          echo AUDIT_READ_ONLY_NO_SERVICES_CHANGED
+          REMOTE
+      - name: Delete temporary SSH credentials
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/mpw-event-audit"

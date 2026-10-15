@@ -118,3 +118,12 @@ CSRF_COOKIE_SECURE = env("CSRF_COOKIE_SECURE", default=False)
 SECURE_HSTS_SECONDS = env("SECURE_HSTS_SECONDS", default=0)
 SECURE_HSTS_INCLUDE_SUBDOMAINS = env("SECURE_HSTS_INCLUDE_SUBDOMAINS", default=False)
 SECURE_HSTS_PRELOAD = env("SECURE_HSTS_PRELOAD", default=False)
+
+# Optional merchant wallet proof page is OFF unless explicitly enabled
+# on the approved MojPlayWin host. This does not activate checkout.
+MPW_MERCHANT_WALLET_PROOF_ENABLED = env.bool(
+    "MPW_MERCHANT_WALLET_PROOF_ENABLED", default=False
+)
+MPW_WALLET_PROOF_OWNER_ID = env.int("MPW_WALLET_PROOF_OWNER_ID", default=0)
+if MPW_MERCHANT_WALLET_PROOF_ENABLED:
+    INSTALLED_APPS.append("mpw_native_checkout")

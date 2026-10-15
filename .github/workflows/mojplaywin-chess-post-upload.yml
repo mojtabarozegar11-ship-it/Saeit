@@ -1,0 +1,89 @@
+name: MojPlayWin chess assets post-upload verification and private install
+on:
+  push:
+    paths:
+      - 'catalog/mojplaywin/UPLOAD_CONFIRMED_20261014.txt'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: mojplaywin-chess-post-upload
+  cancel-in-progress: false
+jobs:
+  verify-and-install:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Require explicit uploaded-file confirmation
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f catalog/mojplaywin/UPLOAD_CONFIRMED_20261014.txt
+          grep -Fxq "OWNER_CONFIRMED_UPLOAD=YES" catalog/mojplaywin/UPLOAD_CONFIRMED_20261014.txt
+          echo OWNER_UPLOAD_CONFIRMATION_PRESENT
+      - name: Verify and privately install approved ZIP without activating sales
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+          VPS_KNOWN: ${{ secrets.SAEIT_VPS_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          b="$RUNNER_TEMP/ssh"; mkdir -p "$b"
+          printf '%s\n' "$VPS_KEY" > "$b/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$b/host.key"
+          python3 - "$b/vps.key" "$b/host.key" <<'PY'
+          import pathlib,sys
+          for f in sys.argv[1:]:
+              p=pathlib.Path(f)
+              p.write_text(p.read_text().replace('\r\n','\n').strip().replace('\\n','\n')+'\n')
+          PY
+          chmod 600 "$b/"*.key
+          ssh-keygen -y -P "" -f "$b/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$b/host.key" >/dev/null
+          if [[ -n "$VPS_KNOWN" ]]; then
+            printf '%s\n' "$VPS_KNOWN" > "$b/vps.known"
+          else
+            ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$b/vps.known" 2>/dev/null
+          fi
+          test "$(ssh-keygen -lf "$b/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$b/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $b/vps.key
+            UserKnownHostsFile $b/vps.known
+            StrictHostKeyChecking yes
+          Host saeit-host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $b/host.key
+            UserKnownHostsFile $b/host.known
+            ProxyJump saeit-vps
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+          EOF
+          timeout 30s ssh -F "$b/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$b/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$b/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          script=/home/zomorod2/Saeit-staging/mojplaywin-chess-product-prep-20261014/scripts/mojplaywin_chess_assets.py
+          timeout 60s ssh -F "$b/config" saeit-host "test -f '$script' && python3 '$script' --verify"
+          timeout 65s ssh -F "$b/config" saeit-host "python3 '$script' --install"
+          timeout 45s ssh -F "$b/config" saeit-host 'test -f /home/zomorod2/MojPlayWin_Private_Assets/chess-improvement-2026/MojPlayWin_Science_and_Practice_of_Chess_Improvement.pdf && echo PRIVATE_CHESS_PDF_PRESENT'
+          curl -fsSL --connect-timeout 10 --max-time 30 https://mojplaywin.com/store/ -o /dev/null
+          echo PRIVATE_PDF_INSTALLED_SALES_STILL_INACTIVE
+      - name: Delete temporary runner credentials
+        if: always()
+        shell: bash
+        run: rm -rf -- "$RUNNER_TEMP/ssh"

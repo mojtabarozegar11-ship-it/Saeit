@@ -1,0 +1,112 @@
+name: MojPlayWin isolated cPanel purchase event listener installation
+on:
+  push:
+    branches:
+      - release/mojplaywin-chess-product-20261014
+    paths:
+      - '.github/workflows/mojplaywin-cpanel-stage-listener-install.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: mpw-cpanel-staging-listener-installer
+  cancel-in-progress: false
+jobs:
+  stage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate installation script syntax (no real payments)
+        run: |
+          set -euo pipefail
+          bash -n scripts/install_mpw_cpanel_staging_listener.sh
+          python3 -m unittest discover -s tests -p 'test_mojplaywin_cpanel_local_event_worker.py' -q
+          echo LOCAL_LISTENER_OFFLINE_TESTS_PASSED
+      - name: Start isolated, private, idle-on-no-orders staging listener on cPanel
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/mpw-cpanel-idle-listener"
+          mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          python3 - "$d/vps.key" "$d/host.key" <<'PY'
+          from pathlib import Path
+          import sys
+          for name in sys.argv[1:]:
+              p=Path(name)
+              p.write_text(p.read_text().replace("\r\n","\n").strip().replace("\\n","\n")+"\n")
+          PY
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host saeit-host
+            HostName zohal.pws-dns.net
+            Port 1396
+            User zomorod2
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+          EOF
+          timeout 35s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          timeout 100s ssh -F "$d/config" saeit-host 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = "zomorod2"
+          stage=/home/zomorod2/Saeit-staging/mojplaywin-chess-product-prep-20261014
+          test -f "$stage/scripts/install_mpw_cpanel_staging_listener.sh"
+          bash -n "$stage/scripts/install_mpw_cpanel_staging_listener.sh"
+          bash "$stage/scripts/install_mpw_cpanel_staging_listener.sh"
+          runtime="$HOME/.mpw-native-event-staging"
+          test -d "$runtime"
+          test "$(stat -c '%a' "$runtime")" = "700"
+          test "$(stat -c '%a' "$runtime/.staging-event-hmac")" = "600"
+          test -S "$runtime/native-purchase.sock"
+          pid="$(cat "$runtime/worker.pid")"
+          kill -0 "$pid"
+          python3 - "$runtime/native-purchase.sock" <<'PY'
+          import socket,sys
+          sock=socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+          sock.settimeout(2)
+          sock.connect(sys.argv[1])
+          sock.sendall(b'{"payload_b64":"invalid","signature":"bad"}\n')
+          answer=sock.recv(64)
+          sock.close()
+          assert answer==b"REJECTED\n", answer
+          print("STAGING_IPC_INVALID_SIGNATURE_REJECTED")
+          PY
+          test ! -f "$runtime/pending-orders.mode"
+          echo STAGING_LOCAL_LISTENER_RUNNING
+          echo IDLE_BLOCKCHAIN_REQUESTS_ZERO
+          echo IDLE_OPENAI_TOKENS_ZERO
+          echo LIVE_DJANGO_NOT_CONNECTED
+          echo NO_PRODUCT_72_ACTIVATION
+          REMOTE
+      - name: Remove transient SSH secrets
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/mpw-cpanel-idle-listener"

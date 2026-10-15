@@ -1,0 +1,44 @@
+name: MojPlayWin native ETH TRX Django isolated schema checks
+on:
+  push:
+    paths:
+      - '.github/workflows/mojplaywin-native-django-check.yml'
+      - 'mpw_native_checkout/**'
+      - 'tests/native_checkout_settings.py'
+      - 'tests/native_checkout_urls.py'
+      - 'tests/native_ci_django_db.py'
+      - 'tests/native_ci_django_entitlements.py'
+      - 'tests/native_ci_automatic_settlement.py'
+      - 'tests/native_ci_autopay_worker.py'
+      - 'tests/native_ci_purchase_notify.py'
+      - 'tests/native_ci_purchase_outbox.py'
+      - 'tests/native_ci_real_socket_purchase_cycle.py'
+      - 'tests/native_ci_event_loop_gates.py'
+      - 'tests/native_ci_merchant_wallet_proof.py'
+      - 'mpw_native_checkout/migrations/0003_merchantwalletchallenge_merchantwalletproof.py'
+      - 'mpw_native_checkout/migrations/0002_nativewatchoutbox.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  isolated-schema:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install minimal Django CI requirements
+        shell: bash
+        run: python3 -m pip install --disable-pip-version-check -q 'Django>=5.2,<6' 'eth-account>=0.13,<0.14'
+      - name: Validate isolated model definitions
+        shell: bash
+        env:
+          DJANGO_SETTINGS_MODULE: tests.native_checkout_settings
+        run: |
+          set -euo pipefail
+          python3 -m django check
+          python3 -m django makemigrations mpw_native_checkout --check --dry-run
+          python3 -m django test tests.native_ci_django_db tests.native_ci_django_entitlements tests.native_ci_automatic_settlement tests.native_ci_autopay_worker tests.native_ci_purchase_notify tests.native_ci_purchase_outbox tests.native_ci_real_socket_purchase_cycle tests.native_ci_event_loop_gates tests.native_ci_merchant_wallet_proof --verbosity 1
+          echo NATIVE_DJANGO_SCHEMA_NO_DRIFT
+          echo PRODUCTION_APPS_AND_DATABASE_UNCHANGED

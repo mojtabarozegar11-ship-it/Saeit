@@ -1,0 +1,23 @@
+name: MojPlayWin ETH TRX public RPC read-only readiness
+on:
+  push:
+    paths:
+      - '.github/workflows/mojplaywin-eth-trx-rpc-readiness.yml'
+      - 'scripts/mojplaywin_rpc_readiness.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  rpc-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify chain RPC mainnets (no transactions or wallet operations)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/mojplaywin_rpc_readiness.py
+          echo "RPC_CHECK_ONLY_NO_SALES_ACTIVATED"

@@ -1,0 +1,139 @@
+name: MojPlayWin cPanel local purchase IPC on-host smoke (isolated)
+on:
+  push:
+    branches:
+      - release/mojplaywin-chess-product-20261014
+    paths:
+      - '.github/workflows/mojplaywin-cpanel-onhost-ipc-smoke.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: mpw-cpanel-onhost-ipc-smoke
+  cancel-in-progress: false
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - name: Test staged native purchase event loop on actual cPanel host (no external requests)
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/mpw-ipc-host-ssh"
+          mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          python3 - "$d/vps.key" "$d/host.key" <<'PY'
+          from pathlib import Path
+          import sys
+          for name in sys.argv[1:]:
+              f=Path(name)
+              f.write_text(f.read_text().replace("\r\n","\n").strip().replace("\\n","\n")+"\n")
+          PY
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host saeit-host
+            HostName zohal.pws-dns.net
+            Port 1396
+            User zomorod2
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+          EOF
+          timeout 35s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          timeout 120s ssh -F "$d/config" saeit-host 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = zomorod2
+          staging=/home/zomorod2/Saeit-staging/mojplaywin-chess-product-prep-20261014
+          test -f "$staging/scripts/mojplaywin_cpanel_local_event_worker.py"
+          test -f "$staging/scripts/mojplaywin_purchase_events.py"
+          cd "$staging"
+          export PYTHONPATH="$staging"
+          export PYTHONDONTWRITEBYTECODE=1
+          python3 - <<'PY'
+          import pathlib
+          import tempfile
+          import threading
+          import time
+          import secrets
+          from scripts.mojplaywin_purchase_events import make_event, signed_message
+          from scripts.mojplaywin_cpanel_local_event_worker import run_local_worker, socket_request, SOCKET_BASENAME
+          key=secrets.token_bytes(40)  # TEST ONLY, ephemeral in memory, never printed or saved
+          with tempfile.TemporaryDirectory(prefix="mpw-ipc-smoke-") as tmp:
+              root=pathlib.Path(tmp)
+              root.chmod(0o700)
+              calls=[]
+              errors=[]
+              def eth():
+                  calls.append("ETH")
+                  return []
+              def trx():
+                  calls.append("TRX")
+                  return []
+              def worker():
+                  try:
+                      run_local_worker(root, key, eth_scan=eth, trx_scan=trx, stop_after_events=4)
+                  except Exception as exc:
+                      errors.append(type(exc).__name__)
+              th=threading.Thread(target=worker,daemon=True)
+              th.start()
+              sock=root / SOCKET_BASENAME
+              for _ in range(120):
+                  if sock.exists(): break
+                  time.sleep(.025)
+              assert sock.exists(), "Local cPanel socket was not created"
+              time.sleep(.4)
+              assert calls==[], "Unexpected network discovery without orders"
+              def send(action,invoice,order,asset):
+                  now=int(time.time())
+                  payload=make_event(action,invoice,order,asset,now+600,now_epoch=now)
+                  body,signature=signed_message(payload,key)
+                  assert socket_request(sock,body,signature)=="delivered"
+              send("invoice_open",901,1001,"ETH")
+              assert calls==["ETH"], calls
+              send("invoice_open",902,1002,"TRX")
+              assert calls==["ETH","TRX"], calls
+              send("invoice_closed",901,1001,"ETH")
+              assert (root/"pending-orders.mode").read_text()=="TRX\n"
+              send("invoice_closed",902,1002,"TRX")
+              th.join(timeout=5)
+              assert not th.is_alive(), "Local test receiver did not exit"
+              assert not errors, errors
+              assert calls==["ETH","TRX"], calls
+              assert not (root/"pending-orders.mode").exists()
+              print("CPANEL_LOCAL_IDLE_ZERO_BLOCKCHAIN_CALLS_OK")
+              print("CPANEL_ETH_INVOICE_WAKE_OK")
+              print("CPANEL_TRX_INVOICE_WAKE_OK")
+              print("CPANEL_LAST_INVOICE_CLOSE_STOPS_WATCH_OK")
+              print("CPANEL_LOCAL_SOCKET_PRIVATE_TEST_CLEANUP_OK")
+              print("NO_LIVE_DJANGO_OR_ORDER_DATABASE_MODIFICATIONS")
+          PY
+          REMOTE
+      - name: Remove ephemeral SSH keys
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/mpw-ipc-host-ssh"

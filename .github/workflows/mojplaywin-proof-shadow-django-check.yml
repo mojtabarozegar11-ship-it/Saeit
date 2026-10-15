@@ -1,0 +1,140 @@
+name: MojPlayWin isolated merchant proof migration preview
+on:
+  push:
+    branches: [release/mojplaywin-chess-product-20261014]
+    paths: ['.github/workflows/mojplaywin-proof-shadow-django-check.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Stage inactive admin proof app and preview actual MySQL migrations
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/mpw-proof-preflight"
+          mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          python3 - "$d/vps.key" "$d/host.key" <<'PY'
+          from pathlib import Path
+          import sys
+          for filename in sys.argv[1:]:
+            p=Path(filename)
+            p.write_text(p.read_text().replace("\r\n","\n").strip().replace("\\n","\n")+"\n")
+          PY
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host relay
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump relay
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+          EOF
+          timeout 30s ssh -F "$d/config" relay 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          timeout 185s ssh -F "$d/config" host 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          test "$(id -un)" = zomorod2
+          site="$HOME/Saeit-staging"
+          stage="$site/mojplaywin-chess-product-prep-20261014"
+          test -f "$stage/mpw_native_checkout/crypto_subprocess_verify.py"
+          test -f "$stage/mpw_native_checkout/migrations/0003_merchantwalletchallenge_merchantwalletproof.py"
+          export PYTHONDONTWRITEBYTECODE=1
+          python3 - "$stage" "$site" <<'PY'
+          from pathlib import Path
+          import shutil,sys
+          stage,site=map(Path,sys.argv[1:])
+          source=stage/"mpw_native_checkout"
+          target=site/"mpw_native_checkout"
+          if target.is_symlink():
+              raise SystemExit("MPW_PROOF_PACKAGE_SYMLINK_UNSAFE")
+          permitted={".py",".html"}
+          paths=[x for x in source.rglob("*") if x.is_file() and "__pycache__" not in x.parts]
+          if not paths or any(x.suffix not in permitted or x.is_symlink() for x in paths):
+              raise SystemExit("MPW_PROOF_PACKAGE_UNSAFE")
+          if target.exists():
+              for item in paths:
+                  dest=target/item.relative_to(source)
+                  if not dest.is_file() or dest.read_bytes()!=item.read_bytes():
+                      raise SystemExit("MPW_EXISTING_PROOF_MODULES_DIFFER_STOP")
+          else:
+              shutil.copytree(source,target,ignore=shutil.ignore_patterns("__pycache__","*.pyc"))
+          for p in target.rglob("*"):
+              if p.is_file():p.chmod(0o640)
+          for name in ("mojplaywin_native_chain_verify.py","mojplaywin_purchase_events.py"):
+              src=stage/"scripts"/name
+              dest=site/"scripts"/name
+              if not src.is_file():
+                  raise SystemExit("MPW_MISSING_STAGED_DEPENDENCY")
+              if dest.exists():
+                  if dest.read_bytes()!=src.read_bytes():
+                      raise SystemExit("MPW_SITE_SCRIPT_ALREADY_DIFFERENT_STOP")
+              else:
+                  dest.parent.mkdir(exist_ok=True)
+                  shutil.copy2(src,dest)
+                  dest.chmod(0o640)
+          print("MPW_INACTIVE_PROOF_MODULES_COPIED_NO_IMPORT_IN_LIVE_SETTINGS")
+          PY
+          shadow="$HOME/.mpw-proof-shadow"
+          mkdir -p "$shadow"
+          chmod 700 "$shadow"
+          cat > "$shadow/shadow_settings.py" <<'PY'
+          from config.settings import *
+          INSTALLED_APPS = list(INSTALLED_APPS) + ["mpw_native_checkout"]
+          MPW_MERCHANT_WALLET_PROOF_ENABLED = False
+          PY
+          chmod 600 "$shadow/shadow_settings.py"
+          export PYTHONPATH="$shadow:$site"
+          venv=/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python
+          cd "$site"
+          "$venv" -m django check --settings=shadow_settings >/dev/null
+          "$venv" -m django sqlmigrate mpw_native_checkout 0001 --settings=shadow_settings >/dev/null
+          "$venv" -m django sqlmigrate mpw_native_checkout 0002 --settings=shadow_settings >/dev/null
+          "$venv" -m django sqlmigrate mpw_native_checkout 0003 --settings=shadow_settings >/dev/null
+          DJANGO_SETTINGS_MODULE=shadow_settings "$venv" - <<'PY'
+          import django
+          django.setup()
+          from django.db import connection
+          from django.db.migrations.executor import MigrationExecutor
+          executor=MigrationExecutor(connection)
+          target=[("mpw_native_checkout","0003_merchantwalletchallenge_merchantwalletproof")]
+          plan=executor.migration_plan(target)
+          if not plan or any(m.app_label!="mpw_native_checkout" or backwards for m,backwards in plan):
+              raise SystemExit("MPW_MIGRATION_PLAN_HAS_UNEXPECTED_OPERATION")
+          print("MPW_ONLY_NEW_PROOF_APP_MIGRATIONS",",".join(m.name for m,backwards in plan))
+          PY
+          echo MPW_DJANGO_MYSQL_MIGRATION_PREVIEW_OK
+          echo LIVE_APP_SETTINGS_ROUTES_AND_DATABASE_UNCHANGED
+          REMOTE
+      - name: Remove temporary SSH credentials
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/mpw-proof-preflight"

@@ -1,0 +1,23 @@
+name: MojPlayWin read-only native coin payment discovery probe
+on:
+  push:
+    paths:
+      - '.github/workflows/mojplaywin-native-discovery-readonly.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Query pinned Ethereum and TRON incoming transaction indexes
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=scripts python3 scripts/mojplaywin_direct_wallet_discovery.py
+          echo "DISCOVERY_ONLY_NOT_A_PAYMENT_CONFIRMATION"
+          echo "NO_ORDER_OR_WALLET_MODIFICATIONS"
