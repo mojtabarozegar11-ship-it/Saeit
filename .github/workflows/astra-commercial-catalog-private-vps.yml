@@ -7,6 +7,8 @@ on:
       - .github/workflows/astra-commercial-catalog-private-vps.yml
       - scripts/astra_commercial_candidates.py
       - tests/test_astra_commercial_candidates.py
+      - scripts/astra_mpw_four_draft_import.py
+      - tests/test_astra_mpw_four_draft_import.py
   workflow_dispatch:
 
 permissions:
@@ -31,6 +33,7 @@ jobs:
           set -euo pipefail
           python3 -m py_compile scripts/astra_commercial_candidates.py
           python3 -m unittest discover -s tests -p test_astra_commercial_candidates.py -v
+          python3 -m unittest discover -s tests -p test_astra_mpw_four_draft_import.py -v
 
   private-vps-commercial-catalog:
     needs: isolated-commerce-tests
