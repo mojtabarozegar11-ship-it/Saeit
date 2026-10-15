@@ -5,7 +5,7 @@ Distinct product from orchard investment NPV. Buyer-supplied quantities, prices,
 taxes, lead times and supplier quality information only. No online scraping,
 market forecasts, paid APIs, supplier due-diligence or public product publishing.
 """
-from decimal import Decimal, InvalidOperation, localcontext, ROUND_HALF_EVEN
+from decimal import Decimal, InvalidOperation, localcontext, ROUND_HALF_EVEN, ROUND_CEILING
 from pathlib import Path
 import argparse
 import hashlib
@@ -61,8 +61,13 @@ def verify(inp):
           "tax_pct","waste_pct","lead_days","minimum_order_units",
           "available_units","source_label","quote_ref"}
     for raw in offers:
-        if not isinstance(raw,dict) or set(raw)!=spec:
-            raise AuditInputError("each offer must have exactly the eleven required fields")
+        # Optional whole-pack pricing is explicit and backward compatible.
+        keys=set(raw) if isinstance(raw,dict) else set()
+        pack_fields={"pricing_basis","pack_size_base_units"}
+        if not isinstance(raw,dict) or keys not in (spec, spec|pack_fields):
+            raise AuditInputError("exact base-unit or whole-pack quote fields required")
+        if keys==spec|pack_fields and raw["pricing_basis"]!="per_pack":
+            raise AuditInputError("whole-pack quote must explicitly say per_pack")
         name=raw["supplier"]
         if not isinstance(name,str) or not name.strip() or len(name)>70 or name in names:
             raise AuditInputError("distinct nonblank supplier names required")
@@ -76,7 +81,12 @@ def verify(inp):
         ref=raw["quote_ref"]
         if not isinstance(ref,str) or len(ref)>120:
             raise AuditInputError("quote_ref length invalid")
-        out={"supplier":name,"lead_days":lead,"source_label":src,"quote_ref":ref}
+        out={"supplier":name,"lead_days":lead,"source_label":src,"quote_ref":ref,
+             "pricing_basis":"per_base_unit","pack_size_base_units":None}
+        if keys==spec|pack_fields:
+            out["pricing_basis"]="per_pack"
+            out["pack_size_base_units"]=dec(
+                raw["pack_size_base_units"],"pack_size_base_units",MAX_QTY,True)
         for key in ("unit_price","freight_flat","setup_flat","minimum_order_units",
                     "available_units"):
             out[key]=dec(raw[key],key,MAX_QTY if key.endswith("_units") else MAX_MONEY)
@@ -112,7 +122,10 @@ def evaluate(inp):
            "ESTIMATED_LANDED_COST_ONLY_NOT_PURCHASE_APPROVAL",
            "NO_PARTIAL_OR_SPLIT_SUPPLIER_ALLOCATION",
            "DELIVERY_CAPACITY_SELF_REPORTED",
-           "TAX_AND_DISCOUNT_CONVENTIONS_MUST_BE_CONFIRMED"]
+           "TAX_AND_DISCOUNT_CONVENTIONS_MUST_BE_CONFIRMED",
+           "WHOLE_PACK_PRICING_AND_ROUNDING_ARE_EXPLICIT_INPUTS",
+           "UNUSED_PURCHASED_UNITS_ARE_NOT_ASSUMED_RESALABLE",
+           "COST_SPREAD_IS_NOT_REALIZED_SAVINGS"]
     with localcontext() as ctx:
         ctx.prec=42
         for tag,scenario in stresses.items():
@@ -120,13 +133,18 @@ def evaluate(inp):
             for offer in offers:
                 waste=offer["waste_pct"]+scenario["waste_extra_pp"]
                 reasons=[]
+                pack_count=None
+                required_gross=None
                 if waste>=100:
                     reasons.append("WASTE_AT_OR_ABOVE_100_PERCENT")
                     gross=None
                 else:
-                    gross=qty/(1-waste/100)
-                    if gross<offer["minimum_order_units"]:
-                        gross=offer["minimum_order_units"]
+                    required_gross=qty/(1-waste/100)
+                    gross=max(required_gross,offer["minimum_order_units"])
+                    if offer["pricing_basis"]=="per_pack":
+                        pack=offer["pack_size_base_units"]
+                        pack_count=(gross/pack).to_integral_value(rounding=ROUND_CEILING)
+                        gross=pack_count*pack
                 if offer["lead_days"]>deadline:
                     reasons.append("DELIVERY_AFTER_DEADLINE")
                 if gross is not None and gross>offer["available_units"]:
@@ -142,9 +160,17 @@ def evaluate(inp):
                     "lead_days":offer["lead_days"],
                     "verified_quote":False,
                     "verified_supplier_quality":False,
+                    "quote_pricing_basis":offer["pricing_basis"],
+                    "price_per_quoted_unit":shown(offer["unit_price"]),
+                    "pack_size_base_units":(
+                        shown(offer["pack_size_base_units"])
+                        if offer["pack_size_base_units"] is not None else None),
+                    "whole_packs_ordered":(
+                        str(pack_count) if pack_count is not None else None),
                 }
                 if gross is not None:
-                    material=gross*offer["unit_price"]*scenario["price_multiplier"]
+                    invoice_qty=pack_count if pack_count is not None else gross
+                    material=invoice_qty*offer["unit_price"]*scenario["price_multiplier"]
                     discounted=material*(1-offer["discount_pct"]/100)
                     # Tax convention: applies to discounted material + setup, excludes freight.
                     taxable=discounted+offer["setup_flat"]
@@ -153,6 +179,12 @@ def evaluate(inp):
                     total=taxable+tax+freight
                     output.update({
                         "gross_order_units":shown(gross),
+                        "gross_units_before_pack_rounding":shown(required_gross),
+                        "net_usable_units_from_order":shown(gross*(1-waste/100)),
+                        "surplus_usable_units":shown(gross*(1-waste/100)-qty),
+                        "quoted_price_normalized_per_base_unit":shown(
+                            offer["unit_price"]/offer["pack_size_base_units"]
+                            if pack_count is not None else offer["unit_price"]),
                         "usable_fraction_pct":shown(100-waste),
                         "discounted_material_cost":shown(discounted),
                         "setup_cost":shown(offer["setup_flat"]),
@@ -170,10 +202,16 @@ def evaluate(inp):
                                      x["supplier"]))
             valid=[x for x in rows if x["eligible_for_cost_comparison"]]
             winner=valid[0]["supplier"] if valid else None
+            runner_up=valid[1]["supplier"] if len(valid)>1 else None
+            arithmetic_gap=(
+                shown(valid[1]["_exact_total"]-valid[0]["_exact_total"])
+                if len(valid)>1 else None)
             for row in rows:
                 row.pop("_exact_total",None)
             results[tag]={
                 "lowest_cost_eligible_supplier_under_inputs":winner,
+                "second_lowest_cost_eligible_supplier_under_inputs":runner_up,
+                "arithmetic_cost_gap_to_second_eligible_not_realized_savings":arithmetic_gap,
                 "offers":rows,
                 "all_offers_ineligible":len(valid)==0,
             }
