@@ -1,0 +1,135 @@
+name: Astra Private Research Dossiers VPS (No Sales or Network)
+
+on:
+  push:
+    branches: [feature/astra-v2-0048-integration-canary-20261015]
+    paths:
+      - .github/workflows/astra-v2-research-dossiers-vps.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: astra-private-research-dossiers
+  cancel-in-progress: false
+
+jobs:
+  isolated-research-plans:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify dossiers never become manufactured commercial evidence
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p test_astra_v2_private_research_dossiers.py -v
+          python3 -m py_compile scripts/astra_v2_private_research_dossiers.py
+      - name: Transfer single audited research planner into isolated VPS area
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          tmp="$RUNNER_TEMP/astra-research-dossiers"
+          install -d -m 700 "$tmp"
+          trap 'rm -rf -- "$tmp"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$tmp/key"
+          chmod 600 "$tmp/key"
+          ssh-keygen -y -P '' -f "$tmp/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$tmp/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$tmp/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          SSH=(ssh -i "$tmp/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$tmp/known" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=15 githubops@178.239.147.150)
+          run_id="$GITHUB_RUN_ID"_"$GITHUB_RUN_ATTEMPT"
+          digest="$(sha256sum scripts/astra_v2_private_research_dossiers.py | awk '{print $1}')"
+          cat scripts/astra_v2_private_research_dossiers.py | "${SSH[@]}" \
+            "set -e; umask 077; dest=\$HOME/factory-runtime/operations/astra-v2-research-dossiers; mkdir -p \"\$dest\"; chmod 700 \"\$dest\"; test ! -e \"\$dest/candidate-$run_id.py\"; cat > \"\$dest/candidate-$run_id.py\"; chmod 600 \"\$dest/candidate-$run_id.py\""
+          "${SSH[@]}" 'bash -se' "$run_id" "$digest" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          test "$(id -un)" = githubops
+          [[ "$1" =~ ^[0-9]+_[0-9]+$ ]]
+          [[ "$2" =~ ^[a-f0-9]{64}$ ]]
+          root="$HOME/factory-runtime"
+          script_dir="$root/operations/astra-v2-research-dossiers"
+          candidate="$script_dir/candidate-$1.py"
+          live="$script_dir/dossiers.py"
+          original="$root/private/factory-fresh-isolated.sqlite3"
+          research="$root/private/astra-v2-research-bridge/research-tasks.sqlite3"
+          work="$root/private/astra-v2-research-dossiers"
+          output="$work/briefs"
+          PY="$root/.venv/bin/python"
+          test -x "$PY"
+          test -f "$candidate" && test ! -L "$candidate"
+          test "$(sha256sum "$candidate" | awk '{print $1}')" = "$2"
+          test -f "$original" && test ! -L "$original"
+          test -f "$research" && test ! -L "$research"
+          if test ! -d "$work"; then mkdir -m 700 "$work"; fi
+          test -d "$work" && test ! -L "$work"
+          if test ! -d "$output"; then mkdir -m 700 "$output"; fi
+          test -d "$output" && test ! -L "$output"
+          chmod 700 "$work" "$output"
+          "$PY" "$candidate" --legacy-db "$original" --research-db "$research" \
+             --output-dir "$output" --limit 50 > "$work/first-$1.json"
+          "$PY" - "$work/first-$1.json" "$output" <<'PY'
+          import json,pathlib,sys
+          summary=json.loads(pathlib.Path(sys.argv[1]).read_text())
+          out=pathlib.Path(sys.argv[2])
+          count=len(list(out.glob("research-*.json")))
+          assert summary["dossiers_written"]>0,summary
+          assert summary["network_requests"]==0
+          assert summary["independently_verified_commercial_products"]==0
+          assert summary["factory_databases_modified"] is False
+          assert summary["public_store_or_payment_modified"] is False
+          assert count>=summary["dossiers_written"]
+          first=sorted(out.glob("research-*.json"))[0]
+          row=json.loads(first.read_text())
+          assert row["release_authorized"] is False
+          assert row["commercial_quality_score"] is None
+          assert row["independently_verified_research_items"]==0
+          assert row["research_evidence_target"]==100
+          assert row["external_actions_required"]==5
+          assert row["internal_actions_required"]==1
+          print("ASTRA_DOSSIERS_FIRST_BATCH="+str(summary["dossiers_written"]))
+          print("ASTRA_DOSSIERS_PRIVATE_FILES="+str(count))
+          print("ASTRA_DOSSIERS_ALL_MARKET_ATTESTATIONS_UNVERIFIED=true")
+          print("ASTRA_DOSSIERS_NO_UNTRUSTED_PUBLIC_CONTENT_EXPORTED=true")
+          PY
+          if test -e "$live"; then
+             test -f "$live" && test ! -L "$live"
+             cp -p -- "$live" "$script_dir/backup-$1.py"
+          fi
+          mv -- "$candidate" "$live"
+          chmod 600 "$live"
+          touch "$work/cron-errors.log"
+          chmod 600 "$work/cron-errors.log"
+          marker=ASTRA_V2_PRIVATE_RESEARCH_DOSSIERS
+          previous="$work/previous-$1"
+          crontab -l > "$previous" 2>/dev/null || :
+          test "$(grep -c "$marker" "$previous" || true)" -le 1
+          test -x /usr/bin/flock && test -x /usr/bin/timeout
+          next="$work/next-$1"
+          grep -v "$marker" "$previous" > "$next" || true
+          schedule="*/30 * * * * /usr/bin/flock -n $work/cron.lock /usr/bin/timeout 120 $PY $live --legacy-db $original --research-db $research --output-dir $output --limit 50 > /dev/null 2>> $work/cron-errors.log # $marker"
+          printf '%s\n' "$schedule" >> "$next"
+          crontab "$next"
+          test "$(crontab -l | grep -c "$marker" || true)" = 1 || { crontab "$previous"; exit 4; }
+          grep -v "$marker" "$previous" > "$work/unrelated-before-$1" || true
+          crontab -l | grep -v "$marker" > "$work/unrelated-after-$1" || true
+          cmp -s "$work/unrelated-before-$1" "$work/unrelated-after-$1" || { crontab "$previous"; exit 5; }
+          test "$(crontab -l | grep -c ASTRA_V2_PRIVATE_RESEARCH_BRIDGE || true)" = 1
+          test "$(crontab -l | grep -c ASTRA_V2_PRIVATE_RESEARCH_DOSSIERS || true)" = 1
+          echo ASTRA_DOSSIERS_INDEPENDENT_CRON=EVERY_30_MINUTES
+          echo ASTRA_DOSSIERS_ORIGINAL_BRIDGE_CRON_PRESERVED=true
+          echo ASTRA_DOSSIERS_ORIGINAL_FACTORY_DB_OPENED_READ_ONLY=true
+          echo ASTRA_DOSSIERS_PUBLIC_STORE_CHANGED=false
+          echo ASTRA_DOSSIERS_PAYMENTS_CHANGED=false
+          echo ASTRA_DOSSIERS_COMMERCIAL_PRODUCT_RELEASES=0
+          rm -f -- "$previous" "$next" \
+            "$work/unrelated-before-$1" "$work/unrelated-after-$1" "$work/first-$1.json"
+          REMOTE
