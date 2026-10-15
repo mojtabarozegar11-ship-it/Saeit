@@ -549,48 +549,67 @@ jobs:
           set +e
           status_path="$RUNNER_TEMP/zomorod-recovery-status.json"
           python3 - "$SSH_CONFIG" "$GITHUB_SHA" "$status_path" <<'PY'
-          import json, subprocess, sys, urllib.request, urllib.error, base64
+          import base64, json, os, re, subprocess, sys, urllib.error, urllib.request
           ssh_config, commit_sha, status_path = sys.argv[1:]
           routes = {}
-          urls = [
-              "https://zomorodmelal.ir/",
-              "https://zomorodmelal.ir/admin/",
-              "https://zomorodmelal.ir/admin/login/",
-              "https://zomorodmelal.ir/amozeshgah/",
-          ]
-          for url in urls:
+          for url in ["https://zomorodmelal.ir/", "https://zomorodmelal.ir/admin/", "https://zomorodmelal.ir/admin/login/", "https://zomorodmelal.ir/amozeshgah/"]:
               try:
-                  p=subprocess.run(["curl","--silent","--show-error","--location","--max-time","30","--output","/dev/null","--write-out","%{http_code}",url],capture_output=True,text=True,timeout=35)
-                  routes[url]=int(p.stdout.strip() or "0")
+                  p = subprocess.run(["curl", "--silent", "--show-error", "--location", "--max-time", "30", "--output", "/dev/null", "--write-out", "%{http_code}", url], capture_output=True, text=True, timeout=35)
+                  routes[url] = int(p.stdout.strip() or "0")
               except Exception:
-                  routes[url]=0
-          venv_configured=False
+                  routes[url] = 0
+          app = None
+          env_names = []
+          venv_configured = False
+          launcher_present = False
+          log_matches = []
           try:
-              remote=subprocess.run(["ssh","-F",ssh_config,"saeit-cpanel","python3 -c 'import json,subprocess; d=json.loads(subprocess.check_output([\"uapi\",\"--output=json\",\"PassengerApps\",\"list_applications\"],text=True)); s=[d]; a=[]\nwhile s:\n x=s.pop()\n if isinstance(x,dict):\n  if str(x.get(\"domain\",\"\")).lower()==\"zomorodmelal.ir\" and x.get(\"base_uri\")==\"/\": a.append(x)\n  s.extend(x.values())\n elif isinstance(x,list): s.extend(x)\nprint(\"yes\" if len(a)==1 and (a[0].get(\"envvars\") or {}).get(\"VIRTUAL_ENV\")==\"/home/zomorod2/virtualenv/Saeit/3.10\" else \"no\")'"],capture_output=True,text=True,timeout=30)
-              venv_configured="yes" in remote.stdout.splitlines()
-          except Exception:
-              pass
-          payload={"commit_sha":commit_sha,"passenger_virtual_env_configured":venv_configured,"routes":routes}
-          with open(status_path,"w",encoding="utf-8") as f: json.dump(payload,f,ensure_ascii=False,indent=2)
+              p = subprocess.run(["ssh", "-F", ssh_config, "saeit-cpanel", "uapi", "--output=json", "PassengerApps", "list_applications"], capture_output=True, text=True, timeout=30)
+              data = json.loads(p.stdout)
+              found = []
+              stack = [data]
+              while stack:
+                  x = stack.pop()
+                  if isinstance(x, dict):
+                      if str(x.get("domain", "")).lower() == "zomorodmelal.ir" and x.get("base_uri") == "/": found.append(x)
+                      stack.extend(x.values())
+                  elif isinstance(x, list): stack.extend(x)
+              if len(found) == 1:
+                  app = found[0]
+                  envvars = app.get("envvars") or {}
+                  env_names = sorted(envvars) if isinstance(envvars, dict) else []
+                  venv_configured = isinstance(envvars, dict) and envvars.get("VIRTUAL_ENV") == "/home/zomorod2/virtualenv/Saeit/3.10"
+              test = subprocess.run(["ssh", "-F", ssh_config, "saeit-cpanel", "test", "-x", "/home/zomorod2/virtualenv/Saeit/3.10/bin/set_env_vars.py"], timeout=30)
+              launcher_present = test.returncode == 0
+              log = subprocess.run(["ssh", "-F", ssh_config, "saeit-cpanel", "tail", "-n", "120", "/home/zomorod2/public_html/stderr.log"], capture_output=True, text=True, timeout=30).stdout
+              for line in log.splitlines():
+                  if re.search(r"error|exception|traceback|failed|not found|exec:", line, re.I):
+                      line = re.sub(r"(?i)(SECRET_KEY|PASSWORD|TOKEN|API_KEY|PRIVATE_KEY)([^=]*=)[^[:space:]]+", r"\1\2[redacted]", line)
+                      log_matches.append(line[:500])
+          except Exception as error:
+              log_matches.append("DIAGNOSTIC_ERROR=" + type(error).__name__)
+          payload = {"commit_sha": commit_sha, "passenger_virtual_env_configured": venv_configured, "passenger_launcher_present": launcher_present, "passenger_envvar_names": env_names, "root_app_enabled": bool(app and app.get("enabled") in (1, True, "1")), "routes": routes, "passenger_error_log_lines": log_matches[-12:]}
+          with open(status_path, "w", encoding="utf-8") as f: json.dump(payload, f, ensure_ascii=False, indent=2)
           try:
-              token=__import__("os").environ["GH_TOKEN"]
-              api="https://api.github.com/repos/"+__import__("os").environ["GITHUB_REPOSITORY"]+"/contents/.codex/zomorod-recovery-status.json"
-              headers={"Authorization":"Bearer "+token,"Accept":"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28"}
-              sha=None
+              api = "https://api.github.com/repos/" + os.environ["GITHUB_REPOSITORY"] + "/contents/.codex/zomorod-recovery-status.json"
+              headers = {"Authorization": "Bearer " + os.environ["GH_TOKEN"], "Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"}
+              sha = None
               try:
-                  req=urllib.request.Request(api+"?ref=main",headers=headers)
-                  with urllib.request.urlopen(req,timeout=20) as response: sha=json.load(response).get("sha")
+                  req = urllib.request.Request(api + "?ref=main", headers=headers)
+                  with urllib.request.urlopen(req, timeout=20) as response: sha = json.load(response).get("sha")
               except urllib.error.HTTPError as error:
-                  if error.code!=404: raise
-              body={"message":"Record temporary Zomorod route recovery status","content":base64.b64encode(open(status_path,"rb").read()).decode(),"branch":"main"}
-              if sha: body["sha"]=sha
-              req=urllib.request.Request(api,data=json.dumps(body).encode(),headers={**headers,"Content-Type":"application/json"},method="PUT")
-              with urllib.request.urlopen(req,timeout=30) as response: print("RECOVERY_STATUS_FILE_COMMITTED="+str(response.status))
+                  if error.code != 404: raise
+              body = {"message": "Record temporary Zomorod route recovery status", "content": base64.b64encode(open(status_path, "rb").read()).decode(), "branch": "main"}
+              if sha: body["sha"] = sha
+              req = urllib.request.Request(api, data=json.dumps(body).encode(), headers={**headers, "Content-Type": "application/json"}, method="PUT")
+              with urllib.request.urlopen(req, timeout=30) as response: print("RECOVERY_STATUS_FILE_COMMITTED=" + str(response.status))
           except Exception as error:
               print("RECOVERY_STATUS_FILE_COMMITTED=no")
-              print("RECOVERY_STATUS_PUBLICATION_ERROR="+type(error).__name__)
-          print("RECOVERY_STATUS_ROUTES="+json.dumps(routes,ensure_ascii=False,sort_keys=True))
-          print("PASSENGER_VIRTUAL_ENV_CONFIGURED="+str(venv_configured).lower())
+              print("RECOVERY_STATUS_PUBLICATION_ERROR=" + type(error).__name__)
+          print("RECOVERY_STATUS_ROUTES=" + json.dumps(routes, ensure_ascii=False, sort_keys=True))
+          print("PASSENGER_VIRTUAL_ENV_CONFIGURED=" + str(venv_configured).lower())
+          print("PASSENGER_LAUNCHER_PRESENT=" + str(launcher_present).lower())
+          print("PASSENGER_ERROR_LOG_LINES=" + str(len(log_matches)))
           PY
       - name: Remove temporary SSH material
         if: always()
