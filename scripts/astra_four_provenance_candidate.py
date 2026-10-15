@@ -248,7 +248,9 @@ def run(catalog,inbox,output,*,apply):
         "items":[summary for _,summary in results],
     }
     if apply:
-        raw=(json.dumps(report,sort_keys=True,indent=2)+"\n").encode()
+        stable=dict(report)
+        stable["items"]=[{k:v for k,v in item.items() if k!="newly_written"} for item in report["items"]]
+        raw=(json.dumps(stable,sort_keys=True,indent=2)+"\n").encode()
         report_name="astra-commercial-review-"+hash_bytes(raw)[:20]+".json"
         store_unique(folder,report_name,raw,apply=True)
     return report
