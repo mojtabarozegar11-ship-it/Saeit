@@ -40,8 +40,14 @@ class ArtifactIntegrityTests(unittest.TestCase):
         self.assertFalse(valid["commercial_ready"])
 
     def test_change_one_pixel_breaks_hash_binding(self):
-        Image.new("RGB", (256,256), "black").save(self.png)
-        with self.assertRaisesRegex(ArtifactIntegrityError, "SHA256_MISMATCH|IMAGE_BYTE_COUNT_MISMATCH"):
+        with Image.open(self.png) as image:
+            pixel = image.getpixel((0, 0))
+            image.putpixel((0, 0), tuple(255 - value for value in pixel))
+            image.save(self.png, "PNG")
+        with self.assertRaisesRegex(
+            ArtifactIntegrityError,
+            "PNG_SHA256_MISMATCH|IMAGE_BYTE_COUNT_MISMATCH",
+        ):
             verify_pair(self.png, self.qa)
 
     def test_modified_report_approval_is_rejected(self):
