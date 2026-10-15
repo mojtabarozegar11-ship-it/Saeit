@@ -1,0 +1,31 @@
+name: ComfyUI Tailnet Owner Authorization Gate
+on:
+  push:
+    branches: [ops/comfyui-private-tailnet-activate-20261015]
+    paths: [.github/workflows/comfyui-tailnet-safe-activation.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  owner-secret-readiness:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: Check non-sensitive presence of owner authorization only
+        shell: bash
+        env:
+          TAILNET_KEY: ${{ secrets.COMFYUI_TAILSCALE_AUTHKEY }}
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -Eeuo pipefail
+          if [[ -n "$VPS_KEY" ]]; then
+            echo "COMFYUI_VPS_SSH_AUTH_AVAILABLE"
+          else
+            echo "COMFYUI_VPS_SSH_AUTH_MISSING"
+          fi
+          if [[ -n "$TAILNET_KEY" ]]; then
+            echo "COMFYUI_TAILSCALE_AUTHKEY_CONFIGURED"
+          else
+            echo "COMFYUI_TAILSCALE_AUTHKEY_NOT_CONFIGURED"
+          fi
+          echo "COMFYUI_READ_ONLY_SECRET_PRESENCE_CHECK_COMPLETE"
