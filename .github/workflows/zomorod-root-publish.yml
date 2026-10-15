@@ -103,10 +103,15 @@ jobs:
           set -euo pipefail
           root=/home/zomorod2/public_html
           test -d "$root" && test "$(stat -c %U "$root")" = "zomorod2" && test -w "$root"
-          test -f "$root/.htaccess"
           backup="$HOME/.backups/zomorodmelal-amozeshgah/htaccess.20261014T235252Z"
-          test -f "$backup" && cmp -s "$root/.htaccess" "$backup"
-          test ! -e "$root/index.html" && test ! -L "$root/index.html"
+          test -f "$root/.htaccess" && test -f "$backup" && cmp -s "$root/.htaccess" "$backup"
+          if test -e "$root/index.html" || test -L "$root/index.html"; then
+            test -f "$root/index.html" && test ! -L "$root/index.html"
+            grep -Fq '<!-- saeit-zomorod-root-homepage-v1 -->' "$root/index.html"
+            echo ROOT_INDEX=MANAGED_VERSION_PRESENT
+          else
+            echo ROOT_INDEX=AVAILABLE
+          fi
           raw="$HOME/.root-app-audit-$$.json"
           trap 'rm -f -- "$raw"' EXIT
           uapi --output=json PassengerApps list_applications > "$raw"
@@ -129,16 +134,15 @@ jobs:
           PY
           echo ROOT_DIRECTORY_OWNER=zomorod2
           echo ROOT_HTACCESS_UNCHANGED=yes
-          echo ROOT_INDEX_AVAILABLE=yes
           REMOTE
-      - name: Stage homepage and atomically publish only root index.html
+      - name: Stage and atomically publish the managed homepage
         shell: bash
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/zomorod-root"
           root=/home/zomorod2/public_html
           stage="$root/.zomorod-root-stage-$GITHUB_SHA"
-          ssh -F "$d/config" saeit-cpanel "set -eu; test ! -e '$root/index.html' && test ! -L '$root/index.html'; test ! -e '$stage'; mkdir -m 700 '$stage'"
+          ssh -F "$d/config" saeit-cpanel "set -eu; test ! -e '$stage'; mkdir -m 700 '$stage'"
           tar -C public -czf - index.html | ssh -F "$d/config" saeit-cpanel "tar -xzf - -C '$stage'"
           expected_sha="$(sha256sum public/index.html | awk '{print $1}')"
           ssh -F "$d/config" saeit-cpanel bash -s -- "$expected_sha" "$GITHUB_SHA" <<'REMOTE'
@@ -147,22 +151,37 @@ jobs:
           commit_sha="$2"
           root=/home/zomorod2/public_html
           stage="$root/.zomorod-root-stage-$commit_sha"
+          target="$root/index.html"
+          backup="$HOME/.backups/zomorodmelal-root-homepage/index-previous-$commit_sha"
           actual_sha="$(sha256sum "$stage/index.html" | awk '{print $1}')"
           test "$actual_sha" = "$expected_sha"
+          if test -f "$target"; then
+            grep -Fq '<!-- saeit-zomorod-root-homepage-v1 -->' "$target"
+            current_sha="$(sha256sum "$target" | awk '{print $1}')"
+            if test "$current_sha" = "$expected_sha"; then
+              rm -f -- "$stage/index.html"
+              rmdir "$stage"
+              echo ROOT_INDEX_ALREADY_CURRENT=yes
+              exit 0
+            fi
+            install -d -m 700 "$HOME/.backups/zomorodmelal-root-homepage"
+            test ! -e "$backup"
+            cp -p "$target" "$backup"
+          fi
           chmod 644 "$stage/index.html"
-          mv -T "$stage/index.html" "$root/index.html"
+          mv -T "$stage/index.html" "$target"
           rmdir "$stage"
-          test -s "$root/index.html"
+          test -s "$target"
           echo ROOT_INDEX_INSTALLED=yes
           REMOTE
-      - name: Verify apex and www, roll back if either fails
+      - name: Verify root and education routes
         shell: bash
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/zomorod-root"
           failed=0
           for url in https://zomorodmelal.ir/ https://www.zomorodmelal.ir/; do
-            name="$(printf '%s' "$url" | sed 's#https://##; s#/#_#g; s#\\.#_#g')"
+            name="$(printf '%s' "$url" | sed 's#https://##; s#/#_#g; s#\.#_#g')"
             file="$d/$name.html"
             result="$(curl --silent --show-error --location --max-redirs 5 --connect-timeout 10 --max-time 30 -H 'Cache-Control: no-cache' -o "$file" -w '%{http_code}|%{content_type}|%{url_effective}' "$url" || true)"
             code="${result%%|*}"
@@ -170,24 +189,37 @@ jobs:
             printf 'PUBLIC_ROOT_CHECK %s result=%s\n' "$url" "$result"
             if [ "$code" != "200" ] || [[ "$type" != text/html* ]] || ! grep -Fq '<!-- saeit-zomorod-root-homepage-v1 -->' "$file" || ! grep -Fq 'https://zomorodmelal.ir/amozeshgah/' "$file"; then failed=1; fi
           done
+          for url in https://zomorodmelal.ir/amozeshgah/ https://zomorodmelal.ir/education/; do
+            name="$(printf '%s' "$url" | sed 's#https://##; s#/#_#g; s#\.#_#g')"
+            file="$d/$name.html"
+            result="$(curl --silent --show-error --location --max-redirs 5 --connect-timeout 10 --max-time 30 -H 'Cache-Control: no-cache' -o "$file" -w '%{http_code}|%{content_type}|%{url_effective}' "$url" || true)"
+            code="${result%%|*}"
+            printf 'PUBLIC_EDUCATION_CHECK %s result=%s\n' "$url" "$result"
+            if [ "$code" != "200" ] || ! grep -Fq 'آموزشگاه زمرد ملل' "$file"; then failed=1; fi
+          done
           if [ "$failed" -ne 0 ]; then
             ssh -F "$d/config" saeit-cpanel bash -s -- "$GITHUB_SHA" <<'REMOTE'
           set -euo pipefail
           commit_sha="$1"
           root=/home/zomorod2/public_html
           target="$root/index.html"
-          backup="$HOME/.backups/zomorodmelal-root-homepage/index-failed-$commit_sha"
-          if test -f "$target" && grep -Fq '<!-- saeit-zomorod-root-homepage-v1 -->' "$target"; then
-            install -d -m 700 "$HOME/.backups/zomorodmelal-root-homepage"
-            test ! -e "$backup"
-            mv -T "$target" "$backup"
+          backup="$HOME/.backups/zomorodmelal-root-homepage/index-previous-$commit_sha"
+          if test -f "$backup"; then
+            if test -f "$target" && grep -Fq '<!-- saeit-zomorod-root-homepage-v1 -->' "$target"; then
+              failed="$HOME/.backups/zomorodmelal-root-homepage/index-failed-$commit_sha"
+              test ! -e "$failed"
+              mv -T "$target" "$failed"
+            fi
+            mv -T "$backup" "$target"
+            echo ROOT_PUBLICATION_ROLLED_BACK=yes
+          else
+            echo ROOT_PUBLICATION_RETAINED_PREVIOUSLY_VERIFIED_VERSION=yes
           fi
-          echo ROOT_PUBLICATION_ROLLED_BACK=yes
           REMOTE
             exit 1
           fi
           echo ROOT_APEX_AND_WWW_VALIDATION=passed
-          grep -F '<title>' "$d/zomorodmelal_ir_.html" | head -1
+          echo EDUCATION_AND_LEGACY_URL_VALIDATION=passed
       - name: Remove temporary SSH material
         if: always()
         shell: bash
