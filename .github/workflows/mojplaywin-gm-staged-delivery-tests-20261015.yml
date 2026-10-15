@@ -1,0 +1,37 @@
+name: MojPlayWin chess Grandmaster staged delivery safety tests
+on:
+  push:
+    branches:
+      - fix/mpw-gm-415-download-20261015
+    paths:
+      - '.github/workflows/mojplaywin-gm-staged-delivery-tests-20261015.yml'
+      - 'core/chess_ebook_delivery.py'
+      - 'tests/test_mpw_chess_gm_release_guards.py'
+      - 'catalog/mojplaywin/chess-grandmaster-2026-release-preflight.json'
+      - 'catalog/mojplaywin/chess-grandmaster-2026-safe-delivery-config.json'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify final ebook identity and closed release gates
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p test_mpw_chess_gm_release_guards.py -v
+          echo MPW_GM_STATIC_RELEASE_GUARDS_OK
+      - name: Isolated Django delivery authorization tests
+        env:
+          DJANGO_SETTINGS_MODULE: tests.native_checkout_settings
+        run: |
+          set -euo pipefail
+          python3 -m venv "$RUNNER_TEMP/gm-tests"
+          "$RUNNER_TEMP/gm-tests/bin/python" -m pip install --disable-pip-version-check -q 'Django>=5.2,<6' 'eth-account>=0.13,<0.14'
+          "$RUNNER_TEMP/gm-tests/bin/python" -m django test tests.native_ci_commerce_download_views tests.native_ci_commerce_private_assets --verbosity 2
+          echo MPW_GM_ISOLATED_PRIVATE_DOWNLOAD_GUARDS_OK
+          echo MPW_LIVE_DB_CHECKOUT_AND_PAYMENTS_UNCHANGED
