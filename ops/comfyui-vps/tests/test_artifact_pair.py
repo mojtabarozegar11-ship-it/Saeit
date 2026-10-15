@@ -6,13 +6,23 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from PIL import Image
-
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from image_quality_report import report
+try:
+    from PIL import Image
+except ModuleNotFoundError as exc:
+    if exc.name != "PIL":
+        raise
+    Image = None
+
+if Image is not None:
+    from image_quality_report import report
+else:
+    report = None
+
 from verify_artifact_pair import ArtifactIntegrityError, verify_pair
 
 
+@unittest.skipIf(Image is None, "Pillow tests run in dedicated ComfyUI QA CI")
 class ArtifactIntegrityTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
