@@ -119,7 +119,18 @@ jobs:
               required=(b'PassengerAppRoot "/home/zomorod2/Saeit"',b'PassengerBaseURI "/"')
               if not all(item in original for item in required):
                   raise SystemExit("ORIGINAL_HTACCESS_BACKUP_MAPPING_MISMATCH")
-              prefix=("RewriteEngine On\n"
+              import re
+              match=re.search(rb'^PassengerPython\s+"?([^"\s]+)',original,re.M)
+              if not match:
+                  raise SystemExit("PASSENGER_PYTHON_DIRECTIVE_MISSING")
+              python_path=match.group(1).decode("utf-8")
+              venv=os.path.dirname(os.path.dirname(python_path))
+              expected=os.path.expanduser("~/virtualenv/Saeit/3.10")
+              env_script=os.path.join(venv,"bin","set_env_vars.py")
+              if venv!=expected or not os.path.isfile(env_script) or not os.access(env_script,os.X_OK):
+                  raise SystemExit("PASSENGER_VENV_ENV_HELPER_MISSING_OR_UNEXPECTED")
+              prefix=(f'SetEnv PYTHONHOME "{venv}"\n'
+                      "RewriteEngine On\n"
                       "RewriteRule ^$ index.html [END]\n"
                       "RewriteRule ^amozeshgah/?$ amozeshgah/index.html [END]\n"
                       "DirectoryIndex index.html\n").encode("utf-8")
