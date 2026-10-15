@@ -1,0 +1,57 @@
+name: Astra V2 Cross-Branch Migration Parity No-Write Gate
+
+on:
+  push:
+    branches: [feature/astra-factory-v2-architecture-20261014]
+    paths:
+      - .github/workflows/astra-v2-migration-parity.yml
+      - scripts/astra_v2_migration_parity.py
+      - tests/test_astra_v2_migration_parity.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compare-historical-source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - name: Checkout Astra V2 source WITHOUT writing historical code into it
+        uses: actions/checkout@v4
+      - name: Checkout existing VPS-aligned 0048 source into separate read-only review directory
+        uses: actions/checkout@v4
+        with:
+          repository: mojtabarozegar11-ship-it/Saeit
+          ref: factory/staging-reconciliation-20261008
+          path: historical-0048
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test migration safety, conflicting schemas and no code execution
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p test_astra_v2_migration_parity.py -v
+      - name: Inventory true gap without cherry-pick or applying migrations
+        run: |
+          set -euo pipefail
+          python3 scripts/astra_v2_migration_parity.py --current-dir core/migrations --reference-dir historical-0048/core/migrations > "$RUNNER_TEMP/astra-migration-parity.json"
+          python3 - "$RUNNER_TEMP/astra-migration-parity.json" <<'PY'
+          import json,sys,pathlib
+          d=json.loads(pathlib.Path(sys.argv[1]).read_text())
+          assert d["current_last_migration_number"]==39,d
+          assert d["reference_last_migration_number"]==48,d
+          assert len(d["missing_current_0040_to_0048"])==9,d
+          assert d["reference_0048_file"]=="0048_business_market_architecture.py"
+          assert d["automatic_merge_permitted"] is False
+          assert d["production_migration_permitted"] is False
+          assert d["stage45_cutover_permitted"] is False
+          print("ASTRA_SCHEMA_PARITY_BASE_0039_IDENTICAL="+str(d["common_0039_sha_equal"]).lower())
+          print("ASTRA_SCHEMA_PARITY_MISSING_0040_TO_0048="+str(len(d["missing_current_0040_to_0048"])))
+          print("ASTRA_SCHEMA_PARITY_CONFLICT_COUNT="+str(len(d["same_number_divergent_migrations"])))
+          print("ASTRA_SCHEMA_PARITY_0048_SOURCE_BRANCH=FACTORY_STAGING_RECONCILIATION_20261008")
+          print("ASTRA_SCHEMA_PARITY_NEXT_STEP="+d["next_step"])
+          print("ASTRA_SCHEMA_PARITY_LIVE_FACTORY_MIGRATION_ATTEMPTS=0")
+          print("ASTRA_SCHEMA_PARITY_AUTOMATIC_MERGE=false")
+          PY
