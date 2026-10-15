@@ -114,10 +114,12 @@ def create_digital_order(request):
     with transaction.atomic():
         cart,created=CommerceOrderRequest.objects.select_for_update().get_or_create(
             idempotency_key=key,
-            defaults={"buyer":request.user,"asset":data["asset"]},
+            defaults={"buyer":request.user,"asset":data["asset"],
+                      "requested_product_id":data["product_id"]},
         )
         if not created:
             if (cart.buyer_id!=request.user.pk or cart.asset!=data["asset"]
+                or cart.requested_product_id!=data["product_id"]
                 or cart.order_id is None):
                 return JsonResponse({"error":"Cart request conflict"},status=409)
             order=cart.order
@@ -128,11 +130,13 @@ def create_digital_order(request):
                 "reused":True,
             },status=200)
         if Order.objects.filter(customer=request.user,status="pending").count()>=5:
+            transaction.set_rollback(True)
             return JsonResponse({"error":"Too many pending orders"},status=429)
         product=Product.objects.select_for_update().select_related(
             "knowledge_article"
         ).filter(pk=data["product_id"]).first()
         if product is None or not _eligible(product):
+            transaction.set_rollback(True)
             return JsonResponse({"error":"Product not eligible for sale"},status=404)
         order=Order.objects.create(
             customer=request.user,status="pending",
