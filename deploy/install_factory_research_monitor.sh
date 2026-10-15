@@ -58,9 +58,15 @@ ops="$base/operations"
 stage="$ops/evidence-sidecar-candidate"
 exec 9>"$ops/evidence-sidecar-monitor.lock"
 flock -n 9 || exit 0
+# Obtain the live ORM database path from Django settings, not a guessed db.sqlite3.
+django_db="$(cd "$base/django-app" && \
+  DJANGO_SETTINGS_MODULE=config.settings SAEIT_ENV=production MOJ_FACTORY_LOCAL_MODE=1 \
+  "$base/.venv/bin/python" -c 'from django.conf import settings; print(settings.DATABASES["default"]["NAME"])')"
+test -s "$django_db"
 exec nice -n 15 timeout 50s "$base/.venv/bin/python" \
   "$stage/scripts/factory_research_sidecar.py" \
   --db "$base/private/factory-fresh-isolated.sqlite3" \
+  --compare-db "$django_db" \
   --out "$base/private/research-evidence-sidecar" \
   --limit 50 > "$ops/evidence-sidecar-monitor-last.log" 2>&1
 WRAPPER
