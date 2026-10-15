@@ -117,3 +117,20 @@ This section supersedes the former "only one specialized builder" and "no automa
 - Live existing factory cron, cPanel, production websites, payment providers and financial ledgers were not modified by this scoped upgrade.
 
 **Commercial result remains zero**: No independently confirmed buyer willingness-to-pay, no competitive user trial, no expert financial/procurement audit, no accepted 90/100 quality rating, no owner release authorization, no storefront/payment settlement. A 24-hour soak with monitored results is still NOT complete. Original Astra migration 0049 and Stage 4→5 market-provider cutover are NOT complete. Two families alone do not imply general autonomous content creation.
+
+## 2026-10-15 latest technical update — verified 470 tests and bounded autonomous cache
+
+The `feature/astra-factory-v2-architecture-20261014` branch now contains **three** distinct, privately QA'd source-builder families. [No-order three-product integrated artifact run 38659312298](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/38659312298) produced and independently tested all three private ZIPs on a GitHub runner. [CI 38660936246](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/38660936246) and [Django CI 38660936207](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/38660936207) each passed **470** tests after further autonomous production hardening.
+
+An unbounded case archive can fill a small VPS and halt unattended manufacturing. Accordingly, the order-free educator now has:
+- 720 retained, byte-validated, synthetic-only ZIP slots, and at least 168 hours of protection for recent editions;
+- fail-closed preservation of arbitrary user files, foreign ZIPs, tampered archives and symlinked objects;
+- safe retirement only of exact original synthetic lesson content in oldest eligible hours when slots are full;
+- the original 64 MiB private synthetic archive cap and 256 MiB free-space safety margin remain; lack of capacity stops production rather than modifying unrelated content;
+- regression tests for retention, corruption, preservation of user/foreign files, long-window 48-edition no-order production and per-hour idempotence.
+
+**Deployment truth check:** [read-only VPS audit run 38661021156](https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/38661021156), UTC 2026-10-15 00:36:51, observed **one** five-minute private cron marker, **two** builder families already producing private QA-accepted ZIPs, **one** autonomous educational edition, a cron-log age of **109 seconds**, and **third water/land builder NOT on VPS**. This check proves a current functioning periodic scheduler, NOT the branch's new rolling retention feature already running or a 24-hour uptime soak.
+
+**Critical distinction:** The 720-edition retention change is currently **committed and CI-tested in GitHub, not independently verified as deployed to the VPS**. A remote cutover attempt for third builder + new runtime changes did not complete through the available controlled path; do not claim installation. The live original factory, website hosting and payment environment were not changed by these branch-only updates.
+
+**Commercial qualification remains unchanged:** three original *technical prototypes*, not three independently validated saleable items; no verified buyer problem/willingness, no independent 90/100 score, no real publishing or revenue settlement. Third prototype competes with sophisticated existing academic tools (FAO literature, UC Davis and K-State tools, documented in `docs/research/ASTRA_V2_WATER_LAND_COMPETITION_AND_RESEARCH_20261015.md`). Do not describe rigorous mechanical QA as proof of a premium market.
