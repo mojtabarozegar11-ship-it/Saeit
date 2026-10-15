@@ -154,7 +154,7 @@ def assess(bundle):
     if not complete_evidence:
         blockers.append("ONE_HUNDRED_DISTINCT_STRONG_EVIDENCE_PASSAGES_REQUIRED")
     if not complete_internal:
-        blockers.append("ONE_VERIFIED_INTERNAL_RESEARCH_ACTION_REQUIRED")
+        blockers.append("ONE_STRUCTURED_INTERNAL_RESEARCH_ACTION_REQUIRED")
     if not outcome_passed or missing_factors:
         blockers.append("TEN_FACTOR_VALIDATION_PASS_REQUIRED")
     if not no_active_or_owner_problem:
@@ -168,14 +168,14 @@ def assess(bundle):
     return {
         "schema": "saeit.factory.research-readiness.v1",
         "product_id": bundle.get("product_id"),
-        "research_gate": "READY_FOR_INDEPENDENT_REVIEW" if research_ready else "RESEARCH_BLOCKED",
+        "research_gate": "QUANTITATIVE_THRESHOLD_MET_REVIEW_REQUIRED" if research_ready else "RESEARCH_BLOCKED",
         "research_gate_passed": research_ready,
         "evidence_completeness_workload_percent": round(metric, 1),
         "counts": {
             "public_distinct_domain_groups": len(domains),
             "public_domains_with_strong_evidence": len(source_coverage),
             "validated_unique_evidence_passages": len(unique_evidence),
-            "verified_internal_action_records": len(action_ids),
+            "self_attested_internal_action_records": len(action_ids),
             "upstream_factors_marked_missing": len(missing_factors),
         },
         "targets": {
@@ -189,5 +189,5 @@ def assess(bundle):
         "commercial_quality_approved": False,
         "price_review_completed": False,
         "verified_sales": False,
-        "note": "Technical coverage is not proof of source accuracy, market demand, or product saleability.",
+        "note": "Candidate URLs, passages and internal-action flags are NOT independently authenticated. Counts are workload indicators only; human verification is mandatory. No automatic publication is permitted.",
     }
