@@ -6,13 +6,22 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from PIL import Image
-
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from image_quality_report import report  # noqa: E402
+try:
+    from PIL import Image
+except ModuleNotFoundError as exc:
+    if exc.name != "PIL":
+        raise
+    Image = None
+
+if Image is not None:
+    from image_quality_report import report
+else:
+    report = None
 
 
+@unittest.skipIf(Image is None, "Pillow is tested in dedicated image QA CI only")
 class TestImageQualityGate(unittest.TestCase):
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
