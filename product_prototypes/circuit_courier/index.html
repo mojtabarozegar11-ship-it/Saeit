@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark"><title>Circuit Courier | Astra Game Lab</title>
+<link rel="stylesheet" href="style.css"><script defer src="engine.js"></script><script defer src="app.js"></script></head>
+<body>
+<header><div class="brand"><span class="mark">◈</span> CIRCUIT COURIER <small>AN ORIGINAL ASTRA GAME LAB PROTOTYPE</small></div>
+<span class="chip">OFFLINE · 36 STAGES · NO TRACKING</span></header>
+<main>
+<section class="hero"><p class="eyebrow">TACTICAL ROUTE PUZZLE</p><h1>Route the signal.<br><em>Recover the nodes.</em></h1>
+<p>Collect all three signal beacons, then reach the exit before your energy runs out. Every level has been checked by a shortest-path solver.</p>
+<div class="caveat" role="note">Private playable research build. Stage layouts are procedurally generated, not independently playtested; progress stays only on this device. No purchases, gambling, or live leaderboards.</div></section>
+<section class="playgrid">
+<div class="gamepanel">
+<div class="hud"><div><small>STAGE</small><strong id="level-label">01 / 36</strong></div>
+<div><small>ENERGY LEFT</small><strong id="energy">—</strong></div>
+<div><small>BEACONS</small><strong id="beacons">0 / 3</strong></div>
+<div><small>OPTIMAL</small><strong id="optimal">—</strong></div></div>
+<div id="board" class="board" role="grid" aria-label="Six by six signal-routing grid"></div>
+<p class="legend"><span>◈ You</span><span>◆ Beacons</span><span>⬡ Exit</span><span>▣ Blocker</span></p>
+<div id="status" class="status" role="status" aria-live="polite">Use arrow keys or the controls to move.</div>
+<div class="controls" aria-label="Movement controls">
+  <button type="button" data-move="up" aria-label="Move up">↑</button>
+  <div><button type="button" data-move="left" aria-label="Move left">←</button>
+  <button type="button" data-move="down" aria-label="Move down">↓</button>
+  <button type="button" data-move="right" aria-label="Move right">→</button></div>
+</div>
+<div class="toolbar"><button id="reset" type="button">Restart stage</button><button id="hint" type="button">Hint (1-star cap)</button><button id="next" type="button" disabled>Next stage →</button></div>
+</div>
+<aside class="sidebar"><h2>Mission log</h2>
+<p>Each move spends one unit of energy. Collect <strong>3 beacons</strong> and exit. Walls are impassable. A hint suggests the next move on a mathematically shortest route, but caps the stage award at one star.</p>
+<div class="progress"><small>COMPLETED STAGES</small><strong id="progress">0 / 36</strong><div class="bar"><span id="progress-bar"></span></div></div>
+<h3>Choose a stage</h3><div class="level-list" id="level-list" aria-label="Stage selection"></div>
+<p class="footnote">Progress stored locally in this browser only. Clear it in browser settings; no cloud or account is used.</p>
+<h3>Rules & integrity</h3><ul><li>Each stage is deterministic and reproducible.</li><li>Three stars: finish on shortest route without hints.</li><li>Two stars: within two extra moves, no hints.</li><li>One star: finish with more moves or use a hint.</li><li>There is no real-money reward or random purchase mechanic.</li></ul></aside>
+</section></main><footer>ASTRA Game Lab · Private reference prototype · 2026 · Commercial readiness not verified</footer>
+</body></html>

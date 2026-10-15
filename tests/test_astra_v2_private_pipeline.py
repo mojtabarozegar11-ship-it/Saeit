@@ -194,18 +194,19 @@ class PrivateManufacturingTests(unittest.TestCase):
         self.assertFalse(qa["real_payment_allowed"])
         self.assertFalse(qa["evidence_of_willingness_to_pay"])
 
-    def test_approved_private_source_revisions_bootstrap_three_builders_without_orders(self):
+    def test_approved_private_source_revisions_bootstrap_four_builders_without_orders(self):
         (self.root/".enable-autonomous-specialists").write_text("private_only")
         first=pipeline.tick(self.root)
-        self.assertEqual(first["private_source_autoplan"]["new_source_jobs"],3)
+        self.assertEqual(first["private_source_autoplan"]["new_source_jobs"],4)
         self.assertEqual(first["status"],"PRIVATE_QA_PASSED",first)
+        self.assertEqual(pipeline.tick(self.root)["status"],"PRIVATE_QA_PASSED")
         self.assertEqual(pipeline.tick(self.root)["status"],"PRIVATE_QA_PASSED")
         self.assertEqual(pipeline.tick(self.root)["status"],"PRIVATE_QA_PASSED")
         again=pipeline.tick(self.root)
         self.assertEqual(again["status"],"NO_ELIGIBLE_WORK")
-        self.assertEqual(again["private_source_autoplan"]["already_known_sources"],3)
-        self.assertEqual(pipeline.status(self.root)["distinct_private_product_families"],3)
-        self.assertEqual(pipeline.status(self.root)["distinct_private_qa_artifact_versions"],3)
+        self.assertEqual(again["private_source_autoplan"]["already_known_sources"],4)
+        self.assertEqual(pipeline.status(self.root)["distinct_private_product_families"],4)
+        self.assertEqual(pipeline.status(self.root)["distinct_private_qa_artifact_versions"],4)
         self.assertEqual(pipeline.status(self.root)["published_products"],0)
 
     def test_private_source_revision_mode_must_be_explicit_and_safe(self):
@@ -256,11 +257,11 @@ class PrivateManufacturingTests(unittest.TestCase):
         self.assertEqual(result["status"],"PRIVATE_QA_PASSED",result)
         self.assertEqual(result["topic_quality_gate"]["mode"],
                          "private_provisional_review_only")
-        self.assertEqual(result["private_source_autoplan"]["new_source_jobs"],3)
-        for _ in range(2):
+        self.assertEqual(result["private_source_autoplan"]["new_source_jobs"],4)
+        for _ in range(3):
             self.assertEqual(pipeline.tick(self.root)["status"],"PRIVATE_QA_PASSED")
         self.assertEqual(pipeline.tick(self.root)["status"],"NO_ELIGIBLE_WORK")
-        self.assertEqual(pipeline.status(self.root)["distinct_private_product_families"],3)
+        self.assertEqual(pipeline.status(self.root)["distinct_private_product_families"],4)
         self.assertEqual(pipeline.status(self.root)["published_products"],0)
 
     def test_topic_gate_rejects_unsafe_marker_and_symlinked_dossier(self):
