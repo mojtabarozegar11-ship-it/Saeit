@@ -69,6 +69,7 @@ jobs:
           set -euo pipefail
           set +e
           python -m django test \
+            tests.native_ci_buyer_cart \
             tests.native_ci_payment_release_preflight \
             tests.native_ci_sitewide_commerce \
             tests.native_ci_sitewide_chain_adapter \
