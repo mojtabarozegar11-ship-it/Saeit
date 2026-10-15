@@ -1,0 +1,84 @@
+name: PICM Video GPU Hardware Readiness (Read Only)
+on:
+  push:
+    branches: [audit/picm-video-gpu-capacity-20261015]
+    paths:
+      - .github/workflows/picm-video-gpu-capacity-readonly.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: picm-video-gpu-capacity-readonly
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - name: Inspect GPU compute on established VPS without changing the factory
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -Eeuo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          work="$RUNNER_TEMP/picm-video-gpu-audit"
+          install -d -m 700 "$work"
+          trap 'rm -rf -- "$work"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$work/key"
+          chmod 600 "$work/key"
+          ssh-keygen -y -P '' -f "$work/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$work/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$work/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          timeout 55s ssh -i "$work/key" -p 22 \
+            -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$work/known" -o BatchMode=yes \
+            -o ConnectTimeout=15 githubops@178.239.147.150 'bash -se' <<'REMOTE'
+          set -Eeuo pipefail
+          echo PICM_READ_ONLY_GPU_AUDIT_CONNECTED
+          echo PICM_AUDIT_FOCUS=GPU_hardware_not_image_only_CPU
+          echo "PICM_SERVER_ARCH=$(uname -m)"
+          echo "PICM_LOGICAL_CPUS=$(getconf _NPROCESSORS_ONLN)"
+          free -h | sed -n '1,3p'
+          df -h "$HOME" | tail -1
+          gpu=0
+          if command -v nvidia-smi >/dev/null 2>&1; then
+            nvidia-smi --query-gpu=name,memory.total,compute_mode --format=csv,noheader || true
+            if nvidia-smi -L >/dev/null 2>&1; then gpu=1; fi
+          else
+            echo PICM_NVIDIA_DRIVER_COMMAND_NOT_PRESENT
+          fi
+          if command -v rocm-smi >/dev/null 2>&1; then
+            rocm-smi --showproductname --showmeminfo vram 2>/dev/null || true
+            if rocm-smi --showproductname >/dev/null 2>&1; then gpu=1; fi
+          else
+            echo PICM_ROCM_DRIVER_COMMAND_NOT_PRESENT
+          fi
+          if test -e /dev/nvidia0; then echo PICM_NVIDIA_DEVICE_PRESENT; fi
+          if test -e /dev/kfd; then echo PICM_ROCM_DEVICE_PRESENT; fi
+          if command -v lspci >/dev/null 2>&1; then
+            lspci | grep -Ei 'VGA|3D controller|Display controller' | head -5 || true
+          else
+            echo PICM_LSPCI_NOT_INSTALLED
+          fi
+          echo "PICM_GPU_DRIVER_READY=$gpu"
+          echo "PICM_FFPROBE=$(command -v ffprobe || echo unavailable)"
+          echo "PICM_FFMPEG=$(command -v ffmpeg || echo unavailable)"
+          for path in "$HOME/comfyui-isolated" "$HOME/picm-gpu"; do
+            if test -d "$path"; then
+              echo "PICM_ISOLATED_RUNTIME_PRESENT=$(basename "$path")"
+              find "$path" -maxdepth 4 -type f \
+                \( -iname '*wan*.safetensors' -o -iname '*hunyuan*.safetensors' -o -iname '*ltx*.safetensors' \) \
+                -printf 'PICM_VIDEO_MODEL_WEIGHT_PRESENT=%f\n' 2>/dev/null | head -8 || true
+            fi
+          done
+          if command -v ss >/dev/null 2>&1; then
+            if ss -ltn '( sport = :8188 or sport = :18188 )' | grep -Eq ':8188|:18188'; then
+              echo PICM_COMFY_PORT_LISTENING
+            else
+              echo PICM_COMFY_PORT_NOT_LISTENING
+            fi
+          fi
+          echo PICM_AUDIT_NO_MODEL_STARTED_NO_FACTORY_MUTATION
+          REMOTE
