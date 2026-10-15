@@ -17,7 +17,7 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse
-from django.shortcuts import render
+from django.shortcuts import render, redirect
 from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
@@ -115,8 +115,18 @@ def unauthenticated():
 @never_cache
 @require_GET
 def picm_page(request):
+    """Entry page: never mix the login form with the image workbench."""
+    return redirect("/picm/workspace/" if request.user.is_authenticated else "/picm/login/")
+
+
+@never_cache
+@require_GET
+def picm_workbench(request):
+    """The protected second page, reached only after login."""
+    if not request.user.is_authenticated:
+        return redirect("/picm/login/")
     return render(request, "picm/index.html", {
-        "picm_authenticated": request.user.is_authenticated,
+        "picm_authenticated": True,
         "picm_daily_limit": DAILY_QUOTA,
     })
 
