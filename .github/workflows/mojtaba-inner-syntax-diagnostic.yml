@@ -90,7 +90,7 @@ jobs:
                   rendered=m.patch(name,text)
                   template=template_engine.from_string(rendered)
                   print('PARSE_OK='+name,flush=True)
-                  req=RequestFactory().get('/mojtaba.roozegar/'+name+'/')
+                  req=RequestFactory().get('/mojtaba.roozegar/'+name+'/',HTTP_HOST='mojplaywin.com')
                   from django.conf import settings
                   context=RequestContext(req, {'stories':[],'items':[], 'profile':None})
                   template.render(context)
