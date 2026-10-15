@@ -1,0 +1,125 @@
+name: MojPlayWin ETH TRX real-network readiness before activation
+on:
+  push:
+    branches: [audit/mpw-book72-go-live-gates-20261015]
+    paths: [.github/workflows/mpw-book72-real-money-preflight-readonly.yml]
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Prepare pinned SSH connections to authorized site host
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/astra-live-payment"
+          install -d -m 700 "$d"
+          for item in VPS_KEY HOST_KEY; do
+            printf '%s' "${!item}" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/$item.key"
+            chmod 600 "$d/$item.key"
+            ssh-keygen -y -P '' -f "$d/$item.key" >/dev/null
+          done
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -i "$d/VPS_KEY.key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/vps.known" -o BatchMode=yes githubops@178.239.147.150 'ssh-keyscan -T 10 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/VPS_KEY.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/HOST_KEY.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 12
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+      - name: Check actual pricing, safe buyer signature and read-only chain infrastructure
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -F "$RUNNER_TEMP/astra-live-payment/config" saeit-cpanel 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          export DJANGO_SETTINGS_MODULE=config.settings
+          export PYTHONPATH="$HOME/Saeit-staging"
+          cd "$HOME/Saeit-staging"
+          for py in "$HOME/virtualenv/Saeit-staging/3.11/bin/python" "$PWD/.venv/bin/python" "$HOME/virtualenv/Saeit-staging/3.10/bin/python"; do
+            if test -x "$py" && "$py" -c 'import django' >/dev/null 2>&1; then
+              "$py" - <<'PY'
+          import django,subprocess,pathlib
+          django.setup()
+          from django.conf import settings
+          from core.models import Product
+          from mpw_native_checkout.wallet_ownership import proven_assets
+          product=Product.objects.get(pk=72)
+          metadata=product.metadata or {}
+          price=metadata.get("pricing",{})
+          print("MPW_SALE72_PRICE_AND_LIST="+str(price))
+          print("MPW_SALE72_CHARGE_AMOUNT="+str(product.price))
+          print("MPW_SALE72_BOTH_RECEIVER_PROOFS="+str(proven_assets().get("ETH") and proven_assets().get("TRX")))
+          print("MPW_SALE72_PUBLIC_ACTIVE="+str(product.active))
+          for setting in ("MPW_COMMERCE_RELEASE_READY","MPW_COMMERCE_INVOICING_ENABLED",
+                          "MPW_COMMERCE_SETTLEMENT_ENABLED","MPW_COMMERCE_REAL_RPC_ENABLED",
+                          "MPW_COMMERCE_AUTORECONCILE_ENABLED","MPW_COMMERCE_DOWNLOADS_ENABLED",
+                          "MPW_COMMERCE_BUYER_SIGNATURE_ENABLED"):
+              print("MPW_SALE72_GATE_"+setting+"="+str(getattr(settings,setting,False) is True))
+          candidate=getattr(settings,"MPW_COMMERCE_BUYER_CRYPTO_PYTHON","")
+          backup=getattr(settings,"MPW_NATIVE_CRYPTO_HELPER_PYTHON","")
+          print("MPW_SALE72_BUYER_CRYPTO_CONFIGURED="+str(bool(candidate and pathlib.Path(candidate).is_file())))
+          print("MPW_SALE72_MERCHANT_CRYPTO_AVAILABLE="+str(bool(backup and pathlib.Path(backup).is_file())))
+          print("MPW_SALE72_BUYER_SIGNATURE_WORKER_PRESENT="+str(pathlib.Path("mpw_commerce/buyer_signature_worker.py").is_file()))
+          print("MPW_SALE72_SESSION_SECURE="+str(settings.SESSION_COOKIE_SECURE))
+          print("MPW_SALE72_CSRF_SECURE="+str(settings.CSRF_COOKIE_SECURE))
+          try:
+              from scripts.mojplaywin_direct_wallet_rates import fetch_fresh_rates
+              rates=fetch_fresh_rates()
+              print("MPW_SALE72_FRESH_USD_RATES="+str(set(rates)=={"ETH","TRX"}))
+          except Exception as exc:
+              print("MPW_SALE72_FRESH_USD_RATES=ERROR_"+type(exc).__name__)
+          try:
+              from scripts.mojplaywin_native_rpc_clients import ethereum_rpc
+              print("MPW_SALE72_ETH_MAINNET_RPC="+str(ethereum_rpc("eth_chainId",[])=="0x1"))
+          except Exception as exc:
+              print("MPW_SALE72_ETH_MAINNET_RPC=ERROR_"+type(exc).__name__)
+          try:
+              from scripts.mojplaywin_native_rpc_clients import tron_solidity_rpc
+              tron_solidity_rpc("/walletsolidity/gettransactionbyid",{"value":"0"*64})
+              print("MPW_SALE72_TRON_RPC_REACHABLE=True")
+          except Exception as exc:
+              print("MPW_SALE72_TRON_RPC_REACHABLE=ERROR_"+type(exc).__name__)
+          print("MPW_SALE72_READ_ONLY=YES")
+          PY
+              break
+            fi
+          done
+          if crontab -l >/dev/null 2>&1; then
+            if crontab -l 2>/dev/null | grep -Eq 'mpw_commerce_reconcile|mpw_native_autopay'; then
+              echo MPW_SALE72_AUTOMATIC_RECONCILIATION_CRON=FOUND
+            else
+              echo MPW_SALE72_AUTOMATIC_RECONCILIATION_CRON=NOT_CONFIGURED
+            fi
+          else
+            echo MPW_SALE72_AUTOMATIC_RECONCILIATION_CRON=NO_CRONTAB
+          fi
+          REMOTE
+      - name: Clean temporary identities
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/astra-live-payment"
