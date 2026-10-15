@@ -42,9 +42,9 @@ def formatted(board,line):
 def unique_key(b):
  return ' '.join(b.fen().split()[:4])
 def teaching(b,played,top,second):
- vals={'P':1,'N':3,'B':3.25,'R':5,'Q':9}
- w=sum(len(b.pieces(getattr(chess,k),chess.WHITE))*v for k,v in vals.items())
- bl=sum(len(b.pieces(getattr(chess,k),chess.BLACK))*v for k,v in vals.items())
+ vals={chess.PAWN:1,chess.KNIGHT:3,chess.BISHOP:3.25,chess.ROOK:5,chess.QUEEN:9}
+ w=sum(len(b.pieces(k,chess.WHITE))*val for k,val in vals.items())
+ bl=sum(len(b.pieces(k,chess.BLACK))*val for k,val in vals.items())
  checks=sum(b.gives_check(m) for m in b.legal_moves)
  caps=sum(b.is_capture(m) for m in b.legal_moves)
  move=b.san(played); lead=b.san(top['line'][0])
