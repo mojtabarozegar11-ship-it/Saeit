@@ -28,8 +28,16 @@ HOSTS=frozenset(("mojplaywin.com","www.mojplaywin.com"))
 
 def _ready(request):
     return (
-        getattr(settings,"MPW_COMMERCE_RELEASE_READY",False) is True
-        and getattr(settings,"MPW_COMMERCE_CUSTOMER_HTTP_ENABLED",False) is True
+        all(getattr(settings, flag, False) is True for flag in (
+            "MPW_COMMERCE_RELEASE_READY",
+            "MPW_COMMERCE_CUSTOMER_HTTP_ENABLED",
+            "MPW_COMMERCE_BUYER_SIGNATURE_ENABLED",
+            "MPW_COMMERCE_INVOICING_ENABLED",
+            "MPW_COMMERCE_SETTLEMENT_ENABLED",
+            "MPW_COMMERCE_REAL_RPC_ENABLED",
+            "MPW_COMMERCE_AUTORECONCILE_ENABLED",
+            "MPW_COMMERCE_DOWNLOADS_ENABLED",
+        ))
         and request.is_secure()
         and request.get_host().split(":")[0].lower() in HOSTS
         and request.user.is_active
