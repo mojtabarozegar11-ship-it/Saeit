@@ -1,0 +1,192 @@
+name: MojPlayWin Trust Wallet mainnet fix deploy safeguarded
+on:
+  push:
+    branches: [qa/mpw-payment-release-preflight-20261015]
+    paths: ['.github/workflows/mojplaywin-eth-mainnet-safe-deploy.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: mpw-eth-proof-template-guarded
+  cancel-in-progress: false
+jobs:
+  eth-template-patch:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check ETH signing stays fail closed in eight simulated wallet conditions
+        run: node tests/native_ci_eth_wallet_network_js.mjs
+      - name: Apply only ETH chain detection template patch to cPanel via pinned VPS relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/mpw-eth-chain-ui"
+          mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          python3 - "$d/vps.key" "$d/host.key" <<'PY'
+          from pathlib import Path
+          import sys
+          for filename in sys.argv[1:]:
+              f=Path(filename)
+              f.write_text(f.read_text().replace("\r\n","\n").strip().replace("\\n","\n")+"\n")
+          PY
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host relay
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host host
+            HostName zohal.pws-dns.net
+            Port 1396
+            User zomorod2
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump relay
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+          EOF
+          timeout 30s ssh -F "$d/config" relay 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          site_rel="mpw_native_checkout/templates/mpw_native_checkout/merchant_wallet_proof.html"
+          candidate_sha="$(sha256sum "$site_rel" | cut -d' ' -f1)"
+          timeout 35s ssh -F "$d/config" host \
+            'set -e; umask 077; mkdir -p "$HOME/.mpw-eth-chain-ui"; chmod 700 "$HOME/.mpw-eth-chain-ui"; cat > "$HOME/.mpw-eth-chain-ui/candidate.html"' < "$site_rel"
+          remote_sha="$(timeout 25s ssh -F "$d/config" host 'sha256sum "$HOME/.mpw-eth-chain-ui/candidate.html"' | cut -d' ' -f1)"
+          test "$remote_sha" = "$candidate_sha"
+          timeout 90s ssh -F "$d/config" host 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = "zomorod2"
+          cd "$HOME/Saeit-staging"
+          export DJANGO_SETTINGS_MODULE=config.settings
+          export PYTHONDONTWRITEBYTECODE=1
+          "$HOME/virtualenv/Saeit-staging/3.11/bin/python" - <<'PY'
+          import os,sys,tempfile,hashlib
+          from pathlib import Path
+          import django
+          django.setup()
+          from django.conf import settings
+          from django.template.loader import get_template
+          from django.core.management import call_command
+          home=Path.home()
+          site=home/"Saeit-staging"
+          rel="mpw_native_checkout/templates/mpw_native_checkout/merchant_wallet_proof.html"
+          target=site/rel
+          candidate=home/".mpw-eth-chain-ui/candidate.html"
+          backup=home/".mpw-eth-chain-ui/original.html"
+          assert target.is_file() and not target.is_symlink()
+          assert candidate.is_file() and not candidate.is_symlink()
+          assert not backup.exists(),"Do not overwrite private rollback backup"
+          origin=Path(get_template("mpw_native_checkout/merchant_wallet_proof.html").origin.name)
+          assert origin.resolve()==target.resolve(),"Django uses a different active template"
+          for name in ("MPW_COMMERCE_RELEASE_READY","MPW_COMMERCE_CUSTOMER_HTTP_ENABLED",
+                       "MPW_COMMERCE_SETTLEMENT_ENABLED","MPW_COMMERCE_REAL_RPC_ENABLED",
+                       "MPW_COMMERCE_INVOICING_ENABLED"):
+              assert getattr(settings,name,False) is False, name
+          old=target.read_bytes()
+          new=candidate.read_bytes()
+          anchor=b'  // Providers may encode Ethereum mainnet as 0x1'
+          start=new.index(anchor)
+          end=new.index(b'  return provider.request({method:"personal_sign"',start)
+          replacement=new[start:end]
+          old_segment='  const chain=await provider.request({method:"eth_chainId"});\n  if(chain!=="0x1")throw new Error("شبکه Ethereum Mainnet را در کیف پول انتخاب کنید.");\n'.encode()
+          assert old.count(old_segment)==1,"Unexpected live source drift; no changes"
+          assert new.count(replacement)==1
+          assert new.replace(replacement,old_segment)==old,"Candidate differs outside guarded two-line site patch"
+          def save_atomic(path,payload,mode):
+              fd,tmp=tempfile.mkstemp(prefix=".wallet-eth-",dir=path.parent)
+              try:
+                  with os.fdopen(fd,"wb") as fh:
+                      fh.write(payload);fh.flush();os.fsync(fh.fileno())
+                  os.chmod(tmp,mode)
+                  os.replace(tmp,path)
+              finally:
+                  if os.path.exists(tmp):os.unlink(tmp)
+          save_atomic(backup,old,0o600)
+          original_sha=hashlib.sha256(old).hexdigest()
+          try:
+              save_atomic(target,new,target.stat().st_mode & 0o777)
+              call_command("check",verbosity=0)
+              assert target.read_bytes()==new
+              print("MPW_ETH_FIX_ORIGINAL_SOURCE_BACKED_UP=True")
+              print("MPW_ETH_FIX_EXACT_PATCH_APPLIED=True")
+              print("MPW_ETH_FIX_DJANGO_CHECK_PASSED=True")
+              print("MPW_ETH_FIX_LIVE_PAYMENT_FLAGS_STILL_OFF=True")
+          except Exception:
+              if target.read_bytes()==new:
+                  save_atomic(target,old,target.stat().st_mode & 0o777)
+                  print("MPW_ETH_FIX_ROLLBACK_COMPLETE=True")
+              raise
+          # Passenger reload is needed to remove any cached template copy.
+          passenger=home/"mojplaywin.com"
+          startup=passenger/"passenger_wsgi.py"
+          restart=passenger/"tmp/restart.txt"
+          assert startup.is_file() and str(site) in startup.read_text()
+          assert restart.parent.is_dir() and not restart.is_symlink()
+          restart.touch()
+          print("MPW_ETH_FIX_PASSENGER_RELOAD_REQUESTED=True")
+          PY
+          REMOTE
+          getstatus() { curl -L -sS --connect-timeout 8 --max-time 25 -o /dev/null -w '%{http_code}' "$1" || true; }
+          h="$(getstatus 'https://mojplaywin.com/')"
+          admin="$(getstatus 'https://mojplaywin.com/admin/login/')"
+          wallet="$(getstatus 'https://mojplaywin.com/merchant/wallet-proof/')"
+          echo "MPW_ETH_FIX_HOME_HTTP=$h"
+          echo "MPW_ETH_FIX_ADMIN_HTTP=$admin"
+          echo "MPW_ETH_FIX_WALLET_ANON_FINAL_HTTP=$wallet"
+          if [ "$h" != 200 ] || [ "$admin" != 200 ] || [ "$wallet" != 200 ]; then
+            echo MPW_ETH_FIX_SMOKE_FAILURE_TRY_ROLLBACK
+            timeout 50s ssh -F "$d/config" host 'bash -se' <<'ROLLBACK'
+          set -euo pipefail
+          cd "$HOME/Saeit-staging"
+          "$HOME/virtualenv/Saeit-staging/3.11/bin/python" - <<'PY'
+          from pathlib import Path
+          import os,tempfile
+          home=Path.home()
+          target=home/"Saeit-staging/mpw_native_checkout/templates/mpw_native_checkout/merchant_wallet_proof.html"
+          original=home/".mpw-eth-chain-ui/original.html"
+          candidate=home/".mpw-eth-chain-ui/candidate.html"
+          if original.is_file() and candidate.is_file() and target.is_file() and target.read_bytes()==candidate.read_bytes():
+              fd,tmp=tempfile.mkstemp(prefix=".wallet-eth-rollback-",dir=target.parent)
+              try:
+                  with os.fdopen(fd,"wb") as f:
+                      f.write(original.read_bytes());f.flush();os.fsync(f.fileno())
+                  os.chmod(tmp,target.stat().st_mode & 0o777)
+                  os.replace(tmp,target)
+                  restart=home/"mojplaywin.com/tmp/restart.txt"
+                  if restart.is_file():restart.touch()
+                  print("MPW_ETH_FIX_SCOPED_ROLLBACK_SUCCESS=True")
+              finally:
+                  if os.path.exists(tmp):os.unlink(tmp)
+          PY
+          ROLLBACK
+            exit 1
+          fi
+          echo MPW_ETH_FIX_PUBLIC_HTTP_HEALTHY=True
+      - name: Remove runner-only SSH credentials
+        if: always()
+        shell: bash
+        run: rm -rf -- "$RUNNER_TEMP/mpw-eth-chain-ui"
