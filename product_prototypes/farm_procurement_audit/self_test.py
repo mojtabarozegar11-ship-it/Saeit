@@ -3,6 +3,7 @@
 import json
 from pathlib import Path
 from decimal import Decimal
+from copy import deepcopy
 from procurement_audit import evaluate
 
 DATA=Path(__file__).resolve().parent/"example_synthetic.json"
@@ -23,6 +24,18 @@ def verify():
     assert result["market_demand_verified"] is False
     assert result["commercial_release_allowed"] is False
     assert result["quality_score"] is None
+    pack_case=deepcopy(payload)
+    pack_case["offers"][0].update(
+        pricing_basis="per_pack",pack_size_base_units="20",unit_price="90")
+    mixed=evaluate(pack_case)
+    packaged={o["supplier"]:o for o in mixed["scenarios"]["base"]["offers"]}
+    north=packaged["Synthetic Provider North"]
+    assert north["whole_packs_ordered"]=="6"
+    assert north["gross_order_units"]=="120.00"
+    assert north["surplus_usable_units"]=="14.00"
+    assert north["total_landed_cost"]=="558.00"
+    assert mixed["commercial_release_allowed"] is False
+    print("PROCUREMENT_WHOLE_PACK_NORMALIZATION_SELF_TEST=PASS")
     print("PROCUREMENT_SELF_TEST=PASS")
     print("PROCUREMENT_FOR_SALE=false")
 
