@@ -1,0 +1,107 @@
+name: MojPlayWin book72 final checkout infrastructure audit
+on:
+  push:
+    branches: [audit/mpw-book72-go-live-gates-20261015]
+    paths: [.github/workflows/mpw-book72-sale-infra-readonly.yml]
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Prepare pinned SSH connections to authorized site host
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/astra-live-payment"
+          install -d -m 700 "$d"
+          for item in VPS_KEY HOST_KEY; do
+            printf '%s' "${!item}" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/$item.key"
+            chmod 600 "$d/$item.key"
+            ssh-keygen -y -P '' -f "$d/$item.key" >/dev/null
+          done
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -i "$d/VPS_KEY.key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/vps.known" -o BatchMode=yes githubops@178.239.147.150 'ssh-keyscan -T 10 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/VPS_KEY.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/HOST_KEY.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 12
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+      - name: Inspect live buyer login, network verification, scheduler, and price without writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -F "$RUNNER_TEMP/astra-live-payment/config" saeit-cpanel 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          app="$HOME/Saeit-staging"
+          export DJANGO_SETTINGS_MODULE=config.settings PYTHONPATH="$app"
+          cd "$app"
+          for py in "$HOME/virtualenv/Saeit-staging/3.11/bin/python" "$app/.venv/bin/python" "$HOME/virtualenv/Saeit-staging/3.10/bin/python"; do
+            if test -x "$py" && "$py" -c 'import django' >/dev/null 2>&1; then
+              "$py" - <<'PY'
+          import django,pathlib,os,socket
+          django.setup()
+          from django.conf import settings
+          from django.urls import resolve,Resolver404
+          from django.apps import apps
+          from mpw_native_checkout.wallet_ownership import proven_assets
+          Product=apps.get_model("core","Product")
+          p=Product.objects.get(pk=72)
+          print("SALE72_PRICE="+str(p.price)+" "+p.currency)
+          print("SALE72_PUBLIC="+str(p.active))
+          print("SALE72_PROMO_METADATA="+str((p.metadata or {}).get("pricing")))
+          print("SALE72_WALLET_PROOFS="+str({k:v for k,v in proven_assets().items() if k in ("ETH","TRX")}))
+          print("SALE72_DJANGO_LOGIN_URL="+str(settings.LOGIN_URL if hasattr(settings,"LOGIN_URL") else "/accounts/login/"))
+          for path in ("/accounts/login/","/accounts/signup/","/accounts/register/","/register/","/login/","/commerce/book/72/","/commerce/my-purchases/"):
+              try: print("SALE72_ROUTE_"+path.replace("/","_").upper()+"="+str(resolve(path).view_name))
+              except Resolver404:print("SALE72_ROUTE_"+path.replace("/","_").upper()+"=MISSING")
+          for name in ("MPW_COMMERCE_BUYER_CRYPTO_PYTHON","MPW_NATIVE_CRYPTO_HELPER_PYTHON","MPW_COMMERCE_PRIVATE_ASSET_ROOT"):
+              val=getattr(settings,name,None)
+              print("SALE72_SETTING_"+name+"_CONFIGURED="+str(isinstance(val,str) and bool(val)))
+              if name.endswith("_PYTHON") and val:
+                  print("SALE72_SETTING_"+name+"_EXISTS="+str(pathlib.Path(val).is_file()))
+              if name.endswith("ASSET_ROOT") and val:
+                  print("SALE72_SETTING_"+name+"_ISDIR="+str(pathlib.Path(val).is_dir()))
+          for rel in ("mpw_commerce/management/commands/mpw_commerce_reconcile.py","scripts/mojplaywin_native_rpc_clients.py","scripts/mojplaywin_direct_wallet_rates.py"):
+              print("SALE72_MODULE_"+rel.replace("/","_")+"="+str((pathlib.Path.cwd()/rel).is_file()))
+          for host in ("api.coingecko.com","ethereum-rpc.publicnode.com","tron-rpc.publicnode.com"):
+              try:
+                  socket.getaddrinfo(host,443,type=socket.SOCK_STREAM)
+                  result="DNS_READY"
+              except OSError:result="DNS_UNAVAILABLE"
+              print("SALE72_NETWORK_"+host.replace(".","_")+"="+result)
+          print("SALE72_AUDIT_READ_ONLY=YES")
+          PY
+              exit 0
+            fi
+          done
+          exit 1
+          REMOTE
+      - name: Clean temporary identities
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/astra-live-payment"
