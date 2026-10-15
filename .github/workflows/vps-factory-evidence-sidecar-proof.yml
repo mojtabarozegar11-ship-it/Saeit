@@ -1,0 +1,100 @@
+name: Factory Evidence Sidecar VPS Private Proof
+on:
+  push:
+    branches: [feature/factory-private-evidence-sidecar-20261015]
+    paths: [.github/workflows/vps-factory-evidence-sidecar-proof.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: factory-evidence-sidecar-private-proof
+  cancel-in-progress: false
+jobs:
+  prove:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate pure-Python offline sidecar
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/factory_evidence_quality.py scripts/factory_first_product_pilot.py scripts/factory_research_sidecar.py
+          python3 -m unittest discover -s tests -p 'test_factory_research_sidecar.py' -v
+          python3 -m unittest discover -s tests -p 'test_factory_evidence_quality.py' -v
+      - name: Install isolated sidecar and inspect candidate research without touching factory
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/factory-sidecar"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh_opts=(-i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=3)
+          tar -cf "$d/private-scripts.tar" \
+            scripts/factory_research_sidecar.py \
+            scripts/factory_evidence_quality.py \
+            scripts/factory_first_product_pilot.py
+          ssh "${ssh_opts[@]}" githubops@178.239.147.150 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          root="$HOME/factory-runtime/operations/evidence-sidecar-candidate"
+          test -d "$HOME/factory-runtime/django-app"
+          test -s "$HOME/factory-runtime/private/factory-fresh-isolated.sqlite3"
+          test -x "$HOME/factory-runtime/.venv/bin/python"
+          install -d -m 700 "$root"
+          REMOTE
+          scp "${ssh_opts[@]}" "$d/private-scripts.tar" githubops@178.239.147.150:/home/githubops/factory-runtime/operations/evidence-sidecar-candidate/bundle.tar
+          ssh "${ssh_opts[@]}" githubops@178.239.147.150 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          base="$HOME/factory-runtime"
+          staged="$base/operations/evidence-sidecar-candidate"
+          output="$base/private/research-evidence-sidecar"
+          test -f "$staged/bundle.tar" && test ! -L "$staged/bundle.tar"
+          for expected in scripts/factory_research_sidecar.py scripts/factory_evidence_quality.py scripts/factory_first_product_pilot.py; do
+            tar -tf "$staged/bundle.tar" | grep -Fxq "$expected"
+          done
+          tar -xf "$staged/bundle.tar" -C "$staged" --no-same-owner --no-same-permissions
+          chmod -R go-rwx "$staged"
+          rm -f -- "$staged/bundle.tar"
+          "$base/.venv/bin/python" -m py_compile "$staged/scripts/"*.py
+          pidfile="$base/operations/vps-only-loop.pid"
+          read -r pid < "$pidfile"
+          [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid"
+          echo FACTORY_MAIN_LOOP_ALIVE_PRE_SIDECAR
+          "$base/.venv/bin/python" "$staged/scripts/factory_research_sidecar.py" \
+            --db "$base/private/factory-fresh-isolated.sqlite3" \
+            --out "$output" --limit 50
+          "$base/.venv/bin/python" - "$output/latest.json" <<'PY'
+          import json,sys
+          from pathlib import Path
+          p=Path(sys.argv[1])
+          j=json.loads(p.read_text(encoding="utf-8"))
+          assert j["schema"]=="saeit.factory.evidence-sidecar.v1"
+          assert j["database_mutations"]==0 and j["external_calls"]==0
+          assert j["publishable_count"]==0 and j["approval_bypass"] is False
+          assert not j["commercial_quality_approved"]
+          assert 0<=j["product_count"]<=50
+          assert p.stat().st_mode & 0o077 == 0
+          print("FACTORY_PRIVATE_RESEARCH_SIDECAR_PRODUCTS="+str(j["product_count"]))
+          print("FACTORY_PRIVATE_RESEARCH_SIDECAR_BLOCKED="+str(j["research_blocked"]))
+          print("FACTORY_PRIVATE_RESEARCH_SIDECAR_REVIEW_CANDIDATES="+str(j["quantitative_research_review_candidates"]))
+          for k,v in sorted(j["blocker_frequency"].items()):
+            if k.isupper() and all(x.isupper() or x=="_" for x in k):
+              print("FACTORY_PRIVATE_RESEARCH_GAP_"+k+"="+str(v))
+          print("FACTORY_PRIVATE_RESEARCH_WORKLIST_VERIFIED")
+          PY
+          read -r pid_after < "$pidfile"
+          [[ "$pid_after" =~ ^[0-9]+$ ]] && kill -0 "$pid_after"
+          echo FACTORY_MAIN_LOOP_ALIVE_POST_SIDECAR
+          echo FACTORY_SIDECAR_DOES_NOT_EDIT_CRON_OR_STORE
+          REMOTE
