@@ -92,6 +92,15 @@ jobs:
           original.backup(clone)
           original.close()
           clone.executescript(statements)
+          # sqlmigrate produces DDL but does not record django_migrations.
+          # Reproduce MigrationRecorder's 0049 entry only in this
+          # disposable clone so later schema-integrity checks can run.
+          assert clone.execute("SELECT COUNT(*) FROM django_migrations "
+                               "WHERE app='core' AND name='0049_astra_stage45_research_queue'").fetchone()[0]==0
+          clone.execute(
+              "INSERT INTO django_migrations(app,name,applied) "
+              "VALUES('core','0049_astra_stage45_research_queue',CURRENT_TIMESTAMP)")
+          clone.commit()
           after={table:clone.execute("SELECT COUNT(*) FROM "+table).fetchone()[0] for table in rows}
           assert before==after,(before,after)
           names={x[0] for x in clone.execute("SELECT name FROM sqlite_master WHERE type='table'")}
