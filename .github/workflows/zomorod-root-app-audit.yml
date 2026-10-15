@@ -1,4 +1,4 @@
-name: Inspect Zomorod root app mapping
+name: Restore Zomorodmelal Django root and verify pages
 
 on:
   push:
@@ -14,11 +14,10 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  inspect-root-app:
+  restore-and-check:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 12
     steps:
-      - uses: actions/checkout@v4
       - name: Prepare pinned relay
         shell: bash
         env:
@@ -27,7 +26,7 @@ jobs:
         run: |
           set -euo pipefail
           umask 077
-          d="$RUNNER_TEMP/zomorod-audit"
+          d="$RUNNER_TEMP/zomorod-restore"
           install -d -m 700 "$d"
           printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
           printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
@@ -66,45 +65,112 @@ jobs:
           test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
           cp "$d/host.candidate" "$d/host.known"
           echo "CONFIRMED_PINNED_RELAY_READY=yes"
-      - name: Read the existing root app config without changing it
+      - name: Re-enable the existing root application
         shell: bash
         env:
-          SSH_CONFIG: ${{ runner.temp }}/zomorod-audit/config
+          SSH_CONFIG: ${{ runner.temp }}/zomorod-restore/config
         run: |
           set -euo pipefail
           ssh -F "$SSH_CONFIG" saeit-cpanel bash -se <<'REMOTE'
           set -euo pipefail
-          raw="$(mktemp "$HOME/.root-app-audit.XXXXXX.json")"
-          trap 'rm -f -- "$raw"' EXIT
-          uapi --output=json PassengerApps list_applications > "$raw"
-          python3 - "$raw" <<'PY'
-          import json,sys
-          data=json.load(open(sys.argv[1],encoding="utf-8"))
-          wanted=[]
+          python3 - <<'PY'
+          import json, subprocess
+          result = subprocess.run(["uapi","--output=json","PassengerApps","list_applications"], check=True, capture_output=True, text=True)
+          data = json.loads(result.stdout)
+          found=[]
           stack=[data]
-          keys={"name","appname","domain","base_uri","app_root","application_root","enabled","python_version","startup_file","uri","path"}
           while stack:
               x=stack.pop()
               if isinstance(x,dict):
                   if str(x.get("domain","")).lower()=="zomorodmelal.ir" and x.get("base_uri")=="/":
-                      wanted.append({k:x[k] for k in keys if k in x})
+                      found.append(x)
                   stack.extend(x.values())
               elif isinstance(x,list):
                   stack.extend(x)
-          if len(wanted)!=1:
-              raise SystemExit(f"ROOT_APP_COUNT={len(wanted)}")
-          print("ROOT_APP_CONFIG="+json.dumps(wanted[0],ensure_ascii=False,sort_keys=True))
+          if len(found)!=1:
+              raise SystemExit(f"ROOT_APP_COUNT={len(found)}")
+          app=found[0]
+          if app.get("name")!="saeit-django" or app.get("path")!="/home/zomorod2/Saeit":
+              raise SystemExit("ROOT_APP_MAPPING_CHANGED; refusing to enable")
+          root="/home/zomorod2/public_html"
+          backup="$HOME/.backups/zomorodmelal-amozeshgah/htaccess.20261014T235252Z"
+          if not __import__("os").path.isfile(backup) or not __import__("os").path.isfile(root+"/.htaccess"):
+              raise SystemExit("HTACCESS_BACKUP_OR_LIVE_FILE_MISSING")
+          if open(backup,"rb").read()!=open(root+"/.htaccess","rb").read():
+              raise SystemExit("HTACCESS_CHANGED; refusing to alter it")
+          old_home="$HOME/.backups/zomorodmelal-root-homepage/index-disabled-c381571fab0869972481369c25202c53e54c00d8"
+          if not __import__("os").path.isfile(old_home) or b"saeit-zomorod-root-homepage-v1" not in open(old_home,"rb").read():
+              raise SystemExit("TEMPORARY_HOMEPAGE_BACKUP_NOT_CONFIRMED")
+          if __import__("os").path.lexists(root+"/index.html"):
+              raise SystemExit("PUBLIC_ROOT_INDEX_PRESENT; refusing to overwrite")
+          print("ROOT_APP_PRECHECK=passed")
           PY
-          printf 'HTACCESS_PASSENGER_DIRECTIVES_BEGIN\n'
-          if test -f /home/zomorod2/public_html/.htaccess; then
-            grep -E '^[[:space:]]*(Passenger|RewriteEngine|RewriteCond|RewriteRule)' /home/zomorod2/public_html/.htaccess || true
-          fi
-          printf 'HTACCESS_PASSENGER_DIRECTIVES_END\n'
-          printf 'UAPI_HELP_BEGIN\n'
-          uapi --help 2>&1 | head -n 40 || true
-          printf 'UAPI_HELP_END\n'
+          result="$(uapi --output=json PassengerApps enable_application name=saeit-django)"
+          python3 -c 'import json,sys; d=json.load(sys.stdin); r=d.get("result",{}); print("PASSENGER_ENABLE_STATUS="+str(r.get("status"))); print("PASSENGER_ENABLE_ERRORS="+str(r.get("errors") or [])); sys.exit(0 if r.get("status")==1 and not r.get("errors") else 1)' <<<"$result"
+          uapi --output=json PassengerApps list_applications | python3 -c 'import json,sys; d=json.load(sys.stdin); stack=[d]; found=[]
+while stack:
+ x=stack.pop()
+ if isinstance(x,dict):
+  if str(x.get("domain","")).lower()=="zomorodmelal.ir" and x.get("base_uri")=="/": found.append(x)
+  stack.extend(x.values())
+ elif isinstance(x,list): stack.extend(x)
+assert len(found)==1 and found[0].get("enabled") in (1,True,"1"), "ROOT_APP_NOT_ENABLED"
+print("ROOT_APP_ENABLED=yes")'
           REMOTE
+      - name: Check live site routes
+        shell: bash
+        run: |
+          set -euo pipefail
+          token="codex-restore-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          urls=(
+            "https://zomorodmelal.ir/"
+            "https://www.zomorodmelal.ir/"
+            "https://zomorodmelal.ir/amozeshgah/"
+            "https://zomorodmelal.ir/education/"
+            "https://zomorodmelal.ir/academy/"
+            "https://zomorodmelal.ir/services/"
+            "https://zomorodmelal.ir/agriculture/"
+            "https://zomorodmelal.ir/industry/"
+            "https://zomorodmelal.ir/knowledge/"
+            "https://zomorodmelal.ir/market/"
+            "https://zomorodmelal.ir/economy/"
+            "https://zomorodmelal.ir/studio/"
+            "https://zomorodmelal.ir/agents/"
+            "https://zomorodmelal.ir/company/"
+            "https://zomorodmelal.ir/weather/"
+            "https://zomorodmelal.ir/store/"
+            "https://zomorodmelal.ir/auctions/"
+            "https://zomorodmelal.ir/search/"
+            "https://zomorodmelal.ir/robots.txt"
+            "https://zomorodmelal.ir/sitemap.xml"
+          )
+          n=0
+          for original in "${urls[@]}"; do
+            n=$((n+1))
+            sep='?'
+            [[ "$original" == *\?* ]] && sep='&'
+            url="${original}${sep}healthcheck=${token}-${n}"
+            out="$RUNNER_TEMP/route-${n}.body"
+            status="$(curl --silent --show-error --location --max-time 35 --output "$out" --write-out '%{http_code}' -H 'Cache-Control: no-cache' "$url")"
+            echo "HTTP $status $original"
+            if (( status < 200 || status >= 500 )); then
+              echo "ROUTE_FAILED=$original" >&2
+              head -c 1500 "$out" >&2 || true
+              exit 1
+            fi
+            if [[ "$original" == "https://zomorodmelal.ir/" ]]; then
+              grep -q 'services-page' "$out"
+              grep -q 'یک درگاه برای' "$out"
+              ! grep -qi 'Index of /' "$out"
+              ! grep -q 'saeit-zomorod-root-homepage-v1' "$out"
+            fi
+            if [[ "$original" == "https://zomorodmelal.ir/amozeshgah/" ]]; then
+              grep -q 'education-page' "$out"
+              grep -q 'آموزش؛ از اولین درس تا مهارت حرفه‌ای' "$out"
+            fi
+          done
+          echo "PUBLIC_ROUTE_SMOKE_TESTS=passed"
       - name: Remove temporary SSH material
         if: always()
         shell: bash
-        run: rm -rf -- "$RUNNER_TEMP/zomorod-audit"
+        run: rm -rf -- "$RUNNER_TEMP/zomorod-restore"
