@@ -1,0 +1,212 @@
+name: Publish Mojtaba fifty original editorial entries
+on:
+  issues:
+    types: [opened]
+permissions:
+  contents: read
+concurrency:
+  group: mojtaba-v17-fifty-editorials-production
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event.issue.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.issue.title == 'Ops: Publish Mojtaba fifty original editorial entries 2026-10-15'
+    runs-on: ubuntu-latest
+    timeout-minutes: 17
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify 50 real original articles in nine approved pages
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p test_mojtaba_50_editorials.py -v
+      - name: Prepare pinned SSH relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/photo-relay"
+          mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          python3 - "$d/host.key" <<'PY'
+          import pathlib,sys
+          p=pathlib.Path(sys.argv[1]);t=p.read_text().replace('\r\n','\n').strip()
+          p.write_text(t.replace('\\n','\n')+'\n')
+          PY
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host saeit-host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+            ConnectionAttempts 1
+          EOF
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          echo "SSH_CONFIG=$d/config" >> "$GITHUB_ENV"
+      - name: Transfer original fifty text entries to private V17 staging
+        shell: bash
+        run: |
+          set -euo pipefail
+          stage="/home/zomorod2/.mpw-fifty-release-$GITHUB_RUN_ID"
+          timeout 35s ssh -F "$SSH_CONFIG" saeit-host "test ! -e '$stage' && install -d -m 700 '$stage'"
+          timeout 70s scp -F "$SSH_CONFIG" scripts/mojtaba_50_editorials_safe_deploy.py "saeit-host:$stage/installer.py"
+          timeout 70s scp -F "$SSH_CONFIG" content/mojtaba_personal_50_editorial_20261015.json "saeit-host:$stage/editorials.json"
+
+      - name: Preflight all nine Django pages, install with backup and live verification
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 590s ssh -F "$SSH_CONFIG" saeit-host "bash -s -- '$GITHUB_RUN_ID'" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          rid="$1"
+          app="/home/zomorod2/mojtaba_personal/mojtaba_roozegar_personal_v17"
+          stage="/home/zomorod2/.mpw-fifty-release-$rid"
+          script="$stage/installer.py"
+          src="$stage/editorials.json"
+          backup="$HOME/.backups/mojtaba-fifty-editorials/$rid"
+          py="$app/../.venv_personal_test/bin/python"
+          changed=0
+          done_ok=0
+          rollback() {
+            rc=$?
+            trap - EXIT
+            if test "$changed" = 1 && test "$done_ok" = 0 && test -d "$backup"; then
+              python3 "$script" rollback --app "$app" --backup "$backup" && echo "FIFTY_EDITORIAL_ROLLBACK=restored" || echo "FIFTY_EDITORIAL_ROLLBACK=manual_attention_required"
+            fi
+            exit "$rc"
+          }
+          trap rollback EXIT
+          test -f "$app/manage.py" && test ! -L "$app"
+          test -f "$script" && test -f "$src" && test -x "$py"
+          python3 "$script" check --app "$app" --content "$src" --backup "$backup"
+          cd "$app"
+          # Actual on-host Django template parsing and rendering BEFORE writing a live template.
+          "$py" - "$script" "$src" <<'PY_VALIDATE'
+          import importlib.util,os,sys
+          spec=importlib.util.spec_from_file_location("fifty",sys.argv[1])
+          mod=importlib.util.module_from_spec(spec);spec.loader.exec_module(mod)
+          content=mod.load_content(mod.Path(sys.argv[2]))
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          import django;django.setup()
+          from django.template import engines,RequestContext
+          from django.test import RequestFactory
+          eng=engines["django"].engine
+          for name,old in mod.template_sources(mod.APP).items():
+              proposal=mod.patch_template(name,old,content)
+              t=eng.from_string(proposal)
+              request=RequestFactory().get("/mojtaba.roozegar/"+name+"/",HTTP_HOST="mojplaywin.com")
+              rendered=t.render(RequestContext(request,{"items":[],"stories":[],"profile":None}))
+              if mod.MARKER not in rendered:raise ValueError("Editorial block not rendered")
+              for item in content["entries"]:
+                  if item["page"]==name and item["title"] not in rendered:
+                      raise ValueError("Missing original editorial entry: "+item["id"])
+              print("FIFTY_DJANGO_RENDER_OK="+name+" count="+str(mod.COUNTS[name]),flush=True)
+          print("ALL_NINE_PAGE_EDITORIAL_PREFLIGHT_SUCCESS=yes",flush=True)
+          PY_VALIDATE
+
+          changed=1
+          python3 "$script" install --app "$app" --content "$src" --backup "$backup"
+          "$py" manage.py check --deploy
+          test -d "$app/tmp" && touch "$app/tmp/restart.txt"
+
+          python3 - "$src" <<'PY_LIVE'
+          import json,re,sys,time
+          from html.parser import HTMLParser
+          from urllib.request import Request,urlopen
+          content=json.load(open(sys.argv[1],encoding="utf-8"))
+          routes={"home":"","about":"about/","projects":"projects/","posts":"blog/",
+                  "gallery":"gallery/","resume":"resume/","activities":"works-activities/",
+                  "memories":"memories/","stories":"stories/"}
+          marker='id="mpw-fifty-editorials-20261015"'
+          base="https://mojplaywin.com/mojtaba.roozegar/"
+          total=0
+          class Images(HTMLParser):
+              def __init__(self):
+                  super().__init__();self.first=[];self.second=[]
+              def handle_starttag(self,tag,attrs):
+                  d=dict(attrs)
+                  if tag!="img":return
+                  uri=d.get("src","")
+                  if "owner_gallery_20261015_b/" in uri:self.second.append(uri)
+                  elif "owner_gallery_20261015/" in uri:self.first.append(uri)
+          for page,path in routes.items():
+              entries=[e for e in content["entries"] if e["page"]==page]
+              failure=""
+              for attempt in range(7):
+                  try:
+                      req=Request(base+path+"?editorials_release="+str(time.time_ns()),headers={"User-Agent":"MojtabaEditorial50Release/1.0"})
+                      with urlopen(req,timeout=23) as res:
+                          html=res.read(4500000).decode("utf-8","replace")
+                          if res.status!=200:raise ValueError("HTTP status not 200")
+                      if marker not in html:raise ValueError("50-entry section not visible")
+                      if 'id="mpw-new-originals-20261015-b"' not in html:raise ValueError("Previous 10-photo panel was removed")
+                      for item in entries:
+                          if 'id="'+item["id"]+'"' not in html or item["title"] not in html:
+                              raise ValueError("Missing editorial article "+item["id"])
+                      if html.count('<article id="MPW-')!=len(entries):
+                          raise ValueError("Wrong count of new article blocks")
+                      imgs=Images();imgs.feed(html)
+                      if not imgs.second:raise ValueError("Previous original images missing")
+                      if page=="gallery" and (len(imgs.first)!=10 or len(imgs.second)!=10):
+                          raise ValueError("All 20 existing originals must remain visible in gallery")
+                      print("LIVE_FIFTY_EDITORIAL_PAGE="+page+" articles="+str(len(entries))+" original_images="+str(len(imgs.first)+len(imgs.second)),flush=True)
+                      total+=len(entries)
+                      break
+                  except Exception as exc:
+                      failure=str(exc)
+                      print("RETRY_FIFTY_PAGE="+page+" attempt="+str(attempt+1)+" "+failure[:90],flush=True)
+                      time.sleep(3)
+              else:
+                  raise SystemExit("FIFTY_LIVE_PAGE_FAILED="+page+" "+failure)
+          if total!=50:raise ValueError("Expected exactly 50 live articles")
+          print("FIFTY_LIVE_ARTICLES_VERIFIED=50",flush=True)
+          print("ALL_NINE_PERSONAL_PAGES_ACTIVE=yes",flush=True)
+          PY_LIVE
+          done_ok=1
+          trap - EXIT
+          echo "FIFTY_EDITORIALS_PUBLISHED_SUCCESS=yes"
+          echo "FIFTY_EDITORIAL_BACKUP=$backup"
+          rm -rf "$stage"
+          REMOTE
+
+      - name: Confirm both existing domains' homepages remain healthy
+        shell: bash
+        run: |
+          set -euo pipefail
+          for site in "https://mojplaywin.com/" "https://zomorodmelal.ir/"; do
+            status="$(curl -sSL -o /dev/null --max-time 22 -w '%{http_code}' "$site")"
+            test "$status" = "200"
+            echo "EXISTING_DOMAIN_HEALTHY=$site HTTP_$status"
+          done
+      - name: Dispose of SSH runner secrets
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/photo-relay"
