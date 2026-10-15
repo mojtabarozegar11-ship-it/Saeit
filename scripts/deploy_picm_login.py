@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Scope-limited PICM login deployer; preserves all non-PICM site routes."""
+"""Scope-limited repeatable PICM login installer; preserves non-PICM routes."""
 import ast
 import json
 import os
@@ -67,11 +67,20 @@ def deploy(run):
     verify_environment(run)
     stage = HOME / (".mojplaywin-picm-login-" + run)
     root_urls = (ROOT / "config/urls.py").read_text(encoding="utf-8")
-    if MARK in root_urls or 'path("picm/login/"' in root_urls:
-        raise RuntimeError("PICM_LOGIN_ALREADY_INSTALLED")
     if "# SAEIT_PICM_V1_OWNER_SCOPED_ROUTES" not in root_urls:
         raise RuntimeError("PICM_PRIMARY_ROUTES_NOT_INSTALLED")
-    urls = root_urls.rstrip() + "\n" + ROUTES
+    if MARK in root_urls:
+        # Safe update of the *already installed* PICM login; never append routes twice.
+        if (root_urls.count(MARK) != 1
+                or root_urls.count('path("picm/login/"') != 1
+                or root_urls.count('path("picm/logout/"') != 1):
+            raise RuntimeError("PICM_LOGIN_ROUTE_INTEGRITY_FAILED")
+        urls = root_urls
+    else:
+        if ('path("picm/login/"' in root_urls
+                or 'path("picm/logout/"' in root_urls):
+            raise RuntimeError("PICM_LOGIN_ROUTE_COLLISION")
+        urls = root_urls.rstrip() + "\n" + ROUTES
     ast.parse(urls)
     src_auth = (stage / "core/picm_auth.py").read_bytes()
     ast.parse(src_auth.decode("utf-8"))
