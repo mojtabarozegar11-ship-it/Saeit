@@ -117,6 +117,16 @@ jobs:
             cp -a "$target" "$backup"
             diff -qr "$target" "$backup"
           fi
+          stale="$root/.zomorod-agriculture-stage-b493c17664c47c31b5dd2b1465c5b74e465e0449"
+          if test -e "$stale"; then
+            test -d "$stale" && test ! -L "$stale"
+            test -z "$(find "$stale" -type l -print -quit)"
+            test "$(find "$stale" -type f -name index.html | wc -l)" -eq 14
+            test -z "$(find "$stale" -type f ! -name index.html -print -quit)"
+            test -z "$(find "$stale" -type f -name index.html ! -exec grep -Fq '<!-- saeit-zomorod-agriculture-v1 -->' {} ; -print -quit)"
+            rm -rf -- "$stale"
+            echo PREVIOUS_INTERRUPTED_STAGE_REMOVED=yes
+          fi
           test ! -e "$stage" && mkdir -m 700 "$stage" && mkdir -m 700 "$stage/assets"
           REMOTE
           tar -C public/agriculture -czf - . | ssh -F "$d/config" saeit-cpanel "tar -xzf - -C /home/zomorod2/public_html/.zomorod-agriculture-stage-$GITHUB_SHA"
@@ -139,6 +149,7 @@ jobs:
           rollback_on_error() {
             rc=$?
             if [ "$rc" -ne 0 ]; then
+              rm -rf -- "$stage"
               if [ "$created" -eq 1 ] && [ ! -d "$backup" ]; then
                 rm -rf -- "$target"
                 echo AGRICULTURE_PARTIAL_INSTALL_REMOVED=yes
