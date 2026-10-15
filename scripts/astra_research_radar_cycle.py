@@ -2,7 +2,7 @@
 """Astra isolated daily public-source research cycle (no factory or commerce writes).
 
 Daily append-only reports are stored in a distinct owner-private folder.
-Cron may invoke repeatedly: at most one record per UTC day is created.
+Cron may invoke repeatedly: one baseline and at most one immutable retry per 6-hour UTC slot.
 No site, factory database, queue, publication, payment or migration access.
 """
 import argparse
@@ -74,13 +74,25 @@ def run_cycle(root, now=None, fetcher=None, fixture=None, source=None):
     radar = _radar()
     workspace = _private_directory(root)
     today = now.strftime("%Y%m%d")
-    path = workspace / ("daily-" + today + ".json")
+    baseline = workspace / ("daily-" + today + ".json")
+    slot = now.hour // 6
     with _new_lock(workspace / ".cycle.lock") as lock:
         fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
-        if path.exists() or path.is_symlink():
-            return {"status": "UNCHANGED", "date": today,
-                    "topic_count": _inspect_existing(path, today)}
-        # Never rewrite foreign or previously generated reports.
+        if baseline.exists() or baseline.is_symlink():
+            known = _inspect_existing(baseline, today)
+            original = json.loads(baseline.read_text(encoding="utf-8"))
+            if original.get("run_slot_utc") == slot:
+                return {"status": "UNCHANGED", "date": today,
+                        "topic_count": known}
+            # An incomplete earlier report never blocks same-day research.
+            # Preserve it byte for byte; retries are capped to four UTC slots.
+            path = workspace / ("retry-" + today + "-" + str(slot) + ".json")
+            if path.exists() or path.is_symlink():
+                return {"status": "UNCHANGED", "date": today,
+                        "topic_count": _inspect_existing(path, today)}
+        else:
+            path = baseline
+        # Never overwrite either baseline or older retry reports.
         feeds, errors = {}, {}
         if fixture is not None:
             if source not in radar.FEEDS and source not in radar.HTML_SOURCES:
@@ -100,7 +112,8 @@ def run_cycle(root, now=None, fetcher=None, fixture=None, source=None):
         report = radar.research_report(feeds, now)
         report["feed_failures"].update(errors)
         report["run_date_utc"] = today
-        report["cycle_version"] = "astra_research_daily_v1"
+        report["cycle_version"] = "astra_research_daily_v2"
+        report["run_slot_utc"] = slot
         if (report["factory_mutations"] != 0 or report["publications"] != 0 or
                 report["payments"] != 0 or report["commercial_products_built"] != 0 or
                 any(item["status"] != "RESEARCH_REQUIRED" or
@@ -112,7 +125,8 @@ def run_cycle(root, now=None, fetcher=None, fixture=None, source=None):
         radar.write_private_new(path, report)
         return {"status": "RECORDED", "date": today,
                 "topic_count": len(report["candidate_hypotheses"]),
-                "feed_count": len(feeds), "failure_count": len(report["feed_failures"])}
+                "feed_count": len(feeds), "failure_count": len(report["feed_failures"]),
+                "record_name": path.name}
 
 
 def main(argv=None):
