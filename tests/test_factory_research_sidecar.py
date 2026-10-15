@@ -111,6 +111,37 @@ class ResearchSidecarTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError,"CURSOR_SYMLINK"):
             sidecar.inspect(self.db,self.out,limit=50)
 
+    def test_two_database_scopes_never_reconcile_by_id(self):
+        other=self.root/"django.db"
+        with sqlite3.connect(self.db) as original, sqlite3.connect(other) as mirror:
+            original.backup(mirror)
+        with sqlite3.connect(other) as mirror:
+            mirror.execute("UPDATE core_product SET title=? WHERE id=1",("OTHER PRODUCT ID 1",))
+            metadata=mirror.execute("SELECT metadata FROM core_product WHERE id=2").fetchone()[0]
+            mirror.execute("INSERT INTO core_product VALUES (?,?,?,?,?,?,?,?,?)",
+                           (4,"Django private candidate","digital",metadata,0,"0",None,None,1))
+        before_a=self.db.read_bytes()
+        before_b=other.read_bytes()
+        sidecar.inspect(self.db,self.out,limit=50,compare_db=other)
+        info=json.loads((self.out/"latest.json").read_text(encoding="utf-8"))
+        diff=info["data_source_consistency"]
+        self.assertFalse(diff["database_files_are_identical"])
+        self.assertEqual(diff["private_product_count"],3)
+        self.assertEqual(diff["django_product_count"],4)
+        self.assertEqual(diff["overlapping_numeric_ids"],3)
+        self.assertEqual(diff["overlap_ids_with_different_normalized_titles"],1)
+        self.assertEqual(diff["django_only_numeric_ids"],1)
+        self.assertEqual(diff["private_only_numeric_ids"],0)
+        self.assertFalse(diff["auto_reconciliation_allowed"])
+        self.assertEqual(before_a,self.db.read_bytes())
+        self.assertEqual(before_b,other.read_bytes())
+
+    def test_same_sqlite_path_is_detected_not_auto_reconciled(self):
+        sidecar.inspect(self.db,self.out,compare_db=self.db)
+        info=json.loads((self.out/"latest.json").read_text(encoding="utf-8"))
+        self.assertTrue(info["data_source_consistency"]["database_files_are_identical"])
+        self.assertFalse(info["data_source_consistency"]["auto_reconciliation_allowed"])
+
     def test_limit_requires_bounded_integer(self):
         for n in (0,101,-1,True,1.5):
             with self.subTest(limit=n),self.assertRaises(ValueError):
