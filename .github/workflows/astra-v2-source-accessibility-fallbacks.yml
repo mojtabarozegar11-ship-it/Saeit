@@ -52,6 +52,9 @@ jobs:
               ("IOWA_DECISION_UPDATES","https://www.extension.iastate.edu/Agdm/whatsnew.html"),
               ("USDA_COST_DATA","https://ers.usda.gov/data-products/commodity-costs-and-returns"),
               ("USDA_FARM_INCOME","https://ers.usda.gov/topics/farm-economy/farm-sector-income-finances/highlights-from-the-farm-income-forecast"),
+              ("USDA_FINANCIAL_RATIOS","https://ers.usda.gov/data-products/farm-income-and-wealth-statistics/documentation-for-the-farm-sector-financial-ratios"),
+              ("USDA_FARM_INCOME_METHOD","https://ers.usda.gov/data-products/farm-income-and-wealth-statistics/general-documentation"),
+              ("USDA_FARM_BALANCE_SHEET","https://ers.usda.gov/data-products/farm-income-and-wealth-statistics/documentation-for-the-farm-sector-balance-sheet"),
           ]
           opener=build_opener(BlockRedirect,HTTPSHandler(context=ssl.create_default_context()))
           found=0
