@@ -2,7 +2,7 @@ name: Mojtaba inner pages syntax read-only diagnosis
 on:
   push:
     branches: ['fix/mojtaba-inner-stories-runtime-20261015']
-    paths: ['.github/workflows/mojtaba-inner-syntax-diagnostic.yml']
+    paths: ['.github/workflows/mojtaba-inner-syntax-diagnostic.yml', 'scripts/mojtaba_personal_inner_content.py', 'tests/test_mojtaba_personal_inner_content.py']
 permissions:
   contents: read
 jobs:
