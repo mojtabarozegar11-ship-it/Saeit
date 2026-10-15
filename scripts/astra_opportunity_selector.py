@@ -161,22 +161,20 @@ def rank_opportunities(candidates, snapshots, now_utc):
         elif not gates["build_capability_available"] or not gates["distribution_path_available"]:
             status = "RESEARCH_REQUIRED"
             reasons.append("BUILD_OR_DISTRIBUTION_CAPABILITY_MISSING")
-        elif score < MIN_RESEARCH_PRIORITY_SCORE:
-            status = "RESEARCH_REQUIRED"
-            reasons.append("PROVISIONAL_PRIORITY_BELOW_RESEARCH_FLOOR")
-        elif len(domains) < MIN_DISTINCT_SOURCE_DOMAINS:
-            status = "RESEARCH_REQUIRED"
-            reasons.append("FEWER_THAN_THREE_DISTINCT_SOURCE_DOMAINS")
         else:
+            if score < MIN_RESEARCH_PRIORITY_SCORE:
+                reasons.append("PROVISIONAL_PRIORITY_BELOW_RESEARCH_FLOOR")
+            if len(domains) < MIN_DISTINCT_SOURCE_DOMAINS:
+                reasons.append("FEWER_THAN_THREE_DISTINCT_SOURCE_DOMAINS")
             missing = sorted(CLAIM_TYPES - claim_types)
-            if missing:
+            if "problem" in missing or "willingness_to_pay" in missing:
+                reasons.append("PROBLEM_OR_WILLINGNESS_SIGNAL_MISSING")
+            if "comparison" in missing:
+                reasons.append("COMPETITOR_COMPARISON_SIGNAL_MISSING")
+            if "feasibility" in missing:
+                reasons.append("FEASIBILITY_SIGNAL_MISSING")
+            if reasons:
                 status = "RESEARCH_REQUIRED"
-                if "problem" in missing or "willingness_to_pay" in missing:
-                    reasons.append("PROBLEM_OR_WILLINGNESS_SIGNAL_MISSING")
-                if "comparison" in missing:
-                    reasons.append("COMPETITOR_COMPARISON_SIGNAL_MISSING")
-                if "feasibility" in missing:
-                    reasons.append("FEASIBILITY_SIGNAL_MISSING")
             else:
                 status = "REVIEW_REQUIRED"
                 reasons.append("SOURCE_AND_ASSESSMENT_ATTESTATION_REQUIRED")
