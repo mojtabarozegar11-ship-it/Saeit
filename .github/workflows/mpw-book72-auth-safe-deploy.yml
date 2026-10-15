@@ -1,0 +1,120 @@
+name: MojPlayWin book72 guarded customer access deploy
+on:
+  push:
+    branches: [feature/mpw-book72-customer-auth-promo-20261015]
+    paths: [.github/workflows/mpw-book72-auth-safe-deploy.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 13
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 60d27f90573c2d75ef7bca5c7b63a557f2a75027
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Validate SHA-pinned source and prepare minimal archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = 60d27f90573c2d75ef7bca5c7b63a557f2a75027
+          python3 -m py_compile mpw_commerce/customer_auth.py mpw_commerce/product_checkout_page.py scripts/mpw_book72_auth_install.py
+          mkdir -p _baseline/mpw_commerce/templates/mpw_commerce
+          git show 53a92c4ac49d8ea4eedff4f8511f734dd9d29536:mpw_commerce/product_checkout_page.py > _baseline/mpw_commerce/product_checkout_page.py
+          git show 53a92c4ac49d8ea4eedff4f8511f734dd9d29536:mpw_commerce/templates/mpw_commerce/product_checkout.html > _baseline/mpw_commerce/templates/mpw_commerce/product_checkout.html
+          tar -czf "$RUNNER_TEMP/mpw-auth.tgz" \
+            mpw_commerce/customer_auth.py \
+            mpw_commerce/templates/mpw_commerce/customer_login.html \
+            mpw_commerce/templates/mpw_commerce/customer_register.html \
+            scripts/mojplaywin_direct_wallet_invoice.py \
+            scripts/mojplaywin_direct_wallet_rates.py \
+            scripts/mojplaywin_direct_wallet_discovery.py \
+            scripts/mojplaywin_native_rpc_clients.py \
+            mpw_commerce/product_checkout_page.py \
+            mpw_commerce/templates/mpw_commerce/product_checkout.html \
+            _baseline/mpw_commerce/product_checkout_page.py \
+            _baseline/mpw_commerce/templates/mpw_commerce/product_checkout.html
+          echo MPW_AUTH_SOURCE_AND_BASELINE_VERIFIED
+      - name: Prepare pinned SSH connections to authorized site host
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/astra-live-payment"
+          install -d -m 700 "$d"
+          for item in VPS_KEY HOST_KEY; do
+            printf '%s' "${!item}" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/$item.key"
+            chmod 600 "$d/$item.key"
+            ssh-keygen -y -P '' -f "$d/$item.key" >/dev/null
+          done
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -i "$d/VPS_KEY.key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/vps.known" -o BatchMode=yes githubops@178.239.147.150 'ssh-keyscan -T 10 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/VPS_KEY.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/HOST_KEY.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 12
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+      - name: Guarded install on cPanel with automatic rollback
+        shell: bash
+        run: |
+          set -euo pipefail
+          run_id="${{ github.run_id }}"
+          [[ "$run_id" =~ ^[0-9]+$ ]]
+          dir=".mpw-auth-$run_id"
+          conn="$RUNNER_TEMP/astra-live-payment/config"
+          ssh -F "$conn" saeit-cpanel "umask 077; mkdir -m 700 '$dir'"
+          scp -F "$conn" "$RUNNER_TEMP/mpw-auth.tgz" "saeit-cpanel:$dir/payload.tgz"
+          scp -F "$conn" scripts/mpw_book72_auth_install.py "saeit-cpanel:$dir/installer.py"
+          local_sha="$(sha256sum "$RUNNER_TEMP/mpw-auth.tgz" | awk '{print $1}')"
+          remote_sha="$(ssh -F "$conn" saeit-cpanel "sha256sum '$dir/payload.tgz' | awk '{print \$1}'")"
+          test "$local_sha" = "$remote_sha"
+          ssh -F "$conn" saeit-cpanel "RUN_ID=$run_id bash -se" <<'REMOTE'
+          set -euo pipefail
+          export DJANGO_SETTINGS_MODULE=config.settings
+          export PYTHONPATH="$HOME/Saeit-staging"
+          dir="$HOME/.mpw-auth-$RUN_ID"
+          test -f "$HOME/Saeit-staging/manage.py"
+          for py in "$HOME/virtualenv/Saeit-staging/3.11/bin/python" "$HOME/Saeit-staging/.venv/bin/python" "$HOME/virtualenv/Saeit-staging/3.10/bin/python"; do
+            if test -x "$py" && "$py" -c 'import django' >/dev/null 2>&1; then
+              "$py" "$dir/installer.py" "$dir/payload.tgz" "$dir/backup"
+              exit $?
+            fi
+          done
+          exit 1
+          REMOTE
+      - name: Minimal public account route probes, without billing
+        shell: bash
+        run: |
+          for url in https://mojplaywin.com/accounts/login/ https://mojplaywin.com/accounts/register/; do
+            status="$(curl -L -o /dev/null -sS --connect-timeout 5 --max-time 15 -w '%{http_code}' "$url" || true)"
+            echo "MPW_CUSTOMER_ROUTE_HTTP_STATUS=$status"
+          done
+      - name: Clean temporary identities
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/astra-live-payment"

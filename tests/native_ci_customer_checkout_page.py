@@ -88,6 +88,24 @@ class CustomerCheckoutPageTests(TestCase):
         self.assertNotContains(response, "0x89149b01f59115B86553561F12438D2ADF517E75")
         self.assertEqual(Order.objects.count(), 0)
 
+    def test_regular_30_and_sale_7_50_display_only_when_price_matches(self):
+        self.product.metadata["pricing"] = {
+            "list_price_usd": "30.00", "sale_price_usd": "7.50",
+            "discount_amount_usd": "22.50", "discount_percent": 75,
+        }
+        self.product.save(update_fields=["metadata"])
+        response = self.get()
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="regular-price">30.00')
+        self.assertContains(response, '75% off')
+        self.assertContains(response, 'id="price">7.50')
+
+        self.product.metadata["pricing"]["sale_price_usd"] = "6.00"
+        self.product.save(update_fields=["metadata"])
+        response = self.get()
+        self.assertNotContains(response, 'id="regular-price"')
+        self.assertContains(response, 'id="price">7.50')
+
     def test_signed_in_buyer_required_and_invalid_domain_denied(self):
         self.assertEqual(self.get(host="zomorodmelal.ir").status_code, 404)
         self.assertEqual(self.get(secure=False).status_code, 404)

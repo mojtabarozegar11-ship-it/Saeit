@@ -77,7 +77,24 @@ def product_checkout_page(request, product_id):
                .filter(pk=product_id).first())
     if not approved_for_checkout(request, product):
         raise Http404("Checkout unavailable")
+    pricing = (product.metadata or {}).get("pricing", {})
+    regular_price = None
+    discount_percent = None
+    if isinstance(pricing, dict):
+        try:
+            original = Decimal(str(pricing.get("list_price_usd", "")))
+            quoted = Decimal(str(pricing.get("sale_price_usd", "")))
+            if (original.is_finite() and quoted == product.price
+                    and original > quoted > 0 and original <= Decimal("1000")):
+                percent = (Decimal("100") * (original - quoted) / original)
+                if percent == percent.to_integral_value():
+                    regular_price = format(original, ".2f")
+                    discount_percent = int(percent)
+        except (ValueError, TypeError, ArithmeticError):
+            pass
     return render(request, "mpw_commerce/product_checkout.html", {
         "product": product,
         "price_usd": format(product.price, ".2f"),
+        "regular_price_usd": regular_price,
+        "discount_percent": discount_percent,
     })
