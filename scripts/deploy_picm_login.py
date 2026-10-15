@@ -16,6 +16,7 @@ DOCROOT = HOME / "mojplaywin.com"
 BACKUPS = HOME / ".mojplaywin-backups"
 FILES = (Path("config/urls.py"), Path("core/picm_auth.py"),
          Path("templates/picm/login.html"), Path("templates/picm/index.html"),
+         Path("templates/picm/free_motion.js"),
          Path("core/picm_views.py"))
 MARK = "# SAEIT_PICM_PRIVATE_LOGIN_V1"
 WORKSPACE_MARK = "# SAEIT_PICM_WORKSPACE_V1"
@@ -123,6 +124,7 @@ def deploy(run):
     ast.parse(src_auth.decode("utf-8"))
     src_login = (stage / "templates/picm/login.html").read_bytes()
     src_index = (stage / "templates/picm/index.html").read_bytes()
+    src_motion = (stage / "templates/picm/free_motion.js").read_bytes()
     src_views = (stage / "core/picm_views.py").read_bytes()
     ast.parse(src_views.decode("utf-8"))
     if (b"def picm_workbench(request):" not in src_views
@@ -130,6 +132,9 @@ def deploy(run):
             or b"def picm_reference_stage(request):" not in src_views):
         raise RuntimeError("PICM_PHOTO_UPLOAD_VIEWS_NOT_FOUND")
     if (b'<title>PICM' not in src_index or b'id="renderform"' not in src_index
+            or b"include 'picm/free_motion.js'" not in src_index
+            or b"captureStream(20)" not in src_motion
+            or b"MediaRecorder(" not in src_motion
             or b'/picm/logout/' not in src_index or b'csrf_token' not in src_login):
         raise RuntimeError("PICM_LOGIN_TEMPLATES_INVALID")
     backup = BACKUPS / ("picm-login-" + run)
@@ -150,7 +155,7 @@ def deploy(run):
     try:
         payload = {FILES[0]: urls.encode(), FILES[1]: src_auth,
                    FILES[2]: src_login, FILES[3]: src_index,
-                   FILES[4]: src_views}
+                   FILES[4]: src_motion, FILES[5]: src_views}
         for relative, content in payload.items():
             atomic_write(ROOT / relative, content, manifest[str(relative)]["mode"])
         restart()
