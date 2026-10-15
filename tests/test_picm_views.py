@@ -24,6 +24,7 @@ class PICMTest(TestCase):
         self.addCleanup(self.env.stop)
         self.rf = RequestFactory()
         (Path(self.temp.name) / "worker-token").write_text("X" * 64 + "\n")
+        (Path(self.temp.name) / ".owner-user-id").write_text("42\n", encoding="ascii")
 
     def user(self, pk=42, authenticated=True):
         return SimpleNamespace(pk=pk, is_authenticated=authenticated)
@@ -44,6 +45,14 @@ class PICMTest(TestCase):
         headers = {"HTTP_AUTHORIZATION": "Bearer " + "X" * 64} if token else {}
         req = self.rf.get("/picm/worker/next/", **headers)
         return v.picm_worker_next(req)
+
+    def test_other_authenticated_user_cannot_submit_or_use_result(self):
+        other = self.user(pk=700, authenticated=True)
+        result = self.post({"prompt": "Landscapes with rivers", "style": "natural", "steps": 2}, other)
+        self.assertEqual(result.status_code, 403)
+        # Even if the user id is valid, missing binding denies all access.
+        (Path(self.temp.name)/".owner-user-id").unlink()
+        self.assertEqual(self.post({"prompt":"Sunlit garden", "style":"natural", "steps":1}).status_code,403)
 
     def test_anonymous_cannot_submit(self):
         res = self.post({"prompt": "A botanical garden", "style": "natural",
@@ -82,8 +91,7 @@ class PICMTest(TestCase):
         status.user = self.user(42)
         self.assertEqual(json.loads(v.picm_status(status, ident).content)["state"], "done")
         status.user = self.user(99)
-        with self.assertRaises(Http404):
-            v.picm_status(status, ident)
+        self.assertEqual(v.picm_status(status, ident).status_code, 403)
         image_req = self.rf.get("/picm/image/" + ident + "/")
         image_req.user = self.user(42)
         result = v.picm_image(image_req, ident)
@@ -122,6 +130,7 @@ class PICMPhotoReferenceTests(TestCase):
         self.env.start()
         self.addCleanup(self.env.stop)
         self.rf = RequestFactory()
+        (Path(self.temp.name) / ".owner-user-id").write_text("101\\n".replace("\\\\n", "\\n"), encoding="ascii")
 
     def photo(self, width=512, height=512):
         from django.core.files.uploadedfile import SimpleUploadedFile
