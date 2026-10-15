@@ -1,0 +1,199 @@
+name: Astra four specialist private VPS factory activation
+
+on:
+  push:
+    branches: [factory/astra-four-specialist-live-private-20261015]
+    paths:
+      - .github/workflows/astra-four-specialist-private-vps.yml
+      - scripts/astra_v2_private_pipeline.py
+      - scripts/astra_v2_self_directed_education.py
+      - scripts/astra_v2_topic_gate.py
+      - scripts/astra_opportunity_selector.py
+      - product_prototypes/**
+      - tests/test_astra_v2_private_pipeline.py
+      - tests/test_astra_circuit_courier.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: astra-four-specialist-private-vps
+  cancel-in-progress: false
+
+jobs:
+  offline-product-qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Verify builder integrity and original game with Node on runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          for spec in test_astra_orchard_decision_audit.py test_astra_farm_procurement_audit.py test_astra_farm_water_land_margin_audit.py test_astra_circuit_courier.py; do
+            python3 -m unittest discover -s tests -p "$spec" -q
+          done
+          node product_prototypes/circuit_courier/test_engine.js
+          python3 -m unittest discover -s tests -p test_astra_v2_private_pipeline.py -q
+          python3 -m unittest discover -s tests -p test_astra_v2_self_directed_education.py -q
+          echo ASTRA_FOUR_SPECIALIST_RUNNER_QA=PASS
+
+  private-four-specialist-vps:
+    needs: offline-product-qa
+    runs-on: ubuntu-latest
+    timeout-minutes: 17
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install independent versioned source and activate separate cron after four real QA artifacts
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          dir="$RUNNER_TEMP/astra-four-vps"
+          install -d -m 700 "$dir"
+          trap 'rm -rf -- "$dir"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$dir/key"
+          chmod 600 "$dir/key"
+          ssh-keygen -y -P '' -f "$dir/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$dir/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$dir/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$dir/config" <<'CFG'
+          Host private-vps
+            HostName 178.239.147.150
+            User githubops
+            BatchMode yes
+            IdentitiesOnly yes
+            StrictHostKeyChecking yes
+            ConnectTimeout 15
+          CFG
+          printf '    IdentityFile %s\n    UserKnownHostsFile %s\n' "$dir/key" "$dir/known" >> "$dir/config"
+          chmod 600 "$dir/config"
+          short="$(git rev-parse --short=12 HEAD)"
+          [[ "$short" =~ ^[0-9a-f]{12}$ ]]
+          tar -cf "$dir/private-source.tar" \
+            scripts/astra_v2_private_pipeline.py \
+            scripts/astra_v2_self_directed_education.py \
+            scripts/astra_v2_topic_gate.py \
+            scripts/astra_opportunity_selector.py \
+            product_prototypes/orchard_decision_audit \
+            product_prototypes/farm_procurement_audit \
+            product_prototypes/farm_water_land_margin_audit \
+            product_prototypes/circuit_courier \
+            tests/test_astra_v2_private_pipeline.py \
+            tests/test_astra_v2_self_directed_education.py \
+            tests/test_astra_orchard_decision_audit.py \
+            tests/test_astra_farm_procurement_audit.py \
+            tests/test_astra_farm_water_land_margin_audit.py \
+            tests/test_astra_circuit_courier.py
+          digest="$(sha256sum "$dir/private-source.tar" | awk '{print $1}')"
+          ssh -F "$dir/config" private-vps "bash -se -- '$short'" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          test "$(id -un)" = githubops
+          ops="$HOME/factory-runtime/operations"
+          private="$HOME/factory-runtime/private"
+          test -d "$ops" && test ! -L "$ops"
+          test -d "$private" && test ! -L "$private"
+          stage="$ops/astra-four-specialist-source-$1"
+          test ! -e "$stage" && test ! -L "$stage"
+          mkdir -m 700 -- "$stage"
+          echo ASTRA_FOUR_STAGE_CREATED=1
+          REMOTE
+          cat "$dir/private-source.tar" | ssh -F "$dir/config" private-vps \
+            "cat > 'factory-runtime/operations/astra-four-specialist-source-$short/source.tar'"
+          ssh -F "$dir/config" private-vps "bash -se -- '$short' '$digest'" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          test "$(id -un)" = githubops
+          ops="$HOME/factory-runtime/operations"
+          stage="$ops/astra-four-specialist-source-$1"
+          source="$stage/source.tar"
+          test -f "$source" && test ! -L "$source"
+          test "$(sha256sum "$source" | awk '{print $1}')" = "$2"
+          cd "$stage"
+          tar -xf "$source" --no-same-owner --no-same-permissions
+          rm -f -- "$source"
+          for spec in test_astra_orchard_decision_audit.py test_astra_farm_procurement_audit.py test_astra_farm_water_land_margin_audit.py test_astra_circuit_courier.py; do
+            python3 -m unittest discover -s tests -p "$spec" -q
+          done
+          python3 -m unittest discover -s tests -p test_astra_v2_self_directed_education.py -q
+          root="$HOME/factory-runtime/private/astra-four-specialist-v1"
+          test ! -L "$root"
+          mkdir -p -m 700 "$root"
+          chmod 700 "$root"
+          marker="$root/.enable-autonomous-specialists"
+          test ! -L "$marker"
+          if test -f "$marker"; then
+            test "$(cat "$marker")" = private_only
+          else
+            printf 'private_only\n' > "$marker"
+            chmod 600 "$marker"
+          fi
+          # No user orders: auto-enqueue four reviewed source revisions.
+          # This produces private artifacts only, NOT certified products for sale.
+          python3 - "$stage" "$root" <<'PY'
+          import json,subprocess,sys
+          stage,root=sys.argv[1:]
+          cmd=[sys.executable,stage+"/scripts/astra_v2_private_pipeline.py"]
+          observed=[]
+          for idx in range(4):
+              proc=subprocess.run(cmd+["tick","--root",root],
+                                  cwd=stage,capture_output=True,text=True,timeout=150)
+              if proc.returncode:
+                  print("ASTRA_FOUR_TICK_ERROR="+proc.stderr[-700:])
+                  raise SystemExit(proc.returncode)
+              item=json.loads(proc.stdout.strip().splitlines()[-1])
+              observed.append(item["status"])
+              print("ASTRA_FOUR_TICK_"+str(idx+1)+"="+item["status"])
+              if item["status"] not in ("PRIVATE_QA_PASSED","NO_ELIGIBLE_WORK"):
+                  raise SystemExit("private artifact failed technical QA")
+          health=subprocess.run(cmd+["status","--root",root],
+                                cwd=stage,capture_output=True,text=True,timeout=40,check=True)
+          state=json.loads(health.stdout.strip().splitlines()[-1])
+          families=state["distinct_private_product_families"]
+          versions=state["distinct_private_qa_artifact_versions"]
+          assert families==4,(families,state)
+          assert versions>=4,(versions,state)
+          assert state["published_products"]==0
+          assert state["verified_revenue"] is None
+          assert state["distinct_private_qa_artifact_versions"]>=4
+          print("ASTRA_FOUR_FAMILIES_PASSED="+str(families))
+          print("ASTRA_FOUR_DISTINCT_PRIVATE_ARTIFACTS="+str(versions))
+          print("ASTRA_FOUR_REAL_SALES_VERIFIED=0")
+          print("ASTRA_FOUR_STORE_PUBLISHING=0")
+          print("ASTRA_FOUR_TECHNICAL_QA_ONLY=true")
+          PY
+          # Restore original cron unchanged, replace only our dedicated marker.
+          previous="$(crontab -l)"
+          original="$(printf '%s\n' "$previous" | grep -F 'ASTRA_V2_PRIVATE_RND_TICK' || true)"
+          test -n "$original" && test "$(printf '%s\n' "$original" | wc -l)" -eq 1
+          existing="$(printf '%s\n' "$previous" | grep -F 'ASTRA_FOUR_SPECIALIST_PRIVATE_TICK' || true)"
+          count="$(printf '%s\n' "$existing" | grep -Fc 'ASTRA_FOUR_SPECIALIST_PRIVATE_TICK' || true)"
+          test "$count" -le 1
+          if test "$count" -eq 1; then
+            printf '%s\n' "$existing" | grep -Eq '^\*/10 \* \* \* \* ASTRA_FOUR_SPECIALIST_PRIVATE_TICK=1 .*/factory-runtime/operations/astra-four-specialist-source-[0-9a-f]{12}/scripts/astra_v2_private_pipeline.py '
+          fi
+          python_bin="$(command -v python3)"
+          new_line="*/10 * * * * ASTRA_FOUR_SPECIALIST_PRIVATE_TICK=1 $python_bin $stage/scripts/astra_v2_private_pipeline.py tick --root $root >> $root/four-specialist-tick.log 2>&1"
+          temp="$(mktemp "$HOME/factory-runtime/private/.four-cron-XXXXXXXX")"
+          trap 'rm -f -- "$temp"' EXIT
+          printf '%s\n' "$previous" | grep -v -F 'ASTRA_FOUR_SPECIALIST_PRIVATE_TICK' > "$temp" || true
+          printf '%s\n' "$new_line" >> "$temp"
+          chmod 600 "$temp"
+          crontab "$temp"
+          after="$(crontab -l)"
+          test "$(printf '%s\n' "$after" | grep -Fc 'ASTRA_FOUR_SPECIALIST_PRIVATE_TICK')" -eq 1
+          test "$original" = "$(printf '%s\n' "$after" | grep -F 'ASTRA_V2_PRIVATE_RND_TICK')"
+          echo ASTRA_FOUR_CRON_ACTIVE=1
+          echo ASTRA_ORIGINAL_PRIVATE_FACTORY_CRON_UNCHANGED=1
+          echo ASTRA_FOUR_PUBLIC_STORE_MUTATIONS=0
+          echo ASTRA_FOUR_PAYMENT_MUTATIONS=0
+          echo ASTRA_FOUR_LIVE_SITE_DATABASE_MUTATIONS=0
+          REMOTE
