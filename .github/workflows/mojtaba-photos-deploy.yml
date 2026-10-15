@@ -1,0 +1,183 @@
+name: Publish Mojtaba original 10-photo portfolio
+on:
+  issues:
+    types: [opened]
+permissions:
+  contents: read
+concurrency:
+  group: mojtaba-v17-photos-production
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event.issue.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.issue.title == 'Ops: Publish Mojtaba original 10-photo gallery 2026-10-15'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify exact user photos
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import importlib.util
+          s=importlib.util.spec_from_file_location("gallery","scripts/mojtaba_personal_photo_gallery.py")
+          m=importlib.util.module_from_spec(s);s.loader.exec_module(m)
+          m.verify_photos(Path("assets/mojtaba_20261015"))
+          print("OWNER_PHOTOS_SOURCE=10 exact verified")
+          PY
+      - name: Prepare pinned SSH relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/photo-relay"
+          mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          python3 - "$d/host.key" <<'PY'
+          import pathlib,sys
+          p=pathlib.Path(sys.argv[1]);t=p.read_text().replace('\r\n','\n').strip()
+          p.write_text(t.replace('\\n','\n')+'\n')
+          PY
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host saeit-host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+            ConnectionAttempts 1
+          EOF
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          echo "SSH_CONFIG=$d/config" >> "$GITHUB_ENV"
+      - name: Upload original photos and installer to private cPanel staging
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar -cf "$RUNNER_TEMP/owner-photos.tar" scripts/mojtaba_personal_photo_gallery.py assets/mojtaba_20261015
+          stage="/home/zomorod2/.mojtaba-original-gallery-$GITHUB_RUN_ID"
+          timeout 30s ssh -F "$SSH_CONFIG" saeit-host "test ! -e '$stage' && install -d -m 700 '$stage'"
+          timeout 75s scp -F "$SSH_CONFIG" "$RUNNER_TEMP/owner-photos.tar" "saeit-host:$stage/pack.tar"
+          timeout 30s ssh -F "$SSH_CONFIG" saeit-host "tar -xf '$stage/pack.tar' -C '$stage' && rm -f '$stage/pack.tar'"
+
+      - name: Protected install and live verification, auto rollback on failure
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 430s ssh -F "$SSH_CONFIG" saeit-host "bash -s -- '$GITHUB_RUN_ID'" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          run_id="$1"
+          app="/home/zomorod2/mojtaba_personal/mojtaba_roozegar_personal_v17"
+          home="$app/templates/personal_site/core/home.html"
+          images="$app/static/personal_site/owner_gallery_20261015"
+          stage="/home/zomorod2/.mojtaba-original-gallery-$run_id"
+          script="$stage/scripts/mojtaba_personal_photo_gallery.py"
+          photos="$stage/assets/mojtaba_20261015"
+          backup_dir="$HOME/.backups/mojtaba-original-photos-release"
+          test -d "$app" && test ! -L "$app" && test -f "$app/manage.py"
+          test -f "$home" && test ! -L "$home" && test "$(realpath "$home")" = "$home"
+          expected_home_sha256="c7fd93ce87652442a4c9d693f5d05054915d6bff1ce6529cb73a730d18c7e825"
+          test "$(sha256sum "$home" | awk '{print $1}')" = "$expected_home_sha256" || { echo "HOME_CHANGED_SINCE_READONLY_PREFLIGHT"; exit 1; }
+          test ! -e "$images" && test ! -L "$stage"
+          install -d -m 700 "$backup_dir"
+          backup="$backup_dir/home-before-$run_id.html"
+          test ! -e "$backup"
+          cp -p "$home" "$backup"
+          installed=0
+          finished=0
+          rollback() {
+            rc=$?
+            trap - EXIT
+            if test "$finished" -ne 1 && test "$installed" -eq 1; then
+              cp -p "$backup" "$home.gallery-restore"
+              mv -f "$home.gallery-restore" "$home"
+              if test -d "$images" && test ! -L "$images"; then rm -rf -- "$images"; fi
+              test -d "$app/tmp" && touch "$app/tmp/restart.txt"
+              echo "GALLERY_ROLLBACK=complete"
+            fi
+            exit "$rc"
+          }
+          trap rollback EXIT
+          python3 "$script" check --photo-dir "$photos"
+          python3 "$script" install --photo-dir "$photos"
+          installed=1
+          py="$app/../.venv_personal_test/bin/python"
+          test -x "$py" && "$py" -c 'import django' >/dev/null
+          cd "$app"
+          "$py" manage.py collectstatic --noinput --verbosity 0
+          test -d "$app/tmp" && touch "$app/tmp/restart.txt"
+          python3 - "$script" <<'PY'
+          import hashlib,importlib.util,sys,time
+          from urllib.request import Request,urlopen
+          s=importlib.util.spec_from_file_location("gallery",sys.argv[1])
+          mod=importlib.util.module_from_spec(s);s.loader.exec_module(mod)
+          origin="https://mojplaywin.com/mojtaba.roozegar/"
+          failure=""
+          for attempt in range(8):
+              try:
+                  req=Request(origin+"?photo_verify="+str(time.time_ns()),headers={"User-Agent":"OwnerGallerySmoke/1.0"})
+                  with urlopen(req,timeout=20) as r:
+                      body=r.read(2000000).decode("utf-8","replace")
+                      if r.status!=200 or mod.MARKER not in body:
+                          raise ValueError("Homepage HTTP 200/marker missing")
+                  for idx,(_,sha) in enumerate(mod.PHOTOS,1):
+                      url=origin+"assets/personal_site/owner_gallery_20261015/photo-"+str(idx).zfill(2)+".jpg"
+                      with urlopen(url,timeout=20) as r:
+                          b=r.read(2000000)
+                          if r.status!=200 or hashlib.sha256(b).hexdigest()!=sha:
+                              raise ValueError("Photo HTTP/hash mismatch "+str(idx))
+                  print("LIVE_HOMEPAGE=200")
+                  print("LIVE_PHOTOS_SHA256_VERIFIED=10")
+                  break
+              except Exception as e:
+                  failure=str(e)
+                  print("LIVE_PHOTO_CHECK_RETRY="+str(attempt+1)+" "+failure[:100])
+                  time.sleep(3)
+          else: raise SystemExit("LIVE_GALLERY_CHECK_FAILED "+failure)
+          PY
+          finished=1
+          trap - EXIT
+          echo "GALLERY_DEPLOY_SUCCESS=yes"
+          echo "HOME_BACKUP=$backup"
+          rm -rf -- "$stage"
+          REMOTE
+
+      - name: Confirm other domains remain responsive (read only)
+        shell: bash
+        run: |
+          for url in https://mojplaywin.com/ https://zomorodmelal.ir/; do
+            code="$(curl --max-time 15 -sSL -o /dev/null -w '%{http_code}' "$url" || true)"
+            echo "UNRELATED_DOMAIN=$url STATUS=$code"
+          done
+
+      - name: Remove temporary SSH credentials
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/photo-relay"
