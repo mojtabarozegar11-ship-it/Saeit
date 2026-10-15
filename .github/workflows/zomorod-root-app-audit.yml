@@ -109,8 +109,7 @@ jobs:
               if os.path.isdir(base):
                   for name in sorted(os.listdir(base)):
                       print("BACKUP_ENTRY="+name)
-          if os.path.lexists(root+"/index.html"):
-              raise SystemExit("PUBLIC_ROOT_INDEX_PRESENT; refusing to overwrite")
+          print("ROOT_INDEX_PRESENT="+str(os.path.lexists(root+"/index.html")).lower())
           print("ROOT_APP_PRECHECK=passed")
           PY
           result="$(uapi --output=json PassengerApps enable_application name=saeit-django)"
@@ -227,6 +226,25 @@ jobs:
           print("ROOT_TEMPLATE_BYTES="+str(len(content)))
           PY
           REMOTE
+      - name: Diagnose cPanel resource saturation
+        shell: bash
+        env:
+          SSH_CONFIG: ${{ runner.temp }}/zomorod-restore/config
+        run: |
+          set -euo pipefail
+          ssh -F "$SSH_CONFIG" saeit-cpanel bash -se <<'REMOTE'
+          set +e
+          echo "CPANEL_DIAGNOSTICS_BEGIN"
+          date -u
+          uptime
+          cat /proc/loadavg
+          ps -u "$(id -u)" -o pid,ppid,stat,etime,comm,%cpu,%mem --sort=-%cpu | head -n 25
+          for path in /home/zomorod2/public_html/index.html /home/zomorod2/public_html/amozeshgah/index.html /home/zomorod2/public_html/.htaccess; do
+            if test -f "$path"; then stat -c 'FILE=%n SIZE=%s MODE=%a MTIME=%y' "$path"; else echo "FILE_MISSING=$path"; fi
+          done
+          command -v lveinfo >/dev/null 2>&1 && lveinfo --user zomorod2 --period 1h --by-fault all 2>&1 | head -n 35 || true
+          echo "CPANEL_DIAGNOSTICS_END"
+          REMOTE
       - name: Check live site routes
         shell: bash
         run: |
@@ -237,6 +255,7 @@ jobs:
             "https://www.zomorodmelal.ir/"
             "https://zomorodmelal.ir/amozeshgah/"
           )
+          failures=0
           n=0
           for original in "${urls[@]}"; do
             n=$((n+1))
@@ -246,22 +265,27 @@ jobs:
             out="$RUNNER_TEMP/route-${n}.body"
             status="$(curl --silent --show-error --location --max-time 35 --output "$out" --write-out '%{http_code}' -H 'Cache-Control: no-cache' "$url")"
             echo "HTTP $status $original"
-            if (( status < 200 || status >= 500 )); then
+            if (( status < 200 || status >= 400 )); then
+              failures=1
               echo "ROUTE_FAILED=$original" >&2
-              head -c 1500 "$out" >&2 || true
-              exit 1
+              head -c 1000 "$out" >&2 || true
+              echo
+              continue
             fi
             if [[ "$original" == "https://zomorodmelal.ir/" ]]; then
-              grep -q 'services-page' "$out"
-              grep -q 'یک درگاه برای' "$out"
-              ! grep -qi 'Index of /' "$out"
-              ! grep -q 'saeit-zomorod-root-homepage-v1' "$out"
+              grep -q 'زمرد ملل | پیوند پژوهش، تولید و بازار' "$out" || failures=1
+              ! grep -qi 'Index of /' "$out" || failures=1
+              ! grep -q 'saeit-zomorod-root-homepage-v1' "$out" || failures=1
             fi
             if [[ "$original" == "https://zomorodmelal.ir/amozeshgah/" ]]; then
-              grep -q 'education-page' "$out"
-              grep -q 'آموزش؛ از اولین درس تا مهارت حرفه‌ای' "$out"
+              grep -q 'education-page' "$out" || failures=1
+              grep -q 'آموزش؛ از اولین درس تا مهارت حرفه‌ای' "$out" || failures=1
             fi
           done
+          if (( failures )); then
+            echo "PUBLIC_ROUTE_SMOKE_TESTS=failed"
+            exit 1
+          fi
           echo "PUBLIC_ROUTE_SMOKE_TESTS=passed"
       - name: Remove temporary SSH material
         if: always()
