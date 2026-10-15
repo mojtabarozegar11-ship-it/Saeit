@@ -24,7 +24,7 @@ class MojPlayWinSiteTests(TestCase):
             with self.subTest(path=path):
                 response=self.client.get(path,HTTP_HOST="mojplaywin.com")
                 self.assertEqual(response.status_code,200)
-                html=response.content.decode("utf-8")
+                html=unescape(response.content.decode("utf-8"))
                 self.assertIn(marker,html)
                 self.assertIn("mojplaywin-matte-gold-theme",html)
                 self.assertIn(f'href="https://mojplaywin.com{path}"',html)
