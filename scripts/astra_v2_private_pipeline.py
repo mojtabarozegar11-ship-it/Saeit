@@ -34,6 +34,12 @@ TEST_NAME = "test_astra_orchard_decision_audit.py"
 BUILDER = "orchard_decision_audit_v2"
 PROCUREMENT_BUILDER = "farm_procurement_audit_v1"
 WATER_BUILDER = "farm_water_land_margin_audit_v1"
+GAME_BUILDER = "circuit_courier_v1"
+GAME_ROOT = ROOT / "product_prototypes" / "circuit_courier"
+GAME_FILES = (
+    "index.html", "style.css", "engine.js", "app.js",
+    "test_engine.js", "self_test.py", "README.md",
+)
 WATER_ROOT = ROOT / "product_prototypes" / "farm_water_land_margin_audit"
 WATER_FILES = (
     "water_margin_audit.py", "render_report.py", "example_synthetic.json",
@@ -54,6 +60,12 @@ BUILDERS = {
         "root": PROCUREMENT_ROOT, "files": PROCUREMENT_FILES,
         "test": "test_astra_farm_procurement_audit.py",
         "slug": "farm_procurement_audit", "title": "Farm Input Procurement Quote Audit",
+    },
+    GAME_BUILDER: {
+        "root": GAME_ROOT, "files": GAME_FILES,
+        "test": "test_astra_circuit_courier.py",
+        "slug": "circuit_courier",
+        "title": "Circuit Courier — 36-stage original offline logic puzzle",
     },
     WATER_BUILDER: {
         "root": WATER_ROOT, "files": WATER_FILES,
