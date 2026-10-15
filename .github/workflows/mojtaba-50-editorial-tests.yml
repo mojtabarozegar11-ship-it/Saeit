@@ -1,0 +1,27 @@
+name: Fifty original Mojtaba editorials tests
+on:
+  push:
+    branches: ['feat/mojtaba-fifty-editorial-pieces-20261015']
+    paths:
+      - 'content/mojtaba_personal_50_editorial_20261015.json'
+      - 'scripts/mojtaba_50_editorials_safe_deploy.py'
+      - 'tests/test_mojtaba_50_editorials.py'
+      - '.github/workflows/mojtaba-50-editorial-tests.yml'
+  pull_request:
+    paths:
+      - 'content/mojtaba_personal_50_editorial_20261015.json'
+      - 'scripts/mojtaba_50_editorials_safe_deploy.py'
+      - 'tests/test_mojtaba_50_editorials.py'
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check all 50 edited articles across 9 live Django template shapes
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mojtaba_50_editorials_safe_deploy.py
+          python3 -m unittest discover -s tests -p 'test_mojtaba_50_editorials.py' -v
