@@ -253,6 +253,171 @@ class ProcurementQuoteAuditTests(unittest.TestCase):
         self.assertEqual(x["gross_order_units"],"112.00")
         self.assertEqual(x["surplus_usable_units"],"6.40")
 
+    def strict_quote_fixture(self):
+        p=sample()
+        p["comparison_controls"]={
+            "required_product_spec_id":"FERT-NPK-20-20-20",
+            "delivery_basis":"delivered_to_farm",
+            "as_of_date":"2026-10-15",
+        }
+        for i,row in enumerate(p["offers"]):
+            row["quote_controls"]={
+                "product_spec_id":"FERT-NPK-20-20-20",
+                "delivery_basis":"delivered_to_farm",
+                "quoted_on":"2026-10-01",
+                "valid_until":"2026-10-31",
+                "quote_document_sha256":("0123456789abcdef"*4 if i%2==0
+                                         else "fedcba9876543210"*4),
+            }
+        return p
+
+    def test_strict_quote_comparability_preserves_math_and_logs_limits(self):
+        p=self.strict_quote_fixture()
+        out=audit.evaluate(p)
+        self.assertEqual(out["declared_spec_comparison_mode"],
+            "buyer_supplied_metadata_not_independently_authenticated")
+        self.assertEqual(out["buyer_required_product_spec_ref"],"FERT-NPK-20-20-20")
+        self.assertEqual(out["as_of_date_operator_supplied"],"2026-10-15")
+        self.assertEqual(out["scenarios"]["base"][
+            "lowest_cost_eligible_supplier_under_inputs"],"Synthetic Provider North")
+        row=offers(out)["Synthetic Provider North"]
+        self.assertTrue(row["buyer_declared_spec_and_quote_date_gate_checked"])
+        self.assertFalse(row["quote_metadata_independently_authenticated"])
+        self.assertFalse(out["market_demand_verified"])
+        self.assertFalse(out["commercial_release_allowed"])
+
+    def test_cheapest_different_fertilizer_is_not_eligible(self):
+        p=self.strict_quote_fixture()
+        p["offers"][2]["lead_days"]=1
+        p["offers"][2]["quote_controls"]["product_spec_id"]="FERT-NPK-10-10-10"
+        out=audit.evaluate(p)
+        row=offers(out)["Synthetic Provider Late"]
+        self.assertIn("PRODUCT_SPECIFICATION_MISMATCH",row["reasons"])
+        self.assertFalse(row["eligible_for_cost_comparison"])
+        self.assertNotEqual(out["scenarios"]["base"][
+            "lowest_cost_eligible_supplier_under_inputs"],"Synthetic Provider Late")
+
+    def test_cheapest_wrong_delivery_basis_is_rejected(self):
+        p=self.strict_quote_fixture()
+        p["offers"][2]["lead_days"]=1
+        p["offers"][2]["quote_controls"]["delivery_basis"]="buyer_collection"
+        row=offers(audit.evaluate(p))["Synthetic Provider Late"]
+        self.assertIn("DELIVERY_BASIS_MISMATCH",row["reasons"])
+        self.assertFalse(row["eligible_for_cost_comparison"])
+
+    def test_quote_expired_before_buyer_as_of_day_is_rejected(self):
+        p=self.strict_quote_fixture()
+        p["offers"][0]["quote_controls"]["valid_until"]="2026-10-14"
+        row=offers(audit.evaluate(p))["Synthetic Provider North"]
+        self.assertIn("QUOTE_EXPIRED_AS_OF_DATE",row["reasons"])
+
+    def test_quotation_issued_after_as_of_day_is_rejected(self):
+        p=self.strict_quote_fixture()
+        p["offers"][0]["quote_controls"].update(
+            quoted_on="2026-10-16",valid_until="2026-10-31")
+        row=offers(audit.evaluate(p))["Synthetic Provider North"]
+        self.assertIn("QUOTE_ISSUED_AFTER_AS_OF_DATE",row["reasons"])
+
+    def test_same_day_issuance_and_expiry_is_valid(self):
+        p=self.strict_quote_fixture()
+        p["offers"][0]["quote_controls"].update(
+            quoted_on="2026-10-15",valid_until="2026-10-15")
+        row=offers(audit.evaluate(p))["Synthetic Provider North"]
+        self.assertTrue(row["eligible_for_cost_comparison"])
+
+    def test_missing_supplier_metadata_never_passes_strict_mode(self):
+        p=self.strict_quote_fixture()
+        del p["offers"][0]["quote_controls"]
+        row=offers(audit.evaluate(p))["Synthetic Provider North"]
+        self.assertIn("QUOTE_COMPARABILITY_METADATA_MISSING",row["reasons"])
+        self.assertFalse(row["eligible_for_cost_comparison"])
+
+    def test_invalid_customer_date_and_spec_schema_fail_closed(self):
+        for field,value in [
+            ("required_product_spec_id","<script>"),
+            ("required_product_spec_id",""),
+            ("as_of_date","2026-02-30"),
+            ("as_of_date","2026-2-3"),
+            ("delivery_basis","somewhere"),
+        ]:
+            with self.subTest(field=field,value=value):
+                p=self.strict_quote_fixture()
+                p["comparison_controls"][field]=value
+                with self.assertRaises(audit.AuditInputError):
+                    audit.evaluate(p)
+
+    def test_invalid_offer_metadata_fails_closed(self):
+        variants=[
+            ("quote_document_sha256","0"*64),
+            ("quote_document_sha256","abc"),
+            ("quote_document_sha256","G"*64),
+            ("product_spec_id","<b>danger</b>"),
+            ("delivery_basis","not a delivery term"),
+            ("quoted_on","2026-02-30"),
+            ("valid_until","2026-01-99"),
+        ]
+        for field,value in variants:
+            with self.subTest(field=field,value=value):
+                p=self.strict_quote_fixture()
+                p["offers"][0]["quote_controls"][field]=value
+                with self.assertRaises(audit.AuditInputError):
+                    audit.evaluate(p)
+
+    def test_issued_after_expiry_is_malformed_quote(self):
+        p=self.strict_quote_fixture()
+        p["offers"][0]["quote_controls"].update(
+            quoted_on="2026-10-21", valid_until="2026-10-20")
+        with self.assertRaisesRegex(audit.AuditInputError,"issue date after expiry"):
+            audit.evaluate(p)
+
+    def test_metadata_without_requested_spec_control_refused(self):
+        p=self.strict_quote_fixture()
+        del p["comparison_controls"]
+        with self.assertRaisesRegex(audit.AuditInputError,"top-level comparison_controls"):
+            audit.evaluate(p)
+
+    def test_legacy_quote_cannot_claim_spec_validation(self):
+        result=audit.evaluate(sample())
+        self.assertEqual(result["declared_spec_comparison_mode"],
+                         "legacy_spec_comparability_unassessed")
+        self.assertIn("LEGACY_MODE_DOES_NOT_CHECK_SUPPLIER_PRODUCT_SPEC_EQUIVALENCE",
+                      result["warnings"])
+        self.assertFalse(offers(result)["Synthetic Provider North"][
+            "buyer_declared_spec_and_quote_date_gate_checked"])
+
+    def test_mixed_quote_pack_with_declared_spec_still_bills_whole_packs(self):
+        p=self.strict_quote_fixture()
+        p["offers"][0].update(
+            pricing_basis="per_pack",pack_size_base_units="20",unit_price="90")
+        result=audit.evaluate(p)
+        row=offers(result)["Synthetic Provider North"]
+        self.assertEqual(row["whole_packs_ordered"],"6")
+        self.assertEqual(row["gross_order_units"],"120.00")
+        self.assertEqual(row["total_landed_cost"],"558.00")
+        self.assertTrue(row["eligible_for_cost_comparison"])
+        self.assertFalse(row["quote_metadata_independently_authenticated"])
+
+    def test_all_expired_means_no_lowest_cost_supplier(self):
+        p=self.strict_quote_fixture()
+        for offer in p["offers"]:
+            offer["quote_controls"]["valid_until"]="2026-10-14"
+        result=audit.evaluate(p)
+        self.assertTrue(result["scenarios"]["base"]["all_offers_ineligible"])
+        self.assertIsNone(result["scenarios"]["base"][
+            "lowest_cost_eligible_supplier_under_inputs"])
+        self.assertIsNone(result["scenarios"]["base"][
+            "arithmetic_cost_gap_to_second_eligible_not_realized_savings"])
+
+    def test_buyer_supplied_digest_does_not_establish_independent_provenance(self):
+        p=self.strict_quote_fixture()
+        out=audit.evaluate(p)
+        row=offers(out)["Synthetic Provider North"]
+        self.assertEqual(row["quote_document_digest_operator_supplied"],
+                         "0123456789abcdef"*4)
+        self.assertFalse(row["verified_quote"])
+        self.assertFalse(out["sources_independently_verified"])
+        self.assertIsNone(out["quality_score"])
+
     def test_report_is_deterministic_and_market_flags_remain_false(self):
         p=sample();p2=deepcopy(p)
         a=audit.evaluate(p);b=audit.evaluate(p2)
