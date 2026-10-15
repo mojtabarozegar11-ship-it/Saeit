@@ -1,0 +1,80 @@
+name: ComfyUI VPS Private Readiness Snapshot
+on:
+  push:
+    branches: [audit/comfyui-vps-private-readiness-20261015]
+    paths: [.github/workflows/comfyui-vps-private-readiness.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: comfyui-vps-private-readiness
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Inspect existing ComfyUI without starting any service
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -Eeuo pipefail
+          umask 077
+          d="$RUNNER_TEMP/saeit-comfy-readiness-ssh"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          test -n "$VPS_KEY" || { echo "SSH_SECRET_MISSING"; exit 1; }
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          expected='SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "$expected" || { echo "SSH_HOST_KEY_MISMATCH"; exit 1; }
+          ssh -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 \
+            githubops@178.239.147.150 'bash -se' <<'REMOTE'
+          set -Eeuo pipefail
+          [[ "$(id -un)" == githubops ]] || exit 2
+          echo "READINESS_SSH_CONNECTED"
+          root="$HOME/comfyui-isolated"
+          if [[ -f "$root/source-v0.40.0/main.py" && -x "$root/env-cpu/bin/python" ]]; then
+            echo "READINESS_COMFY_RUNTIME_PRESENT"
+          else
+            echo "READINESS_COMFY_RUNTIME_MISSING"
+          fi
+          if [[ -f "$root/source-v0.40.0/custom_nodes/saeit_safe_cpu/__init__.py" ]]; then
+            echo "READINESS_SAFE_CPU_NODE_PRESENT"
+          else
+            echo "READINESS_SAFE_CPU_NODE_NOT_CONFIRMED"
+          fi
+          if ss -ltn '( sport = :18188 )' | grep -q 'LISTEN'; then
+            echo "READINESS_LOCAL_COMFY_PORT_LISTENING"
+          else
+            echo "READINESS_LOCAL_COMFY_PORT_IDLE"
+          fi
+          if pgrep -f '[f]actory-runtime' >/dev/null 2>&1; then
+            echo "READINESS_FACTORY_PROCESS_OBSERVED"
+          else
+            echo "READINESS_FACTORY_PROCESS_NOT_OBSERVED"
+          fi
+          tail="$HOME/.local/opt/comfyui-tailnet/binaries-1.104.1/tailscale"
+          socket="$HOME/.local/share/comfyui-tailnet/tailscaled.sock"
+          if [[ -x "$tail" ]]; then
+            echo "READINESS_TAILNET_BINARY_PRESENT"
+            if [[ -S "$socket" ]]; then
+              if timeout 6 "$tail" --socket="$socket" status --json 2>/dev/null | python3 -c 'import json,sys; s=json.load(sys.stdin); sys.exit(0 if s.get("BackendState") == "Running" else 1)' 2>/dev/null; then
+                echo "READINESS_TAILNET_AUTHENTICATED"
+              else
+                echo "READINESS_TAILNET_SOCKET_PRESENT_NOT_AUTHENTICATED"
+              fi
+            else
+              echo "READINESS_TAILNET_DAEMON_IDLE"
+            fi
+          else
+            echo "READINESS_TAILNET_BINARY_ABSENT"
+          fi
+          free -m | awk '/^Mem:/{print "READINESS_RAM_AVAILABLE_MB="$7}'
+          df -Pm "$HOME" | awk 'NR==2{print "READINESS_DISK_AVAILABLE_MB="$4}'
+          echo "READINESS_INSPECTION_FINISHED_NO_SERVICE_MUTATION"
+          REMOTE
