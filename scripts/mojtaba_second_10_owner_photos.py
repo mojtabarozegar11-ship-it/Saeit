@@ -189,7 +189,7 @@ def main():
             for i in range(1,11):
                 p=photo_dir/("photo-"+f"{i:02d}"+".jpg")
                 with p.open("xb") as handle:
-                    handle.write(z.read("owner-new-gallery/"+p.name))
+                    handle.write(z.read("owner-new-gallery/photo-"+f"{i:02d}"+".png"))
                 p.chmod(0o644)
         print("SECOND_GALLERY_STATIC_STAGED=10",flush=True)
         return
