@@ -6,6 +6,8 @@ it is NOT evidence of AI video generation or visual quality.
 import hashlib
 import json
 import os
+import shutil
+import subprocess
 from pathlib import Path
 import tempfile
 import time
@@ -106,14 +108,24 @@ class PICMPrivateMovieBridgeTests(TestCase):
         photo.close()
 
     def _synthetic_mp4(self):
-        # Pure transport fixture, NOT a valid AI-generated film.
-        return b"\x00\x00\x00\x18ftypisom" + b"x" * 20 + b"moov" + b"y" * 4200
+        # Real playable FFmpeg video fixture, NOT AI-generated model footage.
+        # When FFmpeg is absent, the isolated CI still runs protocol-only tests.
+        if not shutil.which("ffmpeg"):
+            self.skipTest("FFmpeg unavailable for playable MP4 fixture")
+        destination = self.root / "fixture-video.mp4"
+        subprocess.run([
+            "ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error",
+            "-f", "lavfi", "-i", "testsrc2=size=160x90:rate=10",
+            "-t", "5.05", "-c:v", "mpeg4", "-q:v", "15",
+            "-movflags", "+faststart", "-y", str(destination),
+        ], check=True, timeout=40)
+        return destination.read_bytes()
 
     def _upload(self, ident, lease, content, *, reported_sha=None):
         digest = reported_sha or hashlib.sha256(content).hexdigest()
         offset = 0
         while offset < len(content):
-            chunk = content[offset:offset + 1024]
+            chunk = content[offset:offset + 64 * 1024]
             res = self._worker(b.video_worker_chunk,
                 "/picm/video/worker/chunk/" + ident + "/", ident,
                 method="post", lease=lease, data=chunk,
@@ -160,6 +172,15 @@ class PICMPrivateMovieBridgeTests(TestCase):
         self.assertIn("private", response["Cache-Control"])
         self.assertIn("no-store", response["Cache-Control"])
         response.close()
+
+    def test_fake_mp4_text_with_ftyp_and_moov_words_cannot_be_published(self):
+        ident = self._stage()
+        lease = self._claim()["lease"]
+        bogus = b"\\x00\\x00\\x00\\x18ftypisom" + b"x" * 20 + b"moov" + b"y" * 4200
+        digest = self._upload(ident, lease, bogus)
+        self.assertEqual(
+            self._finish(ident, lease, len(bogus), digest).status_code, 422)
+        self.assertFalse((self.root / (ident + ".mp4")).exists())
 
     def test_duplicate_chunk_bad_offset_and_false_sha_rejected(self):
         ident = self._stage()
