@@ -35,8 +35,10 @@ function sync(){
   prompt.required=false;
   promptLabel.textContent="یادداشت اختیاری؛ در ویرایش دستی تفسیر نمی‌شود";
  }else if(videoMode()){
-  prompt.required=true;
-  promptLabel.textContent="متن روی ویدیو";
+  // Photo alone is sufficient; overlay caption is always optional.
+  prompt.required=false;
+  prompt.minLength=0;
+  promptLabel.textContent="متن اختیاری روی ویدیو";
  }
  if(videoMode()){
   notice.textContent="ویدیوی متحرک رایگان: عکس شما فقط در همین مرورگر با حرکت سینمایی و متن دلخواه ضبط می‌شود. این روش، ساخت صحنه‌های تازه با مدل مولد هوش مصنوعی نیست و صدا تولید نمی‌کند.";
