@@ -11,6 +11,7 @@ on:
       - tests/test_termux_error_categories.py
       - tests/test_termux_pending_git.py
       - tests/test_termux_autostart.py
+      - tests/test_termux_comfyui_phone.py
       - .github/workflows/termux-bridge-isolated-tests.yml
   workflow_dispatch:
 permissions:
@@ -33,7 +34,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python -m compileall -q termux_bridge/worker.py termux_bridge/autostart.py
+          python -m compileall -q termux_bridge/worker.py termux_bridge/autostart.py termux_bridge/comfyui_phone.py
           python -m unittest discover -s tests -p 'test_termux*.py' -v
           echo TERMUX_BRIDGE_LOCAL_TRANSPORT_TESTS_OK
           echo NO_REAL_ANDROID_OR_VPS_ACTION_PERFORMED
