@@ -150,20 +150,38 @@ jobs:
           import_status=$?
           echo "PASSENGER_WSGI_IMPORT_EXIT=$import_status"
           tail -n 35 "$diag" | sed -E 's/(SECRET_KEY|PASSWORD|TOKEN|API_KEY|PRIVATE_KEY)([^=]*=)[^[:space:]]+/\1\2[redacted]/Ig'
-          printf 'RECENT_APP_ERROR_LOG_FILES_BEGIN\n'
-          find /home/zomorod2/logs /home/zomorod2/Saeit /home/zomorod2/public_html -maxdepth 3 -type f \\
-            \( -iname '*error*log*' -o -iname '*passenger*log*' -o -iname '*stderr*' \) \\
-            -printf '%T@ %s %p\\n' 2>/dev/null | sort -nr | head -n 25
-          printf 'RECENT_APP_ERROR_LOG_FILES_END\n'
-          while IFS= read -r logfile; do
-            test -f "$logfile" || continue
-            echo "APP_ERROR_LOG_BEGIN=$logfile"
-            tail -n 100 "$logfile" | grep -Ei 'error|exception|traceback|passenger|spawn|killed|limit|denied|failed' | tail -n 35 | \\
-              sed -E 's/(SECRET_KEY|PASSWORD|TOKEN|API_KEY|PRIVATE_KEY)([^=]*=)[^[:space:]]+/\\1\\2[redacted]/Ig; s/(Authorization: ).*/\\1[redacted]/Ig'
-            echo "APP_ERROR_LOG_END=$logfile"
-          done < <(find /home/zomorod2/logs /home/zomorod2/Saeit /home/zomorod2/public_html -maxdepth 3 -type f \\
-            \( -iname '*error*log*' -o -iname '*passenger*log*' -o -iname '*stderr*' \) 2>/dev/null | head -n 8)
-          set -e
+          python3 - <<'PY'
+          from pathlib import Path
+          import os,re
+          roots=[Path("/home/zomorod2/logs"),Path("/home/zomorod2/Saeit"),Path("/home/zomorod2/public_html")]
+          found=[]
+          for root in roots:
+              if not root.exists(): continue
+              for base,dirs,files in os.walk(root):
+                  depth=len(Path(base).relative_to(root).parts)
+                  dirs[:]=[d for d in dirs if d not in {".git","venv","node_modules","staticfiles","media"}]
+                  if depth>=3: dirs[:]=[]
+                  for name in files:
+                      if any(k in name.lower() for k in ("error_log","error.log","passenger.log","stderr")):
+                          p=Path(base)/name
+                          try: found.append((p.stat().st_mtime,p))
+                          except OSError: pass
+          found=sorted(found,reverse=True)[:8]
+          print("RECENT_APP_ERROR_LOG_FILES_BEGIN")
+          for _,path in found:
+              print("APP_ERROR_LOG_BEGIN="+str(path))
+              try:
+                  lines=path.read_text(errors="replace").splitlines()[-180:]
+                  selected=[x for x in lines if re.search(r"error|exception|traceback|passenger|spawn|killed|memory|limit|denied|failed",x,re.I)]
+                  for line in selected[-30:]:
+                      line=re.sub(r"(?i)(secret_key|password|token|api[_-]?key|private[_-]?key)(\\s*[:=]\\s*)[^\\s,;]+",r"\\1\\2[redacted]",line)
+                      line=re.sub(r"(?i)(authorization:\\s*)[^\\r\\n]+",r"\\1[redacted]",line)
+                      print(line[:600])
+              except Exception as exc:
+                  print("LOG_READ_ERROR="+type(exc).__name__)
+              print("APP_ERROR_LOG_END="+str(path))
+          print("RECENT_APP_ERROR_LOG_FILES_END")
+          PY          set -e
           REMOTE
       - name: Check live site routes
         shell: bash
