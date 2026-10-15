@@ -69,7 +69,7 @@ def approved_for_checkout(request, product):
     return proofs.get("ETH") is True and proofs.get("TRX") is True
 
 
-@login_required(login_url="/admin/login/")
+@login_required  # Resolve from the MojPlayWin customer LOGIN_URL, never staff admin.
 @never_cache
 @require_GET
 def product_checkout_page(request, product_id):
