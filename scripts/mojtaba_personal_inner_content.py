@@ -128,7 +128,7 @@ def posts()->str:
           "The MojPlayWin direction brings these disciplines together. It is a roadmap for research-led digital work, not a claim that every proposed game or course has already shipped. Responsible communication keeps the difference visible while the work develops."
        ],"RESEARCH · GAME DESIGN · EDUCATION")
     )
-    return wrapper("Ideas explained, not merely announced.","Three substantial editorial research notes on agricultural economics, responsible product development and learning through interactive systems. These are educational frameworks rather than peer-reviewed empirical findings.",body,"RESEARCH NOTES & JOURNAL")
+    return wrapper("Ideas explained, not merely announced.","Three substantial editorial research notes on agricultural economics, responsible product development and learning through interactive systems. These are educational frameworks rather than peer-reviewed empirical findings.","".join(body),"RESEARCH NOTES & JOURNAL")
 def gallery()->str:
     titles=["MojPlayWin founder portrait","Zomorod Melal — desk and digital work","Business presentation","Agricultural innovation discussion","Professional partnership","Executive portrait","Zomorod Melal leadership portrait","MojPlayWin close-up portrait","MojPlayWin formal portrait","Agribusiness leadership portrait"]
     body='<div class="mpw-gallery">'+''.join('<figure><a href="'+PHOTO_STATIC.replace("%02d",f"{i:02d}")+'" target="_blank" rel="noopener" aria-label="View image '+str(i)+'">'+img(i,t)+'</a><figcaption><strong>'+f"{i:02}"+' / '+t+'</strong>Owner-supplied branded editorial image</figcaption></figure>' for i,t in enumerate(titles,1))+'</div>'
