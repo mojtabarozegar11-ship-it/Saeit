@@ -1,0 +1,253 @@
+name: Deploy Studio Raham to MojPlayWin
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/mojplaywin-studio-raha-deploy.yml"
+      - "scripts/deploy_mojplaywin_studio_raha.py"
+      - "scripts/studio_raha_patch.py"
+      - "templates/studio_raha/index.html"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/mojplaywin-studio-raha-deploy.yml"
+      - "scripts/deploy_mojplaywin_studio_raha.py"
+      - "scripts/studio_raha_patch.py"
+      - "templates/studio_raha/index.html"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mojplaywin-studio-raha-production
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: python -m pip install --upgrade pip && pip install -r requirements.txt
+      - name: Django deployment checks
+        env:
+          SECRET_KEY: ci-secret-key
+          DEBUG: "False"
+          ALLOWED_HOSTS: localhost,127.0.0.1
+        run: python manage.py check --deploy
+      - name: Build static manifest
+        env:
+          SECRET_KEY: ci-secret-key
+          DEBUG: "False"
+          ALLOWED_HOSTS: localhost,127.0.0.1
+        run: python manage.py collectstatic --noinput
+      - name: Run tests
+        env:
+          SECRET_KEY: ci-secret-key
+          DEBUG: "False"
+          ALLOWED_HOSTS: localhost,127.0.0.1
+        run: pytest -q
+      - name: Apply migrations to CI database
+        env:
+          SECRET_KEY: ci-secret-key
+          DEBUG: "False"
+          ALLOWED_HOSTS: localhost,127.0.0.1
+        run: python manage.py migrate --noinput
+      - name: Verify production readiness
+        env:
+          SECRET_KEY: ci-secret-key
+          DEBUG: "False"
+          ALLOWED_HOSTS: localhost,127.0.0.1
+        run: python manage.py production_gate
+      - name: Verify Studio Raham payload
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import ast, re
+
+          html = Path("templates/studio_raha/index.html").read_text(encoding="utf-8")
+          assert "<title>Studio Raham" in html
+          assert 'href="https://mojplaywin.com/studio.Roham/"' in html
+          assert 'name="studio-raha-catalog" content="20 games, 20 digital products"' in html
+          for name in ("games", "products"):
+              match = re.search(rf"const {name}=\[(.*?)\n\];", html, re.S)
+              assert match and len(re.findall(r"\{name:", match.group(1))) == 20, name
+          for path in ("scripts/studio_raha_patch.py", "scripts/deploy_mojplaywin_studio_raha.py"):
+              ast.parse(Path(path).read_text(encoding="utf-8"))
+          print("English page metadata and all 20 games and 20 products verified.")
+          PY
+
+  deploy:
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure pinned SSH relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          HOST_HOST="zohal.pws-dns.net"
+          HOST_USER="zomorod2"
+          HOST_PORT=1396
+          [[ -n "$VPS_KEY" && -n "$HOST_KEY" ]] || { echo "Missing SSH credentials"; exit 1; }
+          VPS_KEY="${VPS_KEY//\\n/$'\n'}"
+          HOST_KEY="${HOST_KEY//\\n/$'\n'}"
+          WORK="$RUNNER_TEMP/mojplaywin-ssh"
+          install -d -m 700 "$WORK"
+          printf '%s\n' "$VPS_KEY" > "$WORK/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$WORK/host.key"
+          chmod 600 "$WORK/"*.key
+          ssh-keygen -y -P "" -f "$WORK/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$WORK/host.key" >/dev/null
+          VPS_SCAN="$(ssh-keyscan -T 10 -t rsa 178.239.147.150 2>/dev/null)"
+          [[ -n "$VPS_SCAN" ]]
+          printf '%s\n' "$VPS_SCAN" > "$WORK/vps.known"
+          VPS_FP="$(ssh-keygen -lf "$WORK/vps.known" -E sha256 | awk '{print $2}' | sort -u)"
+          [[ "$VPS_FP" == "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs" ]] || { echo "VPS host key pin mismatch"; exit 1; }
+          cat > "$WORK/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $WORK/vps.key
+            UserKnownHostsFile $WORK/vps.known
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ForwardAgent no
+          EOF
+          chmod 600 "$WORK/config"
+          HOST_SCAN="$(timeout 30s ssh -F "$WORK/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          [[ -n "$HOST_SCAN" ]]
+          printf '%s\n' "$HOST_SCAN" > "$WORK/host.known"
+          HOST_FP="$(ssh-keygen -lf "$WORK/host.known" -E sha256 | awk '{print $2}' | sort -u)"
+          [[ "$HOST_FP" == "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04" ]] || { echo "cPanel host key pin mismatch"; exit 1; }
+          cat >> "$WORK/config" <<EOF
+          Host saeit-host
+            HostName $HOST_HOST
+            User $HOST_USER
+            Port $HOST_PORT
+            IdentityFile $WORK/host.key
+            UserKnownHostsFile $WORK/host.known
+            ProxyJump saeit-vps
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ForwardAgent no
+          EOF
+          chmod 600 "$WORK/config"
+          echo "Pinned SSH relay is ready."
+
+      - name: Check existing MojPlayWin pages and create staging
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$(curl -sS -o /dev/null -w '%{http_code}' https://mojplaywin.com/)" == "200" ]]
+          [[ "$(curl -sS -o /dev/null -w '%{http_code}' https://mojplaywin.com/admin/login/)" == "200" ]]
+          WORK="$RUNNER_TEMP/mojplaywin-ssh"
+          timeout 45s ssh -F "$WORK/config" saeit-host \
+            'test -d /home/zomorod2/mojplaywin.com && test ! -L /home/zomorod2/mojplaywin.com && test -f /home/zomorod2/mojplaywin.com/passenger_wsgi.py && test -f /home/zomorod2/mojplaywin.com/.htaccess && test -d /home/zomorod2/Saeit-staging && test ! -L /home/zomorod2/Saeit-staging && grep -Fq "Saeit-staging" /home/zomorod2/mojplaywin.com/passenger_wsgi.py && test -f /home/zomorod2/Saeit-staging/config/urls.py && test -f /home/zomorod2/Saeit-staging/core/views.py'
+          timeout 20s ssh -F "$WORK/config" saeit-host "install -d -m 700 /home/zomorod2/.mojplaywin-studio-raha-$GITHUB_RUN_ID"
+
+      - name: Package only Studio Raham files
+        run: tar -cf "$RUNNER_TEMP/studio-raha.tar" scripts/deploy_mojplaywin_studio_raha.py scripts/studio_raha_patch.py templates/studio_raha/index.html
+
+      - name: Upload Studio Raham package
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORK="$RUNNER_TEMP/mojplaywin-ssh"
+          scp -F "$WORK/config" "$RUNNER_TEMP/studio-raha.tar" "saeit-host:/home/zomorod2/.mojplaywin-studio-raha-$GITHUB_RUN_ID/bundle.tar"
+          timeout 30s ssh -F "$WORK/config" saeit-host \
+            "tar -xf /home/zomorod2/.mojplaywin-studio-raha-$GITHUB_RUN_ID/bundle.tar -C /home/zomorod2/.mojplaywin-studio-raha-$GITHUB_RUN_ID && rm -f /home/zomorod2/.mojplaywin-studio-raha-$GITHUB_RUN_ID/bundle.tar"
+
+      - name: Install Studio Raham route and page
+        id: deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORK="$RUNNER_TEMP/mojplaywin-ssh"
+          timeout 60s ssh -F "$WORK/config" saeit-host \
+            "python3 /home/zomorod2/.mojplaywin-studio-raha-$GITHUB_RUN_ID/scripts/deploy_mojplaywin_studio_raha.py deploy $GITHUB_RUN_ID $GITHUB_SHA"
+
+      - name: Verify Django runtime route
+        id: route_check
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORK="$RUNNER_TEMP/mojplaywin-ssh"
+          timeout 90s ssh -F "$WORK/config" saeit-host 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          APP=/home/zomorod2/Saeit-staging
+          candidates=("$APP/.venv/bin/python" "$APP/venv/bin/python" /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python /home/zomorod2/virtualenv/Saeit-staging/3.10/bin/python /home/zomorod2/virtualenv/Saeit/3.11/bin/python /home/zomorod2/virtualenv/Saeit/3.10/bin/python /home/zomorod2/virtualenv/mojplaywin.com/3.11/bin/python /home/zomorod2/virtualenv/mojplaywin.com/3.10/bin/python)
+          for python in "${candidates[@]}"; do
+            if [[ -x "$python" ]] && "$python" -c 'import django' >/dev/null 2>&1; then
+              cd "$APP"
+              DJANGO_SETTINGS_MODULE=config.settings "$python" -c 'import django; django.setup(); from django.urls import resolve; match=resolve("/studio.Roham/"); assert match.func.__name__ == "studio_raha"; print("STUDIO_RAHAM_RUNTIME_ROUTE=" + match.func.__name__)'
+              exit 0
+            fi
+          done
+          echo "No Passenger virtualenv with Django found in the verified app paths."
+          exit 1
+          REMOTE
+
+      - name: Verify live Studio Raham page and existing pages
+        id: smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          status="000"
+          for attempt in {1..10}; do
+            status="$(curl -sS -o "$RUNNER_TEMP/studio-raha-live.html" -w '%{http_code}' https://mojplaywin.com/studio.Roham/ || true)"
+            [[ "$status" == "200" ]] && break
+            echo "Studio Raham page not ready yet (HTTP $status, attempt $attempt)."
+            sleep 3
+          done
+          [[ "$status" == "200" ]]
+          [[ "$(curl -sS -o /dev/null -w '%{http_code}' https://mojplaywin.com/)" == "200" ]]
+          [[ "$(curl -sS -o /dev/null -w '%{http_code}' https://mojplaywin.com/admin/login/)" == "200" ]]
+          python - "$RUNNER_TEMP/studio-raha-live.html" <<'PY'
+          from pathlib import Path
+          import re, sys
+          html = Path(sys.argv[1]).read_text(encoding="utf-8")
+          assert "<title>Studio Raham" in html
+          assert 'name="studio-raha-catalog" content="20 games, 20 digital products"' in html
+          for name in ("games", "products"):
+              match = re.search(rf"const {name}=\[(.*?)\n\];", html, re.S)
+              assert match and len(re.findall(r"\{name:", match.group(1))) == 20, name
+          print("Studio Raham is live with 20 games and 20 products; home and admin remain healthy.")
+          PY
+
+      - name: Roll back failed live smoke test
+        if: failure() && steps.deploy.outcome == 'success' && (steps.route_check.outcome == 'failure' || steps.smoke.outcome == 'failure')
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORK="$RUNNER_TEMP/mojplaywin-ssh"
+          timeout 60s ssh -F "$WORK/config" saeit-host \
+            "python3 /home/zomorod2/.mojplaywin-studio-raha-$GITHUB_RUN_ID/scripts/deploy_mojplaywin_studio_raha.py rollback $GITHUB_RUN_ID"
+
+      - name: Remove remote staging files
+        if: always()
+        shell: bash
+        run: |
+          if [[ -f "$RUNNER_TEMP/mojplaywin-ssh/config" ]]; then
+            ssh -F "$RUNNER_TEMP/mojplaywin-ssh/config" -o ConnectTimeout=10 saeit-host \
+              "rm -rf /home/zomorod2/.mojplaywin-studio-raha-$GITHUB_RUN_ID" || true
+          fi
+
+      - name: Remove temporary SSH credentials
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/mojplaywin-ssh" "$RUNNER_TEMP/studio-raha.tar" "$RUNNER_TEMP/studio-raha-live.html"
