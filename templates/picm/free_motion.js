@@ -23,7 +23,9 @@ const videoMode=()=>mode.value==="image_video";
 const imageMode=()=>mode.value==="image_edit";
 function format(){
  if(!compatible())throw Error("مرورگر شما امکان ضبط ویدیو از عکس را ندارد.");
- const mime=["video/webm;codecs=vp8","video/webm","video/mp4"].find(v=>MediaRecorder.isTypeSupported(v));
+ // MP4/H.264 first: Android Gallery and most mobile video players prefer MP4.
+ // WebM remains a real video fallback on browsers without MP4 recording.
+ const mime=["video/mp4;codecs=avc1.42E01E","video/mp4","video/webm;codecs=vp8","video/webm"].find(v=>MediaRecorder.isTypeSupported(v));
  if(!mime)throw Error("مرورگر از فرمت ضبط پشتیبانی نمی‌کند؛ Chrome یا Samsung Internet را امتحان کنید.");
  return mime;
 }
