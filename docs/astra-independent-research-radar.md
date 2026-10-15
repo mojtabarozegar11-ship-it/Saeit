@@ -1,12 +1,12 @@
 # Astra V2 — independent research radar (experimental, isolated)
 
 Purpose: identify fresh **research questions** from independent reading of
-two publicly available USDA NASS RSS feeds. No human prompt, buyer order,
-paid API, or pre-written candidate list is required for the feed scan.
+two publicly available USDA NASS RSS feeds and the official NASS newsroom. No human prompt, buyer order,
+paid API, or pre-written candidate list is required for the source scan.
 
 This is **not** a commercial product generation, validation or deployment
 feature. The source agencies publish statistics/news, not proof of buyers
-willing to pay for software. Both feeds come from the **same publisher**;
+willing to pay for software. All three fixed sources come from the **same publisher**;
 independent market corroboration remains missing. The output is a private
 research-only shortlist and all build/publish/payment flags are false.
 
@@ -29,10 +29,10 @@ python3 scripts/astra_independent_research_radar.py \
 
 Note: a later run needs a **different output filename**, because overwriting
 private review history is forbidden. The script only requests exact HTTPS
-endpoints for USDA NASS News and Today's Reports, with fixed timeout, strict
+endpoints for USDA NASS News, Today's Reports and the official NASS newsroom, with fixed timeout, strict
 response size, no redirects, no proxies, and no external feed URLs.
 
-To test an offline feed fixture (no network):
+To test an offline RSS or first-party HTML fixture (no network):
 
 ```bash
 python3 scripts/astra_independent_research_radar.py \
@@ -58,7 +58,7 @@ python3 scripts/astra_independent_research_radar.py \
 
 The GitHub Actions workflow is a no-secret, no-network offline test only.
 It is deliberately NOT attached to production or the private VPS clock.
-The fixed public feeds may occasionally be unavailable or change formats:
+The fixed public sources may be stale, unavailable, or change formats:
 failures are reported instead of fabricating research.
 
 Future rollout requires a **separate authorized isolated VPS/runner deployment**,
