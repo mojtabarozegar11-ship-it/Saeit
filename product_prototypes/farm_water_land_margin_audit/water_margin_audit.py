@@ -158,10 +158,54 @@ def solve(crops, land, water):
             "vertices_tested": tested}
 
 
+def water_sensitivity_frontier(crops, land, water):
+    """Exact optimal gross-margin *secants* at five fixed water budgets.
+
+    Each adjacent increment answers the hypothetical average improvement from
+    that additional water allowance for the SAME crop inputs and linear model.
+    It is neither an instantaneous LP dual/shadow price nor a market water
+    price, actual water demand, agronomic yield response or permit authority.
+    The 0-water case is intentionally retained to show the model boundary.
+    """
+    fractions = (D("0"), D("0.25"), D("0.50"), D("0.75"), D("1.00"))
+    rows = []
+    previous_budget = None
+    previous_margin = None
+    for fraction in fractions:
+        cap = water * fraction
+        solution = solve(crops, land, cap)
+        margin = solution["total_margin"]
+        delta_water = cap - previous_budget if previous_budget is not None else None
+        delta_margin = (margin - previous_margin
+                        if previous_margin is not None else None)
+        if delta_margin is not None and delta_margin < -EPS:
+            raise ArithmeticError("optimal gross margin decreased as water grew")
+        if delta_water is not None and delta_water > 0:
+            secant = fmt(delta_margin / delta_water, D("0.000001"))
+        else:
+            secant = None  # Undefined for zero width or first interval.
+        rows.append({
+            "water_budget_fraction": fmt(fraction, AREA),
+            "water_budget_m3": fmt(cap),
+            "water_used_m3": fmt(solution["water_used"]),
+            "optimal_gross_margin": fmt(margin),
+            "added_water_allowance_m3": (fmt(delta_water)
+                                         if delta_water is not None else None),
+            "gross_margin_gain_in_interval": (fmt(delta_margin)
+                                              if delta_margin is not None else None),
+            "average_incremental_gross_margin_per_m3": secant,
+            "market_water_price_or_dual_shadow_price": None,
+            "farm_result_verified": False,
+        })
+        previous_budget, previous_margin = cap, margin
+    return rows
+
+
 def audit(payload):
     currency, land, water, drought, crops = validate(payload)
     baseline = solve(crops, land, water)
     stressed = solve(crops, land, water * drought)
+    frontier = water_sensitivity_frontier(crops, land, water)
 
     def present(solution, water_cap):
         return {
@@ -192,6 +236,7 @@ def audit(payload):
         "NO_ROTATION_SOIL_DISEASE_WEATHER_YIELD_OR_ECOLOGICAL_CONSTRAINTS",
         "NO_HYDROLOGICAL_PERMITS_OR_WATER_RIGHTS_CHECKED",
         "GROSS_MARGIN_IS_NOT_NET_PROFIT",
+        "SENSITIVITY_INTERVAL_AVERAGE_NOT_MARKET_PRICE_OR_INSTANTANEOUS_DUAL",
         "DO_NOT_USE_AS_UNREVIEWED_IRRIGATION_OR_CROP_RECOMMENDATION",
     ]
     for c in crops:
@@ -207,6 +252,7 @@ def audit(payload):
         "baseline": present(baseline, water),
         "water_scarcity": present(stressed, water * drought),
         "drought_water_fraction": fmt(drought, AREA),
+        "water_sensitivity_frontier": frontier,
         "hypothetical_gross_margin_loss_under_water_scarcity": fmt(changes),
         "warnings": sorted(set(warnings)),
         "market_demand_verified": False,

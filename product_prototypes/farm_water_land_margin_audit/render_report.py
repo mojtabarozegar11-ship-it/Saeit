@@ -61,6 +61,36 @@ def render(doc):
                      " ha · Unused water: "+x(d["unused_water_m3"])+
                      " m³ · Candidate vertices considered: "+x(d["vertices_tested"])+
                      "</p></section>")
+    frontier = doc.get("water_sensitivity_frontier")
+    if not isinstance(frontier, list) or len(frontier) != 5:
+        raise ValueError("missing five-point water sensitivity frontier")
+    parts.append('<section class="card"><h2>Water allowance sensitivity</h2>'
+                 '<p>All points re-optimize the same user-supplied linear model. '
+                 'Interval values are <strong>average gross-margin gains per '
+                 'extra m³ of allowed water</strong>; they are NOT a market '
+                 'water price, a continuously differentiable dual value, '
+                 'real-world profitability, or permission to pump more water.'
+                 '</p><div class="scrolling"><table><thead><tr>'
+                 '<th>Water budget (fraction of baseline)</th><th>Budget (m³)</th>'
+                 '<th>Water used (m³)</th><th>Optimal gross margin</th>'
+                 '<th>Gross margin gain since prior point</th>'
+                 '<th>Average gain per added m³ (currency/m³)</th>'
+                 '</tr></thead><tbody>')
+    for row in frontier:
+        if row.get("farm_result_verified") is not False or (
+                row.get("market_water_price_or_dual_shadow_price") is not None):
+            raise ValueError("frontier metadata cannot claim verification")
+        parts.append("<tr>" + "".join("<td>" + x(value) + "</td>" for value in (
+            str(row["water_budget_fraction"]),
+            row["water_budget_m3"],
+            row["water_used_m3"],
+            row["optimal_gross_margin"],
+            row["gross_margin_gain_in_interval"]
+            if row["gross_margin_gain_in_interval"] is not None else "—",
+            row["average_incremental_gross_margin_per_m3"]
+            if row["average_incremental_gross_margin_per_m3"] is not None else "—",
+        )) + "</tr>")
+    parts.append("</tbody></table></div></section>")
     parts.append('<div class="card"><h2>Risks and missing real-world checks</h2><ul>')
     for warning in doc["warnings"]:
         parts.append("<li>"+x(warning)+"</li>")
