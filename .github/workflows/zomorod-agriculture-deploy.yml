@@ -94,7 +94,7 @@ jobs:
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/zomorod-agriculture"
-          expected="$(find public/agriculture -type f -name index.html -print0 | sort -z | xargs -0 sha256sum | sha256sum | awk '{print $1}')"
+          expected="$(cd public/agriculture && find . -type f -name index.html -print0 | sort -z | xargs -0 sha256sum | awk '{print $1}' | sha256sum | awk '{print $1}')"
           ssh -F "$d/config" saeit-cpanel bash -se -- "$expected" "$GITHUB_SHA" <<'REMOTE'
           set -euo pipefail
           expected="$1"; sha="$2"
@@ -120,7 +120,7 @@ jobs:
           expected="$1"; sha="$2"
           root=/home/zomorod2/public_html; target="$root/agriculture"
           stage="$root/.zomorod-agriculture-stage-$sha"
-          actual="$(find "$stage" -type f -name index.html -print0 | sort -z | xargs -0 sha256sum | sha256sum | awk '{print $1}')"
+          actual="$(cd "$stage" && find . -type f -name index.html -print0 | sort -z | xargs -0 sha256sum | awk '{print $1}' | sha256sum | awk '{print $1}')"
           test "$actual" = "$expected"
           test -z "$(find "$stage" -type l -print -quit)"
           created=0
