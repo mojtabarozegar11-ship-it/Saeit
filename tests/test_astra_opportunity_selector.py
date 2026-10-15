@@ -150,6 +150,31 @@ class AstraOpportunitySelectorTests(unittest.TestCase):
                 row = run_rank([candidate("farm")], s)["candidates"][0]
                 self.assertEqual(row["status"], "RESEARCH_REQUIRED")
 
+    def test_explicit_synthetic_markers_cannot_trigger_research_review(self):
+        for marker in selector.SYNTHETIC_MARKERS:
+            with self.subTest(marker=marker):
+                refs = review_evidence("farm")
+                refs[1][marker] = True
+                row = run_rank([candidate("farm")], refs)["candidates"][0]
+                self.assertEqual(row["status"], "RESEARCH_REQUIRED")
+                self.assertEqual(row["distinct_source_domains_preliminary"], 2)
+                self.assertIn("PROBLEM_OR_WILLINGNESS_SIGNAL_MISSING",
+                              row["blockers"])
+                # An ambiguous marker is not permission to count a fake row.
+                refs[1][marker] = "false"
+                self.assertEqual(run_rank([candidate("farm")], refs)[
+                    "candidates"][0]["status"], "RESEARCH_REQUIRED")
+
+    def test_mirrored_snapshot_hashes_do_not_fake_independent_domains(self):
+        refs = review_evidence("farm")
+        refs[1]["content_sha256"] = refs[0]["content_sha256"]
+        a = run_rank([candidate("farm")], refs)["candidates"][0]
+        b = run_rank([candidate("farm")], list(reversed(refs)))["candidates"][0]
+        self.assertEqual(a, b)
+        self.assertEqual(a["status"], "RESEARCH_REQUIRED")
+        self.assertEqual(a["distinct_source_domains_preliminary"], 2)
+        self.assertIn("PROBLEM_OR_WILLINGNESS_SIGNAL_MISSING", a["blockers"])
+
     def test_lawful_and_rights_are_nonnegotiable(self):
         for name in ("lawful", "rights_reviewed"):
             with self.subTest(gate=name):

@@ -139,6 +139,36 @@ class AdapterTests(unittest.TestCase):
         self.assertEqual(report["bridge_audit"]["astra_snapshots_examined"], 3)
         self.assertEqual(report["bridge_audit"]["astra_snapshots_eligible"], 2)
 
+    def test_synthetic_snapshot_stays_excluded_across_sqlite_bridge(self):
+        with sqlite3.connect(self.db) as conn:
+            conn.executescript("""
+              CREATE TABLE core_factoryqueueitem (id INTEGER PRIMARY KEY, key TEXT, kind TEXT);
+              CREATE TABLE core_discoverysnapshot (
+                id INTEGER PRIMARY KEY, hypothesis_id INTEGER, url TEXT,
+                content_hash TEXT, retrieved_at TEXT, record TEXT);
+              INSERT INTO core_factoryqueueitem VALUES (1,'demo','discovery');
+            """)
+            for i, (host, claim) in enumerate((
+                ("example.com", "problem"),
+                ("example.org", "willingness_to_pay"),
+                ("example.net", "comparison"),
+                ("example.com", "feasibility")), 1):
+                record = {"claim_type": claim}
+                if i == 2:
+                    record["illustrative_only"] = True
+                conn.execute("INSERT INTO core_discoverysnapshot VALUES (?,?,?,?,?,?)",
+                             (i, 1, "https://" + host + "/source",
+                              hash_for(str(i)), NOW, json.dumps(record)))
+        original = self.db.read_bytes()
+        output = adapter.evaluate_db(self.db, [
+            item("demo", astra_queue_key="demo")], NOW)
+        row = output["candidates"][0]
+        self.assertEqual(row["status"], "RESEARCH_REQUIRED")
+        self.assertEqual(row["distinct_source_domains_preliminary"], 2)
+        self.assertEqual(output["bridge_audit"]["astra_snapshots_eligible"], 3)
+        self.assertEqual(output["bridge_audit"]["astra_snapshots_synthetic_rejected"], 1)
+        self.assertEqual(self.db.read_bytes(), original)
+
     def test_misleading_claim_does_not_make_buildable(self):
         with sqlite3.connect(self.db) as conn:
             conn.executescript("""

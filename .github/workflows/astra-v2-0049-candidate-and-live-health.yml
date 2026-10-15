@@ -2,7 +2,7 @@ name: Astra V2 0049 Inactive Candidate and Current Factory Health
 
 on:
   push:
-    branches: [factory/astra-v2-0049-integration-20261015]
+    branches: [factory/astra-v2-0049-integration-20261015, factory/astra-v2-evidence-integrity-20261015]
     paths: [.github/workflows/astra-v2-0049-candidate-and-live-health.yml]
   workflow_dispatch:
 

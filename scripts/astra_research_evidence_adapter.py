@@ -148,6 +148,13 @@ def _references(conn, candidates):
                             row["record"], str) else row["record"]
                         if not isinstance(record, dict):
                             continue
+                        # Synthetic/illustrative markers must survive the
+                        # SQLite-to-selector boundary, not be silently dropped.
+                        if _selector._explicitly_synthetic(record):
+                            audit["astra_snapshots_synthetic_rejected"] = (
+                                audit.get("astra_snapshots_synthetic_rejected", 0) + 1
+                            )
+                            continue
                         # The ORIGINAL captured record must explicitly classify
                         # its claim; do not derive commercial intent from prose.
                         claim = record.get("claim_type")

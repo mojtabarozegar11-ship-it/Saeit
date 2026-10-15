@@ -87,6 +87,23 @@ class ResearchBacklogTests(unittest.TestCase):
         self.assertEqual(rows["candidate_two"]["preliminary_claims"],["willingness_to_pay"])
         self.assertEqual(d["invalid_or_unusable_snapshots"],1)
 
+    def test_additional_synthetic_markers_are_rejected_by_backlog(self):
+        for marker in ("synthetic", "is_synthetic", "test_fixture", "mock_data"):
+            with self.subTest(marker=marker):
+                with sqlite3.connect(self.db) as c:
+                    c.execute("DELETE FROM core_discoverysnapshot")
+                    c.execute(
+                        "INSERT INTO core_discoverysnapshot "
+                        "(hypothesis_id,url,content_hash,retrieved_at,record) "
+                        "VALUES (?,?,?,?,?)",
+                        (1, "https://example.com/test",
+                         hashlib.sha256(marker.encode()).hexdigest(),
+                         NOW.strftime("%Y-%m-%d %H:%M:%S.%f"),
+                         json.dumps({"claim_type":"problem", marker:True})))
+                result = self.report()
+                self.assertEqual(result["invalid_or_unusable_snapshots"], 1)
+                self.assertEqual(result["backlog"][0]["preliminary_unique_references"], 0)
+
     def test_bad_timestamp_and_fake_ip_links_are_excluded(self):
         self.add_ref(1,"example.com","problem",1,when=NOW-timedelta(days=121))
         self.add_ref(1,"example.net","comparison",2,when=NOW+timedelta(days=1))
