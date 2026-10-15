@@ -36,6 +36,16 @@ urlpatterns += [
 ]
 '''
 
+PHOTO_MARK = "# SAEIT_PICM_REFERENCE_UPLOAD_V1"
+PHOTO_ROUTES = '''
+# SAEIT_PICM_REFERENCE_UPLOAD_V1
+from core.picm_views import picm_reference_stage, picm_reference_status
+urlpatterns += [
+    path("picm/api/reference/", picm_reference_stage, name="picm_reference_stage"),
+    path("picm/api/reference/<str:ident>/", picm_reference_status, name="picm_reference_status"),
+]
+'''
+
 
 def verify_environment(run):
     if not re.fullmatch(r"[0-9]{1,20}", run):
@@ -99,6 +109,15 @@ def deploy(run):
         if 'path("picm/workspace/"' in urls:
             raise RuntimeError("PICM_WORKSPACE_ROUTE_COLLISION")
         urls = urls.rstrip() + "\n" + WORKSPACE_ROUTES
+    if PHOTO_MARK in urls:
+        if (urls.count(PHOTO_MARK) != 1
+                or urls.count('path("picm/api/reference/"') != 1
+                or urls.count('path("picm/api/reference/<str:ident>/"') != 1):
+            raise RuntimeError("PICM_REFERENCE_ROUTES_INTEGRITY_FAILED")
+    else:
+        if 'path("picm/api/reference/"' in urls:
+            raise RuntimeError("PICM_REFERENCE_ROUTE_COLLISION")
+        urls = urls.rstrip() + "\n" + PHOTO_ROUTES
     ast.parse(urls)
     src_auth = (stage / "core/picm_auth.py").read_bytes()
     ast.parse(src_auth.decode("utf-8"))
@@ -106,8 +125,10 @@ def deploy(run):
     src_index = (stage / "templates/picm/index.html").read_bytes()
     src_views = (stage / "core/picm_views.py").read_bytes()
     ast.parse(src_views.decode("utf-8"))
-    if b"def picm_workbench(request):" not in src_views or b"def picm_page(request):" not in src_views:
-        raise RuntimeError("PICM_WORKSPACE_VIEWS_NOT_FOUND")
+    if (b"def picm_workbench(request):" not in src_views
+            or b"def picm_page(request):" not in src_views
+            or b"def picm_reference_stage(request):" not in src_views):
+        raise RuntimeError("PICM_PHOTO_UPLOAD_VIEWS_NOT_FOUND")
     if (b'<title>PICM' not in src_index or b'id="renderform"' not in src_index
             or b'/picm/logout/' not in src_index or b'csrf_token' not in src_login):
         raise RuntimeError("PICM_LOGIN_TEMPLATES_INVALID")
