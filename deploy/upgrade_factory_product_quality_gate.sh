@@ -28,6 +28,7 @@ echo FACTORY_MAIN_LOOP_ALIVE_BEFORE_QUALITY_SYNC
 old_cron="$(crontab -l 2>/dev/null | sha256sum | cut -d' ' -f1)"
 check="$ops/quality-gate-check-$$"
 install -d -m 700 "$check/scripts" "$check/output"
+test ! -L "$check"
 install -m 600 "$target/factory_first_product_pilot.py" "$check/scripts/factory_first_product_pilot.py"
 install -m 600 "$target/factory_product_maker.py" "$check/scripts/factory_product_maker.py"
 for f in "${files[@]}"; do
@@ -60,8 +61,10 @@ PY
 # Lock both independent scheduling paths. A concurrent run must fail closed.
 exec 9>"$ops/autonomous-product-cycle.lock"
 flock -n 9 || { echo FACTORY_PRODUCT_CYCLE_BUSY_NO_MODIFICATIONS; exit 12; }
-exec 8>"$private/.production-cycle.lock"
-flock -n 8 || { echo FACTORY_PRIVATE_CYCLE_BUSY_NO_MODIFICATIONS; exit 13; }
+# Probe the secondary lock without holding it across run_cycle(), which takes
+# that same lock internally. The primary wrapper lock protects Cron scheduling.
+flock -n "$private/.production-cycle.lock" -c 'exit 0' ||
+  { echo FACTORY_PRIVATE_CYCLE_BUSY_NO_MODIFICATIONS; exit 13; }
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
 backup="$ops/backups/factory-quality-code-$stamp"
 install -d -m 700 "$backup"
