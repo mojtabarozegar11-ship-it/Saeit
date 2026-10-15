@@ -5,6 +5,8 @@ on:
     branches: [feature/astra-v2-0048-integration-canary-20261015]
     paths:
       - .github/workflows/astra-v2-promote-procurement-vps-private.yml
+      - product_prototypes/farm_procurement_audit/**
+      - tests/test_astra_farm_procurement_audit.py
   workflow_dispatch:
 
 permissions:
@@ -79,7 +81,9 @@ jobs:
           test ! -e "$previous"
           test -f "$accepted" && test ! -L "$accepted"
           test "$(cat "$accepted")" = private_only
-          test "$(crontab -l | grep -c ASTRA_V2_PRIVATE_RND_TICK || true)" = 1
+          for label in ASTRA_V2_PRIVATE_RND_TICK ASTRA_V2_PRIVATE_RESEARCH_BRIDGE ASTRA_V2_PRIVATE_RESEARCH_DOSSIERS ASTRA_V2_CURATED_PUBLIC_SOURCES; do
+            test "$(crontab -l | grep -c "$label" || true)" = 1
+          done
           test -x /usr/bin/flock
           "$py" - "$original" <<'PY'
           import sqlite3,pathlib,sys
