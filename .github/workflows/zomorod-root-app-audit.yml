@@ -142,13 +142,17 @@ jobs:
           test -f .env && echo yes || echo no
           diag="$(mktemp "$HOME/.root-app-diag.XXXXXX")"
           trap 'rm -f -- "$app_json" "$diag"' EXIT
+          python_path="$(sed -nE 's/^[[:space:]]*PassengerPython[[:space:]]+"?([^"[:space:]]+)"?.*/\\1/p' /home/zomorod2/public_html/.htaccess | head -n 1)"
+          test -n "$python_path"
+          test -x "$python_path"
+          echo "PASSENGER_PYTHON_PATH=$python_path"
           set +e
-          /home/zomorod2/virtualenv/Saeit/3.11/bin/python manage.py check >"$diag" 2>&1
+          "$python_path" manage.py check >"$diag" 2>&1
           check_status=$?
           echo "DJANGO_CHECK_EXIT=$check_status"
           tail -n 35 "$diag" | sed -E 's/(SECRET_KEY|PASSWORD|TOKEN|API_KEY|PRIVATE_KEY)([^=]*=)[^[:space:]]+/\1\2[redacted]/Ig'
           : >"$diag"
-          /home/zomorod2/virtualenv/Saeit/3.11/bin/python -c 'import passenger_wsgi; print("PASSENGER_WSGI_IMPORT=passed")' >"$diag" 2>&1
+          "$python_path" -c 'import passenger_wsgi; print("PASSENGER_WSGI_IMPORT=passed")' >"$diag" 2>&1
           import_status=$?
           echo "PASSENGER_WSGI_IMPORT_EXIT=$import_status"
           tail -n 35 "$diag" | sed -E 's/(SECRET_KEY|PASSWORD|TOKEN|API_KEY|PRIVATE_KEY)([^=]*=)[^[:space:]]+/\1\2[redacted]/Ig'
@@ -186,7 +190,7 @@ jobs:
           PY
           set -e
           export DJANGO_SETTINGS_MODULE=config.settings
-          /home/zomorod2/virtualenv/Saeit/3.11/bin/python - <<'PY'
+          "$python_path" - <<'PY'
           from pathlib import Path
           import django,re
           django.setup()
