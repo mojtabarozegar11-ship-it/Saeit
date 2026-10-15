@@ -1,0 +1,64 @@
+name: Astra 0049 Pre-existing P0 Security Failure Baseline
+
+on:
+  push:
+    branches: [feature/astra-stage45-schema-0049-20261015]
+    paths: [.github/workflows/astra-0049-historical-p0-baseline.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  historical-source-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SAEIT_ENV: ci
+      DEBUG: "False"
+      SECRET_KEY: astra-historical-p0-test-only
+      ALLOWED_HOSTS: localhost,127.0.0.1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 91cf3f4d630ea608a070f97fffd1c38756dbe141
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Reproduce factory P0 failures on historical 0048 code WITHOUT any Astra 0049 edits
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = 91cf3f4d630ea608a070f97fffd1c38756dbe141
+          test ! -f core/migrations/0049_astra_stage45_research_queue.py
+          python -m pip install -r requirements.txt
+          set +e
+          python -m pytest -q core/tests/test_factory_p0_security.py --tb=no > "$RUNNER_TEMP/historical-p0-output.txt" 2>&1
+          code="$?"
+          set -e
+          python3 - "$RUNNER_TEMP/historical-p0-output.txt" "$code" <<'PY'
+          import pathlib,re,sys
+          text=pathlib.Path(sys.argv[1]).read_text()
+          status=int(sys.argv[2])
+          actual=set(re.findall(r"FAILED core/tests/test_factory_p0_security.py::FactoryP0SecurityTests::(test_[a-z0-9_]+)",text))
+          expected={
+              "test_artifact_digest_change_after_approval_rejects_old_manifest",
+              "test_cached_approval_is_rejected_after_revoke_from_independent_object",
+              "test_expired_approval_cannot_activate_current_release",
+              "test_expired_market_eligibility_invalidates_approved_manifest",
+              "test_spec_or_artifact_change_after_approval_invalidates_release",
+          }
+          # A positive diagnosis is allowed only if historical baseline has
+          # exactly the same failures as the integration test. No skipping or
+          # editing failing tests, and no weakening of factory approvals.
+          if status!=1 or actual!=expected:
+              print("HISTORICAL_P0_BASELINE_MISMATCH",status,
+                    sorted(actual),sorted(expected))
+              print(text[-4500:])
+              raise SystemExit(2)
+          print("ASTRA_0049_HISTORICAL_0048_P0_BASELINE_FAILING_TESTS=5")
+          print("ASTRA_0049_SECURITY_FAILURES_PRE_EXIST_0049=true")
+          print("ASTRA_0049_THIS_BASELINE_JOB_CHANGED_SOURCE=false")
+          print("ASTRA_0049_TESTS_NOT_SKIPPED_OR_ALTERED=true")
+          PY
