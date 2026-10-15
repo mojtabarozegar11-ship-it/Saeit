@@ -1,8 +1,5 @@
 name: ComfyUI CPU Image Studio - Preset Runner
 on:
-  push:
-    branches: [feature/comfyui-production-integrity-20261015]
-    paths: [".github/workflows/comfyui-cpu-runner-image-proof.yml", ops/comfyui-vps/verify_artifact_pair.py]
   workflow_dispatch:
     inputs:
       preset:
@@ -19,6 +16,9 @@ on:
         options: ['4', '8', '12']
 permissions:
   contents: read
+concurrency:
+  group: saeit-comfyui-public-preview-runner
+  cancel-in-progress: false
 jobs:
   render:
     runs-on: ubuntu-24.04
