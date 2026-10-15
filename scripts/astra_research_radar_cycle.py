@@ -90,7 +90,7 @@ def run_cycle(root, now=None, fetcher=None, fixture=None, source=None):
             feeds[source] = fixture
         else:
             fetch = fetcher if fetcher is not None else radar.fetch_feed
-            for name in sorted(radar.FEEDS | radar.HTML_SOURCES):
+            for name in sorted(set(radar.FEEDS).union(radar.HTML_SOURCES)):
                 try:
                     feeds[name] = fetch(name)
                 except (OSError, ValueError) as exc:
