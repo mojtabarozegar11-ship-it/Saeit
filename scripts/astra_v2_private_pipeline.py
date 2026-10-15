@@ -11,6 +11,7 @@ import argparse
 from contextlib import contextmanager
 from datetime import datetime, timezone
 import fcntl
+import importlib.util
 import hashlib
 import json
 import os
@@ -305,9 +306,29 @@ def intake_private_briefs(root):
     return counts
 
 
+def _self_directed_cycle(root):
+    """Autonomously create one new *educational case edition* each UTC hour.
+
+    This runs under the same queue lock, not through the external inbox. It
+    does not count as a new commercial product or verified market research.
+    """
+    name=ROOT/"scripts"/"astra_v2_self_directed_education.py"
+    if name.is_symlink() or not name.is_file():
+        return {"status":"MODULE_MISSING","new_private_educational_edition":False}
+    spec=importlib.util.spec_from_file_location("astra_self_directed_education",str(name))
+    module=importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.create_current(root)
+
+
 def tick(root):
     intake_private_briefs(root)
     with locked(root), database(root) as conn:
+        try:
+            autonomous=_self_directed_cycle(root)
+        except (OSError,ValueError,AssertionError,RuntimeError,zipfile.BadZipFile):
+            autonomous={"status":"CASE_REVIEW_REQUIRED",
+                        "new_private_educational_edition":False}
         # The EXCLUSIVE file lock remains held for the full build. Therefore
         # any BUILDING job seen *after* acquiring it was abandoned by a
         # terminated worker, not concurrently running. Recover at most twice;
@@ -332,7 +353,8 @@ def tick(root):
             "WHERE stage='QUEUED' ORDER BY id LIMIT 1").fetchone()
         if not row:
             return {"status":"NO_ELIGIBLE_WORK", "new_products":0,
-                    "note":"a clock tick is not manufacturing"}
+                    "autonomous_education":autonomous,
+                    "note":"no queued specialist builds; educational editions are separate from commercial products"}
         job_id, brief_id, builder, _, attempts = row
         if builder not in BUILDERS:
             raise ValueError("job builder not allowlisted")
@@ -356,13 +378,15 @@ def tick(root):
             return {"status":"PRIVATE_QA_PASSED","job_id":job_id,
                     "artifact_sha256":artifact_sha,"source_digest":version,
                     "new_distinct_product_versions":int(already==1),
-                    "new_products_for_sale":0,"qa_score":None}
+                    "new_products_for_sale":0,"qa_score":None,
+                    "autonomous_education":autonomous}
         except (OSError,ValueError,subprocess.SubprocessError,RuntimeError) as exc:
             with conn:
                 conn.execute("UPDATE jobs SET stage='FAILED_REVIEW',last_error=? WHERE id=?",
                              (type(exc).__name__,job_id))
             return {"status":"FAILED_REVIEW","job_id":job_id,
-                    "error_type":type(exc).__name__,"new_products":0}
+                    "error_type":type(exc).__name__,"new_products":0,
+                    "autonomous_education":autonomous}
 
 
 def status(root):
@@ -374,7 +398,13 @@ def status(root):
         family_count=conn.execute(
             "SELECT COUNT(DISTINCT builder) FROM jobs WHERE stage='PRIVATE_QA_PASSED'"
         ).fetchone()[0]
+        lesson_dir=root/"autonomous_education"
+        lesson_count=(len(list(lesson_dir.glob("case-*.zip")))
+                      if lesson_dir.is_dir() and not lesson_dir.is_symlink() else 0)
         return {"queues":dict(rows),"distinct_private_qa_artifact_versions":count,
+                "self_directed_private_educational_editions":lesson_count,
+                "self_directed_edition_interval_minutes":60,
+                "self_directed_market_validation":False,
                 "distinct_private_product_families":family_count,
                 "available_specialist_builders":sorted(BUILDERS),
                 "published_products":0,"verified_revenue":None,
