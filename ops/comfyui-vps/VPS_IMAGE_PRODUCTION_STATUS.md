@@ -12,7 +12,7 @@
 - A real **256×256** PNG was generated directly on the VPS by the portable CPU engine in approximately **3 minutes 48 seconds** (2 diffusion steps; run `38658907082`). PNG SHA-256: `8ad21ae1664a0edb142195d78af5ac40fa59f8ba5bac1c40170a824f481cd52a`; factory loop was still alive after the test.
 - The first-generation blurred output is a technical test, **not** marketable imagery.
 - A `SaeitSafeCPURender` plugin was privately registered in the actual ComfyUI server's `custom_nodes/saeit_safe_cpu`. Registration over the localhost API was verified in run `38659643625` and the server was then stopped.
-- Full PNG output through the ComfyUI custom node is a separate QA gate; do not infer it from registration alone.
+- **Actual ComfyUI custom-node PNG proof succeeded**: run `38659838508` started ComfyUI over loopback, found `SaeitSafeCPURender`, queued an allowlisted scene, generated a real 256×256 PNG via the installed SSE2 backend, passed the resulting IMAGE into ComfyUI `SaveImage`, and delivered a verified PNG artifact. SHA-256: `a06e90814e2cfb85c00e6a7821fbec6cc600682dedfbb4c91f39515519f8229a` (94,897 bytes). The factory loop remained alive, and the ComfyUI service was stopped after the run. The output is heavily blurred and is **not commercially usable**.
 
 ## Mobile operations with no added account
 
@@ -21,7 +21,7 @@ GitHub Actions workflows already use the owner's authorized GitHub session:
 - **ComfyUI VPS Private Lifecycle Control** — `status`, `start`, `stop`, `health`; on-demand timeouts; no Termux.
 - **ComfyUI CPU Image Studio - Preset Runner** — four allowlisted sample presets rendered in temporary GitHub runners with downloadable PNG artifacts, independently verified (runs `38655879476`, `38656883582`).
 - **ComfyUI VPS Bounded CPU PNG Proof** — safe on-demand 256px demonstration using the private VPS CPU engine; read-only repository access and pinned SSH host key.
-- **ComfyUI VPS Native SSE2 Image Node Proof** — optional custom-node experiment controlled through Github, with a bounded ComfyUI session and an explicit factory/RAM watchdog.
+- **ComfyUI VPS Native SSE2 Image Node Proof** — verified private custom-node image generation and delivery, controlled from the user's GitHub account with 1–3 steps, a bounded ComfyUI session and factory/RAM safeguards.
 
 No general-purpose arbitrary commands, public HTTP listener, unsecured tunnel or customer prompts are exposed.
 
@@ -43,3 +43,9 @@ No general-purpose arbitrary commands, public HTTP listener, unsecured tunnel or
 - `ops/comfyui-vps/vps_smoke.py`
 - `ops/comfyui-vps/saeit_cpu_node/__init__.py`
 - `ops/comfyui-vps/run_preset.py`
+
+## Final implementation status
+
+Native ComfyUI's built-in checkpoint loader still cannot load the compressed Tiny-SD model. The **custom node** calls the isolated SSE2 CPU runtime and returns a ComfyUI `IMAGE` object; `SaveImage` persists it. This is a proven custom-node integration, not a claim that the stock checkpoint loader was fixed.
+
+For a phone without Termux, open **GitHub Actions → ComfyUI VPS Native SSE2 Image Node Proof → Run workflow**, choose `orchard`, `greenhouse`, `product`, or `abstract`, and use 1–3 steps. Retrieve the PNG under **Artifacts**. The separate GitHub CPU Image Studio offers a 512×512 test on a more capable hosted CPU. Neither is currently suitable for automatically listing images for sale.
