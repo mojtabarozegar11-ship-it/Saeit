@@ -145,7 +145,7 @@ def templates(app:Path)->dict[str,str]:
 
 def main():
     parser=argparse.ArgumentParser()
-    parser.add_argument("mode",choices=("verify","preflight","install","rollback"))
+    parser.add_argument("mode",choices=("verify","preflight","assets","install","rollback"))
     parser.add_argument("--archive",type=Path)
     parser.add_argument("--backup",type=Path)
     parser.add_argument("--app",type=Path,default=APP)
@@ -172,29 +172,37 @@ def main():
         if (app/"tmp").is_dir():(app/"tmp/restart.txt").touch()
         print("SECOND_GALLERY_ROLLBACK=all_nine_templates",flush=True)
         return
-    if args.mode=="install" and not args.archive:raise SystemExit("--archive required")
-    if args.archive:verify_archive(args.archive)
+    if args.mode=="assets":
+        if not args.archive: raise SystemExit("--archive required")
+        verify_archive(args.archive)
+        if photo_dir.exists(): raise ValueError("Refusing to overwrite second original photo directory")
+        photo_dir.mkdir(parents=True,mode=0o755)
+        with ZipFile(args.archive) as z:
+            for i in range(1,11):
+                p=photo_dir/("photo-"+f"{i:02d}"+".png")
+                with p.open("xb") as handle:
+                    handle.write(z.read("owner-new-gallery/"+p.name))
+                p.chmod(0o644)
+        print("SECOND_GALLERY_STATIC_STAGED=10",flush=True)
+        return
+    if args.mode=="install":
+        if not photo_dir.is_dir() or photo_dir.is_symlink():raise ValueError("Originals not staged")
+        for i in range(1,11):
+            p=photo_dir/("photo-"+f"{i:02d}"+".png")
+            if not p.is_file() or p.is_symlink() or hashlib.sha256(p.read_bytes()).hexdigest()!=SHA[i-1]:
+                raise ValueError("Staged photo mismatch "+str(i))
     existing=templates(app)
     new={page:patch(page,data) for page,data in existing.items()}
     if args.mode=="preflight":
         print("NINE_TEMPLATES_READY=yes",flush=True)
         return
     if backup.exists():raise ValueError("Refuse overwriting backup")
-    if photo_dir.exists():raise ValueError("Refuse overwriting original second batch")
     backup.mkdir(parents=True,mode=0o700)
     for page,(filename,_) in ROUTES.items():
         p=backup/filename
         p.write_text(existing[page],encoding="utf-8")
         p.chmod(0o600)
-    photo_dir.mkdir(parents=True,mode=0o755)
-    with ZipFile(args.archive) as z:
-        for i in range(1,11):
-            p=photo_dir/("photo-"+f"{i:02d}"+".png")
-            with p.open("xb") as f:
-                f.write(z.read("owner-new-gallery/"+p.name))
-            p.chmod(0o644)
-    print("SECOND_GALLERY_STATIC_COPIED=10",flush=True)
-    # caller must collectstatic before these HTML files become public.
+    print("SECOND_GALLERY_STATIC_ALREADY_COLLECTED=yes",flush=True)
     print("SECOND_GALLERY_BACKUP_READY=yes",flush=True)
     changed=[]
     try:
