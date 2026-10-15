@@ -1,0 +1,43 @@
+name: Astra independent research radar - isolated QA
+
+on:
+  push:
+    branches:
+      - feature/astra-independent-research-radar-20261015
+    paths:
+      - scripts/astra_independent_research_radar.py
+      - tests/test_astra_independent_research_radar.py
+      - .github/workflows/astra-independent-research-radar-ci.yml
+      - docs/astra-independent-research-radar.md
+  pull_request:
+    branches:
+      - factory/astra-v2-0049-integration-20261015
+    paths:
+      - scripts/astra_independent_research_radar.py
+      - tests/test_astra_independent_research_radar.py
+      - .github/workflows/astra-independent-research-radar-ci.yml
+      - docs/astra-independent-research-radar.md
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  isolated-offline-research-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Compile standalone researcher (no dependencies or factory imports)
+        run: python -m py_compile scripts/astra_independent_research_radar.py
+      - name: Offline security/provenance/no-publication regression
+        run: python -m unittest discover -s tests -p 'test_astra_independent_research_radar.py' -v
+      - name: Confirm this workflow cannot deploy
+        run: |
+          echo ASTRA_RESEARCH_DEPLOYMENT=0
+          echo ASTRA_RESEARCH_LIVE_VPS_CONTACT=0
+          echo ASTRA_RESEARCH_PUBLICATION=0
+          echo ASTRA_RESEARCH_PAYMENT=0
