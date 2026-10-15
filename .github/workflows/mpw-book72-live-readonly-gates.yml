@@ -1,0 +1,126 @@
+name: MojPlayWin book 72 definitive live readiness audit
+on:
+  push:
+    branches: [audit/mpw-book72-go-live-gates-20261015]
+    paths:
+      - .github/workflows/mpw-book72-live-readonly-gates.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Prepare pinned SSH connections to authorized site host
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/astra-live-payment"
+          install -d -m 700 "$d"
+          for item in VPS_KEY HOST_KEY; do
+            printf '%s' "${!item}" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/$item.key"
+            chmod 600 "$d/$item.key"
+            ssh-keygen -y -P '' -f "$d/$item.key" >/dev/null
+          done
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -i "$d/VPS_KEY.key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/vps.known" -o BatchMode=yes githubops@178.239.147.150 'ssh-keyscan -T 10 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/VPS_KEY.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/HOST_KEY.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 12
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+      - name: Read-only release gate for book 72 on live MojPlayWin
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -F "$RUNNER_TEMP/astra-live-payment/config" saeit-cpanel 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          app="$HOME/Saeit-staging"
+          doc="$HOME/mojplaywin.com"
+          test -f "$app/manage.py"
+          test -f "$doc/passenger_wsgi.py"
+          test "$(grep -Fc Saeit-staging "$doc/passenger_wsgi.py")" -ge 1
+          export DJANGO_SETTINGS_MODULE=config.settings
+          export PYTHONPATH="$app"
+          cd "$app"
+          for py in "$HOME/virtualenv/Saeit-staging/3.11/bin/python" "$app/.venv/bin/python" "$HOME/virtualenv/Saeit-staging/3.10/bin/python" "$HOME/virtualenv/mojplaywin.com/3.11/bin/python"; do
+            if test -x "$py" && "$py" -c 'import django' >/dev/null 2>&1; then
+              "$py" - <<'PY'
+          import django,hashlib,pathlib
+          from django.apps import apps
+          from django.conf import settings
+          from django.urls import resolve, Resolver404
+          django.setup()
+          print("BOOK72_AUDIT_DJANGO_RUNNING=YES")
+          print("BOOK72_AUDIT_DEBUG_FALSE="+str(settings.DEBUG is False))
+          Product=apps.get_model("core","Product")
+          print("BOOK72_PUBLIC_PRODUCT_COUNT="+str(Product.objects.filter(active=True).count()))
+          product=Product.objects.select_related("knowledge_article").filter(pk=72).first()
+          print("BOOK72_RECORD_EXISTS="+str(product is not None))
+          if product:
+              print("BOOK72_PRODUCT_ACTIVE="+str(product.active))
+              print("BOOK72_OWNER_ATTACHED="+str(product.owner_id is not None))
+              print("BOOK72_KNOWLEDGE_ATTACHED="+str(product.knowledge_article_id is not None))
+              print("BOOK72_ARTICLE_PUBLISHED="+str(bool(product.knowledge_article and product.knowledge_article.published)))
+              print("BOOK72_PRICE_USD="+str(product.price if product.currency=="USD" else "NON_USD"))
+              print("BOOK72_TYPE="+str(product.product_type))
+              meta=product.metadata if isinstance(product.metadata,dict) else {}
+              for key in ("factory_publication_permission","asset_verified","quality_approved","license_verified"):
+                  print("BOOK72_GATE_"+key.upper()+"="+str(meta.get(key) is True))
+              commerce=meta.get("mpw_commerce") if isinstance(meta.get("mpw_commerce"),dict) else {}
+              print("BOOK72_COMMERCE_ENABLED="+str(commerce.get("enabled") is True))
+              print("BOOK72_PRIVATE_REFERENCE_REGISTERED="+str(bool(commerce.get("private_file"))))
+          flags=("MPW_COMMERCE_RELEASE_READY","MPW_COMMERCE_CUSTOMER_HTTP_ENABLED","MPW_COMMERCE_INVOICING_ENABLED","MPW_COMMERCE_BUYER_SIGNATURE_ENABLED","MPW_COMMERCE_SETTLEMENT_ENABLED","MPW_COMMERCE_REAL_RPC_ENABLED","MPW_COMMERCE_AUTORECONCILE_ENABLED","MPW_COMMERCE_DOWNLOADS_ENABLED")
+          for flag in flags:
+              print("BOOK72_FLAG_"+flag+"="+str(getattr(settings,flag,False) is True))
+          print("BOOK72_COMMERCE_APP_INSTALLED="+str(apps.is_installed("mpw_commerce")))
+          for route in ("/commerce/book/72/","/commerce/my-purchases/","/commerce/checkout/order/","/commerce/checkout/invoice/","/commerce/download/1/"):
+              try: name=str(resolve(route).view_name)
+              except Resolver404: name="NOT_ROUTED"
+              print("BOOK72_ROUTE_"+route.replace("/","_").upper()+"="+name)
+          asset=pathlib.Path("/home/zomorod2/MojPlayWin_Private_Assets/store/chess-improvement/MojPlayWin_Chess_Grandmaster_Final_Covered_2026.pdf")
+          if asset.is_symlink() or not asset.is_file():
+              print("BOOK72_ARCHIVED_415_ASSET=MISSING")
+          else:
+              h=hashlib.sha256()
+              with asset.open("rb") as f:
+                  for chunk in iter(lambda:f.read(1024*1024),b""):h.update(chunk)
+              print("BOOK72_ARCHIVED_415_SIZE="+str(asset.stat().st_size))
+              print("BOOK72_ARCHIVED_415_SHA256_MATCH="+str(h.hexdigest()=="3837fc3cb21ed1a2e7c33e0db8f8e10d158583309b02b97d4d674d25a147207a"))
+          print("BOOK72_SALE_ACTIVATION_PERFORMED=NO")
+          PY
+              echo BOOK72_READONLY_RELEASE_GATE_COMPLETED=YES
+              exit 0
+            fi
+          done
+          echo BOOK72_READONLY_RELEASE_GATE_COMPLETED=NO
+          exit 1
+          REMOTE
+      - name: Clean temporary identities
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/astra-live-payment"
