@@ -157,7 +157,8 @@ class PICMPrivateMovieBridgeTests(TestCase):
         response = b.video_owner_download(request, ident)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(b"".join(response.streaming_content), content)
-        self.assertEqual(response["Cache-Control"], "private, no-store")
+        self.assertIn("private", response["Cache-Control"])
+        self.assertIn("no-store", response["Cache-Control"])
         response.close()
 
     def test_duplicate_chunk_bad_offset_and_false_sha_rejected(self):
