@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<meta name="referrer" content="no-referrer">
+<title>My purchased books | MojPlayWin</title>
+<style>
+:root{color-scheme:dark;font-family:system-ui,-apple-system,sans-serif;background:#101520;color:#f5f6f8}
+body{margin:0;padding:24px}
+main{max-width:760px;margin:5vh auto;padding:26px;border:1px solid #455065;border-radius:16px;background:#1b2431}
+h1{font-size:clamp(26px,5vw,38px)}
+article{border:1px solid #4f5c70;border-radius:10px;padding:18px;margin:15px 0}
+a{color:#ffdc93}p{line-height:1.6}
+</style>
+</head>
+<body>
+<main>
+<p>MojPlayWin · Secure customer library</p>
+<h1>My purchased books</h1>
+<p>Only purchases with independently verified payment and fulfillment evidence appear here. This page is private to your account.</p>
+{% for purchase in purchases %}
+<article><strong>{{ purchase.title }}</strong>
+<p><a href="{{ purchase.url }}">Download purchased file</a></p></article>
+{% empty %}
+<p>No verified downloadable purchases were found for this account. If you have paid, do not send another payment; contact support with your order reference.</p>
+{% endfor %}
+</main>
+</body>
+</html>
