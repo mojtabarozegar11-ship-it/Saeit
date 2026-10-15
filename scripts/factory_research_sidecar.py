@@ -53,7 +53,47 @@ def safe_output(destination, obj):
             os.unlink(temp)
 
 
-def inspect(database, destination, *, limit=50):
+def compare_database_sources(private_path, django_path):
+    """Inspect separate SQLite files only; never equate integer IDs with identity."""
+    a=Path(private_path).expanduser().resolve()
+    b=Path(django_path).expanduser().resolve()
+    if not a.is_file() or not b.is_file() or a.is_symlink() or b.is_symlink():
+        raise RuntimeError("DATABASE_SOURCE_MISSING_OR_SYMLINK")
+    same=a.samefile(b)
+    def fetch_ids(path):
+        c=sqlite3.connect(path.as_uri()+"?mode=ro",uri=True,timeout=12)
+        try:
+            c.execute("PRAGMA query_only=ON")
+            fields={row[1] for row in c.execute("PRAGMA table_info(core_product)")}
+            if not {"id","title","active","factory_managed"}.issubset(fields):
+                raise RuntimeError("PRODUCT_SCHEMA_INCOMPATIBLE")
+            rows=list(c.execute("SELECT id,title,factory_managed,active FROM core_product ORDER BY id LIMIT 100001"))
+            if len(rows)>100000:
+                raise RuntimeError("DATABASE_COMPARE_EXCEEDS_BOUNDED_LIMIT")
+            return {int(i): (" ".join(unicodedata.normalize("NFKC",str(t or "")).split()).casefold(),
+                             bool(f),bool(act)) for i,t,f,act in rows}
+        finally:
+            c.close()
+    original=fetch_ids(a)
+    reference=fetch_ids(b)
+    matching_ids=set(original)&set(reference)
+    different=sum(original[i][0]!=reference[i][0] for i in matching_ids)
+    return {
+        "private_product_count":len(original),
+        "django_product_count":len(reference),
+        "private_drafts":sum(f and not act for _,f,act in original.values()),
+        "django_drafts":sum(f and not act for _,f,act in reference.values()),
+        "database_files_are_identical":same,
+        "overlapping_numeric_ids":len(matching_ids),
+        "overlap_ids_with_different_normalized_titles":different,
+        "private_only_numeric_ids":len(set(original)-set(reference)),
+        "django_only_numeric_ids":len(set(reference)-set(original)),
+        "auto_reconciliation_allowed":False,
+        "scope_note":"Distinct SQLite files must never be matched by integer primary key alone.",
+    }
+
+
+def inspect(database, destination, *, limit=50, compare_db=None):
     if not isinstance(limit,int) or isinstance(limit,bool) or limit<1 or limit>100:
         raise ValueError("BOUNDED_PRODUCT_LIMIT_REQUIRED")
     db=Path(database).expanduser().resolve()
@@ -118,8 +158,11 @@ def inspect(database, destination, *, limit=50):
         finally:
             conn.close()
         pending=sum(1 for row in candidates if row["research_gate"]=="RESEARCH_BLOCKED")
+        consistency=compare_database_sources(db,compare_db) if compare_db is not None else None
         summary={
             "schema":"saeit.factory.evidence-sidecar.v1",
+            "data_source_scope":"factory-private-sqlite-only",
+            "data_source_consistency":consistency,
             "mode":"read_only_order_independent_research_worklist",
             "database_mutations":0,
             "external_calls":0,
@@ -152,8 +195,9 @@ def main(argv=None):
     parser.add_argument("--db",required=True)
     parser.add_argument("--out",required=True)
     parser.add_argument("--limit",type=int,default=50)
+    parser.add_argument("--compare-db",help="Actual Django default SQLite path for read-only source separation check")
     opt=parser.parse_args(argv)
-    result=inspect(opt.db,opt.out,limit=opt.limit)
+    result=inspect(opt.db,opt.out,limit=opt.limit,compare_db=opt.compare_db)
     for key,value in result.items():
         print("FACTORY_RESEARCH_SIDECAR_"+str(key).upper()+"="+str(value),flush=True)
     print("FACTORY_RESEARCH_SIDECAR_PUBLICATION=false",flush=True)
