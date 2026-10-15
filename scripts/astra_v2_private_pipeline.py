@@ -352,7 +352,7 @@ def plan_private_source_revisions(root, conn):
         _validate_sources(builder)
         versions=[(name,(config["root"]/name).read_bytes()) for name in config["files"]]
         revision=digest(builder.encode()+b"".join(
-            name.encode()+b"\\x00"+digest(blob).encode() for name,blob in versions))
+            name.encode()+b"\x00"+digest(blob).encode() for name,blob in versions))
         item={
             "brief_id":"auto_"+revision[:20],
             "builder":builder,
