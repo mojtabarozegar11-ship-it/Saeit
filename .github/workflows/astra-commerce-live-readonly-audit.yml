@@ -1,0 +1,112 @@
+name: Astra commerce live checkout and catalog read-only audit
+on:
+  push:
+    branches: [factory/astra-commercial-catalog-20261015]
+    paths:
+      - .github/workflows/astra-commerce-live-readonly-audit.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Prepare pinned SSH connections to authorized site host
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/astra-live-payment"
+          install -d -m 700 "$d"
+          for item in VPS_KEY HOST_KEY; do
+            printf '%s' "${!item}" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/$item.key"
+            chmod 600 "$d/$item.key"
+            ssh-keygen -y -P '' -f "$d/$item.key" >/dev/null
+          done
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -i "$d/VPS_KEY.key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/vps.known" -o BatchMode=yes githubops@178.239.147.150 'ssh-keyscan -T 10 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/VPS_KEY.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/HOST_KEY.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 12
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+      - name: Read-only active MojPlayWin catalog and checkout status
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -F "$RUNNER_TEMP/astra-live-payment/config" saeit-cpanel 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          app="$HOME/Saeit-staging"
+          doc="$HOME/mojplaywin.com"
+          test -f "$app/manage.py"
+          test -f "$doc/passenger_wsgi.py"
+          if grep -Fq Saeit-staging "$doc/passenger_wsgi.py"; then echo ASTRA_HOST_MPW_APP_LINKED=YES; else echo ASTRA_HOST_MPW_APP_LINKED=UNKNOWN; fi
+          export DJANGO_SETTINGS_MODULE=config.settings
+          export PYTHONPATH="$app"
+          cd "$app"
+          code="$app/core/api.py"
+          test -f "$code"
+          python3 - "$code" <<'PY'
+          import pathlib,sys
+          text=pathlib.Path(sys.argv[1]).read_text(encoding="utf-8",errors="replace")
+          print("ASTRA_HOST_LEGACY_PAYMENT_APPROVAL_CODE="+str('status="awaiting_approval"' in text))
+          print("ASTRA_HOST_LEGACY_PAYMENT_PROVIDER_UNSET_CODE="+str('provider="not_configured"' in text))
+          PY
+          for py in "$HOME/virtualenv/Saeit-staging/3.11/bin/python" "$app/.venv/bin/python" "$HOME/virtualenv/Saeit-staging/3.10/bin/python" "$HOME/virtualenv/mojplaywin.com/3.11/bin/python"; do
+            if test -x "$py" && "$py" -c 'import django' >/dev/null 2>&1; then
+              "$py" - <<'PY'
+          import django
+          from django.apps import apps
+          from django.conf import settings
+          from django.urls import resolve,Resolver404
+          django.setup()
+          Product=apps.get_model("core","Product")
+          print("ASTRA_HOST_DJANGO_DEBUG_FALSE="+str(settings.DEBUG is False))
+          print("ASTRA_HOST_ACTIVE_PUBLIC_PRODUCTS="+str(Product.objects.filter(active=True).count()))
+          print("ASTRA_HOST_ACTIVE_FACTORY_PRODUCTS="+str(Product.objects.filter(active=True,metadata__factory_origin="saeit_vps").count()))
+          print("ASTRA_HOST_FACTORY_DRAFTS="+str(Product.objects.filter(active=False,metadata__factory_origin="saeit_vps").count()))
+          for name in ("Order","PaymentIntent","CryptoPaymentIntent"):
+              try: model=apps.get_model("core",name)
+              except LookupError:
+                  print("ASTRA_HOST_MODEL_"+name.upper()+"=MISSING")
+                  continue
+              try: print("ASTRA_HOST_MODEL_"+name.upper()+"_COUNT="+str(model.objects.count()))
+              except Exception as exc: print("ASTRA_HOST_MODEL_"+name.upper()+"_DB_ERROR="+type(exc).__name__)
+          for path in ("/store/","/store/product/1/","/crypto-payments/"):
+              try: found=resolve(path);result=str(found.url_name)
+              except Resolver404: result="MISSING"
+              print("ASTRA_HOST_ROUTE_"+path.replace("/","_").upper()+"="+result)
+          PY
+              echo ASTRA_HOST_DJANGO_RUNTIME_AUDITED=YES
+              exit 0
+            fi
+          done
+          echo ASTRA_HOST_DJANGO_RUNTIME_AUDITED=NO
+          REMOTE
+      - name: Clean temporary identities
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/astra-live-payment"
