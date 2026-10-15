@@ -24,7 +24,7 @@ DIST_DIR = "commercial-review-v2"
 SAFE_EXTENSIONS = frozenset({".py",".js",".html",".css",".json",".md",".txt"})
 PY_LOCAL = frozenset({"decision_audit","water_margin_audit",
                       "procurement_audit","render_report"})
-NODE_BUILTINS = frozenset({"assert","node:assert","fs","node:fs","path","node:path",
+NODE_BUILTINS = frozenset({"assert","node:assert","node:assert/strict","fs","node:fs","path","node:path",
                            "vm","node:vm","url","node:url"})
 NAME_RX = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,130}$")
 REMOTE_RX = re.compile(
@@ -117,8 +117,15 @@ def _runtime_dependency_evidence(files):
         # with requests made by packaged programs.
         for m in REMOTE_RX.finditer(content):
             matched=m.group(0).lower()
-            if matched.startswith(("http://","https://","//","@import")):
+            if matched.startswith(("http://","https://","//")):
+                from urllib.parse import urlsplit
+                candidate = "http:" + matched if matched.startswith("//") else matched
+                hostname=urlsplit(candidate).hostname
+                if hostname in {"127.0.0.1","localhost","::1"}:
+                    continue
                 external_refs.append({"file":name,"indicator":matched[:100]})
+            elif matched.startswith("@import"):
+                external_refs.append({"file":name,"indicator":"CSS_IMPORT_REVIEW"})
     py_external=sorted(p for p in py_imports if p not in sys.stdlib_module_names
                        and p not in PY_LOCAL and p!="__future__")
     js_external=sorted(x for x in js_imports if x not in NODE_BUILTINS
