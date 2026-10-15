@@ -1,0 +1,108 @@
+name: Astra Circuit Courier Private Playable QA Package
+
+on:
+  push:
+    branches:
+      - factory/astra-circuit-private-playable-artifact-20261015
+      - factory/astra-v2-0049-integration-20261015
+    paths:
+      - .github/workflows/astra-circuit-courier-private-package.yml
+      - product_prototypes/circuit_courier/**
+      - scripts/astra_v2_private_pipeline.py
+      - tests/test_astra_circuit_courier.py
+      - tests/test_astra_circuit_courier_factory_integration.py
+  pull_request:
+    branches:
+      - factory/astra-v2-0049-integration-20261015
+
+permissions:
+  contents: read
+
+jobs:
+  offline-qa-playable:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      SAEIT_ENV: ci
+      ASTRA_CIRCUIT_COMMERCIAL_RELEASE: "false"
+      ASTRA_CIRCUIT_PAYMENTS: "false"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Independent puzzle solvability and offline security QA
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest discover -s tests -p test_astra_circuit_courier.py -v
+          python -m unittest discover -s tests -p test_astra_circuit_courier_factory_integration.py -v
+          python product_prototypes/circuit_courier/self_test.py
+          echo ASTRA_CIRCUIT_36_LEVELS_TESTED=true
+          echo ASTRA_CIRCUIT_STORE_PUBLICATION=false
+          echo ASTRA_CIRCUIT_REAL_PAYMENTS=false
+      - name: Build reproducible standalone offline game ZIP only
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -m 700 "$RUNNER_TEMP/circuit-private"
+          python3 - "$RUNNER_TEMP/circuit-private" <<'PY'
+          import hashlib, pathlib, sys, zipfile
+          output=pathlib.Path(sys.argv[1])
+          root=pathlib.Path("product_prototypes/circuit_courier")
+          names=("README.md","index.html","style.css","engine.js",
+                 "app.js","test_engine.js","self_test.py")
+          archive=output/"circuit-courier-36-stage-private-qa.zip"
+          with zipfile.ZipFile(archive,"w",zipfile.ZIP_DEFLATED,compresslevel=9) as zipf:
+              for name in sorted(names):
+                  src=root/name
+                  assert src.is_file() and not src.is_symlink()
+                  content=src.read_bytes()
+                  assert 100<len(content)<200000,name
+                  info=zipfile.ZipInfo("circuit_courier/"+name,(2020,1,1,0,0,0))
+                  info.compress_type=zipfile.ZIP_DEFLATED
+                  info.external_attr=0o100644<<16
+                  zipf.writestr(info,content)
+          with zipfile.ZipFile(archive) as zipf:
+              assert zipf.testzip() is None
+              assert len(zipf.namelist())==len(names)
+          digest=hashlib.sha256(archive.read_bytes()).hexdigest()
+          (output/"circuit-courier.sha256").write_text(
+              digest+"  "+archive.name+"\n")
+          print("ASTRA_CIRCUIT_PRIVATE_ZIP_SHA256="+digest)
+          print("ASTRA_CIRCUIT_PRIVATE_BUILD=PASS")
+          print("ASTRA_CIRCUIT_RETAIL_READY=false")
+          PY
+      - name: Verify extracted game remains playable and isolated
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - "$RUNNER_TEMP/circuit-private/circuit-courier-36-stage-private-qa.zip" "$RUNNER_TEMP/circuit-private" <<'PY'
+          import pathlib,sys,zipfile
+          with zipfile.ZipFile(sys.argv[1]) as z:
+              z.extractall(sys.argv[2])
+          PY
+          python "$RUNNER_TEMP/circuit-private/circuit_courier/self_test.py"
+          node "$RUNNER_TEMP/circuit-private/circuit_courier/test_engine.js"
+          echo ASTRA_CIRCUIT_PRIVATE_EXTRACTED_SELF_TEST=PASS
+      - name: Upload QA artifact only, never public store
+        uses: actions/upload-artifact@v4
+        with:
+          name: circuit-courier-private-qa
+          path: |
+            ${{ runner.temp }}/circuit-private/circuit-courier-36-stage-private-qa.zip
+            ${{ runner.temp }}/circuit-private/circuit-courier.sha256
+          retention-days: 7
+          if-no-files-found: error
+      - name: Confirm noncommercial QA-only result
+        shell: bash
+        run: |
+          echo ASTRA_CIRCUIT_NO_PUBLIC_SITE_CHANGES=true
+          echo ASTRA_CIRCUIT_NO_VPS_CONNECTIONS=true
+          echo ASTRA_CIRCUIT_NO_PAYMENT_OR_PRICE_AUTHORIZATION=true
+          echo "Playable ZIP verified and retained as a private QA workflow artifact only." >> "$GITHUB_STEP_SUMMARY"
