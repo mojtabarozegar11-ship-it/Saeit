@@ -1,109 +1,132 @@
 <!doctype html>
-<html lang="en">
+<html lang="fa" dir="rtl">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="robots" content="noindex,nofollow">
-<meta name="theme-color" content="#101827">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow"><meta name="theme-color" content="#0b1020">
 <title>PICM | MojPlayWin AI Image Studio</title>
 <style>
-:root{color-scheme:dark;font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#ecf2fa;background:#0a1020}
-*{box-sizing:border-box} body{margin:0;background:radial-gradient(ellipse at 85% 0,#242e52 0,transparent 43%),#0a1020;min-height:100vh}
-header{border-bottom:1px solid #2e3650;padding:17px clamp(16px,5vw,70px);display:flex;justify-content:space-between;align-items:center;gap:10px}
-.logo{font-size:19px;font-weight:800;letter-spacing:.05em}.logo span{color:#93a5ff}a{color:#b3c3ff;text-decoration:none}
-main{max-width:1110px;margin:0 auto;padding:38px 20px 70px}
-.eyebrow{text-transform:uppercase;letter-spacing:.2em;color:#99aaf4;font-size:12px;font-weight:800}h1{font-size:clamp(30px,4vw,54px);margin:8px 0 11px;line-height:1.12}
-.lead{color:#afbdd6;max-width:700px;line-height:1.65;margin-bottom:27px}
-.layout{display:grid;grid-template-columns:minmax(290px,1fr) minmax(290px,1.07fr);gap:22px}
-.panel{border:1px solid #313b56;border-radius:22px;background:rgba(19,29,48,.86);box-shadow:0 18px 65px #0003;padding:24px}
-label{display:block;font-size:14px;color:#d7e0ef;font-weight:650;margin:17px 0 9px}
-textarea,select{background:#0d172a;color:#eef2ff;border:1px solid #47516b;border-radius:12px;padding:14px;font:inherit;width:100%;outline:none}
-textarea:focus,select:focus{border-color:#a4b3ff;box-shadow:0 0 0 3px #849bff30}
-textarea{min-height:156px;resize:vertical;line-height:1.55}
-select{height:50px}.row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-button{margin-top:21px;width:100%;border:0;border-radius:13px;padding:16px;background:linear-gradient(95deg,#8795ff,#b893ff);color:#111427;font-size:16px;font-weight:800;cursor:pointer}
-button:disabled{opacity:.45;cursor:not-allowed}
-.caption{color:#8e9cb7;font-size:12px;line-height:1.6}
-.preview{min-height:330px;display:flex;align-items:center;justify-content:center;flex-direction:column;text-align:center;border:1px dashed #4a5676;background:linear-gradient(120deg,#111a2d,#171d35);border-radius:16px;gap:15px;overflow:hidden}
-.preview svg{width:65px;opacity:.75}.preview img{width:100%;max-width:512px;height:auto;image-rendering:auto}
-#status{color:#b7c9e4;line-height:1.7;font-size:14px;padding-top:14px;min-height:48px}
-.notice{border:1px solid #596074;background:#252a3c;color:#ebdef1;border-radius:11px;padding:11px 14px;font-size:13px;margin-top:16px}
-.download{display:inline-block;border:1px solid #8997fa;padding:12px 16px;border-radius:12px;margin:8px 0}
-footer{margin-top:25px;color:#8795ae;font-size:12px}
-@media(max-width:760px){.layout{grid-template-columns:1fr}.panel{padding:18px}.row{grid-template-columns:1fr 1fr}.preview{min-height:240px}}
+*{box-sizing:border-box}
+:root{font-family:Tahoma,"Segoe UI",system-ui,sans-serif;background:#090f1f;color:#edf1ff;color-scheme:dark}
+body{margin:0;min-height:100vh;background:radial-gradient(ellipse at 85% 2%,#28305a 0,transparent 45%),#090f1f}
+header{display:flex;align-items:center;justify-content:space-between;gap:14px;border-bottom:1px solid #34415c;padding:17px clamp(16px,4vw,64px)}
+.brand{font-weight:900;font-size:20px;letter-spacing:.04em;direction:ltr}.brand b{color:#aba7ff}
+header span{color:#a7b5d4;font-size:13px}
+main{max-width:1080px;margin:auto;padding:30px 16px 70px}
+.eyebrow{color:#a8b0ff;font-size:12px;font-weight:800;letter-spacing:1px}
+h1{font-size:clamp(27px,4.5vw,46px);margin:8px 0 10px}
+.lead{color:#b6c5df;font-size:14px;line-height:2;max-width:800px;margin-bottom:20px}
+.layout{display:grid;grid-template-columns:minmax(320px,1fr) minmax(310px,.95fr);gap:20px}
+.panel{padding:24px;border-radius:22px;border:1px solid #3a4764;background:#151f35e8;box-shadow:0 15px 50px #0003}
+h2{font-size:20px;margin:0 0 17px}
+.modes{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:15px 0 21px}
+.mode{cursor:pointer;border:1px solid #475878;border-radius:12px;padding:15px 8px;text-align:center;background:#0e182d;color:#c7d5ed;min-height:90px}
+.mode[aria-pressed="true"]{border-color:#a4a0ff;background:#2d3158;color:#fff;box-shadow:0 0 0 2px #aaa3ff40}
+.mode strong{display:block;font-size:13px;line-height:1.7}
+.mode small{display:block;color:#a9b7d5;font-size:11px;margin-top:5px}
+label{display:block;color:#e0e8f8;font-size:14px;font-weight:700;margin:18px 0 9px}
+input[type=file]{width:100%;background:#0e182e;padding:16px;border:1px dashed #6e7fa4;border-radius:12px;color:#bfcbde;font-size:12px}
+textarea{resize:vertical;min-height:130px;padding:13px 15px;background:#0b1427;color:white;border:1px solid #56627c;border-radius:11px;font:inherit;line-height:1.7;width:100%}
+textarea:focus,input:focus{outline:2px solid #9a9eff;outline-offset:1px}
+.notice{border:1px solid #5b657e;background:#252e46;color:#e1eaff;padding:14px;border-radius:12px;font-size:13px;line-height:1.9;margin-top:18px}
+.notice strong{color:#f9e8b9}
+button.primary{display:block;width:100%;border:0;border-radius:12px;padding:16px;margin-top:20px;font:inherit;font-weight:800;cursor:pointer;background:linear-gradient(100deg,#8fa0ff,#bd9fff);color:#10142b}
+button.primary:disabled{cursor:not-allowed;opacity:.6}
+.hint{color:#acb8d0;font-size:12px;line-height:1.8;margin-top:11px}
+.preview{min-height:330px;background:linear-gradient(140deg,#10192e,#1c2542);border-radius:15px;border:1px dashed #52617f;display:flex;align-items:center;justify-content:center;text-align:center;flex-direction:column;overflow:hidden;padding:17px;color:#bbcae2;gap:12px}
+.preview img{width:100%;max-height:430px;object-fit:contain;border-radius:10px}
+.preview svg{width:75px;height:75px;stroke:#9eaeeb;fill:none}
+.status{font-size:13px;line-height:1.9;color:#c1d0ec;min-height:44px;overflow-wrap:anywhere;margin-top:18px}
+.section-caption{font-size:12px;color:#99aaca;line-height:1.8}
+footer{margin-top:29px;color:#8696b6;font-size:12px}
+.logout{margin:25px 0 0;display:flex;justify-content:flex-start}
+.logout button{background:transparent;border:1px solid #607092;color:#bbc9e4;border-radius:11px;padding:11px 20px;cursor:pointer}
+@media(max-width:770px){.layout{grid-template-columns:1fr}.panel{padding:18px}.modes{grid-template-columns:1fr 1fr 1fr}.preview{min-height:220px}}
 </style>
 </head>
 <body>
-<header><div class="logo">MojPlayWin <span>/ PICM</span></div><span style="font-size:13px;color:#b0bed6">Image Studio · Workspace</span></header>
+<header><div class="brand">MojPlayWin <b>· PICM</b></div><span>میز کار خصوصی تصویر</span></header>
 <main>
-<div class="eyebrow">Private AI image studio · Beta</div>
-<h1>Ideas become images.</h1>
-<p class="lead">Describe your scene, choose a visual style, and submit a private image request. Your result returns to this page—no Termux, GitHub or direct server access needed.</p>
+<div class="eyebrow">PICM · PRIVATE PHOTO WORKSPACE</div>
+<h1>استودیوی عکس و ویدیو</h1>
+<p class="lead">عکس مرجع خود را انتخاب کنید و حالت مورد نظر را مشخص کنید. این میز کار فقط سه حالت مبتنی بر عکس دارد؛ ساخت عکس یا ویدیو از متنِ تنها حذف شده است.</p>
 <div class="layout">
 <section class="panel">
-<h2>Generate image</h2>
-<form id="renderform">
-{% csrf_token %}
-<label for="prompt">Image description</label>
-<textarea id="prompt" name="prompt" required minlength="4" maxlength="580" placeholder="A luminous botanical garden with delicate golden sunlight..."></textarea>
-<div class="row">
-<div><label for="style">Style</label><select id="style" name="style"><option value="cinematic">Cinematic</option><option value="natural">Natural photo</option><option value="illustration">Illustration</option><option value="product">Product</option></select></div>
-<div><label for="steps">Render steps</label><select id="steps" name="steps"><option value="2">2 · Standard demo</option><option value="1">1 · Quick test</option><option value="3">3 · Detailed demo</option></select></div>
+<h2>تنظیمات پروژه</h2>
+<div class="modes" role="group" aria-label="انتخاب نوع پردازش">
+<button class="mode" id="mode-image_edit" type="button" aria-pressed="true" data-mode="image_edit"><strong>عکس + متن ← عکس</strong><small>Photo Editing</small></button>
+<button class="mode" id="mode-image_video" type="button" aria-pressed="false" data-mode="image_video"><strong>عکس + متن ← ویدیو</strong><small>Image to Video</small></button>
+<button class="mode" id="mode-upscale_8k" type="button" aria-pressed="false" data-mode="upscale_8k"><strong>ارتقای عکس 8K</strong><small>True Upscale</small></button>
 </div>
-<div class="notice">Current CPU engine: 256 × 256 experimental PNG. High-quality and 8K rendering are not yet available. Up to {{ picm_daily_limit }} requests per account per 24 hours.</div>
-<button type="submit" id="submit">Generate image</button>
-<div class="caption">Your prompt and image stay private to your account. Requests run sequentially on a protected server with resource limits.</div>
+<form id="renderform" enctype="multipart/form-data">
+{% csrf_token %}
+<input type="hidden" id="mode" name="mode" value="image_edit">
+<label for="photo">عکس مرجع (الزامی)</label>
+<input type="file" name="photo" id="photo" accept="image/png,image/jpeg" required aria-describedby="photohelp">
+<div id="photohelp" class="hint">PNG یا JPEG · حداکثر ۶ مگابایت · تصویر داخل حساب شما خصوصی می‌ماند.</div>
+<div id="promptgroup">
+<label for="prompt">دستور تغییر عکس</label>
+<textarea id="prompt" name="prompt" maxlength="580" minlength="4" required placeholder="برای نمونه: نور سینمایی طبیعی، جزئیات چهره حفظ شود و پس‌زمینه باغی سرسبز باشد..."></textarea>
+</div>
+<div class="notice"><strong>وضعیت موتور:</strong> موتور GPU برای ویرایش رئال، ویدیو و افزایش جزئیات واقعی 8K هنوز متصل نشده است. در این مرحله عکس مرجع را به‌صورت خصوصی برای پردازش آماده می‌کنید؛ **فایل نهایی تولید نمی‌شود**.</div>
+<button type="submit" id="submit" class="primary">ثبت خصوصی عکس مرجع</button>
+<div class="hint">عکس ثبت‌شده حداکثر ۲۴ ساعت نگهداری می‌شود و پس از آن پاک‌سازی می‌شود. برای حفظ منابع، هر حساب هم‌زمان می‌تواند حداکثر سه عکس آماده‌سازی‌شده داشته باشد.</div>
 </form>
 </section>
 <section class="panel">
-<h2>Preview</h2>
+<h2>پیش‌نمایش عکس مرجع</h2>
 <div class="preview" id="preview">
-<svg viewBox="0 0 64 64" fill="none" aria-hidden="true"><rect x="5" y="9" width="54" height="46" rx="6" stroke="#9babea" stroke-width="2"/><circle cx="20" cy="23" r="5" fill="#8499e9"/><path d="m10 47 16-17 11 11 8-9 10 14" stroke="#a3aef0" stroke-width="3"/></svg>
-<div>Generated image appears here</div>
+<svg viewBox="0 0 64 64" aria-hidden="true"><rect x="6" y="9" width="52" height="46" rx="6" stroke-width="2"/><circle cx="20" cy="23" r="5" stroke-width="2"/><path d="M9 48 26 31 36 41 45 33 55 47" stroke-width="2"/></svg>
+<span>ابتدا یک عکس آپلود کنید</span>
 </div>
-<p id="status" role="status" aria-live="polite">Ready for your idea.</p>
-<div id="downloads"></div>
+<p class="section-caption">پیش‌نمایش تصویر در مرورگر شما نمایش داده می‌شود. عکس روی سایت عمومی منتشر نمی‌شود.</p>
+<p id="status" class="status" role="status" aria-live="polite">آمادهٔ انتخاب عکس مرجع.</p>
 </section>
 </div>
-<div style="display:flex;justify-content:flex-end;margin-top:24px"><form method="post" action="/picm/logout/">{% csrf_token %}<button type="submit" style="background:none;border:1px solid #596784;color:#c0cdef;padding:10px 18px;width:auto;margin:0;font-size:14px">خروج از میز کار</button></form></div>
-<footer>PICM Beta · MojPlayWin. Render speed and availability depend on protected server capacity.</footer>
+<div class="logout"><form method="post" action="/picm/logout/">{% csrf_token %}<button type="submit">خروج از میز کار</button></form></div>
+<footer>MojPlayWin PICM · آزمایشی. کیفیت 8K و تولید ویدیو منوط به نصب و آزمون پردازشگر تخصصی است.</footer>
 </main>
 <script>
-(function(){
-const form=document.getElementById('renderform'), button=document.getElementById('submit'), status=document.getElementById('status'), preview=document.getElementById('preview'), downloads=document.getElementById('downloads');
-const csrf=document.querySelector('[name=csrfmiddlewaretoken]')?.value||'';
-const valid=/^[a-f0-9]{32}$/;
-const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
-async function jsonResponse(url,options) {
- const response=await fetch(url,{credentials:'same-origin',cache:'no-store',...options});
- let data={};try{data=await response.json()}catch(e){}
- if(!response.ok)throw new Error(data.error||('Server error '+response.status));
- return data;
-}
-form.addEventListener('submit',async event=>{
- event.preventDefault();if(button.disabled)return;
- button.disabled=true;downloads.replaceChildren();status.textContent='Submitting your image request...';
- try{
-  const payload={prompt:document.getElementById('prompt').value,style:document.getElementById('style').value,steps:Number(document.getElementById('steps').value)};
-  const job=await jsonResponse('/picm/api/submit/',{method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':csrf},body:JSON.stringify(payload)});
-  if(!valid.test(job.id))throw new Error('Invalid image job ID');
-  preview.replaceChildren();preview.textContent='Image is queued for the private render engine.';
-  let finished=false;
-  for(let i=0;i<120;i++){
-   await sleep(5000);
-   const state=await jsonResponse('/picm/api/status/'+job.id+'/');
-   if(state.state==='done'){
-    const image=document.createElement('img');image.alt='Generated picture';image.src='/picm/image/'+job.id+'/';preview.replaceChildren(image);
-    const link=document.createElement('a');link.href=image.src;link.textContent='Download your PNG';link.className='download';downloads.appendChild(link);
-    status.textContent='Image ready · experimental 256 × 256 PNG';finished=true;break;
-   }
-   if(state.state==='failed')throw new Error('Render could not finish safely. Please try again later.');
-   status.textContent=state.state==='queued'?'Waiting in the private render queue...':'Engine rendering your image...';
-  }
-  if(!finished)status.textContent='Still processing. Keep this tab open to check the result.';
- }catch(error){status.textContent='Could not complete: '+error.message}
- finally{button.disabled=false}
+(()=>{
+const form=document.getElementById('renderform'), file=document.getElementById('photo'), prompt=document.getElementById('prompt'), group=document.getElementById('promptgroup'), mode=document.getElementById('mode'), submit=document.getElementById('submit'), preview=document.getElementById('preview'), status=document.getElementById('status');
+const csrf=form.querySelector('[name=csrfmiddlewaretoken]').value;
+let objectURL=null;
+const msgs={image_edit:'پردازش عکس بر اساس متن',image_video:'ساخت ویدیو از عکس و متن',upscale_8k:'ارتقای کیفیت عکس تا 8K'};
+document.querySelectorAll('[data-mode]').forEach(button=>button.addEventListener('click',()=>{
+  mode.value=button.dataset.mode;
+  document.querySelectorAll('[data-mode]').forEach(el=>el.setAttribute('aria-pressed',String(el===button)));
+  group.hidden=mode.value==='upscale_8k';prompt.required=!group.hidden;
+  if(group.hidden)prompt.value='';
+  status.textContent='حالت انتخابی: '+msgs[mode.value]+' · موتور مربوطه هنوز آمادهٔ تولید نیست.';
+}));
+file.addEventListener('change',()=>{
+ if(objectURL){URL.revokeObjectURL(objectURL);objectURL=null}
+ preview.replaceChildren();
+ const selected=file.files?.[0];if(!selected){preview.textContent='ابتدا یک عکس انتخاب کنید';return}
+ if(!['image/png','image/jpeg'].includes(selected.type)||selected.size>6*1024*1024){
+  status.textContent='فقط عکس PNG یا JPEG با حجم حداکثر ۶ مگابایت پذیرفته می‌شود.';
+  file.value='';return;
+ }
+ objectURL=URL.createObjectURL(selected);
+ const pic=document.createElement('img');pic.src=objectURL;pic.alt='پیش‌نمایش عکس انتخاب‌شده';
+ preview.appendChild(pic);status.textContent='عکس برای ثبت خصوصی آماده است.';
 });
+form.addEventListener('submit',async e=>{
+ e.preventDefault();if(submit.disabled||!file.files?.length)return;
+ submit.disabled=true;status.textContent='در حال بررسی و ثبت عکس مرجع...';
+ try{
+  const data=new FormData(form);
+  const res=await fetch('/picm/api/reference/',{
+    method:'POST',credentials:'same-origin',cache:'no-store',
+    headers:{'X-CSRFToken':csrf},body:data
+  });
+  let result={};try{result=await res.json()}catch(err){}
+  if(!res.ok)throw new Error(result.error||'خطا در ثبت: '+res.status);
+  if(!/^[a-f0-9]{32}$/.test(result.id))throw new Error('پاسخ غیرمنتظره سرور');
+  status.textContent='عکس خصوصی ثبت شد ('+result.width+' × '+result.height+'). شناسه: '+result.id+'. برای تولید خروجی نهایی، نصب GPU لازم است. زمان نگهداری: ۲۴ ساعت.';
+ }catch(error){status.textContent='ثبت انجام نشد: '+error.message}
+ finally{submit.disabled=false}
+});
+window.addEventListener('pagehide',()=>{if(objectURL)URL.revokeObjectURL(objectURL)});
 })();
 </script>
-</body>
-</html>
+</body></html>
