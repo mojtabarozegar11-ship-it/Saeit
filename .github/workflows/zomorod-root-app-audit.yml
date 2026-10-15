@@ -381,6 +381,33 @@ jobs:
           echo
           echo "CPANEL_DIAGNOSTICS_END"
           REMOTE
+      - name: Inspect Python Selector registration
+        if: always()
+        shell: bash
+        env:
+          SSH_CONFIG: ${{ runner.temp }}/zomorod-restore/config
+        run: |
+          set -euo pipefail
+          ssh -F "$SSH_CONFIG" saeit-cpanel bash -se <<'REMOTE'
+          set +e
+          echo "PYTHON_SELECTOR_DIAGNOSTICS_BEGIN"
+          for tool in selectorctl cloudlinux-selector; do
+            command -v "$tool" 2>/dev/null || true
+          done
+          if command -v selectorctl >/dev/null 2>&1; then
+            selectorctl --help 2>&1 | head -n 100
+            echo "SELECTOR_PYTHON_USER_SUMMARY_BEGIN"
+            selectorctl --interpreter=python --user=zomorod2 --json --user-summary 2>&1 | head -c 15000
+            echo
+            echo "SELECTOR_PYTHON_USER_SUMMARY_END"
+          fi
+          if command -v cloudlinux-selector >/dev/null 2>&1; then
+            echo "CLOUDLINUX_SELECTOR_HELP_BEGIN"
+            cloudlinux-selector --help 2>&1 | head -n 100
+            echo "CLOUDLINUX_SELECTOR_HELP_END"
+          fi
+          echo "PYTHON_SELECTOR_DIAGNOSTICS_END"
+          REMOTE
       - name: Check live site routes
         shell: bash
         run: |
