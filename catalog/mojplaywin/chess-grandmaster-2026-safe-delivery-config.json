@@ -1,0 +1,33 @@
+{
+  "product_pk": 72,
+  "product_key": "mojplaywin-chess-improvement-2026",
+  "title": "The Science and Practice of Chess Improvement",
+  "edition": "Grandmaster Analytical Research Edition 2026",
+  "final_book": {
+    "filename": "MojPlayWin_Chess_Grandmaster_Final_Covered_2026.pdf",
+    "bytes": 3631972,
+    "sha256": "3837fc3cb21ed1a2e7c33e0db8f8e10d158583309b02b97d4d674d25a147207a",
+    "absolute_private_path": "/home/zomorod2/MojPlayWin_Private_Assets/store/chess-improvement/MojPlayWin_Chess_Grandmaster_Final_Covered_2026.pdf",
+    "host_checksum_verified": true
+  },
+  "proposed_product_metadata": {
+    "mpw_commerce": {
+      "enabled": false,
+      "fulfillment": "digital",
+      "private_file": "COMPUTE_RELATIVE_TO_MPW_COMMERCE_PRIVATE_ASSET_ROOT_AT_INSTALL_TIME"
+    }
+  },
+  "required_install_checks": [
+    "Confirm final PDF size and sha256 on cPanel",
+    "Compute relative path from configured MPW_COMMERCE_PRIVATE_ASSET_ROOT rather than guessing root",
+    "Resolve with mpw_commerce.downloads._private_file and assert exact PDF match",
+    "Leave product.active, checkout_enabled and payment_live unchanged",
+    "Never switch on real invoice settlement, downloads or public checkout without tested mainnet transaction and purchase-to-delivery evidence"
+  ],
+  "verified_wallet_ownership": {
+    "ETH": true,
+    "TRX": true
+  },
+  "release_state": "STAGING_MANIFEST_ONLY_DO_NOT_TREAT_AS_DEPLOYED",
+  "source_audit": "https://github.com/mojtabarozegar11-ship-it/Saeit/actions/runs/38698321011"
+}
