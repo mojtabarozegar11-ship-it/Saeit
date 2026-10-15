@@ -65,3 +65,33 @@ Future rollout requires a **separate authorized isolated VPS/runner deployment**
 a bounded cadence and retention policy, review of legal/source terms, and
 independent review of at least three truly distinct evidence publishers.
 Never pipe this report directly into the live factory's intake or store.
+
+
+## Private VPS execution status and bounded fresh-source signals (15 October 2026)
+
+The installed private `githubops` cron runs at minute 17 every six hours,
+entirely separately from `ASTRA_V2_PRIVATE_RND_TICK`. GitHub Actions tests
+verify the existing factory cron remains unchanged; no public store, payments,
+live database migration, or factory queue is touched. The VPS uses Python
+3.8.2, which is supported by the private runner.
+
+The daily report `daily-YYYYMMDD.json` is immutable. Subsequent research
+within a different six-hour UTC window is saved as
+`retry-YYYYMMDD-SLOT.json` (SLOT is 0,1,2,3), also immutable. Repeating the
+same slot is a no-op. The initial 15 October report with one unavailable source
+was preserved and an independent retry successfully downloaded all three
+fixed public sources and found two *research questions*.
+
+For a fresh retry, the radar consults only safely parsed private reports from
+the last 30 days (bounded to 160 reports), and annotates each topic with a
+count of newly observed headline-source SHA-256 references.
+`novel_source_signals_30d` **does not mean** new paying customers,
+verified independent publishers, willingness to pay, new commercial goods,
+or objective product quality. If all headline references were seen before,
+the report records zero novelty rather than manufacturing another product.
+Historical private reports are never overwritten or silently deleted.
+
+Current scope remains research-only and subject to independent domain,
+market, licensing, and field validation. PR 178 is still a draft; the dedicated
+private VPS staging workflow does not authorize merging the broader
+Astra/0049 branch or releasing its products.
