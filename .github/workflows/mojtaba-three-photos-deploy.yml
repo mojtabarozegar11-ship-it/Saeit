@@ -1,0 +1,205 @@
+name: Publish Mojtaba original photos on remaining pages
+on:
+  issues:
+    types: [opened]
+permissions:
+  contents: read
+concurrency:
+  group: mojtabarozegar-last-three-photos-publish
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event.issue.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.issue.title == 'Ops: Publish original photos on remaining personal pages'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Unit test before server connection
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p 'test_mojtaba_fill_last_three_images.py' -v
+      - name: Prepare pinned SSH relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/photo-relay"
+          mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          python3 - "$d/host.key" <<'PY'
+          import pathlib,sys
+          p=pathlib.Path(sys.argv[1]);t=p.read_text().replace('\r\n','\n').strip()
+          p.write_text(t.replace('\\n','\n')+'\n')
+          PY
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host saeit-host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+            ConnectionAttempts 1
+          EOF
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          echo "SSH_CONFIG=$d/config" >> "$GITHUB_ENV"
+      - name: Upload personal photo-only installer and original SHA manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          stage="/home/zomorod2/.personal-photo-finish-$GITHUB_RUN_ID"
+          timeout 30s ssh -F "$SSH_CONFIG" saeit-host "test ! -e '$stage' && install -d -m 700 '$stage'"
+          timeout 70s scp -F "$SSH_CONFIG" scripts/mojtaba_fill_last_three_images.py "saeit-host:$stage/installer.py"
+          timeout 70s scp -F "$SSH_CONFIG" assets/mojtaba_original_photos_manifest_20261015.json "saeit-host:$stage/manifest.json"
+
+      - name: Compile live Django templates in memory, install and verify real photos with rollback
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 500s ssh -F "$SSH_CONFIG" saeit-host "bash -s -- '$GITHUB_RUN_ID'" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          app=/home/zomorod2/mojtaba_personal/mojtaba_roozegar_personal_v17
+          stage="/home/zomorod2/.personal-photo-finish-$1"
+          script="$stage/installer.py"
+          manifest="$stage/manifest.json"
+          backup="$HOME/.backups/mojtaba-three-original-photo-finish/$1"
+          py="$app/../.venv_personal_test/bin/python"
+          marker='id="mpw-three-photo-strip-20261015"'
+          installed=0
+          success=0
+          rollback() {
+            rc=$?
+            trap - EXIT
+            if test "$installed" = 1 && test "$success" = 0; then
+              python3 "$script" rollback --backup-dir "$backup" && echo "PHOTO_THREE_PAGES_ROLLBACK=success" || echo "PHOTO_THREE_PAGES_ROLLBACK=manual_attention_needed"
+            fi
+            exit "$rc"
+          }
+          trap rollback EXIT
+
+          test -d "$app" && test ! -L "$app" && test -f "$app/manage.py"
+          test -f "$script" && test -f "$manifest"
+          test -x "$py" && "$py" -c 'import django'
+          cd "$app"
+          python3 "$script" check --backup-dir "$backup"
+          # Parse and render all three proposed templates with V17 Django before any write.
+          "$py" - "$script" <<'PY_PRECHECK'
+          import os,sys,importlib.util
+          spec=importlib.util.spec_from_file_location('photo_panel',sys.argv[1])
+          m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
+          os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          import django; django.setup()
+          from django.template import engines,RequestContext
+          from django.test import RequestFactory
+          eng=engines['django'].engine
+          for name,text in m.current_templates().items():
+              rendered=m.patch(name,text)
+              template=eng.from_string(rendered)
+              request=RequestFactory().get('/mojtaba.roozegar/'+name+'/',HTTP_HOST='mojplaywin.com')
+              page=template.render(RequestContext(request,{'items':[],'stories':[],'profile':None}))
+              assert m.MARKER in page
+              assert page.count("owner_gallery_20261015/photo-") >= len(m.PAGES[name])
+              print("DJANGO_RENDER_READY="+name)
+          print("ALL_THREE_DJANGO_TEMPLATES_SAFE=yes")
+          PY_PRECHECK
+
+          installed=1
+          python3 "$script" install --backup-dir "$backup"
+          "$py" manage.py check --deploy
+          test -d "$app/tmp" && touch "$app/tmp/restart.txt"
+
+          python3 - "$script" "$manifest" <<'PY_PUBLIC'
+          import hashlib,importlib.util,json,re,sys,time
+          from urllib.parse import urljoin
+          from urllib.request import urlopen,Request
+          from html.parser import HTMLParser
+          spec=importlib.util.spec_from_file_location('photo_panel',sys.argv[1])
+          p=importlib.util.module_from_spec(spec);spec.loader.exec_module(p)
+          manifest=json.load(open(sys.argv[2]))
+          expected={f["path"]:f["sha256"] for f in manifest["files"]}
+          base="https://mojplaywin.com/mojtaba.roozegar/"
+          class Images(HTMLParser):
+              def __init__(self):
+                  super().__init__(); self.items=[]
+              def handle_starttag(self,tag,attrs):
+                  a=dict(attrs)
+                  if tag=="img" and "owner_gallery_20261015/" in a.get("src",""):
+                      self.items.append(a["src"])
+          for name,route in [("resume","resume/"),("memories","memories/"),("stories","stories/")]:
+              failure=""
+              for attempt in range(8):
+                  try:
+                      req=Request(base+route+"?photo_release="+str(time.time_ns()),headers={"User-Agent":"MojtabaOriginalPhotosRelease/1.0"})
+                      with urlopen(req,timeout=25) as r:
+                          body=r.read(3000000).decode("utf-8","replace")
+                          if r.status!=200 or p.MARKER not in body: raise RuntimeError("page marker absent")
+                      parser=Images();parser.feed(body)
+                      if len(parser.items)!=len(p.PAGES[name]): raise RuntimeError("wrong image count "+str(len(parser.items)))
+                      ids=[]
+                      for image_uri in parser.items:
+                          match=re.search(r"/(photo-(\d\d))(?:\.[a-f0-9]{8,})?\.jpg(?:\?|$)",image_uri)
+                          if not match: raise RuntimeError("unexpected photo URL")
+                          original=match.group(1)+".jpg"
+                          ids.append(int(match.group(2)))
+                          with urlopen(Request(urljoin(base,image_uri),headers={"User-Agent":"MojtabaOriginalPhotosRelease/1.0"}),timeout=25) as response:
+                              if response.status!=200: raise RuntimeError("image not 200")
+                              data=response.read(2000000)
+                          if hashlib.sha256(data).hexdigest()!=expected[original]: raise RuntimeError("photo SHA-256 mismatch "+original)
+                      if ids!=[x[0] for x in p.PAGES[name]]: raise RuntimeError("unexpected image ordering")
+                      print("LIVE_PERSONAL_PHOTOS_VERIFIED="+route+" images="+str(len(ids)))
+                      break
+                  except Exception as e:
+                      failure=type(e).__name__+" "+str(e)
+                      print("VERIFY_RETRY="+route+" "+str(attempt+1)+" "+failure[:120])
+                      time.sleep(3)
+              else: raise SystemExit("LIVE_PHOTO_VERIFICATION_FAILED "+route+" "+failure)
+          print("ALL_THREE_PUBLIC_PHOTO_PAGES=verified")
+          PY_PUBLIC
+
+          success=1
+          trap - EXIT
+          echo "THREE_PHOTO_PAGES_PUBLISHED=yes"
+          echo "BACKUP=$backup"
+          rm -rf "$stage"
+          REMOTE
+
+      - name: Ensure unrelated site roots are healthy
+        shell: bash
+        run: |
+          set -euo pipefail
+          for url in "https://mojplaywin.com/" "https://zomorodmelal.ir/"; do
+            code="$(curl -sSL -o /dev/null --max-time 20 -w '%{http_code}' "$url")"
+            test "$code" = 200
+            echo "OTHER_SITE_UNCHANGED=$url HTTP_$code"
+          done
+      - name: Delete credentials
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/photo-relay"
