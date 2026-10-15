@@ -1,0 +1,145 @@
+name: MojPlayWin register Taniya book draft
+on:
+  push:
+    branches: [qa/mpw-payment-release-preflight-20261015]
+    paths:
+      - '.github/workflows/mojplaywin-register-taniya-draft.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: mojplaywin-register-taniya-draft
+  cancel-in-progress: false
+jobs:
+  register:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify Taniya sale metadata and private-asset gate
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from decimal import Decimal
+          with open('catalog/mojplaywin/taniya-little-baker-worms.json',encoding='utf-8') as f:
+              d=json.load(f)
+          assert d['product_id']=='mojplaywin-taniya-little-baker-worms'
+          assert d['title']=='Taniya and the Little Baker Worms'
+          assert Decimal(d['regular_price'])==Decimal('18.00')
+          assert Decimal(d['discount_amount'])==Decimal('14.00')
+          assert Decimal(d['sale_price'])==Decimal('4.00')
+          assert d['currency']=='USD'
+          assert d['pages']==40
+          assert d['author']=='Mojtaba Roozegar'
+          assert d['graphic_designer']=='Mojtaba Roozegar'
+          assert d['public_active'] is False
+          assert d['digital_asset']['sha256']=='2f6dace4e5bc09ffe11b9e5d677ddff4980fe00de94b7c2ea5b286d1303901d48'
+          assert d['digital_asset']['uploaded_to_host'] is False
+          print('TANIYA_DRAFT_METADATA_VERIFIED_SALES_DISABLED')
+          PY
+      - name: Register inactive digital product draft
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+          VPS_KNOWN: ${{ secrets.SAEIT_VPS_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/ssh"; mkdir -p "$d"
+          printf '%s\\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\\n' "$HOST_KEY" > "$d/host.key"
+          python3 - "$d/vps.key" "$d/host.key" <<'PY'
+          import pathlib,sys
+          for f in sys.argv[1:]:
+              p=pathlib.Path(f)
+              p.write_text(p.read_text().replace("\\r\\n","\\n").strip().replace("\\\\n","\\n")+"\\n")
+          PY
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          if [[ -n "$VPS_KNOWN" ]]; then
+            printf "%s\\n" "$VPS_KNOWN" > "$d/vps.known"
+          else
+            ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          fi
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host saeit-host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+          EOF
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          payload="$(base64 -w0 catalog/mojplaywin/taniya-little-baker-worms.json)"
+          timeout 90s ssh -F "$d/config" saeit-host "cd /home/zomorod2/Saeit-staging && MANIFEST_B64='$payload' PYTHONDONTWRITEBYTECODE=1 /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python manage.py shell" <<'PY'
+          import os,base64,json
+          from decimal import Decimal
+          from django.apps import apps
+          d=json.loads(base64.b64decode(os.environ['MANIFEST_B64']))
+          if d['public_active'] is not False or d['digital_asset']['uploaded_to_host'] is not False:
+              raise RuntimeError('Public activation and unverified asset installation are forbidden')
+          P=apps.get_model('core','Product')
+          found=P.objects.filter(title__iexact=d['title']).first()
+          if found:
+              expected=(Decimal(d['sale_price']),d['currency'],False,d['product_id'])
+              actual=(found.price,found.currency,found.active,found.metadata.get('product_id'))
+              if actual != expected:
+                  raise RuntimeError('Existing Taniya product does not match the inactive draft; refusing changes')
+              print('DRAFT_PRODUCT_ALREADY_PRESENT',found.pk,'ACTIVE',found.active,'PRICE',found.price,found.currency)
+          else:
+              meta={
+                'product_id':d['product_id'],
+                'slug':'taniya-little-baker-worms',
+                'short_description':d['short_description'],
+                'long_description':d['long_description'],
+                'language':d['language'],
+                'pages':d['pages'],
+                'suggested_age_range':d['suggested_age_range'],
+                'features':d['features'],
+                'regular_price':d['regular_price'],
+                'discount_amount':d['discount_amount'],
+                'discount_percentage':78,
+                'checkout_enabled':False,
+                'fulfillment_status':'pending_private_pdf_install_and_verified_customer_payment',
+                'pdf_sha256':d['digital_asset']['sha256'],
+                'author':d['author'],
+                'graphic_designer':d['graphic_designer'],
+                'format':d['format'],
+                'disclaimer':d['disclaimer'],
+              }
+              p=P(title=d['title'],product_type='digital_book',price=Decimal(d['sale_price']),currency=d['currency'],active=False,metadata=meta)
+              p.full_clean()
+              p.save()
+              print('INACTIVE_TANIYA_DRAFT_CREATED',p.pk,'ACTIVE',p.active,'PRICE',p.price,p.currency)
+          print('TANIYA_DRAFT_GATE_OK')
+          PY
+          timeout 40s ssh -F "$d/config" saeit-host 'install -d -m 700 /home/zomorod2/MojPlayWin_Private_Uploads && echo PRIVATE_UPLOAD_FOLDER_READY'
+          code="$(curl -sSL --connect-timeout 12 --max-time 30 -o /dev/null -w '%{http_code}' https://mojplaywin.com/store/)"
+          echo "STORE_HTTP=$code"
+          test "$code" = 200
+      - name: Remove SSH material
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/ssh"
