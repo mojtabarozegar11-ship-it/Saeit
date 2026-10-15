@@ -22,6 +22,8 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
+from .picm_access import owner_allowed, owner_id
+
 UUID_RE = re.compile(r"^[0-9a-f]{32}$")
 MAX_JOBS = 80
 DAILY_QUOTA = 2
@@ -116,7 +118,11 @@ def unauthenticated():
 @require_GET
 def picm_page(request):
     """Entry page: never mix the login form with the image workbench."""
-    return redirect("/picm/workspace/" if request.user.is_authenticated else "/picm/login/")
+    if not request.user.is_authenticated:
+        return redirect("/picm/login/")
+    if not owner_allowed(request.user):
+        return HttpResponse(status=403)
+    return redirect("/picm/workspace/")
 
 
 @never_cache
@@ -125,6 +131,8 @@ def picm_workbench(request):
     """The protected second page, reached only after login."""
     if not request.user.is_authenticated:
         return redirect("/picm/login/")
+    if not owner_allowed(request.user):
+        return HttpResponse(status=403)
     return render(request, "picm/index.html", {
         "picm_authenticated": True,
         "picm_daily_limit": DAILY_QUOTA,
@@ -136,6 +144,8 @@ def picm_workbench(request):
 def picm_submit(request):
     if not request.user.is_authenticated:
         return unauthenticated()
+    if not owner_allowed(request.user):
+        return JsonResponse({"error": "forbidden"}, status=403)
     if len(request.body) > 2000:
         return JsonResponse({"error": "request_too_large"}, status=413)
     try:
@@ -177,6 +187,8 @@ def picm_submit(request):
 def picm_status(request, ident):
     if not request.user.is_authenticated:
         return unauthenticated()
+    if not owner_allowed(request.user):
+        return JsonResponse({"error": "forbidden"}, status=403)
     with locked() as root:
         job = load_job(root, ident)
     if job.get("user_id") != request.user.pk:
@@ -193,7 +205,7 @@ def picm_status(request, ident):
 @never_cache
 @require_GET
 def picm_image(request, ident):
-    if not request.user.is_authenticated:
+    if not owner_allowed(request.user):
         raise Http404
     with locked() as root:
         job = load_job(root, ident)
@@ -227,6 +239,10 @@ def picm_worker_next(request):
         for job in records:
             if job.get("state") != "queued":
                 continue
+            # Skip historic queue entries not owned by the bound PICM account.
+            current_owner = owner_id(root)
+            if current_owner is None or str(job.get("user_id")) != current_owner:
+                continue
             job["state"] = "running"
             job["attempts"] = job.get("attempts", 0) + 1
             job["updated"] = now
@@ -253,6 +269,8 @@ def picm_worker_finish(request, ident):
             job = load_job(root, ident)
         except Http404:
             return HttpResponse(status=404)
+        if owner_id(root) is None or str(job.get("user_id")) != owner_id(root):
+            return HttpResponse(status=403)
         lease = request.headers.get("X-PICM-Lease", "")
         if not lease or not hmac.compare_digest(str(job.get("lease", "")), lease):
             return HttpResponse(status=409)
@@ -369,6 +387,8 @@ def picm_reference_stage(request):
     """Accept a private owner-scoped image; do NOT promise an unavailable GPU render."""
     if not request.user.is_authenticated:
         return unauthenticated()
+    if not owner_allowed(request.user):
+        return JsonResponse({"error": "forbidden"}, status=403)
     if request.META.get("CONTENT_LENGTH", "").isdigit():
         if int(request.META["CONTENT_LENGTH"]) > PICM_REFERENCE_MAX_BYTES + 65536:
             return JsonResponse({"error": "reference_too_large"}, status=413)
@@ -462,9 +482,13 @@ def picm_reference_stage(request):
 @never_cache
 @require_GET
 def picm_reference_status(request, ident):
-    """Only the image owner can view its preparation state."""
+    """Only the single configured PICM owner can view input staging."""
     if not request.user.is_authenticated:
         return unauthenticated()
+    if not owner_allowed(request.user):
+        raise Http404
+    if not owner_allowed(request.user):
+        return JsonResponse({"error": "forbidden"}, status=403)
     if not UUID_RE.fullmatch(ident):
         raise Http404
     with locked() as root:
