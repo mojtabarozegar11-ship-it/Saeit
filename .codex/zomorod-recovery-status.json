@@ -1,7 +1,8 @@
 {
-  "commit_sha": "03d44cedba78c291369626ac05a5349217163190",
+  "commit_sha": "e33df0b67045f966ea56a9dbc8ffdb5cead1fb20",
   "passenger_virtual_env_configured": false,
   "passenger_launcher_present": true,
+  "login_shell_virtual_env_configured": false,
   "passenger_envvar_names": [],
   "passenger_edit_result": {
     "returncode": 0,
@@ -11,7 +12,11 @@
     ],
     "requested_envvar_names": [
       "VIRTUAL_ENV"
-    ]
+    ],
+    "fallback": "bash_profile",
+    "bash_profile_backup": "/home/zomorod2/.backups/zomorodmelal-root-homepage/bash-profile-before-e33df0b67045f966ea56a9dbc8ffdb5cead1fb20",
+    "login_shell_virtual_env": true,
+    "readback_verified": false
   },
   "root_app_enabled": true,
   "routes": {
