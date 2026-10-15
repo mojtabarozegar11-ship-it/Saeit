@@ -75,6 +75,35 @@ jobs:
           if str(a.get("enabled")) not in ("1","True"): raise SystemExit("PASSENGER_NOT_RESTORED")
           '
           REMOTE
+      - name: Inspect production WSGI entrypoint without editing
+        shell: bash
+        env:
+          SSH_CONFIG: ${{ runner.temp }}/zomorod-restore/config
+        run: |
+          set -euo pipefail
+          ssh -F "$SSH_CONFIG" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          cd /home/zomorod2/Saeit
+          for p in passenger_wsgi.py config/wsgi.py wsgi.py; do
+            if test -f "$p"; then
+              echo "APP_ENTRYPOINT=$p SHA=$(sha256sum "$p" | cut -d' ' -f1) BYTES=$(wc -c < "$p")"
+              python3 - "$p" <<'PY'
+          import sys,ast,pathlib
+          p=pathlib.Path(sys.argv[1])
+          s=p.read_text(errors="replace")
+          print("ENTRY_HAS_GET_WSGI_APPLICATION="+str("get_wsgi_application" in s))
+          print("ENTRY_HAS_DEMO_IT_WORKS="+str("It works!" in s))
+          print("ENTRY_HAS_APPLICATION_SYMBOL="+str("application" in s))
+          print("ENTRYPOINT_LINES="+str(len(s.splitlines())))
+          if p.name == "passenger_wsgi.py" and len(s)<1600:
+              for line in s.splitlines():
+                  if not any(k in line.upper() for k in ("SECRET","PASSWORD","TOKEN","API_KEY","PRIVATE_KEY")):
+                      print("ENTRYLINE="+line[:190])
+          PY
+            fi
+          done
+          echo "CURRENT_ENTRYPOINT_AUDIT_FINISHED=yes"
+          REMOTE
       - name: Identify the short 200 response without credentials (read-only)
         shell: bash
         run: |
