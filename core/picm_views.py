@@ -216,6 +216,7 @@ def picm_worker_next(request):
         if not worker_authorized(request, root):
             return HttpResponse(status=403)
         now = time.time()
+        _clean_expired_staging(root, now)
         records = sorted(job_records(root), key=lambda j: j.get("created", 0))
         for job in records:
             if job.get("state") == "running" and now - job.get("updated", 0) > 900:
