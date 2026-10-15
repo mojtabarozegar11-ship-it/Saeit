@@ -41,7 +41,7 @@ jobs:
           lowered=data.lower()
           assert len(data)<100_000 and 'create table' in lowered
           assert 'core_factoryqueueitem' in lowered and 'core_discoverysnapshot' in lowered
-          assert not re.search(r'\\b(drop|delete|update|alter|attach|detach|replace|truncate)\\b',lowered)
+          assert not re.search(r'\b(drop|delete|update|alter|attach|detach|replace|truncate)\b',lowered)
           print("ASTRA_0049_DDL_ADDITIVE_ONLY=true")
           PY
       - name: Execute migration DDL against disposable VPS snapshot copy only
