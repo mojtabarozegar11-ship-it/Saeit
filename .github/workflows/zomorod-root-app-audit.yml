@@ -441,13 +441,17 @@ jobs:
           for name, value in updated.items():
               args.extend([f"envvar_name={name}", f"envvar_value={value}"])
           edited = subprocess.run(args, capture_output=True, text=True)
+          edit_status_path = backup_dir / f"passenger-env-edit-status-{commit_sha}.json"
           try:
               response = json.loads(edited.stdout)
+              status = response.get("result", {}).get("status")
+              errors = response.get("result", {}).get("errors") or []
           except Exception:
-              backup.unlink(missing_ok=True)
-              raise SystemExit("PASSENGER_EDIT_RETURNED_INVALID_JSON; no configuration confirmation")
-          status = response.get("result", {}).get("status")
-          errors = response.get("result", {}).get("errors") or []
+              status = None
+              errors = ["INVALID_UAPI_JSON"]
+          status_record = {"returncode": edited.returncode, "status": status, "errors": [str(e)[:300] for e in errors], "requested_envvar_names": sorted(updated)}
+          edit_status_path.write_text(json.dumps(status_record, ensure_ascii=False), encoding="utf-8")
+          os.chmod(edit_status_path, 0o600)
           print("PASSENGER_EDIT_STATUS=" + str(status))
           print("PASSENGER_EDIT_ERRORS=" + str(errors))
           if edited.returncode != 0 or status != 1 or errors:
@@ -466,9 +470,11 @@ jobs:
               elif isinstance(x, list):
                   stack.extend(x)
           if len(apps) != 1 or (apps[0].get("envvars") or {}).get("VIRTUAL_ENV") != venv:
+              status_record["readback_verified"] = False
+              edit_status_path.write_text(json.dumps(status_record, ensure_ascii=False), encoding="utf-8")
               raise SystemExit("PASSENGER_VENV_MAPPING_READBACK_FAILED; backup=" + str(backup))
-          print("PASSENGER_VIRTUAL_ENV_CONFIGURED=yes")
-          print("PASSENGER_ENVIRONMENT_BACKUP=" + str(backup))
+          status_record["readback_verified"] = True
+          edit_status_path.write_text(json.dumps(status_record, ensure_ascii=False), encoding="utf-8")
           print("PASSENGER_ENVIRONMENT_VARIABLE_NAMES=" + ",".join(sorted(updated)))
           PY
           touch tmp/restart.txt
@@ -563,6 +569,13 @@ jobs:
           venv_configured = False
           launcher_present = False
           log_matches = []
+          edit_result = {}
+          try:
+              status_file = "/home/zomorod2/.backups/zomorodmelal-root-homepage/passenger-env-edit-status-" + commit_sha + ".json"
+              status_read = subprocess.run(["ssh", "-F", ssh_config, "saeit-cpanel", "cat", status_file], capture_output=True, text=True, timeout=30)
+              if status_read.returncode == 0: edit_result = json.loads(status_read.stdout)
+          except Exception:
+              pass
           try:
               p = subprocess.run(["ssh", "-F", ssh_config, "saeit-cpanel", "uapi", "--output=json", "PassengerApps", "list_applications"], capture_output=True, text=True, timeout=30)
               data = json.loads(p.stdout)
@@ -588,7 +601,7 @@ jobs:
                       log_matches.append(line[:500])
           except Exception as error:
               log_matches.append("DIAGNOSTIC_ERROR=" + type(error).__name__)
-          payload = {"commit_sha": commit_sha, "passenger_virtual_env_configured": venv_configured, "passenger_launcher_present": launcher_present, "passenger_envvar_names": env_names, "root_app_enabled": bool(app and app.get("enabled") in (1, True, "1")), "routes": routes, "passenger_error_log_lines": log_matches[-12:]}
+          payload = {"commit_sha": commit_sha, "passenger_virtual_env_configured": venv_configured, "passenger_launcher_present": launcher_present, "passenger_envvar_names": env_names, "passenger_edit_result": edit_result, "root_app_enabled": bool(app and app.get("enabled") in (1, True, "1")), "routes": routes, "passenger_error_log_lines": log_matches[-12:]}
           with open(status_path, "w", encoding="utf-8") as f: json.dump(payload, f, ensure_ascii=False, indent=2)
           try:
               api = "https://api.github.com/repos/" + os.environ["GITHUB_REPOSITORY"] + "/contents/.codex/zomorod-recovery-status.json"
