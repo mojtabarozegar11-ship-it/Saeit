@@ -164,6 +164,13 @@ jobs:
             grep -E '^[[:space:]]*(PassengerAppRoot|PassengerStartupFile|PassengerBaseURI|RewriteRule|RewriteCond)' "$root/.htaccess" | head -40 || true
           else echo ROOT_HTACCESS=ABSENT
           fi
+          backup="$HOME/.backups/zomorodmelal-amozeshgah/htaccess.20261014T235252Z"
+          if test -f "$root/.htaccess" && test -f "$backup"; then
+            echo ROOT_HTACCESS_HASHES
+            sha256sum "$root/.htaccess" "$backup"
+            if cmp -s "$root/.htaccess" "$backup"; then echo ROOT_HTACCESS_MATCHES_PRE_ALIAS_BACKUP=yes; else echo ROOT_HTACCESS_MATCHES_PRE_ALIAS_BACKUP=no; fi
+          else echo ROOT_HTACCESS_BACKUP_PRESENT=no
+          fi
           REMOTE
       - name: Inspect active Passenger app and release state
         shell: bash
