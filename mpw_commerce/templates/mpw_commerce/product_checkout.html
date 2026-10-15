@@ -28,7 +28,10 @@ code{color:#f2cc80;overflow-wrap:anywhere}
 <small>MOJPLAYWIN · VERIFIED DIGITAL PURCHASE</small>
 <h1>{{ product.title }}</h1>
 <p class="muted">Digital PDF · Secure private delivery to your account after confirmed blockchain payment</p>
-<p class="price">$<span id="price">{{ price_usd }}</span> USD</p>
+{% if regular_price_usd %}
+<p class="muted">Regular price: <del>$<span id="regular-price">{{ regular_price_usd }}</span></del> USD · <strong>{{ discount_percent }}% off</strong></p>
+{% endif %}
+<p class="price">Special price: $<span id="price">{{ price_usd }}</span> USD</p>
 <div class="panel">
 <strong>Read before buying</strong>
 <p>This product must be paid using the exact amount and network on the server-issued invoice. Wallet signatures confirm your sender address only; no spending approval is requested.</p>
