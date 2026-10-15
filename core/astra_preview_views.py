@@ -15,6 +15,9 @@ PUBLIC_SLUGS = frozenset({
 
 @require_safe
 def astra_preview_page(request, slug=None):
+    hostname = request.get_host().split(":", 1)[0].lower().rstrip(".")
+    if hostname not in {"mojplaywin.com", "www.mojplaywin.com"}:
+        raise Http404("Not found")
     brand = brand_for_request(request)
     if brand is None or brand.code != "mojplaywin":
         raise Http404("Not found")
