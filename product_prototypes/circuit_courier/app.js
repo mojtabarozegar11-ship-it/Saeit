@@ -49,7 +49,7 @@ function draw(){
 function popcount(n){let x=0;for(;n;n&=n-1)x++;return x;}
 function drawStages(){
   const root=el("level-list");root.replaceChildren();
-  const unlocked=Math.min(core.COUNT,Math.max(1,...Object.keys(progress).map(Number))+1);
+  const unlocked=Math.min(core.COUNT,Math.max(0,...Object.keys(progress).map(Number))+1);
   // Any completed higher stage implies previous stages had been visited.
   for(let n=1;n<=core.COUNT;n++){
     const btn=document.createElement("button");
