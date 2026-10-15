@@ -98,7 +98,28 @@ class PrivateResearchDossiersTests(unittest.TestCase):
         self.build()
         self.build()
         self.assertEqual(sorted(p.name for p in self.out.iterdir()),
-                         ["research-1.json","research-3.json"])
+                         [".research-dossiers-cursor.json","research-1.json","research-3.json"])
+
+    def test_bounded_cursor_rotates_across_more_than_one_batch(self):
+        with sqlite3.connect(self.private) as db:
+            db.executemany(
+                "INSERT INTO research_tasks VALUES (?, 'WAITING_FOR_EVIDENCE',0,0,0,NULL)",
+                [(i,) for i in range(4,58)])
+        r1=self.build(limit=25)
+        r2=self.build(limit=25)
+        r3=self.build(limit=25)
+        self.assertEqual([r["dossiers_written"] for r in (r1,r2,r3)],[25,25,6])
+        self.assertFalse(r1["wrapped"])
+        self.assertTrue(r3["cursor_product_id"]>=57)
+        self.assertTrue(self.build(limit=25)["wrapped"])
+        self.assertTrue((self.out/"research-57.json").is_file())
+
+    def test_cursor_symlink_is_rejected(self):
+        foreign=self.out.parent/"foreign-cursor.json"
+        foreign.write_text('{"last_product_id":999}')
+        (self.out/".research-dossiers-cursor.json").symlink_to(foreign)
+        with self.assertRaisesRegex(ValueError,"DOSSIER_CURSOR_UNSAFE"):
+            self.build()
 
     def test_dossier_does_not_contain_raw_url_or_private_content(self):
         self.build()
