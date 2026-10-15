@@ -71,7 +71,7 @@ try:
     if not alt:raise RuntimeError('No unique position for game '+str(gi))
     k=min(alt,key=lambda x:abs(x-k));b,m,msan=ps[k]
    seen.add(unique_key(b))
-   infos=engine.analyse(b,chess.engine.Limit(time=.18),multipv=2)
+   infos=engine.analyse(b,chess.engine.Limit(time=.65),multipv=2)
    opts=[]
    for info in infos[:2]:
     pv=info.get('pv',[])
@@ -124,7 +124,7 @@ def page(c,d):
  c.drawRightString(A4[0]-42,25,str(d.page));c.restoreState()
 story=[P('One Hundred Game Studies & Two Hundred Independent Decision Exercises','title'),
        P('Research supplement for The Science and Practice of Chess Improvement | Author and researcher: Mojtaba Roozegar | 2026'),
-       P('Scientific limits: Game scores are legal source records. The 300 candidate evaluations are Stockfish snapshots at 0.18 seconds per position with MultiPV=2, not 300 formally proven best moves. The 200 puzzles are distinct board-state decision exercises, not necessarily forced tactical wins. Human grandmaster review has not occurred.'),
+       P('Scientific limits: Game scores are legal source records. The 300 candidate evaluations are Stockfish snapshots at 0.65 seconds per position with MultiPV=2, not 300 formally proven best moves. The 200 puzzles are distinct board-state decision exercises, not necessarily forced tactical wins. Human grandmaster review has not occurred.'),
        P('Source credit: https://github.com/brianerdelyi/ChessPGN. Only move scores and header facts are processed; no historical commentary is copied. Historical event/date attribution requires a separate cross-check.','small'),PageBreak(),P('Part I: 100 real-game decision studies','title')]
 for g in games:
  h=g['headers'];story.append(P(f"Game {g['num']:03d}: {h.get('White','?')} vs {h.get('Black','?')}",'h'))
@@ -142,7 +142,7 @@ story.extend([P('Part II: 200 independent practice positions','title'),
 for i,x in enumerate(exercises,1):
  story.append(P(f"Exercise {i:03d}: {x['side']} to move | Game {x['game']:03d}",'h'))
  story.append(BoardDiagram(x['fen']))
- story.append(P('Tasks: identify a candidate, name a serious alternative, calculate opponent counterplay, and assess uncertainty.','small'))
+ 
  story.append(P('FEN: '+x['fen'],'small'))
  if i%2==0:story.append(PageBreak())
 story.extend([P('Part III: worked, evidence-limited answers','title'),
@@ -150,9 +150,8 @@ story.extend([P('Part III: worked, evidence-limited answers','title'),
 for i,x in enumerate(exercises,1):
  score=('mate '+str(x['mate'])) if x['mate'] is not None else ('%+.2f'%(x['cp']/100) if x['cp'] is not None else 'unknown')
  story.append(P(f"Answer {i:03d}: {x['best']} | evaluation {score} | depth {x['depth']}",'h'))
- story.append(P(x['comment']))
- story.append(P(f"Variation A: {x['pv']} | Variation B: {x['second_pv']}",'small'))
- story.append(P('FEN: '+x['fen'],'small'))
+ story.append(P(f"Recorded game move: {x['played']} | First engine candidate: {x['best']} | Next engine candidate: {x['runner']}",'small'))
+ story.append(P(f"Principal variation A: {x['pv']} | B: {x['second_pv']}",'small'))
 story.extend([P('Editorial and release limitations','h'),P('The source has 100 legal score records; there are 300 unique engine-reviewed board states and 200 independent practice positions. This does not demonstrate 100 deep human-edited game analyses, engine proof of all alternatives, 150,000 nonduplicated useful words, or full rights clearance. These require further work before public sales.')])
 pdf=out/'MojPlayWin_Chess_R4_100_Games_200_Exercises.pdf'
 SimpleDocTemplate(str(pdf),pagesize=A4,leftMargin=43,rightMargin=43,topMargin=47,bottomMargin=40,title='MojPlayWin R4 Game and Exercise Research Workbook',author='Mojtaba Roozegar').build(story,onFirstPage=page,onLaterPages=page)
@@ -161,7 +160,7 @@ pages=len(PdfReader(str(pdf)).pages)
 qa={'release':'R4','legal_source_games':len(games),'bad_game_scores':invalid,
     'position_analyses':len(allcases),'unique_positions':len(seen),
     'independent_exercises':len(exercises),'exercise_unique_positions':len({unique_key(chess.Board(c['fen'])) for c in exercises}),
-    'engine_id':eid,'engine_time_sec_per_position':.18,'multipv':2,
+    'engine_id':eid,'engine_time_sec_per_position':.65,'multipv':2,
     'min_depth':min(depths),'max_depth':max(depths),'average_depth':round(statistics.mean(depths),1),
     'pages':pages,'sha256':hashlib.sha256(pdf.read_bytes()).hexdigest(),
     'human_grandmaster_reviewed':False,'deep_verified_100_games':False,
@@ -169,5 +168,5 @@ qa={'release':'R4','legal_source_games':len(games),'bad_game_scores':invalid,
 (out/'MojPlayWin_Chess_R4_QA.json').write_text(json.dumps(qa,indent=2,ensure_ascii=False))
 (out/'MojPlayWin_Chess_R4_Editorial_Status.md').write_text('# R4 editorial status\n\n'+
  f"Legal games: {len(games)}/100. Distinct analyzed positions: {len(allcases)}. Unique exercises: {len(exercises)}. PDF pages: {pages}. Engine: {eid}. Depth range: {min(depths)}-{max(depths)}.\n\n"+
- 'Game facts sourced from https://github.com/brianerdelyi/ChessPGN; no third-party commentary included. Analysis is original algorithm-assisted teaching commentary, based on 0.18-second searches, not adjudicated master-level depth. R3 and storefront remain unchanged. Further historical provenance, rights and human specialist review required.\n')
+ 'Game facts sourced from https://github.com/brianerdelyi/ChessPGN; no third-party commentary included. Analysis is original algorithm-assisted teaching commentary, based on 0.65-second searches, not adjudicated master-level depth. R3 and storefront remain unchanged. Further historical provenance, rights and human specialist review required.\n')
 print('R4_COMPLETE',json.dumps({k:v for k,v in qa.items() if k!='bad_game_scores'}),flush=True)
