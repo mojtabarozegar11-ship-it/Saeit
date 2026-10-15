@@ -14,6 +14,7 @@ on:
       - tests/test_astra_v2_*.py
       - tests/test_astra_farm_*.py
       - tests/test_astra_orchard_decision_audit.py
+      - tests/test_astra_v2_independent_math_regressions.py
       - core/migrations/0049_astra_stage45_research_queue.py
   pull_request:
     branches: [factory/staging-reconciliation-20261008]
@@ -104,6 +105,12 @@ jobs:
           echo ASTRA_V2_0049_INTEGRATED_THREE_BUILDERS_QA=PASS
           echo ASTRA_V2_0049_INTEGRATED_PRIVATE_RESEARCH=PASS
           echo ASTRA_V2_0049_NO_COMMERCIAL_SALE_AUTHORIZED=true
+      - name: Independent 300-case fractional arithmetic benchmarks
+        run: |
+          set -euo pipefail
+          python -m unittest discover -s tests -p test_astra_v2_independent_math_regressions.py -v
+          echo ASTRA_V2_300_SYNTHETIC_MATH_REFERENCE_CASES=PASS
+          echo ASTRA_V2_300_CASES_ARE_NOT_MARKET_EVIDENCE=true
       - name: No production or network side effects
         run: |
           echo ASTRA_V2_0049_NO_VPS_SSH=true
