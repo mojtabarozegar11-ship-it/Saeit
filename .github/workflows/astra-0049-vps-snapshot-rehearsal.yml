@@ -3,7 +3,10 @@ name: Astra 0049 VPS Snapshot Migration Rehearsal
 on:
   push:
     branches: [feature/astra-stage45-schema-0049-20261015]
-    paths: [.github/workflows/astra-0049-vps-snapshot-rehearsal.yml]
+    paths:
+      - .github/workflows/astra-0049-vps-snapshot-rehearsal.yml
+      - scripts/astra_opportunity_selector.py
+      - scripts/astra_research_evidence_adapter.py
   workflow_dispatch:
 
 permissions:
@@ -62,6 +65,7 @@ jobs:
           test "$(ssh-keygen -lf "$temp/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
           SSH=(ssh -i "$temp/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$temp/known" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=15 githubops@178.239.147.150)
           cat "$RUNNER_TEMP/astra-0049.sql" | "${SSH[@]}" 'umask 077; destination="$HOME/factory-runtime/operations/astra-stage45-disposable-0049.sql"; test ! -L "$destination"; cat > "$destination"; chmod 600 "$destination"'
+          tar -cf - scripts/astra_opportunity_selector.py scripts/astra_research_evidence_adapter.py | "${SSH[@]}" 'set -eu; umask 077; stage="$HOME/factory-runtime/operations/astra-stage45-probe-code"; test ! -L "$stage"; mkdir -p "$stage"; chmod 700 "$stage"; tar -xf - -C "$stage"'
           "${SSH[@]}" 'bash -se' <<'REMOTE'
           set -euo pipefail
           umask 077
@@ -116,5 +120,63 @@ jobs:
           print("ASTRA_0049_DB_PUBLICATION_DENIAL=PASS")
           print("ASTRA_0049_LIVE_SQLITE_MUTATIONS=0")
           print("ASTRA_0049_PUBLIC_SITE_MUTATIONS=0")
+          PY
+          python3 - "$work/disposable.sqlite3" "$HOME/factory-runtime/operations/astra-stage45-probe-code/scripts/astra_research_evidence_adapter.py" <<'PY'
+          import datetime,importlib.util,pathlib,sqlite3,sys
+          db=pathlib.Path(sys.argv[1])
+          adapter_source=pathlib.Path(sys.argv[2])
+          assert adapter_source.is_file() and not adapter_source.is_symlink()
+          spec=importlib.util.spec_from_file_location("astra_vps_stage45_readonly_probe",adapter_source)
+          adapter=importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(adapter)
+          now=datetime.datetime.now(datetime.timezone.utc)
+          utc_naive=now.strftime("%Y-%m-%d %H:%M:%S.%f")
+          evidence=[
+            ("example.com","problem"),
+            ("example.org","willingness_to_pay"),
+            ("example.net","comparison"),
+            ("example.com","feasibility"),
+          ]
+          with sqlite3.connect(db) as conn:
+              pk=conn.execute("SELECT id FROM core_factoryqueueitem WHERE key='discovery:canary'").fetchone()[0]
+              for number,(host,claim) in enumerate(evidence,1):
+                  conn.execute(
+                    "INSERT INTO core_discoverysnapshot "
+                    "(created_at,updated_at,hypothesis_id,url,content_hash,retrieved_at,record) "
+                    "VALUES (?,?,?,?,?,?,?)",
+                    (utc_naive,utc_naive,pk,
+                     f"https://{host}/synthetic-{number}",f"{number:064x}",
+                     utc_naive,'{"claim_type":"'+claim+'","illustrative_only":true}'))
+              initial=conn.execute("SELECT COUNT(*) FROM core_discoverysnapshot").fetchone()[0]
+          measures=dict.fromkeys(("problem_intensity","demand","differentiation","feasibility",
+                                  "margin","distribution","strategic_fit"),80)
+          gates=dict.fromkeys(("lawful","rights_reviewed","build_capability_available",
+                               "distribution_path_available"),True)
+          candidates=[
+            {"opportunity_key":"canary-topic","astra_queue_key":"discovery:canary",
+             "problem":"Synthetic farm scenario requiring review only",
+             "assessments":measures,"gates":gates},
+            {"opportunity_key":"unrelated-topic","astra_queue_key":"discovery:unrelated",
+             "problem":"Unrelated synthetic opportunity with zero mapped evidence",
+             "assessments":measures,"gates":gates},
+          ]
+          report=adapter.evaluate_db(db,candidates,now.isoformat())
+          by_key={r["opportunity_key"]:r for r in report["candidates"]}
+          a=by_key["canary-topic"]
+          b=by_key["unrelated-topic"]
+          assert a["status"]=="REVIEW_REQUIRED" and a["distinct_source_domains_preliminary"]==3,a
+          assert set(a["observed_claim_types"])=={
+               "problem","willingness_to_pay","comparison","feasibility"}
+          assert b["status"]=="RESEARCH_REQUIRED" and b["distinct_source_domains_preliminary"]==0,b
+          assert all(not r["build_authorized"] and not r["publish_authorized"]
+                     and not r["payment_authorized"] for r in report["candidates"])
+          assert report["bridge_audit"]["astra_snapshots_eligible"]==4
+          assert report["bridge_audit"]["bridge_writes_to_factory"]==0
+          with sqlite3.connect(db.as_uri()+"?mode=ro",uri=True) as conn:
+              assert conn.execute("SELECT COUNT(*) FROM core_discoverysnapshot").fetchone()[0]==initial
+          print("ASTRA_0049_VPS_READONLY_RESEARCH_BRIDGE=PASS")
+          print("ASTRA_0049_VPS_TYPED_CLAIM_ISOLATION=PASS")
+          print("ASTRA_0049_VPS_SYNTHETIC_ONLY=true")
+          print("ASTRA_0049_VPS_RELEASE_AUTHORITY=false")
           PY
           REMOTE
