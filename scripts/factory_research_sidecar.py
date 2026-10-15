@@ -16,6 +16,7 @@ from pathlib import Path
 import sqlite3
 import sys
 import tempfile
+import unicodedata
 
 ROOT = Path(__file__).resolve().parent
 
@@ -81,13 +82,29 @@ def inspect(database, destination, *, limit=50):
             columns={col[1] for col in conn.execute("PRAGMA table_info(core_product)")}
             if not {"id","active","factory_managed"}.issubset(columns):
                 raise RuntimeError("PRODUCT_SCHEMA_INCOMPATIBLE")
-            ids=[row[0] for row in conn.execute(
-                "SELECT id FROM core_product WHERE factory_managed=1 AND active=0 ORDER BY id LIMIT ?",
-                (limit,))]
+            all_ids=[row[0] for row in conn.execute(
+                "SELECT id FROM core_product WHERE factory_managed=1 AND active=0 ORDER BY id LIMIT 10001"
+            )]
+            if len(all_ids)>10000:
+                raise RuntimeError("RESEARCH_BACKLOG_EXCEEDS_BOUNDED_CAP")
+            cursor_path=dest/"cursor.json"
+            if cursor_path.is_symlink():
+                raise RuntimeError("CURSOR_SYMLINK")
+            try:
+                previous=int(json.loads(cursor_path.read_text(encoding="utf-8")).get("last_product_id",0))
+            except (OSError,ValueError,TypeError,AttributeError):
+                previous=0
+            after=next((n for n,item in enumerate(all_ids) if item>previous),0)
+            ids=(all_ids[after:]+all_ids[:after])[:limit]
             candidates=[]
             reason_count=collections.Counter()
+            title_counts=collections.Counter()
             for ident in ids:
                 bundle=pilot.prepare(conn,ident)
+                title=unicodedata.normalize("NFKC",str(bundle.get("title") or ""))
+                key=" ".join(title.split()).casefold()
+                if key:
+                    title_counts[key]+=1
                 current=gate.assess(bundle)
                 reason_count.update(current["blockers"])
                 candidates.append({
@@ -107,6 +124,11 @@ def inspect(database, destination, *, limit=50):
             "database_mutations":0,
             "external_calls":0,
             "product_count":len(candidates),
+            "total_factory_drafts_in_scope":len(all_ids),
+            "unscanned_in_this_batch":max(0,len(all_ids)-len(candidates)),
+            "duplicate_title_occurrences_in_batch":sum(max(0,v-1) for v in title_counts.values()),
+            "duplicate_title_groups_in_batch":sum(int(v>1) for v in title_counts.values()),
+            "last_scanned_product_id":ids[-1] if ids else previous,
             "research_blocked":pending,
             "quantitative_research_review_candidates":len(candidates)-pending,
             "blocker_frequency":dict(sorted(reason_count.items())),
@@ -117,7 +139,11 @@ def inspect(database, destination, *, limit=50):
             "note":"Research evidence counts are candidate metrics, never independently certified product quality.",
         }
         changed=safe_output(dest/"latest.json",summary)
+        if ids:
+            safe_output(dest/"cursor.json",{"last_product_id":ids[-1]})
         return {"status":"ok","processed":len(candidates),"blocked":pending,
+                "total_drafts":len(all_ids),"unscanned":max(0,len(all_ids)-len(candidates)),
+                "duplicates":summary["duplicate_title_occurrences_in_batch"],
                 "changed":changed,"publishable":0}
 
 
