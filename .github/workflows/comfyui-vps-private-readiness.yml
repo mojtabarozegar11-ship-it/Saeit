@@ -78,3 +78,5 @@ jobs:
           df -Pm "$HOME" | awk 'NR==2{print "READINESS_DISK_AVAILABLE_MB="$4}'
           echo "READINESS_INSPECTION_FINISHED_NO_SERVICE_MUTATION"
           REMOTE
+
+# Trigger a fresh, read-only VPS readiness snapshot on 2026-10-15.
