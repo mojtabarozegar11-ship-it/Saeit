@@ -28,6 +28,18 @@ Second scenario uses the explicitly supplied `drought_water_fraction`, e.g. 0.65
 
 **Limitations:** maximum 5 crops, independent fractional areas, no minimum contract acreage, no transport/storage constraints, no nonlinear yields or crop rotations. A professional should check all field constraints before farm decisions. The presence of a mathematically optimal solution **under this simplified model** does NOT mean a physically or legally admissible field plan.
 
+## Water-allowance sensitivity frontier (new)
+
+The audit now resolves the exact same LP at **0%, 25%, 50%, 75% and 100%** of the operator-supplied baseline water budget. The printable HTML report includes a five-row decision table with optimal gross margins and the **average incremental gross-margin gain per additional cubic metre of *allowed* water** between adjacent rows:
+
+`interval_gain_per_m3 = (optimal_margin_at_more_water - optimal_margin_at_less_water) / (more_allowed_m3 - less_allowed_m3)`.
+
+This is a **finite-interval sensitivity calculation**, **not** an infinitesimal dual shadow price, quoted market water tariff, verified marginal crop yield or proof that extra water can be legally or physically supplied. If total baseline water equals zero, the interval value is `null` (undefined), not a manufactured zero-value quote. Currency follows the user-entered currency; no external exchange rate is inferred.
+
+All five optimizations use the original unrounded Decimal input and each has its own feasible land/water allocation. The reported sensitivity is rounded to six decimal places only for display; the stored mathematical optimum is calculated before that rounding. The existing explicit drought scenario remains a separate sixth analysis when its percentage does not coincide with a frontier point. The output still has `quality_score=null`, `sale_ready=false` and zero payment/publication authority.
+
+**Research-method precedent, not evidence of product novelty:** FAO describes linear programming of cropping plans to maximize gross margin under water constraints: https://www.fao.org/4/w4367e/w4367e06.htm . FAO also distinguishes economic marginal value and physical irrigation efficiency: https://www.fao.org/4/y5582e/y5582e06.htm . Existing university alternatives remain direct competitors. No user-level demand validation is implied by these references.
+
 ## Proven methods and real competition
 
 - FAO's *Economic valuation of water resources in agriculture* presents resource-allocation efficiency as one consideration alongside environmental/equity limits: https://www.fao.org/4/y5582e/y5582e06.htm
