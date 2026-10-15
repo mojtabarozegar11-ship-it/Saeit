@@ -1,0 +1,51 @@
+name: PICM Private Image Studio Safety Tests
+on:
+  push:
+    branches: [main]
+    paths:
+      - core/picm_views.py
+      - templates/picm/index.html
+      - ops/picm-vps/**
+      - scripts/deploy_mojplaywin_picm.py
+      - tests/test_picm_views.py
+      - .github/workflows/picm-safety-tests.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: picm-private-safety
+  cancel-in-progress: false
+jobs:
+  safety:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install project dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Check safe installer and engine syntax
+        run: |
+          python -m py_compile core/picm_views.py ops/picm-vps/worker.py scripts/deploy_mojplaywin_picm.py
+          python - <<'PY'
+          from pathlib import Path
+          html=Path('templates/picm/index.html').read_text()
+          assert '<title>PICM' in html and 'csrfmiddlewaretoken' in html
+          assert "http://127.0.0.1:18188" in Path("ops/picm-vps/worker.py").read_text()
+          assert "https://mojplaywin.com" in Path("ops/picm-vps/worker.py").read_text()
+          print("PICM_PRIVATE_ONLY_CONFIGURATION_OK")
+          PY
+      - name: Validate authenticated queue and image-return contract
+        env:
+          SECRET_KEY: picm-disposable-ci-secret
+          DEBUG: "False"
+          ALLOWED_HOSTS: localhost,127.0.0.1
+        run: pytest -q tests/test_picm_views.py
+      - name: Check Django system
+        env:
+          SECRET_KEY: picm-disposable-ci-secret
+          DEBUG: "False"
+          ALLOWED_HOSTS: localhost,127.0.0.1
+        run: python manage.py check
