@@ -97,5 +97,28 @@ class PICMIndependentGPUReadinessTests(unittest.TestCase):
         self.assertIn("loopback_comfy_service_unavailable", result["requirements"])
 
 
+    def test_wan5b_profile_accepts_8gb_only_when_free_vram_sufficient(self):
+        self.assertEqual(p.GPU_PROFILES["wan22-5b-offload-8gb"], 7000)
+        response = {"devices": [{"type": "cuda", "name": "NVIDIA RTX 8GB"}]}
+        with patch.object(p.shutil, "which", return_value="/usr/bin/ffmpeg"):
+            with patch.object(p.shutil, "disk_usage", return_value=self.disk):
+                def check(minimum):
+                    return p.inspect(self.home, self.graph, self.nodes,
+                        minimum_gpu_mib=minimum, probe=lambda _: response,
+                        gpu_command=lambda: "8192, 7400")
+                self.assertFalse(check(p.GPU_PROFILES["standard-24gb"])["ready"])
+                self.assertTrue(check(p.GPU_PROFILES["wan22-5b-offload-8gb"])["ready"])
+
+    def test_wan5b_profile_rejects_gpu_with_low_free_memory(self):
+        with patch.object(p.shutil, "which", return_value="/usr/bin/ffmpeg"):
+            with patch.object(p.shutil, "disk_usage", return_value=self.disk):
+                result = p.inspect(self.home, self.graph, self.nodes,
+                    minimum_gpu_mib=p.GPU_PROFILES["wan22-5b-offload-8gb"],
+                    probe=lambda _: {"devices": [{"type": "cuda"}]},
+                    gpu_command=lambda: "8192, 4900")
+        self.assertFalse(result["ready"])
+        self.assertIn("insufficient_free_gpu_vram", result["requirements"])
+
+
 if __name__ == "__main__":
     unittest.main()
