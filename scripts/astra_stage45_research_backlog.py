@@ -79,7 +79,7 @@ def _typed_reference(row, now, selector, adapter):
         if not isinstance(record, dict):
             return None
         claim = record.get("claim_type")
-        if claim not in CLAIMS or record.get("illustrative_only") is True:
+        if claim not in CLAIMS or selector._explicitly_synthetic(record):
             return None
         url = row["url"]
         host = selector._public_https_domain(url)
