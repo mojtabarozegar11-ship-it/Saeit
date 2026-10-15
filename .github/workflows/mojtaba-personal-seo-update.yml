@@ -138,6 +138,10 @@ jobs:
               "Originally from Iran, I began a new chapter abroad in 2022. After living in several countries, I made Vancouver, British Columbia, my home.",
               "My work brings together business, agriculture, research and technology. This site shares selected projects, experiences and writing.",
               "HOME_JOURNEY_COPY")
+          for label,source in (("home",home),("base",base)):
+              for number,line in enumerate(source.splitlines(),1):
+                  if "Vancouver" in line:
+                      print("SEO_UNRESOLVED_LOCATION="+label+":"+str(number)+":"+line[:700])
           if "Vancouver" in home or "Vancouver" in base:
               raise SystemExit("VANCOUVER_REFERENCE_REMAINS_IN_TARGET_TEMPLATES")
           base=once(base,
