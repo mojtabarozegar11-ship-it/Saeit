@@ -1,0 +1,247 @@
+name: Apply SEO updates to Mojtaba personal page
+on:
+  issues:
+    types: [opened]
+permissions:
+  contents: read
+concurrency:
+  group: mojtaba-personal-seo-update
+  cancel-in-progress: false
+jobs:
+  update:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event.issue.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.issue.title == 'Ops: Apply Mojtaba personal SEO metadata 2026-10-15'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Prepare pinned SSH relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojtaba-seo"
+          mkdir -p "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          python3 - "$d/host.key" <<'PY'
+          import pathlib,sys
+          p=pathlib.Path(sys.argv[1])
+          t=p.read_text().replace('\\r\\n','\\n').strip()
+          p.write_text(t.replace('\\\\n','\\n')+'\\n')
+          PY
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host saeit-host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+            ConnectionAttempts 1
+          EOF
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          echo "SSH_CONFIG=$d/config" >> "$GITHUB_ENV"
+
+      - name: Update personal SEO templates with backup and rollback
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -F "$SSH_CONFIG" saeit-host 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          app="/home/zomorod2/mojtaba_personal/mojtaba_roozegar_personal_v17"
+          base="$app/templates/personal_site/base.html"
+          home="$app/templates/personal_site/core/home.html"
+          test -f "$app/manage.py"
+          test -f "$base"
+          test -f "$home"
+          test "$(realpath "$base")" = "$base"
+          test "$(realpath "$home")" = "$home"
+          backup="$HOME/.backups/mojtaba-personal-seo/$(date -u +%Y%m%dT%H%M%SZ)"
+          install -d -m 700 "$backup"
+          cp -p "$base" "$backup/base.html"
+          cp -p "$home" "$backup/home.html"
+          zm_htaccess="/home/zomorod2/public_html/.htaccess"
+          zm_index="/home/zomorod2/public_html/index.html"
+          zm_htaccess_before="$(sha256sum "$zm_htaccess" | awk '{print $1}')"
+          if test -f "$zm_index"; then zm_index_before="$(sha256sum "$zm_index" | awk '{print $1}')"; else zm_index_before="missing"; fi
+          changed=0
+          success=0
+          rollback() {
+            rc=$?
+            if test "$success" != 1 && test "$changed" = 1; then
+              cp -p "$backup/base.html" "$base.restore"
+              cp -p "$backup/home.html" "$home.restore"
+              mv -f "$base.restore" "$base"
+              mv -f "$home.restore" "$home"
+              touch "$app/tmp/restart.txt"
+              echo "SEO_ROLLBACK=completed"
+            fi
+            exit "$rc"
+          }
+          trap rollback EXIT
+          changed=1
+          python3 - "$base" "$home" <<'PY'
+          import json,re,sys,pathlib,os
+          base_path,home_path=map(pathlib.Path,sys.argv[1:])
+          base=base_path.read_text(encoding="utf-8")
+          home=home_path.read_text(encoding="utf-8")
+          def once(text,old,new,label):
+              count=text.count(old)
+              if count!=1: raise SystemExit(f"{label}_EXPECTED_ONCE_GOT_{count}")
+              return text.replace(old,new,1)
+          home=once(home,
+              "{% block title %}Mojtaba Roozegar — Entrepreneur, Stories & Work{% endblock %}",
+              "{% block title %}Mojtaba Roozegar (مجتبی روزگار) | Official Website{% endblock %}",
+              "HOME_TITLE")
+          home=once(home,
+              "{% block description %}Meet Mojtaba Roozegar, an entrepreneur based in Vancouver. Explore work, personal memories, original fiction and reflections.{% endblock %}",
+              "{% block description %}Official website of Mojtaba Roozegar (مجتبی روزگار), entrepreneur, business executive and researcher. Explore his work, ideas and writing.{% endblock %}",
+              "HOME_DESCRIPTION")
+          home=once(home,
+              "{% block description %}Official website of Mojtaba Roozegar (مجتبی روزگار), entrepreneur, business executive and researcher. Explore his work, ideas and writing.{% endblock %}\n",
+              "{% block description %}Official website of Mojtaba Roozegar (مجتبی روزگار), entrepreneur, business executive and researcher. Explore his work, ideas and writing.{% endblock %}\n{% block og_title %}Mojtaba Roozegar (مجتبی روزگار) | Official Website{% endblock %}\n{% block og_description %}Mojtaba Roozegar is an entrepreneur, business executive and researcher. Read about his work, ideas and writing.{% endblock %}\n",
+              "HOME_SOCIAL_META")
+          home=once(home,
+              "THE PERSONAL EDITION <span class=\"eyebrow-dot\">✦</span> VANCOUVER, BC",
+              "THE PERSONAL EDITION <span class=\"eyebrow-dot\">✦</span> MOJTABA ROOZEGAR",
+              "HOME_EYEBROW")
+          home=once(home,
+              "<p class=\"hero-intro\">{{ profile.intro|default:'Originally from Iran and now based in Vancouver, Canada. I share the work I create, the moments I remember, and the stories I imagine.' }}</p>",
+              "<p class=\"hero-intro\">Mojtaba Roozegar is an entrepreneur, business executive and researcher. This independent website brings together his work, ideas and writing.</p>",
+              "HOME_HERO_INTRO")
+          home=once(home,
+              "Originally from Iran, I began a new chapter abroad in 2022. After living in several countries, I made Vancouver, British Columbia, my home.",
+              "My work brings together business, agriculture, research and technology. This site shares selected projects, experiences and writing.",
+              "HOME_JOURNEY_COPY")
+          if "Vancouver" in home or "Vancouver" in base:
+              raise SystemExit("VANCOUVER_REFERENCE_REMAINS_IN_TARGET_TEMPLATES")
+          base=once(base,
+              '<meta property="og:description" content="An independent personal collection of work, ideas, memories and original stories.">',
+              '<meta property="og:description" content="{% block og_description %}An independent personal collection of work, ideas, memories and original stories.{% endblock %}">',
+              "BASE_OG_DESCRIPTION")
+          pattern=re.compile(r'<script type="application/ld\+json">(.*?)</script>',re.S)
+          match=pattern.search(base)
+          if not match or len(pattern.findall(base))!=1:
+              raise SystemExit("BASE_JSONLD_SCRIPT_EXPECTED_ONE")
+          old=json.loads(match.group(1))
+          if old.get("@type")!="Person" or old.get("@id")!="https://mojplaywin.com/mojtaba.roozegar/#person":
+              raise SystemExit("BASE_JSONLD_SOURCE_MISMATCH")
+          person={
+              "@type":"Person",
+              "@id":"https://mojplaywin.com/mojtaba.roozegar/#person",
+              "name":"Mojtaba Roozegar",
+              "alternateName":"مجتبی روزگار",
+              "url":"https://mojplaywin.com/mojtaba.roozegar/",
+              "description":"Entrepreneur, business executive and researcher. Mojtaba Roozegar shares his work, ideas and writing.",
+              "sameAs":old.get("sameAs",[]),
+              "jobTitle":["Entrepreneur","Business Executive","Researcher"],
+              "worksFor":old.get("worksFor",[])
+          }
+          webpage={
+              "@context":"https://schema.org",
+              "@type":"ProfilePage",
+              "@id":"https://mojplaywin.com/mojtaba.roozegar/#webpage",
+              "url":"https://mojplaywin.com/mojtaba.roozegar/",
+              "name":"Mojtaba Roozegar (مجتبی روزگار) | Official Website",
+              "mainEntity":person
+          }
+          replacement='<script type="application/ld+json">'+json.dumps(webpage,ensure_ascii=False,separators=(",",":"))+'</script>'
+          base=base[:match.start()]+replacement+base[match.end():]
+          if "Vancouver" in base:
+              raise SystemExit("BASE_LOCATION_REFERENCE_REMAINS")
+          staged=[]
+          for path,content in ((base_path,base),(home_path,home)):
+              tmp=path.with_name(path.name+".seo-tmp")
+              tmp.write_text(content,encoding="utf-8")
+              os.chmod(tmp,path.stat().st_mode & 0o777)
+              staged.append((tmp,path))
+          for tmp,path in staged:
+              os.replace(tmp,path)
+          print("SEO_TEMPLATES_PATCHED=2")
+          print("SEO_PATCH_PATH="+str(base_path))
+          print("SEO_PATCH_PATH="+str(home_path))
+          PY
+          touch "$app/tmp/restart.txt"
+          python3 - "$zm_htaccess" "$zm_htaccess_before" "$zm_index" "$zm_index_before" <<'PY'
+          import hashlib,pathlib,sys
+          def h(p):
+              try:return hashlib.sha256(pathlib.Path(p).read_bytes()).hexdigest()
+              except FileNotFoundError:return "missing"
+          if h(sys.argv[1])!=sys.argv[2] or h(sys.argv[3])!=sys.argv[4]:
+              raise SystemExit("ZOMOROD_ROOT_FILE_CHANGED_DURING_PERSONAL_UPDATE")
+          print("ZOMOROD_ROOT_FILES_UNCHANGED=yes")
+          PY
+          python3 - <<'PY'
+          from html.parser import HTMLParser
+          from urllib.request import Request,urlopen
+          from xml.etree import ElementTree
+          import json,time
+          target="https://mojplaywin.com/mojtaba.roozegar/?seo_verify="+str(int(time.time()))
+          class Check(HTMLParser):
+              def __init__(self):
+                  super().__init__(); self.title_on=False; self.title=[]; self.meta={}; self.canonical=[]; self.scripts=[]; self.script_on=False; self.script=[]
+              def handle_starttag(self,tag,attrs):
+                  a=dict(attrs)
+                  if tag=="title": self.title_on=True
+                  if tag=="meta" and a.get("name","").lower() in ("description","robots"): self.meta[a["name"].lower()]=a.get("content","")
+                  if tag=="link" and "canonical" in a.get("rel","").lower().split(): self.canonical.append(a.get("href",""))
+                  if tag=="script" and a.get("type","").lower()=="application/ld+json": self.script_on=True; self.script=[]
+              def handle_endtag(self,tag):
+                  if tag=="title": self.title_on=False
+                  if tag=="script" and self.script_on: self.scripts.append("".join(self.script)); self.script_on=False
+              def handle_data(self,data):
+                  if self.title_on:self.title.append(data)
+                  if self.script_on:self.script.append(data)
+          req=Request(target,headers={"User-Agent":"MojtabaPersonalSEOUpdate/1.0"})
+          with urlopen(req,timeout=20) as response:
+              if response.status!=200: raise SystemExit("PROFILE_HTTP_STATUS="+str(response.status))
+              html=response.read(2000000).decode("utf-8","replace")
+          p=Check();p.feed(html)
+          title="".join(p.title).strip()
+          description=p.meta.get("description","")
+          expected_title="Mojtaba Roozegar (مجتبی روزگار) | Official Website"
+          if title!=expected_title: raise SystemExit("SEO_TITLE_VERIFY_FAILED="+title)
+          if "Mojtaba Roozegar" not in description or "مجتبی روزگار" not in description: raise SystemExit("SEO_DESCRIPTION_VERIFY_FAILED")
+          if "index" not in p.meta.get("robots","").lower() or "noindex" in p.meta.get("robots","").lower(): raise SystemExit("SEO_ROBOTS_VERIFY_FAILED")
+          if p.canonical!=["https://mojplaywin.com/mojtaba.roozegar/"]: raise SystemExit("SEO_CANONICAL_VERIFY_FAILED="+repr(p.canonical))
+          ld=[json.loads(x) for x in p.scripts]
+          profile=[x for x in ld if x.get("@type")=="ProfilePage"]
+          if len(profile)!=1 or profile[0].get("mainEntity",{}).get("name")!="Mojtaba Roozegar": raise SystemExit("SEO_PROFILE_SCHEMA_VERIFY_FAILED")
+          if "Vancouver" in html: raise SystemExit("SEO_LOCATION_TEXT_REMAINS")
+          print("PROFILE_HTTP=200")
+          print("SEO_TITLE="+title)
+          print("SEO_DESCRIPTION="+description)
+          print("SEO_ROBOTS="+p.meta.get("robots",""))
+          print("SEO_CANONICAL="+repr(p.canonical))
+          print("SEO_JSONLD=ProfilePage->Person")
+          PY
+          success=1
+          echo "SEO_UPDATE=completed"
+          echo "SEO_BACKUP=$backup"
+          REMOTE
