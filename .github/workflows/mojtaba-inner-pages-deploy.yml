@@ -1,0 +1,178 @@
+name: Complete Mojtaba personal internal pages
+on:
+  issues:
+    types: [opened]
+permissions:
+  contents: read
+concurrency:
+  group: mojtaba-v17-inner-pages-production
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event.issue.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.issue.title == 'Ops: Complete Mojtaba personal 8 internal pages 2026-10-15'
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test content generator before live SSH
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p 'test_mojtaba_personal_inner_content.py' -v
+      - name: Prepare pinned SSH relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/photo-relay"
+          mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          python3 - "$d/host.key" <<'PY'
+          import pathlib,sys
+          p=pathlib.Path(sys.argv[1]);t=p.read_text().replace('\r\n','\n').strip()
+          p.write_text(t.replace('\\n','\n')+'\n')
+          PY
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host saeit-host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+            ConnectionAttempts 1
+          EOF
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          echo "SSH_CONFIG=$d/config" >> "$GITHUB_ENV"
+      - name: Copy vetted personal content installer to private cPanel stage
+        shell: bash
+        run: |
+          set -euo pipefail
+          stage="/home/zomorod2/.personal-inner-release-$GITHUB_RUN_ID"
+          timeout 25s ssh -F "$SSH_CONFIG" saeit-host "test ! -e '$stage' && install -d -m 700 '$stage'"
+          timeout 70s scp -F "$SSH_CONFIG" scripts/mojtaba_personal_inner_content.py "saeit-host:$stage/installer.py"
+
+      - name: Protected eight-template install, rollback and HTTP checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 510s ssh -F "$SSH_CONFIG" saeit-host "bash -s -- '$GITHUB_RUN_ID'" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          run_id="$1"
+          app="/home/zomorod2/mojtaba_personal/mojtaba_roozegar_personal_v17"
+          stage="/home/zomorod2/.personal-inner-release-$run_id"
+          script="$stage/installer.py"
+          backup="$HOME/.backups/mojtaba-inner-pages-release/$run_id"
+          marker="mpw-inner-content-20261015"
+          installed=0
+          finished=0
+          rollback() {
+            rc=$?
+            trap - EXIT
+            if test "$finished" -ne 1 && test "$installed" -eq 1 && test -d "$backup"; then
+              python3 "$script" rollback --backup-dir "$backup" || echo "MANUAL_ROLLBACK_REQUIRED=yes"
+              echo "PERSONAL_INNER_ROLLBACK=attempted"
+            fi
+            exit "$rc"
+          }
+          trap rollback EXIT
+          test -f "$app/manage.py" && test -f "$script" && test ! -L "$app"
+          for p in "$app"/templates/personal_site/core/{about,projects,posts,gallery,resume,activities,memories,stories}.html; do
+            test -f "$p" && test ! -L "$p"
+          done
+          python3 "$script" check --backup-dir "$backup"
+          installed=1
+          python3 "$script" install --backup-dir "$backup"
+          py="$app/../.venv_personal_test/bin/python"
+          test -x "$py" && "$py" -c 'import django'
+          cd "$app"
+          "$py" manage.py check --deploy
+          test -d "$app/tmp" && touch "$app/tmp/restart.txt"
+          python3 - <<'PY'
+          import time
+          from urllib.request import Request,urlopen
+          from html.parser import HTMLParser
+          base="https://mojplaywin.com/mojtaba.roozegar/"
+          urls={"about/":"A personal story across borders.",
+                "projects/":"Experience, initiatives and ideas.",
+                "blog/":"Ideas explained, not merely announced.",
+                "gallery/":"Ten distinct images, one professional narrative.",
+                "resume/":"A multidisciplinary professional path.",
+                "works-activities/":"Work through many disciplines.",
+                "memories/":"The journey behind the work.",
+                "stories/":"A place for imagination."}
+          for path,text in urls.items():
+              error=""
+              for attempt in range(7):
+                  try:
+                      req=Request(base+path+"?verify="+str(time.time_ns()),headers={"User-Agent":"MojtabaPersonalEightPageLive/1.0"})
+                      with urlopen(req,timeout=19) as r:
+                          s=r.read(3000000).decode("utf-8","replace")
+                          if r.status!=200 or 'id="mpw-inner-content-20261015"' not in s or text not in s:
+                              raise ValueError("Page missing content or HTTP 200")
+                          if "<title>" not in s: raise ValueError("SEO title missing")
+                      print("LIVE_PAGE_VERIFIED="+path)
+                      break
+                  except Exception as e:
+                      error=str(e)
+                      print("PAGE_RETRY="+path+" attempt="+str(attempt+1)+" "+error[:80])
+                      time.sleep(3)
+              else:
+                  raise SystemExit("LIVE_PAGE_FAILED "+path+" "+error)
+          # Verify images still work and are linked from gallery (without changing them).
+          with urlopen(Request(base+"gallery/?photos="+str(time.time_ns())),timeout=20) as r:
+              html=r.read(2500000).decode("utf-8","replace")
+          if html.count('class="mpw-gallery"')!=1:
+              raise SystemExit("Gallery absent on live site")
+          for i in range(1,11):
+              if ("photo-"+str(i).zfill(2)+".") not in html: raise SystemExit("Missing gallery photograph "+str(i))
+          print("LIVE_GALLERY_PHOTOS=10")
+          PY
+          finished=1
+          trap - EXIT
+          echo "PERSONAL_INNER_EIGHT_PAGES_DEPLOYED=yes"
+          echo "CONTENT_BACKUP=$backup"
+          rm -rf -- "$stage"
+          REMOTE
+
+      - name: Confirm original root sites remain online
+        shell: bash
+        run: |
+          set -euo pipefail
+          for site in "https://mojplaywin.com/" "https://zomorodmelal.ir/"; do
+            status="$(curl -sSL -o /dev/null -w '%{http_code}' --max-time 18 "$site")"
+            test "$status" = "200"
+            echo "ORIGINAL_ROOT_HEALTH=$site HTTP_$status"
+          done
+
+      - name: Destroy temporary SSH credentials
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/photo-relay"
