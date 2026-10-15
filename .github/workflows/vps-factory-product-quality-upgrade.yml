@@ -1,0 +1,89 @@
+name: VPS Factory Research Gate Safe Sync
+on:
+  push:
+    branches: [fix/factory-vps-quality-module-deploy-20261015]
+    paths: [.github/workflows/vps-factory-product-quality-upgrade.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: saeit-vps-factory-research-gate-safe-sync
+  cancel-in-progress: false
+jobs:
+  sync:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run policy, module, product and rollback tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n deploy/upgrade_factory_product_quality_gate.sh
+          python3 -m unittest discover -s tests -p 'test_factory_quality_module_upgrade.py' -v
+          python3 -m unittest discover -s tests -p 'test_factory_vps_installer_syntax.py' -v
+          python3 -m unittest discover -s tests -p 'test_factory_evidence_quality.py' -v
+          python3 -m unittest discover -s tests -p 'test_factory_autonomous_portfolio.py' -v
+          python3 -m unittest discover -s tests -p 'test_factory_vps_product_cycle.py' -v
+      - name: Upgrade only three private VPS product modules with rollback
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/factory-research-gate"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          opts=(-i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=2)
+          stage="/home/githubops/factory-runtime/operations/quality-gate-upgrade-source"
+          tar -cf "$d/bundle.tar" \
+            deploy/upgrade_factory_product_quality_gate.sh \
+            scripts/factory_evidence_quality.py \
+            scripts/factory_autonomous_portfolio.py \
+            scripts/factory_vps_product_cycle.py
+          digest="$(sha256sum "$d/bundle.tar" | awk '{print $1}')"
+          ssh "${opts[@]}" githubops@178.239.147.150 \
+            'install -d -m 700 "$HOME/factory-runtime/operations/quality-gate-upgrade-source" && test -f "$HOME/factory-runtime/operations/vps-only-loop.pid"'
+          scp "${opts[@]}" "$d/bundle.tar" githubops@178.239.147.150:"$stage/bundle.tar"
+          ssh "${opts[@]}" githubops@178.239.147.150 bash -se -- "$digest" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          expected="$1"
+          root="$HOME/factory-runtime/operations/quality-gate-upgrade-source"
+          test ! -L "$root" && test -f "$root/bundle.tar"
+          printf '%s  %s\n' "$expected" "$root/bundle.tar" | sha256sum -c --status
+          python3 - "$root/bundle.tar" "$root" <<'PY'
+          from pathlib import Path
+          import sys,tarfile
+          expected={
+            "deploy/upgrade_factory_product_quality_gate.sh",
+            "scripts/factory_evidence_quality.py",
+            "scripts/factory_autonomous_portfolio.py",
+            "scripts/factory_vps_product_cycle.py",
+          }
+          archive=Path(sys.argv[1])
+          destination=Path(sys.argv[2])
+          with tarfile.open(archive,"r:") as tar:
+              members=tar.getmembers()
+              assert {m.name for m in members}==expected
+              assert all(m.isfile() and not m.issym() and not m.islnk() for m in members)
+              for m in members:
+                  payload=tar.extractfile(m)
+                  assert payload is not None
+                  target=destination/m.name
+                  target.parent.mkdir(mode=0o700,parents=True,exist_ok=True)
+                  target.write_bytes(payload.read())
+                  target.chmod(0o600)
+          print("FACTORY_PRIVATE_UPGRADE_PACKAGE_INTEGRITY_VERIFIED")
+          PY
+          rm -f -- "$root/bundle.tar"
+          bash "$root/deploy/upgrade_factory_product_quality_gate.sh"
+          echo FACTORY_PRODUCTION_MODULE_SYNCHRONIZATION_VERIFIED
+          REMOTE
