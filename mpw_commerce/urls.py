@@ -4,6 +4,7 @@ Not included in the active production URLconf.
 """
 from django.urls import path
 from .downloads import download_paid_item
+from .purchase_history import purchased_downloads
 from .buyer_orders import create_digital_order
 from .product_checkout_page import product_checkout_page
 from .checkout_views import (
@@ -14,6 +15,7 @@ from .checkout_views import (
 app_name="mpw_commerce"
 urlpatterns=[
     path("commerce/book/<int:product_id>/",product_checkout_page,name="book"),
+    path("commerce/my-purchases/",purchased_downloads,name="purchases"),
     path("commerce/checkout/order/",create_digital_order,name="order"),
     path("commerce/download/<int:item_id>/",download_paid_item,name="download"),
     path("commerce/checkout/challenge/",checkout_challenge,name="challenge"),
