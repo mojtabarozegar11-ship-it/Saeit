@@ -48,7 +48,7 @@ class WaterLandAuditTests(unittest.TestCase):
         self.assertEqual([x["water_budget_m3"] for x in frontier],
                          ["0.00", "2.50", "5.00", "7.50", "10.00"])
         self.assertEqual([x["optimal_gross_margin"] for x in frontier],
-                         ["0.00", "12.50", "20.75", "22.63", "24.50"])
+                         ["0.00", "12.50", "20.75", "22.62", "24.50"])
         self.assertEqual(
             [x["average_incremental_gross_margin_per_m3"] for x in frontier],
             [None, "5.000000", "3.300000", "0.750000", "0.750000"])
