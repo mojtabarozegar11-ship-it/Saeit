@@ -65,8 +65,34 @@ async function signEth(message,expected){
   const actual=(accounts?.[0]||"").toLowerCase();
   if(actual!==expected.toLowerCase())
     throw new Error("حساب متصل با آدرس دریافت ETH مطابقت ندارد.");
-  const chain=await provider.request({method:"eth_chainId"});
-  if(chain!=="0x1")throw new Error("شبکه Ethereum Mainnet را در کیف پول انتخاب کنید.");
+  // Providers may encode Ethereum mainnet as 0x1, 0x01 or decimal 1.
+  // Never skip chain validation and never sign on a different chain.
+  function isEthereumMainnet(id){
+    if(typeof id==="number")return Number.isSafeInteger(id)&&id===1;
+    if(typeof id!=="string")return false;
+    const value=id.trim();
+    if(/^0x[0-9a-f]+$/i.test(value))
+      return Number.parseInt(value.slice(2),16)===1;
+    if(/^[0-9]+$/.test(value))
+      return Number(value)===1;
+    return false;
+  }
+  let chain=await provider.request({method:"eth_chainId"});
+  if(!isEthereumMainnet(chain)){
+    // The wallet itself must explicitly approve any network switch.
+    try{
+      await provider.request({method:"wallet_switchEthereumChain",
+        params:[{chainId:"0x1"}]});
+      chain=await provider.request({method:"eth_chainId"});
+    }catch(err){
+      // No message is signed and no money can move on a failed switch.
+      throw new Error("تغییر به شبکه اصلی اتریوم در کیف پول تأیید نشد. شناسه گزارش‌شده: "+
+        String(chain).slice(0,32));
+    }
+  }
+  if(!isEthereumMainnet(chain))
+    throw new Error("کیف پول هنوز روی Ethereum Mainnet نیست. شناسه شبکه: "+
+      String(chain).slice(0,32));
   return provider.request({method:"personal_sign",params:[message,accounts[0]]});
 }
 async function signTrx(message,expected){
