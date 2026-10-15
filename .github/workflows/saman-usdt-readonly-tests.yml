@@ -1,0 +1,32 @@
+name: SAMAN USDT isolated receipt tests
+
+on:
+  push:
+    branches:
+      - feat/saman-usdt-readonly-verifier-20261014
+    paths:
+      - scripts/mojplaywin_usdt_chain_verify.py
+      - scripts/mojplaywin_native_chain_verify.py
+      - tests/test_mojplaywin_usdt_chain_verify.py
+      - .github/workflows/saman-usdt-readonly-tests.yml
+  pull_request:
+    paths:
+      - scripts/mojplaywin_usdt_chain_verify.py
+      - scripts/mojplaywin_native_chain_verify.py
+      - tests/test_mojplaywin_usdt_chain_verify.py
+      - .github/workflows/saman-usdt-readonly-tests.yml
+
+permissions:
+  contents: read
+
+jobs:
+  usdt-receipts-offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Verify isolated token receipt rules without network or secrets
+        run: python -m unittest discover -s tests -p 'test_mojplaywin_usdt_chain_verify.py' -v
