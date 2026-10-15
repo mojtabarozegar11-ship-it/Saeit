@@ -1,0 +1,32 @@
+name: PICM GPU Pipeline Isolated Safety Tests
+on:
+  push:
+    branches: [feature/picm-gpu-one-command-20261015]
+    paths:
+      - ops/picm-gpu/**
+      - tests/test_picm_story_pipeline.py
+      - tests/test_picm_story_comfy.py
+      - tests/test_picm_story_assemble.py
+      - .github/workflows/picm-gpu-pipeline-safety.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  safety:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate isolated Python syntax
+        run: |
+          python -m py_compile ops/picm-gpu/story_pipeline.py ops/picm-gpu/story_comfy.py ops/picm-gpu/story_assemble.py
+      - name: Prove no movie can be fabricated without GPU
+        run: |
+          python -m unittest discover -s tests -p 'test_picm_story_pipeline.py' -v
+          python -m unittest discover -s tests -p 'test_picm_story_comfy.py' -v
+          python -m unittest discover -s tests -p 'test_picm_story_assemble.py' -v
+      - name: Explicit evidence statement
+        run: echo 'PICM_ISOLATED_SOFTWARE_GATES_ONLY_NOT_A_GPU_RENDER'
