@@ -1,0 +1,112 @@
+name: MojPlayWin verified private GM chess installation
+on:
+  push:
+    branches: [audit/mpw-chess-file-readonly-20261015]
+    paths: ['.github/workflows/mojplaywin-gm-final-private-install-20261015.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Check chess ebook location and SHA256 on cPanel without changes
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/mpw-root-audit"
+          mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          python3 - "$d/vps.key" "$d/host.key" <<'PY'
+          from pathlib import Path
+          import sys
+          for filename in sys.argv[1:]:
+              f=Path(filename)
+              f.write_text(f.read_text().replace("\r\n","\n").strip().replace("\\n","\n")+"\n")
+          PY
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host relay
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host host
+            HostName zohal.pws-dns.net
+            Port 1396
+            User zomorod2
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump relay
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+          EOF
+          timeout 30s ssh -F "$d/config" relay 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          timeout 100s ssh -F "$d/config" host 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          test "$(id -un)" = "zomorod2"
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib,os,shutil,tempfile
+          home=Path.home()
+          name="MojPlayWin_Chess_Grandmaster_Final_Covered_2026.pdf"
+          source=home/"MojPlayWin_Private_Assets/chess-improvement-2026"/name
+          destdir=home/"MojPlayWin_Private_Assets/store/chess-improvement"
+          target=destdir/name
+          expected="3837fc3cb21ed1a2e7c33e0db8f8e10d158583309b02b97d4d674d25a147207a"
+          def approved(path):
+              assert path.is_file() and not path.is_symlink()
+              assert path.stat().st_size==3631972
+              h=hashlib.sha256()
+              with path.open("rb") as f:
+                  for part in iter(lambda:f.read(262144),b""):h.update(part)
+              assert h.hexdigest()==expected
+          assert destdir.is_dir() and not destdir.is_symlink()
+          approved(source)
+          print("SOURCE_HASH_OK=True")
+          if target.exists():
+              approved(target)
+              print("PRIVATE_TARGET_ALREADY_IDENTICAL=True")
+          else:
+              fd,temp=tempfile.mkstemp(prefix=".gm-staged-",suffix=".pdf",dir=destdir)
+              try:
+                  os.fchmod(fd,0o600)
+                  with os.fdopen(fd,"wb") as out, source.open("rb") as inp:
+                      shutil.copyfileobj(inp,out,256*1024)
+                      out.flush();os.fsync(out.fileno())
+                  approved(Path(temp))
+                  assert not target.exists()
+                  os.rename(temp,target)
+              finally:
+                  if os.path.exists(temp):os.unlink(temp)
+              print("PRIVATE_TARGET_INSTALLED=True")
+          approved(target)
+          print("TARGET_SHA256="+expected)
+          print("TARGET_BYTES="+str(target.stat().st_size))
+          print("SOURCE_PRESERVED=True")
+          print("PAYMENT_SETTINGS_UNCHANGED=True")
+          PY
+          REMOTE
+
+      - name: Remove transient keys
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/mpw-root-audit"
