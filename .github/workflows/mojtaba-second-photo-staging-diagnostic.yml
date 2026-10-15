@@ -1,0 +1,84 @@
+name: Read-only second gallery staging diagnosis
+on:
+  push:
+    branches: ['feat/mojtaba-second-original-gallery-20261015']
+    paths:
+      - '.github/workflows/mojtaba-second-photo-staging-diagnostic.yml'
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare pinned SSH relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/photo-relay"
+          mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          python3 - "$d/host.key" <<'PY'
+          import pathlib,sys
+          p=pathlib.Path(sys.argv[1]);t=p.read_text().replace('\r\n','\n').strip()
+          p.write_text(t.replace('\\n','\n')+'\n')
+          PY
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host saeit-host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+            ConnectionAttempts 1
+          EOF
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          echo "SSH_CONFIG=$d/config" >> "$GITHUB_ENV"
+      - name: Read-only inventory of pending original photo folder
+        run: |
+          set -euo pipefail
+          timeout 55s ssh -F "$SSH_CONFIG" saeit-host 'python3 -' <<'PY'
+          from pathlib import Path
+          from hashlib import sha256
+          root=Path("/home/zomorod2/mojtaba_personal/mojtaba_roozegar_personal_v17/static/personal_site/owner_gallery_20261015_b")
+          print("OWNER_PHOTO_FOLDER_EXISTS="+str(root.exists()))
+          print("OWNER_PHOTO_FOLDER_SYMLINK="+str(root.is_symlink()))
+          if root.is_dir():
+              for item in sorted(root.iterdir()):
+                  if item.is_file() and not item.is_symlink():
+                      data=item.read_bytes()
+                      print("STAGED_FILE="+item.name+" SIZE="+str(len(data))+" SHA256="+sha256(data).hexdigest()+" MAGIC="+data[:8].hex())
+                  else:
+                      print("UNEXPECTED_NODE="+item.name)
+          print("SECOND_GALLERY_DIAGNOSIS_COMPLETE=yes")
+          PY
+      - name: Remove SSH relay temporary credentials
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/photo-relay"
