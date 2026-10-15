@@ -54,7 +54,7 @@ def main() -> int:
     home = Path.home()
     ssh_dir = home / ".ssh"
     keys_file = ssh_dir / "authorized_keys"
-    if ssh_dir.is_symlink() or (keys_file.exists() and keys_file.is_symlink()):
+    if ssh_dir.is_symlink() or keys_file.is_symlink():
         print("SYMLINK_NOT_ALLOWED")
         return 4
     if mode == "status" and not keys_file.is_file():
