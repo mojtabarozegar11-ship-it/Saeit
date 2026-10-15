@@ -55,6 +55,9 @@ def taniya_studio(request):
 
 
 def platform_page(request, section):
+    if request.get_host().split(":")[0].lower() in {"mojplaywin.com", "www.mojplaywin.com"}:
+        from .mojplaywin_views import platform_section
+        return platform_section(request, section)
     pages = {
         "agriculture": {
             "kicker":"AGRICULTURE · VALUE CHAIN","title":"کشاورزی و زنجیره ارزش","lead":"از تحقیق و کشت تا فرآوری، بسته‌بندی، برند و بازار؛ هر زنجیره مستقل و قابل توسعه است.",

@@ -8,4 +8,7 @@ def services(request):
         {"no": "04", "title": "بازار و محصولات", "meta": "MARKET · COMMERCE", "text": "معرفی، عرضه و اتصال خدمات و محصولات به مسیرهای بازار.", "url": "/market/"},
         {"no": "05", "title": "دانش و محتوا", "meta": "KNOWLEDGE · MEDIA", "text": "تبدیل دانش تخصصی به مقاله، مرجع، محتوای آموزشی و رسانه.", "url": "/knowledge/"},
     ]
+    if request.get_host().split(":")[0].lower() in {"mojplaywin.com", "www.mojplaywin.com"}:
+        from .mojplaywin_views import home
+        return home(request)
     return render(request, "core/services.html", {"items": items})
