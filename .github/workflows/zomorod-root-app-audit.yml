@@ -456,7 +456,39 @@ jobs:
           print("PASSENGER_EDIT_ERRORS=" + str(errors))
           if edited.returncode != 0 or status != 1 or errors:
               backup.unlink(missing_ok=True)
-              raise SystemExit("PASSENGER_VENV_MAPPING_EDIT_FAILED")
+              error_text = " ".join(str(e) for e in errors)
+              if "parameter" in error_text.lower() and "python" in error_text.lower():
+                  profile = pathlib.Path.home() / ".bash_profile"
+                  marker = "# ZOMORODMELAL_PASSENGER_VIRTUAL_ENV"
+                  profile_backup = backup_dir / f"bash-profile-before-{commit_sha}"
+                  if profile.exists():
+                      if profile_backup.exists():
+                          raise SystemExit("BASH_PROFILE_BACKUP_ALREADY_EXISTS")
+                      import shutil
+                      shutil.copy2(profile, profile_backup)
+                      os.chmod(profile_backup, 0o600)
+                      old_profile = profile.read_text(encoding="utf-8", errors="replace")
+                  else:
+                      profile_backup.write_text("CODEX_NO_PREVIOUS_BASH_PROFILE\n", encoding="utf-8")
+                      os.chmod(profile_backup, 0o600)
+                      old_profile = ""
+                  if marker not in old_profile:
+                      with profile.open("a", encoding="utf-8") as f:
+                          if old_profile and not old_profile.endswith("\n"):
+                              f.write("\n")
+                          f.write(marker + "\nexport VIRTUAL_ENV=" + venv + "\n")
+                  check = subprocess.run(["bash", "-lc", "printenv VIRTUAL_ENV"], capture_output=True, text=True)
+                  if check.stdout.strip() != venv:
+                      status_record["login_shell_virtual_env"] = False
+                      edit_status_path.write_text(json.dumps(status_record, ensure_ascii=False), encoding="utf-8")
+                      raise SystemExit("LOGIN_SHELL_VIRTUAL_ENV_NOT_SET")
+                  status_record["fallback"] = "bash_profile"
+                  status_record["bash_profile_backup"] = str(profile_backup)
+                  status_record["login_shell_virtual_env"] = True
+                  edit_status_path.write_text(json.dumps(status_record, ensure_ascii=False), encoding="utf-8")
+                  print("PASSENGER_VIRTUAL_ENV_CONFIGURED_VIA_LOGIN_PROFILE=yes")
+              else:
+                  raise SystemExit("PASSENGER_VENV_MAPPING_EDIT_FAILED")
           verified = subprocess.run(["uapi", "--output=json", "PassengerApps", "list_applications"], check=True, capture_output=True, text=True)
           data = json.loads(verified.stdout)
           apps = []
@@ -568,6 +600,7 @@ jobs:
           env_names = []
           venv_configured = False
           launcher_present = False
+          login_shell_venv = False
           log_matches = []
           edit_result = {}
           try:
@@ -594,6 +627,8 @@ jobs:
                   venv_configured = isinstance(envvars, dict) and envvars.get("VIRTUAL_ENV") == "/home/zomorod2/virtualenv/Saeit/3.10"
               test = subprocess.run(["ssh", "-F", ssh_config, "saeit-cpanel", "test", "-x", "/home/zomorod2/virtualenv/Saeit/3.10/bin/set_env_vars.py"], timeout=30)
               launcher_present = test.returncode == 0
+              shell_check = subprocess.run(["ssh", "-F", ssh_config, "saeit-cpanel", "bash", "-lc", "printenv VIRTUAL_ENV"], capture_output=True, text=True, timeout=30)
+              login_shell_venv = shell_check.stdout.strip() == "/home/zomorod2/virtualenv/Saeit/3.10"
               log = subprocess.run(["ssh", "-F", ssh_config, "saeit-cpanel", "tail", "-n", "120", "/home/zomorod2/public_html/stderr.log"], capture_output=True, text=True, timeout=30).stdout
               for line in log.splitlines():
                   if re.search(r"error|exception|traceback|failed|not found|exec:", line, re.I):
@@ -601,7 +636,7 @@ jobs:
                       log_matches.append(line[:500])
           except Exception as error:
               log_matches.append("DIAGNOSTIC_ERROR=" + type(error).__name__)
-          payload = {"commit_sha": commit_sha, "passenger_virtual_env_configured": venv_configured, "passenger_launcher_present": launcher_present, "passenger_envvar_names": env_names, "passenger_edit_result": edit_result, "root_app_enabled": bool(app and app.get("enabled") in (1, True, "1")), "routes": routes, "passenger_error_log_lines": log_matches[-12:]}
+          payload = {"commit_sha": commit_sha, "passenger_virtual_env_configured": venv_configured, "passenger_launcher_present": launcher_present, "login_shell_virtual_env_configured": login_shell_venv, "passenger_envvar_names": env_names, "passenger_edit_result": edit_result, "root_app_enabled": bool(app and app.get("enabled") in (1, True, "1")), "routes": routes, "passenger_error_log_lines": log_matches[-12:]}
           with open(status_path, "w", encoding="utf-8") as f: json.dump(payload, f, ensure_ascii=False, indent=2)
           try:
               api = "https://api.github.com/repos/" + os.environ["GITHUB_REPOSITORY"] + "/contents/.codex/zomorod-recovery-status.json"
