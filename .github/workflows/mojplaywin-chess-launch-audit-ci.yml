@@ -6,6 +6,7 @@ on:
     paths:
       - 'mpw_commerce/management/commands/mpw_chess_launch_audit.py'
       - 'tests/native_ci_chess_launch_audit.py'
+      - 'tests/native_checkout_root_urls.py'
       - '.github/workflows/mojplaywin-chess-launch-audit-ci.yml'
   workflow_dispatch:
 permissions:
