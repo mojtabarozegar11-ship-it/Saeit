@@ -116,7 +116,7 @@ jobs:
               lines=raw.decode("utf-8",errors="strict").splitlines()
               directory_indexes=[line for line in lines if line.lstrip().lower().startswith("directoryindex")]
               print("EXISTING_DIRECTORY_INDEX_RULES="+repr(directory_indexes))
-              backup=os.path.expanduser("~/.backups/zomorodmelal-root-homepage/htaccess-before-directory-index-"+commit_sha)
+              backup=os.path.expanduser("~/.backups/zomorodmelal-root-homepage/htaccess-before-directory-index")
               if not os.path.exists(backup):
                   import shutil
                   shutil.copy2(live,backup)
