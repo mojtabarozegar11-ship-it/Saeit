@@ -37,7 +37,8 @@ WATER_BUILDER = "farm_water_land_margin_audit_v1"
 WATER_ROOT = ROOT / "product_prototypes" / "farm_water_land_margin_audit"
 WATER_FILES = (
     "water_margin_audit.py", "render_report.py", "example_synthetic.json",
-    "self_test.py", "README.md",
+    "self_test.py", "serve_local.py", "index.html", "app.js",
+    "style.css", "README.md",
 )
 PROCUREMENT_ROOT = ROOT / "product_prototypes" / "farm_procurement_audit"
 PROCUREMENT_FILES = (
