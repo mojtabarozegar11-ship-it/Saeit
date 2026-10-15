@@ -186,7 +186,8 @@ jobs:
           print("RECENT_APP_ERROR_LOG_FILES_END")
           PY
           set -e
-          python3 - <<'PY'
+          export DJANGO_SETTINGS_MODULE=config.settings
+          /home/zomorod2/virtualenv/Saeit/3.11/bin/python - <<'PY'
           from pathlib import Path
           from django.test import RequestFactory
           from django.urls import resolve
