@@ -12,7 +12,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
-from django.test import Client, TestCase, override_settings
+from django.test import Client, TransactionTestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 from eth_account import Account
@@ -30,7 +30,7 @@ TX="0x"+"a"*64
 TOKEN="c"*32
 
 
-class FullPrivatePurchaseCycle(TestCase):
+class FullPrivatePurchaseCycle(TransactionTestCase):
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
@@ -79,6 +79,8 @@ class FullPrivatePurchaseCycle(TestCase):
             MPW_COMMERCE_BUYER_SIGNATURE_ENABLED=True,
             MPW_COMMERCE_INVOICING_ENABLED=True,
             MPW_COMMERCE_SETTLEMENT_ENABLED=True,
+            MPW_COMMERCE_REAL_RPC_ENABLED=True,
+            MPW_COMMERCE_AUTORECONCILE_ENABLED=True,
             MPW_COMMERCE_DOWNLOADS_ENABLED=True,
             MPW_COMMERCE_BUYER_CRYPTO_PYTHON=sys.executable,
             MPW_COMMERCE_PRIVATE_ASSET_ROOT=str(root),

@@ -1,0 +1,151 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<meta name="referrer" content="no-referrer">
+<title>{{ product.title }} | Secure MojPlayWin checkout</title>
+<style>
+:root{color-scheme:dark;font-family:system-ui,-apple-system,sans-serif;background:#101520;color:#f7f7f7}
+*{box-sizing:border-box}body{margin:0;padding:24px}
+main{max-width:680px;margin:3vh auto;border:1px solid #404657;border-radius:18px;padding:28px;background:#181e2b}
+h1{font-size:clamp(24px,5vw,34px);line-height:1.15}h2{font-size:20px}
+small,.muted{color:#c4cbd8}p{line-height:1.6}label{display:block;margin:18px 0 6px}
+select,button{font:inherit;border-radius:9px;padding:12px 15px}
+select{width:100%;background:#121723;border:1px solid #606879;color:inherit}
+button{background:#d9b56b;color:#141821;border:0;font-weight:700;cursor:pointer;margin:12px 8px 0 0}
+button:disabled{cursor:not-allowed;opacity:.55}
+code{color:#f2cc80;overflow-wrap:anywhere}
+.panel{border-radius:10px;border:1px solid #5b6476;padding:14px;margin:16px 0;background:#222a39}
+.price{font-size:28px;font-weight:800}.alert{color:#ffcc89}
+#status{min-height:26px}a{color:#f8d18a}#invoice[hidden],#downloads[hidden]{display:none}
+</style>
+</head>
+<body>
+<main>
+<small>MOJPLAYWIN · VERIFIED DIGITAL PURCHASE</small>
+<h1>{{ product.title }}</h1>
+<p class="muted">Digital PDF · Secure private delivery to your account after confirmed blockchain payment</p>
+<p class="price">$<span id="price">{{ price_usd }}</span> USD</p>
+<div class="panel">
+<strong>Read before buying</strong>
+<p>This product must be paid using the exact amount and network on the server-issued invoice. Wallet signatures confirm your sender address only; no spending approval is requested.</p>
+<p class="alert">Never pay an address from an email, screenshot, or unverified message. Do not pay before an invoice is shown here. A blockchain transfer cannot be reversed.</p>
+</div>
+<form id="csrf-form" hidden>{% csrf_token %}</form>
+<label for="asset">Choose your payment network</label>
+<select id="asset"><option value="ETH">Ethereum mainnet · ETH</option><option value="TRX">TRON mainnet · TRX</option></select>
+<p class="muted">Use an Ethereum-compatible wallet for ETH and a TRON-compatible wallet for TRX. Trust Wallet compatibility can vary by in-app browser.</p>
+<button id="start" type="button">Connect wallet and request an invoice</button>
+<p id="status" role="status" aria-live="polite"></p>
+<section id="invoice" class="panel" hidden aria-label="Payment instructions">
+<h2>Pay your verified invoice</h2>
+<p>Network: <strong id="network"></strong></p>
+<p>Exactly: <code id="amount"></code></p>
+<p>Recipient: <code id="receiver"></code></p>
+<p>Valid until: <time id="expiry"></time></p>
+<p class="alert">Send only once, on the network shown. Transfer fees are extra. Do not send after expiry.</p>
+<button id="check" type="button">I have sent payment — check status</button>
+</section>
+<section id="downloads" class="panel" hidden aria-label="Purchased download">
+<h2>Payment verified</h2>
+<p>Your secure download is ready:</p>
+<div id="links"></div>
+</section>
+<p class="muted">If you have questions, contact the publisher before sending funds. Purchases remain subject to the seller's published support and refund terms.</p>
+</main>
+<script>
+"use strict";
+(() => {
+const productId = {{ product.pk }};
+const csrf = document.querySelector("[name=csrfmiddlewaretoken]").value;
+const start = document.getElementById("start");
+const status = document.getElementById("status");
+const invoiceBox = document.getElementById("invoice");
+const check = document.getElementById("check");
+const downloadBox = document.getElementById("downloads");
+let currentOrder = null;
+function say(message) { status.textContent = message; }
+async function api(path, method, payload) {
+  const response = await fetch(path, {
+    method, credentials:"same-origin", redirect:"error",
+    headers:method==="POST" ? {"Content-Type":"application/json","X-CSRFToken":csrf} : {},
+    body:method==="POST" ? JSON.stringify(payload) : undefined
+  });
+  if (!response.ok) throw new Error("Checkout request was rejected ("+response.status+"). Please contact support before paying.");
+  return await response.json();
+}
+function readWallet(asset) {
+  if (asset==="ETH") {
+    if (!window.ethereum || !window.ethereum.request) throw new Error("No compatible Ethereum wallet found. Open this page inside your wallet browser.");
+    return window.ethereum.request({method:"eth_requestAccounts"}).then(accounts => {
+      if (!accounts || !accounts.length) throw new Error("Wallet connection was declined.");
+      return {sender:accounts[0],sign:message=>window.ethereum.request({method:"personal_sign",params:[message,accounts[0]]})};
+    });
+  }
+  const tron = window.tronWeb;
+  if (!tron || !tron.defaultAddress || !tron.defaultAddress.base58 || !tron.trx || !tron.trx.signMessageV2) {
+    throw new Error("No compatible TRON wallet signer is available. Use a TRON wallet browser.");
+  }
+  return Promise.resolve({sender:tron.defaultAddress.base58,sign:message=>tron.trx.signMessageV2(message)});
+}
+start.addEventListener("click",async () => {
+  start.disabled=true;
+  try {
+    const asset=document.getElementById("asset").value;
+    say("Connecting to your wallet. You will sign a NON-SPENDING message.");
+    const wallet=await readWallet(asset);
+    const order=await api("/commerce/checkout/order/","POST",{
+      product_id:productId,quantity:1,asset,request_id:crypto.randomUUID()
+    });
+    currentOrder=order.order_id;
+    const challenge=await api("/commerce/checkout/challenge/","POST",{
+      order_id:currentOrder,asset,sender:wallet.sender
+    });
+    const signature=await wallet.sign(challenge.message);
+    await api("/commerce/checkout/verify/","POST",{
+      challenge_id:challenge.challenge_id,signature
+    });
+    const bill=await api("/commerce/checkout/invoice/","POST",{challenge_id:challenge.challenge_id});
+    if (bill.asset!==asset || bill.order_id!==currentOrder || bill.usd_total!==document.getElementById("price").textContent.trim()) {
+      throw new Error("Invoice and product price do not match. Do NOT pay.");
+    }
+    document.getElementById("network").textContent=bill.network;
+    document.getElementById("amount").textContent=bill.amount_native+" "+asset;
+    document.getElementById("receiver").textContent=bill.receiver;
+    document.getElementById("expiry").textContent=bill.expires_at;
+    invoiceBox.hidden=false;
+    say("Your signed invoice is ready. Review the network and exact amount before sending.");
+  } catch(err) {
+    say(err instanceof Error ? err.message : "Checkout failed. Do NOT send any funds.");
+  } finally {start.disabled=false;}
+});
+check.addEventListener("click",async()=>{
+  if (!currentOrder)return;
+  check.disabled=true;
+  try {
+    const data=await api("/commerce/checkout/status/"+encodeURIComponent(currentOrder)+"/","GET");
+    if(data.can_access_purchased_items && Array.isArray(data.download_paths) && data.download_paths.length){
+      invoiceBox.hidden=true;
+      const holder=document.getElementById("links");
+      holder.replaceChildren();
+      for (const path of data.download_paths) {
+        if(typeof path!=="string" || !/^\/commerce\/download\/[0-9]+\/$/.test(path))continue;
+        const anchor=document.createElement("a");
+        anchor.href=path;anchor.textContent="Download your purchased PDF";
+        holder.append(anchor);
+      }
+      downloadBox.hidden=false;
+      say("Payment confirmed and access granted.");
+    } else {
+      say("Payment has not yet been independently confirmed. Do not pay again. Check later or contact support.");
+    }
+  } catch(err) {say(err instanceof Error?err.message:"Payment status unavailable; do not pay again.");}
+  finally {check.disabled=false;}
+});
+})();
+</script>
+</body>
+</html>
