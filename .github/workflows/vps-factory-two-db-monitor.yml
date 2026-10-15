@@ -1,0 +1,111 @@
+name: VPS Factory Two-Database Integrity Monitoring
+on:
+  push:
+    branches: [feature/factory-two-db-scope-monitor-20261015]
+    paths: [.github/workflows/vps-factory-two-db-monitor.yml]
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Install, inspect, or remove only the research sidecar cron entry
+        type: choice
+        default: status
+        required: true
+        options: [status, install, remove]
+permissions:
+  contents: read
+concurrency:
+  group: vps-private-factory-evidence-monitor
+  cancel-in-progress: false
+jobs:
+  safe-monitor:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate safe and idempotent cron installer
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n deploy/install_factory_research_monitor.sh
+          python3 -m unittest discover -s tests -p 'test_factory_evidence_monitor_installer.py' -v
+          python3 -m unittest discover -s tests -p 'test_factory_research_sidecar.py' -v
+          python3 -m py_compile scripts/factory_research_sidecar.py
+      - name: Apply narrowly scoped private evidence monitoring
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          REQUESTED_MODE: ${{ inputs.mode }}
+        run: |
+          set -euo pipefail
+          umask 077
+          action="${REQUESTED_MODE:-install}"
+          [[ "$action" =~ ^(status|install|remove)$ ]] || { echo INVALID_MODE; exit 2; }
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/factory-monitor"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          opts=(-i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15)
+          remote=(ssh "${opts[@]}" githubops@178.239.147.150)
+          stage="/home/githubops/factory-runtime/operations/evidence-sidecar-candidate"
+          "${remote[@]}" 'test -f "$HOME/factory-runtime/operations/evidence-sidecar-candidate/scripts/factory_research_sidecar.py"'
+          # Update only the isolated sidecar implementation, with an idempotent
+          # single-file backup. Do not modify the factory's Django application.
+          scp "${opts[@]}" scripts/factory_research_sidecar.py githubops@178.239.147.150:"$stage/scripts/.factory_research_sidecar.next"
+          expected_sidecar="$(sha256sum scripts/factory_research_sidecar.py | awk '{print $1}')"
+          actual_sidecar="$("${remote[@]}" "sha256sum '$stage/scripts/.factory_research_sidecar.next'" | awk '{print $1}')"
+          test "$expected_sidecar" = "$actual_sidecar"
+          "${remote[@]}" 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          stage="$HOME/factory-runtime/operations/evidence-sidecar-candidate/scripts"
+          test -f "$stage/factory_research_sidecar.py"
+          test ! -L "$stage/factory_research_sidecar.py"
+          test -f "$stage/.factory_research_sidecar.next"
+          cp -p -- "$stage/factory_research_sidecar.py" "$stage/factory_research_sidecar.previous"
+          chmod 600 "$stage/factory_research_sidecar.previous"
+          mv -f -- "$stage/.factory_research_sidecar.next" "$stage/factory_research_sidecar.py"
+          chmod 600 "$stage/factory_research_sidecar.py"
+          REMOTE
+          scp "${opts[@]}" deploy/install_factory_research_monitor.sh githubops@178.239.147.150:"$stage/install-evidence-monitor.tmp"
+          expected="$(sha256sum deploy/install_factory_research_monitor.sh | awk '{print $1}')"
+          actual="$("${remote[@]}" "sha256sum '$stage/install-evidence-monitor.tmp'" | awk '{print $1}')"
+          test "$expected" = "$actual"
+          "${remote[@]}" "mv '$stage/install-evidence-monitor.tmp' '$stage/install-evidence-monitor.sh'; chmod 700 '$stage/install-evidence-monitor.sh'"
+          "${remote[@]}" bash -s -- "$action" <<'REMOTE'
+          set -euo pipefail
+          test -r "$HOME/factory-runtime/operations/vps-only-loop.pid"
+          base="$HOME/factory-runtime"
+          ops="$base/operations"
+          before_main="$(crontab -l 2>/dev/null | grep -cF SAEIT_FACTORY_AUTOSTART || true)"
+          before_products="$(crontab -l 2>/dev/null | grep -cF SAEIT_AUTONOMOUS_PRODUCTS_V2 || true)"
+          bash "$ops/evidence-sidecar-candidate/install-evidence-monitor.sh" "$1"
+          after_main="$(crontab -l 2>/dev/null | grep -cF SAEIT_FACTORY_AUTOSTART || true)"
+          after_products="$(crontab -l 2>/dev/null | grep -cF SAEIT_AUTONOMOUS_PRODUCTS_V2 || true)"
+          test "$before_main" = "$after_main"
+          test "$before_products" = "$after_products"
+          echo FACTORY_EXISTING_SCHEDULES_PRESERVED
+          if [[ "$1" == install ]]; then
+            timeout 70s bash "$ops/evidence-sidecar-candidate/run-evidence-hourly.sh"
+            test -s "$base/private/research-evidence-sidecar/latest.json"
+            "$base/.venv/bin/python" - "$base/private/research-evidence-sidecar/latest.json" <<'PY'
+          import json,sys
+          d=json.load(open(sys.argv[1],encoding="utf-8"))
+          assert d.get("publishable_count")==0 and d.get("database_mutations")==0
+          print("RESEARCH_HOURLY_MONITOR_LIVE_PROOF_PRODUCTS="+str(d["product_count"]))
+          print("RESEARCH_HOURLY_MONITOR_BACKLOG_TOTAL="+str(d["total_factory_drafts_in_scope"]))
+          sources=d.get("data_source_consistency")
+          assert isinstance(sources,dict), "COMPARISON_REQUIRED_NOT_ONLY_PRIVATE_MONITORING"
+          assert sources["auto_reconciliation_allowed"] is False
+          assert sources["private_product_count"] >= sources["django_product_count"]
+          print("FACTORY_DUAL_DB_PRIVATE_DRAFT_COUNT="+str(sources["private_drafts"]))
+          print("FACTORY_DUAL_DB_DJANGO_DRAFT_COUNT="+str(sources["django_drafts"]))
+          print("FACTORY_DUAL_DB_CONFLICTING_SHARED_IDS="+str(sources["overlap_ids_with_different_normalized_titles"]))
+          print("FACTORY_DUAL_DB_SAFE_RECONCILIATION=false")
+          print("RESEARCH_HOURLY_MONITOR_PUBLICATION_LOCKED")
+          PY
+          fi
+          REMOTE
