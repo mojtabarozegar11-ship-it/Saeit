@@ -135,6 +135,22 @@ jobs:
               raise SystemExit("ROOT_APP_NOT_ENABLED")
           print("ROOT_APP_ENABLED=yes")
           PY
+          cd /home/zomorod2/Saeit
+          printf 'APP_ENV_FILE_PRESENT='
+          test -f .env && echo yes || echo no
+          diag="$(mktemp "$HOME/.root-app-diag.XXXXXX")"
+          trap 'rm -f -- "$app_json" "$diag"' EXIT
+          set +e
+          /home/zomorod2/virtualenv/Saeit/3.11/bin/python manage.py check >"$diag" 2>&1
+          check_status=$?
+          echo "DJANGO_CHECK_EXIT=$check_status"
+          tail -n 35 "$diag" | sed -E 's/(SECRET_KEY|PASSWORD|TOKEN|API_KEY|PRIVATE_KEY)([^=]*=)[^[:space:]]+/\1\2[redacted]/Ig'
+          : >"$diag"
+          /home/zomorod2/virtualenv/Saeit/3.11/bin/python -c 'import passenger_wsgi; print("PASSENGER_WSGI_IMPORT=passed")' >"$diag" 2>&1
+          import_status=$?
+          echo "PASSENGER_WSGI_IMPORT_EXIT=$import_status"
+          tail -n 35 "$diag" | sed -E 's/(SECRET_KEY|PASSWORD|TOKEN|API_KEY|PRIVATE_KEY)([^=]*=)[^[:space:]]+/\1\2[redacted]/Ig'
+          set -e
           REMOTE
       - name: Check live site routes
         shell: bash
