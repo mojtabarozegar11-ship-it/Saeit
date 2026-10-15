@@ -341,9 +341,11 @@ def plan_private_source_revisions(root, conn):
     the same source hash never generates additional work or claims new goods.
     """
     enabled=root/".enable-autonomous-specialists"
+    if enabled.is_symlink():
+        raise ValueError("unsafe specialist-autoplan configuration")
     if not enabled.exists():
         return {"new_source_jobs":0,"already_known_sources":0,"mode":"disabled"}
-    if enabled.is_symlink() or not enabled.is_file() or enabled.read_text().strip()!="private_only":
+    if not enabled.is_file() or enabled.read_text().strip()!="private_only":
         raise ValueError("unsafe specialist-autoplan configuration")
     submitted=known=0
     for builder,config in sorted(BUILDERS.items()):
