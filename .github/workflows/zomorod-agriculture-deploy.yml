@@ -104,6 +104,10 @@ jobs:
           test -d "$root" && test ! -L "$root" && test "$(stat -c %U "$root")" = zomorod2 && test -w "$root"
           if test -e "$target"; then
             test -d "$target" && test ! -L "$target"
+            if test -z "$(find "$target" -mindepth 1 -print -quit)"; then
+              rmdir "$target"
+              echo EMPTY_TARGET_FROM_INTERRUPTED_INSTALL_REMOVED=yes
+            fi
             test -f "$target/index.html" && ! test -L "$target/index.html"
             grep -Fq '<!-- saeit-zomorod-agriculture-v1 -->' "$target/index.html" || { echo "Unmanaged agriculture directory; refusing"; exit 1; }
             test -z "$(find "$target" -type l -print -quit)" || { echo "Symlink found inside managed agriculture directory"; exit 1; }
@@ -143,14 +147,20 @@ jobs:
           trap rollback_on_error EXIT
           if test ! -e "$target"; then mkdir -m 755 "$target"; created=1; fi
           test -d "$target" && test ! -L "$target"
-          while IFS= read -r -d '' f; do
-            rel="${f#"$stage"/}"; dir="${rel%/*}"
-            mkdir -p "$target/$dir"
-            test ! -L "$target/$dir" && test ! -L "$target/$rel"
+          files=("index.html" "livestock/index.html" "horticulture/index.html" "greenhouse/index.html" "poultry/index.html" "aquaculture/index.html" "inputs/index.html" "seeds/index.html" "fertilizers/index.html" "pesticides/index.html" "offices/index.html" "water-soil/index.html" "machinery/index.html" "market/index.html")
+          for rel in "${files[@]}"; do
+            f="$stage/$rel"
+            test -f "$f" && test ! -L "$f"
+            if [[ "$rel" == */* ]]; then
+              dir="${rel%/*}"
+              mkdir -p "$target/$dir"
+              test ! -L "$target/$dir"
+            fi
+            test ! -L "$target/$rel"
             chmod 644 "$f"
             mv -f -- "$f" "$target/$rel"
-          done < <(find "$stage" -type f -name index.html -print0)
-          rmdir "$stage"
+          done
+          rm -rf -- "$stage"
           grep -Fq '<!-- saeit-zomorod-agriculture-v1 -->' "$target/index.html"
           echo AGRICULTURE_ATOMIC_PAGE_REPLACEMENT=passed
           REMOTE
