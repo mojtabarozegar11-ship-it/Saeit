@@ -1,0 +1,145 @@
+name: PICM Scoped Worker Callback CSRF Repair
+on:
+  issues:
+    types: [opened]
+permissions:
+  contents: read
+concurrency:
+  group: mojplaywin-picm-production
+  cancel-in-progress: false
+jobs:
+  repair:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event.issue.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.issue.title == 'Ops: repair PICM worker CSRF callback 2026-10-15'
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate scoped CSRF exception
+        run: |
+          python3 -m py_compile core/picm_views.py
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('core/picm_views.py').read_text()
+          assert '@csrf_exempt  # Machine-to-machine bearer token' in p
+          assert 'worker_authorized(request, root)' in p
+          assert '@require_POST' in p
+          print('PICM_CALLBACK_TOKEN_AUTH_STILL_REQUIRED')
+          PY
+      - name: Configure pinned relay and cPanel SSH
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -Eeuo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          WORK="$RUNNER_TEMP/picm-ssh"
+          install -d -m 700 "$WORK"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$WORK/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$WORK/host.key"
+          chmod 600 "$WORK/"*.key
+          ssh-keygen -y -P '' -f "$WORK/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$WORK/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$WORK/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$WORK/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$WORK/config" <<EOF
+          Host picm-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $WORK/vps.key
+            UserKnownHostsFile $WORK/vps.known
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ForwardAgent no
+          EOF
+          chmod 600 "$WORK/config"
+          timeout 30s ssh -F "$WORK/config" picm-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$WORK/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$WORK/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          cat >> "$WORK/config" <<EOF
+          Host picm-host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $WORK/host.key
+            UserKnownHostsFile $WORK/host.known
+            ProxyJump picm-vps
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ForwardAgent no
+          EOF
+          chmod 600 "$WORK/config"
+          echo PICM_RELAY_READY
+      - name: Back up and repair only live PICM callback module
+        id: patch
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          WORK="$RUNNER_TEMP/picm-ssh"
+          scp -q -F "$WORK/config" core/picm_views.py "picm-host:/home/zomorod2/.picm-csrf-$GITHUB_RUN_ID.py"
+          timeout 60s ssh -F "$WORK/config" picm-host "RUN_ID=$GITHUB_RUN_ID bash -se" <<'REMOTE'
+          set -Eeuo pipefail
+          root=/home/zomorod2/Saeit-staging
+          live="$root/core/picm_views.py"
+          incoming="/home/zomorod2/.picm-csrf-$RUN_ID.py"
+          backup="/home/zomorod2/.mojplaywin-backups/picm-csrf-$RUN_ID"
+          test "$(id -un)" = zomorod2
+          test -f "$live" && test ! -L "$live" && test -f "$incoming" && test ! -L "$incoming"
+          grep -Fq 'def picm_worker_finish(' "$live"
+          grep -Fq '@csrf_exempt  # Machine-to-machine bearer token' "$incoming"
+          grep -Fq 'worker_authorized(request, root)' "$incoming"
+          python3 -m py_compile "$incoming"
+          install -d -m 700 "$backup"
+          cp -p "$live" "$backup/picm_views.py"
+          chmod 600 "$backup/picm_views.py"
+          chmod 644 "$incoming"
+          mv -f "$incoming" "$live"
+          touch "$root/tmp/restart.txt"
+          touch /home/zomorod2/mojplaywin.com/tmp/restart.txt
+          echo PICM_CALLBACK_REPLACED_WITH_BACKUP
+          REMOTE
+      - name: Test authenticated callback reaches application not CSRF middleware
+        id: verify
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          WORK="$RUNNER_TEMP/picm-ssh"
+          timeout 55s ssh -F "$WORK/config" picm-vps 'python3 -' <<'PY'
+          from pathlib import Path
+          from urllib.request import Request,urlopen
+          from urllib.error import HTTPError
+          secret=(Path.home()/".local/share/saeit-picm/worker-token").read_text().strip()
+          request=Request("https://mojplaywin.com/picm/worker/finish/"+"0"*32+"/",
+                          method="POST",data=b"{}",headers={
+                          "Authorization":"Bearer "+secret,"X-PICM-Lease":"a"*32,
+                          "Content-Type":"application/json"})
+          try:
+              with urlopen(request,timeout=30) as response:
+                  status=response.status
+          except HTTPError as exc:
+              status=exc.code
+          assert status==404, "Expected authorized non-existent job 404; got "+str(status)
+          print("PICM_VPS_AUTHENTICATED_CALLBACK_REACHED_DJANGO_HTTP_404")
+          PY
+      - name: Roll back scoped callback fix if verification fails
+        if: failure() && steps.patch.outcome == 'success' && steps.verify.outcome == 'failure'
+        shell: bash
+        run: |
+          WORK="$RUNNER_TEMP/picm-ssh"
+          timeout 45s ssh -F "$WORK/config" picm-host "RUN_ID=$GITHUB_RUN_ID bash -se" <<'REMOTE' || true
+          set -e
+          file="/home/zomorod2/.mojplaywin-backups/picm-csrf-$RUN_ID/picm_views.py"
+          test -f "$file" && cp "$file" /home/zomorod2/Saeit-staging/core/picm_views.py
+          touch /home/zomorod2/Saeit-staging/tmp/restart.txt
+          REMOTE
+      - name: Remove temporary connection credentials
+        if: always()
+        shell: bash
+        run: |
+          rm -rf -- "$RUNNER_TEMP/picm-ssh"
