@@ -1,0 +1,122 @@
+name: MojPlayWin chess real sale blockers and wallet proof audit
+on:
+  push:
+    branches: [audit/mpw-chess-file-readonly-20261015]
+    paths: ['.github/workflows/mojplaywin-gm-sale-gates-20261015.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Check chess ebook location and SHA256 on cPanel without changes
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/mpw-root-audit"
+          mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          python3 - "$d/vps.key" "$d/host.key" <<'PY'
+          from pathlib import Path
+          import sys
+          for filename in sys.argv[1:]:
+              f=Path(filename)
+              f.write_text(f.read_text().replace("\r\n","\n").strip().replace("\\n","\n")+"\n")
+          PY
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host relay
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host host
+            HostName zohal.pws-dns.net
+            Port 1396
+            User zomorod2
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump relay
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+          EOF
+          timeout 30s ssh -F "$d/config" relay 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          timeout 100s ssh -F "$d/config" host 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = "zomorod2"
+          cd "$HOME/Saeit-staging"
+          export PYTHONDONTWRITEBYTECODE=1
+          "$HOME/virtualenv/Saeit-staging/3.11/bin/python" - <<'PY'
+          import os,hashlib,django
+          from pathlib import Path
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          django.setup()
+          from django.conf import settings
+          from django.db import connection
+          from django.urls import get_resolver,reverse
+          from core.models import Product
+          from mpw_native_checkout.wallet_ownership import proven_assets
+          print("GM_DB_MYSQL="+str(connection.vendor=="mysql"))
+          proofs=proven_assets()
+          print("GM_ETH_SIGNED_PROOF="+str(proofs.get("ETH") is True))
+          print("GM_TRX_SIGNED_PROOF="+str(proofs.get("TRX") is True))
+          p=Product.objects.get(pk=72)
+          m=p.metadata if isinstance(p.metadata,dict) else {}
+          root=Path.home()/"MojPlayWin_Private_Assets/store/chess-improvement"
+          fn=root/"MojPlayWin_Chess_Grandmaster_Final_Covered_2026.pdf"
+          expected="3837fc3cb21ed1a2e7c33e0db8f8e10d158583309b02b97d4d674d25a147207a"
+          ok=(fn.is_file() and not fn.is_symlink() and fn.stat().st_size==3631972 and hashlib.sha256(fn.read_bytes()).hexdigest()==expected)
+          print("GM_FINAL_PDF_PRIVATE_HASH_OK="+str(ok))
+          print("GM_DB_FILE_VERIFIED="+str(m.get("final_pdf_host_verified") is True))
+          print("GM_PRODUCT_ACTIVE="+str(p.active))
+          print("GM_PRODUCT_ASSET_APPROVED="+str(m.get("asset_verified") is True))
+          print("GM_PAYMENT_LIVE_APPROVED="+str(m.get("payment_live") is True))
+          print("GM_PRODUCT_COMMERCE_ENABLED="+str((m.get("mpw_commerce") or {}).get("enabled") is True))
+          print("GM_PRODUCT_COMMERCE_TYPE="+str((m.get("mpw_commerce") or {}).get("fulfillment","UNCONFIGURED")))
+          print("GM_CHECKOUT_FLAG="+str(m.get("checkout_enabled") is True))
+          raw=getattr(settings,"MPW_COMMERCE_PRIVATE_ASSET_ROOT",None)
+          print("GM_PRIVATE_ASSET_ROOT_CONFIGURED="+str(isinstance(raw,str) and raw.startswith("/")))
+          if isinstance(raw,str) and raw.startswith("/"):
+              rt=Path(raw)
+              print("GM_PRIVATE_ROOT_EXISTS="+str(rt.is_dir() and not rt.is_symlink()))
+              try: print("GM_FINAL_ASSET_INSIDE_COMMERCE_ROOT="+str(fn.resolve().is_relative_to(rt.resolve())))
+              except (OSError,ValueError):print("GM_FINAL_ASSET_INSIDE_COMMERCE_ROOT=False")
+          for key in ("MPW_COMMERCE_RELEASE_READY","MPW_COMMERCE_INVOICING_ENABLED","MPW_COMMERCE_SETTLEMENT_ENABLED","MPW_COMMERCE_CUSTOMER_HTTP_ENABLED","MPW_COMMERCE_REAL_RPC_ENABLED","MPW_COMMERCE_AUTORECONCILE_ENABLED","MPW_COMMERCE_DOWNLOADS_ENABLED"):
+              print("GM_GATE_"+key+"="+str(getattr(settings,key,False) is True))
+          app_urls=[str(pat.pattern) for pat in get_resolver().url_patterns]
+          print("GM_MPW_COMMERCE_URLCONF_CONNECTED="+str(any("mpw_commerce" in str(getattr(x,"urlconf_name","")) for x in get_resolver().url_patterns)))
+          old=Path("core/chess_ebook_delivery.py")
+          if old.is_file():
+              s=old.read_text(errors="replace")
+              print("GM_OLD_DOWNLOAD_SOURCE_REFERS_ORIGINAL="+str("d284d559bfac931cffe11e97561ac442d63dae5d8eda4bc04e84dd2c26022a1b" in s))
+              print("GM_OLD_DOWNLOAD_SOURCE_REFERS_FINAL="+str(expected in s))
+          print("GM_SALE_GATES_AUDIT_READ_ONLY=True")
+          PY
+          REMOTE
+          for path in /store/ /store/product/72/ /merchant/wallet-proof/; do
+            code="$(curl -sSL --max-time 20 -o /dev/null -w '%{http_code}' "https://mojplaywin.com$path" || true)"
+            echo "GM_HTTP_PATH_$path=$code"
+          done
+
+      - name: Remove transient keys
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/mpw-root-audit"
