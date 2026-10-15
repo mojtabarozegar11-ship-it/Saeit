@@ -194,8 +194,9 @@ class PICMPrivateMovieBridgeTests(TestCase):
         ident = self._stage()
         req = self.rf.get("/picm/video/status/" + ident + "/")
         req.user = self.owner
-        with self.assertRaises(Http404):
-            b.video_owner_status(req, ident)
+        self.assertEqual(
+            json.loads(b.video_owner_status(req, ident).content)["state"],
+            "staged_awaiting_gpu")
         self.assertEqual(self._worker(b.video_worker_reference,
             "/picm/video/worker/reference/" + ident + "/", ident,
             lease="a" * 32).status_code, 409)
