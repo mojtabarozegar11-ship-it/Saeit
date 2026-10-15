@@ -2,7 +2,7 @@ name: ComfyUI VPS Bounded CPU PNG Proof
 on:
   push:
     branches: [feature/comfyui-vps-render-proof-20261015]
-    paths: [.github/workflows/comfyui-vps-bounded-render.yml]
+    paths: [.github/workflows/comfyui-vps-bounded-render.yml, ops/comfyui-vps/vps_smoke.py]
   workflow_dispatch:
 permissions:
   contents: read
@@ -23,6 +23,7 @@ jobs:
           set -euo pipefail
           umask 077
           python3 -m py_compile ops/comfyui-vps/vps_smoke.py
+          python3 -m unittest discover -s ops/comfyui-vps/tests -p 'test_vps_smoke_safety.py' -v
           test -n "$VPS_KEY"
           dir="$RUNNER_TEMP/comfy-proof-ssh"
           install -d -m 700 "$dir"
