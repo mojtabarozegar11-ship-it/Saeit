@@ -131,6 +131,28 @@ jobs:
                   print("DIRECTORY_INDEX_INDEX_HTML_SET=yes")
               else:
                   print("DIRECTORY_INDEX_INDEX_HTML_ALREADY_SET=yes")
+              raw=open(live,"rb").read()
+              lines=raw.decode("utf-8",errors="strict").splitlines()
+              rewrites=[
+                  "RewriteRule ^$ index.html [END]",
+                  "RewriteRule ^amozeshgah/?$ amozeshgah/index.html [END]",
+              ]
+              if not all(rule in lines for rule in rewrites):
+                  rewrite_backup=os.path.expanduser("~/.backups/zomorodmelal-root-homepage/htaccess-before-static-rewrite")
+                  if not os.path.exists(rewrite_backup):
+                      import shutil
+                      shutil.copy2(live,rewrite_backup)
+                  prefix="RewriteEngine On\\n"+"\\n".join(rewrites)+"\\n"
+                  updated=(prefix+raw.decode("utf-8")).encode("utf-8")
+                  temp=live+".codex-tmp"
+                  open(temp,"wb").write(updated)
+                  os.chmod(temp,0o644)
+                  os.replace(temp,live)
+                  if open(live,"rb").read()!=updated:
+                      raise SystemExit("STATIC_DIRECTORY_REWRITE_VERIFY_FAILED")
+                  print("STATIC_DIRECTORY_REWRITES_SET=yes")
+              else:
+                  print("STATIC_DIRECTORY_REWRITES_ALREADY_SET=yes")
           print("ROOT_APP_PRECHECK=passed")
           PY
           result="$(uapi --output=json PassengerApps enable_application name=saeit-django)"
