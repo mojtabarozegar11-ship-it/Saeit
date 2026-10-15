@@ -33,7 +33,7 @@ class SecondPhotoBatchTest(unittest.TestCase):
     def test_gallery_shows_all_10_original_composites_individually(self):
         after=m.patch("gallery",self.template())
         for number in range(1,11):
-            self.assertEqual(after.count("photo-"+f"{number:02d}"+".png"),2)
+            self.assertEqual(after.count("photo-"+f"{number:02d}"+".jpg"),2)
         self.assertEqual(after.count("<figure>"),10)
     def test_content_block_remains_valid_and_scope_is_fixed(self):
         with self.assertRaises(ValueError):
