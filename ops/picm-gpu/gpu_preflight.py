@@ -25,10 +25,12 @@ def inspect(host_root, workflow_api, node_map, *,
             comfy="http://127.0.0.1:8188",
             minimum_gpu_mib=20000,
             minimum_free_disk_gib=20,
-            probe=None, gpu_command=None):
+            probe=None, gpu_command=None, gpu_profile="standard-24gb"):
     """Return safe, non-identifying read-only facts and unmet conditions."""
     problems = []
     details = {}
+    if gpu_profile not in GPU_PROFILES:
+        problems.append("unknown_GPU_profile")
     root = Path(host_root)
     if root.is_symlink() or not root.is_dir():
         problems.append("private_gpu_work_dir_missing")
@@ -47,6 +49,18 @@ def inspect(host_root, workflow_api, node_map, *,
     try:
         graph, mapping = load_workflow(workflow_api, node_map)
         verify_generating_graph(graph, mapping)
+        if gpu_profile == "wan22-5b-offload-8gb":
+            # Prevent accidental acceptance of a larger 14B image-to-video
+            # graph merely because its sampler and hardware API exist.
+            models = [node for node in graph.values()
+                      if node.get("class_type") == "UNETLoader"]
+            if not any(
+                    "wan2.2_ti2v_5b" in str(node.get("inputs", {}).get("unet_name", "")).lower()
+                    for node in models):
+                problems.append("wan22_5b_checkpoint_not_selected_in_workflow")
+            if not any(node.get("class_type") == "Wan22ImageToVideoLatent"
+                       for node in graph.values()):
+                problems.append("wan22_5b_i2v_latent_node_missing")
         details["connected_i2v_graph"] = True
     except (AssemblyError, OSError, ValueError, KeyError, TypeError):
         details["connected_i2v_graph"] = False
@@ -124,7 +138,8 @@ def main():
     report = inspect(args.work_dir, args.workflow_api, args.node_map,
                      comfy=args.comfy,
                      minimum_gpu_mib=minimum_vram,
-                     minimum_free_disk_gib=args.minimum_free_disk_gib)
+                     minimum_free_disk_gib=args.minimum_free_disk_gib,
+                     gpu_profile=args.gpu_profile)
     report["gpu_profile"] = args.gpu_profile
     report["minimum_free_vram_mib"] = minimum_vram
     print(json.dumps(report, sort_keys=True))
