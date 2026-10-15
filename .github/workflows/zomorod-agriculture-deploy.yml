@@ -123,7 +123,25 @@ jobs:
           actual="$(find "$stage" -type f -name index.html -print0 | sort -z | xargs -0 sha256sum | sha256sum | awk '{print $1}')"
           test "$actual" = "$expected"
           test -z "$(find "$stage" -type l -print -quit)"
-          test -e "$target" || mkdir -m 755 "$target"
+          created=0
+          rollback_on_error() {
+            rc=$?
+            if [ "$rc" -ne 0 ]; then
+              if [ "$created" -eq 1 ] && [ ! -d "$backup" ]; then
+                rm -rf -- "$target"
+                echo AGRICULTURE_PARTIAL_INSTALL_REMOVED=yes
+              elif [ -d "$backup" ]; then
+                failed="$HOME/.backups/zomorodmelal-agriculture/agriculture-failed-$sha"
+                test ! -e "$failed"
+                mv -T "$target" "$failed"
+                mv -T "$backup" "$target"
+                echo AGRICULTURE_PARTIAL_UPDATE_RESTORED=yes
+              fi
+            fi
+            exit "$rc"
+          }
+          trap rollback_on_error EXIT
+          if test ! -e "$target"; then mkdir -m 755 "$target"; created=1; fi
           test -d "$target" && test ! -L "$target"
           while IFS= read -r -d '' f; do
             rel="${f#"$stage"/}"; dir="${rel%/*}"
