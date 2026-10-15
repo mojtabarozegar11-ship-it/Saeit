@@ -1,5 +1,6 @@
 
 from django.contrib import admin
+from django.views.generic import TemplateView
 from django.urls import include, path
 from django.views.generic import RedirectView
 from command_center.views import dashboard as staff_dashboard
@@ -20,6 +21,7 @@ from core.knowledge_views import knowledge_article_detail, knowledge_book_detail
 
 urlpatterns = [
     path("", services, name="home"),
+    path("ghanadi/", TemplateView.as_view(template_name="core/ghanadi.html"), name="ghanadi"),
     path("agriculture/", lambda request: platform_page(request, "agriculture"), name="agriculture"),
     path("industry/", lambda request: platform_page(request, "industry"), name="industry"),
     path("research/", lambda request: platform_page(request, "research"), name="research"),
