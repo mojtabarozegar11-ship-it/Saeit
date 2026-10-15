@@ -1,0 +1,120 @@
+name: Astra V2 Topic Quality Gate Isolated VPS Canary
+
+on:
+  push:
+    branches: [feature/astra-factory-v2-architecture-20261014]
+    paths: [.github/workflows/astra-v2-topic-gate-vps-private-canary.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: astra-v2-topic-gate-isolated-canary
+  cancel-in-progress: false
+
+jobs:
+  private-vps-canary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Recheck research triage and private queue regressions locally
+        run: |
+          python3 -m unittest discover -s tests -p 'test_astra_opportunity_selector.py' -q
+          python3 -m unittest discover -s tests -p 'test_astra_research_evidence_adapter.py' -q
+          python3 -m unittest discover -s tests -p 'test_astra_v2_private_pipeline.py' -q
+      - name: Prove gate on VPS in separate disposable private workspace only
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" || { echo ASTRA_VPS_KEY_MISSING; exit 1; }
+          private_tmp="$RUNNER_TEMP/astra-topic-gate"
+          install -d -m 700 "$private_tmp"
+          trap 'rm -rf -- "$private_tmp"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$private_tmp/key"
+          chmod 600 "$private_tmp/key"
+          ssh-keygen -y -P '' -f "$private_tmp/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$private_tmp/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$private_tmp/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          SSH=(ssh -i "$private_tmp/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$private_tmp/known" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=15 githubops@178.239.147.150)
+          tar -cf - scripts/astra_opportunity_selector.py scripts/astra_research_evidence_adapter.py scripts/astra_v2_topic_gate.py scripts/astra_v2_private_pipeline.py scripts/astra_v2_self_directed_education.py tests/test_astra_v2_private_pipeline.py tests/test_astra_opportunity_selector.py tests/test_astra_research_evidence_adapter.py tests/test_astra_v2_self_directed_education.py tests/test_astra_orchard_decision_audit.py tests/test_astra_farm_procurement_audit.py tests/test_astra_farm_water_land_margin_audit.py product_prototypes/orchard_decision_audit product_prototypes/farm_procurement_audit product_prototypes/farm_water_land_margin_audit | "${SSH[@]}" 'set -eu; umask 077; base="$HOME/factory-runtime/operations/astra-v2-topic-gate-canary-source"; test ! -L "$base"; mkdir -p "$base"; chmod 700 "$base"; tar -xf - -C "$base"'
+          "${SSH[@]}" 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          test "$(id -un)" = githubops
+          base="$HOME/factory-runtime/operations/astra-v2-topic-gate-canary-source"
+          test -f "$base/scripts/astra_v2_topic_gate.py"
+          test ! -L "$base"
+          command -v python3
+          before="$(crontab -l 2>/dev/null | sha256sum | awk '{print $1}')"
+          cd "$base"
+          python3 -m unittest discover -s tests -p 'test_astra_opportunity_selector.py' -q
+          python3 -m unittest discover -s tests -p 'test_astra_research_evidence_adapter.py' -q
+          python3 -m unittest discover -s tests -p 'test_astra_v2_private_pipeline.py' -q
+          install -d -m 700 "$HOME/factory-runtime/private"
+          scratch="$(mktemp -d "$HOME/factory-runtime/private/topic-gate-smoke-XXXXXXXX")"
+          test ! -L "$scratch"
+          export ASTRA_GATE_SMOKE_ROOT="$scratch"
+          trap 'rm -rf -- "$ASTRA_GATE_SMOKE_ROOT"' EXIT
+          python3 - <<'PY'
+          import hashlib,importlib.util,json,os,pathlib,zipfile
+          from datetime import datetime,timezone
+          path=pathlib.Path('scripts/astra_v2_private_pipeline.py').resolve()
+          spec=importlib.util.spec_from_file_location('private_gate_canary',str(path))
+          module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+          root=module.safe_root(os.environ['ASTRA_GATE_SMOKE_ROOT'])
+          (root/'.enable-topic-research-gate').write_text('private_only')
+          brief={'brief_id':'canary_orchard_ref','builder':module.BUILDER,
+                 'development_scope':'private_reference_prototype',
+                 'publication_allowed':False,'market_demand_verified':False,
+                 'paid_api_budget':0,
+                 'problem':'Private synthetic orchard economics prototype for quality gate validation'}
+          candidate={'opportunity_key':brief['brief_id'],'problem':brief['problem'],
+                     'assessments':dict.fromkeys(('problem_intensity','demand','differentiation',
+                       'feasibility','margin','distribution','strategic_fit'),1),
+                     'gates':{'lawful':True,'rights_reviewed':True,
+                              'build_capability_available':True,
+                              'distribution_path_available':True}}
+          now=datetime.now(timezone.utc).isoformat()
+          evidence=[{'opportunity_key':brief['brief_id'],'url':'https://'+host+'/'+claim,
+                     'observed_at':now,'claim_type':claim,
+                     'content_sha256':hashlib.sha256((host+claim).encode()).hexdigest()}
+                    for host,claim in [('example.com','problem'),
+                                       ('example.org','willingness_to_pay'),
+                                       ('example.net','comparison'),
+                                       ('example.com','feasibility')]]
+          p=root/'topic-research-dossiers.json'
+          p.write_text(json.dumps({'candidates':[candidate],'snapshots':evidence}))
+          weak=module.enqueue(root,brief)
+          assert weak['status']=='RESEARCH_REQUIRED' and weak['new_job'] is False,weak
+          assert not list(root.glob('artifact-*.zip'))
+          candidate['assessments']={key:85 for key in candidate['assessments']}
+          p.write_text(json.dumps({'candidates':[candidate],'snapshots':evidence}))
+          intake=module.enqueue(root,brief)
+          assert intake['status']=='QUEUED',intake
+          result=module.tick(root)
+          assert result['status']=='PRIVATE_QA_PASSED',result
+          assert result['new_products_for_sale']==0,result
+          packs=list(root.glob('artifact-*.zip'))
+          assert len(packs)==1 and zipfile.ZipFile(packs[0]).testzip() is None
+          audit=json.loads(next(root.glob('qa-*.json')).read_text())
+          assert audit['sale_ready'] is False and audit['real_payment_allowed'] is False
+          assert module.status(root)['published_products']==0
+          print('ASTRA_V2_TOPIC_GATE_VPS_SMOKE=PASS')
+          print('ASTRA_V2_WEAK_IDEA_HELD=true')
+          print('ASTRA_V2_RESEARCH_UPGRADE_PRIVATE_QA=PASS')
+          print('ASTRA_V2_PUBLIC_STORE_WRITES=0')
+          print('ASTRA_V2_PAYMENTS_USED=0')
+          PY
+          after="$(crontab -l 2>/dev/null | sha256sum | awk '{print $1}')"
+          test "$before" = "$after"
+          echo ASTRA_V2_EXISTING_SCHEDULER_UNCHANGED=true
+          echo ASTRA_V2_LIVE_FACTORY_UNMODIFIED=true
+          REMOTE
