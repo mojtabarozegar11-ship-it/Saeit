@@ -33,7 +33,7 @@ footer{margin-top:25px;color:#8795ae;font-size:12px}
 </style>
 </head>
 <body>
-<header><div class="logo">MojPlayWin <span>/ PICM</span></div><div>{% if picm_authenticated %}<form method="post" action="/picm/logout/" style="display:inline;margin-right:12px">{% csrf_token %}<button type="submit" style="width:auto;padding:8px 12px;margin:0;font-size:12px">خروج</button></form>{% else %}<a href="/picm/login/">ورود</a> · {% endif %}<a href="/">← Main site</a></div></header>
+<header><div class="logo">MojPlayWin <span>/ PICM</span></div><span style="font-size:13px;color:#b0bed6">Image Studio · Workspace</span></header>
 <main>
 <div class="eyebrow">Private AI image studio · Beta</div>
 <h1>Ideas become images.</h1>
@@ -41,9 +41,6 @@ footer{margin-top:25px;color:#8795ae;font-size:12px}
 <div class="layout">
 <section class="panel">
 <h2>Generate image</h2>
-{% if not picm_authenticated %}
-<div class="notice">Please <a href="/picm/login/">sign in</a> to create images. The public studio is currently in a limited beta.</div>
-{% endif %}
 <form id="renderform">
 {% csrf_token %}
 <label for="prompt">Image description</label>
@@ -53,7 +50,7 @@ footer{margin-top:25px;color:#8795ae;font-size:12px}
 <div><label for="steps">Render steps</label><select id="steps" name="steps"><option value="2">2 · Standard demo</option><option value="1">1 · Quick test</option><option value="3">3 · Detailed demo</option></select></div>
 </div>
 <div class="notice">Current CPU engine: 256 × 256 experimental PNG. High-quality and 8K rendering are not yet available. Up to {{ picm_daily_limit }} requests per account per 24 hours.</div>
-<button type="submit" id="submit" {% if not picm_authenticated %}disabled{% endif %}>Generate image</button>
+<button type="submit" id="submit">Generate image</button>
 <div class="caption">Your prompt and image stay private to your account. Requests run sequentially on a protected server with resource limits.</div>
 </form>
 </section>
@@ -67,6 +64,7 @@ footer{margin-top:25px;color:#8795ae;font-size:12px}
 <div id="downloads"></div>
 </section>
 </div>
+<div style="display:flex;justify-content:flex-end;margin-top:24px"><form method="post" action="/picm/logout/">{% csrf_token %}<button type="submit" style="background:none;border:1px solid #596784;color:#c0cdef;padding:10px 18px;width:auto;margin:0;font-size:14px">خروج از میز کار</button></form></div>
 <footer>PICM Beta · MojPlayWin. Render speed and availability depend on protected server capacity.</footer>
 </main>
 <script>
