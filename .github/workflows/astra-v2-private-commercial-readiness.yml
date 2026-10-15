@@ -1,0 +1,72 @@
+name: Astra V2 Private Commercial Readiness Evidence Gate
+
+on:
+  push:
+    branches: [feature/astra-factory-v2-architecture-20261014]
+    paths:
+      - .github/workflows/astra-v2-private-commercial-readiness.yml
+      - scripts/astra_v2_release_gate.py
+      - tests/test_astra_v2_release_gate.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: astra-v2-private-commercial-readiness
+  cancel-in-progress: false
+
+jobs:
+  verify-private-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate immutable artifact, source, manifest and SQLite gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p test_astra_v2_release_gate.py -v
+          python3 -m unittest discover -s tests -p test_astra_v2_private_pipeline.py -q
+          python3 -m py_compile scripts/astra_v2_release_gate.py
+      - name: Audit three on-VPS prototypes without writing to factory or sites
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          temp="$RUNNER_TEMP/astra-commercial-readiness"
+          install -d -m 700 "$temp"
+          trap 'rm -rf -- "$temp"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$temp/key"
+          chmod 600 "$temp/key"
+          ssh-keygen -y -P '' -f "$temp/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$temp/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$temp/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          SSH=(ssh -i "$temp/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$temp/known" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=15 githubops@178.239.147.150)
+          cat scripts/astra_v2_release_gate.py | "${SSH[@]}" \
+            'python3 - --private-root /home/githubops/factory-runtime/private/astra-v2-canary-products --active-source /home/githubops/factory-runtime/operations/astra-v2-vps-canary-source --strict-technical' > "$temp/readiness.json"
+          python3 - "$temp/readiness.json" <<'PY'
+          import json, pathlib, sys
+          data=json.loads(pathlib.Path(sys.argv[1]).read_text())
+          assert data["verified_private_technical_families"]==3
+          assert data["expected_private_families"]==3
+          assert data["technical_integrity_gate"]=="PASS"
+          assert data["commercially_qualified_products"]==0
+          assert data["factory_mutations"]==0
+          assert data["public_site_mutations"]==0
+          assert data["payment_attempts"]==0
+          for family in data["families"]:
+              assert family["commercial_quality_score"] is None
+              assert family["commercial_release_authorized"] is False
+              assert family["technical_artifact_integrity"]=="VERIFIED"
+          print("ASTRA_RELEASE_EVIDENCE_TECHNICAL_FAMILIES=3")
+          print("ASTRA_RELEASE_EVIDENCE_COMMERCIAL_QUALIFICATION=BLOCKED")
+          print("ASTRA_RELEASE_EVIDENCE_PRIVATE_FACTORY_UNCHANGED=true")
+          print("ASTRA_RELEASE_EVIDENCE_SITES_PAYMENTS_UNCHANGED=true")
+          PY
