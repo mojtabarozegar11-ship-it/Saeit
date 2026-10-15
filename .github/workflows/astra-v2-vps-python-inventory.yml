@@ -52,5 +52,16 @@ jobs:
           find "$HOME" -maxdepth 7 \( -type f -o -type l \) \
             \( -name python3.11 -o -name python3.12 \) -print 2>/dev/null | head -n 35 || true
           echo ASTRA_VPS_HOME_PYTHON311_SEARCH_END=true
+          python3 - "$HOME/factory-runtime/private/factory-fresh-isolated.sqlite3" <<'PY'
+          import pathlib,shutil,sys
+          p=pathlib.Path(sys.argv[1])
+          assert p.is_file() and not p.is_symlink()
+          size=p.stat().st_size
+          free=shutil.disk_usage(p.parent).free
+          print("ASTRA_VPS_FACTORY_DB_SIZE_MIB="+str(size//1048576))
+          print("ASTRA_VPS_PRIVATE_VOLUME_FREE_MIB="+str(free//1048576))
+          print("ASTRA_VPS_FULL_COPY_EXTRA_REQUIRED_MIB="+str((size*2+536870912)//1048576))
+          print("ASTRA_VPS_SIZE_LIMIT_256_MIB_EXCEEDED="+str(size>268435456).lower())
+          PY
           echo ASTRA_VPS_NO_DATABASE_WRITES=true
           REMOTE
