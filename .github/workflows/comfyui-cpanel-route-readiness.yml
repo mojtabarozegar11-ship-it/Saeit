@@ -1,0 +1,125 @@
+name: ComfyUI cPanel Route Readiness (Read Only)
+on:
+  push:
+    branches: [ops/comfyui-headscale-readiness-20261015]
+    paths:
+      - ".github/workflows/comfyui-cpanel-route-readiness.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: comfyui-cpanel-route-readiness
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Configure pinned VPS to cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -Eeuo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/cpanel-route"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+      - name: Inspect mojplaywin domain and proxy prerequisites without changes
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          d="$RUNNER_TEMP/cpanel-route"
+          ssh -F "$d/config" saeit-cpanel 'bash -se' <<'REMOTE'
+          set -Eeuo pipefail
+          echo CPANEL_USER="$(id -un)"
+          echo CPANEL_HOST="$(hostname)"
+          timeout 30s uapi --output=json DomainInfo domains_data | python3 -c '
+          import json,sys
+          d=json.load(sys.stdin)
+          target={"mojplaywin.com","www.mojplaywin.com","comfyui.mojplaywin.com","headscale.mojplaywin.com"}
+          found=[]
+          def walk(x):
+              if isinstance(x,dict):
+                  domain=x.get("domain") or x.get("servername")
+                  root=x.get("documentroot") or x.get("document_root") or x.get("docroot")
+                  if isinstance(domain,str) and domain.rstrip(".").lower() in target:
+                      found.append((domain,root))
+                  for v in x.values(): walk(v)
+              elif isinstance(x,list):
+                  for v in x: walk(v)
+          walk(d)
+          for domain,root in sorted(set(found)): print("CPANEL_DOMAIN",domain,"DOCROOT",root)
+          if not found: print("MOJPLAYWIN_NOT_ASSIGNED_TO_THIS_CPANEL_ACCOUNT")
+          '
+          echo CPANEL_NODE="$(command -v node || echo absent)"
+          echo CPANEL_PYTHON="$(command -v python3 || echo absent)"
+          if command -v node >/dev/null 2>&1; then node --version; fi
+          echo CPANEL_SSH_OUTBOUND_TO_VPS_PORT22
+          python3 - <<'PY'
+          import socket
+          s=socket.socket(); s.settimeout(4)
+          try:
+              s.connect(("178.239.147.150",22)); print("CPANEL_TO_VPS_SSH_REACHABLE")
+          except OSError: print("CPANEL_TO_VPS_SSH_UNREACHABLE")
+          finally: s.close()
+          PY
+          echo CPANEL_PASSENGER_CAPABILITY
+          if uapi --output=json PassengerApps list_applications >/dev/null 2>&1; then echo PASSENGER_UAPI_AVAILABLE; else echo PASSENGER_UAPI_UNAVAILABLE; fi
+          echo CPANEL_ROUTE_READINESS_COMPLETE
+          REMOTE
+      - name: Check public domain DNS and VPS reachability
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          for host in mojplaywin.com comfyui.mojplaywin.com headscale.mojplaywin.com; do
+            if getent ahostsv4 "$host" >/dev/null; then echo "DNS_${host//./_}_RESOLVES"; else echo "DNS_${host//./_}_MISSING"; fi
+          done
+          python3 - <<'PY'
+          import socket
+          for port in (22,80,443,18188):
+              s=socket.socket(); s.settimeout(3)
+              try: s.connect(("178.239.147.150",port)); print(f"VPS_TCP_{port}_OPEN")
+              except OSError: print(f"VPS_TCP_{port}_CLOSED_OR_FILTERED")
+              finally: s.close()
+          PY
+      - name: Clean temporary SSH material
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/cpanel-route"
