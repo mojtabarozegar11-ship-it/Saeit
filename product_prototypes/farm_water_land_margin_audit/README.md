@@ -14,6 +14,53 @@ python3 render_report.py --report /tmp/water-margin-private.json --html /tmp/wat
 
 Open the HTML on your own computer/mobile, where you transferred it privately, and choose Print → PDF if needed. Input files and private reports never leave the machine. New outputs are chmod 0600; the tool refuses to overwrite files.
 
+## Interactive private browser workbench
+
+The product now includes a mobile-responsive editor so users do **not** need
+to hand-edit JSON. From the extracted `farm_water_land_margin_audit` directory:
+
+```bash
+python3 self_test.py
+python3 serve_local.py --port 8766
+```
+
+Open **http://127.0.0.1:8766/** in a browser **on the same device** as the
+Python process. The web server binds exclusively to the loopback interface:
+it is **not** an internet/cloud service, and it is **not accessible from a
+different phone or computer**. Do not expose it through a public reverse
+proxy or bind it to an external interface without a separate security review.
+
+The workbench offers:
+
+- An editable, clearly labeled 2–5-crop form with acreage, water demand per
+  hectare, unit revenue, variable costs and user-supplied source references.
+- The existing Python Decimal optimization — no duplicate JavaScript math
+  and no remote API/telemetry — for baseline, drought and five water
+  availability levels.
+- Readable crop comparison and incremental gross-margin sensitivity tables.
+  Results distinguish hypothetical interval values from any actual price
+  of water, legal irrigation rights or agronomic recommendation.
+- Explicitly fictional **Load example**, import/export of a local JSON input,
+  JSON export of the report, and browser Print / Save PDF.
+
+Inputs and results reside only in the local browser/process unless the user
+deliberately exports them. The app itself does not log user input or save
+uploaded farm data. The local HTTP API requires a correct loopback Host and
+same-origin POST; it applies request-size limits and contains no network
+fetches, accounts, or cloud credentials. Browser results are constructed with
+text-safe DOM APIs; it does not interpolate user crop names into HTML.
+
+Run dedicated tests from the repository root:
+
+```bash
+python3 -m unittest discover -s tests -p 'test_astra_water_land_local_workbench.py' -v
+python3 -m unittest discover -s tests -p 'test_astra_farm_water_land_margin_audit.py' -v
+```
+
+**This is an offline research interface, not a retail product.** No actual
+buyer interviews, independent agronomic validation, quality score,
+sale price, or publication permission has been established.
+
 ## Mathematical scope, objective and exactness
 
 For activities `i`, select fractional hectares `x_i >= 0`. Optimize the operator-supplied total gross margin `sum((revenue_i - variable_cost_i)*x_i)` subject to:
