@@ -184,7 +184,7 @@ class PICMPhotoReferenceTests(TestCase):
         self.assertEqual(self.submit().status_code,429)
         oversized=self.rf.post("/picm/api/reference/", data={
             "mode":"image_edit","prompt":"Make realistic","photo":self.photo(8193,1024)})
-        oversized.user=SimpleNamespace(pk=802,is_authenticated=True)
+        oversized.user=SimpleNamespace(pk=101,is_authenticated=True)
         self.assertEqual(v.picm_reference_stage(oversized).status_code,422)
 
     def test_rejects_file_not_matching_image_header(self):
