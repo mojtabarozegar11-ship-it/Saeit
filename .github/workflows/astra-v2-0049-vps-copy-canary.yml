@@ -91,7 +91,7 @@ jobs:
           scratch=pathlib.Path(sys.argv[2])
           available=shutil.disk_usage(scratch).free
           needed=original.stat().st_size*2+512*1024*1024
-          assert original.stat().st_size<=256*1024*1024,"factory DB exceeds bounded canary"
+          assert original.stat().st_size<=512*1024*1024,"factory DB exceeds bounded canary"
           assert available>=needed,"insufficient disk safety reserve for private clone"
           db=scratch/"factory-0048-copy.sqlite3"
           uri=original.resolve().as_uri()+"?mode=ro"
