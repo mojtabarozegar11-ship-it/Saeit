@@ -1,0 +1,172 @@
+name: Publish Zomorod Ghanadi static page
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/ghanadi-deploy.yml"
+      - "public/ghanadi/**"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ghanadi-static-publication
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Check out reviewed storefront
+        uses: actions/checkout@v4
+
+      - name: Validate storefront and assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from html.parser import HTMLParser
+          from pathlib import Path
+          import re
+          page = Path("public/ghanadi/index.html")
+          source = page.read_text(encoding="utf-8")
+          class Check(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.title = self.h1 = self.rtl = self.canonical = False
+              def handle_starttag(self, tag, attrs):
+                  a = dict(attrs)
+                  if tag == "html":
+                      self.rtl = a.get("lang") == "fa" and a.get("dir") == "rtl"
+                  if tag == "title":
+                      self.title = True
+                  if tag == "h1":
+                      self.h1 = True
+                  if tag == "link" and a.get("rel") == "canonical":
+                      self.canonical = a.get("href") == "https://zomorodmelal.ir/ghanadi/"
+          c = Check()
+          c.feed(source)
+          if not all((c.title, c.h1, c.rtl, c.canonical)):
+              raise SystemExit("Storefront metadata or Persian RTL heading is missing")
+          if len(re.findall(r"\bgroup:", source)) != 20:
+              raise SystemExit("Expected 20 populated product records")
+          for name in ("cookie.svg", "cake.svg", "cafe.svg", "box.svg"):
+              asset = Path("public/ghanadi/assets") / name
+              if not asset.is_file() or asset.stat().st_size < 400:
+                  raise SystemExit(f"Missing or invalid illustration: {name}")
+          print("GHANADI_SOURCE_VALIDATION=passed")
+          print(f"PAGE_BYTES={page.stat().st_size}")
+          print("PRODUCT_RECORDS=20")
+          PY
+
+      - name: Prepare pinned VPS relay and cPanel SSH
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/ghanadi-publish"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+
+      - name: Install only the new /ghanadi path
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/ghanadi-publish"
+          target="/home/zomorod2/public_html/ghanadi"
+          stage="/home/zomorod2/public_html/.ghanadi-stage-$GITHUB_SHA"
+          ssh -F "$d/config" saeit-cpanel "set -eu; test ! -e '$target' && test ! -L '$target'; test ! -e '$stage' && mkdir -m 755 '$stage'"
+          tar -C public/ghanadi -czf - . | ssh -F "$d/config" saeit-cpanel "tar -xzf - -C '$stage'"
+          ssh -F "$d/config" saeit-cpanel "set -eu; chmod 644 '$stage/index.html'; find '$stage/assets' -type f -exec chmod 644 {} +; chmod 755 '$stage' '$stage/assets'; test ! -e '$target' && test ! -L '$target'; mv -T '$stage' '$target'; test -s '$target/index.html'; echo GHANADI_STATIC_PAGE_INSTALLED=yes"
+
+      - name: Verify the public path and roll back a failed publication
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/ghanadi-publish"
+          html="$d/ghanadi-after.html"
+          result="$(curl --silent --show-error --location --retry 2 --retry-delay 1 --max-time 40 -H 'Cache-Control: no-cache' -o "$html" -w '%{http_code}|%{content_type}' https://zomorodmelal.ir/ghanadi/ || true)"
+          code="${result%%|*}"
+          content_type="${result#*|}"
+          valid=1
+          if [ "$code" != "200" ] || [[ "$content_type" != text/html* ]]; then valid=0; fi
+          if ! python3 - "$html" <<'PY'
+          import sys
+          from html.parser import HTMLParser
+          from pathlib import Path
+          try:
+              source = Path(sys.argv[1]).read_text(encoding="utf-8")
+          except Exception:
+              raise SystemExit(1)
+          class Verify(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.title = self.rtl = self.heading = self.canonical = False
+              def handle_starttag(self, tag, attrs):
+                  a = dict(attrs)
+                  if tag == "html":
+                      self.rtl = a.get("lang") == "fa" and a.get("dir") == "rtl"
+                  if tag == "title":
+                      self.title = True
+                  if tag == "h1":
+                      self.heading = True
+                  if tag == "link" and a.get("rel") == "canonical":
+                      self.canonical = a.get("href") == "https://zomorodmelal.ir/ghanadi/"
+          v = Verify()
+          v.feed(source)
+          raise SystemExit(0 if all((v.title, v.rtl, v.heading, v.canonical)) else 1)
+          PY
+          then valid=0; fi
+          if [ "$valid" -ne 1 ]; then
+            echo "PUBLIC_CHECK_FAILED status=$code content_type=$content_type"
+            backup="/home/zomorod2/.backups/zomorodmelal-ghanadi/static-failed-$GITHUB_SHA"
+            ssh -F "$d/config" saeit-cpanel "set -eu; if test -d /home/zomorod2/public_html/ghanadi; then install -d -m 700 /home/zomorod2/.backups/zomorodmelal-ghanadi; test ! -e '$backup'; mv -T /home/zomorod2/public_html/ghanadi '$backup'; fi; echo ROLLBACK_COMPLETED=yes"
+            exit 1
+          fi
+          echo "GHANADI_HTTP=$code"
+          echo "CONTENT_TYPE=$content_type"
+          echo "PUBLIC_HTML_VALIDATION=passed"
+          grep -Eio '<title>[^<]*</title>' "$html" | head -1
+          grep -Eio '<link rel="canonical"[^>]*>' "$html" | head -1
+
+      - name: Remove temporary SSH material
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/ghanadi-publish"
