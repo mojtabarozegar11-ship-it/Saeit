@@ -106,6 +106,7 @@ jobs:
             test -d "$target" && test ! -L "$target"
             test -f "$target/index.html" && ! test -L "$target/index.html"
             grep -Fq '<!-- saeit-zomorod-agriculture-v1 -->' "$target/index.html" || { echo "Unmanaged agriculture directory; refusing"; exit 1; }
+            test -z "$(find "$target" -type l -print -quit)" || { echo "Symlink found inside managed agriculture directory"; exit 1; }
             install -d -m 700 "$HOME/.backups/zomorodmelal-agriculture"
             test ! -e "$backup"
             cp -a "$target" "$backup"
