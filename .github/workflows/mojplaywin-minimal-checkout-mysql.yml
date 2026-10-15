@@ -1,7 +1,7 @@
 name: MojPlayWin minimal checkout full MySQL validation
 on:
   push:
-    branches: [feat/mpw-customer-checkout-minimal-20261015, feature/mpw-paid-book-recovery-20261015, feature/mpw-book72-customer-auth-promo-20261015]
+    branches: [feat/mpw-customer-checkout-minimal-20261015, feature/mpw-paid-book-recovery-20261015, feature/mpw-book72-customer-auth-promo-20261015, fix/mpw-buyer-helper-and-idle-reconciler-20261015]
     paths:
       - '.github/workflows/mojplaywin-minimal-checkout-mysql.yml'
       - 'tests/native_checkout_mysql_settings.py'
@@ -13,6 +13,7 @@ on:
       - 'tests/native_ci_customer_auth.py'
       - 'tests/native_ci_book72_promo.py'
       - 'scripts/mpw_book72_apply_promo.py'
+      - 'scripts/mpw_book72_reconcile_scheduled.py'
       - 'mpw_commerce/**'
       - 'tests/native_ci_buyer_cart.py'
       - 'tests/native_checkout_mysql_settings.py'
