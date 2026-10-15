@@ -31,7 +31,7 @@ textarea:focus,input:focus{outline:2px solid #9a9eff;outline-offset:1px}
 .notice strong{color:#f9e8b9}
 button.primary{display:block;width:100%;border:0;border-radius:12px;padding:16px;margin-top:20px;font:inherit;font-weight:800;cursor:pointer;background:linear-gradient(100deg,#8fa0ff,#bd9fff);color:#10142b}
 button.primary:disabled{cursor:not-allowed;opacity:.6}
-button.stop-video{margin-top:10px;width:100%;padding:12px;background:transparent;color:#e9b2bd;border:1px solid #926876;border-radius:12px;cursor:pointer;font:inherit}.hint{color:#acb8d0;font-size:12px;line-height:1.8;margin-top:11px}
+input[type=range]{width:100%;accent-color:#a0a7ff}button.stop-video{margin-top:10px;width:100%;padding:12px;background:transparent;color:#e9b2bd;border:1px solid #926876;border-radius:12px;cursor:pointer;font:inherit}.hint{color:#acb8d0;font-size:12px;line-height:1.8;margin-top:11px}
 .preview{min-height:330px;background:linear-gradient(140deg,#10192e,#1c2542);border-radius:15px;border:1px dashed #52617f;display:flex;align-items:center;justify-content:center;text-align:center;flex-direction:column;overflow:hidden;padding:17px;color:#bbcae2;gap:12px}
 .preview img{width:100%;max-height:430px;object-fit:contain;border-radius:10px}
 .preview svg{width:75px;height:75px;stroke:#9eaeeb;fill:none}
@@ -66,6 +66,15 @@ footer{margin-top:29px;color:#8696b6;font-size:12px}
 <div id="promptgroup">
 <label for="prompt">دستور تغییر عکس</label>
 <textarea id="prompt" name="prompt" maxlength="580" minlength="4" required placeholder="برای نمونه: نور سینمایی طبیعی، جزئیات چهره حفظ شود و پس‌زمینه باغی سرسبز باشد..."></textarea>
+</div>
+<div id="photo-options">
+<label for="photo-brightness">روشنایی</label>
+<input type="range" id="photo-brightness" min="75" max="140" value="105" step="5">
+<label for="photo-contrast">کنتراست</label>
+<input type="range" id="photo-contrast" min="75" max="145" value="110" step="5">
+<label for="photo-saturation">اشباع رنگ</label>
+<input type="range" id="photo-saturation" min="0" max="165" value="108" step="3">
+<p class="hint">ویرایش رایگان و دستی عکس: نور، کنتراست و رنگ؛ خروجی JPEG با حفظ تناسب تصویر و حداکثر ضلع ۲۰۴۸ پیکسل. این قابلیت مولد هوش مصنوعی نیست.</p>
 </div>
 <div id="video-options" hidden>
 <label for="video-duration">مدت ویدیوی رایگان</label>
