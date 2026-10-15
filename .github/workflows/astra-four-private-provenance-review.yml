@@ -1,0 +1,152 @@
+name: Astra four proprietary provenance review - private
+
+on:
+  push:
+    branches: [factory/astra-commercial-catalog-20261015]
+    paths:
+      - .github/workflows/astra-four-private-provenance-review.yml
+      - scripts/astra_four_provenance_candidate.py
+      - tests/test_astra_four_provenance_candidate.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: astra-four-private-provenance-review
+  cancel-in-progress: false
+
+jobs:
+  technical-qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Source tests for all four products and reproducible legal review packets
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/astra_four_provenance_candidate.py
+          python3 -m unittest discover -s tests -p test_astra_four_provenance_candidate.py -v
+          for suite in test_astra_orchard_decision_audit.py test_astra_farm_procurement_audit.py test_astra_farm_water_land_margin_audit.py test_astra_circuit_courier.py; do
+            python3 -m unittest discover -s tests -p "$suite" -q
+          done
+          node product_prototypes/circuit_courier/test_engine.js
+          echo ASTRA_PROVENANCE_FOUR_PRODUCT_SOURCE_TESTS=PASS
+
+  prepare-private-commercial-review:
+    needs: technical-qa
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare pinned private SSH
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/astra-transfer"
+          mkdir -p "$d"
+          for key in VPS_KEY HOST_KEY; do
+            test -n "${!key}"
+            printf '%s' "${!key}" | python3 -c 'import sys;print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/$key"
+            chmod 600 "$d/$key"
+            ssh-keygen -y -P '' -f "$d/$key" >/dev/null
+          done
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -i "$d/VPS_KEY" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/vps.known" githubops@178.239.147.150 'ssh-keyscan -T 10 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          cat > "$d/config" <<EOF
+          Host vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/VPS_KEY
+            UserKnownHostsFile $d/vps.known
+          Host host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            ProxyJump vps
+            IdentityFile $d/HOST_KEY
+            UserKnownHostsFile $d/host.known
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            StrictHostKeyChecking yes
+            ConnectTimeout 12
+            ForwardAgent no
+          EOF
+          chmod 600 "$d/config"
+      - name: Stage reviewed reproducible package builder privately
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/astra-transfer"
+          scp -q -F "$d/config" scripts/astra_four_provenance_candidate.py 'host:.saeit-astra-four-inbox/astra_four_provenance_candidate.py'
+          ssh -F "$d/config" host 'chmod 600 "$HOME/.saeit-astra-four-inbox/astra_four_provenance_candidate.py"'
+      - name: Prepare owner-attested candidate bundles without changing original goods or payment
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -F "$RUNNER_TEMP/astra-transfer/config" host 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          test "$(id -un)" = "zomorod2"
+          inbox="$HOME/.saeit-astra-four-inbox"
+          review="$HOME/.saeit-astra-four-review-v3"
+          python="$HOME/virtualenv/Saeit-staging/3.11/bin/python"
+          test -x "$python"
+          test -f "$inbox/catalog.json"
+          test -f "$inbox/astra_mpw_four_draft_import.py"
+          test ! -L "$inbox" && test ! -L "$review"
+          "$python" "$inbox/astra_four_provenance_candidate.py" --catalog "$inbox/catalog.json" --inbox "$inbox" --output "$review"
+          "$python" "$inbox/astra_four_provenance_candidate.py" --catalog "$inbox/catalog.json" --inbox "$inbox" --output "$review" --apply
+          "$python" "$inbox/astra_four_provenance_candidate.py" --catalog "$inbox/catalog.json" --inbox "$inbox" --output "$review" --apply
+          test "$(find "$review" -maxdepth 1 -type f -name 'ASTRA-*.zip' | wc -l)" -eq 4
+          test "$(find "$review" -maxdepth 1 -type f -name 'astra-commercial-review-*.json' | wc -l)" -eq 1
+          test "$(stat -c '%a' "$review")" = "700"
+          test ! -L "$HOME/mojplaywin.com/factory-previews"
+          "$python" - <<'PY'
+          import os,glob,zipfile,json
+          from pathlib import Path
+          home=Path.home()
+          root=home/".saeit-astra-four-review-v3"
+          zip_files=list(root.glob("ASTRA-*.zip"))
+          assert len(zip_files)==4
+          for item in zip_files:
+              assert item.stat().st_mode & 0o077==0
+              with zipfile.ZipFile(item) as source:
+                  files=source.namelist()
+                  for tail in ("COPYRIGHT-OWNER-DECLARATION.txt","RELEASE-CANDIDATE-READ-ME.txt","SOURCE-PROVENANCE.json"):
+                      matches=[x for x in files if x.endswith("/"+tail)]
+                      assert len(matches)==1,(item.name,tail)
+                  metadata=json.loads(source.read(next(x for x in files if x.endswith("/SOURCE-PROVENANCE.json"))))
+                  assert metadata["legal_verification_completed"] is False
+                  assert metadata["candidate_status"]=="PRIVATE_QA_NOT_FOR_SALE"
+                  assert metadata["dependency_review"]["paid_release_authorized"] is False
+                  print("ASTRA_PRIVATE_REVIEW_SKU="+metadata["sku"])
+                  for warning in metadata["dependency_review"]["static_scan_warnings"]:
+                      print("ASTRA_PRIVATE_REVIEW_WARNING="+metadata["sku"]+":"+warning)
+          print("ASTRA_PRIVATE_REVIEW_CANDIDATES=4")
+          print("ASTRA_PRIVATE_REVIEW_PAYMENT_UNCHANGED=true")
+          PY
+          REMOTE
+      - name: Verify public previews survived while paid purchase remains disabled
+        shell: bash
+        run: |
+          set -euo pipefail
+          status="$(curl -sSL --max-time 20 -o /dev/null -w '%{http_code}' 'https://mojplaywin.com/factory-previews/')"
+          test "$status" = 200
+          echo ASTRA_REVIEW_PREVIEW_PUBLIC_HTTP=200
+          echo ASTRA_REVIEW_LIVE_PAID_PAYMENT_ENABLED=false
+          echo ASTRA_REVIEW_FACTORY_RELEASE_APPROVED=false
+      - name: Remove ephemeral keys
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/astra-transfer"

@@ -1,0 +1,221 @@
+name: Astra commerce live checkout and catalog read-only audit
+on:
+  push:
+    branches: [factory/astra-commercial-catalog-20261015]
+    paths:
+      - .github/workflows/astra-commerce-live-readonly-audit.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Prepare pinned SSH connections to authorized site host
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/astra-live-payment"
+          install -d -m 700 "$d"
+          for item in VPS_KEY HOST_KEY; do
+            printf '%s' "${!item}" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/$item.key"
+            chmod 600 "$d/$item.key"
+            ssh-keygen -y -P '' -f "$d/$item.key" >/dev/null
+          done
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -i "$d/VPS_KEY.key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/vps.known" -o BatchMode=yes githubops@178.239.147.150 'ssh-keyscan -T 10 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/VPS_KEY.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/HOST_KEY.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 12
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+      - name: Read-only active MojPlayWin catalog and checkout status
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -F "$RUNNER_TEMP/astra-live-payment/config" saeit-cpanel 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          app="$HOME/Saeit-staging"
+          doc="$HOME/mojplaywin.com"
+          test -f "$app/manage.py"
+          test -f "$doc/passenger_wsgi.py"
+          if grep -Fq Saeit-staging "$doc/passenger_wsgi.py"; then echo ASTRA_HOST_MPW_APP_LINKED=YES; else echo ASTRA_HOST_MPW_APP_LINKED=UNKNOWN; fi
+          export DJANGO_SETTINGS_MODULE=config.settings
+          export PYTHONPATH="$app"
+          cd "$app"
+          code="$app/core/api.py"
+          test -f "$code"
+          python3 - "$code" <<'PY'
+          import pathlib,sys
+          text=pathlib.Path(sys.argv[1]).read_text(encoding="utf-8",errors="replace")
+          print("ASTRA_HOST_LEGACY_PAYMENT_APPROVAL_CODE="+str('status="awaiting_approval"' in text))
+          print("ASTRA_HOST_LEGACY_PAYMENT_PROVIDER_UNSET_CODE="+str('provider="not_configured"' in text))
+          PY
+          for py in "$HOME/virtualenv/Saeit-staging/3.11/bin/python" "$app/.venv/bin/python" "$HOME/virtualenv/Saeit-staging/3.10/bin/python" "$HOME/virtualenv/mojplaywin.com/3.11/bin/python"; do
+            if test -x "$py" && "$py" -c 'import django' >/dev/null 2>&1; then
+              "$py" - <<'PY'
+          import django
+          from django.apps import apps
+          from django.conf import settings
+          from django.urls import resolve,Resolver404
+          django.setup()
+          Product=apps.get_model("core","Product")
+          print("ASTRA_HOST_DJANGO_DEBUG_FALSE="+str(settings.DEBUG is False))
+          print("ASTRA_HOST_ACTIVE_PUBLIC_PRODUCTS="+str(Product.objects.filter(active=True).count()))
+          print("ASTRA_HOST_ACTIVE_FACTORY_PRODUCTS="+str(Product.objects.filter(active=True,metadata__factory_origin="saeit_vps").count()))
+          print("ASTRA_HOST_FACTORY_DRAFTS="+str(Product.objects.filter(active=False,metadata__factory_origin="saeit_vps").count()))
+          skus=("ASTRA-CIRCUIT-01","ASTRA-PROCURE-01","ASTRA-WATER-01","ASTRA-ORCHARD-01")
+          verified=0
+          for sku in skus:
+              candidates=Product.objects.filter(metadata__astra_sku=sku)
+              assert candidates.count()==1,"MISSING_OR_DUPLICATE_PRODUCT_"+sku
+              obj=candidates.get()
+              assert obj.active is False and obj.currency=="USD","UNEXPECTED_PUBLIC_ITEM"
+              assert obj.metadata.get("factory_archive_private") is True,"NONPRIVATE_PACKAGE"
+              assert obj.metadata.get("factory_publication_permission") is False
+              assert len(obj.metadata.get("astra_archive_sha256",""))==64
+              verified+=1
+          print("ASTRA_HOST_FOUR_PRIVATE_PRODUCT_SKUS_VERIFIED="+str(verified))
+          print("ASTRA_LIVE_PAY_CHECKOUT_PACKAGE_INSTALLED="+str(apps.is_installed("mpw_commerce")))
+          print("ASTRA_LIVE_PAY_NATIVE_PACKAGE_INSTALLED="+str(apps.is_installed("mpw_native_checkout")))
+          if apps.is_installed("mpw_native_checkout"):
+              try:
+                  from mpw_native_checkout.wallet_ownership import proven_assets
+                  proofs=proven_assets()
+                  for asset in ("ETH","TRX"):
+                      print("ASTRA_LIVE_PAY_MERCHANT_WALLET_"+asset+"_PROVEN="+str(proofs.get(asset) is True))
+              except Exception as exc:
+                  print("ASTRA_LIVE_PAY_MERCHANT_PROOF_CHECK_ERROR="+type(exc).__name__)
+          for url in ("/commerce/checkout/order/","/commerce/book/1/","/commerce/download/1/"):
+              try:
+                  from django.urls import resolve,Resolver404
+                  name=resolve(url).url_name
+              except Resolver404:
+                  name="UNROUTED"
+              print("ASTRA_LIVE_PAY_ROUTE_"+url.strip("/").replace("/","_").upper()+"="+str(name))
+          required=(
+              "MPW_COMMERCE_RELEASE_READY",
+              "MPW_COMMERCE_CUSTOMER_HTTP_ENABLED",
+              "MPW_COMMERCE_BUYER_SIGNATURE_ENABLED",
+              "MPW_COMMERCE_INVOICING_ENABLED",
+              "MPW_COMMERCE_SETTLEMENT_ENABLED",
+              "MPW_COMMERCE_REAL_RPC_ENABLED",
+              "MPW_COMMERCE_AUTORECONCILE_ENABLED",
+              "MPW_COMMERCE_DOWNLOADS_ENABLED",
+          )
+          for flag in required:
+              print("ASTRA_LIVE_PAY_FLAG_"+flag+"="+str(getattr(settings,flag,False) is True))
+          print("ASTRA_LIVE_PAY_PRIVATE_ASSET_ROOT_CONFIGURED="+str(
+              bool(getattr(settings,"MPW_COMMERCE_PRIVATE_ASSET_ROOT",None))))
+          for sku in skus:
+              p=Product.objects.select_related("knowledge_article").get(metadata__astra_sku=sku)
+              meta=p.metadata if isinstance(p.metadata,dict) else {}
+              try:
+                  is_published=bool(p.knowledge_article_id and p.knowledge_article.published)
+              except Exception:
+                  is_published=False
+              print("ASTRA_LIVE_SALE_"+sku+"_ACTIVE="+str(p.active))
+              print("ASTRA_LIVE_SALE_"+sku+"_KNOWLEDGE_PUBLISHED="+str(is_published))
+              print("ASTRA_LIVE_SALE_"+sku+"_FACTORY_PUBLICATION_PERMISSION="+str(
+                  meta.get("factory_publication_permission") is True))
+              print("ASTRA_LIVE_SALE_"+sku+"_INDEPENDENT_QUALITY="+str(
+                  meta.get("quality_approved") is True))
+              print("ASTRA_LIVE_SALE_"+sku+"_LICENSE_AUDIT="+str(
+                  meta.get("license_verified") is True))
+              conf=meta.get("mpw_commerce") or {}
+              print("ASTRA_LIVE_SALE_"+sku+"_COMMERCE_ENABLED="+str(
+                  isinstance(conf,dict) and conf.get("enabled") is True))
+          # Read-only commercial readiness: inspect actual private ZIP payload and gates.
+          import hashlib,zipfile,stat
+          from pathlib import Path
+          from collections import Counter
+          root=Path(getattr(settings,"MPW_COMMERCE_PRIVATE_ASSET_ROOT",""))
+          for sku in skus:
+              product=Product.objects.get(metadata__astra_sku=sku)
+              meta=product.metadata
+              mapping=(meta.get("mpw_commerce") or {})
+              relative=mapping.get("private_file") if isinstance(mapping,dict) else None
+              valid_relative=isinstance(relative,str) and relative.startswith("astra-four-specialist-v1/") and ".." not in relative
+              path=root/relative if valid_relative else None
+              if not path or not path.is_file() or path.is_symlink():
+                  print("ASTRA_CONTENT_"+sku+"_PRIVATE_FILE=UNAVAILABLE")
+                  continue
+              sha=hashlib.sha256(path.read_bytes()).hexdigest()
+              print("ASTRA_CONTENT_"+sku+"_PRIVATE_SHA="+str(sha==meta.get("astra_archive_sha256")))
+              try:
+                  with zipfile.ZipFile(path) as z:
+                      infos=z.infolist()
+                      safe=bool(infos) and len(infos)<=500 and all(
+                          not ((i.filename.startswith("/") or ".." in Path(i.filename).parts) or
+                               i.flag_bits&1 or (i.external_attr>>16)&0o170000==stat.S_IFLNK)
+                          for i in infos
+                      )
+                      extensions=Counter(Path(i.filename).suffix.lower() or "[none]" for i in infos if not i.is_dir())
+                      total=sum(i.file_size for i in infos)
+                      readmes=[i for i in infos if Path(i.filename).name.lower() in (
+                          "readme.md","readme.txt","quickstart.md","user-guide.md",
+                          "instructions.txt","instructions.md")]
+                      licenses=[i for i in infos if Path(i.filename).name.lower() in (
+                          "license","license.txt","license.md","notice","notice.txt",
+                          "third_party_licenses.txt","third-party-notices.md")]
+                      buyer_docs=sum(i.file_size for i in readmes)
+                      ratio=(total / max(1,path.stat().st_size))
+                      print("ASTRA_CONTENT_"+sku+"_ZIP_SAFE="+str(safe and total<=60_000_000 and ratio<300))
+                      print("ASTRA_CONTENT_"+sku+"_FILE_COUNT="+str(len(infos)))
+                      print("ASTRA_CONTENT_"+sku+"_COMPRESSED_BYTES="+str(path.stat().st_size))
+                      print("ASTRA_CONTENT_"+sku+"_UNCOMPRESSED_BYTES="+str(total))
+                      print("ASTRA_CONTENT_"+sku+"_FILE_TYPES="+",".join(
+                          k+":"+str(v) for k,v in sorted(extensions.items())[:12]))
+                      print("ASTRA_CONTENT_"+sku+"_BUYER_GUIDE_BYTES="+str(buyer_docs))
+                      print("ASTRA_CONTENT_"+sku+"_LICENSE_NOTICES_PRESENT="+str(bool(licenses)))
+              except (OSError,ValueError,zipfile.BadZipFile) as err:
+                  print("ASTRA_CONTENT_"+sku+"_ZIP_AUDIT_ERROR="+type(err).__name__)
+              from core.models import FactoryReleaseGate
+              gate=FactoryReleaseGate.objects.filter(product=product).first()
+              print("ASTRA_CONTENT_"+sku+"_RELEASE_GATE="+str(gate.status if gate else "ABSENT"))
+          for name in ("Order","PaymentIntent","CryptoPaymentIntent"):
+              try: model=apps.get_model("core",name)
+              except LookupError:
+                  print("ASTRA_HOST_MODEL_"+name.upper()+"=MISSING")
+                  continue
+              try: print("ASTRA_HOST_MODEL_"+name.upper()+"_COUNT="+str(model.objects.count()))
+              except Exception as exc: print("ASTRA_HOST_MODEL_"+name.upper()+"_DB_ERROR="+type(exc).__name__)
+          for path in ("/store/","/store/product/1/","/crypto-payments/"):
+              try: found=resolve(path);result=str(found.url_name)
+              except Resolver404: result="MISSING"
+              print("ASTRA_HOST_ROUTE_"+path.replace("/","_").upper()+"="+result)
+          PY
+              echo ASTRA_HOST_DJANGO_RUNTIME_AUDITED=YES
+              exit 0
+            fi
+          done
+          echo ASTRA_HOST_DJANGO_RUNTIME_AUDITED=NO
+          REMOTE
+      - name: Clean temporary identities
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/astra-live-payment"

@@ -1,0 +1,143 @@
+name: MojPlayWin four Astra public previews - owner publication
+
+on:
+  push:
+    branches: [factory/astra-commercial-catalog-20261015]
+    paths:
+      - .github/workflows/astra-four-publish-previews.yml
+      - scripts/astra_mpw_publish_previews.py
+      - tests/test_astra_mpw_publish_previews.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: astra-four-previews-publication
+  cancel-in-progress: false
+
+jobs:
+  local-preview-safety:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Verify public previews have safe labels and no checkout
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/astra_mpw_publish_previews.py
+          python3 -m unittest discover -s tests -p test_astra_mpw_publish_previews.py -v
+          python3 -m unittest discover -s tests -p test_astra_mpw_four_draft_import.py -v
+
+  publish-verified-previews:
+    needs: local-preview-safety
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare encrypted runner-to-VPS-to-cPanel connection
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/astra-public-preview"
+          install -d -m 700 "$d"
+          for key in VPS_KEY HOST_KEY; do
+            test -n "${!key}"
+            printf '%s' "${!key}" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/$key"
+            chmod 600 "$d/$key"
+            ssh-keygen -y -P '' -f "$d/$key" >/dev/null
+          done
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -i "$d/VPS_KEY" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/vps.known" githubops@178.239.147.150 'ssh-keyscan -T 10 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          cat > "$d/config" <<EOF
+          Host vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/VPS_KEY
+            UserKnownHostsFile $d/vps.known
+          Host host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            ProxyJump vps
+            IdentityFile $d/HOST_KEY
+            UserKnownHostsFile $d/host.known
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            StrictHostKeyChecking yes
+            ConnectTimeout 12
+            ForwardAgent no
+          EOF
+          chmod 600 "$d/config"
+      - name: Validate live storefront and ship immutable preview script
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/astra-public-preview"
+          ssh -F "$d/config" host 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = "zomorod2"
+          test -f "$HOME/Saeit-staging/core/templates/brands/mojplaywin/store.html"
+          test -f "$HOME/mojplaywin.com/passenger_wsgi.py"
+          test -f "$HOME/.saeit-astra-four-inbox/catalog.json"
+          test "$(find "$HOME/.saeit-astra-four-inbox" -maxdepth 1 -type f -name 'ASTRA-*.zip' | wc -l)" -eq 4
+          test ! -L "$HOME/.saeit-astra-four-inbox"
+          echo ASTRA_PREVIEW_PRIVATE_SOURCE_VERIFIED=4
+          REMOTE
+          scp -q -F "$d/config" scripts/astra_mpw_four_draft_import.py 'host:.saeit-astra-four-inbox/astra_mpw_four_draft_import.py'
+          scp -q -F "$d/config" scripts/astra_mpw_publish_previews.py 'host:.saeit-astra-four-inbox/astra_mpw_publish_previews.py'
+          ssh -F "$d/config" host 'chmod 600 "$HOME/.saeit-astra-four-inbox/astra_mpw_four_draft_import.py" "$HOME/.saeit-astra-four-inbox/astra_mpw_publish_previews.py"'
+      - name: Publish four public preview pages and integrate storefront cards
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -F "$RUNNER_TEMP/astra-public-preview/config" host 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          root="$HOME/.saeit-astra-four-inbox"
+          docroot="$HOME/mojplaywin.com"
+          store="$HOME/Saeit-staging/core/templates/brands/mojplaywin/store.html"
+          py="$HOME/virtualenv/Saeit-staging/3.11/bin/python"
+          test -x "$py"
+          "$py" "$root/astra_mpw_publish_previews.py" --catalog "$root/catalog.json" --packages "$root" --public-root "$docroot" --store-template "$store" --backups "$root"
+          "$py" "$root/astra_mpw_publish_previews.py" --catalog "$root/catalog.json" --packages "$root" --public-root "$docroot" --store-template "$store" --backups "$root" --apply
+          "$py" "$root/astra_mpw_publish_previews.py" --catalog "$root/catalog.json" --packages "$root" --public-root "$docroot" --store-template "$store" --backups "$root" --apply
+          echo ASTRA_OWNER_PUBLIC_PREVIEW_PAGES_CREATED=5
+          echo ASTRA_OWNER_LIVE_PAID_PRODUCTS_ACTIVATED=0
+          echo ASTRA_OWNER_PRIVATE_ARCHIVES_EXPOSED=0
+          REMOTE
+      - name: Verify public HTTPS storefront and each preview URL
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/astra-public-preview"
+          status="$(curl -fsSL --max-time 25 -o "$d/store.html" -w '%{http_code}' 'https://mojplaywin.com/store/')"
+          echo ASTRA_PUBLIC_STORE_HTTP="$status"
+          test "$status" = 200
+          grep -q 'ASTRA EARLY PREVIEW' "$d/store.html"
+          for slug in circuit-courier farm-procurement-audit farm-water-land-margin-audit orchard-decision-audit; do
+            url="https://mojplaywin.com/factory-previews/$slug/"
+            status="$(curl -fsSL --max-time 20 -o "$d/$slug.html" -w '%{http_code}' "$url")"
+            echo ASTRA_PUBLIC_PAGE="$slug:$status"
+            test "$status" = 200
+            grep -q 'Not available for purchase' "$d/$slug.html"
+            grep -q 'Do not send cryptocurrency' "$d/$slug.html"
+          done
+          status="$(curl -fsSL --max-time 20 -o "$d/catalog.html" -w '%{http_code}' 'https://mojplaywin.com/factory-previews/')"
+          test "$status" = 200
+          grep -q 'Four original digital product previews' "$d/catalog.html"
+          echo ASTRA_PUBLIC_FOUR_PREVIEWS_LIVE_VERIFIED=4
+          echo ASTRA_PUBLIC_PAYMENT_ENABLED=false
+      - name: Cleanup runner keys
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/astra-public-preview"

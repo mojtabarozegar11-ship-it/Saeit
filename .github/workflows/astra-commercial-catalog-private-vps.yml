@@ -1,0 +1,142 @@
+name: Astra four products - private commercial catalog
+
+on:
+  push:
+    branches: [factory/astra-commercial-catalog-20261015]
+    paths:
+      - .github/workflows/astra-commercial-catalog-private-vps.yml
+      - scripts/astra_commercial_candidates.py
+      - tests/test_astra_commercial_candidates.py
+      - scripts/astra_mpw_four_draft_import.py
+      - tests/test_astra_mpw_four_draft_import.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: astra-private-commercial-catalog-vps
+  cancel-in-progress: false
+
+jobs:
+  isolated-commerce-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Test no fabricated price rights payment or release
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/astra_commercial_candidates.py
+          python3 -m unittest discover -s tests -p test_astra_commercial_candidates.py -v
+          python3 -m unittest discover -s tests -p test_astra_mpw_four_draft_import.py -v
+
+  private-vps-commercial-catalog:
+    needs: isolated-commerce-tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 11
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect four QA archives and create private priced candidate catalog
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          dir="$RUNNER_TEMP/astra-commerce"
+          install -d -m 700 "$dir"
+          trap 'rm -rf -- "$dir"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$dir/key"
+          chmod 600 "$dir/key"
+          ssh-keygen -y -P '' -f "$dir/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$dir/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$dir/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$dir/config" <<'CFG'
+          Host private-vps
+            HostName 178.239.147.150
+            User githubops
+            BatchMode yes
+            IdentitiesOnly yes
+            StrictHostKeyChecking yes
+            ConnectTimeout 15
+          CFG
+          printf '    IdentityFile %s\n    UserKnownHostsFile %s\n' "$dir/key" "$dir/known" >> "$dir/config"
+          chmod 600 "$dir/config"
+          short="$(git rev-parse --short=12 HEAD)"
+          [[ "$short" =~ ^[a-f0-9]{12}$ ]]
+          sha="$(sha256sum scripts/astra_commercial_candidates.py | awk '{print $1}')"
+          ssh -F "$dir/config" private-vps "bash -se -- '$short'" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          test "$(id -un)" = githubops
+          operation="$HOME/factory-runtime/operations"
+          test -d "$operation" && test ! -L "$operation"
+          target="$operation/astra-commerce-source-$1"
+          test ! -e "$target" && test ! -L "$target"
+          mkdir -m 700 "$target"
+          REMOTE
+          cat scripts/astra_commercial_candidates.py | ssh -F "$dir/config" private-vps \
+            "cat > 'factory-runtime/operations/astra-commerce-source-$short/astra_commercial_candidates.py'"
+          ssh -F "$dir/config" private-vps "bash -se -- '$short' '$sha'" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          test "$(id -un)" = githubops
+          stage="$HOME/factory-runtime/operations/astra-commerce-source-$1"
+          script="$stage/astra_commercial_candidates.py"
+          test -f "$script" && test ! -L "$script"
+          test "$(sha256sum "$script" | awk '{print $1}')" = "$2"
+          source="$HOME/factory-runtime/private/astra-four-specialist-v1"
+          output="$HOME/factory-runtime/private/astra-four-specialist-commercial-candidates"
+          test -d "$source" && test ! -L "$source"
+          test ! -L "$output"
+          # Read-only factory database and archive assessment. Do not publish.
+          python3 "$script" --factory-root "$source" --output-root "$output"
+          python3 - "$output" <<'PY'
+          import json,pathlib,sys
+          root=pathlib.Path(sys.argv[1])
+          records=sorted(root.glob("commercial-catalog-*.json"))
+          assert records
+          current=json.loads(records[-1].read_text())
+          assert len(current["items"])==4
+          assert current["publications"]==0
+          assert current["real_checkout_transactions"]==0
+          assert current["factory_main_queue_mutated"] is False
+          assert all(not item["checkout_authorized"] and
+                     not item["public_listing_authorized"] and
+                     item["quality_score"] is None for item in current["items"])
+          print("ASTRA_COMMERCE_VPS_SKUS="+",".join(p["sku"] for p in current["items"]))
+          print("ASTRA_COMMERCE_VPS_PRIVATE_PROPOSALS=4")
+          print("ASTRA_COMMERCE_VPS_CHECKOUT_LIVE=0")
+          PY
+          # Keep a strictly separate commerce review cron; factory's cron remains unchanged.
+          before="$(crontab -l)"
+          factory="$(printf '%s\n' "$before" | grep -F 'ASTRA_FOUR_SPECIALIST_PRIVATE_TICK' || true)"
+          original="$(printf '%s\n' "$before" | grep -F 'ASTRA_V2_PRIVATE_RND_TICK' || true)"
+          test -n "$factory" && test "$(printf '%s\n' "$factory" | wc -l)" -eq 1
+          test -n "$original" && test "$(printf '%s\n' "$original" | wc -l)" -eq 1
+          count="$(printf '%s\n' "$before" | grep -Fc 'ASTRA_COMMERCE_REVIEW_TICK' || true)"
+          test "$count" -le 1
+          if test "$count" -eq 1; then
+            printf '%s\n' "$before" | grep -F 'ASTRA_COMMERCE_REVIEW_TICK' | grep -Eq '^27 \* \* \* \* ASTRA_COMMERCE_REVIEW_TICK=1 .*/astra_commercial_candidates.py '
+          fi
+          newline="27 * * * * ASTRA_COMMERCE_REVIEW_TICK=1 $(command -v python3) $script --factory-root $source --output-root $output >> $output/review.log 2>&1"
+          tmp="$(mktemp "$HOME/factory-runtime/private/.commercial-cron-XXXXXXXX")"
+          trap 'rm -f "$tmp"' EXIT
+          printf '%s\n' "$before" | grep -v -F 'ASTRA_COMMERCE_REVIEW_TICK' > "$tmp" || true
+          printf '%s\n' "$newline" >> "$tmp"
+          chmod 600 "$tmp"
+          crontab "$tmp"
+          after="$(crontab -l)"
+          test "$(printf '%s\n' "$after" | grep -Fc 'ASTRA_COMMERCE_REVIEW_TICK')" -eq 1
+          test "$factory" = "$(printf '%s\n' "$after" | grep -F 'ASTRA_FOUR_SPECIALIST_PRIVATE_TICK')"
+          test "$original" = "$(printf '%s\n' "$after" | grep -F 'ASTRA_V2_PRIVATE_RND_TICK')"
+          echo ASTRA_COMMERCE_PRIVATE_CATALOG_CRON=ACTIVE
+          echo ASTRA_COMMERCE_EXISTING_FACTORY_CRONS=UNCHANGED
+          echo ASTRA_COMMERCE_STORE_AND_PAYMENTS_MUTATIONS=0
+          REMOTE
