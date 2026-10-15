@@ -16,7 +16,7 @@ class PICMLoginTests(TestCase):
         self.patch = patch.dict(os.environ, {"PICM_STORAGE_DIR": self.temp.name})
         self.patch.start()
         self.addCleanup(self.patch.stop)
-        get_user_model().objects.create_user(username="09170000000", password="unit-test-secret", is_staff=False)
+        get_user_model().objects.create_user(username="picm-09170000000", password="unit-test-secret", is_staff=False)
 
     def test_accepts_persian_and_arabic_digits(self):
         self.assertEqual(normalize_username("۰۹۱۷۰۰۰۰۰۰۰"), "09170000000")
@@ -49,7 +49,7 @@ class PICMLoginTests(TestCase):
         self.assertIn("_auth_user_id",req.session)
         out=factory.post("/picm/logout/")
         out.session=req.session
-        out.user=get_user_model().objects.get(username="09170000000")
+        out.user=get_user_model().objects.get(username="picm-09170000000")
         response=picm_logout(out)
         self.assertEqual(response.status_code,302)
         self.assertNotIn("_auth_user_id",out.session)
