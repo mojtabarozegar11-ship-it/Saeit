@@ -77,8 +77,8 @@ function watchPrivateMovie(ident, body){
    line.textContent="ارتباط دریافت وضعیت موقتاً قطع است؛ صحنه‌بندی ذخیره شده اما فیلم تأیید نشده.";
   }finally{checkingVideo=false;}
  };
- check();
  videoPoll=setInterval(check,20000);
+ check();
 }
 
 function showPlan(result){
