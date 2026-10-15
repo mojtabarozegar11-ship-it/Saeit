@@ -7,7 +7,7 @@ on:
       - ".github/workflows/zomorod-root-app-audit.yml"
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: zomorod-root-homepage
@@ -443,6 +443,45 @@ jobs:
           done
           echo "PASSENGER_ADMIN_ERROR_LOGS_END"
           REMOTE
+      - name: Read Python Selector account status
+        if: always()
+        shell: bash
+        env:
+          SSH_CONFIG: ${{ runner.temp }}/zomorod-restore/config
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          report="$RUNNER_TEMP/selector-probe.txt"
+          ssh -F "$SSH_CONFIG" saeit-cpanel bash -se >"$report" 2>&1 <<'REMOTE'
+          set +e
+          echo "SELECTOR_PROBE_BEGIN"
+          id
+          for tool in selectorctl cloudlinux-selector; do
+            printf '%s=' "$tool"
+            command -v "$tool" || true
+          done
+          if command -v selectorctl >/dev/null 2>&1; then
+            selectorctl --interpreter=python --user=zomorod2 --json --user-summary 2>&1
+            echo "SELECTOR_USER_SUMMARY_EXIT=$?"
+            selectorctl --help 2>&1 | head -n 70
+          fi
+          if command -v cloudlinux-selector >/dev/null 2>&1; then
+            cloudlinux-selector --help 2>&1 | head -n 70
+          fi
+          echo "SELECTOR_PROBE_END"
+          REMOTE
+          python3 - "$report" "$RUNNER_TEMP/selector-payload.json" <<'PY'
+          import base64,json,sys
+          body=open(sys.argv[1],encoding="utf-8",errors="replace").read()
+          payload={"message":"Temporary Python Selector diagnostic","content":base64.b64encode(body.encode()).decode(),"branch":"main"}
+          open(sys.argv[2],"w",encoding="utf-8").write(json.dumps(payload))
+          PY
+          curl --fail-with-body --silent --show-error -X PUT \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/mojtabarozegar11-ship-it/Saeit/contents/.codex/selector-probe-20261015.json" \
+            -d @"$RUNNER_TEMP/selector-payload.json"
       - name: Remove temporary SSH material
         if: always()
         shell: bash
