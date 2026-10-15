@@ -53,8 +53,17 @@ def evidence(key, host, claim, *, date="2026-10-14T00:00:00Z", digest=None):
 
 
 def pair(key):
+    """A minimal two-claim dossier, deliberately insufficient for review."""
     return [evidence(key, "example.com", "problem"),
             evidence(key, "example.org", "willingness_to_pay")]
+
+
+def review_evidence(key):
+    """Synthetic complete dossier used only to exercise review eligibility."""
+    return [evidence(key, "example.com", "problem"),
+            evidence(key, "example.org", "willingness_to_pay"),
+            evidence(key, "example.net", "comparison"),
+            evidence(key, "example.com", "feasibility")]
 
 
 def run_rank(candidates, sources):
@@ -62,11 +71,30 @@ def run_rank(candidates, sources):
 
 
 class AstraOpportunitySelectorTests(unittest.TestCase):
+    def test_two_domains_with_problem_and_payment_only_stay_in_research(self):
+        row = run_rank([candidate("thin")], pair("thin"))["candidates"][0]
+        self.assertEqual(row["status"], "RESEARCH_REQUIRED")
+        self.assertIn("FEWER_THAN_THREE_DISTINCT_SOURCE_DOMAINS", row["blockers"])
+        self.assertIn("COMPETITOR_COMPARISON_SIGNAL_MISSING", row["blockers"])
+        self.assertIn("FEASIBILITY_SIGNAL_MISSING", row["blockers"])
+
+    def test_one_point_topic_never_reaches_review_even_with_complete_links(self):
+        one_point = {k: 1 for k in MEASURES}
+        row = run_rank(
+            [candidate("weak", assessments=one_point)],
+            review_evidence("weak"),
+        )["candidates"][0]
+        self.assertEqual(row["priority_score"], 1)
+        self.assertEqual(row["status"], "RESEARCH_REQUIRED")
+        self.assertIn("PROVISIONAL_PRIORITY_BELOW_RESEARCH_FLOOR", row["blockers"])
+        self.assertFalse(row["build_authorized"])
+
     def test_evidence_and_capability_are_review_not_build_permission(self):
-        report = run_rank([candidate("farm-1")], pair("farm-1"))
+        report = run_rank([candidate("farm-1")], review_evidence("farm-1"))
         entry = report["candidates"][0]
         self.assertEqual(entry["status"], "REVIEW_REQUIRED")
-        self.assertEqual(entry["distinct_source_domains_preliminary"], 2)
+        self.assertEqual(entry["distinct_source_domains_preliminary"], 3)
+        self.assertEqual(entry["claim_source_domains_preliminary"]["comparison"], 1)
         self.assertFalse(entry["evidence_verified_independently"])
         self.assertFalse(entry["build_authorized"])
         self.assertFalse(entry["publish_authorized"])
@@ -142,14 +170,14 @@ class AstraOpportunitySelectorTests(unittest.TestCase):
     def test_evidence_not_product_id_drives_review_order(self):
         a = candidate("999")
         b = candidate("001", assessments={k: 100 for k in MEASURES})
-        rows = run_rank([b, a], pair("999"))["candidates"]
+        rows = run_rank([b, a], review_evidence("999"))["candidates"]
         self.assertEqual([x["opportunity_key"] for x in rows], ["999", "001"])
         self.assertEqual(rows[1]["status"], "RESEARCH_REQUIRED")
 
     def test_evidence_change_reorders_candidates(self):
         a, b = candidate("a"), candidate("b")
-        first = run_rank([a, b], pair("a"))["candidates"]
-        later = run_rank([b, a], pair("b"))["candidates"]
+        first = run_rank([a, b], review_evidence("a"))["candidates"]
+        later = run_rank([b, a], review_evidence("b"))["candidates"]
         self.assertEqual(first[0]["opportunity_key"], "a")
         self.assertEqual(later[0]["opportunity_key"], "b")
 
@@ -158,12 +186,12 @@ class AstraOpportunitySelectorTests(unittest.TestCase):
         lower = {k: 35 for k in MEASURES}
         rows = run_rank([candidate("low", assessments=lower),
                          candidate("high", assessments=higher)],
-                        pair("low") + pair("high"))["candidates"]
+                        review_evidence("low") + review_evidence("high"))["candidates"]
         self.assertEqual([x["opportunity_key"] for x in rows], ["high", "low"])
 
     def test_same_input_is_deterministic_and_has_no_order_dependency(self):
         a, b = candidate("a"), candidate("b")
-        sources = pair("a") + pair("b")
+        sources = review_evidence("a") + review_evidence("b")
         one = run_rank([b, a], list(reversed(sources)))
         two = run_rank([a, b], sources)
         self.assertEqual(one, two)
