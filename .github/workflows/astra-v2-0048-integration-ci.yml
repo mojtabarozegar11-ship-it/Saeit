@@ -8,6 +8,9 @@ on:
       - scripts/astra_**
       - tests/test_astra_**
       - product_prototypes/**
+      - core/models.py
+      - core/migrations/0049_astra_private_research_intake.py
+      - core/tests/test_astra_stage45_schema.py
   workflow_dispatch:
 
 permissions:
@@ -47,25 +50,50 @@ jobs:
           python3 product_prototypes/farm_water_land_margin_audit/self_test.py
           node --check product_prototypes/orchard_decision_audit/app.js
           echo ASTRA_INTEGRATION_PRIVATE_BUILDER_TESTS=PASS
-      - name: Migrate only fresh disposable 0048 CI database
+      - name: Verify fail-closed 0049 evidence queue using Django test database
+        shell: bash
         run: |
           set -euo pipefail
-          export DATABASE_URL="sqlite:///$RUNNER_TEMP/astra-0048-integrated-migrate.sqlite3"
-          test ! -e "$RUNNER_TEMP/astra-0048-integrated-migrate.sqlite3"
+          export DATABASE_URL="sqlite:///$RUNNER_TEMP/astra-0049-model-tests.sqlite3"
+          python3 -m pytest -q core/tests/test_astra_stage45_schema.py
+      - name: Migrate only fresh disposable 0049 CI database with rollback rehearsal
+        run: |
+          set -euo pipefail
+          export DATABASE_URL="sqlite:///$RUNNER_TEMP/astra-0049-integrated-migrate.sqlite3"
+          test ! -e "$RUNNER_TEMP/astra-0049-integrated-migrate.sqlite3"
           python3 manage.py migrate --noinput --verbosity 0
-          python3 - "$RUNNER_TEMP/astra-0048-integrated-migrate.sqlite3" <<'PY'
+          python3 - "$RUNNER_TEMP/astra-0049-integrated-migrate.sqlite3" <<'PY'
           import sqlite3, pathlib, sys
           p=pathlib.Path(sys.argv[1])
           assert p.is_file()
           with sqlite3.connect(str(p)) as con:
               names={r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-              assert {'core_businessunit','core_marketpolicy','core_legalentity'}.issubset(names)
+              assert {'core_businessunit','core_marketpolicy','core_legalentity','core_factoryqueueitem','core_discoverysnapshot'}.issubset(names)
               row=con.execute("SELECT name FROM django_migrations WHERE app='core' ORDER BY name DESC LIMIT 1").fetchone()
-              assert row==('0048_business_market_architecture',),row
-          print("ASTRA_INTEGRATION_0048_EMPTY_DB_MIGRATION=PASS")
+              assert row==('0049_astra_private_research_intake',),row
+          print("ASTRA_INTEGRATION_0049_EMPTY_DB_MIGRATION=PASS")
           print("ASTRA_INTEGRATION_VPS_WRITES=0")
           print("ASTRA_INTEGRATION_PUBLIC_SITE_CHANGES=0")
           print("ASTRA_INTEGRATION_PAYMENT_CHANGES=0")
           print("ASTRA_INTEGRATION_MARKET_QUALIFICATION=NOT_PROVEN")
-          print("ASTRA_INTEGRATION_0049_APPLIED=false")
+          print("ASTRA_INTEGRATION_0049_CI_ONLY=true")
+          PY
+          python3 manage.py migrate core 0048 --noinput --verbosity 0
+          python3 - "$RUNNER_TEMP/astra-0049-integrated-migrate.sqlite3" <<'PY'
+          import pathlib,sqlite3,sys
+          with sqlite3.connect(sys.argv[1]) as con:
+              names={r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+              assert "core_factoryqueueitem" not in names
+              assert "core_discoverysnapshot" not in names
+              assert {"core_businessunit","core_marketpolicy","core_legalentity"}.issubset(names)
+          print("ASTRA_INTEGRATION_0049_DISPOSABLE_ROLLBACK_TO_0048=PASS")
+          PY
+          python3 manage.py migrate core 0049 --noinput --verbosity 0
+          python3 - "$RUNNER_TEMP/astra-0049-integrated-migrate.sqlite3" <<'PY'
+          import sqlite3,sys
+          with sqlite3.connect(sys.argv[1]) as con:
+              tables={r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+              assert {"core_factoryqueueitem","core_discoverysnapshot"}.issubset(tables)
+          print("ASTRA_INTEGRATION_0049_DISPOSABLE_REAPPLY=PASS")
+          print("ASTRA_INTEGRATION_NO_LIVE_DB_MIGRATION=true")
           PY
