@@ -333,9 +333,56 @@ def _self_directed_cycle(root):
     return module.create_current(root)
 
 
+def plan_private_source_revisions(root, conn):
+    """Create private QA work from approved *source updates*, with zero orders.
+
+    Opt-in marker is controlled ONLY by the isolated private VPS deployment.
+    Production sites and normal test temp directories have no marker. Reusing
+    the same source hash never generates additional work or claims new goods.
+    """
+    enabled=root/".enable-autonomous-specialists"
+    if not enabled.exists():
+        return {"new_source_jobs":0,"already_known_sources":0,"mode":"disabled"}
+    if enabled.is_symlink() or not enabled.is_file() or enabled.read_text().strip()!="private_only":
+        raise ValueError("unsafe specialist-autoplan configuration")
+    submitted=known=0
+    for builder,config in sorted(BUILDERS.items()):
+        # Closed allowlist; untrusted source folders or missing tests are
+        # never promoted by this scheduler.
+        _validate_sources(builder)
+        versions=[(name,(config["root"]/name).read_bytes()) for name in config["files"]]
+        revision=digest(builder.encode()+b"".join(
+            name.encode()+b"\\x00"+digest(blob).encode() for name,blob in versions))
+        item={
+            "brief_id":"auto_"+revision[:20],
+            "builder":builder,
+            "development_scope":"private_reference_prototype",
+            "publication_allowed":False,
+            "market_demand_verified":False,
+            "paid_api_budget":0,
+            "problem":"Automated private regression build of reviewed specialist source "+
+                      config["title"]+"; no customer demand or commercial approval is inferred.",
+        }
+        token=digest(check_brief(item))
+        if conn.execute("SELECT 1 FROM jobs WHERE payload_sha=?",(token,)).fetchone():
+            known+=1
+            continue
+        if conn.execute("SELECT COUNT(*) FROM jobs").fetchone()[0]>=MAX_BRIEFS:
+            raise ValueError("bounded internal queue exhausted")
+        with conn:
+            conn.execute(
+                """INSERT INTO jobs(brief_id,builder,payload_sha,stage,created_at)
+                   VALUES (?,?,?,?,?)""",
+                (item["brief_id"],builder,token,"QUEUED",now()))
+        submitted+=1
+    return {"new_source_jobs":submitted,"already_known_sources":known,
+            "mode":"private_approved_source_revisions_only"}
+
+
 def tick(root):
     intake_private_briefs(root)
     with locked(root), database(root) as conn:
+        revision_intake=plan_private_source_revisions(root, conn)
         try:
             autonomous=_self_directed_cycle(root)
         except (OSError,ValueError,AssertionError,RuntimeError,zipfile.BadZipFile):
@@ -366,6 +413,7 @@ def tick(root):
         if not row:
             return {"status":"NO_ELIGIBLE_WORK", "new_products":0,
                     "autonomous_education":autonomous,
+                    "private_source_autoplan":revision_intake,
                     "note":"no queued specialist builds; educational editions are separate from commercial products"}
         job_id, brief_id, builder, _, attempts = row
         if builder not in BUILDERS:
@@ -391,14 +439,16 @@ def tick(root):
                     "artifact_sha256":artifact_sha,"source_digest":version,
                     "new_distinct_product_versions":int(already==1),
                     "new_products_for_sale":0,"qa_score":None,
-                    "autonomous_education":autonomous}
+                    "autonomous_education":autonomous,
+                    "private_source_autoplan":revision_intake}
         except (OSError,ValueError,subprocess.SubprocessError,RuntimeError) as exc:
             with conn:
                 conn.execute("UPDATE jobs SET stage='FAILED_REVIEW',last_error=? WHERE id=?",
                              (type(exc).__name__,job_id))
             return {"status":"FAILED_REVIEW","job_id":job_id,
                     "error_type":type(exc).__name__,"new_products":0,
-                    "autonomous_education":autonomous}
+                    "autonomous_education":autonomous,
+                    "private_source_autoplan":revision_intake}
 
 
 def status(root):
