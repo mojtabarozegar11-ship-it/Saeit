@@ -19,7 +19,9 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 HOST = "mojplaywin.com"
 ROUTES = (
     "/", "/store/", "/research/", "/studio/", "/agents/", "/market/",
-    "/company/", "/ventures/agriculture/", "/ventures/cafe-restaurant/",
+    "/company/", "/games/", "/ai/", "/blockchain/", "/products/",
+    "/crypto-payments/", "/global-business/", "/support/", "/research-lab/",
+    "/ventures/agriculture/", "/ventures/cafe-restaurant/",
     "/ventures/fuel-station/", "/ventures/jewelry-gold/", "/ventures/carpets/",
     "/ventures/currency-crypto/", "/ventures/ecommerce/",
     "/ventures/hospitality/",
