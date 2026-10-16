@@ -1,0 +1,28 @@
+name: Mojtaba Vancouver enterprise web twenty series 2 tests
+on:
+  push:
+    branches: ['feat/mojtaba-vancouver-enterprise-smart-web20-series2-20261016']
+    paths:
+      - 'content/mojtaba_vancouver_enterprise_web_series2_part_*.json'
+      - 'scripts/mojtaba_vancouver_enterprise_web20_series2_publish.py'
+      - 'tests/test_mojtaba_vancouver_enterprise_web20_series2.py'
+      - '.github/workflows/mojtaba-vancouver-enterprise20-series2-*.yml'
+  pull_request:
+    paths:
+      - 'content/mojtaba_vancouver_enterprise_web_series2_part_*.json'
+      - 'scripts/mojtaba_vancouver_enterprise_web20_series2_publish.py'
+      - 'tests/test_mojtaba_vancouver_enterprise_web20_series2.py'
+      - '.github/workflows/mojtaba-vancouver-enterprise20-series2-*.yml'
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate unique 20 expert studies, 20 vector covers and 53 protected older articles
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mojtaba_vancouver_enterprise_web20_series2_publish.py
+          python3 -m unittest discover -s tests -p 'test_mojtaba_vancouver_enterprise_web20_series2.py' -v
