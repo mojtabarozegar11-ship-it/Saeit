@@ -1,0 +1,230 @@
+name: Personal About English-only Q&A protected release
+on:
+  pull_request:
+    paths:
+      - .github/workflows/mojtaba-personal-about-english-qa.yml
+      - scripts/mojtaba_about_english_questions_upgrade.py
+      - tests/test_mojtaba_about_english_questions_upgrade.py
+  issues:
+    types: [opened]
+permissions:
+  contents: read
+concurrency:
+  group: mojtaba-personal-about-english-only
+  cancel-in-progress: false
+jobs:
+  tests:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      (github.event_name == 'pull_request' ||
+       (github.event_name == 'issues' &&
+        github.event.issue.user.login == 'mojtabarozegar11-ship-it' &&
+        github.event.issue.title == 'Ops: Personal About English-only Q&A 2026-10-16'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Syntax and strict About-only regression tests
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mojtaba_about_english_questions_upgrade.py
+          python3 -m unittest discover -s tests -p 'test_mojtaba_about_english_questions_upgrade.py' -v
+          python3 scripts/mojtaba_about_english_questions_upgrade.py check --source content/mojtaba_personal_public_identity_faq_20261016.json
+  publish:
+    needs: tests
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event_name == 'issues' &&
+      github.event.issue.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.issue.title == 'Ops: Personal About English-only Q&A 2026-10-16'
+    runs-on: ubuntu-latest
+    timeout-minutes: 23
+    steps:
+      - uses: actions/checkout@v4
+      - name: Authenticate pinned two-hop SSH relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/personal-english-qa-relay"
+          mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          python3 - "$d/host.key" <<'PY'
+          import pathlib,sys
+          p=pathlib.Path(sys.argv[1]);t=p.read_text().replace('\r\n','\n').strip()
+          p.write_text(t.replace('\\n','\n')+'\n')
+          PY
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host saeit-host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+            ConnectionAttempts 1
+          EOF
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          echo "PERSONAL_ENGLISH_QA_SSH=$d/config" >> "$GITHUB_ENV"
+      - name: Stage narrow installer and existing English Q&A source
+        shell: bash
+        run: |
+          set -euo pipefail
+          stage="/home/zomorod2/.personal-english-qa-stage-$GITHUB_RUN_ID"
+          timeout 25s ssh -F "$PERSONAL_ENGLISH_QA_SSH" saeit-host "test ! -e '$stage' && install -d -m 700 '$stage'"
+          timeout 65s scp -F "$PERSONAL_ENGLISH_QA_SSH" scripts/mojtaba_about_english_questions_upgrade.py "saeit-host:$stage/english_upgrade.py"
+          timeout 65s scp -F "$PERSONAL_ENGLISH_QA_SSH" scripts/mojtaba_personal_public_faq_safe_publish.py "saeit-host:$stage/mojtaba_personal_public_faq_safe_publish.py"
+          timeout 65s scp -F "$PERSONAL_ENGLISH_QA_SSH" content/mojtaba_personal_public_identity_faq_20261016.json "saeit-host:$stage/questions.json"
+      - name: Verify backup; replace only About FAQ; validate full personal site
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 1100s ssh -F "$PERSONAL_ENGLISH_QA_SSH" saeit-host "bash -s -- '$GITHUB_RUN_ID'" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          run="$1"
+          app="/home/zomorod2/mojtaba_personal/mojtaba_roozegar_personal_v17"
+          stage="/home/zomorod2/.personal-english-qa-stage-$run"
+          script="$stage/english_upgrade.py"
+          source="$stage/questions.json"
+          backup="/home/zomorod2/.backups/mojtaba-personal-about-english/$run"
+          py="/home/zomorod2/mojtaba_personal/.venv_personal_test/bin/python"
+          installed=0
+          verified=0
+          cleanup(){
+            exit_code=$?
+            trap - EXIT
+            if test "$installed" = 1 && test "$verified" = 0 && test -f "$backup/manifest.json"; then
+              "$py" "$script" rollback --app "$app" --backup "$backup" &&
+              echo "PERSONAL_ABOUT_ENGLISH_REMOTE_ROLLBACK=yes" ||
+              echo "PERSONAL_ABOUT_ENGLISH_MANUAL_REVIEW_REQUIRED=yes"
+            fi
+            rm -rf -- "$stage"
+            exit "$exit_code"
+          }
+          trap cleanup EXIT
+          test -f "$app/manage.py" && test ! -L "$app" && test -x "$py"
+          test -f "$script" && test -f "$source"
+          cd "$app"
+          "$py" "$script" check --source "$source"
+          "$py" "$script" install --app "$app" --source "$source" --backup "$backup"
+          installed=1
+          "$py" manage.py check --deploy
+          "$py" "$script" verify --app "$app" --backup "$backup"
+          "$py" - <<'PYTEST'
+          import os
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          import django;django.setup()
+          from django.test import Client
+          from django.urls import reverse
+          from core.models import Post
+          from html.parser import HTMLParser
+          import re
+          c=Client(HTTP_HOST="mojplaywin.com")
+          routes=("home","about","resume","activities","memories","stories",
+                  "projects","posts","gallery","contact")
+          for route in routes:
+              response=c.get(reverse("personal_site:"+route),secure=True)
+              if response.status_code!=200:
+                  raise RuntimeError("Personal route failed: "+route+"="+str(response.status_code))
+              content=response.content.decode("utf-8","replace")
+              mark="mpw-personal-english-questions-v2-20261016"
+              if route=="about":
+                  if mark not in content or content.count(mark)!=1:
+                      raise RuntimeError("English About Q&A absent or duplicate")
+                  faq=re.search(r'<section\s+id="mpw-public-personal-faq-20261016"[^>]*>.*?</section>',content,re.S)
+                  if not faq:
+                      raise RuntimeError("Public personal FAQ missing")
+                  block=faq.group()
+                  if re.search(r"[\u0600-\u06FF]",block):
+                      raise RuntimeError("Persian still present in FAQ section")
+                  if block.count("<article")!=8:
+                      raise RuntimeError("Expected eight English answers")
+                  if 'action="/mojtaba.roozegar/contact/"' not in block:
+                      raise RuntimeError("Inline question form target missing")
+                  if 'name="csrfmiddlewaretoken"' not in block:
+                      raise RuntimeError("CSRF token missing from question form")
+                  for name in ("name","email","message","subject","website"):
+                      if 'name="'+name+'"' not in block:
+                          raise RuntimeError("Existing contact form field missing: "+name)
+              elif mark in content:
+                  raise RuntimeError("FAQ upgrade leaked into another page: "+route)
+              print("PERSONAL_ENGLISH_QA_DJANGO_PAGE="+route+" HTTP=200",flush=True)
+          slugs=list(Post.objects.filter(published=True).values_list("slug",flat=True))
+          if len(slugs)<93:raise RuntimeError("Published article floor violated")
+          for slug in slugs:
+              u=reverse("personal_site:post_detail",kwargs={"slug":slug})
+              if c.get(u,secure=True).status_code!=200:
+                  raise RuntimeError("Article URL broken: "+slug)
+          print("PERSONAL_ENGLISH_QA_ARTICLE_ROUTES_VERIFIED="+str(len(slugs)),flush=True)
+          from core.forms import ContactForm
+          fields=set(ContactForm().fields)
+          if not {"name","email","subject","message"}.issubset(fields):
+              raise RuntimeError("Existing contact handler incompatible with About question form")
+          print("PERSONAL_ENGLISH_QA_CONTACT_FORM_FIELDS_COMPATIBLE=yes",flush=True)
+          PYTEST
+          test -d "$app/tmp" && touch "$app/tmp/restart.txt" || true
+          "$py" - <<'PYHTTP'
+          from urllib.request import Request,urlopen
+          import re,time
+          url="https://mojplaywin.com/mojtaba.roozegar/about/"
+          for attempt in range(4):
+              try:
+                  with urlopen(Request(url,headers={"User-Agent":"MojtabaEnglishAboutReleaseAudit/1"}),
+                               timeout=18) as response:
+                      body=response.read(2000000).decode("utf-8","replace")
+                      if response.status!=200:
+                          raise RuntimeError("Unexpected HTTP status")
+                  part=re.search(r'<section\s+id="mpw-public-personal-faq-20261016"[^>]*>.*?</section>',body,re.S)
+                  if not part:
+                      raise RuntimeError("About FAQ not publicly visible")
+                  block=part.group()
+                  if block.count("<article")!=8 or re.search(r"[\u0600-\u06FF]",block):
+                      raise RuntimeError("English-only About not deployed correctly")
+                  if "mpw-personal-ask-question-v2-20261016" not in block:
+                      raise RuntimeError("Ask a question form missing")
+                  if 'name="csrfmiddlewaretoken"' not in block:
+                      raise RuntimeError("Public form CSRF missing")
+                  print("PERSONAL_ABOUT_ENGLISH_LIVE_HTTP=200",flush=True)
+                  break
+              except Exception as exc:
+                  print("PERSONAL_ABOUT_ENGLISH_HTTP_RETRY="+str(exc)[:110],flush=True)
+                  if attempt==3:raise
+                  time.sleep(2)
+          PYHTTP
+          "$py" "$script" verify --app "$app" --backup "$backup"
+          verified=1
+          echo "PERSONAL_ABOUT_ENGLISH_LIVE_PUBLISH=success"
+          echo "PERSONAL_ABOUT_ENGLISH_BACKUP=$backup"
+          echo "MOJPLAYWIN_ROOT_ZOMOROD_SIBLINGS_UNCHANGED=yes"
+          REMOTE
+      - name: Erase SSH relay keys
+        if: always()
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/personal-english-qa-relay"
+          test ! -d "$d" || rm -rf -- "$d"
