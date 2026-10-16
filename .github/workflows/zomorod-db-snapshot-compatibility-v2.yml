@@ -111,6 +111,11 @@ jobs:
               else:
                   print(f"{name}_SUMMARY="+(lines[-1][:220] if lines else "no output"))
               if p.returncode: sys.exit(p.returncode)
+          p=subprocess.run([sys.executable,"manage.py","collectstatic","--noinput"],stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)
+          print(f"STATIC_COLLECTION_EXIT={p.returncode}")
+          lines=[x for x in p.stdout.splitlines() if x.strip()]
+          print("STATIC_COLLECTION_SUMMARY="+(lines[-1][:220] if lines else "no output"))
+          if p.returncode: sys.exit(p.returncode)
           import django
           django.setup()
           from django.test import Client
