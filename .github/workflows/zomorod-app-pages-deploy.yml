@@ -221,6 +221,19 @@ jobs:
           paths=(config/urls.py config/settings.py core/views.py core/company_content_models.py core/zomorod_public_views.py core/services_views.py core/templates/base.html core/templates/core/services.html core/templates/core/platform_page.html core/management/commands/knowledge_agent_generate.py core/tests/test_zomorod_public_pages.py public/agriculture/index.html public/agriculture/livestock/index.html public/agriculture/horticulture/index.html public/agriculture/greenhouse/index.html public/agriculture/poultry/index.html public/agriculture/aquaculture/index.html public/agriculture/inputs/index.html public/agriculture/seeds/index.html public/agriculture/fertilizers/index.html public/agriculture/pesticides/index.html public/agriculture/offices/index.html public/agriculture/water-soil/index.html public/agriculture/machinery/index.html public/agriculture/market/index.html core/static/site/heroes/platform-home.webp core/static/site/heroes/agriculture.webp core/static/site/heroes/smart-agriculture.webp core/static/site/heroes/industry.webp core/static/site/heroes/economy.webp core/static/site/heroes/research.webp core/static/site/heroes/knowledge.webp core/static/site/heroes/academy.webp core/static/site/heroes/education-detail.webp core/static/site/heroes/ai.webp)
           asset_paths=(agriculture/assets/zomorod-olive-v1/platform-home.webp agriculture/assets/zomorod-olive-v1/agriculture.webp agriculture/assets/zomorod-olive-v1/smart-agriculture.webp agriculture/assets/zomorod-olive-v1/industry.webp agriculture/assets/zomorod-olive-v1/economy.webp agriculture/assets/zomorod-olive-v1/research.webp agriculture/assets/zomorod-olive-v1/knowledge.webp)
           asset_sources=(platform-home.webp agriculture.webp smart-agriculture.webp industry.webp economy.webp research.webp knowledge.webp)
+          page_rel=agriculture/index.html
+          page_source="$stage/public/$page_rel"
+          page_target="$public_root/$page_rel"
+          page_backup="$backup/public_html/$page_rel"
+          page_existed="$backup/public-page-existing"
+          : > "$page_existed"
+          test -f "$page_source" || { echo "Missing staged public page: $page_source"; exit 1; }
+          test ! -L "$page_target"
+          if test -f "$page_target"; then
+            mkdir -p "$(dirname "$page_backup")"
+            cp -p "$page_target" "$page_backup"
+            printf 'yes\n' > "$page_existed"
+          fi
           for i in "${!asset_paths[@]}"; do
             rel="${asset_paths[$i]}"
             source="$stage/core/static/site/heroes/${asset_sources[$i]}"
@@ -268,6 +281,14 @@ jobs:
                 rm -f -- "$target"
               fi
             done
+            page_target="$public_root/agriculture/index.html"
+            if grep -Fxq yes "$backup/public-page-existing"; then
+              mkdir -p "$(dirname "$page_target")"
+              cp -p "$backup/public_html/agriculture/index.html" "$page_target.rollback"
+              mv -f "$page_target.rollback" "$page_target"
+            else
+              rm -f -- "$page_target"
+            fi
             touch "$app/passenger_wsgi.py"
             echo "DEPLOYMENT_ROLLED_BACK=yes"
           }
@@ -287,6 +308,10 @@ jobs:
             cp -p "$source" "$target.new"
             mv -f "$target.new" "$target"
           done
+          page_target="$public_root/agriculture/index.html"
+          mkdir -p "$(dirname "$page_target")"
+          cp -p "$page_source" "$page_target.new"
+          mv -f "$page_target.new" "$page_target"
           cd "$app"
           check_result="$(mktemp "$HOME/.zomorod-django-check-$sha.XXXXXX.json")"
           if ! "$selector" run-script --json --interpreter python --user "$USER" --app-root Saeit --script-name manage.py -- check --deploy > "$check_result"; then
@@ -330,7 +355,7 @@ jobs:
           for route in agriculture agriculture/livestock agriculture/horticulture agriculture/greenhouse agriculture/poultry agriculture/aquaculture agriculture/inputs agriculture/seeds agriculture/fertilizers agriculture/pesticides agriculture/offices agriculture/water-soil agriculture/machinery agriculture/market; do
             fetch "https://zomorodmelal.ir/$route/" "$tmp"
             case "$route" in
-              agriculture) expected='از خاک و آب، تا محصول و بازار.' ;;
+              agriculture) expected='راهنمای جامع کشاورزی' ;;
               agriculture/livestock) expected='دامپروری' ;;
               agriculture/horticulture) expected='باغبانی و باغداری' ;;
               agriculture/greenhouse) expected='گلخانه' ;;
@@ -368,7 +393,7 @@ jobs:
           done
           rm -f -- "$tmp" "$headers"
           echo "LIVE_AGRICULTURE_PAGES=14"
-          echo "LIVE_IMAGE_ROUTES=15"
+          echo "LIVE_IMAGE_ROUTES=7"
       - name: Roll back if public verification failed
         if: failure() && steps.install.outcome == 'success'
         env:
@@ -409,6 +434,14 @@ jobs:
               rm -f -- "$target"
             fi
           done
+          page_target="$root/agriculture/index.html"
+          if grep -Fxq yes "$backup/public-page-existing"; then
+            mkdir -p "$(dirname "$page_target")"
+            cp -p "$backup/public_html/agriculture/index.html" "$page_target.rollback"
+            mv -f "$page_target.rollback" "$page_target"
+          else
+            rm -f -- "$page_target"
+          fi
           touch "$app/passenger_wsgi.py"
           rm -f "$backup/deployed.flag"
           echo "PUBLIC_VERIFICATION_ROLLBACK=complete"
