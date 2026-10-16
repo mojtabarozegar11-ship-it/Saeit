@@ -73,6 +73,39 @@ class ContactLabelSafetyTests(unittest.TestCase):
         module.rollback(self.root, self.backup)
         self.assertEqual(template.read_text(encoding="utf-8"), original)
 
+    def test_loop_form_label_tag_override_is_template_only(self):
+        self.file.unlink()
+        template = self.root / "templates/personal_site/core/contact.html"
+        template.parent.mkdir(parents=True)
+        original = ('<form method="post">{% for field in form %}'
+                    '<div class="field">{{ field.label_tag }}{{ field }}</div>'
+                    '{% endfor %}<button>Send message</button></form>')
+        template.write_text(original, encoding="utf-8")
+        rel, before, after = module.plan(self.root)
+        self.assertEqual(rel, "templates/personal_site/core/contact.html")
+        self.assertEqual(before, original)
+        self.assertIn("{% if field.name == 'name' %}", after)
+        self.assertIn("{% elif field.name == 'email' %}", after)
+        self.assertIn('<label for="{{ field.id_for_label }}">Your Message</label>', after)
+        self.assertIn("{{ field }}", after)
+        module.install(self.root, self.backup)
+        self.assertIn("Your Name", template.read_text(encoding="utf-8"))
+        module.rollback(self.root, self.backup)
+        self.assertEqual(template.read_text(encoding="utf-8"), original)
+
+    def test_loop_with_inline_label_content_uses_existing_label_tag(self):
+        self.file.unlink()
+        template = self.root / "templates/personal_site/core/contact.html"
+        template.parent.mkdir(parents=True)
+        original = ('{% for field in form.visible_fields %}'
+                    '<label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}'
+                    '{% endfor %}')
+        template.write_text(original, encoding="utf-8")
+        _, before, after = module.plan(self.root)
+        self.assertIn("Your Name", after)
+        self.assertIn("{% else %}{{ field.label }}{% endif %}", after)
+        self.assertEqual(before, original)
+
     def test_partial_source_fails_without_modification(self):
         self.file.write_text(ORIGINAL.replace("نام فرستنده", "Your Name"), encoding="utf-8")
         with self.assertRaises(ValueError):
