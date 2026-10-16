@@ -45,6 +45,34 @@ class ContactLabelSafetyTests(unittest.TestCase):
         module.rollback(self.root, self.backup)
         self.assertEqual(self.file.read_text(encoding="utf-8"), ORIGINAL)
 
+    def test_contact_template_labels_change_without_touching_model(self):
+        # The live V17 app gets its Persian labels from core/models.py.
+        # Template-only overrides leave model schema and migrations unchanged.
+        self.file.unlink()
+        template = self.root / "templates" / "personal_site" / "core" / "contact.html"
+        template.parent.mkdir(parents=True)
+        original = """{% extends "personal_site/base.html" %}
+<form method="post">{% csrf_token %}
+{{ form.name.label_tag }} {{ form.name }}
+{{ form.email.label_tag }} {{ form.email }}
+{{ form.subject.label_tag }} {{ form.subject }}
+{{ form.message.label_tag }} {{ form.message }}
+<button type="submit">Send message</button></form>
+"""
+        template.write_text(original, encoding="utf-8")
+        model = self.root / "core" / "models.py"
+        model.write_text('CONTACT_VERBOSE_NAME = "نام فرستنده"\n', encoding="utf-8")
+        rel, before, after = module.plan(self.root)
+        self.assertEqual(rel, "templates/personal_site/core/contact.html")
+        self.assertEqual(before, original)
+        self.assertIn('<label for="{{ form.name.id_for_label }}">Your Name</label>', after)
+        self.assertIn('<label for="{{ form.message.id_for_label }}">Your Message</label>', after)
+        module.install(self.root, self.backup)
+        self.assertEqual(model.read_text(encoding="utf-8"), 'CONTACT_VERBOSE_NAME = "نام فرستنده"\n')
+        self.assertIn("{{ form.subject }}", template.read_text(encoding="utf-8"))
+        module.rollback(self.root, self.backup)
+        self.assertEqual(template.read_text(encoding="utf-8"), original)
+
     def test_partial_source_fails_without_modification(self):
         self.file.write_text(ORIGINAL.replace("نام فرستنده", "Your Name"), encoding="utf-8")
         with self.assertRaises(ValueError):
