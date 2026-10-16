@@ -148,7 +148,7 @@ def route_mojplaywin_brand_store(urlconf):
             raise RuntimeError("MojPlayWin brand store exists without its expected view import")
         updated = urlconf.replace(
             brand_import,
-            brand_import + "\\nfrom core.mojplaywin_views import branded_store_dispatch",
+            brand_import + "\nfrom core.mojplaywin_views import branded_store_dispatch",
             1,
         )
     return updated.replace(old_route, new_route, 1)
