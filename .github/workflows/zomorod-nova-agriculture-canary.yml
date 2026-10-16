@@ -1,0 +1,174 @@
+name: Preview entirely new Nova visual language on genetics page safely
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/zomorod-nova-agriculture-canary.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-agriculture-static
+  cancel-in-progress: false
+jobs:
+  canary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check distinct new Nova agriculture CSS
+        run: |
+          set -euo pipefail
+          test "$(stat -c %s content/zomorod-new-home/nova-agriculture.css)" -gt 7000
+          grep -Fq '.frame' content/zomorod-new-home/nova-agriculture.css
+          grep -Fq 'prefers-reduced-motion' content/zomorod-new-home/nova-agriculture.css
+          grep -Fq 'grid-template-columns' content/zomorod-new-home/nova-agriculture.css
+          echo "NOVA_AGRI_CSS_SOURCE=verified"
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - name: Back up original page, logo, main site and all protected sites
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1"; web="$HOME/public_html"
+          backup="$HOME/.backups/zomorod-nova-agri-canary/$sha"
+          target="$web/agriculture/genetics/index.html"
+          css="$web/agriculture/assets/zm-nova-agriculture-v1.css"
+          test -s "$target" && test ! -L "$target"
+          test -f "$web/agriculture/.htaccess" && grep -Fq 'PassengerEnabled off' "$web/agriculture/.htaccess"
+          test -s "$web/index.html" && grep -Fq 'zm-nova-home-2026-v1' "$web/index.html"
+          test -s "$web/site-heritage/home-before-redesign/index.html"
+          grep -Fq 'zm-agri-design-v3' "$target"
+          ! grep -Fq 'zm-nova-agriculture-v1' "$target"
+          test ! -e "$css" && test ! -L "$css"
+          for dir in mohammad ghanadi amozeshgah; do test -s "$web/$dir/index.html"; done
+          mkdir -p "$(dirname "$backup")"
+          test ! -e "$backup"
+          mkdir -m 700 "$backup"
+          mkdir -m 700 "$backup/staging"
+          cp -p "$target" "$backup/genetics.original.html"
+          cmp -s "$target" "$backup/genetics.original.html"
+          sha256sum "$web/index.html" "$web/.htaccess" "$web/agriculture/index.html" "$web/agriculture/.htaccess" \
+            "$web/site-heritage/home-before-redesign/index.html" \
+            "$web/mohammad/index.html" "$web/ghanadi/index.html" "$web/amozeshgah/index.html" > "$backup/protected.sha256"
+          echo "NOVA_AGRI_CANARY_BACKUP=verified"
+          REMOTE
+      - name: Stage new Nova CSS privately
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          tar -cf - -C content/zomorod-new-home nova-agriculture.css |
+            ssh -F "$d/config" saeit-cpanel "tar -xf - -C /home/zomorod2/.backups/zomorod-nova-agri-canary/$GITHUB_SHA/staging"
+      - name: Apply new layout to one agriculture page only with automatic rollback
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1"; web="$HOME/public_html"
+          backup="$HOME/.backups/zomorod-nova-agri-canary/$sha"
+          target="$web/agriculture/genetics/index.html"
+          css="$web/agriculture/assets/zm-nova-agriculture-v1.css"
+          src="$backup/staging/nova-agriculture.css"
+          test -s "$src" && ! test -e "$css"
+          rollback() {
+            set +e
+            if test -f "$target" && grep -Fq 'zm-nova-agriculture-v1' "$target"; then
+              cp -p "$backup/genetics.original.html" "$target.rollback"
+              mv -f "$target.rollback" "$target"
+            fi
+            if test -f "$css" && cmp -s "$css" "$src"; then rm -f "$css"; fi
+            echo "NOVA_AGRI_CANARY_ROLLBACK=complete"
+          }
+          active=1
+          trap 'rc=$?; trap - EXIT; if test "$active" = 1; then rollback; fi; exit "$rc"' EXIT
+          cp -p "$src" "$css.new.$sha"; chmod 644 "$css.new.$sha"
+          mv -n "$css.new.$sha" "$css"
+          cmp -s "$src" "$css"
+          python3 - "$target" "$backup/genetics.original.html" <<'PY'
+          import os,pathlib,stat,sys
+          file=pathlib.Path(sys.argv[1])
+          orig=pathlib.Path(sys.argv[2]).read_bytes()
+          assert file.read_bytes()==orig
+          old=b'<!-- zm-agri-design-v3 --><link rel="stylesheet" href="/agriculture/assets/zm-agritech-luxe-v3.css">'
+          new=b'<!-- zm-nova-agriculture-v1 --><link rel="stylesheet" href="/agriculture/assets/zm-nova-agriculture-v1.css">'
+          assert orig.count(old)==1
+          modern=orig.replace(old,new)
+          assert modern.replace(new,old)==orig
+          temp=file.with_name(file.name+".nova-tmp")
+          temp.write_bytes(modern)
+          temp.chmod(stat.S_IMODE(file.stat().st_mode))
+          os.replace(temp,file)
+          print("NOVA_AGRI_GENETICS_OLD_CONTENT_PRESERVED=yes")
+          PY
+          page="$(curl -sS -L --max-time 22 -o "$backup/page.response" -w '%{http_code}' "https://zomorodmelal.ir/agriculture/genetics/?v=$sha" || true)"
+          stylesheet="$(curl -sS -L --max-time 22 -o "$backup/style.response" -w '%{http_code}' "https://zomorodmelal.ir/agriculture/assets/zm-nova-agriculture-v1.css?v=$sha" || true)"
+          echo "NOVA_AGRI_CANARY_PAGE=$page"
+          echo "NOVA_AGRI_CANARY_STYLE=$stylesheet"
+          test "$page" = 200 && test "$stylesheet" = 200
+          grep -Fq 'zm-nova-agriculture-v1' "$backup/page.response"
+          grep -Fq 'background:linear-gradient(165deg' "$backup/style.response"
+          for route in / /agriculture/ /mohammad/ /ghanadi/ /amozeshgah/; do
+            code="$(curl -sS -L --max-time 21 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir$route" || true)"
+            echo "NOVA_AGRI_PROTECTED_ROUTE=$route code=$code"
+            test "$code" = 200
+          done
+          sha256sum -c --status "$backup/protected.sha256"
+          echo "NOVA_AGRI_PROTECTED_HASHES=unchanged"
+          active=0
+          trap - EXIT
+          echo "NOVA_AGRI_CANARY=passed"
+          REMOTE
+      - name: Remove runner credentials
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
