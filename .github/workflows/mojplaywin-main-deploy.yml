@@ -146,6 +146,15 @@ jobs:
           print("PASSENGER_MOJPLAYWIN_MAPPING=not-found" if not found else "PASSENGER_MOJPLAYWIN_MAPPING_COUNT="+str(found))'
           ssh -F "$d/config" saeit-cpanel python3 - <<'PY'
           from pathlib import Path
+          for filename in ("/home/zomorod2/mojplaywin.com/passenger_wsgi.py", "/home/zomorod2/mojplaywin.com/.htaccess"):
+              path = Path(filename)
+              if not path.is_file() or path.is_symlink():
+                  print(f"ROUTING_FILE {filename}=missing")
+                  continue
+              print(f"ROUTING_FILE {filename}")
+              for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+                  if any(word in line.lower() for word in ("passenger", "rewrite", "sys.path", "django_settings_module", "application", "sait-staging", "saeit-staging")) and not any(secret in line.lower() for secret in ("secret", "password", "api_key")):
+                      print(line[:500])
           import re
           roots = [Path("/home/zomorod2/logs"), Path("/home/zomorod2/mojplaywin.com"), Path("/home/zomorod2/Saeit-staging")]
           names = {"error_log", "passenger.log", "stderr.log", "application.log"}
