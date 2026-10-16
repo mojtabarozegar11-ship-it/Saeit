@@ -134,6 +134,47 @@ jobs:
           con.close()
           PY
           REMOTE
+      - name: Verify the saved live source plus additive missing module in isolation
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-db-test-v2"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          root=/home/zomorod2/.backups/zomorodmelal-complete/9fcadc9ea749075785829565e57770f5cc173a8b
+          stage=/home/zomorod2/.backups/zomorodmelal-complete/source-preflight-47c38ec3810326790f6f954b515b4f11d59042d1
+          packages=/home/zomorod2/.backups/zomorodmelal-complete/packages-preflight-47c38ec3810326790f6f954b515b4f11d59042d1
+          py=/home/zomorod2/virtualenv/Saeit/3.10/bin/python
+          candidate=/home/zomorod2/Saeit/backups/pre_phase19_cleanup_20261004-124041/db.sqlite3
+          test -s "$root/application-source.tar.gz" && test -f "$stage/core/mojplaywin_views.py" && test -f "$candidate"
+          isolated="$root/live-source-compat-v1-20261016"
+          mkdir -m 700 "$isolated"
+          tar -xzf "$root/application-source.tar.gz" -C "$isolated"
+          install -D -m 644 "$stage/core/mojplaywin_views.py" "$isolated/core/mojplaywin_views.py"
+          cp -p "$candidate" "$isolated/db.sqlite3"
+          chmod 600 "$isolated/db.sqlite3"
+          export PYTHONPATH="$packages:$isolated"
+          export DJANGO_SETTINGS_MODULE=config.settings
+          export DATABASE_URL="sqlite:////${isolated#/}/db.sqlite3"
+          cd "$isolated"
+          "$py" manage.py check
+          p="$("$py" manage.py migrate --plan 2>&1)"
+          printf '%s\n' "$p" | awk 'NF {print "LIVE_SOURCE_PENDING_MIGRATION_LINE=" $0; n++; if(n==8) exit}'
+          "$py" manage.py collectstatic --noinput
+          "$py" - <<'PY'
+          import django
+          django.setup()
+          from django.test import Client
+          client=Client(HTTP_HOST="zomorodmelal.ir")
+          paths=["/","/industry/","/agriculture/","/agents/","/api/health/","/api/bridge/health/","/admin/login/","/amozeshgah/","/mohammad/","/ghanadi/","/agriculture/livestock/","/blog/"]
+          failed=[]
+          for path in paths:
+              response=client.get(path,secure=True)
+              print(f"LIVE_SOURCE_ROUTE_{path.replace('/','_')}_STATUS={response.status_code}")
+              if response.status_code>=500: failed.append(path)
+          if failed: raise SystemExit("LIVE_SOURCE_ROUTE_FAILURES="+",".join(failed))
+          PY
+          REMOTE
       - name: Remove temporary SSH material
         if: always()
         shell: bash
