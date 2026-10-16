@@ -353,7 +353,7 @@ jobs:
           required = [
               'id="mw-all-pages-menu"', 'id="site-directory"', "All MojPlayWin pages",
               'href="/games/"', 'href="/studio/"', 'href="/products/"', 'href="/services/"',
-              'href="/ai/"', 'href="/blockchain/"', 'href="/crypto-payments/"',
+              'href="/ai/"', 'href="/agents/"', 'href="/blockchain/"', 'href="/crypto-payments/"',
               'href="/research-lab/"', 'href="/knowledge/"', 'href="/agro-industry/"',
               'href="/ventures/cafe-restaurant/"', 'href="/ventures/fuel-station/"',
               'href="/ventures/jewelry-gold/"', 'href="/ventures/carpets/"',
