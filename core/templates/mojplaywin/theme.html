@@ -284,6 +284,33 @@ body:is(.mojplaywin-home,.mojplaywin-section,.mojplaywin-store) main .mw-nav-pan
    border-color:rgba(245,210,145,.67)!important
  }
 }
+
+/* Atelier V4 original page-depth layout: photographic story, methodology, outputs. */
+.mpx-editorial{position:relative;overflow:hidden}
+.mpx-editorial::before{content:"";position:absolute;top:0;right:0;width:min(300px,55%);height:1px;background:linear-gradient(90deg,transparent,#efcb89,transparent)}
+.mpx-editorial-intro{display:grid;grid-template-columns:1fr 1fr;gap:clamp(17px,3vw,40px);margin:22px 0 29px}
+.mpx-editorial-intro p{font-size:clamp(.95rem,1.2vw,1.07rem);line-height:1.91;color:#d2cec4!important;margin:0}
+.mpx-editorial-media{display:grid;grid-template-columns:1.25fr 1fr 1fr;gap:14px;margin:26px 0 35px}
+.mpx-editorial-figure{position:relative;min-width:0;overflow:hidden;margin:0;border:1px solid var(--mw-line);border-radius:19px;background:#14161b}
+.mpx-editorial-figure img{display:block;width:100%;height:245px;object-fit:cover}
+.mpx-editorial-figure:first-child img{height:245px}
+.mpx-editorial-figure figcaption{min-height:55px;display:flex;align-items:center;padding:12px 15px;font-size:.72rem;font-weight:710;letter-spacing:.015em;color:var(--mw-gold-bright);line-height:1.45}
+.mpx-editorial-columns{display:grid;grid-template-columns:1.15fr .85fr;gap:17px}
+.mpx-editorial-panel{padding:clamp(23px,3.2vw,36px);background:radial-gradient(circle at 100% 0,rgba(223,177,95,.095),transparent 42%),#111318;border:1px solid var(--mw-line);border-radius:22px}
+.mpx-editorial-panel h3{max-width:26ch;font-size:clamp(1.5rem,2.3vw,2.45rem);letter-spacing:-.045em;line-height:1.16;margin:17px 0 26px}
+.mpx-editorial-steps{counter-reset:mwsteps;list-style:none;margin:0;padding:0;display:grid;gap:11px}
+.mpx-editorial-steps li{position:relative;counter-increment:mwsteps;padding:18px 18px 18px 58px;border:1px solid var(--mw-line);border-radius:13px;background:rgba(255,255,255,.018)}
+.mpx-editorial-steps li::before{content:counter(mwsteps,decimal-leading-zero);position:absolute;left:17px;top:18px;color:var(--mw-gold-bright);font-weight:830;font-size:.88rem}
+.mpx-editorial-steps strong{display:block;font-size:1.01rem;color:var(--mw-ink)!important;margin-bottom:5px}
+.mpx-editorial-steps p{margin:0;line-height:1.75;color:var(--mw-muted)!important;font-size:.86rem}
+.mpx-editorial-outcomes ul{list-style:none;margin:0 0 28px;padding:0;display:grid;gap:13px}
+.mpx-editorial-outcomes li{position:relative;line-height:1.72;font-size:.93rem;padding:0 0 0 28px;color:var(--mw-ink)!important}
+.mpx-editorial-outcomes li::before{content:"✦";color:var(--mw-gold);position:absolute;left:0}
+.mpx-editorial-outcomes .mw-note{margin:22px 0}
+@media(max-width:1000px){.mpx-editorial-media{grid-template-columns:repeat(3,minmax(0,1fr))}.mpx-editorial-media img{height:185px}}
+@media(max-width:760px){.mpx-editorial-intro,.mpx-editorial-columns{grid-template-columns:1fr}.mpx-editorial-media{grid-template-columns:1fr 1fr}.mpx-editorial-figure:first-child{grid-column:span 2}.mpx-editorial-figure img,.mpx-editorial-figure:first-child img{height:170px}.mpx-editorial-figure:first-child img{height:245px}.mpx-editorial-panel{padding:23px 18px}}
+@media(max-width:430px){.mpx-editorial-media{grid-template-columns:1fr}.mpx-editorial-figure:first-child{grid-column:span 1}.mpx-editorial-figure img,.mpx-editorial-figure:first-child img{height:210px}}
+@media(prefers-reduced-motion:reduce){.mpx-editorial-figure img{transform:none!important;transition:none!important}}
 </style>
 <header class="mw-site-nav" data-design="atelier-v4">
   <a class="mw-brand" href="/" aria-label="MojPlayWin home">
