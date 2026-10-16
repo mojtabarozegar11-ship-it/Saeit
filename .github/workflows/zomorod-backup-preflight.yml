@@ -101,6 +101,33 @@ jobs:
           else
             echo "ENV_FILE_PRESENT=no"
           fi
+          if command -v uapi >/dev/null 2>&1; then
+            uapi --output=json ResourceUsage get_usages 2>/dev/null | python3 -c 'import sys,json; x=json.load(sys.stdin); st=[x]; seen=set()
+          while st:
+              y=st.pop()
+              if isinstance(y,dict):
+                  for k,v in y.items():
+                      if any(t in str(k).lower() for t in ("disk","inode","quota","limit","usage","available")) and isinstance(v,(int,float,str)):
+                          if str(v).replace(".","",1).isdigit(): print("RESOURCE_"+str(k).upper()+"="+str(v))
+                      st.append(v)
+              elif isinstance(y,list): st.extend(y)' || echo "RESOURCE_USAGE=unavailable"
+          else
+            echo "RESOURCE_USAGE=command_unavailable"
+          fi
+          python3 - "$app/config/settings.py" <<'PY'
+          import pathlib,re,sys
+          p=pathlib.Path(sys.argv[1])
+          if not p.exists():
+              print("SETTINGS_FILE_PRESENT=no")
+          else:
+              s=p.read_text(errors="replace")
+              engines=sorted(set(re.findall(r"django\\.db\\.backends\\.[A-Za-z0-9_.]+",s)))
+              print("SETTINGS_FILE_PRESENT=yes")
+              print("SETTINGS_DB_ENGINE_MODULES="+(",".join(engines) if engines else "dynamic_or_unresolved"))
+              print("SETTINGS_DATABASE_URL_REFERENCE="+("yes" if "DATABASE_URL" in s else "no"))
+          PY
+          find "$app" -xdev -type f \\( -iname '*.sqlite3' -o -iname '*.sqlite' -o -iname '*.db' \\) ! -path '*/backups/*' ! -path '*/.git/*' -printf 'ACTIVE_DB_CANDIDATE=%p BYTES=%s\\n' 2>/dev/null | head -20
+          du -x -s -B1 "$app"/* "$app"/.[!.]* 2>/dev/null | sort -rn | head -20 | awk '{print "APP_COMPONENT_BYTES="$1}'
           if test -d "$HOME/.backups"; then
             find "$HOME/.backups" -maxdepth 3 -type d -iname '*zomorod*' -print
             du -sb "$HOME/.backups" 2>/dev/null | awk '{print "EXISTING_BACKUPS_BYTES="$1}' || true
