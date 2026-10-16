@@ -121,10 +121,13 @@ jobs:
               except urllib.error.HTTPError as error:
                   status, body = error.code, error.read(400000).decode("utf-8", "replace")
               title = re.search(r"<title[^>]*>(.*?)</title>", body, re.I | re.S)
-              plain = re.sub(r"<[^>]+>", " ", body)
+              visible = re.sub(r"<(script|style)\\b[^>]*>.*?</\\1>", " ", body, flags=re.I | re.S)
+              headings = re.findall(r"<h[1-3]\\b[^>]*>(.*?)</h[1-3]>", visible, re.I | re.S)
+              plain = re.sub(r"<[^>]+>", " ", visible)
               plain = re.sub(r"\\s+", " ", plain).strip()
               print(f"PUBLIC_DIAG url={url} status={status} expected={marker in body} title={title.group(1)[:160] if title else 'none'}")
-              print(f"PUBLIC_DIAG_TEXT {plain[:240]}")
+              print(f"PUBLIC_DIAG_HEADINGS {[re.sub(r'<[^>]+>', ' ', h).strip()[:100] for h in headings[:8]]}")
+              print(f"PUBLIC_DIAG_TEXT {plain[:500]}")
           PY
       - name: Package application changes with merge baselines
         if: ${{ !contains(github.event.head_commit.message, 'MOJPLAYWIN_ROLLBACK_38827723099') && !contains(github.event.head_commit.message, 'MOJPLAYWIN_DIAG_20261016') }}
