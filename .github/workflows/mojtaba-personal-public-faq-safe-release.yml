@@ -1,0 +1,199 @@
+name: Mojtaba bilingual public FAQ protected release
+on:
+  pull_request:
+    paths:
+      - .github/workflows/mojtaba-personal-public-faq-safe-release.yml
+      - scripts/mojtaba_personal_public_faq_safe_publish.py
+      - tests/test_mojtaba_personal_public_faq_safe_publish.py
+      - content/mojtaba_personal_public_identity_faq_20261016.json
+  issues:
+    types: [opened]
+permissions:
+  contents: read
+concurrency:
+  group: mojtaba-personal-public-faq-only
+  cancel-in-progress: false
+jobs:
+  tests:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      (github.event_name == 'pull_request' ||
+       (github.event_name == 'issues' &&
+        github.event.issue.user.login == 'mojtabarozegar11-ship-it' &&
+        github.event.issue.title == 'Ops: Publish Mojtaba personal public FAQ 2026-10-16'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Syntax, content scope and isolated template regression tests
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mojtaba_personal_public_faq_safe_publish.py
+          python3 -m unittest discover -s tests -p 'test_mojtaba_personal_public_faq_safe_publish.py' -v
+          python3 scripts/mojtaba_personal_public_faq_safe_publish.py check --content content/mojtaba_personal_public_identity_faq_20261016.json
+
+  publish:
+    needs: tests
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event_name == 'issues' &&
+      github.event.issue.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.issue.title == 'Ops: Publish Mojtaba personal public FAQ 2026-10-16'
+    runs-on: ubuntu-latest
+    timeout-minutes: 23
+    steps:
+      - uses: actions/checkout@v4
+      - name: Authenticate pinned two-hop SSH relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/personal-faq-relay"
+          mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          python3 - "$d/host.key" <<'PY'
+          import pathlib,sys
+          p=pathlib.Path(sys.argv[1]);t=p.read_text().replace('\r\n','\n').strip()
+          p.write_text(t.replace('\\n','\n')+'\n')
+          PY
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host saeit-host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+            ConnectionAttempts 1
+          EOF
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          echo "PERSONAL_FAQ_SSH_CONFIG=$d/config" >> "$GITHUB_ENV"
+      - name: Stage personal-only FAQ script and public text
+        shell: bash
+        run: |
+          set -euo pipefail
+          stage="/home/zomorod2/.personal-faq-stage-$GITHUB_RUN_ID"
+          timeout 25s ssh -F "$PERSONAL_FAQ_SSH_CONFIG" saeit-host "test ! -e '$stage' && install -d -m 700 '$stage'"
+          timeout 70s scp -F "$PERSONAL_FAQ_SSH_CONFIG" scripts/mojtaba_personal_public_faq_safe_publish.py "saeit-host:$stage/installer.py"
+          timeout 70s scp -F "$PERSONAL_FAQ_SSH_CONFIG" content/mojtaba_personal_public_identity_faq_20261016.json "saeit-host:$stage/faq.json"
+      - name: Backup and publish only personal About FAQ; verify and auto-rollback
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 1100s ssh -F "$PERSONAL_FAQ_SSH_CONFIG" saeit-host "bash -s -- '$GITHUB_RUN_ID'" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          run_id="$1"
+          app="/home/zomorod2/mojtaba_personal/mojtaba_roozegar_personal_v17"
+          stage="/home/zomorod2/.personal-faq-stage-$run_id"
+          script="$stage/installer.py"
+          content="$stage/faq.json"
+          backup="/home/zomorod2/.backups/mojtaba-personal-public-faq/$run_id"
+          py="/home/zomorod2/mojtaba_personal/.venv_personal_test/bin/python"
+          installed=0
+          verified=0
+          finish() {
+            result=$?
+            trap - EXIT
+            if test "$installed" = 1 && test "$verified" = 0 && test -f "$backup/manifest.json"; then
+              "$py" "$script" rollback --app "$app" --backup "$backup" && echo "PERSONAL_PUBLIC_FAQ_AUTO_ROLLBACK=yes" || echo "PERSONAL_PUBLIC_FAQ_MANUAL_REVIEW_REQUIRED=yes"
+            fi
+            rm -rf -- "$stage"
+            exit "$result"
+          }
+          trap finish EXIT
+          test -x "$py" && test -f "$app/manage.py" && test ! -L "$app"
+          test -f "$script" && test -f "$content"
+          cd "$app"
+          "$py" "$script" check --content "$content"
+          "$py" "$script" install --app "$app" --content "$content" --backup "$backup"
+          installed=1
+          "$py" manage.py check --deploy
+          "$py" "$script" verify --app "$app" --backup "$backup"
+          "$py" - <<'PYTEST'
+          import os
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          import django;django.setup()
+          from django.test import Client
+          from django.urls import reverse
+          from core.models import Post
+          c=Client(HTTP_HOST="mojplaywin.com")
+          names=("home","about","resume","activities","memories","stories",
+                 "projects","posts","gallery","contact")
+          for name in names:
+              response=c.get(reverse("personal_site:"+name),secure=True)
+              if response.status_code!=200:
+                  raise RuntimeError("Protected personal page failed: "+name)
+              body=response.content
+              marker=b'mpw-public-personal-faq-20261016'
+              if name=="about" and (marker not in body or b'Who is Mojtaba Roozegar?' not in body):
+                  raise RuntimeError("Bilingual FAQ missing on rendered personal About")
+              if name!="about" and marker in body:
+                  raise RuntimeError("FAQ leaked into unrelated personal page")
+              print("PERSONAL_FAQ_DJANGO_PAGE="+name+" HTTP=200",flush=True)
+          slugs=list(Post.objects.filter(published=True).values_list("slug",flat=True))
+          if len(slugs)<93:raise RuntimeError("93 published personal articles not preserved")
+          for slug in slugs:
+              response=c.get(reverse("personal_site:post_detail",kwargs={"slug":slug}),secure=True)
+              if response.status_code!=200:
+                  raise RuntimeError("Old article broken: "+slug)
+          print("PERSONAL_FAQ_ALL_POST_ROUTES_PRESERVED="+str(len(slugs)),flush=True)
+          PYTEST
+          test -d "$app/tmp" && touch "$app/tmp/restart.txt" || true
+          "$py" - <<'PYHTTP'
+          import time
+          from urllib.request import Request,urlopen
+          url="https://mojplaywin.com/mojtaba.roozegar/about/"
+          for attempt in range(4):
+              try:
+                  with urlopen(Request(url,headers={"User-Agent":"MojtabaPublicFAQReleaseAudit/1"}),
+                               timeout=18) as r:
+                      body=r.read(800000)
+                      if r.status!=200:raise RuntimeError("About response not 200")
+                      if b'mpw-public-personal-faq-20261016' not in body:
+                          raise RuntimeError("New FAQ missing from public website")
+                      if "پرسش‌های متداول".encode() not in body:
+                          raise RuntimeError("Persian FAQ missing")
+                  print("PERSONAL_PUBLIC_ABOUT_FAQ_LIVE_HTTP=200",flush=True)
+                  break
+              except Exception as exc:
+                  print("PERSONAL_PUBLIC_ABOUT_RETRY="+str(exc)[:130],flush=True)
+                  if attempt==3:raise
+                  time.sleep(3)
+          PYHTTP
+          "$py" "$script" verify --app "$app" --backup "$backup"
+          verified=1
+          echo "PERSONAL_PUBLIC_FAQ_SAFE_LIVE_PUBLISH=success"
+          echo "PERSONAL_PUBLIC_FAQ_BACKUP=$backup"
+          echo "MOJPLAYWIN_ROOT_ZOMOROD_FACTORY_UNTOUCHED=yes"
+          REMOTE
+      - name: Erase temporary SSH keys
+        if: always()
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/personal-faq-relay"
+          test ! -d "$d" || rm -rf -- "$d"
