@@ -78,4 +78,4 @@ jobs:
       - name: Prepare personal editorial release archive
         run: |
           set -euo pipefail
-          tar -czf "$RUNNER_TEMP/editorial-fix.tar.gz" scripts/mojtaba_remove_unwanted_profile_disclaimers.py scripts/mojtaba_twenty_photo_essays_safe_publish.py content/mojtaba_twenty_photo_essays_*.json
+          tar -czf "$RUNNER_TEMP/editorial-fix.tar.gz" scripts/mojtaba_remove_unwanted_profile_disclaimers.py scripts/mojtaba_twenty_photo_essays_safe_publish.py content/mojtaba_*.json
