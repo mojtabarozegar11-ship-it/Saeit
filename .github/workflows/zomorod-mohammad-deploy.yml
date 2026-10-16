@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/zomorod-mohammad-deploy.yml"
+      - "scripts/mohammad_bundle_photos.py"
       - "public/mohammad/**"
 permissions:
   contents: read
@@ -34,6 +35,10 @@ jobs:
           test -s public/mohammad/panel/index.html
           grep -Fq 'میز کار مدیریت' public/mohammad/panel/index.html
           echo "MOHAMMAD_SOURCE=valid"
+      - name: Prepare local Mohammad photos
+        shell: bash
+        run: |
+          python3 scripts/mohammad_bundle_photos.py public/mohammad
       - name: Prepare pinned VPS to cPanel relay
         shell: bash
         env:
@@ -220,6 +225,12 @@ jobs:
           set -euo pipefail
           page="$(curl --fail --silent --show-error --retry 4 --retry-delay 2 https://zomorodmelal.ir/mohammad/)"
           grep -Fq 'کلینیک ساختمان محمد' <<< "$page"
+          grep -Fq '/mohammad/assets/photos/' <<< "$page"
+          photo_file="$RUNNER_TEMP/mohammad-live-photo.jpg"
+          curl --fail --location --silent --show-error --retry 4 --retry-delay 2 -o "$photo_file" "https://zomorodmelal.ir/mohammad/assets/photos/photo-1600607687939-ce8a6c25118c.jpg"
+          test "$(file -b --mime-type "$photo_file")" = "image/jpeg"
+          test "$(wc -c < "$photo_file")" -gt 3500
+          echo "MOHAMMAD_LOCAL_PHOTO=verified"
           curl --fail --silent --show-error --retry 4 --retry-delay 2 -o /dev/null https://zomorodmelal.ir/mohammad/styles.css
           curl --fail --silent --show-error --retry 4 --retry-delay 2 -o /dev/null https://zomorodmelal.ir/mohammad/app.js
           curl --fail --silent --show-error --retry 4 --retry-delay 2 -o /dev/null https://zomorodmelal.ir/mohammad/assets/checklist-before-renovation.html

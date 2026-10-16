@@ -1,0 +1,26 @@
+name: Mohammad local photo preflight
+on:
+  pull_request:
+    paths:
+      - "scripts/mohammad_bundle_photos.py"
+      - ".github/workflows/mohammad-photo-preflight.yml"
+      - ".github/workflows/zomorod-mohammad-deploy.yml"
+      - "public/mohammad/**"
+permissions:
+  contents: read
+jobs:
+  test-photo-cache:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and validate local photos without deploying
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/mohammad_bundle_photos.py public/mohammad
+          test -s public/mohammad/assets/photos/manifest.json
+          python3 -c 'import json; from pathlib import Path; p=Path("public/mohammad/assets/photos"); m=json.loads((p/"manifest.json").read_text()); assert m["photo_count"]>0; assert all((p/f).is_file() for f in m["files"].values()); print("PREFLIGHT_REAL_PHOTOS",m["photo_count"],"FALLBACKS",m["fallback_count"])'
+          ! grep -Rql 'https://images.unsplash.com/' public/mohammad --include='*.html'
+          grep -Fq '/mohammad/assets/photos/' public/mohammad/index.html
+          echo "MOHAMMAD_LOCAL_PHOTO_PREFLIGHT=passed"
