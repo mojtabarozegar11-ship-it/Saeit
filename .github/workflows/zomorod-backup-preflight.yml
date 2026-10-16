@@ -172,7 +172,7 @@ jobs:
                   for z in v: walk(z)
           walk(json.load(sys.stdin))' || echo "PASSENGER_ENV_INSPECTION=unavailable"
           python3 - "$app/config/settings.py" <<'PY'
-          import ast,pathlib,re,sys
+          import ast,pathlib,re,sys,urllib.parse
           p=pathlib.Path(sys.argv[1])
           if not p.exists():
               print("DB_CONFIG_INSPECTION=no_settings_file")
@@ -205,6 +205,12 @@ jobs:
                       for a in n.args[:1]:
                           if isinstance(a,ast.Constant) and isinstance(a.value,str) and ("DATABASE" in a.value.upper() or "DB"==a.value.upper()):
                               print("DB_ENV_REFERENCE="+a.value[:40])
+                      defaults=list(n.args[1:])+[kw.value for kw in n.keywords if kw.arg in ("default","default_value")]
+                      for d in defaults:
+                          if isinstance(d,ast.Constant) and isinstance(d.value,str) and "sqlite" in d.value.lower():
+                              u=urllib.parse.urlsplit(d.value)
+                              print("DB_DEFAULT_SCHEME="+(u.scheme or "sqlite"))
+                              print("DB_DEFAULT_NAME_BASENAME="+pathlib.Path(u.path).name)
           if not seen:
               for n in ast.walk(root):
                   if isinstance(n,ast.Constant) and isinstance(n.value,str):
@@ -213,17 +219,6 @@ jobs:
                           m=re.search(r"([^/\\\\]+\\.sqlite3?|[^/\\\\]+\\.db)$",v)
                           if m: print("DB_SQLITE_BASENAME_CANDIDATE="+m.group(1))
               print("DB_CONFIG_ENGINE=dynamic_or_indirect")
-          PY
-          import pathlib,re,sys
-          p=pathlib.Path(sys.argv[1])
-          if not p.exists():
-              print("SETTINGS_FILE_PRESENT=no")
-          else:
-              s=p.read_text(errors="replace")
-              engines=sorted(set(re.findall(r"django\\.db\\.backends\\.[A-Za-z0-9_.]+",s)))
-              print("SETTINGS_FILE_PRESENT=yes")
-              print("SETTINGS_DB_ENGINE_MODULES="+(",".join(engines) if engines else "dynamic_or_unresolved"))
-              print("SETTINGS_DATABASE_URL_REFERENCE="+("yes" if "DATABASE_URL" in s else "no"))
           PY
           python3 - "$app" <<'PY'
           import pathlib,sys
