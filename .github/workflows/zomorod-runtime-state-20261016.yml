@@ -73,6 +73,25 @@ jobs:
           set -euo pipefail
           app=/home/zomorod2/Saeit
           test -f "$app/manage.py"
+          if git -C "$app" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+            echo "LIVE_SOURCE_GIT=yes"
+            git -C "$app" rev-parse HEAD | sed 's/^/LIVE_SOURCE_HEAD=/'
+            git -C "$app" status --porcelain --untracked-files=no | wc -l | awk '{print "LIVE_TRACKED_CHANGES=" $1}'
+            git -C "$app" remote get-url origin 2>/dev/null | sed -E 's#https?://[^/@]+:[^/@]+@#https://[redacted]@#' | sed 's/^/LIVE_SOURCE_ORIGIN=/'
+            for rel in config/urls.py core/mojplaywin_views.py requirements.txt; do
+              if test -f "$app/$rel"; then
+                sha256sum "$app/$rel" | awk -v f="$rel" '{print "LIVE_FILE_" f "_SHA256=" $1}'
+                if git -C "$app" cat-file -e "HEAD:$rel" 2>/dev/null; then echo "LIVE_HEAD_HAS_$rel=yes"; else echo "LIVE_HEAD_HAS_$rel=no"; fi
+              else
+                echo "LIVE_FILE_MISSING=$rel"
+              fi
+            done
+            echo "LIVE_REQUIREMENTS_BEGIN"
+            sed -n '1,15p' "$app/requirements.txt"
+            echo "LIVE_REQUIREMENTS_END"
+          else
+            echo "LIVE_SOURCE_GIT=no"
+          fi
           for version in 3.10 3.11; do
             py="/home/zomorod2/virtualenv/Saeit/$version/bin/python"
             echo "RUNTIME_VERSION=$version PRESENT=$(test -x "$py" && echo yes || echo no)"
