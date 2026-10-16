@@ -143,6 +143,41 @@ jobs:
                   if line.startswith(("ALT_DUALSITE_CORE=","ALT_DUALSITE_CORE_IMPORT=")): print(line)
           except (OSError,subprocess.TimeoutExpired) as error:
               print("ALT_DUALSITE_ERROR="+type(error).__name__)
+          # Import the real Django WSGI application with the selector interpreter.
+          # This is an isolated child process: no website config changes or GET requests.
+          import_probe="""
+import os,sys,site
+from pathlib import Path
+root=Path(sys.argv[1])
+os.chdir(root)
+sys.path.insert(0,str(root))
+for location in sys.argv[2:]:
+    if os.path.isdir(location):
+        site.addsitedir(location)
+envfile=root/'.env'
+if envfile.is_file():
+    for raw in envfile.read_text(encoding='utf-8',errors='replace').splitlines():
+        raw=raw.strip()
+        if not raw or raw.startswith('#') or '=' not in raw:
+            continue
+        key,value=raw.split('=',1)
+        key=key.strip()
+        if key:
+            os.environ.setdefault(key,value.strip().strip('"').strip("'"))
+os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+from config.wsgi import application
+print('ALT_DUALSITE_WSGI_IMPORT=passed')
+"""
+          try:
+              r=subprocess.run(["/opt/alt/python310/bin/python3.10","-B","-c",import_probe,str(app),*sites],capture_output=True,text=True,timeout=20,check=False,env={**os.environ,"PYTHONDONTWRITEBYTECODE":"1"})
+              print("ALT_DUALSITE_WSGI_EXIT="+str(r.returncode))
+              if "ALT_DUALSITE_WSGI_IMPORT=passed" in r.stdout:
+                  print("ALT_DUALSITE_WSGI_IMPORT=passed")
+              if r.returncode:
+                  last=r.stderr.strip().splitlines()[-1] if r.stderr.strip() else ""
+                  print("ALT_DUALSITE_WSGI_ERROR_CLASS="+last.split(":",1)[0][:80])
+          except (OSError,subprocess.TimeoutExpired) as error:
+              print("ALT_DUALSITE_WSGI_ERROR_CLASS="+type(error).__name__)
           log=app/"stderr.log"
           if not log.is_file():
               print("PASSENGER_LOG=missing");raise SystemExit(0)
