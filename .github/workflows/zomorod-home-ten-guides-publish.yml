@@ -1,0 +1,229 @@
+name: Publish ten more illustrated articles to original Zomorod homepage
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/zomorod-home-ten-guides-publish.yml"
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-root-homepage
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate 10 Persian illustrated articles and existing asset sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from html.parser import HTMLParser
+          from pathlib import Path
+          class Count(HTMLParser):
+              def __init__(self):super().__init__();self.articles=self.images=self.headings=0;self.ids=[]
+              def handle_starttag(self,t,a):
+                  d=dict(a)
+                  if t=="article":self.articles+=1
+                  if t=="img":self.images+=1
+                  if t=="h3":self.headings+=1
+                  if d.get("id"):self.ids.append(d["id"])
+          p=Path("public/zomorod-home-ten-guides-20261016.html")
+          h=p.read_text(encoding="utf-8")
+          c=Count();c.feed(h)
+          assert h.count("<!-- ZM_HOME_TEN_GUIDES_BEGIN_20261016 -->")==1
+          assert h.count("<!-- ZM_HOME_TEN_GUIDES_END_20261016 -->")==1
+          assert c.articles==10 and c.images==10 and c.headings==10
+          assert len(c.ids)==len(set(c.ids))
+          assert len(h)>11000 and h.count("تمرین:")==10
+          assert all(route in h for route in ("/economy/","/research/","/industry/","/agriculture/poultry/","/knowledge/"))
+          print("ADDITIONAL_EXPERT_GUIDES_VALIDATED=10")
+          PY
+          for name in economy agriculture smart-agriculture platform-home services research industry academy marketplace knowledge; do
+            test -s "core/static/site/heroes/$name.webp"
+          done
+          echo "SOURCE_IMAGES_VALIDATED=10"
+      - name: Prepare the confirmed pinned VPS to cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-root"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "CONFIRMED_PINNED_RELAY_READY=yes"
+
+
+
+      - name: Stage additive fragment and existing site-owned photos privately
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-root"
+          stage="/home/zomorod2/.zm-ten-guides-$GITHUB_SHA"
+          ssh -F "$d/config" saeit-cpanel "test ! -e '$stage' && mkdir -m 700 '$stage'"
+          tar -czf - public/zomorod-home-ten-guides-20261016.html core/static/site/heroes/{economy,agriculture,smart-agriculture,platform-home,services,research,industry,academy,marketplace,knowledge}.webp | ssh -F "$d/config" saeit-cpanel "tar -xzf - -C '$stage'"
+      - name: Back up original homepage and insert cards after existing featured content only
+        id: publish
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-root"
+          ssh -F "$d/config" saeit-cpanel python3 - "$GITHUB_SHA" <<'PY'
+          from pathlib import Path
+          import os,sys
+          sha=sys.argv[1]
+          home=Path.home()
+          root=home/"public_html"
+          page=root/"index.html"
+          staging=home/(".zm-ten-guides-"+sha)
+          piece=staging/"public/zomorod-home-ten-guides-20261016.html"
+          backup=home/".backups"/"zomorod-home-ten-guides"/sha
+          assert root.is_dir() and not root.is_symlink()
+          assert page.is_file() and not page.is_symlink() and page.stat().st_uid==os.getuid()
+          assert piece.is_file() and not piece.is_symlink()
+          original=page.read_bytes()
+          fragment=piece.read_bytes()
+          anchor=b"<!-- ZM_HOME_FEATURE_END -->"
+          assert original.count(anchor)==1, "The current homepage gallery has changed; abort instead of replacing it"
+          assert b"ZM_HOME_TEN_GUIDES_BEGIN_20261016" not in original
+          assert b"zm-specialist-library-20261016" in original
+          assert original.count(b"</main>")==1
+          assert fragment.count(b"<article ")==10 and fragment.count(b"<img ")==10
+          assert not backup.exists()
+          backup.mkdir(parents=True)
+          snapshot=backup/"index.before.html"
+          snapshot.write_bytes(original)
+          assert snapshot.read_bytes()==original
+          images=root/"static/site/heroes"
+          assert images.is_dir() and not images.is_symlink()
+          manifest=backup/"added-images.txt"
+          manifest.write_text("",encoding="utf-8")
+          for name in ("economy","agriculture","smart-agriculture","platform-home","services","research","industry","academy","marketplace","knowledge"):
+              source=staging/"core/static/site/heroes"/(name+".webp")
+              dest=images/(name+".webp")
+              assert source.is_file() and source.stat().st_size>1000
+              if dest.exists():
+                  assert dest.is_file() and not dest.is_symlink() and dest.stat().st_size>1000
+              else:
+                  assert not dest.is_symlink()
+                  target=images/("."+name+"-new-"+sha+".tmp")
+                  target.write_bytes(source.read_bytes())
+                  os.chmod(target,0o644)
+                  os.replace(target,dest)
+                  with manifest.open("a",encoding="utf-8") as mf:mf.write(name+"\n")
+                  print("MISSING_OWNED_PHOTO_INSTALLED="+name)
+          amended=original.replace(anchor,anchor+b"\n"+fragment,1)
+          assert amended.count(b"ZM_HOME_TEN_GUIDES_BEGIN_20261016")==1
+          assert amended.count(b"ZM_HOME_FEATURE_BEGIN")==1
+          assert amended.count(b"</main>")==1
+          assert page.read_bytes()==original, "Concurrent change detected; not overwriting"
+          temp=page.with_name("index.zm-ten-"+sha+".tmp")
+          temp.write_bytes(amended)
+          os.chmod(temp,page.stat().st_mode & 0o777)
+          os.replace(temp,page)
+          print("EXISTING_HOMEPAGE_BACKUP=complete")
+          print("TEN_ADDITIONAL_ARTICLES_INSTALLED=yes")
+          PY
+      - name: Verify actual public content and image URLs and preserve important routes
+        shell: bash
+        run: |
+          set -euo pipefail
+          html="$RUNNER_TEMP/zm-ten-new-homepage.html"
+          result="$(curl -L -sS --max-time 35 -H 'Cache-Control: no-cache' -o "$html" -w '%{http_code}' "https://zomorodmelal.ir/?ten_articles=$GITHUB_SHA" || true)"
+          echo "HOME_HTTP=$result"
+          test "$result" = 200
+          for marker in ZM_HOME_TEN_GUIDES_BEGIN_20261016 zm-home-ten-guides-20261016 ZM_HOME_FEATURE_BEGIN zm-specialist-library-20261016; do
+            grep -Fq "$marker" "$html"
+          done
+          for title in 'مدیریت مزرعه با نگاه اقتصادی' 'سلامت خاک، پایه تولید پایدار' 'گلخانه و مدیریت محیط تولید' 'دامپروری، سلامت گله و هزینه خوراک' 'طیور و امنیت زیستی واحد پرورش' 'پژوهش کاربردی برای حل مسئله تولید' 'صنایع تبدیلی و افزایش ارزش افزوده' 'آموزش کاربردی و توسعه مهارت' 'بازار کشاورزی؛ فراتر از قیمت روز' 'دانشنامه علمی و یادگیری مستمر'; do
+            grep -Fq "$title" "$html"
+          done
+          for name in economy agriculture smart-agriculture platform-home services research industry academy marketplace knowledge; do
+            code="$(curl -L -sS --max-time 25 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir/static/site/heroes/$name.webp" || true)"
+            echo "NEW_GUIDE_IMAGE=$name HTTP=$code"
+            test "$code" = 200
+          done
+          for route in agriculture/ agriculture/livestock/ agriculture/greenhouse/ agriculture/poultry/ amozeshgah/ industry/ research/ economy/ market/ knowledge/ company/ blog/ store/; do
+            code="$(curl -L -sS --max-time 25 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir/$route" || true)"
+            echo "UNCHANGED_SITE_ROUTE=/$route HTTP=$code"
+            test "$code" = 200
+          done
+          echo "TEN_NEW_PHOTO_ARTICLES_ON_LIVE_HOMEPAGE=verified"
+      - name: Automatic rollback of homepage and only newly added images on failure
+        if: failure()
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-root"
+          if test ! -f "$d/config"; then echo "NOTHING_INSTALLED_BEFORE_SSH_SETUP"; exit 0; fi
+          ssh -F "$d/config" saeit-cpanel python3 - "$GITHUB_SHA" <<'PY'
+          from pathlib import Path
+          import os,sys
+          sha=sys.argv[1]
+          home=Path.home()
+          page=home/"public_html/index.html"
+          backup=home/".backups"/"zomorod-home-ten-guides"/sha
+          original=backup/"index.before.html"
+          if original.is_file() and page.is_file() and b"ZM_HOME_TEN_GUIDES_BEGIN_20261016" in page.read_bytes():
+              temp=page.with_name("index.zm-ten-rollback-"+sha+".tmp")
+              temp.write_bytes(original.read_bytes())
+              os.chmod(temp,page.stat().st_mode & 0o777)
+              os.replace(temp,page)
+              assert page.read_bytes()==original.read_bytes()
+              print("OLD_HOMEPAGE_RESTORED=verified")
+          manifest=backup/"added-images.txt"
+          if manifest.is_file() and (not page.is_file() or b"ZM_HOME_TEN_GUIDES_BEGIN_20261016" not in page.read_bytes()):
+              approved=("economy","agriculture","smart-agriculture","platform-home","services","research","industry","academy","marketplace","knowledge")
+              for name in manifest.read_text(encoding="utf-8").splitlines():
+                  if name not in approved:continue
+                  candidate=home/"public_html/static/site/heroes"/(name+".webp")
+                  source=home/(".zm-ten-guides-"+sha)/"core/static/site/heroes"/(name+".webp")
+                  if candidate.is_file() and not candidate.is_symlink() and source.is_file() and candidate.read_bytes()==source.read_bytes():
+                      candidate.unlink()
+                      print("NEW_ONLY_IMAGE_RESTORED="+name)
+          PY
+      - name: Remove temporary SSH credentials
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/zomorod-root"
