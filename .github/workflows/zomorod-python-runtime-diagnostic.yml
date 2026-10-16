@@ -209,6 +209,7 @@ jobs:
           python3 - "$raw" <<'PY'
           from pathlib import Path
           import json, os, re, sys, time
+          # Re-read the primary app log after explicit Passenger restarts.
           home=Path.home()
           roots=[home]
           found=[]
