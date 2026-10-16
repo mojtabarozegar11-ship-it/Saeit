@@ -310,7 +310,11 @@ jobs:
               from django.test import Client
               response = Client(HTTP_HOST="mojplaywin.com", secure=True).get("/", follow=True)
               body = response.content.decode("utf-8", "replace")
-              print(f"INTERNAL_DJANGO_ROUTE status={response.status_code} expected={'Ideas become knowledge' in body} title={'MojPlayWin' if 'MojPlayWin' in body else 'other'}")
+              import re
+              from django.urls import resolve
+              title_match = re.search(r"<title[^>]*>(.*?)</title>", body, re.I | re.S)
+              route = resolve("/")
+              print("INTERNAL_DJANGO_ROUTE status=%s expected=%s title=%s view=%s" % (response.status_code, "Ideas become knowledge" in body, title_match.group(1)[:120] if title_match else "none", route.func.__module__ + "." + route.func.__name__))
               print(f"PASSENGER_RUNTIME application={getattr(app_obj, '__module__', type(app_obj).__name__)}")
               for name in ("config.urls", "core.services_views", "core.mojplaywin_views"):
                   module = sys.modules.get(name)
