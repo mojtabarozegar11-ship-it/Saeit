@@ -78,6 +78,7 @@ class MojPlayWinAtelierV4Tests(TestCase):
         css = (ROOT / "core" / "static" / "site" / "mojplaywin-atelier-v4.css").read_text(encoding="utf-8")
         self.assertIn('class="mpw-atelier-v4"', base)
         self.assertIn('mojplaywin-atelier-v4.css', base)
+        self.assertNotIn("'site/mojplaywin.css'", base)
         self.assertIn('href="https://mojplaywin.com{{ request.path }}"', base)
         self.assertIn('{% block meta_description %}', base)
         self.assertIn('application/ld+json', base)
