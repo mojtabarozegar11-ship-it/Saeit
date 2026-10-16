@@ -188,7 +188,7 @@ jobs:
             else
               echo "LEGACY_BACKUP_DIRECTIVES=verified"
             fi
-            if grep -Fq 'PassengerPython /home/zomorod2/virtualenv/Saeit/3.10/bin/python' "$htaccess"; then
+            if grep -Fq 'PassengerPython "/home/zomorod2/virtualenv/Saeit/3.10/bin/python"' "$htaccess"; then
               echo "PREVIOUS_PASSENGER_CONFIG_RECOVERY=already_verified_venv"
             elif grep -Fq 'PassengerPython "/opt/alt/python310/bin/lswsgi"' "$htaccess"; then
               echo "PREVIOUS_PASSENGER_CONFIG_RECOVERY=original_selector_config"
@@ -559,6 +559,15 @@ jobs:
           fetch "https://zomorodmelal.ir/?__zomorod_verify=$GITHUB_SHA" "$tmp"
           grep -Eq 'کشاورزی|دامپروری' "$tmp"
           echo "LIVE_ROUTE_CHECK=home passed"
+          for route in about company agents api/health; do
+            fetch "https://zomorodmelal.ir/$route/?__zomorod_verify=$GITHUB_SHA" "$tmp"
+            echo "LIVE_ROUTE_CHECK=$route passed"
+          done
+          bridge_headers="$RUNNER_TEMP/zomorod-bridge-headers.txt"
+          bridge_code="$(curl -sS --max-time 20 -D "$bridge_headers" -o "$tmp" -w '%{http_code}' "https://zomorodmelal.ir/api/bridge/health/?__zomorod_verify=$GITHUB_SHA" || true)"
+          test "$bridge_code" != "500" && test "$bridge_code" != "000"
+          grep -qi '^content-type: application/json' "$bridge_headers"
+          echo "LIVE_ROUTE_CHECK=api/bridge/health status=$bridge_code json=verified"
           for route in agriculture agriculture/livestock agriculture/horticulture agriculture/greenhouse agriculture/poultry agriculture/aquaculture agriculture/inputs agriculture/seeds agriculture/fertilizers agriculture/pesticides agriculture/offices agriculture/water-soil agriculture/machinery agriculture/market agriculture/genetics; do
             fetch "https://zomorodmelal.ir/$route/?__zomorod_verify=$GITHUB_SHA" "$tmp"
             case "$route" in
