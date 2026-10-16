@@ -12,9 +12,18 @@ _original_populate = Apps.populate
 
 def _trace_reentrant_population(self, *args, **kwargs):
     if self.loading:
-        print("RuntimeError: ZOMOROD_DJANGO_POPULATE_REENTERED", file=sys.stderr)
+        print(
+            "RuntimeError: ZOMOROD_DJANGO_POPULATE_REENTERED "
+            f"ready={self.ready} apps_ready={self.apps_ready} models_ready={self.models_ready}",
+            file=sys.stderr,
+        )
         traceback.print_stack(limit=48, file=sys.stderr)
-    return _original_populate(self, *args, **kwargs)
+    try:
+        return _original_populate(self, *args, **kwargs)
+    except BaseException:
+        print("ZOMOROD_DJANGO_POPULATE_FAILURE", file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
+        raise
 
 
 Apps.populate = _trace_reentrant_population
