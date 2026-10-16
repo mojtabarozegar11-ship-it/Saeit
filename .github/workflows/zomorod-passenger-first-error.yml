@@ -82,6 +82,25 @@ jobs:
                   if re.match(r"^\s*Passenger(?:Python|AppRoot)\s+",line):
                       key,value=line.strip().split(None,1)
                       print("PASSENGER_CONFIG "+key+"="+("selector_lswsgi" if "lswsgi" in value else "other_python" if key=="PassengerPython" else "correct" if value.strip('"')==str(app) else "unexpected"))
+          import subprocess
+          interpreters=[
+              ("venv",home/"virtualenv"/"Saeit"/"3.10"/"bin"/"python"),
+              ("alt",Path("/opt/alt/python310/bin/python3.10")),
+          ]
+          probe="import sys,importlib.util;print('PYTHON_RUNTIME='+sys.version.split()[0]);print('PYTHON_EXEC='+sys.executable);print('PYDANTIC_CORE_SPEC='+str(importlib.util.find_spec('pydantic_core') is not None));print('OPENAI_SPEC='+str(importlib.util.find_spec('openai') is not None))"
+          for label,interp in interpreters:
+              if not interp.exists():
+                  print("PYTHON_PROBE "+label+" interpreter_missing");continue
+              try:
+                  result=subprocess.run([str(interp),"-c",probe],capture_output=True,text=True,timeout=9,check=False)
+                  print("PYTHON_PROBE "+label+" exit="+str(result.returncode))
+                  for out in result.stdout.splitlines():
+                      if out.startswith(("PYTHON_RUNTIME=","PYDANTIC_CORE_SPEC=","OPENAI_SPEC=")):
+                          print("PYTHON_PROBE "+label+" "+out)
+                  if result.returncode:
+                      print("PYTHON_PROBE "+label+" error_class=nonzero")
+              except (OSError,subprocess.TimeoutExpired) as error:
+                  print("PYTHON_PROBE "+label+" error_class="+type(error).__name__)
           log=app/"stderr.log"
           if not log.is_file():
               print("PASSENGER_LOG=missing");raise SystemExit(0)
