@@ -143,10 +143,35 @@ jobs:
             [[ "$status" == "200" ]] && grep -Fq "Turn ideas into" "$RUNNER_TEMP/farnaz-live.html" && break
             sleep 3
           done
-          [[ "$status" == "200" ]]
-          grep -Fq "ARCHITECTURAL DRAFTING" "$RUNNER_TEMP/farnaz-live.html"
-          [[ "$(curl -sS -o /dev/null -w '%{http_code}' https://mojplaywin.com/)" == "200" ]]
-          [[ "$(curl -sS -o /dev/null -w '%{http_code}' https://mojplaywin.com/admin/login/)" == "200" ]]
+          if [[ "$status" != "200" ]] || ! grep -Fq "Turn ideas into" "$RUNNER_TEMP/farnaz-live.html" || ! grep -Fq "ARCHITECTURAL DRAFTING" "$RUNNER_TEMP/farnaz-live.html"; then
+            echo "FARNAZ_PUBLIC_HTTP_STATUS=$status"
+            python3 - "$RUNNER_TEMP/farnaz-live.html" <<'PY'
+          from html.parser import HTMLParser
+          from pathlib import Path
+          import sys
+          class Summary(HTMLParser):
+              def __init__(self):
+                  super().__init__(); self.in_title=False; self.title=[]; self.text=[]
+              def handle_starttag(self, tag, attrs):
+                  self.in_title = tag == "title"
+              def handle_endtag(self, tag):
+                  if tag == "title": self.in_title=False
+              def handle_data(self, data):
+                  if self.in_title: self.title.append(data.strip())
+                  if data.strip(): self.text.append(data.strip())
+          parser=Summary()
+          parser.feed(Path(sys.argv[1]).read_text(encoding="utf-8",errors="replace"))
+          print("FARNAZ_PUBLIC_TITLE=" + " ".join(parser.title)[:160])
+          print("FARNAZ_PUBLIC_TEXT=" + " ".join(parser.text)[:320])
+          PY
+            exit 1
+          fi
+          root_status="$(curl -sS -o /dev/null -w '%{http_code}' https://mojplaywin.com/)"
+          admin_status="$(curl -sS -o /dev/null -w '%{http_code}' https://mojplaywin.com/admin/login/)"
+          echo "MOJPLAYWIN_ROOT_HTTP_STATUS=$root_status"
+          echo "DJANGO_ADMIN_HTTP_STATUS=$admin_status"
+          [[ "$root_status" == "200" ]]
+          [[ "$admin_status" == "200" ]]
           echo "FARNAZ_AND_EXISTING_SITE_SMOKE_OK=yes"
       - name: Roll back Farnaz route config if smoke testing fails
         if: failure() && steps.deploy.outcome == 'success' && steps.smoke.outcome == 'failure'
