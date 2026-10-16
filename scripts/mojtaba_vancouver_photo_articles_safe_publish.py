@@ -118,25 +118,71 @@ def safe_photos(rows,folder):
         out[row["slug"]]={"filename":p,"sha256":file_sha(p),"bytes":p.stat().st_size}
     return out
 
+
+def public_owner_gallery_photos():
+    """Read the twenty images actually exposed by the personal gallery, not presumed ORM rows."""
+    from html.parser import HTMLParser
+    from urllib.request import Request,urlopen
+    from urllib.parse import urljoin,urlparse
+    base="https://mojplaywin.com/mojtaba.roozegar/gallery/"
+    class Photos(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.one=[];self.two=[]
+        def handle_starttag(self,tag,attrs):
+            if tag!="img":return
+            raw=dict(attrs).get("src","")
+            if not raw:return
+            uri=urljoin(base,raw)
+            parsed=urlparse(uri)
+            if parsed.scheme!="https" or parsed.netloc!="mojplaywin.com":return
+            if "owner_gallery_20261015_b/" in parsed.path:self.two.append(uri)
+            elif "owner_gallery_20261015/" in parsed.path:self.one.append(uri)
+    with urlopen(Request(base,headers={"User-Agent":"MojtabaGalleryImageReuser/1"}),timeout=25) as response:
+        if response.status!=200:raise ValueError("Existing gallery unavailable")
+        page=response.read(4000000).decode("utf-8","replace")
+    parser=Photos();parser.feed(page)
+    if len(parser.one)!=10 or len(parser.two)!=10:raise ValueError("Twenty existing owner-gallery images not visible")
+    photos=parser.one+parser.two
+    if len(set(photos))!=20:raise ValueError("Original owner gallery images are duplicated")
+    return photos
+
+def legacy_photo_fallback(source,missing_to_image):
+    """Render owner's existing photo URLs only for older Post records with a blank cover.
+
+    No legacy Post rows are modified.
+    """
+    if not missing_to_image:return source
+    mark='id="mpw-vancouver-older-article-photo-20261016"'
+    if mark in source:raise ValueError("Legacy photo fallback already present")
+    block="{% block content %}"
+    if source.count(block)!=1:raise ValueError("Missing article detail insertion point")
+    snippets=['{% if kind == "Article" and not item.cover %}']
+    for i,(slug,url) in enumerate(sorted(missing_to_image.items())):
+        if any(c not in "abcdefghijklmnopqrstuvwxyz0123456789-" for c in slug):raise ValueError("Unsafe old slug")
+        test="{% if" if i==0 else "{% elif"
+        snippets.append(test+' item.slug == "'+slug+'" %}')
+        snippets.append('<figure '+mark+' style="border:3px solid #c19a51;background:#161513;padding:10px;margin:20px auto;max-width:1050px"><img src="'+html.escape(url,quote=True)+'" alt="Photograph from Mojtaba Roozegar’s original personal gallery" width="1200" height="675" loading="lazy" decoding="async" style="width:100%;height:auto;object-fit:cover"><figcaption style="color:#ddc6a0;font:14px/1.5 system-ui,sans-serif">Personal gallery photograph used as an editorial illustration, not evidence of a business partnership.</figcaption></figure>')
+    snippets.extend(['{% endif %}','{% endif %}'])
+    where=source.index(block)+len(block)
+    return source[:where]+"\n"+"\n".join(snippets)+"\n"+source[where:]
+
 def stage_install(app,rows,photo_dir,contents,backup):
     current=protected_templates(app)
     Post,GalleryItem,transaction,media,media_url=prepare(app)
     if not media_url.startswith("/") or not media_url.endswith("/"):raise ValueError("Unexpected MEDIA_URL")
-    proposed={page:patch(page,text,rows,media_url) for page,text in current.items()}
     photos=safe_photos(rows,photo_dir)
     older=old_slugs(contents)
     if Post.objects.filter(slug__in=[r["slug"] for r in rows]).exists():raise ValueError("New slug collision")
     if Post.objects.filter(slug__in=older,published=True).count()!=23:raise ValueError("23 older posts not published")
-    gallery=[g.image for g in GalleryItem.objects.exclude(image="").order_by("pk") if g.image and g.image.storage.exists(g.image.name)]
-    if len(gallery)<20:raise ValueError("Cannot verify 20 existing personal photographs")
+    gallery=public_owner_gallery_photos()
     if backup.exists() or backup.is_symlink():raise ValueError("Backup destination exists")
-    # Use existing owner-gallery images for prior posts that have no native article cover.
     prior=list(Post.objects.filter(slug__in=older))
+    # The old public gallery is template-backed, not necessarily twenty GalleryItem rows.
+    # Preserve all old DB rows and render the already-public original images as fallback.
+    fallback={p.slug:gallery[j%len(gallery)] for j,p in enumerate(sorted(prior,key=lambda v:v.slug)) if not p.cover}
     changes={}
-    for j,p in enumerate(sorted(prior,key=lambda v:v.slug)):
-        if not p.cover:
-            target=gallery[j%len(gallery)].name
-            changes[p.slug]={"before":"","after":target}
+    proposed={page:(legacy_photo_fallback(patch(page,text,rows,media_url),fallback) if page=="detail" else patch(page,text,rows,media_url)) for page,text in current.items()}
     media_target=media/IMAGE_FOLDER
     if media_target.is_symlink() or media_target.exists():raise ValueError("Dedicated image destination must be new")
     backup.mkdir(parents=True,mode=0o700)
@@ -161,11 +207,6 @@ def stage_install(app,rows,photo_dir,contents,backup):
             if Post.objects.filter(slug__in=[r["slug"] for r in rows]).exists():raise ValueError("Concurrent slug collision")
             for r in rows:
                 Post.objects.create(title=r["title"],slug=r["slug"],excerpt=r["excerpt"],content=r["content"],cover=expected_path(r["slug"]),published=True)
-            for old in prior:
-                if old.slug in changes:
-                    if old.cover:raise ValueError("Existing photo changed concurrently")
-                    old.cover=changes[old.slug]["after"]
-                    old.save(update_fields=["cover"])
             for page,filename in TEMPLATES.items():
                 path=app/"templates/personal_site/core"/filename
                 if proposed[page]==current[page]:continue
@@ -186,7 +227,7 @@ def stage_install(app,rows,photo_dir,contents,backup):
         raise
     if (app/"tmp").is_dir():(app/"tmp/restart.txt").touch()
     print("VANCOUVER_NEW_TEN_NATIVE_ARTICLES_INSTALLED=yes",flush=True)
-    print("VANCOUVER_OLD_TWENTYTHREE_POSTS_COVERS_REPAIRED="+str(len(changes)),flush=True)
+    print("VANCOUVER_LEGACY_POST_IMAGES_INSERTED_IN_DETAIL="+str(len(fallback)),flush=True)
     print("VANCOUVER_TEN_LOCAL_JPEG_FILES_SAVED=yes",flush=True)
     print("VANCOUVER_BACKUP="+str(backup),flush=True)
 

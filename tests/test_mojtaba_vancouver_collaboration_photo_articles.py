@@ -81,6 +81,15 @@ class TestVancouverCollaborationImages(unittest.TestCase):
             p.write_text(json.dumps(a))
             with self.assertRaises(ValueError):m.load_bundle([p,q])
 
+    def test_existing_gallery_image_fallback_avoids_legacy_db_mutations(self):
+        original='{% block content %}<h1>{{ item.title }}</h1>{% endblock %}'
+        mapping={'prior-personal-article-test':'https://mojplaywin.com/mojtaba.roozegar/media/owner_gallery_20261015_b/example.jpg'}
+        patched=m.legacy_photo_fallback(original,mapping)
+        self.assertIn('mpw-vancouver-older-article-photo-20261016',patched)
+        self.assertIn('owner_gallery_20261015_b/',patched)
+        self.assertIn('not item.cover',patched)
+        self.assertEqual(m.legacy_photo_fallback(original,{}),original)
+
     def test_strict_scope_and_media_name(self):
         self.assertEqual(set(m.TEMPLATES),{"home","posts","detail"})
         for row in self.rows:
