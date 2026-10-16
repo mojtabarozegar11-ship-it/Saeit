@@ -180,6 +180,31 @@ jobs:
           if not seen:
               print("SERVER_LOG no matching known log files")
           PY
+      - name: Inspect live Django root resolver
+        if: contains(github.event.head_commit.message, 'MOJPLAYWIN_DIAG_20261016')
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-main-ssh"
+          ssh -F "$d/config" saeit-cpanel /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - <<'PY'
+          import runpy
+          from pathlib import Path
+          runpy.run_path("/home/zomorod2/mojplaywin.com/passenger_wsgi.py")
+          from django.conf import settings
+          from django.urls import get_resolver, resolve
+          route = resolve("/")
+          print(f"LIVE_ROOT_URLCONF {settings.ROOT_URLCONF}")
+          print(f"LIVE_ROOT_VIEW {route.func.__module__}.{route.func.__name__}")
+          for pattern in get_resolver().url_patterns:
+              if str(pattern.pattern) in ("", "^$"):
+                  callback = pattern.callback
+                  print(f"LIVE_EMPTY_ROUTE {callback.__module__}.{callback.__name__}")
+          path = Path("/home/zomorod2/Saeit-staging/config/urls.py")
+          if path.is_file() and not path.is_symlink():
+              for number, line in enumerate(path.read_text(encoding="utf-8", errors="replace").splitlines(), 1):
+                  if 'path("",' in line or "brand_views" in line or "urlpatterns" in line:
+                      print(f"LIVE_URLS_LINE {number}: {line[:240]}")
+          PY
       - name: Package application changes with merge baselines
         if: ${{ !contains(github.event.head_commit.message, 'MOJPLAYWIN_ROLLBACK_38827723099') && !contains(github.event.head_commit.message, 'MOJPLAYWIN_DIAG_20261016') }}
         shell: bash
