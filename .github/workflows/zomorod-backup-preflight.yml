@@ -83,8 +83,10 @@ jobs:
           done
           df -Pk "$HOME" | tail -n 1 | awk '{print "DISK_TOTAL_KB="$2; print "DISK_USED_KB="$3; print "DISK_FREE_KB="$4}'
           if command -v quota >/dev/null 2>&1; then quota -s 2>/dev/null || echo "ACCOUNT_QUOTA=unavailable"; else echo "ACCOUNT_QUOTA=command_unavailable"; fi
-          if command -v cpapi2 >/dev/null 2>&1; then
-            cpapi2 --user=zomorod2 DiskUsage fetchdiskusagewithextras 2>/dev/null | python3 -c 'import sys,json
+          cpapi2_bin="$(command -v cpapi2 2>/dev/null || true)"
+          if test -z "$cpapi2_bin" && test -x /usr/local/cpanel/bin/cpapi2; then cpapi2_bin=/usr/local/cpanel/bin/cpapi2; fi
+          if test -n "$cpapi2_bin"; then
+            "$cpapi2_bin" --user=zomorod2 DiskUsage fetchdiskusagewithextras 2>/dev/null | python3 -c 'import sys,json
           try:
               j=json.load(sys.stdin)
               rows=j.get("cpanelresult",{}).get("data",[])
