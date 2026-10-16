@@ -66,6 +66,18 @@ jobs:
           print("AGRICULTURE_PAGES=15")
           PY
           python -m compileall -q passenger_wsgi.py config core command_center
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+          admin=Path('core/admin.py').read_text(encoding='utf-8')
+          if re.search(r'(?m)^from \.chat_runtime import MasterAgentChat', admin):
+              raise SystemExit('ADMIN_OPTIONAL_OPENAI_IMPORT=not_lazy')
+          if not re.search(r'def chat_console\(self, request\):[\s\S]{0,500}from \.chat_runtime import MasterAgentChat', admin):
+              raise SystemExit('ADMIN_OPTIONAL_OPENAI_IMPORT=not_verified')
+          if 'os.execl(' in Path('passenger_wsgi.py').read_text(encoding='utf-8'):
+              raise SystemExit('PASSENGER_REEXEC=not_allowed')
+          print('PASSENGER_STARTUP_IMPORTS=verified')
+          PY
       - name: Prepare pinned VPS relay and cPanel SSH
         env:
           VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
@@ -410,6 +422,21 @@ jobs:
           mkdir -p "$(dirname "$page_target")"
           cp -p "$page_source" "$page_target.new"
           mv -f "$page_target.new" "$page_target"
+          python3 - "$htaccess" "$sha" <<'PY'
+          import os,sys
+          from pathlib import Path
+          path=Path(sys.argv[1])
+          current=path.read_text(encoding="utf-8")
+          old='PassengerPython "/opt/alt/python310/bin/lswsgi"'
+          new='PassengerPython "/home/zomorod2/virtualenv/Saeit/3.10/bin/python"'
+          if current.count(old)!=1:
+              raise SystemExit("PASSENGER_PYTHON_SWITCH=unexpected_original")
+          temporary=path.with_name(path.name+"."+sys.argv[2]+".tmp")
+          temporary.write_text(current.replace(old,new),encoding="utf-8")
+          os.chmod(temporary,path.stat().st_mode & 0o777)
+          os.replace(temporary,path)
+          print("PASSENGER_PYTHON_SELECTED=project_virtualenv")
+          PY
           if test -f "$app/stderr.log"; then
             stat -c %s "$app/stderr.log" > "$backup/passenger-log-offset.txt"
           else
@@ -418,8 +445,8 @@ jobs:
           echo "PASSENGER_STARTUP_ENTRYPOINT_BEGIN"
           sed -n '1,20p' "$app/passenger_wsgi.py"
           echo "PASSENGER_STARTUP_ENTRYPOINT_END"
-          grep -Fq 'PassengerPython "/opt/alt/python310/bin/lswsgi"' "$htaccess"
-          echo "PASSENGER_PYTHON_PRE_RESTART=lswsgi"
+          grep -Fq 'PassengerPython "/home/zomorod2/virtualenv/Saeit/3.10/bin/python"' "$htaccess"
+          echo "PASSENGER_PYTHON_PRE_RESTART=project_virtualenv"
           restart_result="$(mktemp "$HOME/.zomorod-passenger-restart-$sha.XXXXXX.json")"
           if ! "$selector" restart --json --interpreter python --user "$USER" --app-root Saeit > "$restart_result"; then
             rm -f -- "$restart_result"
@@ -435,10 +462,10 @@ jobs:
               raise SystemExit(1)
           PY
           rm -f -- "$restart_result"
-          grep -Fq 'PassengerPython "/opt/alt/python310/bin/lswsgi"' "$htaccess"
+          grep -Fq 'PassengerPython "/home/zomorod2/virtualenv/Saeit/3.10/bin/python"' "$htaccess"
           mkdir -p "$app/tmp"
           touch "$app/tmp/restart.txt"
-          echo "PASSENGER_PYTHON_FINAL=verified_cpanel_entrypoint"
+          echo "PASSENGER_PYTHON_FINAL=verified_project_virtualenv"
           echo "PASSENGER_TOUCH_RESTART=done"
           cd "$app"
           if ! "$passenger_python" - <<'PY'
