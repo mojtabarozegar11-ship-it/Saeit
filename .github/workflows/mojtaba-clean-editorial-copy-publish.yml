@@ -1,0 +1,216 @@
+name: Clean personal editorial wording and primary profile caption
+on:
+  issues:
+    types: [opened]
+permissions:
+  contents: read
+concurrency:
+  group: personal-v17-editorial-description-cleanup-20261016
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event.issue.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.issue.title == 'Ops: Replace Mojtaba profile disclaimer with professional editorial copy 2026-10-16'
+    runs-on: ubuntu-latest
+    timeout-minutes: 22
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate professional profile copy and protect all older educational content
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mojtaba_clean_editorial_professional_copy.py
+          python3 -m unittest discover -s tests -p 'test_mojtaba_clean_editorial_professional_copy.py' -v
+      - name: Prepare pinned SSH relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/photo-relay"
+          mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          python3 - "$d/host.key" <<'PY'
+          import pathlib,sys
+          p=pathlib.Path(sys.argv[1]);t=p.read_text().replace('\r\n','\n').strip()
+          p.write_text(t.replace('\\n','\n')+'\n')
+          PY
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host saeit-host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+            ConnectionAttempts 1
+          EOF
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          echo "SSH_CONFIG=$d/config" >> "$GITHUB_ENV"
+      - name: Transfer bounded personal site editorial manifests to original authorized host
+        shell: bash
+        run: |
+          set -euo pipefail
+          stage="/home/zomorod2/.mpw-editorial-clean-$GITHUB_RUN_ID"
+          tar -czf "$RUNNER_TEMP/editorial-clean.tgz" \
+            scripts/mojtaba_clean_editorial_professional_copy.py \
+            scripts/mojtaba_twenty_photo_essays_safe_publish.py \
+            content/mojtaba_twenty_photo_essays_*.json \
+            content/mojtaba_seven_full_independent_journal_20261016.json \
+            content/mojtaba_six_advanced_journal_articles_20261016.json \
+            content/mojtaba_ten_advanced_website_engineering_20261016.json \
+            content/mojtaba_vancouver_collab_part_*.json \
+            content/mojtaba_vancouver_enterprise_web_part_*.json \
+            content/mojtaba_vancouver_enterprise_web_series2_part_*.json
+          timeout 35s ssh -F "$SSH_CONFIG" saeit-host "test ! -e '$stage' && install -d -m 700 '$stage'"
+          timeout 120s scp -F "$SSH_CONFIG" "$RUNNER_TEMP/editorial-clean.tgz" "saeit-host:$stage/source.tgz"
+      - name: Guarded positive editorial copy update and public route verification
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 920s ssh -F "$SSH_CONFIG" saeit-host "bash -s -- '$GITHUB_RUN_ID'" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          id="$1"
+          app="/home/zomorod2/mojtaba_personal/mojtaba_roozegar_personal_v17"
+          stage="/home/zomorod2/.mpw-editorial-clean-$id"
+          py="$app/../.venv_personal_test/bin/python"
+          script="$stage/scripts/mojtaba_clean_editorial_professional_copy.py"
+          backup="$HOME/.backups/mojtaba-editorial-description/$id"
+          installed=0
+          verified=0
+          restore() {
+            code=$?
+            trap - EXIT
+            if test "$installed" = 1 && test "$verified" = 0 && test -f "$backup/manifest.json"; then
+              "$py" "$script" rollback --app "$app" --backup "$backup" && echo "EDITORIAL_COPY_AUTO_ROLLBACK=success" || echo "EDITORIAL_COPY_AUTO_ROLLBACK=manual_review_required"
+            fi
+            exit "$code"
+          }
+          trap restore EXIT
+          test ! -L "$app" && test -f "$app/manage.py" && test -x "$py"
+          tar -tzf "$stage/source.tgz" > "$stage/archive-list.txt"
+          grep -Fxq 'scripts/mojtaba_clean_editorial_professional_copy.py' "$stage/archive-list.txt"
+          cd "$stage"
+          tar -xzf source.tgz --no-same-owner
+          "$py" "$script" check --app "$app" --content "$stage/content"
+          cd "$app"
+          "$py" "$script" install --app "$app" --content "$stage/content" --backup "$backup"
+          installed=1
+          "$py" manage.py check --deploy
+          test ! -d "$app/tmp" || touch "$app/tmp/restart.txt"
+          "$py" - "$stage" <<'PY_CHECK'
+          import importlib.util,os,sys,time
+          from html import unescape
+          from html.parser import HTMLParser
+          from pathlib import Path
+          from urllib.request import Request,urlopen
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          import django;django.setup()
+          from core.models import Post
+          stage=Path(sys.argv[1])
+          spec=importlib.util.spec_from_file_location("clean",(stage/"scripts/mojtaba_clean_editorial_professional_copy.py"))
+          mod=importlib.util.module_from_spec(spec);spec.loader.exec_module(mod)
+          originals=mod.posts_from_manifests(stage/"content")
+          assert Post.objects.filter(slug__in=originals,published=True).count()==93
+          print("EDITORIAL_COPY_ALL_93_POSTS_STILL_PUBLISHED=yes",flush=True)
+          base="https://mojplaywin.com/mojtaba.roozegar/"
+          class Pictures(HTMLParser):
+              def __init__(self):
+                  super().__init__();self.src=[];self.gallery_a=[];self.gallery_b=[]
+              def handle_starttag(self,tag,attrs):
+                  if tag!="img":return
+                  img=dict(attrs).get("src","")
+                  if img:self.src.append(img)
+                  if "owner_gallery_20261015_b/" in img:self.gallery_b.append(img)
+                  elif "owner_gallery_20261015/" in img:self.gallery_a.append(img)
+          def check(route,fn):
+              last=""
+              for n in range(6):
+                  try:
+                      with urlopen(Request(base+route+"?clean_proof="+str(time.time_ns()),headers={"User-Agent":"PersonalCleanEditorialProof/1"}),timeout=25) as response:
+                          if response.status!=200:raise ValueError("HTTP "+str(response.status))
+                          text=response.read(5000000).decode("utf-8","replace")
+                      fn(text);return
+                  except Exception as e:
+                      last=str(e);time.sleep(2)
+              raise ValueError("Failed public URL "+route+" "+last)
+          for route in ("","about/"):
+              def profile_check(doc):
+                  if "My work combines research, applied economics and the design of intelligent" not in unescape(doc):
+                      raise ValueError("Professional profile description missing")
+                  if "It is not presented as" in unescape(doc) or "evidence of a Vancouver office" in unescape(doc):
+                      raise ValueError("Obsolete owner photograph disclaimer still displayed")
+                  if "Official owner-selected profile photograph" in doc:
+                      raise ValueError("Old caption still visible")
+                  if 'id="mpw-primary-personal-profile-20261016"' not in doc:
+                      raise ValueError("Primary owner's image missing")
+              check(route,profile_check)
+              print("EDITORIAL_COPY_LIVE_PROFILE_INFO="+(route or "home"),flush=True)
+          for route in ("","blog/"):
+              def index_check(doc):
+                  for mark in ('id="mpw-fifty-editorials-20261015"','id="mpw-mojtaba-twenty-image-essays-20261016"','id="mpw-photoessay-reading-guides-20261016"'):
+                      if mark not in doc:raise ValueError("Old editorial section missing "+mark)
+                  p=Pictures();p.feed(doc)
+                  if sum("mojtaba_personal_image_essays_20261016/" in x for x in p.src)<20:
+                      raise ValueError("Twenty original portraits/articles absent")
+              check(route,index_check)
+              print("EDITORIAL_COPY_LIVE_INDEX="+(route or "home"),flush=True)
+          for slug in originals:
+              def article_check(doc):
+                  p=Pictures();p.feed(doc)
+                  if not p.src:raise ValueError("Article image missing")
+                  if "The image is not proof of a Vancouver office" in unescape(doc):
+                      raise ValueError("Old article figure disclaimer remains")
+              check("blog/"+slug+"/",article_check)
+          print("EDITORIAL_COPY_ALL_93_ARTICLE_URLS_INTACT=yes",flush=True)
+          def gallery_ok(doc):
+              p=Pictures();p.feed(doc)
+              if len(p.gallery_a)!=10 or len(p.gallery_b)!=10:
+                  raise ValueError("Prior twenty owner gallery photos changed")
+          check("gallery/",gallery_ok)
+          print("EDITORIAL_COPY_20_OWNER_GALLERY_PHOTOS_SAFE=yes",flush=True)
+          def contact_ok(doc):
+              if 'name="csrfmiddlewaretoken"' not in doc:raise ValueError("Existing contact form changed")
+          check("contact/",contact_ok)
+          print("EDITORIAL_COPY_EXISTING_CONTACT_FORM_SAFE=yes",flush=True)
+          PY_CHECK
+          for domain in "https://mojplaywin.com/" "https://zomorodmelal.ir/"; do
+            code="$(curl -sSL -o /dev/null -w '%{http_code}' --max-time 24 "$domain")"
+            test "$code" = 200
+            echo "EDITORIAL_COPY_PARENT_SITE_HEALTHY=$domain HTTP_200"
+          done
+          verified=1
+          trap - EXIT
+          echo "EDITORIAL_COPY_LIVE_PUBLICATION_SUCCESS=yes"
+          echo "EDITORIAL_COPY_BACKUP=$backup"
+          rm -rf "$stage"
+          REMOTE
+      - name: Remove temporary SSH credentials
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/photo-relay"

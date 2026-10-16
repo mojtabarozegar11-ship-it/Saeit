@@ -1,0 +1,26 @@
+name: Mojtaba clean professional editorial copy tests
+on:
+  push:
+    branches: ['fix/mojtaba-editorial-professional-copy-20261016']
+    paths:
+      - 'scripts/mojtaba_clean_editorial_professional_copy.py'
+      - 'tests/test_mojtaba_clean_editorial_professional_copy.py'
+      - '.github/workflows/mojtaba-clean-editorial-copy-*.yml'
+  pull_request:
+    paths:
+      - 'scripts/mojtaba_clean_editorial_professional_copy.py'
+      - 'tests/test_mojtaba_clean_editorial_professional_copy.py'
+      - '.github/workflows/mojtaba-clean-editorial-copy-*.yml'
+permissions:
+  contents: read
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate precise profile rewrite and retention of 93 original articles
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mojtaba_clean_editorial_professional_copy.py
+          python3 -m unittest discover -s tests -p test_mojtaba_clean_editorial_professional_copy.py -v
