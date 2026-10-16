@@ -4,7 +4,6 @@ from django.http import HttpResponseRedirect
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
 
-from .chat_runtime import MasterAgentChat
 from .models import (
     Agent,
     AgentCapability,
@@ -48,6 +47,9 @@ class ChatSessionAdmin(ModelAdmin):
         return custom + urls
 
     def chat_console(self, request):
+        # Keep the optional OpenAI client out of Django admin autodiscovery/startup.
+        from .chat_runtime import MasterAgentChat
+
         session_id = request.GET.get("session")
         session = None
         if session_id:
