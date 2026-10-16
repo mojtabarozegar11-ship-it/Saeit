@@ -122,6 +122,12 @@ def plan(root: Path):
                 reported += 1
             if reported >= 30:
                 break
+        contact_template = root / "templates/personal_site/core/contact.html"
+        if contact_template.is_file() and not contact_template.is_symlink():
+            html = contact_template.read_text(encoding="utf-8")
+            for no, line in enumerate(html.splitlines(), 1):
+                if "label" in line.lower() or ("form." in line and "label" in line):
+                    print("READ_ONLY_CONTACT_TEMPLATE_LABEL_LINE=" + str(no) + ":" + line.strip()[:260], flush=True)
         print("READ_ONLY_PERSONAL_LABEL_SOURCE_DIAGNOSTIC_END", flush=True)
         raise ValueError("Expected exactly one contact label source, found " + str(len(candidates)))
     return candidates[0]
