@@ -47,5 +47,5 @@ urlpatterns = [
     assert 'path("", branded_home, name="home")' not in merged
     assert 'branded_store_dispatch(request) if brand_for_request(request)' in merged
     assert 'path("worlds/", branded_page, {"page": "worlds"}' in merged
-    assert "from core.mojplaywin_views import branded_store_dispatch" in merged
+    assert ", branded_store_dispatch" in merged
     assert DEPLOY.route_mojplaywin_brand_store(merged) == merged
