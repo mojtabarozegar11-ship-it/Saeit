@@ -206,6 +206,27 @@ jobs:
           else:
               print("SELECTOR_APP_RUNTIME=verified")
           PY
+          # Run the configured Passenger interpreter directly, with bytecode writes disabled.
+          # This distinguishes a WSGI import failure from a Passenger-only startup failure.
+          wsgi_python="$HOME/virtualenv/Saeit/3.10/bin/python"
+          if test -x "$wsgi_python"; then
+            wsgi_raw="$(mktemp "$HOME/.zomorod-wsgi-import.XXXXXX.log")"
+            trap 'rm -f -- "$raw" "$check_raw" "$migrate_raw" "$wsgi_raw"' EXIT
+            if (cd "$HOME/Saeit" && PYTHONDONTWRITEBYTECODE=1 "$wsgi_python" -c 'import passenger_wsgi; print("WSGI_IMPORT=success")') > "$wsgi_raw" 2>&1; then
+              echo "WSGI_IMPORT=success"
+            else
+              echo "WSGI_IMPORT=failed"
+              python3 - "$wsgi_raw" <<'PY'
+          import re,sys
+          for line in open(sys.argv[1],encoding="utf-8",errors="replace"):
+              line=re.sub(r"(?i)(password|secret|token|api[_-]?key|private[_-]?key)(\\s*[:=]\\s*)[^\\s,;]+",r"\\1=[redacted]",line.rstrip())
+              line=re.sub(r"(?i)(://[^/\\s:@]+:)[^/@\\s]+@",r"\\1[redacted]@",line)
+              print("WSGI_IMPORT_DIAGNOSTIC="+line[:240])
+          PY
+            fi
+          else
+            echo "WSGI_IMPORT=interpreter_not_found"
+          fi
           python3 - "$raw" <<'PY'
           from pathlib import Path
           import json, os, re, sys, time
