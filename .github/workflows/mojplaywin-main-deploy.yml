@@ -153,7 +153,9 @@ jobs:
                   continue
               print(f"ROUTING_FILE {filename}")
               for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
-                  if any(word in line.lower() for word in ("passenger", "rewrite", "sys.path", "django_settings_module", "application", "sait-staging", "saeit-staging")) and not any(secret in line.lower() for secret in ("secret", "password", "api_key")):
+                  if filename.endswith("passenger_wsgi.py") and not any(secret in line.lower() for secret in ("secret", "password", "api_key")):
+                      print(line[:500])
+                  elif any(word in line.lower() for word in ("passenger", "rewrite", "sys.path", "django_settings_module", "application", "app =", "sait-staging", "saeit-staging")) and not any(secret in line.lower() for secret in ("secret", "password", "api_key")):
                       print(line[:500])
           import re
           roots = [Path("/home/zomorod2/logs"), Path("/home/zomorod2/mojplaywin.com"), Path("/home/zomorod2/Saeit-staging")]
