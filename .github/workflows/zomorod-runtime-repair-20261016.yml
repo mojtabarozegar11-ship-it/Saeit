@@ -247,7 +247,6 @@ jobs:
           echo "RUNTIME_REPAIR_LIVE_SMOKE=passed"
           REMOTE
       - name: Remove temporary SSH material
-      - name: Remove temporary SSH material
         if: always()
         shell: bash
         run: rm -rf -- "$RUNNER_TEMP/zomorod-runtime"
