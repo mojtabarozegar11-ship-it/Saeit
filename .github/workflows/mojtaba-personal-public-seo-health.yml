@@ -1,0 +1,48 @@
+name: Mojtaba personal SEO health (read-only)
+on:
+  pull_request:
+    paths:
+      - .github/workflows/mojtaba-personal-public-seo-health.yml
+      - scripts/mojtaba_personal_public_seo_health_audit.py
+      - tests/test_mojtaba_personal_public_seo_health.py
+      - content/mojtaba_personal_public_identity_faq_20261016.json
+  issues:
+    types: [opened]
+permissions:
+  contents: read
+concurrency:
+  group: mojtaba-personal-seo-readonly
+  cancel-in-progress: false
+jobs:
+  quality:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      (github.event_name == 'pull_request' ||
+       (github.event_name == 'issues' &&
+        github.event.issue.user.login == 'mojtabarozegar11-ship-it' &&
+        github.event.issue.title == 'Ops: Mojtaba personal public SEO health check 2026-10-16'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Syntax, privacy scope and regression tests
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mojtaba_personal_public_seo_health_audit.py
+          python3 -m unittest discover -s tests -p 'test_mojtaba_personal_public_seo_health.py' -v
+  public-audit:
+    needs: quality
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      (github.event_name == 'pull_request' ||
+       (github.event_name == 'issues' &&
+        github.event.issue.user.login == 'mojtabarozegar11-ship-it' &&
+        github.event.issue.title == 'Ops: Mojtaba personal public SEO health check 2026-10-16'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Measure public pages without modifying the site
+        run: |
+          set -euo pipefail
+          python3 scripts/mojtaba_personal_public_seo_health_audit.py --attempts 3 --timeout 12
