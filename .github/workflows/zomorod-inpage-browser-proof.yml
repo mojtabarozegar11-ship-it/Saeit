@@ -19,10 +19,12 @@ jobs:
           browser="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
           if test -z "$browser"; then echo "CHROMIUM_NOT_INSTALLED"; exit 1; fi
           echo "BROWSER=$browser"
-          for route in industry research agriculture; do
-            file="$RUNNER_TEMP/zomorod-$route-dom.html"
-            debug="$RUNNER_TEMP/zomorod-$route-browser.log"
-            timeout 55s "$browser" --headless --no-sandbox --disable-gpu --disable-dev-shm-usage --disable-background-networking --virtual-time-budget=13000 --user-data-dir="$RUNNER_TEMP/browser-$route" --dump-dom "https://zomorodmelal.ir/$route/?editorial_probe=$GITHUB_SHA" > "$file" 2> "$debug" || true
+          failures=0
+          for route in industry research knowledge market economy studio agents company blog weather store auctions newsletter agriculture services agriculture/livestock agriculture/horticulture agriculture/greenhouse agriculture/poultry agriculture/aquaculture agriculture/inputs agriculture/seeds agriculture/fertilizers agriculture/pesticides agriculture/offices agriculture/water-soil agriculture/machinery agriculture/market; do
+            id="${route//\//_}"
+            file="$RUNNER_TEMP/zomorod-$id-dom.html"
+            debug="$RUNNER_TEMP/zomorod-$id-browser.log"
+            timeout 55s "$browser" --headless --no-sandbox --disable-gpu --disable-dev-shm-usage --disable-background-networking --virtual-time-budget=13000 --user-data-dir="$RUNNER_TEMP/browser-$id" --dump-dom "https://zomorodmelal.ir/$route/?editorial_probe=$GITHUB_SHA" > "$file" 2> "$debug" || true
             bytes="$(wc -c < "$file")"
             echo "PAGE=$route RENDERED_HTML_BYTES=$bytes"
             if grep -Fq 'data-zomorod-inpage-editorial="20261016"' "$file"; then
@@ -31,7 +33,9 @@ jobs:
               echo "PAGE=$route EDITORIAL_INSERTED=no"
               grep -E 'Content Security Policy|Refused to load|ERR_|Uncaught' "$debug" | head -10 || true
               grep -o 'modern.js[^"]*' "$file" | head -2 || true
-              exit 1
+              failures=$((failures+1))
             fi
           done
-          echo "BROWSER_RENDERED_CONTENT_PROOF=all_3_passed"
+          echo "BROWSER_EDITORIAL_MISSING_ROUTES=$failures"
+          test "$failures" -eq 0
+          echo "BROWSER_RENDERED_CONTENT_PROOF=all_28_passed"
