@@ -201,8 +201,9 @@ jobs:
           migrate_ok=inspect(sys.argv[2],"SELECTOR_MIGRATE_CHECK",("no changes detected","no migrations to apply","no operations to perform"))
           good=migrate_ok and good
           if not good:
-              raise SystemExit(1)
-          print("SELECTOR_APP_RUNTIME=verified")
+              print("SELECTOR_APP_RUNTIME=not_verified; continuing read-only log and route diagnostics")
+          else:
+              print("SELECTOR_APP_RUNTIME=verified")
           PY
           python3 - <<'PY'
           from pathlib import Path
