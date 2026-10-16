@@ -273,7 +273,7 @@ jobs:
         run: |
           set -euo pipefail
           for domain in zomorodmelal.ir staging.zomorodmelal.ir; do
-            for route in /agriculture/ /agriculture/genetics/ /agents/ /api/health/; do
+            for route in / /about/ /company/ /agents/ /agriculture/ /agriculture/genetics/ /api/health/ /api/bridge/health/; do
               code="$(curl -sS --max-time 15 -o /dev/null -w '%{http_code}' "https://$domain$route" || true)"
               echo "PUBLIC_HEALTH $domain$route $code"
             done
