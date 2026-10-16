@@ -1,0 +1,115 @@
+name: Zomorod read-only backup preflight
+on:
+  push:
+    branches:
+      - codex/zomorod-backup-preflight
+    paths:
+      - .github/workflows/zomorod-backup-preflight.yml
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare pinned VPS to cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: \${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: \${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-backup-preflight"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY_READY=yes"
+      - name: Read-only storage, app, and database preflight
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-backup-preflight"
+          ssh -F "$d/config" saeit-cpanel 'bash -s' <<'REMOTE'
+          set -eu
+          app="$HOME/Saeit"
+          web="$HOME/public_html"
+          printf 'CPANEL_HOME=%s\n' "$HOME"
+          for p in "$app" "$web" "$HOME/Saeit-staging"; do
+            if test -d "$p"; then
+              printf 'PATH_PRESENT=%s\n' "$p"
+              du -sb "$p" 2>/dev/null | awk '{print "TREE_BYTES="$1}' || echo "TREE_BYTES=unavailable"
+              find "$p" -xdev -type f 2>/dev/null | wc -l | awk '{print "TREE_FILES="$1}'
+              find "$p" -xdev -type l 2>/dev/null | wc -l | awk '{print "TREE_SYMLINKS="$1}'
+            else
+              printf 'PATH_PRESENT=no:%s\n' "$p"
+            fi
+          done
+          df -Pk "$HOME" | tail -n 1 | awk '{print "DISK_TOTAL_KB="$2; print "DISK_USED_KB="$3; print "DISK_FREE_KB="$4}'
+          if command -v quota >/dev/null 2>&1; then quota -s 2>/dev/null || echo "ACCOUNT_QUOTA=unavailable"; else echo "ACCOUNT_QUOTA=command_unavailable"; fi
+          if test -f "$app/.env"; then
+            stat -c 'ENV_FILE_BYTES=%s ENV_FILE_MODE=%a' "$app/.env"
+            python3 - "$app/.env" <<'PY'
+          import sys, urllib.parse
+          found = None
+          for line in open(sys.argv[1], encoding="utf-8", errors="replace"):
+              line = line.strip()
+              if not line or line.startswith("#") or "=" not in line: continue
+              key, value = line.split("=", 1)
+              if key.strip() == "DATABASE_URL":
+                  value = value.strip().strip("'\"")
+                  found = urllib.parse.urlsplit(value).scheme.lower() or "unparsed"
+                  break
+          print("DATABASE_URL_SCHEME=" + (found or "not_in_dotenv"))
+          PY
+          else
+            echo "ENV_FILE_PRESENT=no"
+          fi
+          if test -d "$HOME/.backups"; then
+            find "$HOME/.backups" -maxdepth 3 -type d -iname '*zomorod*' -print
+            du -sb "$HOME/.backups" 2>/dev/null | awk '{print "EXISTING_BACKUPS_BYTES="$1}' || true
+          else
+            echo "BACKUP_ROOT_PRESENT=no"
+          fi
+          if test -f "$app/.git/HEAD"; then git -C "$app" rev-parse HEAD 2>/dev/null | sed 's/^/DEPLOYED_GIT_HEAD=/' || echo "DEPLOYED_GIT_HEAD=unavailable"; else echo "DEPLOYED_GIT_HEAD=not_a_git_checkout"; fi
+          REMOTE
+      - name: Remove temporary SSH material
+        if: always()
+        shell: bash
+        run: rm -rf -- "$RUNNER_TEMP/zomorod-backup-preflight"
