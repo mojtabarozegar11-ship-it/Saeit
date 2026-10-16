@@ -8,7 +8,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 AGRICULTURE_SLUGS = frozenset({
     "livestock", "horticulture", "greenhouse", "poultry", "aquaculture",
     "inputs", "seeds", "fertilizers", "pesticides", "offices",
-    "water-soil", "machinery", "market",
+    "water-soil", "machinery", "market", "genetics",
 })
 
 
