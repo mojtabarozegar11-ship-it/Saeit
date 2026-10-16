@@ -132,6 +132,29 @@ jobs:
           else
             echo "RESOURCE_USAGE=command_unavailable"
           fi
+          uapi --output=json PassengerApps list_applications 2>/dev/null | python3 -c 'import sys,json,urllib.parse
+          def walk(v):
+              if isinstance(v,dict):
+                  if v.get("domain") in ("zomorodmelal.ir","www.zomorodmelal.ir"):
+                      for k,z in v.items():
+                          if "env" in str(k).lower():
+                              if isinstance(z,dict):
+                                  for ek,ev in z.items():
+                                      print("PASSENGER_ENV_KEY="+str(ek))
+                                      if str(ek).upper()=="DATABASE_URL":
+                                          print("PASSENGER_DATABASE_URL_SCHEME="+(urllib.parse.urlsplit(str(ev)).scheme or "unparsed"))
+                              elif isinstance(z,list):
+                                  for item in z:
+                                      if isinstance(item,dict):
+                                          ek=item.get("name") or item.get("key")
+                                          if ek: print("PASSENGER_ENV_KEY="+str(ek))
+                                          if str(ek).upper()=="DATABASE_URL":
+                                              ev=item.get("value","")
+                                              print("PASSENGER_DATABASE_URL_SCHEME="+(urllib.parse.urlsplit(str(ev)).scheme or "unparsed"))
+                  for z in v.values(): walk(z)
+              elif isinstance(v,list):
+                  for z in v: walk(z)
+          walk(json.load(sys.stdin))' || echo "PASSENGER_ENV_INSPECTION=unavailable"
           python3 - "$app/config/settings.py" <<'PY'
           import pathlib,re,sys
           p=pathlib.Path(sys.argv[1])
