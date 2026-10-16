@@ -73,8 +73,26 @@ jobs:
           htaccess="$HOME/public_html/.htaccess"
           test -f "$app/manage.py" && test -f "$htaccess"
           python_path="$(awk '$1 == "PassengerPython" { gsub(/"/, "", $2); print $2; exit }' "$htaccess")"
-          awk '/^[[:space:]]*Passenger(AppRoot|BaseURI|Python|StartupFile|ErrorLog|Enabled)[[:space:]]/ { print "PASSENGER_DIRECTIVE=" $0 }' "$htaccess"
+          awk '/^[[:space:]]*(Passenger(AppRoot|BaseURI|Python|StartupFile|ErrorLog|Enabled)|RewriteEngine|RewriteCond|RewriteRule|DirectoryIndex)[[:space:]]/ { print "ROOT_WEB_DIRECTIVE=" $0 }' "$htaccess"
           printf 'CONFIGURED_PASSENGER_PYTHON=%s\n' "${python_path:-missing}"
+          for app in Saeit Saeit-staging; do
+            app_dir="$HOME/$app"
+            test -d "$app_dir" || continue
+            for rel in passenger_wsgi.py config/wsgi.py; do
+              file="$app_dir/$rel"
+              if test -f "$file"; then
+                echo "WSGI_SOURCE_BEGIN=$app/$rel"
+                sed -n '1,30p' "$file"
+                echo "WSGI_SOURCE_END=$app/$rel"
+              fi
+            done
+          done
+          while IFS= read -r staging_ht; do
+            test -n "$staging_ht" || continue
+            echo "STAGING_WEB_CONFIG_BEGIN=$staging_ht"
+            awk '/^[[:space:]]*(Passenger(AppRoot|BaseURI|Python|StartupFile|ErrorLog|Enabled)|RewriteEngine|RewriteCond|RewriteRule|DirectoryIndex)[[:space:]]/ { print "STAGING_WEB_DIRECTIVE=" $0 }' "$staging_ht"
+            echo "STAGING_WEB_CONFIG_END=$staging_ht"
+          done < <(find "$HOME" -maxdepth 5 -type f -iname .htaccess -ipath '*staging*' -print 2>/dev/null)
           if test -n "$python_path" && test -e "$python_path"; then
             printf 'PASSENGER_PATH_REAL=%s\n' "$(readlink -f "$python_path")"
             printf 'PASSENGER_PATH_FILE_TYPE=%s\n' "$(file -b "$python_path")"
