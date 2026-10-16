@@ -91,6 +91,7 @@ jobs:
           print("ZOMOROD_ROOT_APP_MAPPING=verified")
           PY
           python_path="$(awk '$1 == "PassengerPython" { gsub(/"/, "", $2); print $2; exit }' "$htaccess")"
+          printf 'PASSENGER_PYTHON_RESOLVED=%s\n' "${python_path:-missing}"
           case "$python_path" in "$HOME"/virtualenv/*) ;; *) echo "PASSENGER_PYTHON_PATH=not_verified" >&2; exit 1 ;; esac
           test -x "$python_path"
           "$python_path" -c 'import django, environ, rest_framework, whitenoise'
@@ -109,6 +110,7 @@ jobs:
           app=/home/zomorod2/Saeit
           htaccess=/home/zomorod2/public_html/.htaccess
           python_path="$(awk '$1 == "PassengerPython" { gsub(/"/, "", $2); print $2; exit }' "$htaccess")"
+          printf 'PASSENGER_PYTHON_RESOLVED_FOR_RUN=%s\n' "${python_path:-missing}"
           cd "$app"
           "$python_path" manage.py company_activity_agent_cycle
           "$python_path" manage.py knowledge_agent_cycle
