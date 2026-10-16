@@ -134,6 +134,66 @@ jobs:
                               print("SITE_DATABASE_CANDIDATE_BACKUP="+str(p.relative_to(home))+" bytes="+str(p.stat().st_size))
           PY
           REMOTE
+      - name: Locate historical main-app DB snapshots by path and metadata only
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          export PYTHONDONTWRITEBYTECODE=1
+          python3 - <<'PY'
+          import os,pathlib,datetime,sqlite3,urllib.parse
+          home=pathlib.Path.home()
+          roots=[
+            home/".backups"/"zomorodmelal-app",
+            home/".backups"/"zomorodmelal-root-homepage",
+            home/"Saeit",
+            home/"Saeit-staging",
+            home/"backups",
+          ]
+          disallowed=("mohammad","ghanadi","amozeshgah","picm","mojplaywin","zahra","roham")
+          names=[]
+          examined=0
+          for root in roots:
+              if not root.is_dir():continue
+              print("SITE_DB_BACKUP_SEARCH_ROOT="+str(root.relative_to(home)))
+              for base,dirs,files in os.walk(root,followlinks=False):
+                  parent=pathlib.Path(base)
+                  depth=len(parent.relative_to(root).parts)
+                  dirs[:]=sorted(d for d in dirs if not any(x in d.lower() for x in disallowed) and not d.startswith(".")) if depth<5 else []
+                  for name in files:
+                      examined+=1
+                      if examined>12000:break
+                      lname=name.lower()
+                      if not (lname.endswith((".sqlite3",".sqlite",".db",".sql",".sql.gz",".sqlite3.gz",".sqlite3.bak")) or (lname.endswith((".zip",".tar",".tar.gz")) and ("backup" in lname or "zomorod" in lname))):
+                          continue
+                      full=parent/name
+                      if full.is_symlink() or any(s in str(full.relative_to(home)).lower() for s in disallowed): continue
+                      try: st=full.stat()
+                      except OSError: continue
+                      names.append((st.st_size,st.st_mtime,full))
+                  if examined>12000:break
+              if examined>12000:break
+          print("SITE_DB_BACKUP_FILES_MATCHED="+str(len(names)))
+          print("SITE_DB_FILES_EXAMINED="+str(examined))
+          for size,mtime,path in sorted(names,reverse=True)[:85]:
+              stamp=datetime.datetime.fromtimestamp(mtime,datetime.timezone.utc).isoformat(timespec="seconds")
+              print("SITE_DB_BACKUP_CANDIDATE path="+str(path.relative_to(home))+" bytes="+str(size)+" modified_utc="+stamp)
+              if size>100 and size<150_000_000 and path.name.endswith((".sqlite3",".sqlite",".db",".sqlite3.bak")):
+                  try:
+                      with path.open("rb") as f: magic=f.read(16)
+                      if magic!=b"SQLite format 3\x00":continue
+                      uri="file:"+urllib.parse.quote(str(path))+"?mode=ro"
+                      conn=sqlite3.connect(uri,uri=True,timeout=1)
+                      try:
+                          tables={row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+                          print("SITE_DB_BACKUP_SCHEMA path="+str(path.relative_to(home))+" tables="+str(len(tables))+" has_agents="+str("core_agent" in tables)+" has_auth="+str("auth_user" in tables)+" has_migrations="+str("django_migrations" in tables))
+                      finally:conn.close()
+                  except Exception as exc:
+                      print("SITE_DB_BACKUP_SCHEMA_READ_FAILED="+type(exc).__name__)
+          PY
+          REMOTE
       - name: Remove runner SSH relay keys
         if: always()
         run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
