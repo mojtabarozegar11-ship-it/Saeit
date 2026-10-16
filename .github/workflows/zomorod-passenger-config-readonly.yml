@@ -116,6 +116,38 @@ jobs:
           echo "FAILED_RELEASE_LOG_FILES_BEGIN"
           find /home/zomorod2/.backups/zomorodmelal-complete/9fcadc9ea749075785829565e57770f5cc173a8b/failed-app-2ed15c52c3f66ef1e50e72f4c2feeaa07dfd0342 -maxdepth 3 -type f -printf '%p %s bytes\n' 2>/dev/null | head -80
           echo "FAILED_RELEASE_LOG_FILES_END"
+          echo "RECENT_PASSENGER_ERRORS_BEGIN"
+          python3 - /home/zomorod2/Saeit /home/zomorod2/.backups/zomorodmelal-complete/9fcadc9ea749075785829565e57770f5cc173a8b/failed-app-057e92ce4bf3373b5f431276e6febbaa3c2a42fe <<'PY'
+          import pathlib,sys
+          for base in map(pathlib.Path,sys.argv[1:]):
+              if not base.exists(): continue
+              files=sorted(set(base.glob("stderr.log*")) | set(base.glob("**/stderr.log*")))
+              for p in files:
+                  try:
+                      p=p.resolve()
+                      if not p.is_file(): continue
+                      lines=p.read_text(errors="replace").splitlines()[-3000:]
+                      blocks=[]; cur=[]
+                      for line in lines:
+                          if "Traceback (most recent call last):" in line:
+                              if cur: blocks.append(cur)
+                              cur=[line]
+                          elif cur:
+                              cur.append(line)
+                              if any(k in line for k in ("RuntimeError:","ModuleNotFoundError:","ImportError:","Error:")):
+                                  blocks.append(cur); cur=[]
+                      if cur: blocks.append(cur)
+                      matches=[b for b in blocks if any("populate() isn't reentrant" in x or "ModuleNotFoundError" in x for x in b)]
+                      if matches:
+                          print("LOG_TRACE_FILE="+str(p))
+                          for b in matches[-8:]:
+                              print("---")
+                              for line in b:
+                                  if any(k in line for k in ("Traceback","File \"","RuntimeError:","ModuleNotFoundError:","ImportError:","Error:")):
+                                      print(line.strip()[:500])
+                  except OSError: pass
+          PY
+          echo "RECENT_PASSENGER_ERRORS_END"
           echo "DJANGO_SETUP_CALLS_BEGIN"
           if [ -d /home/zomorod2/.backups/zomorodmelal-complete/source-preflight-47c38ec3810326790f6f954b515b4f11d59042d1 ]; then
             rg -n --glob '*.py' --glob '!**/migrations/**' 'django\.setup|setup\(\)|get_wsgi_application|apps\.populate' /home/zomorod2/.backups/zomorodmelal-complete/source-preflight-47c38ec3810326790f6f954b515b4f11d59042d1 | head -100 || true
