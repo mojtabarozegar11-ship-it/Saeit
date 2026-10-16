@@ -68,3 +68,4 @@ jobs:
           echo "MASTER_SCHEDULE_ENTRIES=$count"
           test -x "$base/operations/vps-only-loop.sh" && echo FACTORY_LOOP_SCRIPT_PRESENT
           REMOTE
+# Post-activation independent owner verification 2026-10-16.
