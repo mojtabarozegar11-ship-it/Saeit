@@ -30,6 +30,9 @@ NO_TOKENS = (
     "not completed client contracts, a claimed Canadian office",
     "not an actual client installation",
     "Images document editorial themes, not client contracts",
+    "The image is not proof of a Vancouver office",
+    "not evidence of a business partnership",
+    "not a claim of a Canadian office",
 )
 
 def digest(b:bytes)->str:return hashlib.sha256(b).hexdigest()
@@ -68,6 +71,18 @@ def cleanup_template(text:str)->str:
     s=s.replace(
         "Conceptual illustration · not an actual client installation",
         "Technology and engineering illustration"
+    )
+    s=s.replace(
+        "Personal portrait or illustrative digital artwork supplied for this essay. The image is not proof of a Vancouver office, professional engagement or completed enterprise project.",
+        "Portrait or technology illustration accompanying this article."
+    )
+    s=s.replace(
+        "Personal gallery photograph used as an editorial illustration, not evidence of a business partnership.",
+        "Personal gallery photograph."
+    )
+    s=s.replace(
+        "This is an invitation to explore possibilities—not a claim of a Canadian office, completed partnership or work authorization.",
+        "I welcome discussions about research, digital services and practical project opportunities."
     )
     s=s.replace(
         "not a record of a completed client deployment.",
