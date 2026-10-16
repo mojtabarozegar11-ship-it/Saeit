@@ -61,6 +61,13 @@ class CleanupTests(unittest.TestCase):
         new,_=m.clean_template(original)
         self.assertNotIn("The About page places",new)
         self.assertIn("<h2>Research stays</h2>",new)
+    def test_escaped_home_navigation_map_is_removed(self):
+        phrase=next(x for x in m.BLOCKS if x.startswith("This personal site is a public introduction"))
+        escaped=phrase.replace("Work & Activities","Work &amp; Activities")
+        before="<p>"+escaped+"</p><h2>Education and professional background</h2>"
+        after,_=m.clean_template(before)
+        self.assertNotIn("The About page places",after)
+        self.assertIn("<h2>Education and professional background</h2>",after)
     def test_fiction_text_retained_editorial_footnote_removed(self):
         old="<p>The mapmaker opened a new chapter. This story is fictional.</p><span>FICTIONAL VIGNETTE · EDITORIAL SAMPLE</span>"
         new,_=m.clean_template(old)
