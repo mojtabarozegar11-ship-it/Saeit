@@ -139,12 +139,17 @@ jobs:
       - name: Compare live route identities
         shell: bash
         run: |
+          set -u
           for route in "" "industry/" "research/" "knowledge/" "company/" "blog/" "store/" "agriculture/" "amozeshgah/"; do
             file="$RUNNER_TEMP/zomorod-public-page.html"
-            curl -fsSL --max-time 20 "https://zomorodmelal.ir/$route" -o "$file"
+            status="$(curl -sSL --max-time 20 -o "$file" -w '%{http_code}' "https://zomorodmelal.ir/$route" || true)"
+            if [ "$status" != "200" ]; then
+              echo "PAGE_IDENTITY=/$route HTTP=$status CONTENT_UNAVAILABLE"
+              continue
+            fi
             digest="$(sha256sum "$file" | cut -c1-16)"
             title="$(grep -oim1 '<title>[^<]*</title>' "$file" | cut -c1-120 || true)"
-            echo "PAGE_IDENTITY=/$route HASH=$digest SIZE=$(wc -c < "$file") TITLE=$title"
+            echo "PAGE_IDENTITY=/$route HTTP=$status HASH=$digest SIZE=$(wc -c < "$file") TITLE=$title"
           done
       - name: Match served document hashes to safe document root files
         shell: bash
