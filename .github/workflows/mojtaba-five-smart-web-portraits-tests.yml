@@ -1,0 +1,31 @@
+name: Mojtaba five professional smart web portraits quality
+on:
+  push:
+    branches: ['feat/mojtaba-five-smart-web-photo-editorials-20261016']
+    paths:
+      - 'assets/mojtaba_five_smart_web_portraits_20261016.zip'
+      - 'content/mojtaba_five_smart_web_portrait_editorials_20261016.json'
+      - 'scripts/mojtaba_five_smart_web_portraits_publish.py'
+      - 'tests/test_mojtaba_five_smart_web_portraits.py'
+      - '.github/workflows/mojtaba-five-smart-web-portraits-*.yml'
+  pull_request:
+    paths:
+      - 'assets/mojtaba_five_smart_web_portraits_20261016.zip'
+      - 'content/mojtaba_five_smart_web_portrait_editorials_20261016.json'
+      - 'scripts/mojtaba_five_smart_web_portraits_publish.py'
+      - 'tests/test_mojtaba_five_smart_web_portraits.py'
+      - '.github/workflows/mojtaba-five-smart-web-portraits-*.yml'
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate five exact AI photo hashes, all previous 93 articles and three personal template guards
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mojtaba_five_smart_web_portraits_publish.py
+          python3 -m unittest discover -s tests -p 'test_mojtaba_five_smart_web_portraits.py' -v

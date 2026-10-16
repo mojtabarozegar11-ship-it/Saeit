@@ -1,0 +1,263 @@
+name: Publish five smart-web editorial portraits to personal journal
+on:
+  issues:
+    types: [opened]
+permissions:
+  contents: read
+concurrency:
+  group: personal-v17-unique-five-editorial-portraits-20261016
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event.issue.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.issue.title == 'Ops: Publish five original intelligent website portraits and research copy 2026-10-16'
+    runs-on: ubuntu-latest
+    timeout-minutes: 23
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check original image hashes, source content and 93 previous article guards
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mojtaba_five_smart_web_portraits_publish.py
+          python3 -m unittest discover -s tests -p 'test_mojtaba_five_smart_web_portraits.py' -v
+          sha256sum assets/mojtaba_five_smart_web_portraits_20261016.zip
+      - name: Bundle five distinct user-approved illustrations with original site manifests
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar -czf "$RUNNER_TEMP/five-smart-web-portraits.tgz" \
+            scripts/mojtaba_five_smart_web_portraits_publish.py \
+            scripts/mojtaba_twenty_photo_essays_safe_publish.py \
+            assets/mojtaba_five_smart_web_portraits_20261016.zip \
+            content/mojtaba_five_smart_web_portrait_editorials_20261016.json \
+            content/mojtaba_twenty_photo_essays_*.json \
+            content/mojtaba_seven_full_independent_journal_20261016.json \
+            content/mojtaba_six_advanced_journal_articles_20261016.json \
+            content/mojtaba_ten_advanced_website_engineering_20261016.json \
+            content/mojtaba_vancouver_collab_part_*.json \
+            content/mojtaba_vancouver_enterprise_web_part_*.json \
+            content/mojtaba_vancouver_enterprise_web_series2_part_*.json
+      - name: Prepare pinned SSH relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/photo-relay"
+          mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          python3 - "$d/host.key" <<'PY'
+          import pathlib,sys
+          p=pathlib.Path(sys.argv[1]);t=p.read_text().replace('\r\n','\n').strip()
+          p.write_text(t.replace('\\n','\n')+'\n')
+          PY
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host saeit-host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+            ConnectionAttempts 1
+          EOF
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          echo "SSH_CONFIG=$d/config" >> "$GITHUB_ENV"
+      - name: Transfer scoped unchanged article manifests and five WebP photos to authorized personal hosting
+        shell: bash
+        run: |
+          set -euo pipefail
+          stage="/home/zomorod2/.mpw-five-portrait-editorials-$GITHUB_RUN_ID"
+          timeout 30s ssh -F "$SSH_CONFIG" saeit-host "test ! -e '$stage' && install -d -m 700 '$stage'"
+          timeout 100s scp -F "$SSH_CONFIG" "$RUNNER_TEMP/five-smart-web-portraits.tgz" "saeit-host:$stage/bundle.tgz"
+      - name: Publish limited personal visual supplements and verify 93 unchanged original articles
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 1040s ssh -F "$SSH_CONFIG" saeit-host "bash -s -- '$GITHUB_RUN_ID'" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          job="$1"
+          stage="/home/zomorod2/.mpw-five-portrait-editorials-$job"
+          app="/home/zomorod2/mojtaba_personal/mojtaba_roozegar_personal_v17"
+          python="$app/../.venv_personal_test/bin/python"
+          script="$stage/scripts/mojtaba_five_smart_web_portraits_publish.py"
+          backup="$HOME/.backups/mojtaba-five-web-portrait-editorials/$job"
+          installed=0
+          verified=0
+          finish() {
+            result=$?
+            trap - EXIT
+            if test "$installed" = 1 && test "$verified" = 0 && test -f "$backup/manifest.json"; then
+              "$python" "$script" rollback --app "$app" --backup "$backup" && echo "FIVE_PORTRAITS_AUTO_ROLLBACK=success" || echo "FIVE_PORTRAITS_AUTO_ROLLBACK=manual_intervention_needed"
+            fi
+            exit "$result"
+          }
+          trap finish EXIT
+          test ! -L "$app" && test -f "$app/manage.py" && test -x "$python"
+          test -f "$stage/bundle.tgz" && test ! -L "$stage/bundle.tgz"
+          tar -tzf "$stage/bundle.tgz" > "$stage/archive-members.txt"
+          grep -Fxq "assets/mojtaba_five_smart_web_portraits_20261016.zip" "$stage/archive-members.txt"
+          grep -Fxq "scripts/mojtaba_five_smart_web_portraits_publish.py" "$stage/archive-members.txt"
+          cd "$stage"
+          tar -xzf bundle.tgz --no-same-owner
+          "$python" "$script" check --app "$app" --staging "$stage"
+          cd "$app"
+          "$python" - "$stage" <<'PY_PREFLIGHT'
+          import importlib.util,os,sys
+          from pathlib import Path
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          import django;django.setup()
+          from django.template import engines
+          from core.models import Post
+          folder=Path(sys.argv[1])
+          spec=importlib.util.spec_from_file_location("five",folder/"scripts/mojtaba_five_smart_web_portraits_publish.py")
+          m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
+          rows=m.article_data(folder)
+          m.verify_zip(folder)
+          m.django_guards(m.APP,folder,rows)
+          for key,path in m.templates(m.APP).items():
+              revised=m.patch(key,path.read_text(encoding="utf-8"),rows)
+              engines["django"].engine.from_string(revised)
+              print("FIVE_PORTRAITS_DJANGO_PREFLIGHT="+key,flush=True)
+          if Post.objects.filter(published=True).count()<93:raise RuntimeError("Published previous post count shrank")
+          print("FIVE_PORTRAITS_93_OLDER_POSTS_PREFLIGHT=yes",flush=True)
+          PY_PREFLIGHT
+          "$python" "$script" install --app "$app" --staging "$stage" --backup "$backup"
+          installed=1
+          "$python" manage.py check --deploy
+          "$python" manage.py collectstatic --noinput --verbosity 0
+          test ! -d "$app/tmp" || touch "$app/tmp/restart.txt"
+          "$python" - "$stage" <<'PY_PUBLIC'
+          import hashlib,html,importlib.util,json,sys,time
+          from html.parser import HTMLParser
+          from pathlib import Path
+          from urllib.parse import urljoin
+          from urllib.request import Request,urlopen
+          folder=Path(sys.argv[1])
+          spec=importlib.util.spec_from_file_location("five",folder/"scripts/mojtaba_five_smart_web_portraits_publish.py")
+          m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
+          rows=m.article_data(folder)
+          old,last=m.original_slugs(folder,rows)
+          archive=m.verify_zip(folder)
+          digests={name.replace(".webp",""):digest for name,raw,digest in archive}
+          base="https://mojplaywin.com/mojtaba.roozegar/"
+          class Pictures(HTMLParser):
+              def __init__(self):
+                  super().__init__();self.images=[];self.a=[];self.b=[]
+              def handle_starttag(self,tag,attributes):
+                  if tag!="img":return
+                  src=dict(attributes).get("src","")
+                  if src:self.images.append(src)
+                  if "owner_gallery_20261015_b/" in src:self.b.append(src)
+                  elif "owner_gallery_20261015/" in src:self.a.append(src)
+          def fetch(url):
+              with urlopen(Request(url,headers={"User-Agent":"MojtabaFiveVerifiedEditorialImages/1"}),timeout=23) as response:
+                  if response.status!=200:raise ValueError("Not HTTP 200: "+url)
+                  return response.read(5500000)
+          def verify(route,condition):
+              last_error=""
+              for trial in range(6):
+                  try:
+                      data=fetch(base+route+"?five_editorial_proof="+str(time.time_ns())).decode("utf-8","replace")
+                      return condition(data)
+                  except Exception as exc:
+                      last_error=str(exc)
+                      print("FIVE_PORTRAITS_RETRY="+route+" "+last_error[:110],flush=True)
+                      time.sleep(3)
+              raise RuntimeError("Public verification failed "+route+" "+last_error)
+          for route in ("","blog/"):
+              def homepage(html_body):
+                  if m.MARK not in html_body:raise ValueError("New collection section missing")
+                  if 'id="mpw-mojtaba-twenty-image-essays-20261016"' not in html_body:
+                      raise ValueError("Original 20 illustrated articles missing")
+                  if 'id="mpw-enterprise-collaboration-brief-20261016"' not in html_body:
+                      raise ValueError("Original six collaboration offers missing")
+                  if 'id="mpw-photoessay-reading-guides-20261016"' not in html_body:
+                      raise ValueError("Existing reading pathways missing")
+                  p=Pictures();p.feed(html_body)
+                  found={}
+                  for name in digests:
+                      urls=[u for u in p.images if m.ASSET in u and name in u]
+                      if len(urls)!=1:raise ValueError("Missing or repeated different-topic portrait: "+name)
+                      found[name]=urls[0]
+                  if sum("mojtaba_personal_image_essays_20261016/" in s for s in p.images)<20:
+                      raise ValueError("Original 20 full illustrated article cards not preserved")
+                  if sum("mojtaba_six_diverse_collaboration_photos_20261016/" in s for s in p.images)!=6:
+                      raise ValueError("Six former distinct collaboration images not preserved")
+                  return found
+              found=verify(route,homepage)
+              for stem,url in found.items():
+                  data=fetch(urljoin(base,url))
+                  if data[:4]!=b"RIFF" or data[8:12]!=b"WEBP" or hashlib.sha256(data).hexdigest()!=digests[stem]:
+                      raise ValueError("Real public image checksum mismatch "+stem)
+              print("FIVE_PORTRAITS_FIVE_UNIQUE_IMAGES_LIVE="+(route or "home"),flush=True)
+          for row in rows:
+              stem=row["image"].replace(".webp","")
+              def article_verification(body,row=row,stem=stem):
+                  if m.DETAIL_MARK not in body or row["title"] not in html.unescape(body):
+                      raise ValueError("Technical supplement or photo missing")
+                  p=Pictures();p.feed(body)
+                  if len([s for s in p.images if m.ASSET in s and stem in s])!=1:
+                      raise ValueError("Incorrect topic photo on detailed article")
+              verify("blog/"+row["slug"]+"/",article_verification)
+              print("FIVE_PORTRAITS_LIVE_ARTICLE_WITH_MATCHING_PHOTO="+row["slug"],flush=True)
+          for item in list(old)+[x["slug"] for x in last]:
+              def old_article(body):
+                  p=Pictures();p.feed(body)
+                  if not p.images:raise ValueError("Existing article lost its images")
+              verify("blog/"+item+"/",old_article)
+          print("FIVE_PORTRAITS_PREVIOUS_93_ARTICLE_ROUTES_UNCHANGED=yes",flush=True)
+          def owner_gallery(body):
+              p=Pictures();p.feed(body)
+              if len(p.a)!=10 or len(p.b)!=10:
+                  raise ValueError("Original twenty user-photo gallery modified")
+          verify("gallery/",owner_gallery)
+          print("FIVE_PORTRAITS_TWENTY_OWNER_PHOTOS_PRESERVED=yes",flush=True)
+          def profile(body):
+              if 'id="mpw-primary-personal-profile-20261016"' not in body:
+                  raise ValueError("Owner-chosen principal profile picture missing")
+          verify("",profile)
+          verify("contact/",lambda doc: None if "<form" in doc else (_ for _ in ()).throw(ValueError("Contact form absent")))
+          print("FIVE_PORTRAITS_SELECTED_PROFILE_AND_CONTACT_PRESERVED=yes",flush=True)
+          PY_PUBLIC
+          for site in "https://mojplaywin.com/" "https://zomorodmelal.ir/"; do
+            code="$(curl -sSL -o /dev/null -w '%{http_code}' --max-time 24 "$site")"
+            test "$code" = 200
+            echo "FIVE_PORTRAITS_MAIN_SITE_HEALTHY=$site HTTP_200"
+          done
+          verified=1
+          trap - EXIT
+          echo "FIVE_PORTRAITS_PUBLICATION_FULLY_VERIFIED=yes"
+          echo "FIVE_PORTRAITS_BACKUP_LOCATION=$backup"
+          rm -rf "$stage"
+          REMOTE
+      - name: Remove ephemeral SSH credentials
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/photo-relay"

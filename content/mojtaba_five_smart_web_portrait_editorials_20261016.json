@@ -1,0 +1,72 @@
+{
+  "version": 1,
+  "language": "en",
+  "purpose": "Five distinct photographic editorial extensions to five existing, preserved smart-website articles",
+  "articles": [
+    {
+      "number": 1,
+      "slug": "listen-before-code-professional-enterprise-website-discovery",
+      "title": "Evidence-Driven Discovery for Intelligent Enterprise Websites",
+      "excerpt": "How stakeholder research, bounded architecture experiments and traceable requirements shape reliable enterprise web products.",
+      "image": "vancouver-smart-web-portrait-01.webp",
+      "label": "Research-led digital strategy",
+      "paragraphs": [
+        "Enterprise website discovery should establish what a business process actually does before deciding how the interface will look. A stakeholder map connects executives, front-line operators, information owners and compliance reviewers to the decisions they make. A task map then records entry conditions, required evidence, exceptional cases and the person authorized to approve each transition. This method prevents a visually polished homepage from concealing an unreliable ordering or service workflow.",
+        "Convert observations into measurable acceptance criteria. For example, a supplier should be able to upload a quotation, receive a stable reference, correct an invalid document and see only records belonging to its organization. Include denied-access cases and retry behavior in the same specification as successful tasks. An engineering prototype can then be evaluated for task completion, data integrity, accessibility and latency instead of judged only by aesthetics.",
+        "An effective first engagement produces a lightweight architecture decision record, a permission matrix, a prioritized backlog and a deliberately limited demonstration using synthetic data. Unknowns such as external API ownership or historical data quality remain explicit. I am available to explore this method with organizations seeking professionally engineered intelligent websites."
+      ]
+    },
+    {
+      "number": 2,
+      "slug": "enterprise-cloud-migration-application-modernization-vancouver",
+      "title": "Modular Architecture for Modern Enterprise Web Platforms",
+      "excerpt": "A reproducible approach to service boundaries, data ownership and gradual modernization of large commercial sites.",
+      "image": "vancouver-smart-web-portrait-02.webp",
+      "label": "Enterprise systems architecture",
+      "paragraphs": [
+        "Large business websites often combine public content, authenticated portals, payment status, internal operations and external ERP or CRM feeds. Treating every function as one indivisible codebase increases deployment risk. Conversely, separating every feature into a microservice before measuring real complexity creates unnecessary operational overhead. Architecture should begin with business capabilities, data ownership and the failure boundaries that matter to users.",
+        "Define modules by cohesive responsibilities such as identity, catalog, quotations, service requests and reporting. Each module should have explicit interfaces, an authoritative record source and versioned integration contracts. Where modernization is required, a reversible migration can redirect one low-risk workflow at a time while keeping existing URLs and transactions stable. Test the compatibility of database migrations with both old and new application versions before a production cutover.",
+        "A professional technical proposal should include a context diagram, a deployment inventory, data contracts and a risk-ranked sequence of tests. Quantify latency, defect rates or operational effort only when measurement is available. This makes a roadmap reviewable by both enterprise architects and business sponsors while avoiding broad replacement of functioning systems."
+      ]
+    },
+    {
+      "number": 3,
+      "slug": "enterprise-website-analytics-measurement-and-honest-growth",
+      "title": "Decision Intelligence and Measurement Design for Business Websites",
+      "excerpt": "Designing useful metrics and explainable dashboards without conflating traffic, conversions and commercial outcomes.",
+      "image": "vancouver-smart-web-portrait-03.webp",
+      "label": "Analytics and research",
+      "paragraphs": [
+        "A business dashboard becomes a decision tool only when its measures have precise definitions. The number of visitors, the number of qualified inquiries and the number of accepted contracts are separate events with different business interpretations. Define each metric's numerator, denominator, reporting period, identity policy and source of truth before building charts. Avoid treating test traffic or repeated requests as genuine business demand.",
+        "Instrument meaningful user journeys rather than collecting every possible click. An enterprise quotation funnel might record request start, validation failure, approval submission and signed acceptance, with explicit relationships between attempts and unique transactions. Dashboards should show data freshness and the possibility of delayed external reconciliation. Where an AI model predicts a lead or assigns a risk score, report validation results and uncertainty separately from observed outcomes.",
+        "A pilot can compare a reviewed measurement specification with the events an instrumented synthetic workflow actually emits. Test idempotency, consent handling, accessibility and consistency across devices. This creates a reproducible foundation for improving a commercial website without relying on invented growth percentages or unsupported causal claims."
+      ]
+    },
+    {
+      "number": 4,
+      "slug": "cloud-hosting-continuous-delivery-enterprise-web-reliability",
+      "title": "Resilient Hosting, Secure Releases and Verifiable Website Reliability",
+      "excerpt": "A production engineering checklist for backups, deep-route testing, permission boundaries and reversible deployments.",
+      "image": "vancouver-smart-web-portrait-04.webp",
+      "label": "Cloud engineering and security",
+      "paragraphs": [
+        "Reliable hosting is not the same as a responsive homepage. An enterprise website may show status 200 at its root while authentication, product details or service APIs fail. Identify business-critical journeys and document dependencies such as databases, static assets, background jobs and third-party integrations. Availability should be evaluated from those journeys, with explicit recovery-time and recovery-point objectives.",
+        "Deployment safety begins with bounded change scope. A release should record its commit, allowed target application, migration requirements, backups and evidence of a successful rollback rehearsal. Static-file versioning and deep-route verification matter when sites share a hosting environment. Avoid replacing unrelated application folders or restarting services that support other businesses. Apply least-privilege service accounts and never publish deployment secrets in logs.",
+        "After deployment, inspect representative authorized and unauthorized routes, real image responses, relevant forms and performance telemetry. A rollback must be limited to files and records created by that release, and should refuse to erase later legitimate edits. A small reliability-focused pilot can demonstrate deployment evidence, traceable recovery and maintainable operations before any larger architectural migration."
+      ]
+    },
+    {
+      "number": 5,
+      "slug": "international-remote-enterprise-teams-vancouver-collaboration-practices",
+      "title": "Professional Collaboration Framework for Intelligent Web Projects",
+      "excerpt": "From executive presentation to a scoped pilot with accountable decisions, technical milestones and measurable acceptance.",
+      "image": "vancouver-smart-web-portrait-05.webp",
+      "label": "Technical collaboration and delivery",
+      "paragraphs": [
+        "An effective technology presentation should clarify a business problem before showcasing capabilities. For a prospective industrial or commercial partner, an example of a robust approval workflow or a clearly documented architecture often communicates more than a long list of frameworks. A project introduction should distinguish the business outcome, the proposed engineering method and the evidence that would justify advancing beyond a pilot.",
+        "Remote and international teams need explicit ownership. Agree on a primary decision maker, an approved communication channel, time-zone conventions and a process for recording important design choices. A bounded proposal can identify stakeholder interviews, a demonstrable user journey, security assumptions and acceptance tests. Technical uncertainty should be documented instead of hidden inside a fixed delivery promise.",
+        "I welcome professional discussions about intelligent websites, large-scale portals, AI-enabled knowledge services and data-driven business tools. A sensible next step is a discovery meeting followed by a written pilot brief: scope, dependencies, review milestones and commercial terms to be agreed by the parties. The goal is a useful, independently assessable technical outcome."
+      ]
+    }
+  ]
+}
