@@ -1,5 +1,9 @@
 name: Run Zomorod site agent cycle
 on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/zomorod-site-agent-cycle.yml"
   schedule:
     - cron: "45 4 * * *"
   workflow_dispatch:
