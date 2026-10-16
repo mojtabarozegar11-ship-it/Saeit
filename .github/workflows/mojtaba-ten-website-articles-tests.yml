@@ -1,0 +1,27 @@
+name: Mojtaba ten web engineering articles tests
+on:
+  push:
+    branches: ['feat/mojtaba-ten-expert-web-engineering-articles-20261016']
+    paths:
+      - 'content/mojtaba_ten_advanced_website_engineering_20261016.json'
+      - 'scripts/mojtaba_ten_website_articles_publish.py'
+      - 'tests/test_mojtaba_ten_website_articles.py'
+      - '.github/workflows/mojtaba-ten-website-articles-*.yml'
+  pull_request:
+    paths:
+      - 'content/mojtaba_ten_advanced_website_engineering_20261016.json'
+      - 'scripts/mojtaba_ten_website_articles_publish.py'
+      - 'tests/test_mojtaba_ten_website_articles.py'
+      - '.github/workflows/mojtaba-ten-website-articles-*.yml'
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile scoped content publisher
+        run: python3 -m py_compile scripts/mojtaba_ten_website_articles_publish.py
+      - name: Validate ten full technical articles and previous-content protections
+        run: python3 -m unittest discover -s tests -p 'test_mojtaba_ten_website_articles.py' -v
