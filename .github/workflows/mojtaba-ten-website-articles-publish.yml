@@ -1,0 +1,234 @@
+name: Publish ten advanced website engineering articles
+on:
+  issues:
+    types: [opened]
+permissions:
+  contents: read
+concurrency:
+  group: mojtaba-v17-ten-website-articles-20261016
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event.issue.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.issue.title == 'Ops: Publish ten specialist website engineering articles 2026-10-16'
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate ten substantive web engineering tutorials and old page guards
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mojtaba_ten_website_articles_publish.py
+          python3 -m unittest discover -s tests -p test_mojtaba_ten_website_articles.py -v
+      - name: Prepare pinned SSH relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/photo-relay"
+          mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          python3 - "$d/host.key" <<'PY'
+          import pathlib,sys
+          p=pathlib.Path(sys.argv[1]);t=p.read_text().replace('\r\n','\n').strip()
+          p.write_text(t.replace('\\n','\n')+'\n')
+          PY
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host saeit-host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+            ConnectionAttempts 1
+          EOF
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          echo "SSH_CONFIG=$d/config" >> "$GITHUB_ENV"
+      - name: Transfer approved web engineering content and installer to private personal stage
+        shell: bash
+        run: |
+          set -euo pipefail
+          stage="/home/zomorod2/.mpw-ten-web-articles-$GITHUB_RUN_ID"
+          timeout 30s ssh -F "$SSH_CONFIG" saeit-host "test ! -e '$stage' && install -d -m 700 '$stage'"
+          timeout 75s scp -F "$SSH_CONFIG" scripts/mojtaba_ten_website_articles_publish.py "saeit-host:$stage/installer.py"
+          timeout 75s scp -F "$SSH_CONFIG" content/mojtaba_ten_advanced_website_engineering_20261016.json "saeit-host:$stage/articles.json"
+          timeout 75s scp -F "$SSH_CONFIG" content/mojtaba_seven_full_independent_journal_20261016.json "saeit-host:$stage/older_seven.json"
+          timeout 75s scp -F "$SSH_CONFIG" content/mojtaba_six_advanced_journal_articles_20261016.json "saeit-host:$stage/older_six.json"
+      - name: Check existing posts, install ten and verify live content with rollback
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 730s ssh -F "$SSH_CONFIG" saeit-host "bash -s -- '$GITHUB_RUN_ID'" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          id="$1"
+          app="/home/zomorod2/mojtaba_personal/mojtaba_roozegar_personal_v17"
+          stage="/home/zomorod2/.mpw-ten-web-articles-$id"
+          script="$stage/installer.py"
+          source="$stage/articles.json"
+          backup="$HOME/.backups/mojtaba-ten-website-articles/$id"
+          py="$app/../.venv_personal_test/bin/python"
+          installed=0
+          success=0
+          on_exit() {
+            status=$?
+            trap - EXIT
+            if test "$installed" = 1 && test "$success" = 0 && test -f "$backup/manifest.json"; then
+              "$py" "$script" rollback --app "$app" --backup "$backup" && echo "TEN_WEB_ARTICLES_AUTO_ROLLBACK=success" || echo "TEN_WEB_ARTICLES_ROLLBACK_MANUAL_ATTENTION=yes"
+            fi
+            exit "$status"
+          }
+          trap on_exit EXIT
+          test -f "$app/manage.py" && test ! -L "$app" && test -x "$py"
+          test -f "$script" && test -f "$source" && test -f "$stage/older_seven.json" && test -f "$stage/older_six.json"
+          "$py" "$script" check --app "$app" --content "$source"
+          cd "$app"
+          "$py" - "$script" "$source" "$stage/older_seven.json" "$stage/older_six.json" <<'PY_PREFLIGHT'
+          import importlib.util,json,os,sys
+          from pathlib import Path
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          import django;django.setup()
+          from django.urls import reverse
+          from django.template import engines
+          from core.models import Post
+          spec=importlib.util.spec_from_file_location("webjournal",sys.argv[1])
+          mod=importlib.util.module_from_spec(spec);spec.loader.exec_module(mod)
+          current=mod.load_manifest(Path(sys.argv[2]))["articles"]
+          old7=json.load(open(sys.argv[3],encoding="utf-8"))["articles"]
+          old6=json.load(open(sys.argv[4],encoding="utf-8"))["articles"]
+          assert len(current)==10 and len(old7)==7 and len(old6)==6
+          oldslug=[x["slug"] for x in old7+old6]
+          assert Post.objects.filter(slug__in=oldslug,published=True).count()==13,"Thirteen earlier native articles must remain published"
+          for entry in current:
+              assert not Post.objects.filter(slug=entry["slug"]).exists(),"Cannot replace an old post"
+              assert reverse("personal_site:post_detail",kwargs={"slug":entry["slug"]})=="/mojtaba.roozegar/blog/"+entry["slug"]+"/"
+          for page,src in mod.read_templates(mod.APP).items():
+              engines["django"].engine.from_string(mod.patch_template(src,mod.load_manifest(Path(sys.argv[2]))))
+              print("TEN_WEB_DJANGO_TEMPLATE_PREFLIGHT="+page,flush=True)
+          print("TEN_WEB_13_EXISTING_POSTS_PRESERVED_PREFLIGHT=yes",flush=True)
+          PY_PREFLIGHT
+          installed=1
+          "$py" "$script" install --app "$app" --content "$source" --backup "$backup"
+          "$py" manage.py check --deploy
+          test ! -d "$app/tmp" || touch "$app/tmp/restart.txt"
+          "$py" - "$source" "$stage/older_seven.json" "$stage/older_six.json" <<'PY_LIVE'
+          import json,sys,time
+          from html import unescape
+          from html.parser import HTMLParser
+          from urllib.request import Request,urlopen
+          base="https://mojplaywin.com/mojtaba.roozegar/"
+          new=json.load(open(sys.argv[1],encoding="utf-8"))["articles"]
+          old7=json.load(open(sys.argv[2],encoding="utf-8"))["articles"]
+          old6=json.load(open(sys.argv[3],encoding="utf-8"))["articles"]
+          class CheckHTML(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.first=[];self.second=[];self.title=False;self.t=[];self.desc=[];self.can=[];self.script=False;self.json=[];self.buf=[]
+              def handle_starttag(self,tag,attrs):
+                  attrs=dict(attrs)
+                  if tag=="img":
+                      s=attrs.get("src","")
+                      if "owner_gallery_20261015_b/" in s:self.second.append(s)
+                      elif "owner_gallery_20261015/" in s:self.first.append(s)
+                  elif tag=="title":self.title=True
+                  elif tag=="meta" and attrs.get("name","").lower()=="description":self.desc.append(attrs.get("content",""))
+                  elif tag=="link" and "canonical" in attrs.get("rel","").lower().split():self.can.append(attrs.get("href",""))
+                  elif tag=="script" and attrs.get("type")=="application/ld+json":self.script=True;self.buf=[]
+              def handle_endtag(self,tag):
+                  if tag=="title":self.title=False
+                  elif tag=="script" and self.script:self.json.append("".join(self.buf));self.script=False
+              def handle_data(self,data):
+                  if self.title:self.t.append(data)
+                  if self.script:self.buf.append(data)
+          def get(path):
+              with urlopen(Request(base+path+"?ten_web_verification="+str(time.time_ns()),headers={"User-Agent":"MojtabaTenWebExpertPublish/1"}),timeout=24) as r:
+                  if r.status!=200:raise ValueError("non-200 "+path)
+                  return r.read(4500000).decode("utf-8","replace")
+          def verify(path,validator):
+              err=""
+              for attempt in range(7):
+                  try:
+                      body=get(path);validator(body);return
+                  except Exception as exc:
+                      err=str(exc);print("TEN_WEB_RETRY="+path+" "+str(attempt+1)+" "+err[:180],flush=True);time.sleep(3)
+              raise SystemExit("TEN_WEB_PAGE_FAILED="+path+" "+err)
+          def index_check(body):
+              markers=['id="mpw-website-ten-index-20261016"','id="mpw-journal-advanced-index-20261016"','id="mpw-journal-longform-index-20261016"','id="mpw-fifty-editorials-20261015"','id="mpw-new-originals-20261015-b"','id="mpw-academic-profile-20261016"','id="mpw-personal-expanded-20261016"']
+              for m in markers:
+                  if m not in body:raise ValueError("previous content or new index missing: "+m)
+              for post in new:
+                  if "/blog/"+post["slug"]+"/" not in body:raise ValueError("missing new article link")
+          for route in ("","blog/"):
+              verify(route,index_check)
+              print("TEN_WEB_INDEX_LIVE_VERIFIED="+(route or "home"),flush=True)
+          for post in new:
+              path="blog/"+post["slug"]+"/"
+              def article_check(body,post=post,path=path):
+                  readable=unescape(body)
+                  if post["title"] not in readable or post["content"].splitlines()[1][:65] not in readable:
+                      raise ValueError("article title or full text not present")
+                  p=CheckHTML();p.feed(body)
+                  if post["title"] not in " ".join(p.t):raise ValueError("unique article title absent")
+                  if not p.desc or post["excerpt"][:45] not in " ".join(p.desc):raise ValueError("unique meta description absent")
+                  if base+path not in p.can:raise ValueError("unexpected canonical")
+                  if not any('"@type":"BlogPosting"' in v and post["title"] in v for v in p.json):raise ValueError("BlogPosting markup absent")
+              verify(path,article_check)
+              print("TEN_WEB_FULL_ARTICLE_AND_SEO_VERIFIED="+post["slug"],flush=True)
+          for old in old7+old6:
+              def prior_check(body,old=old):
+                  if old["title"] not in unescape(body):raise ValueError("old article was lost")
+              verify("blog/"+old["slug"]+"/",prior_check)
+          print("TEN_WEB_ALL_THIRTEEN_OLDER_ARTICLES_PRESENT=yes",flush=True)
+          def gallery_check(body):
+              p=CheckHTML();p.feed(body)
+              if len(p.first)!=10 or len(p.second)!=10:raise ValueError("twenty original owner images missing")
+          verify("gallery/",gallery_check)
+          print("TEN_WEB_TWENTY_ORIGINAL_IMAGES_PRESENT=yes",flush=True)
+          print("TEN_WEB_NEW_TEN_ARTICLES_AND_SEO_PASS=yes",flush=True)
+          PY_LIVE
+          success=1
+          trap - EXIT
+          echo "TEN_WEB_ARTICLES_PUBLISHED_ON_LIVE_SITE=yes"
+          echo "TEN_WEB_ARTICLES_BACKUP=$backup"
+          rm -rf "$stage"
+          REMOTE
+      - name: Check both main websites remain reachable
+        shell: bash
+        run: |
+          set -euo pipefail
+          for site in "https://mojplaywin.com/" "https://zomorodmelal.ir/"; do
+            code="$(curl -sSL -o /dev/null -w '%{http_code}' --max-time 25 "$site")"
+            test "$code" = "200"
+            echo "TEN_WEB_ORIGINAL_DOMAIN_HEALTHY=$site HTTP_200"
+          done
+      - name: Erase temporary SSH credentials
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/photo-relay"
