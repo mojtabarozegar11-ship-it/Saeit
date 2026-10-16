@@ -415,6 +415,11 @@ jobs:
           try:
               import passenger_wsgi
               print("PASSENGER_WSGI_IMPORT=passed")
+              from django.test import Client
+              response = Client(HTTP_HOST="zomorodmelal.ir").get("/agriculture/")
+              print("DJANGO_CLIENT_AGRICULTURE_STATUS="+str(response.status_code))
+              if response.status_code != 200:
+                  raise SystemExit("DJANGO_CLIENT_AGRICULTURE=failed")
           except Exception:
               traceback.print_exc()
               raise
