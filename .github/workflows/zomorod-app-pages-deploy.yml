@@ -158,10 +158,10 @@ jobs:
           # proven missing in that runtime; --no-deps prevents changing Django or other packages.
           passenger_python="$HOME/virtualenv/Saeit/3.10/bin/python"
           test -x "$passenger_python" || { echo "PASSENGER_PYTHON=missing" >&2; exit 1; }
-          if ! "$passenger_python" -c 'import environ, rest_framework, whitenoise.middleware' >/dev/null 2>&1; then
-            "$passenger_python" -m pip --disable-pip-version-check install --no-deps 'django-environ>=0.12,<1.0' 'djangorestframework>=3.16,<4.0' 'whitenoise>=6.9,<7.0'
+if ! "$passenger_python" -c 'import environ, rest_framework, whitenoise.middleware, openai, psycopg, PIL' >/dev/null 2>&1; then
+            "$passenger_python" -m pip --disable-pip-version-check install --upgrade-strategy only-if-needed 'Django>=5.2,<6.0' 'django-environ>=0.12,<1.0' 'djangorestframework>=3.16,<4.0' 'psycopg[binary]>=3.2,<4.0' 'openai>=1.100,<2.0' 'whitenoise>=6.9,<7.0' 'Pillow>=10,<12'
           fi
-          "$passenger_python" -c 'import environ, rest_framework, whitenoise; print("PASSENGER_RUNTIME_DEPENDENCIES=verified")'
+          "$passenger_python" -c 'import django, environ, rest_framework, whitenoise, openai, psycopg, PIL; print("PASSENGER_RUNTIME_DEPENDENCIES=verified")'
           recovery="$HOME/.backups/zomorodmelal-app/b78498ecccc3b99784a0cb060ea2c59bec65c505"
           if test -f "$recovery/deployed.flag" && test ! -f "$recovery/recovered.flag"; then
             echo "RECOVERING_PREVIOUS_UNVERIFIED_GENERATION=b78498ecccc3b99784a0cb060ea2c59bec65c505"
