@@ -127,6 +127,32 @@ def route_mojplaywin_brand_home(urlconf):
     updated = urlconf.replace(brand_import, brand_import + "\nfrom core.mojplaywin_views import branded_home_dispatch", 1)
     return updated.replace(old_route, new_route, 1)
 
+def route_mojplaywin_brand_store(urlconf):
+    old_route = 'path("store/", lambda request: branded_store(request) if brand_for_request(request) else store_home(request), name="store"),'
+    new_route = 'path("store/", lambda request: branded_store_dispatch(request) if brand_for_request(request) else store_home(request), name="store"),'
+    if new_route in urlconf or old_route not in urlconf:
+        return urlconf
+    dispatcher_import = "from core.mojplaywin_views import branded_home_dispatch"
+    if dispatcher_import in urlconf:
+        updated = urlconf.replace(
+            dispatcher_import,
+            dispatcher_import + ", branded_store_dispatch",
+            1,
+        )
+    else:
+        brand_import = next(
+            (line for line in urlconf.splitlines() if line.startswith("from core.brand_views import ")),
+            None,
+        )
+        if brand_import is None:
+            raise RuntimeError("MojPlayWin brand store exists without its expected view import")
+        updated = urlconf.replace(
+            brand_import,
+            brand_import + "\\nfrom core.mojplaywin_views import branded_store_dispatch",
+            1,
+        )
+    return updated.replace(old_route, new_route, 1)
+
 def restart_passenger():
     restart = DOCROOT / "tmp" / "restart.txt"
     restart.parent.mkdir(parents=True, exist_ok=True)
@@ -202,6 +228,7 @@ def deploy(run_id, commit_sha, stage_arg):
         outputs[relative] = apply_three_way(baseline, source, live, str(relative))
         if relative == Path("config/urls.py"):
             outputs[relative] = route_mojplaywin_brand_home(outputs[relative])
+            outputs[relative] = route_mojplaywin_brand_store(outputs[relative])
         if relative.suffix == ".py":
             ast.parse(outputs[relative], filename=str(relative))
 
