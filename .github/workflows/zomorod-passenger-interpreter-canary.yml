@@ -1,0 +1,176 @@
+name: Zomorod Passenger interpreter canary
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/zomorod-passenger-interpreter-canary.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: zomorod-passenger-interpreter-canary
+  cancel-in-progress: false
+
+jobs:
+  canary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-passenger-canary"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_CPANEL_RELAY=verified"
+
+      - name: Switch only PassengerPython and verify live routes with rollback
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-passenger-canary"
+          sha="$GITHUB_SHA"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$sha" <<'REMOTE'
+          set -euo pipefail
+          sha="$1"
+          app="$HOME/Saeit"
+          root="$HOME/public_html"
+          htaccess="$root/.htaccess"
+          venv_python="$HOME/virtualenv/Saeit/3.10/bin/python"
+          backup="$HOME/.backups/zomorodmelal-passenger-python/$sha"
+          selector="$(command -v cloudlinux-selector || true)"
+          if test -z "$selector" && test -x /usr/sbin/cloudlinux-selector; then selector=/usr/sbin/cloudlinux-selector; fi
+          test -n "$selector" && test -x "$venv_python" && test -f "$htaccess"
+          grep -Fq 'PassengerAppRoot "/home/zomorod2/Saeit"' "$htaccess"
+          grep -Fq 'PassengerPython "/opt/alt/python310/bin/lswsgi"' "$htaccess"
+          mkdir -p "$backup"
+          cp -p "$htaccess" "$backup/htaccess.original"
+          sha256sum "$backup/htaccess.original" | awk '{print $1}' > "$backup/htaccess.sha256"
+          printf 'original\n' > "$backup/state"
+          active=0
+          rollback() {
+            status=$?
+            if test "$active" = 1; then
+              cp -p "$backup/htaccess.original" "$htaccess.rollback"
+              mv -f "$htaccess.rollback" "$htaccess"
+              "$selector" restart --json --interpreter python --user "$USER" --app-root Saeit >/dev/null || true
+              printf 'rolled_back\n' > "$backup/state"
+              echo "PASSENGER_CONFIG_ROLLBACK=complete" >&2
+            fi
+            exit "$status"
+          }
+          trap rollback EXIT
+          python3 - "$htaccess" "$venv_python" <<'PY'
+          from pathlib import Path
+          import os,sys
+          path=Path(sys.argv[1])
+          source=path.read_text(encoding="utf-8")
+          old='PassengerPython "/opt/alt/python310/bin/lswsgi"'
+          new=f"PassengerPython {sys.argv[2]}"
+          if source.count(old)!=1:
+              raise SystemExit("EXPECTED_LSWGI_DIRECTIVE_NOT_UNIQUE")
+          replacement=path.with_name(path.name+".canary")
+          replacement.write_text(source.replace(old,new,1),encoding="utf-8")
+          os.chmod(replacement,path.stat().st_mode)
+          os.replace(replacement,path)
+          PY
+          active=1
+          echo "PASSENGER_PYTHON_CANARY=$venv_python"
+          restart_result="$(mktemp "$HOME/.zomorod-passenger-canary-restart.XXXXXX.json")"
+          if ! "$selector" restart --json --interpreter python --user "$USER" --app-root Saeit > "$restart_result"; then
+            rm -f -- "$restart_result"
+            echo "PASSENGER_CANARY_RESTART=failed" >&2
+            exit 1
+          fi
+          python3 - "$restart_result" <<'PY'
+          import json,sys
+          data=json.load(open(sys.argv[1],encoding="utf-8"))
+          print("PASSENGER_CANARY_RESTART="+str(data.get("result")))
+          if data.get("result")!="success":
+              raise SystemExit(1)
+          PY
+          rm -f -- "$restart_result"
+          python3 - "$app" "$venv_python" <<'PY'
+          import os,sys
+          os.chdir(sys.argv[1])
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          import passenger_wsgi
+          from django.test import Client
+          client=Client(HTTP_HOST="zomorodmelal.ir")
+          for route in ("/agriculture/","/agriculture/genetics/","/agents/","/api/health/"):
+              response=client.get(route,secure=True)
+              print("DJANGO_CANARY "+route+" "+str(response.status_code))
+              if response.status_code!=200:
+                  raise SystemExit(1)
+          PY
+          REMOTE
+          check_route() {
+            local route="$1" file="$RUNNER_TEMP/zomorod-passenger-$2.html"
+            local code
+            code="$(curl -sS --max-time 25 --retry 4 --retry-connrefused --retry-delay 3 -o "$file" -w '%{http_code}' "https://zomorodmelal.ir$route?__passenger_canary=$GITHUB_SHA")"
+            printf 'PUBLIC_CANARY_ROUTE %s %s\n' "$route" "$code"
+            test "$code" = "200"
+          }
+          check_route /agriculture/ agriculture
+          check_route /agriculture/genetics/ genetics
+          check_route /agents/ agents
+          check_route /api/health/ health
+          bridge_code="$(curl -sS --max-time 25 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir/api/bridge/health/?__passenger_canary=$GITHUB_SHA" || true)"
+          echo "PUBLIC_CANARY_BRIDGE_STATUS=$bridge_code"
+          for route in /mohammad/ /ghanadi/ /amozeshgah/; do
+            code="$(curl -sS --max-time 25 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir$route?__passenger_canary=$GITHUB_SHA" || true)"
+            echo "PROTECTED_SUBSITE_STATUS $route $code"
+          done
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          backup="$HOME/.backups/zomorodmelal-passenger-python/$1"
+          printf 'verified_live\n' > "$backup/state"
+          echo "PASSENGER_CONFIG_CANARY=verified_live"
+          REMOTE
+      - name: Remove temporary SSH material
+        if: always()
+        shell: bash
+        run: rm -rf -- "$RUNNER_TEMP/zomorod-passenger-canary"
