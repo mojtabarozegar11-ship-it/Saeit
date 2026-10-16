@@ -46,6 +46,7 @@ jobs:
           print("MOJPLAYWIN_SOURCE_CHECK=passed")
           PY
       - name: Configure pinned VPS and cPanel relay
+        if: ${{ !contains(github.event.head_commit.message, 'MOJPLAYWIN_DIAG_20261016') }}
         shell: bash
         env:
           VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
@@ -100,8 +101,33 @@ jobs:
           cat scripts/deploy_mojplaywin_branding.py | ssh -F "$d/config" saeit-cpanel "cat > '$stage/rollback.py'"
           ssh -F "$d/config" saeit-cpanel "python3 '$stage/rollback.py' rollback '38827723099' restore"
           ssh -F "$d/config" saeit-cpanel "rm -rf -- '$stage'"
+      - name: Diagnose MojPlayWin public routes
+        if: contains(github.event.head_commit.message, 'MOJPLAYWIN_DIAG_20261016')
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import re
+          import urllib.error
+          import urllib.request
+          routes = [
+              ("https://mojplaywin.com/", "Ideas become knowledge"),
+              ("https://mojplaywin.com/store/", "INITIAL COLLECTION"),
+              ("https://mojplaywin.com/agriculture/", "Agriculture"),
+          ]
+          for url, marker in routes:
+              try:
+                  with urllib.request.urlopen(url, timeout=20) as response:
+                      status, body = response.status, response.read(400000).decode("utf-8", "replace")
+              except urllib.error.HTTPError as error:
+                  status, body = error.code, error.read(400000).decode("utf-8", "replace")
+              title = re.search(r"<title[^>]*>(.*?)</title>", body, re.I | re.S)
+              plain = re.sub(r"<[^>]+>", " ", body)
+              plain = re.sub(r"\\s+", " ", plain).strip()
+              print(f"PUBLIC_DIAG url={url} status={status} expected={marker in body} title={title.group(1)[:160] if title else 'none'}")
+              print(f"PUBLIC_DIAG_TEXT {plain[:240]}")
+          PY
       - name: Package application changes with merge baselines
-        if: ${{ !contains(github.event.head_commit.message, 'MOJPLAYWIN_ROLLBACK_38827723099') }}
+        if: ${{ !contains(github.event.head_commit.message, 'MOJPLAYWIN_ROLLBACK_38827723099') && !contains(github.event.head_commit.message, 'MOJPLAYWIN_DIAG_20261016') }}
         shell: bash
         run: |
           set -euo pipefail
@@ -126,7 +152,7 @@ jobs:
           PY
           tar -czf "$RUNNER_TEMP/mojplaywin-main.tar.gz" scripts/deploy_mojplaywin_branding.py config/urls.py core/services_views.py core/commerce_views.py core/views.py core/mojplaywin_views.py core/templates/base.html core/templates/mojplaywin/home.html core/templates/mojplaywin/store.html core/templates/mojplaywin/section.html core/templates/mojplaywin/theme.html -C "$RUNNER_TEMP/mojplaywin-main" deploy_baseline
       - name: Stage and install on the verified cPanel app
-        if: ${{ !contains(github.event.head_commit.message, 'MOJPLAYWIN_ROLLBACK_38827723099') }}
+        if: ${{ !contains(github.event.head_commit.message, 'MOJPLAYWIN_ROLLBACK_38827723099') && !contains(github.event.head_commit.message, 'MOJPLAYWIN_DIAG_20261016') }}
         id: deploy
         shell: bash
         run: |
@@ -158,7 +184,7 @@ jobs:
           PY
           python3 '$stage/scripts/deploy_mojplaywin_branding.py' deploy '$GITHUB_RUN_ID' '$GITHUB_SHA' '$stage'"
       - name: Smoke-test MojPlayWin pages
-        if: ${{ !contains(github.event.head_commit.message, 'MOJPLAYWIN_ROLLBACK_38827723099') }}
+        if: ${{ !contains(github.event.head_commit.message, 'MOJPLAYWIN_ROLLBACK_38827723099') && !contains(github.event.head_commit.message, 'MOJPLAYWIN_DIAG_20261016') }}
         id: smoke
         shell: bash
         run: |
