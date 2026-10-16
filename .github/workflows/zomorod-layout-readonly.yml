@@ -181,6 +181,30 @@ jobs:
             fi
           done
           REMOTE
+      - name: Read only live page content and shared asset references
+        run: |
+          python3 - <<'PY'
+          from urllib.request import Request,urlopen
+          from html.parser import HTMLParser
+          class Analyze(HTMLParser):
+              def __init__(self): super().__init__();self.titles=[];self.js=[];self.css=[];self.h1=[];self.in_h1=False
+              def handle_starttag(self,t,a):
+                  a=dict(a)
+                  if t=="h1":self.in_h1=True
+                  if t=="script" and a.get("src"):self.js.append(a["src"])
+                  if t=="link" and "stylesheet" in a.get("rel",""):self.css.append(a.get("href",""))
+              def handle_endtag(self,t):
+                  if t=="h1":self.in_h1=False
+              def handle_data(self,s):
+                  if self.in_h1 and s.strip():self.h1.append(s.strip()[:50])
+          for path in ("/","/industry/","/research/","/knowledge/","/company/","/blog/","/agriculture/","/weather/","/amozeshgah/"):
+              try:
+                  req=Request("https://zomorodmelal.ir"+path,headers={"User-Agent":"ZomorodSiteAudit/1.0"})
+                  with urlopen(req,timeout=10) as response: body=response.read(200000).decode("utf-8","replace")
+                  a=Analyze();a.feed(body)
+                  print("PAGE_ASSETS="+path+" H1="+str(a.h1[:2])+" JS="+str(a.js[:8])+" CSS="+str(a.css[:8]))
+              except Exception as exc:print("PAGE_AUDIT_ERROR="+path+" "+type(exc).__name__)
+          PY
       - name: Clean temporary access materials
         if: always()
         run: rm -rf "$RUNNER_TEMP/zomorod-root"
