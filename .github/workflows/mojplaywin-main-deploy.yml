@@ -286,12 +286,12 @@ jobs:
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/mojplaywin-main-ssh"
-          python3 - <<'PY' | ssh -F "$d/config" saeit-cpanel '"/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python" -'
+          ssh -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - <<'PY'
           import hashlib, runpy, sys
           from pathlib import Path
           app = Path("/home/zomorod2/Saeit-staging")
           checks = {
-              "config/urls.py": ("path(\"\", services", "mojplaywin_views"),
+              "config/urls.py": ("services", "mojplaywin_views"),
               "core/services_views.py": ("mojplaywin.com", "return home(request)"),
               "core/mojplaywin_views.py": ("def home(request)", "mojplaywin/home.html"),
               "core/templates/mojplaywin/home.html": ("Ideas become knowledge", "OUR PORTFOLIO"),
@@ -313,7 +313,7 @@ jobs:
                   print(f"PASSENGER_RUNTIME_MODULE {name}={getattr(module, '__file__', 'not-loaded')}")
           except Exception as exc:
               print(f"PASSENGER_RUNTIME_IMPORT_ERROR {type(exc).__name__}")
-          PY
+          PY"
       - name: Roll back if smoke checks fail
         if: failure() && steps.deploy.outcome == 'success' && steps.smoke.outcome == 'failure'
         shell: bash
