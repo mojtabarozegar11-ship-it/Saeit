@@ -1,5 +1,6 @@
 from django.http import Http404
 from django.shortcuts import render
+from .mojplaywin_editorial import editorial_for
 
 FEATURES = [
  {"title":"Research & Innovation","text":"Evidence-led research, practical analysis, and ideas shaped into useful digital work.","image":"site/heroes/research.webp","url":"/research/"},
@@ -66,11 +67,11 @@ def venture(request, slug):
  item=next((entry for entry in VENTURES if entry["slug"] == slug), None)
  if item is None:
   raise Http404
- return render(request,"mojplaywin/section.html",{"section_title":item["title"],"section_lead":item["lead"],"section_image":item["image"],"cards":item["cards"],"section_note":item["note"],"ventures":VENTURES,"active_venture":slug})
+ return render(request,"mojplaywin/section.html",{"section_title":item["title"],"section_lead":item["lead"],"section_image":item["image"],"cards":item["cards"],"section_note":item["note"],"ventures":VENTURES,"active_venture":slug,"editorial":editorial_for("venture",slug)})
 
 def platform_section(request, section):
  data=SECTIONS.get(section)
  if data is None:
   data=("Explore MojPlayWin","Explore research, learning, games, and useful digital projects.","site/heroes/platform-home.webp",[("Discover","Explore the work and ideas behind MojPlayWin."),("Learn","Find practical learning resources and guides."),("Get in touch","Discuss a research or digital project.")])
  title,lead,image,cards=data
- return render(request,"mojplaywin/section.html",{"section_title":title,"section_lead":lead,"section_image":image,"cards":cards,"ventures":VENTURES})
+ return render(request,"mojplaywin/section.html",{"section_title":title,"section_lead":lead,"section_image":image,"cards":cards,"ventures":VENTURES,"editorial":editorial_for("section",section)})
