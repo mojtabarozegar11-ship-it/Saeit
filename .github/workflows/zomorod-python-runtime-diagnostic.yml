@@ -73,6 +73,7 @@ jobs:
           htaccess="$HOME/public_html/.htaccess"
           test -f "$app/manage.py" && test -f "$htaccess"
           python_path="$(awk '$1 == "PassengerPython" { gsub(/"/, "", $2); print $2; exit }' "$htaccess")"
+          awk '/^[[:space:]]*Passenger(AppRoot|BaseURI|Python|StartupFile|ErrorLog|Enabled)[[:space:]]/ { print "PASSENGER_DIRECTIVE=" $0 }' "$htaccess"
           printf 'CONFIGURED_PASSENGER_PYTHON=%s\n' "${python_path:-missing}"
           if test -n "$python_path" && test -e "$python_path"; then
             printf 'PASSENGER_PATH_REAL=%s\n' "$(readlink -f "$python_path")"
@@ -209,7 +210,7 @@ jobs:
           from pathlib import Path
           import json, os, re, sys, time
           home=Path.home()
-          roots=[home/"logs",home/"Saeit"/"log",home/"Saeit"/"tmp",home/"public_html"]
+          roots=[home]
           found=[]
           explicit_logs=[]
           try:
@@ -240,10 +241,10 @@ jobs:
                   continue
               for current, dirs, names in os.walk(base):
                   depth=len(Path(current).relative_to(base).parts)
-                  dirs[:]=[d for d in dirs if depth<3 and d not in {".git","static","media","node_modules"}]
+                  dirs[:]=[d for d in dirs if depth<5 and d not in {".git","static","media","node_modules","virtualenv",".cl.selector",".backups",".cache","__pycache__"}]
                   for name in names:
                       low=name.lower()
-                      if low in {"error_log","error.log","stderr.log","passenger.log"} or ("error" in low and low.endswith(".log")) or "passenger" in low:
+                      if low in {"error_log","error.log","stderr.log","passenger.log"} or ("error" in low and low.endswith(".log")) or "passenger" in low or low.endswith(".log"):
                           p=Path(current)/name
                           try:
                               st=p.stat()
