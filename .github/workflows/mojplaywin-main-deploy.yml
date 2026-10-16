@@ -308,7 +308,7 @@ jobs:
               namespace = runpy.run_path("/home/zomorod2/mojplaywin.com/passenger_wsgi.py")
               app_obj = namespace.get("application")
               from django.test import Client
-              response = Client(HTTP_HOST="mojplaywin.com").get("/")
+              response = Client(HTTP_HOST="mojplaywin.com", secure=True).get("/", follow=True)
               body = response.content.decode("utf-8", "replace")
               print(f"INTERNAL_DJANGO_ROUTE status={response.status_code} expected={'Ideas become knowledge' in body} title={'MojPlayWin' if 'MojPlayWin' in body else 'other'}")
               print(f"PASSENGER_RUNTIME application={getattr(app_obj, '__module__', type(app_obj).__name__)}")
