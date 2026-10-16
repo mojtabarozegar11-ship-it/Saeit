@@ -1,0 +1,52 @@
+name: Mojtaba Vancouver 10 photo articles quality
+on:
+  push:
+    branches: ['feat/mojtaba-vancouver-collaboration-ten-photo-articles-20261016']
+    paths:
+      - 'content/mojtaba_vancouver_collab_part_*.json'
+      - 'scripts/mojtaba_vancouver_photo_articles_safe_publish.py'
+      - 'tests/test_mojtaba_vancouver_collaboration_photo_articles.py'
+      - '.github/workflows/mojtaba-vancouver-photo-articles-*.yml'
+  pull_request:
+    paths:
+      - 'content/mojtaba_vancouver_collab_part_*.json'
+      - 'scripts/mojtaba_vancouver_photo_articles_safe_publish.py'
+      - 'tests/test_mojtaba_vancouver_collaboration_photo_articles.py'
+      - '.github/workflows/mojtaba-vancouver-photo-articles-*.yml'
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check photo-backed content and guarded publisher
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mojtaba_vancouver_photo_articles_safe_publish.py
+          python3 -m unittest discover -s tests -p test_mojtaba_vancouver_collaboration_photo_articles.py -v
+      - name: Verify ten licensed Vancouver photographs are downloadable JPEG images
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/vancouver-photos"
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          items=sum((json.loads(Path(p).read_text())["articles"] for p in ("content/mojtaba_vancouver_collab_part_a_20261016.json","content/mojtaba_vancouver_collab_part_b_20261016.json")),[])
+          photo=json.loads(Path("content/mojtaba_vancouver_photo_cdn_urls_20261016.json").read_text())
+          Path("/tmp/vancouver-image-fetch-list.tsv").write_text("".join(f'{x["slug"]}\t{photo[x["photo_id"]]}\n' for x in items))
+          PY
+          while IFS="$(printf '\t')" read -r slug url; do
+            test -n "$slug"
+            curl --fail -L -sS --retry 2 --connect-timeout 12 --max-time 60 -A "Mozilla/5.0 (compatible; ResearchEditorialImageValidator/1.0)" -o "$RUNNER_TEMP/vancouver-photos/$slug.jpg" "$url"
+            SLUG="$slug" PHOTO_DIR="$RUNNER_TEMP/vancouver-photos" python3 - <<'PY'
+          import os
+          from pathlib import Path
+          p=Path(os.environ["PHOTO_DIR"])/(os.environ["SLUG"]+".jpg")
+          b=p.read_bytes()
+          assert b.startswith(b'\xff\xd8\xff') and 35000 <= len(b) <= 7000000,(p.name,len(b),b[:30])
+          print("VANCOUVER_LICENSED_JPEG_VALIDATED="+p.name,flush=True)
+          PY
+          done < /tmp/vancouver-image-fetch-list.tsv

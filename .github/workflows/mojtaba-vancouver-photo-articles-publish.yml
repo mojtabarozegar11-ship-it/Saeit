@@ -1,0 +1,258 @@
+name: Publish ten photo-backed Vancouver collaboration articles
+on:
+  issues:
+    types: [opened]
+permissions:
+  contents: read
+concurrency:
+  group: mojtaba-v17-vancouver-photo-journal-20261016
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event.issue.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.issue.title == 'Ops: Publish ten Vancouver collaboration articles with photographs 2026-10-16'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate content, attribution and rollback protections
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mojtaba_vancouver_photo_articles_safe_publish.py
+          python3 -m unittest discover -s tests -p test_mojtaba_vancouver_collaboration_photo_articles.py -v
+      - name: Download and verify ten licensed Vancouver photographs
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/vancouver-pictures"
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          parts=["content/mojtaba_vancouver_collab_part_a_20261016.json","content/mojtaba_vancouver_collab_part_b_20261016.json"]
+          rows=sum((json.loads(Path(p).read_text())["articles"] for p in parts),[])
+          assert len(rows)==10
+          photo=json.loads(Path("content/mojtaba_vancouver_photo_cdn_urls_20261016.json").read_text())
+          Path("/tmp/vancouver-download-urls.tsv").write_text("".join(f'{r["slug"]}\t{photo[r["photo_id"]]}\n' for r in rows).replace("\\t","\t").replace("\\n","\n"))
+          PY
+          while IFS="$(printf '	')" read -r slug url; do
+            test -n "$slug"
+            curl --fail -L -sS --retry 2 --connect-timeout 12 --max-time 60 -A "Mozilla/5.0 (compatible; VancouverEditorialMediaFetcher/1.0)" -o "$RUNNER_TEMP/vancouver-pictures/$slug.jpg" "$url"
+            NAME="$slug" DIR="$RUNNER_TEMP/vancouver-pictures" python3 - <<'PY'
+          import os
+          from pathlib import Path
+          b=(Path(os.environ["DIR"])/(os.environ["NAME"]+".jpg")).read_bytes()
+          assert b.startswith(b'\xff\xd8\xff') and 35000<=len(b)<=7000000,(len(b),b[:25])
+          print("VANCOUVER_LICENSED_IMAGE_READY="+os.environ["NAME"],flush=True)
+          PY
+          done < /tmp/vancouver-download-urls.tsv
+          tar -czf "$RUNNER_TEMP/vancouver-pictures.tgz" -C "$RUNNER_TEMP" vancouver-pictures
+      - name: Prepare pinned SSH relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/photo-relay"
+          mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          python3 - "$d/host.key" <<'PY'
+          import pathlib,sys
+          p=pathlib.Path(sys.argv[1]);t=p.read_text().replace('\r\n','\n').strip()
+          p.write_text(t.replace('\\n','\n')+'\n')
+          PY
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host saeit-host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+            ConnectionAttempts 1
+          EOF
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          echo "SSH_CONFIG=$d/config" >> "$GITHUB_ENV"
+      - name: Transfer bounded installer, manuscripts and photo archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          stage="/home/zomorod2/.mpw-vancouver-media-$GITHUB_RUN_ID"
+          timeout 30s ssh -F "$SSH_CONFIG" saeit-host "test ! -e '$stage' && install -d -m 700 '$stage'"
+          timeout 90s scp -F "$SSH_CONFIG" scripts/mojtaba_vancouver_photo_articles_safe_publish.py "saeit-host:$stage/installer.py"
+          timeout 90s scp -F "$SSH_CONFIG" content/mojtaba_vancouver_collab_part_a_20261016.json "saeit-host:$stage/part_a.json"
+          timeout 90s scp -F "$SSH_CONFIG" content/mojtaba_vancouver_collab_part_b_20261016.json "saeit-host:$stage/part_b.json"
+          timeout 90s scp -F "$SSH_CONFIG" "$RUNNER_TEMP/vancouver-pictures.tgz" "saeit-host:$stage/photos.tgz"
+          timeout 90s scp -F "$SSH_CONFIG" content/mojtaba_seven_full_independent_journal_20261016.json "saeit-host:$stage/mojtaba_seven_full_independent_journal_20261016.json"
+          timeout 90s scp -F "$SSH_CONFIG" content/mojtaba_six_advanced_journal_articles_20261016.json "saeit-host:$stage/mojtaba_six_advanced_journal_articles_20261016.json"
+          timeout 90s scp -F "$SSH_CONFIG" content/mojtaba_ten_advanced_website_engineering_20261016.json "saeit-host:$stage/mojtaba_ten_advanced_website_engineering_20261016.json"
+      - name: Install and live-verify 33 native articles and 20 original photos with rollback
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 900s ssh -F "$SSH_CONFIG" saeit-host "bash -s -- '$GITHUB_RUN_ID'" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          id="$1"
+          app="/home/zomorod2/mojtaba_personal/mojtaba_roozegar_personal_v17"
+          stage="/home/zomorod2/.mpw-vancouver-media-$id"
+          py="$app/../.venv_personal_test/bin/python"
+          source="$stage/part_a.json"
+          source2="$stage/part_b.json"
+          backup="$HOME/.backups/mojtaba-vancouver-collaboration/$id"
+          script="$stage/installer.py"
+          installed=0
+          success=0
+          on_exit() {
+            status=$?
+            trap - EXIT
+            if test "$installed" = 1 && test "$success" = 0 && test -f "$backup/state.json"; then
+              "$py" "$script" rollback --app "$app" --backup "$backup" && echo "VANCOUVER_PHOTO_AUTO_ROLLBACK=success" || echo "VANCOUVER_PHOTO_AUTO_ROLLBACK_REQUIRES_MANUAL_CHECK=yes"
+            fi
+            exit "$status"
+          }
+          trap on_exit EXIT
+          test -f "$app/manage.py" && test -x "$py" && test ! -L "$app"
+          test -f "$script" && test -f "$source" && test -f "$source2" && test -f "$stage/photos.tgz"
+          "$py" "$script" check --app "$app" --part-a "$source" --part-b "$source2"
+          cd "$stage"
+          tar -xzf photos.tgz --no-same-owner
+          cd "$app"
+          "$py" - "$script" "$source" "$source2" "$stage" <<'PY_PRE'
+          import importlib.util,os,sys
+          from pathlib import Path
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          import django;django.setup()
+          from django.template import engines
+          from django.urls import reverse
+          from django.conf import settings
+          from core.models import Post
+          spec=importlib.util.spec_from_file_location("vancouver",sys.argv[1])
+          m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
+          rows=m.load_bundle([Path(sys.argv[2]),Path(sys.argv[3])])
+          old=m.old_slugs(Path(sys.argv[4]))
+          assert Post.objects.filter(slug__in=old,published=True).count()==23
+          assert not Post.objects.filter(slug__in=[r["slug"] for r in rows]).exists()
+          assert settings.MEDIA_URL.startswith("/") and settings.MEDIA_URL.endswith("/")
+          for r in rows:
+              assert reverse("personal_site:post_detail",kwargs={"slug":r["slug"]})=="/mojtaba.roozegar/blog/"+r["slug"]+"/"
+          m.safe_photos(rows,Path(sys.argv[4])/"vancouver-pictures")
+          for page,original in m.protected_templates(m.APP).items():
+              candidate=m.patch(page,original,rows,settings.MEDIA_URL)
+              engines["django"].engine.from_string(candidate)
+              print("VANCOUVER_TEMPLATE_CHECK="+page,flush=True)
+          print("VANCOUVER_23_OLD_AND_10_NEW_PREFLIGHT_OK=yes",flush=True)
+          PY_PRE
+          installed=1
+          "$py" "$script" install --app "$app" --part-a "$source" --part-b "$source2" --photos "$stage/vancouver-pictures" --old-content "$stage" --backup "$backup"
+          "$py" manage.py check --deploy
+          test ! -d "$app/tmp" || touch "$app/tmp/restart.txt"
+          "$py" - "$source" "$source2" "$stage" <<'PY_LIVE'
+          import os,json,sys,time
+          from html import unescape
+          from html.parser import HTMLParser
+          from urllib.request import Request,urlopen
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          import django;django.setup()
+          from core.models import Post,GalleryItem
+          from django.conf import settings
+          rows=sum((json.load(open(p,encoding="utf-8"))["articles"] for p in sys.argv[1:3]),[])
+          manifests=("mojtaba_seven_full_independent_journal_20261016.json","mojtaba_six_advanced_journal_articles_20261016.json","mojtaba_ten_advanced_website_engineering_20261016.json")
+          old=sum((json.load(open(sys.argv[3]+"/"+p,encoding="utf-8"))["articles"] for p in manifests),[])
+          posts={p.slug:p for p in Post.objects.filter(slug__in=[r["slug"] for r in rows+old],published=True)}
+          if len(posts)!=33:raise RuntimeError("Expected 33 published articles")
+          base="https://mojplaywin.com/mojtaba.roozegar/"
+          class Page(HTMLParser):
+              def __init__(self):super().__init__();self.img=[];self.first=[];self.second=[];self.t=[];self.in_title=False
+              def handle_starttag(self,t,attrs):
+                  a=dict(attrs)
+                  if t=="img":
+                      s=a.get("src","");self.img.append((s,a.get("alt","")))
+                      if "owner_gallery_20261015_b/" in s:self.second.append(s)
+                      elif "owner_gallery_20261015/" in s:self.first.append(s)
+                  if t=="title":self.in_title=True
+              def handle_endtag(self,t):
+                  if t=="title":self.in_title=False
+              def handle_data(self,data):
+                  if self.in_title:self.t.append(data)
+          def fetch(full):
+              with urlopen(Request(full,headers={"User-Agent":"MojtabaVancouverImageProof/1"}),timeout=23) as r:
+                  if r.status!=200:raise ValueError("Non200 "+full)
+                  return r.read(4500000),r.headers
+          def page(relative,check):
+              last=""
+              for attempt in range(6):
+                  try:
+                      b,_=fetch(base+relative+("?test=" if "?" not in relative else "&test=")+str(time.time_ns()))
+                      check(b.decode("utf-8","replace"));return
+                  except Exception as exc:
+                      last=str(exc);time.sleep(3)
+              raise RuntimeError("Failed "+relative+" "+last)
+          for path in ("","blog/"):
+              def check_index(body):
+                  for mk in ('id="mpw-vancouver-collab-photo-ten-20261016"','id="mpw-fifty-editorials-20261015"','id="mpw-website-ten-index-20261016"'):
+                      if mk not in body:raise ValueError("Missing original or new section "+mk)
+                  p=Page();p.feed(body)
+                  if sum("vancouver-collab-20261016/" in img for img,_ in p.img)<10:raise ValueError("Not ten visible cover photos")
+              page(path,check_index)
+              print("VANCOUVER_ARTICLE_INDEX_AND_IMAGES_VERIFIED="+(path or "home"),flush=True)
+          for row in rows+old:
+              slug=row["slug"];post=posts[slug]
+              if not post.cover:raise ValueError("Native article without photo "+slug)
+              image_url=post.cover.url
+              if image_url.startswith("/"):image_url="https://mojplaywin.com"+image_url
+              def verify_article(body,slug=slug,row=row):
+                  if row["title"] not in unescape(body):raise ValueError("Title missing")
+                  p=Page();p.feed(body)
+                  if not any(post.cover.url in image_src or image_src.endswith(post.cover.name) for image_src,alt in p.img):
+                      raise ValueError("Cover not rendered")
+              page("blog/"+slug+"/",verify_article)
+              if slug in {v["slug"] for v in rows}:
+                  raw,headers=fetch(image_url)
+                  if not raw.startswith(b'\xff\xd8\xff') or len(raw)<35000:raise ValueError("Public JPEG missing")
+                  print("VANCOUVER_NEW_ARTICLE_WITH_PUBLIC_PHOTO="+slug,flush=True)
+          print("VANCOUVER_ALL_33_ARTICLES_HAVE_VISIBLE_IMAGES=yes",flush=True)
+          def check_gallery(body):
+              p=Page();p.feed(body)
+              if len(p.first)!=10 or len(p.second)!=10:raise ValueError("Original 20 owner photos changed")
+          page("gallery/",check_gallery)
+          print("VANCOUVER_20_ORIGINAL_OWNER_PHOTOS_PRESERVED=yes",flush=True)
+          PY_LIVE
+          for origin in "https://mojplaywin.com/" "https://zomorodmelal.ir/"; do
+            test "$(curl -sSL -o /dev/null -w '%{http_code}' --max-time 24 "$origin")" = 200
+            echo "VANCOUVER_ORIGINAL_DOMAIN_HEALTHY=$origin HTTP_200"
+          done
+          success=1
+          trap - EXIT
+          echo "VANCOUVER_ALL_TEN_ILLUSTRATED_ARTICLES_LIVE_PUBLISHED=yes"
+          echo "VANCOUVER_BACKUP=$backup"
+          rm -rf "$stage"
+          REMOTE
+      - name: Remove temporary SSH credentials
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/photo-relay"
