@@ -379,7 +379,7 @@ EDITORIAL = {
     ],
     "images": [
       {
-        "path": "site/heroes/ai.webp",
+        "path": "site/mojplaywin-atelier/ai-workflow.svg",
         "alt": "Editorial concept illustration — responsible AI automation",
         "caption": "responsible AI automation"
       },
@@ -722,7 +722,7 @@ EDITORIAL = {
     ],
     "images": [
       {
-        "path": "site/heroes/ai.webp",
+        "path": "site/mojplaywin-atelier/blockchain-network.svg",
         "alt": "Editorial concept illustration — technical digital systems and automation",
         "caption": "technical digital systems and automation"
       },
