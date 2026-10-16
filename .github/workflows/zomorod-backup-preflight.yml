@@ -85,13 +85,18 @@ jobs:
           if command -v quota >/dev/null 2>&1; then quota -s 2>/dev/null || echo "ACCOUNT_QUOTA=unavailable"; else echo "ACCOUNT_QUOTA=command_unavailable"; fi
           if command -v uapi >/dev/null 2>&1; then
             uapi --output=json StatsBar get_stats 2>/dev/null | python3 -c 'import sys,json
-          def walk(v,p=""):
+          def walk(v):
               if isinstance(v,dict):
-                  for k,z in v.items(): walk(z,p+"_"+str(k).upper())
+                  labels=[v.get(k) for k in ("name","label","key","display_name","display")]
+                  label=next((str(x) for x in labels if isinstance(x,str)), "")
+                  if any(t in label.lower() for t in ("disk","quota","storage")):
+                      vals=[v.get(k) for k in ("value","usage","limit","total","used","available")]
+                      for x in vals:
+                          if isinstance(x,(int,float,str)) and str(x).replace(".","",1).isdigit():
+                              print("CPANEL_STAT_"+label.upper().replace(" ","_")+"="+str(x)); break
+                  for z in v.values(): walk(z)
               elif isinstance(v,list):
-                  for i,z in enumerate(v): walk(z,p+"_"+str(i))
-              elif isinstance(v,(int,float,str)) and ("DISK" in p or "QUOTA" in p):
-                  if str(v).replace(".","",1).isdigit(): print("CPANEL"+p+"="+str(v))
+                  for z in v: walk(z)
           walk(json.load(sys.stdin))' || echo "CPANEL_DISK_STATS=unavailable"
           else
             echo "CPANEL_DISK_STATS=command_unavailable"
