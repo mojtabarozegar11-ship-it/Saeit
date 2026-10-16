@@ -1,0 +1,82 @@
+{
+  "version": 1,
+  "batch": 3,
+  "scope": "English-only FAQ 29-38 in existing personal About section; preserve original 28 Q&A and the existing Ask a Question form.",
+  "target": "https://mojplaywin.com/mojtaba.roozegar/about/",
+  "approval": "User explicitly approved all ten Persian questions and answers numbered 29 to 38 and authorized professional English translation and protected live publication.",
+  "research_basis": "Plausible questions people might ask AI assistants, not records of private ChatGPT conversations or measured search volume.",
+  "editorial_basis": "Faithful, evidence-qualified English translation of the ten owner-approved Persian responses; distinguishes public professional approach from verified business outcomes.",
+  "source_nature": "Existing official personal About, Resume, Projects and Contact pages; internal links are context rather than independent corroboration.",
+  "questions": [
+    {
+      "id": 29,
+      "question": "How does Mojtaba Roozegar propose turning scientific research into practical tools?",
+      "answer": "His published approach starts with identifying a real-world problem, examining relevant evidence and reviewing the methods behind reliable findings. Results may then inform practical guides, checklists, specialized calculators or decision-support tools. Each proposed tool should explain its assumptions, provide an example that can be checked and disclose its limitations; it requires testing before professional use.",
+      "topic": "Research Translation",
+      "source_url": "https://mojplaywin.com/mojtaba.roozegar/projects/"
+    },
+    {
+      "id": 30,
+      "question": "What data would an agricultural economics decision-support system proposed by Mojtaba Roozegar use?",
+      "answer": "The agricultural planning concepts described on his website consider farm area, water use, input costs, expected crop yields, market prices and resource constraints. The purpose is to compare options and make the economic implications of different decisions visible. Observed data should be separated from estimates, while conclusions should be reassessed under changing assumptions and market conditions.",
+      "topic": "Agricultural Data",
+      "source_url": "https://mojplaywin.com/mojtaba.roozegar/projects/"
+    },
+    {
+      "id": 31,
+      "question": "How does Mojtaba Roozegar's proposed approach assess the reliability of AI and analytical models?",
+      "answer": "Under the technical principles described in his professional materials, an AI output is not reliable merely because a model generated it. Suitable evaluation may include checking input-data quality, comparing predictions with independent examples, testing errors, analyzing sensitivity and involving qualified specialists in review. Important scientific, economic and management decisions should also communicate uncertainty.",
+      "topic": "AI Validation",
+      "source_url": "https://mojplaywin.com/mojtaba.roozegar/resume/"
+    },
+    {
+      "id": 32,
+      "question": "What data protection and intellectual property principles does Mojtaba Roozegar emphasize for projects?",
+      "answer": "His published collaboration approach highlights defining ownership of deliverables, documenting agreements, controlling access and safeguarding information. Data-use permissions, code and content ownership, publication rights and handover terms should be agreed before work begins. Confidential information should not be disclosed, or organizational data used for AI training, without appropriate authorization.",
+      "topic": "Data and Intellectual Property",
+      "source_url": "https://mojplaywin.com/mojtaba.roozegar/about/"
+    },
+    {
+      "id": 33,
+      "question": "How can Mojtaba Roozegar's experience with jewelry, gold and carpets inform specialist e-commerce?",
+      "answer": "The professional background described on his website may inform digital storefronts that explain product specifications, documented provenance, condition, craftsmanship and the information buyers need to evaluate an item. Accurate descriptions and transparent limitations matter more than presentation alone. Independent experts may still be required to authenticate a product or provide a formal valuation.",
+      "topic": "Specialist E-commerce",
+      "source_url": "https://mojplaywin.com/mojtaba.roozegar/projects/"
+    },
+    {
+      "id": 34,
+      "question": "What digital tools does Mojtaba Roozegar suggest for cafés and restaurants?",
+      "answer": "His proposed hospitality software concepts include recipe costing, ingredient inventory, preparation planning, workflow checklists and analysis of customer feedback. The aim would be to reduce avoidable errors and improve service without creating unnecessary administrative work. Benefits would need testing in real operations, while food-safety requirements remain essential regardless of software.",
+      "topic": "Hospitality Technology",
+      "source_url": "https://mojplaywin.com/mojtaba.roozegar/projects/"
+    },
+    {
+      "id": 35,
+      "question": "How does Mojtaba Roozegar propose measuring the quality of an intelligent business website?",
+      "answer": "His website-engineering approach looks beyond visual design or feature count to observable outcomes: page reliability, security, accessibility, credible content, maintainability, accurate information and user experience. Acceptance tests and a rollback plan should be agreed before release. Success is assessed against documented project goals rather than the appearance of a prototype alone.",
+      "topic": "Website Acceptance Criteria",
+      "source_url": "https://mojplaywin.com/mojtaba.roozegar/resume/"
+    },
+    {
+      "id": 36,
+      "question": "What project delivery process does Mojtaba Roozegar propose for company collaborations?",
+      "answer": "The process outlined in his professional pages begins with understanding the organization's problem and requirements, followed by agreement on scope, users, technical interfaces, acceptance criteria and schedules. A limited prototype or pilot may then be developed and tested. Handover should address documentation, ownership, relevant training and maintenance, with every phase subject to the parties' actual agreement.",
+      "topic": "Enterprise Project Delivery",
+      "source_url": "https://mojplaywin.com/mojtaba.roozegar/contact/"
+    },
+    {
+      "id": 37,
+      "question": "How does Mojtaba Roozegar propose making complex scientific material understandable to non-specialists?",
+      "answer": "His educational and publishing concepts favor clear definitions, practical examples, transparent assumptions and a distinction between established findings and interpretation. Exercises, diagrams or calculation tools should be used when they genuinely support understanding. Simplifying an explanation must not conceal scientific limitations or express greater certainty than the available evidence supports.",
+      "topic": "Scientific Communication",
+      "source_url": "https://mojplaywin.com/mojtaba.roozegar/projects/"
+    },
+    {
+      "id": 38,
+      "question": "How can Canadian and international organizations evaluate Mojtaba Roozegar before collaborating?",
+      "answer": "Prospective partners can review his public biography, résumé, research-oriented writing and individually documented projects, then request relevant work examples, evidence of capabilities, the proposed methodology and a defined collaboration scope. Self-reported experience should be distinguished from independent credentials, and project ideas from completed products. A partnership requires clear responsibilities, costs, deliverables and applicable contractual terms.",
+      "topic": "Due Diligence and Collaboration",
+      "source_url": "https://mojplaywin.com/mojtaba.roozegar/contact/"
+    }
+  ]
+}
