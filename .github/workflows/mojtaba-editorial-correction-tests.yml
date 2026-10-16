@@ -1,0 +1,26 @@
+name: Personal profile editorial corrections tests
+on:
+  push:
+    branches: ['fix/mojtaba-remove-unwanted-photo-disclaimers-20261016']
+    paths:
+      - 'scripts/mojtaba_remove_unwanted_profile_disclaimers.py'
+      - 'tests/test_mojtaba_profile_editorial_cleanup.py'
+      - '.github/workflows/mojtaba-editorial-correction-*.yml'
+  pull_request:
+    paths:
+      - 'scripts/mojtaba_remove_unwanted_profile_disclaimers.py'
+      - 'tests/test_mojtaba_profile_editorial_cleanup.py'
+      - '.github/workflows/mojtaba-editorial-correction-*.yml'
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Keep scientific accuracy and 93 articles while removing rejected photo text
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mojtaba_remove_unwanted_profile_disclaimers.py
+          python3 -m unittest discover -s tests -p 'test_mojtaba_profile_editorial_cleanup.py' -v
