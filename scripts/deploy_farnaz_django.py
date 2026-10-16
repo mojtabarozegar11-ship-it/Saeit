@@ -47,8 +47,8 @@ def verify_layout() -> None:
                  APP / "manage.py", DOMAIN / ".htaccess"):
         if not safe_regular(path):
             raise RuntimeError(f"Expected regular file: {path}")
-    if not safe_regular(PYTHON):
-        raise RuntimeError(f"Expected verified Django Python: {PYTHON}")
+    if not PYTHON.is_file() or not os.access(PYTHON, os.X_OK):
+        raise RuntimeError(f"Expected executable Django Python: {PYTHON}")
     if "Saeit-staging" not in (DOMAIN / "passenger_wsgi.py").read_text(encoding="utf-8", errors="replace"):
         raise RuntimeError("Passenger is not pointed at the expected staging source")
 
