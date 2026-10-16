@@ -146,28 +146,28 @@ jobs:
           # Import the real Django WSGI application with the selector interpreter.
           # This is an isolated child process: no website config changes or GET requests.
           import_probe="""
-import os,sys,site
-from pathlib import Path
-root=Path(sys.argv[1])
-os.chdir(root)
-sys.path.insert(0,str(root))
-for location in sys.argv[2:]:
-    if os.path.isdir(location):
-        site.addsitedir(location)
-envfile=root/'.env'
-if envfile.is_file():
-    for raw in envfile.read_text(encoding='utf-8',errors='replace').splitlines():
-        raw=raw.strip()
-        if not raw or raw.startswith('#') or '=' not in raw:
-            continue
-        key,value=raw.split('=',1)
-        key=key.strip()
-        if key:
-            os.environ.setdefault(key,value.strip().strip('"').strip("'"))
-os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
-from config.wsgi import application
-print('ALT_DUALSITE_WSGI_IMPORT=passed')
-"""
+          import os,sys,site
+          from pathlib import Path
+          root=Path(sys.argv[1])
+          os.chdir(root)
+          sys.path.insert(0,str(root))
+          for location in sys.argv[2:]:
+              if os.path.isdir(location):
+                  site.addsitedir(location)
+          envfile=root/'.env'
+          if envfile.is_file():
+              for raw in envfile.read_text(encoding='utf-8',errors='replace').splitlines():
+                  raw=raw.strip()
+                  if not raw or raw.startswith('#') or '=' not in raw:
+                      continue
+                  key,value=raw.split('=',1)
+                  key=key.strip()
+                  if key:
+                      os.environ.setdefault(key,value.strip().strip('"').strip("'"))
+          os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          from config.wsgi import application
+          print('ALT_DUALSITE_WSGI_IMPORT=passed')
+          """
           try:
               r=subprocess.run(["/opt/alt/python310/bin/python3.10","-B","-c",import_probe,str(app),*sites],capture_output=True,text=True,timeout=20,check=False,env={**os.environ,"PYTHONDONTWRITEBYTECODE":"1"})
               print("ALT_DUALSITE_WSGI_EXIT="+str(r.returncode))
