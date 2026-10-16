@@ -329,7 +329,23 @@ jobs:
           echo "LIVE_ROUTE_CHECK=home passed"
           for route in agriculture agriculture/livestock agriculture/horticulture agriculture/greenhouse agriculture/poultry agriculture/aquaculture agriculture/inputs agriculture/seeds agriculture/fertilizers agriculture/pesticides agriculture/offices agriculture/water-soil agriculture/machinery agriculture/market; do
             fetch "https://zomorodmelal.ir/$route/" "$tmp"
-            grep -Fq 'saeit-zomorod-agriculture-v1' "$tmp"
+            case "$route" in
+              agriculture) expected='از خاک و آب، تا محصول و بازار.' ;;
+              agriculture/livestock) expected='دامپروری' ;;
+              agriculture/horticulture) expected='باغبانی و باغداری' ;;
+              agriculture/greenhouse) expected='گلخانه' ;;
+              agriculture/poultry) expected='پرورش طیور' ;;
+              agriculture/aquaculture) expected='آبزی‌پروری' ;;
+              agriculture/inputs) expected='نهاده‌های کشاورزی' ;;
+              agriculture/seeds) expected='بذر و نشا' ;;
+              agriculture/fertilizers) expected='کود و تغذیهٔ گیاه' ;;
+              agriculture/pesticides) expected='حفاظت گیاه و سموم' ;;
+              agriculture/offices) expected='ادارات و خدمات کشاورزی' ;;
+              agriculture/water-soil) expected='آب، خاک و منابع مزرعه' ;;
+              agriculture/machinery) expected='ماشین‌آلات و فناوری مزرعه' ;;
+              agriculture/market) expected='بازار و زنجیرهٔ ارزش' ;;
+            esac
+            grep -Fq "$expected" "$tmp" || { echo "LIVE_ROUTE_CONTENT_CHECK_FAILED=$route expected=$expected" >&2; exit 1; }
             echo "LIVE_ROUTE_CHECK=$route passed"
           done
           check_webp() {
