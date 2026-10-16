@@ -1,0 +1,207 @@
+name: Install Zomorod-only Nova Django Admin template after isolated render test
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/zomorod-admin-nova-protected-deploy.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-main-django-admin-template
+  cancel-in-progress: false
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify template has all original Django admin functionality
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s templates/admin/base_site.html
+          grep -Fq '{% extends "admin/base.html" %}' templates/admin/base_site.html
+          grep -Fq 'nav-sidebar' templates/admin/base_site.html
+          grep -Fq 'prefers-reduced-motion' templates/admin/base_site.html
+          grep -Fq 'request.get_host == "zomorodmelal.ir"' templates/admin/base_site.html
+          echo "ZM_NOVA_ADMIN_SOURCE=verified"
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - name: Back up any existing admin template and root/subsites, no changes yet
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1"; home="$HOME"; app="$home/Saeit"; web="$home/public_html"
+          backup="$home/.backups/zomorod-admin-nova/$sha"
+          target="$app/templates/admin/base_site.html"
+          test -d "$app/templates" && test ! -L "$app/templates"
+          test ! -L "$target"
+          test -s "$web/index.html" && grep -Fq 'zm-nova-home-2026-v1' "$web/index.html"
+          test -s "$web/site-heritage/home-before-redesign/index.html"
+          for dir in mohammad ghanadi amozeshgah; do test -s "$web/$dir/index.html"; done
+          test -f "$app/.env"
+          test -s "$home/.backups/zomorodmelal-db-recovery-validation/4360521e0fd085b5c86f2bda1780f7cb1cf84073/validation.sqlite3"
+          mkdir -p "$(dirname "$backup")"
+          test ! -e "$backup"
+          mkdir -m 700 "$backup"
+          mkdir -m 700 "$backup/staging"
+          if test -e "$target"; then
+            test -f "$target"
+            cp -p "$target" "$backup/base_site.original.html"
+            echo "ZM_NOVA_ADMIN_OLD_TEMPLATE=saved"
+          else
+            echo "ZM_NOVA_ADMIN_OLD_TEMPLATE=not_present"
+          fi
+          sha256sum "$web/index.html" "$web/.htaccess" \
+            "$web/site-heritage/home-before-redesign/index.html" \
+            "$web/mohammad/index.html" "$web/ghanadi/index.html" "$web/amozeshgah/index.html" > "$backup/immutable.sha256"
+          echo "ZM_NOVA_ADMIN_SITE_BACKUP=verified"
+          REMOTE
+      - name: Stage approved Django admin template privately
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          tar -cf - -C templates/admin base_site.html |
+            ssh -F "$d/config" saeit-cpanel "tar -xf - -C /home/zomorod2/.backups/zomorod-admin-nova/$GITHUB_SHA/staging"
+          echo "ZM_NOVA_ADMIN_STAGING=complete"
+      - name: Render the real Django admin template against isolated database before deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1"; cd "$HOME/Saeit"
+          export PYTHONDONTWRITEBYTECODE=1
+          export DATABASE_URL="sqlite:///$HOME/.backups/zomorodmelal-db-recovery-validation/4360521e0fd085b5c86f2bda1780f7cb1cf84073/validation.sqlite3"
+          unset OPENAI_API_KEY || true
+          "$HOME/virtualenv/Saeit/3.10/bin/python" - "$sha" <<'PY'
+          import os,sys
+          from pathlib import Path
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          import django
+          django.setup()
+          from django.conf import settings
+          from django.template import Engine,RequestContext
+          from django.test import RequestFactory
+          from django.contrib.auth.models import AnonymousUser
+          assert "/zomorodmelal-db-recovery-validation/" in settings.DATABASES["default"]["NAME"]
+          source=Path.home()/".backups"/"zomorod-admin-nova"/sys.argv[1]/"staging"
+          assert (source/"base_site.html").is_file()
+          staging=source
+          template_dir=Path(settings.BASE_DIR)/"templates"
+          engine=Engine(dirs=[str(staging),str(template_dir)],app_dirs=True)
+          tpl=engine.get_template("base_site.html")
+          for host in ("zomorodmelal.ir","mojplaywin.com"):
+              request=RequestFactory().get("/admin/",HTTP_HOST=host)
+              request.user=AnonymousUser()
+              rendered=tpl.render(RequestContext(request,{
+                  "title":"مدیریت","site_header":"Admin","site_title":"Admin",
+                  "user":request.user,"has_permission":False,
+                  "is_popup":False,"is_nav_sidebar_enabled":False,
+                  "available_apps":[],"app_list":[],
+              }))
+              if host=="zomorodmelal.ir":
+                  assert "میز مدیریت زمرد ملل" in rendered
+                  assert "zm-nova-brand" in rendered
+                  assert "prefers-reduced-motion" in rendered
+              else:
+                  assert "زمرد ملل" not in rendered
+                  assert "zm-nova-brand" not in rendered
+              print("ZM_NOVA_ADMIN_STAGE_RENDER="+host+" passed=yes")
+          PY
+          REMOTE
+      - name: Install only admin HTML with failure rollback; verify protected files
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1"; app="$HOME/Saeit"; web="$HOME/public_html"
+          backup="$HOME/.backups/zomorod-admin-nova/$sha"
+          source="$backup/staging/base_site.html"
+          target="$app/templates/admin/base_site.html"
+          rollback() {
+            set +e
+            if test -f "$backup/base_site.original.html"; then
+              cp -p "$backup/base_site.original.html" "$target.back"
+              mv -f "$target.back" "$target"
+            elif test -f "$target" && cmp -s "$target" "$source"; then
+              rm -f "$target"
+            fi
+            echo "ZM_NOVA_ADMIN_TEMPLATE_ROLLBACK=complete"
+          }
+          active=1
+          trap 'rc=$?; trap - EXIT; if test "$active" = 1; then rollback; fi; exit "$rc"' EXIT
+          test -s "$source"
+          mkdir -p "$app/templates/admin"
+          test ! -L "$app/templates/admin"
+          cp -p "$source" "$target.stage.$sha"
+          chmod 644 "$target.stage.$sha"
+          mv -f "$target.stage.$sha" "$target"
+          cmp -s "$source" "$target"
+          for route in / /agriculture/ /mohammad/ /ghanadi/ /amozeshgah/; do
+            code="$(curl -sS -L --max-time 20 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir$route" || true)"
+            echo "ZM_NOVA_ADMIN_PROTECTED_ROUTE=$route code=$code"
+            test "$code" = 200
+          done
+          sha256sum -c --status "$backup/immutable.sha256"
+          echo "ZM_NOVA_ADMIN_ROOT_AND_SUBSITES=unchanged"
+          active=0
+          trap - EXIT
+          echo "ZM_NOVA_ADMIN_TEMPLATE=installed"
+          REMOTE
+      - name: Remove runner SSH key material
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
