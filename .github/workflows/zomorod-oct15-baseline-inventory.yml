@@ -1,0 +1,130 @@
+name: Zomorod 15 October baseline backup inventory (read-only)
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/zomorod-oct15-baseline-inventory.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-baseline-inventory
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - name: Inspect pre-incident homepage baselines without modifying hosting files
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          python3 - <<'PY'
+          import pathlib,hashlib,datetime,zoneinfo,os,re
+          home=pathlib.Path.home()
+          web=home/"public_html"
+          tz=zoneinfo.ZoneInfo("Asia/Tehran")
+          def meta(path,group,show_title=False):
+              if not path.exists() or not path.is_file() or path.is_symlink():
+                  print("BASELINE_FILE",group,str(path.relative_to(home)),"missing");return
+              st=path.stat()
+              with path.open("rb") as f:
+                  digest=hashlib.file_digest(f,"sha256").hexdigest()[:20]
+              stamp=datetime.datetime.fromtimestamp(st.st_mtime,datetime.timezone.utc).astimezone(tz).isoformat(timespec="seconds")
+              print("BASELINE_FILE",group,str(path.relative_to(home)),"bytes="+str(st.st_size),"tehran="+stamp,"sha20="+digest)
+              if show_title and st.st_size<350000:
+                  raw=path.read_text(encoding="utf-8",errors="replace")
+                  match=re.search(r"<title[^>]*>(.*?)</title>",raw,re.I|re.S)
+                  if match:
+                      title=re.sub(r"\s+"," ",match.group(1)).strip()
+                      print("BASELINE_TITLE",group,title[:110])
+          for rel in ("index.html",".htaccess","agriculture/index.html","amozeshgah/index.html","mohammad/index.html","ghanadi/index.html"):
+              meta(web/rel,"LIVE",show_title=rel=="index.html")
+          for rel in ("passenger_wsgi.py","config/wsgi.py","config/settings.py"):
+              meta(home/"Saeit"/rel,"APP")
+          # Only metadata in known backup locations. Never inspect database, env, keys, logs, or independent site contents.
+          roots=[home/".backups"/"zomorodmelal-root-homepage",home/".backups"/"zomorodmelal-amozeshgah",home/"Saeit"/"backups",home/"Saeit"/"var"/"backups",home/".backups"]
+          for root in roots:
+              if not root.is_dir():
+                  print("BACKUP_ROOT",root.name,"missing");continue
+              print("BACKUP_ROOT",str(root.relative_to(home)),"present")
+              selected=[]
+              for base,dirs,files in os.walk(root):
+                  directory=pathlib.Path(base)
+                  depth=len(directory.relative_to(root).parts)
+                  dirs[:]=sorted([d for d in dirs if not d.startswith(".") and not any(s in d.lower() for s in ("mohammad","ghanadi","amozeshgah","secrets","private","token"))]) if depth<4 else []
+                  for name in files:
+                      lname=name.lower()
+                      if name in ("index.html","passenger_wsgi.py",".htaccess") or (depth<2 and any(w in lname for w in ("root","homepage","20261014","20261015","phase19")) and len(name)<110):
+                          path=directory/name
+                          if path.is_symlink():continue
+                          try: st=path.stat()
+                          except OSError: continue
+                          selected.append((st.st_mtime,path))
+              for _,path in sorted(selected,reverse=True)[:70]:
+                  meta(path,"BACKUP",show_title=path.name=="index.html")
+          PY
+          REMOTE
+      - name: Read-only public status
+        shell: bash
+        run: |
+          set -euo pipefail
+          for route in / /agriculture/ /admin/login/ /amozeshgah/ /mohammad/ /ghanadi/; do
+            status="$(curl -sS --max-time 16 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir$route" || true)"
+            echo "ROOT_ROUTE $route $status"
+          done
+      - name: Remove temporary SSH material
+        if: always()
+        shell: bash
+        run: rm -rf -- "$RUNNER_TEMP/zomorod-baseline-inventory"
