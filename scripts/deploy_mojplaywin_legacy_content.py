@@ -15,6 +15,7 @@ APP_ROOT = HOME / "Saeit-staging"
 DOCROOT = HOME / "mojplaywin.com"
 BACKUP_ROOT = HOME / ".mojplaywin-backups"
 FILES = (
+    Path("core/templates/brands/mojplaywin/base.html"),
     Path("core/templates/brands/mojplaywin/home.html"),
     Path("core/templates/brands/mojplaywin/page.html"),
     Path("core/static/site/mojplaywin.css"),
@@ -92,13 +93,15 @@ def read_payload(stage):
     return payload
 
 def validate_payload(payload):
-    home = payload[FILES[0]]
-    page = payload[FILES[1]]
-    css = payload[FILES[2]]
+    home = payload[FILES[1]]
+    page = payload[FILES[2]]
+    css = payload[FILES[3]]
+    required_base = ("MojPlayWin", "site/mojplaywin.css?v=20261016")
     required_home = ("mpw-hero", "PORTFOLIO MIX", "80% digital momentum", "20% real-world ventures")
     required_page = ("mpw-page-hero", "Seven practical fields", "page_key == 'agro-industry'")
     required_css = ("--bg:#050505", "--mpw-gold:#d4af37", "border:3px solid var(--mpw-gold)")
     for label, text, required in (
+        ("base", payload[FILES[0]], required_base),
         ("home", home, required_home), ("page", page, required_page), ("css", css, required_css)
     ):
         missing = [marker for marker in required if marker not in text]
@@ -136,7 +139,9 @@ def deploy(run_id, stage_arg):
             raise RuntimeError(f"Active MojPlayWin file is missing or unsafe: {relative}")
         existing = target.read_text(encoding="utf-8", errors="replace")
         marker = "mpw-hero" if relative.name == "home.html" else (
-            "mpw-page-hero" if relative.name == "page.html" else ".mpw-header"
+            "mpw-page-hero" if relative.name == "page.html" else (
+                "site/mojplaywin.css" if relative.name == "base.html" else ".mpw-header"
+            )
         )
         if marker not in existing:
             raise RuntimeError(f"Refusing to replace an unexpected live template: {relative}")

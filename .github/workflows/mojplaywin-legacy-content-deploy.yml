@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
     paths:
+      - "core/templates/brands/mojplaywin/base.html"
       - "core/templates/brands/mojplaywin/home.html"
       - "core/templates/brands/mojplaywin/page.html"
       - "core/static/site/mojplaywin.css"
@@ -30,6 +31,7 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           checks = {
+              "core/templates/brands/mojplaywin/base.html": ("site/mojplaywin.css?v=20261016",),
               "core/templates/brands/mojplaywin/home.html": ("PORTFOLIO MIX", "80% digital momentum", "20% real-world ventures"),
               "core/templates/brands/mojplaywin/page.html": ("Seven practical fields", "page_key == 'agro-industry'"),
               "core/static/site/mojplaywin.css": ("--bg:#050505", "--mpw-gold:#d4af37", "border:3px solid var(--mpw-gold)"),
@@ -101,6 +103,7 @@ jobs:
           d="$RUNNER_TEMP/mojplaywin-legacy-content-ssh"
           stage="/home/zomorod2/.mojplaywin-content-$GITHUB_RUN_ID"
           tar -czf "$RUNNER_TEMP/mojplaywin-content.tar.gz" \
+            core/templates/brands/mojplaywin/base.html \
             core/templates/brands/mojplaywin/home.html \
             core/templates/brands/mojplaywin/page.html \
             core/static/site/mojplaywin.css
@@ -126,7 +129,7 @@ jobs:
           python3 - <<'PY'
           from urllib.request import Request, urlopen
           checks = {
-              "https://mojplaywin.com/": ("200", "80% digital momentum", "20% real-world ventures"),
+              "https://mojplaywin.com/": ("200", "80% digital momentum", "20% real-world ventures", "site/mojplaywin.css?v=20261016"),
               "https://mojplaywin.com/agro-industry/": ("200", "Seven practical fields", "Currency and digital-asset literacy", "Carpets and handwoven textiles"),
               "https://mojplaywin.com/store/": ("200", "No public products yet", "ASTRA EARLY PREVIEW"),
           }
