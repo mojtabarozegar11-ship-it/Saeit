@@ -69,7 +69,7 @@ def make_html_snapshots():
             raise RuntimeError(f"unexpected canonical for {route}")
         if "mojplaywin-atelier-v4" not in html:
             raise RuntimeError(f"new template missing from {route}")
-        document = rewrite_local_static(html, copied, static_root)
+        document = rewrite_local_static(html, copied, static_root).replace('loading="lazy"', 'loading="eager"')
         (OUTPUT / f"{key}.html").write_text(document, encoding="utf-8")
         manifest[key] = {"path": route, "filename": f"{key}.html", "bytes": len(document)}
     (OUTPUT / "manifest.json").write_text(
@@ -90,6 +90,10 @@ def capture_viewports(manifest):
                 for mode, width, height in [("desktop", 1440, 900), ("mobile", 390, 844)]:
                     page = browser.new_page(viewport={"width": width, "height": height}, device_scale_factor=1)
                     page.goto((OUTPUT / detail["filename"]).resolve().as_uri(), wait_until="load")
+                    page.wait_for_function(
+                        "() => [...document.images].every(i => i.complete)",
+                        timeout=15000,
+                    )
                     page.screenshot(path=str(OUTPUT / f"{key}-{mode}.png"), full_page=True, animations="disabled")
                     stats = page.evaluate("""() => ({
                         title: document.title,
@@ -101,6 +105,14 @@ def capture_viewports(manifest):
                         overflow: document.documentElement.scrollWidth > innerWidth + 5,
                         scrollWidth: document.documentElement.scrollWidth
                     })""")
+                    if key == "home":
+                        nav = page.locator("#mw-all-pages-menu")
+                        nav.locator("summary").click()
+                        if not nav.locator(".mw-nav-panel").is_visible():
+                            raise RuntimeError(f"{key}-{mode}: Explore all menu did not open")
+                        menu_width = page.evaluate("document.documentElement.scrollWidth")
+                        if menu_width > width + 5:
+                            raise RuntimeError(f"{key}-{mode}: menu causes horizontal overflow")
                     results[f"{key}-{mode}"] = stats
                     page.close()
         finally:
