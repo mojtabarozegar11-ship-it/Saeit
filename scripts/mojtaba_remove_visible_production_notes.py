@@ -94,8 +94,14 @@ def clean_template(txt:str)->tuple[str,dict]:
     original=txt
     changes={}
     for phrase in BLOCKS+FRAGMENTS:
-        txt,n=remove_exact_html(txt,phrase)
-        if n:changes[phrase[:75]]=changes.get(phrase[:75],0)+n
+        # The Django source may contain HTML-escaped editorial prose (e.g. Work &amp; Activities).
+        # Treat the original and encoded spellings as one reviewed exact-match target.
+        candidates=(phrase,html.escape(phrase,quote=True))
+        total=0
+        for candidate in dict.fromkeys(candidates):
+            txt,n=remove_exact_html(txt,candidate)
+            total+=n
+        if total:changes[phrase[:75]]=changes.get(phrase[:75],0)+total
     txt,n=PHOTO_CREDIT_RE.subn(r"\1",txt)
     if n:changes["photo credits retained; illustrative production note removed"]=n
     txt,n=COLLECTION_RE.subn("",txt)
