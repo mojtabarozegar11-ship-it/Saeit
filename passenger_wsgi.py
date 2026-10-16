@@ -22,33 +22,21 @@ if os.path.exists(env_path):
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 
-# Temporary narrow diagnostic: capture the first and any nested Django setup callers.
-import threading
-import traceback
-from django.apps import apps as django_apps
-from django.apps.registry import Apps
+# CloudLinux's Passenger interpreter activates the app's lib site-packages,
+# while compiled wheels such as pydantic_core may be installed under lib64.
+# Add the existing package directory directly; do not re-run executable .pth hooks.
+venv_lib64 = os.path.join(
+    os.path.expanduser("~"),
+    "virtualenv",
+    "Saeit",
+    "3.10",
+    "lib64",
+    "python3.10",
+    "site-packages",
+)
+if os.path.isdir(venv_lib64) and venv_lib64 not in sys.path:
+    sys.path.insert(1, venv_lib64)
 
-print("PASSENGER_SETUP_INITIAL_LOADING=" + str(django_apps.loading), file=sys.stderr)
-print("PASSENGER_SETUP_INITIAL_READY=" + str(django_apps.ready), file=sys.stderr)
-_original_populate = Apps.populate
-_populate_calls = 0
-
-def _trace_setup_caller(self, installed_apps):
-    global _populate_calls
-    _populate_calls += 1
-    if _populate_calls <= 4:
-        print("PASSENGER_SETUP_CALL=%s loading=%s ready=%s thread=%s" % (
-            _populate_calls, self.loading, self.ready, threading.current_thread().name
-        ), file=sys.stderr)
-        if self.loading:
-            print("PASSENGER_REENTRANT_CALL_STACK_BEGIN", file=sys.stderr)
-            traceback.print_stack(limit=35, file=sys.stderr)
-            print("PASSENGER_REENTRANT_CALL_STACK_END", file=sys.stderr)
-    return _original_populate(self, installed_apps)
-
-Apps.populate = _trace_setup_caller
-
-# CloudLinux's Passenger interpreter already activates this app's virtualenv.
 # Avoid site.addsitedir(): it re-runs executable .pth hooks and can re-enter
 # Django initialization before Passenger imports this WSGI application.
 from config.wsgi import application
