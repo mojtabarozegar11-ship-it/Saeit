@@ -1,0 +1,208 @@
+name: Add agriculture guides to preserved Zomorod site (static)
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/zomorod-agriculture-static-publish.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-agriculture-static
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate source pages and hero image assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(find public/agriculture -name index.html -type f | wc -l)" = 15
+          for slug in livestock horticulture greenhouse poultry aquaculture inputs seeds fertilizers pesticides offices water-soil machinery market genetics; do
+            test -s "public/agriculture/$slug/index.html"
+            grep -Fq '<!-- saeit-zomorod-agriculture-v1 -->' "public/agriculture/$slug/index.html"
+          done
+          for image in platform-home agriculture smart-agriculture industry economy research knowledge genetics laboratory; do
+            test "$(stat -c %s "core/static/site/heroes/$image.webp")" -gt 1000
+          done
+          echo "STATIC_SOURCE=15 pages, 9 images"
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - name: Preserve all original files and create staging outside document root
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1"
+          web="$HOME/public_html"
+          backup="$HOME/.backups/zomorod-agriculture-static-publish/$sha"
+          test -s "$web/index.html" && test -s "$web/.htaccess"
+          test -s "$web/agriculture/index.html"
+          test -f "$web/agriculture/.htaccess" && ! test -L "$web/agriculture/.htaccess"
+          grep -Fq 'PassengerEnabled off' "$web/agriculture/.htaccess"
+          for rel in mohammad ghanadi amozeshgah; do test -s "$web/$rel/index.html"; done
+          mkdir -p "$(dirname "$backup")"
+          test ! -e "$backup"
+          mkdir -m 700 "$backup"
+          mkdir -p "$backup/staging/agriculture/assets/zomorod-olive-v1"
+          sha256sum "$web/index.html" "$web/.htaccess" "$web/agriculture/index.html" "$web/agriculture/.htaccess" \
+            "$web/mohammad/index.html" "$web/ghanadi/index.html" "$web/amozeshgah/index.html" > "$backup/immutable.sha256"
+          echo "STATIC_PRESERVATION_SNAPSHOT=verified"
+          REMOTE
+      - name: Stage existing GitHub agricultural HTML and image sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          sha="$GITHUB_SHA"
+          tar -cf - -C public agriculture | ssh -F "$d/config" saeit-cpanel "tar -xf - -C /home/zomorod2/.backups/zomorod-agriculture-static-publish/$sha/staging"
+          tar -cf - -C core/static/site/heroes platform-home.webp agriculture.webp smart-agriculture.webp industry.webp research.webp knowledge.webp genetics.webp laboratory.webp | ssh -F "$d/config" saeit-cpanel "tar -xf - -C /home/zomorod2/.backups/zomorod-agriculture-static-publish/$sha/staging/agriculture/assets/zomorod-olive-v1"
+          echo "STATIC_SOURCE_STAGED=complete"
+      - name: Add only missing pages and images with automatic rollback and public checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1"
+          web="$HOME/public_html"
+          backup="$HOME/.backups/zomorod-agriculture-static-publish/$sha"
+          stage="$backup/staging"
+          added="$backup/added-files.txt"
+          : > "$added"
+          for slug in livestock horticulture greenhouse poultry aquaculture inputs seeds fertilizers pesticides offices water-soil machinery market genetics; do
+            rel="agriculture/$slug/index.html"
+            src="$stage/$rel"
+            dst="$web/$rel"
+            test -s "$src" && grep -Fq '<!-- saeit-zomorod-agriculture-v1 -->' "$src"
+            test ! -L "$web/agriculture/$slug" && test ! -L "$dst"
+            if test -e "$dst"; then test -s "$dst" || exit 1; fi
+          done
+          for image in platform-home agriculture smart-agriculture industry economy research knowledge genetics laboratory; do
+            rel="agriculture/assets/zomorod-olive-v1/$image.webp"
+            src="$stage/$rel"
+            dst="$web/$rel"
+            test -s "$src" && test ! -L "$dst"
+            if test -e "$dst"; then test -s "$dst" || exit 1; fi
+          done
+          rollback() {
+            set +e
+            while IFS= read -r rel; do
+              test -n "$rel" || continue
+              dst="$web/$rel"
+              if test -f "$dst" && cmp -s "$dst" "$stage/$rel"; then
+                rm -f -- "$dst"
+                echo "ROLLBACK_NEW_FILE=$rel"
+              fi
+            done < "$added"
+            for slug in livestock horticulture greenhouse poultry aquaculture inputs seeds fertilizers pesticides offices water-soil machinery market genetics; do
+              rmdir "$web/agriculture/$slug" 2>/dev/null || true
+            done
+            echo "STATIC_ROLLBACK=complete"
+          }
+          active=1
+          trap 'rc=$?; trap - EXIT; if test "$active" = 1; then rollback; fi; exit "$rc"' EXIT
+          for slug in livestock horticulture greenhouse poultry aquaculture inputs seeds fertilizers pesticides offices water-soil machinery market genetics; do
+            rel="agriculture/$slug/index.html"
+            dst="$web/$rel"
+            if ! test -e "$dst"; then
+              mkdir -p "$(dirname "$dst")"
+              cp -p "$stage/$rel" "$dst.new.$sha"
+              mv -n "$dst.new.$sha" "$dst"
+              cmp -s "$dst" "$stage/$rel"
+              printf '%s\n' "$rel" >> "$added"
+              echo "NEW_AGRICULTURE_GUIDE=$slug"
+            else
+              echo "PRESERVED_AGRICULTURE_GUIDE=$slug"
+            fi
+          done
+          for image in platform-home agriculture smart-agriculture industry economy research knowledge genetics laboratory; do
+            rel="agriculture/assets/zomorod-olive-v1/$image.webp"
+            dst="$web/$rel"
+            if ! test -e "$dst"; then
+              mkdir -p "$(dirname "$dst")"
+              cp -p "$stage/$rel" "$dst.new.$sha"
+              mv -n "$dst.new.$sha" "$dst"
+              cmp -s "$dst" "$stage/$rel"
+              printf '%s\n' "$rel" >> "$added"
+              echo "NEW_AGRICULTURE_IMAGE=$image"
+            fi
+          done
+          for slug in livestock horticulture greenhouse poultry aquaculture inputs seeds fertilizers pesticides offices water-soil machinery market genetics; do
+            response="$backup/$slug.response.html"
+            code="$(curl -sS -L --max-time 25 -H 'Cache-Control: no-cache' -o "$response" -w '%{http_code}' "https://zomorodmelal.ir/agriculture/$slug/?__static_release=$sha" || true)"
+            echo "PUBLIC_AGRICULTURE_GUIDE=$slug code=$code"
+            test "$code" = 200
+            grep -Fq '<!-- saeit-zomorod-agriculture-v1 -->' "$response"
+          done
+          for image in platform-home agriculture smart-agriculture industry economy research knowledge genetics laboratory; do
+            code="$(curl -sS -L --max-time 20 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir/agriculture/assets/zomorod-olive-v1/$image.webp" || true)"
+            echo "PUBLIC_AGRICULTURE_IMAGE=$image code=$code"
+            test "$code" = 200
+          done
+          for route in / /agriculture/ /mohammad/ /ghanadi/ /amozeshgah/; do
+            code="$(curl -sS -L --max-time 23 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir$route" || true)"
+            echo "PUBLIC_PROTECTED_SITE=$route code=$code"
+            test "$code" = 200
+          done
+          sha256sum -c --status "$backup/immutable.sha256"
+          echo "ORIGINAL_SITE_HASHES=unchanged"
+          active=0
+          trap - EXIT
+          echo "ALL_AGRICULTURE_GUIDES_PUBLISHED=passed"
+          REMOTE
+      - name: Remove temporary relay credentials
+        if: always()
+        shell: bash
+        run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
