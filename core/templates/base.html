@@ -54,7 +54,7 @@ body.zomorod-olive-site main{background-image:none!important}
 body.zomorod-olive-site main [class*="hero"],body.zomorod-olive-site main [class*="noise"]{background-image:none!important}
 </style>
 </head>
-<body class="site-standard-v2 {% if request.get_host == "mojplaywin.com" or request.get_host == "www.mojplaywin.com" %}mojplaywin-site{% endif %} {% if request.get_host == "zomorodmelal.ir" or request.get_host == "www.zomorodmelal.ir" %}zomorod-olive-site{% endif %} {% block body_class %}page-default{% endblock %}">
+<body class="site-standard-v2{% if request.get_host == "mojplaywin.com" or request.get_host == "www.mojplaywin.com" %} mojplaywin-site{% elif request.get_host == "zomorodmelal.ir" or request.get_host == "www.zomorodmelal.ir" %} zomorod-olive-site{% endif %} {% block body_class %}page-default{% endblock %}">
 <a class="skip-link" href="#main-content">{% if request.get_host == "mojplaywin.com" or request.get_host == "www.mojplaywin.com" %}Skip to content{% else %}پرش به محتوای اصلی{% endif %}</a>
 <div class="topbar">{% if request.get_host == "mojplaywin.com" or request.get_host == "www.mojplaywin.com" %}<div>Research · Digital Products · Learning</div><div class="toplinks"><a href="/company/">About</a><span>EN</span></div>{% else %}<div>زنجیره ارزش از پژوهش تا بازار</div><div class="toplinks"><a href="/company/">شرکت</a><span>FA · EN · AR</span></div>{% endif %}</div>
 <header class="site-header">
