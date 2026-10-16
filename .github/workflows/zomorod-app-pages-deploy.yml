@@ -1,0 +1,200 @@
+name: Publish Zomorod Django agriculture pages safely
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/zomorod-app-pages-deploy.yml"
+      - "config/urls.py"
+      - "core/zomorod_public_views.py"
+      - "core/services_views.py"
+      - "core/templates/base.html"
+      - "core/templates/core/services.html"
+      - "core/tests/test_zomorod_public_pages.py"
+      - "public/agriculture/**"
+      - "core/static/site/heroes/**"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-django-pages
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate managed agriculture pages and app source
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from html.parser import HTMLParser
+          from pathlib import Path
+          pages=sorted(Path("public/agriculture").rglob("index.html"))
+          if len(pages) != 14:
+              raise SystemExit(f"Expected 14 agriculture pages, found {len(pages)}")
+          class Check(HTMLParser):
+              def __init__(self):
+                  super().__init__(); self.title=False; self.h1=False; self.rtl=False
+              def handle_starttag(self, tag, attrs):
+                  a=dict(attrs)
+                  if tag=="html": self.rtl=a.get("lang")=="fa" and a.get("dir")=="rtl"
+                  if tag=="title": self.title=True
+                  if tag=="h1": self.h1=True
+          for page in pages:
+              source=page.read_text(encoding="utf-8"); check=Check(); check.feed(source)
+              if "<!-- saeit-zomorod-agriculture-v1 -->" not in source or not all((check.title,check.h1,check.rtl)):
+                  raise SystemExit(f"Invalid page: {page}")
+          print("AGRICULTURE_PAGES=14")
+          PY
+          python -m py_compile config/urls.py core/zomorod_public_views.py core/services_views.py
+      - name: Prepare pinned VPS relay and cPanel SSH
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-app"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+      - name: Stage only scoped Django and guide files
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-app"
+          app=/home/zomorod2/Saeit
+          stage="$app/.zomorod-stage-$GITHUB_SHA"
+          ssh -F "$d/config" saeit-cpanel "test -d '$app' && test ! -e '$stage' && mkdir -m 700 '$stage'"
+          tar -czf - config/urls.py core/zomorod_public_views.py core/services_views.py core/templates/base.html core/templates/core/services.html core/tests/test_zomorod_public_pages.py public/agriculture core/static/site/heroes/platform-home.webp core/static/site/heroes/agriculture.webp core/static/site/heroes/smart-agriculture.webp core/static/site/heroes/industry.webp core/static/site/heroes/economy.webp core/static/site/heroes/research.webp core/static/site/heroes/knowledge.webp core/static/site/heroes/academy.webp core/static/site/heroes/education-detail.webp core/static/site/heroes/ai.webp | ssh -F "$d/config" saeit-cpanel "tar -xzf - -C '$stage'"
+      - name: Back up, publish, verify live routes, or roll back
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-app"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -Eeuo pipefail
+          sha="$1"
+          app=/home/zomorod2/Saeit
+          stage="$app/.zomorod-stage-$sha"
+          backup="$HOME/.backups/zomorodmelal-app/$sha"
+          test -d "$stage" && test -d "$app" && test "$(stat -c %U "$app")" = "zomorod2" && test -w "$app"
+          audit="$HOME/.zomorod-passenger-audit-$sha.json"
+          trap 'rm -f -- "$audit"' EXIT
+          uapi --output=json PassengerApps list_applications > "$audit"
+          python3 - "$audit" <<'PY'
+          import json,sys
+          data=json.load(open(sys.argv[1],encoding="utf-8"))
+          stack=[data]; matches=[]
+          while stack:
+              v=stack.pop()
+              if isinstance(v,dict):
+                  if str(v.get("domain","")).lower()=="zomorodmelal.ir" and v.get("base_uri")=="/" and v.get("path")=="/home/zomorod2/Saeit":
+                      matches.append(v)
+                  stack.extend(v.values())
+              elif isinstance(v,list): stack.extend(v)
+          if not matches: raise SystemExit("Expected root Passenger app mapping was not found")
+          print("PASSENGER_ROOT_MAPPING=verified")
+          PY
+          rm -rf -- "$backup"
+          mkdir -p "$backup"
+          : > "$backup/existing.txt"
+          paths=(config/urls.py core/zomorod_public_views.py core/services_views.py core/templates/base.html core/templates/core/services.html core/tests/test_zomorod_public_pages.py public/agriculture/index.html public/agriculture/livestock/index.html public/agriculture/horticulture/index.html public/agriculture/greenhouse/index.html public/agriculture/poultry/index.html public/agriculture/aquaculture/index.html public/agriculture/inputs/index.html public/agriculture/seeds/index.html public/agriculture/fertilizers/index.html public/agriculture/pesticides/index.html public/agriculture/offices/index.html public/agriculture/water-soil/index.html public/agriculture/machinery/index.html public/agriculture/market/index.html core/static/site/heroes/platform-home.webp core/static/site/heroes/agriculture.webp core/static/site/heroes/smart-agriculture.webp core/static/site/heroes/industry.webp core/static/site/heroes/economy.webp core/static/site/heroes/research.webp core/static/site/heroes/knowledge.webp core/static/site/heroes/academy.webp core/static/site/heroes/education-detail.webp core/static/site/heroes/ai.webp)
+          for rel in "${paths[@]}"; do
+            test -f "$stage/$rel" || { echo "Missing staged file: $rel"; exit 1; }
+            target="$app/$rel"
+            test ! -L "$target"
+            if test -f "$target"; then
+              mkdir -p "$backup/$(dirname "$rel")"
+              cp -p "$target" "$backup/$rel"
+              printf '%s\n' "$rel" >> "$backup/existing.txt"
+            fi
+          done
+          rollback() {
+            set +e
+            for rel in "${paths[@]}"; do
+              target="$app/$rel"
+              if grep -Fxq "$rel" "$backup/existing.txt"; then
+                mkdir -p "$(dirname "$target")"
+                cp -p "$backup/$rel" "$target.rollback"
+                mv -f "$target.rollback" "$target"
+              else
+                rm -f -- "$target"
+              fi
+            done
+            touch "$app/passenger_wsgi.py"
+            echo "DEPLOYMENT_ROLLED_BACK=yes"
+          }
+          active=1
+          trap 'rc=$?; if test "$active" = 1; then rollback; fi; exit "$rc"' EXIT
+          for rel in "${paths[@]}"; do
+            target="$app/$rel"
+            mkdir -p "$(dirname "$target")"
+            cp -p "$stage/$rel" "$target.new"
+            mv -f "$target.new" "$target"
+          done
+          cd "$app"
+          python=/home/zomorod2/virtualenv/Saeit/3.11/bin/python
+          test -x "$python" || python=/home/zomorod2/virtualenv/Saeit/3.11/bin/python3
+          test -x "$python"
+          "$python" manage.py check --deploy
+          touch passenger_wsgi.py
+          tmp="$HOME/.zomorod-health-$sha"
+          curl -fsS --max-time 25 https://zomorodmelal.ir/ -o "$tmp"
+          grep -Eq 'کشاورزی|دامپروری' "$tmp"
+          for route in agriculture agriculture/livestock agriculture/horticulture agriculture/greenhouse agriculture/poultry agriculture/aquaculture agriculture/inputs agriculture/seeds agriculture/fertilizers agriculture/pesticides agriculture/offices agriculture/water-soil agriculture/machinery agriculture/market; do
+            curl -fsS --max-time 25 "https://zomorodmelal.ir/$route/" -o "$tmp"
+            grep -Fq 'saeit-zomorod-agriculture-v1' "$tmp"
+          done
+          for image in platform-home agriculture smart-agriculture industry economy research knowledge; do
+            curl -fsS --max-time 25 "https://zomorodmelal.ir/agriculture/assets/zomorod-olive-v1/$image.webp" -o /dev/null
+          done
+          for image in academy education-detail research knowledge agriculture industry ai economy; do
+            curl -fsS --max-time 25 "https://zomorodmelal.ir/amozeshgah/assets/zomorod-education-v1/$image.webp" -o /dev/null
+          done
+          for route in amozeshgah education ghanadi; do
+            curl -fsS --max-time 25 "https://zomorodmelal.ir/$route/" -o /dev/null
+          done
+          rm -f -- "$tmp"
+          rm -rf -- "$stage"
+          active=0
+          trap - EXIT
+          echo "LIVE_AGRICULTURE_PAGES=14"
+          echo "LIVE_IMAGE_ROUTES=15"
+          echo "DEPLOYMENT_ROLLBACK=available:$backup"
+          REMOTE
