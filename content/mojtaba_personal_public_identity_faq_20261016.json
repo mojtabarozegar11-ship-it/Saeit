@@ -1,0 +1,97 @@
+{
+  "version": 1,
+  "scope": "public personal professional information only",
+  "target": "https://mojplaywin.com/mojtaba.roozegar/",
+  "publication_status": "editorial candidate; verify current facts before deployment",
+  "source_policy": "No private history, unverified awards, invented partnerships or exact residence claims.",
+  "questions": [
+    {
+      "id": 1,
+      "en": {
+        "question": "Who is Mojtaba Roozegar?",
+        "answer": "Mojtaba Roozegar (مجتبی روزگار) is an entrepreneur, business executive and researcher whose personal website presents his professional interests, writing and selected projects."
+      },
+      "fa": {
+        "question": "مجتبی روزگار کیست؟",
+        "answer": "مجتبی روزگار کارآفرین، مدیر کسب‌وکار و پژوهشگری است که در وب‌سایت شخصی خود زمینه‌های فعالیت حرفه‌ای، نوشته‌ها و پروژه‌های منتخبش را معرفی می‌کند."
+      }
+    },
+    {
+      "id": 2,
+      "en": {
+        "question": "What fields does Mojtaba Roozegar work in?",
+        "answer": "His professional interests include agricultural and production economics, farm management, business development, research, education and applied digital technology."
+      },
+      "fa": {
+        "question": "زمینه‌های فعالیت مجتبی روزگار چیست؟",
+        "answer": "زمینه‌های فعالیت حرفه‌ای او شامل اقتصاد کشاورزی و تولید، مدیریت مزرعه، توسعه کسب‌وکار، پژوهش، آموزش و فناوری دیجیتال کاربردی است."
+      }
+    },
+    {
+      "id": 3,
+      "en": {
+        "question": "Where can visitors read his educational and research writing?",
+        "answer": "Visit the research journal on this personal website. Articles have individual pages and can be found through the journal and its topic links."
+      },
+      "fa": {
+        "question": "مطالب آموزشی و پژوهشی او کجا منتشر شده‌اند؟",
+        "answer": "نوشته‌های آموزشی و پژوهشی در بخش مجله سایت شخصی منتشر شده‌اند و هر مقاله صفحه مستقل و پیوندهای موضوعی دارد."
+      }
+    },
+    {
+      "id": 4,
+      "en": {
+        "question": "What is his academic field?",
+        "answer": "His academic profile describes work in agricultural economics, particularly production economics and farm management. The résumé provides his current public academic summary."
+      },
+      "fa": {
+        "question": "رشته تخصصی دانشگاهی او چیست؟",
+        "answer": "در معرفی علمی او اقتصاد کشاورزی، به‌ویژه اقتصاد تولید و مدیریت مزرعه مطرح شده است. جزئیات عمومی در صفحه رزومه آمده است."
+      }
+    },
+    {
+      "id": 5,
+      "en": {
+        "question": "Is he involved in intelligent website engineering?",
+        "answer": "His personal projects and journal describe research-led website design, Django-based systems, practical AI integration, analytics and enterprise collaboration proposals."
+      },
+      "fa": {
+        "question": "آیا در طراحی وب‌سایت‌های هوشمند فعالیت دارد؟",
+        "answer": "بخش پروژه‌ها و مجله او طراحی وب‌سایت مبتنی بر پژوهش، سامانه‌های Django، کاربرد عملی هوش مصنوعی، تحلیل داده و پیشنهادهای همکاری سازمانی را معرفی می‌کند."
+      }
+    },
+    {
+      "id": 6,
+      "en": {
+        "question": "What is Zomorod Melal?",
+        "answer": "Zomorod Melal Agro-Industry has a separate official website covering agricultural and related services. See zomorodmelal.ir for information about that company."
+      },
+      "fa": {
+        "question": "زمرد ملل چیست؟",
+        "answer": "زمرد ملل دارای وب‌سایت رسمی جداگانه برای معرفی فعالیت‌ها و خدمات کشاورزی و حوزه‌های مرتبط است. اطلاعات شرکت در zomorodmelal.ir منتشر می‌شود."
+      }
+    },
+    {
+      "id": 7,
+      "en": {
+        "question": "How is MojPlayWin related to this page?",
+        "answer": "MojPlayWin hosts this independent personal profile along with other digital initiatives. The personal pages are distinct from the platform's main website and other subsites."
+      },
+      "fa": {
+        "question": "رابطه MojPlayWin با سایت شخصی چیست؟",
+        "answer": "صفحه شخصی مجتبی روزگار در دامنه MojPlayWin میزبانی می‌شود، اما محتوای آن از سایت اصلی پلتفرم و سایر زیرسایت‌ها مستقل است."
+      }
+    },
+    {
+      "id": 8,
+      "en": {
+        "question": "How can I contact Mojtaba Roozegar about collaboration?",
+        "answer": "Use the official personal contact page at /mojtaba.roozegar/contact/ to outline an idea, research request or possible professional collaboration."
+      },
+      "fa": {
+        "question": "چگونه می‌توان برای همکاری با مجتبی روزگار تماس گرفت؟",
+        "answer": "از صفحه تماس سایت شخصی به نشانی /mojtaba.roozegar/contact/ می‌توان برای معرفی ایده، درخواست پژوهشی یا پیشنهاد همکاری حرفه‌ای استفاده کرد."
+      }
+    }
+  ]
+}
