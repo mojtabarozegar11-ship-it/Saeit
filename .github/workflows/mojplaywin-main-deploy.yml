@@ -286,7 +286,7 @@ jobs:
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/mojplaywin-main-ssh"
-          ssh -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - <<'PY'
+          ssh -F "$d/config" saeit-cpanel /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - <<'PY'
           import hashlib, runpy, sys
           from pathlib import Path
           app = Path("/home/zomorod2/Saeit-staging")
@@ -313,7 +313,7 @@ jobs:
                   print(f"PASSENGER_RUNTIME_MODULE {name}={getattr(module, '__file__', 'not-loaded')}")
           except Exception as exc:
               print(f"PASSENGER_RUNTIME_IMPORT_ERROR {type(exc).__name__}")
-          PY"
+          PY
       - name: Roll back if smoke checks fail
         if: failure() && steps.deploy.outcome == 'success' && steps.smoke.outcome == 'failure'
         shell: bash
