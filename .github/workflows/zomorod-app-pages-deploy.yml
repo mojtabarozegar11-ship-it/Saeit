@@ -6,6 +6,7 @@ on:
       - ".github/workflows/zomorod-app-pages-deploy.yml"
       - "config/urls.py"
       - "config/settings.py"
+      - "passenger_wsgi.py"
       - "core/views.py"
       - "core/company_content_models.py"
       - "core/zomorod_public_views.py"
