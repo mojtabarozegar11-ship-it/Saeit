@@ -1,0 +1,214 @@
+name: Add two agricultural and gardening tool guides safely
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/zomorod-tools-static-publish.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-agriculture-static
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate additive agriculture tools source
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="content/zomorod-agriculture-additions"
+          for slug in tools gardening-tools; do
+            test -s "$root/$slug/index.html"
+            grep -Fq '<!-- saeit-zomorod-tools-extension-v1 -->' "$root/$slug/index.html"
+            grep -Fq "/agriculture/$slug/" "$root/$slug/index.html"
+          done
+          test -s "$root/landing-addon.html"
+          grep -Fq 'ZM-TOOLS-ADDON-START' "$root/landing-addon.html"
+          grep -Fq 'ZM-TOOLS-ADDON-END' "$root/landing-addon.html"
+          echo "TOOLS_SOURCES=validated"
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - name: Back up only agriculture landing and hash untouched sites
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1"
+          web="$HOME/public_html"
+          base="$HOME/.backups/zomorod-tools-static/$sha"
+          landing="$web/agriculture/index.html"
+          test -s "$landing" && ! test -L "$landing"
+          grep -Fq '<!-- saeit-zomorod-agriculture-v1 -->' "$landing"
+          ! grep -Fq 'ZM-TOOLS-ADDON-START' "$landing"
+          test -f "$web/agriculture/.htaccess" && ! test -L "$web/agriculture/.htaccess"
+          grep -Fq 'PassengerEnabled off' "$web/agriculture/.htaccess"
+          for slug in tools gardening-tools; do
+            test ! -e "$web/agriculture/$slug/index.html"
+            test ! -L "$web/agriculture/$slug"
+          done
+          test -s "$web/index.html" && test -f "$web/.htaccess"
+          for slug in mohammad ghanadi amozeshgah; do
+            test -s "$web/$slug/index.html" || exit 1
+          done
+          mkdir -p "$(dirname "$base")"
+          test ! -e "$base"
+          mkdir -m 700 "$base"
+          mkdir -p "$base/staging"
+          cp -p "$landing" "$base/agriculture-index.before.html"
+          cmp -s "$base/agriculture-index.before.html" "$landing"
+          sha256sum "$web/index.html" "$web/.htaccess" \
+            "$web/agriculture/.htaccess" \
+            "$web/mohammad/index.html" \
+            "$web/ghanadi/index.html" \
+            "$web/amozeshgah/index.html" > "$base/immutable.sha256"
+          echo "TOOLS_BACKUP=verified"
+          REMOTE
+      - name: Stage two guides and index add-on outside website root
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          sha="$GITHUB_SHA"
+          tar -cf - -C content/zomorod-agriculture-additions . | ssh -F "$d/config" saeit-cpanel "tar -xf - -C /home/zomorod2/.backups/zomorod-tools-static/$sha/staging"
+          echo "TOOLS_STAGING=ready"
+      - name: Publish only two missing pages and add navigation cards with rollback
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1"
+          web="$HOME/public_html"
+          base="$HOME/.backups/zomorod-tools-static/$sha"
+          src="$base/staging"
+          landing="$web/agriculture/index.html"
+          changed=0
+          rollback() {
+            set +e
+            if test "$changed" = 1; then
+              cp -p "$base/agriculture-index.before.html" "$landing.rollback"
+              mv -f "$landing.rollback" "$landing"
+            fi
+            for slug in tools gardening-tools; do
+              dst="$web/agriculture/$slug/index.html"
+              if test -f "$dst" && cmp -s "$dst" "$src/$slug/index.html"; then
+                rm -f -- "$dst"
+              fi
+              rmdir "$web/agriculture/$slug" 2>/dev/null || true
+            done
+            echo "TOOLS_RELEASE_ROLLBACK=complete"
+          }
+          active=1
+          trap 'rc=$?; trap - EXIT; if test "$active" = 1; then rollback; fi; exit "$rc"' EXIT
+          for slug in tools gardening-tools; do
+            source="$src/$slug/index.html"
+            dst="$web/agriculture/$slug/index.html"
+            test -s "$source"
+            grep -Fq '<!-- saeit-zomorod-tools-extension-v1 -->' "$source"
+            test ! -e "$dst" && test ! -L "$web/agriculture/$slug"
+            mkdir -p "$(dirname "$dst")"
+            cp -p "$source" "$dst.new.$sha"
+            mv -n "$dst.new.$sha" "$dst"
+            cmp -s "$source" "$dst"
+            echo "TOOLS_PAGE_ADDED=$slug"
+          done
+          python3 - "$landing" "$src/landing-addon.html" "$base/agriculture-index.before.html" <<'PY'
+          import pathlib,os,stat,sys
+          landing=pathlib.Path(sys.argv[1])
+          addon=pathlib.Path(sys.argv[2]).read_bytes()
+          original=pathlib.Path(sys.argv[3]).read_bytes()
+          assert landing.read_bytes()==original,"existing agriculture landing changed concurrently"
+          assert original.count(b"</main>")==1,"unexpected landing structure"
+          assert b"ZM-TOOLS-ADDON-START" not in original,"addon already present"
+          assert addon.count(b"ZM-TOOLS-ADDON-START")==1 and addon.count(b"ZM-TOOLS-ADDON-END")==1
+          new=original.replace(b"</main>",addon+b"</main>",1)
+          assert new.replace(addon,b"",1)==original,"existing page content not preserved"
+          tmp=landing.with_name(landing.name+".tools.tmp")
+          tmp.write_bytes(new)
+          tmp.chmod(stat.S_IMODE(landing.stat().st_mode))
+          os.replace(tmp,landing)
+          print("AGRICULTURE_LANDING_ONLY_ADDITIVE=verified")
+          PY
+          changed=1
+          for slug in tools gardening-tools; do
+            code="$(curl -sS -L --max-time 25 -H 'Cache-Control: no-cache' \
+              -o "$base/$slug.response.html" -w '%{http_code}' \
+              "https://zomorodmelal.ir/agriculture/$slug/?__release=$sha" || true)"
+            echo "TOOLS_PUBLIC_PAGE=$slug status=$code"
+            test "$code" = 200
+            grep -Fq '<!-- saeit-zomorod-tools-extension-v1 -->' "$base/$slug.response.html"
+          done
+          status="$(curl -sS -L --max-time 25 -o "$base/landing.response.html" -w '%{http_code}' \
+            "https://zomorodmelal.ir/agriculture/?__release=$sha" || true)"
+          echo "TOOLS_LANDING_STATUS=$status"
+          test "$status" = 200
+          grep -Fq '/agriculture/tools/' "$base/landing.response.html"
+          grep -Fq '/agriculture/gardening-tools/' "$base/landing.response.html"
+          for route in / /mohammad/ /ghanadi/ /amozeshgah/; do
+            code="$(curl -sS -L --max-time 22 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir$route" || true)"
+            echo "TOOLS_PROTECTED_ROUTE=$route status=$code"
+            test "$code" = 200
+          done
+          sha256sum -c --status "$base/immutable.sha256"
+          echo "TOOLS_ORIGINAL_SITE_HASHES=unchanged"
+          active=0
+          trap - EXIT
+          echo "TOOLS_GUIDES_RELEASE=passed"
+          REMOTE
+      - name: Delete runner temporary SSH credentials
+        if: always()
+        shell: bash
+        run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
