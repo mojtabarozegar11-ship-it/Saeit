@@ -72,6 +72,23 @@ jobs:
           app="$HOME/Saeit"
           htaccess="$HOME/public_html/.htaccess"
           test -f "$app/manage.py" && test -f "$htaccess"
+          # Read only root app mappings and import files; do not inspect independent subsites.
+          for webfile in "$HOME/public_html/agriculture/.htaccess" "$HOME/public_html/agents/.htaccess"; do
+            if test -f "$webfile"; then
+              echo "ROOT_APP_CHILD_CONFIG=$webfile present"
+              awk '/^[[:space:]]*(Passenger(AppRoot|BaseURI|Python|Enabled)|RewriteEngine|RewriteCond|RewriteRule|DirectoryIndex|ErrorDocument)[[:space:]]/ { print "ROOT_APP_CHILD_DIRECTIVE=" $0 }' "$webfile"
+            else
+              echo "ROOT_APP_CHILD_CONFIG=$webfile absent"
+            fi
+          done
+          for rel in core/__init__.py core/apps.py config/wsgi.py passenger_wsgi.py; do
+            file="$app/$rel"
+            if test -f "$file"; then
+              echo "IMPORT_SOURCE_BEGIN=$rel"
+              nl -ba "$file" | sed -n '1,100p'
+              echo "IMPORT_SOURCE_END=$rel"
+            fi
+          done
           python_path="$(awk '$1 == "PassengerPython" { gsub(/"/, "", $2); print $2; exit }' "$htaccess")"
           awk '/^[[:space:]]*(Passenger(AppRoot|BaseURI|Python|StartupFile|ErrorLog|Enabled)|RewriteEngine|RewriteCond|RewriteRule|DirectoryIndex)[[:space:]]/ { print "ROOT_WEB_DIRECTIVE=" $0 }' "$htaccess"
           printf 'CONFIGURED_PASSENGER_PYTHON=%s\n' "${python_path:-missing}"
@@ -378,8 +395,18 @@ jobs:
           set -euo pipefail
           for domain in zomorodmelal.ir staging.zomorodmelal.ir; do
             for route in / /about/ /company/ /agents/ /agriculture/ /agriculture/genetics/ /api/health/ /api/bridge/health/; do
-              code="$(curl -sS --max-time 20 -o /dev/null -w '%{http_code}' "https://$domain$route" || true)"
-              printf 'PUBLIC_ROUTE_STATUS %s%s %s\n' "$domain" "$route" "$code"
+              body="$(mktemp)"
+              headers="$(mktemp)"
+              code="$(curl -sS --max-time 20 -D "$headers" -o "$body" -w '%{http_code}' "https://$domain$route" || true)"
+              ctype="$(awk 'BEGIN{IGNORECASE=1} /^content-type:/ {gsub(/\r/, ""); print $2; exit}' "$headers")"
+              bytes="$(wc -c < "$body" | tr -d ' ')"
+              if grep -qiE 'Apache|Django|Internal Server Error|Passenger|Traceback|503 Service' "$body"; then
+                markers="$(grep -ioE 'Apache|Django|Internal Server Error|Passenger|Traceback|503 Service' "$body" | sort -fu | tr '\n' ',' | sed 's/,$//' | cut -c1-160)"
+              else
+                markers="none"
+              fi
+              printf 'PUBLIC_ROUTE_STATUS %s%s %s content_type=%s bytes=%s body_markers=%s\n' "$domain" "$route" "$code" "\${ctype:-unknown}" "$bytes" "$markers"
+              rm -f -- "$headers" "$body"
             done
           done
       - name: Remove temporary SSH material
