@@ -189,3 +189,5 @@ jobs:
           d="$RUNNER_TEMP/mojplaywin-main-ssh"
           if test -f "$d/config"; then ssh -F "$d/config" -o ConnectTimeout=10 saeit-cpanel "rm -rf -- /home/zomorod2/.mojplaywin-main-$GITHUB_RUN_ID" || true; fi
           rm -rf -- "$d" "$RUNNER_TEMP/mojplaywin-main.tar.gz" "$RUNNER_TEMP/mojplaywin-main" "$RUNNER_TEMP/mojplaywin-smoke.html"
+
+# Recovery marker for failed smoke run 38827723099
