@@ -36,6 +36,18 @@ class MojPlayWinAtelierV4Tests(TestCase):
         self.assertIn('{% for item in ventures %}', home)
         self.assertIn("{{ item.url }}", home)
 
+    def test_new_navigation_preserves_all_page_discovery(self):
+        theme = (THEMES / "theme.html").read_text(encoding="utf-8")
+        brand_base = (ROOT / "core" / "templates" / "brands" / "mojplaywin" / "base.html").read_text(encoding="utf-8")
+        routes = ("/#site-directory", "/games/", "/studio/", "/research/",
+                  "/ai/", "/agents/", "/blockchain/", "/crypto-payments/",
+                  "/products/", "/services/", "/store/", "/ventures/fuel-station/",
+                  "/ventures/jewelry-gold/", "/company/", "/privacy/")
+        for route in routes:
+            with self.subTest(route=route):
+                self.assertIn('href="' + route + '"', theme)
+                self.assertIn('href="' + route + '"', brand_base)
+
     def test_store_and_venture_context_remain_dynamic(self):
         store = (THEMES / "store.html").read_text(encoding="utf-8")
         section = (THEMES / "section.html").read_text(encoding="utf-8")
