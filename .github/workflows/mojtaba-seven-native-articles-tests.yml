@@ -1,0 +1,29 @@
+name: Mojtaba seven native article tests
+on:
+  push:
+    branches: ['feat/mojtaba-seven-independent-journal-articles-20261016']
+    paths:
+      - 'scripts/mojtaba_seven_native_articles_publish.py'
+      - 'content/mojtaba_seven_full_independent_journal_20261016.json'
+      - 'tests/test_mojtaba_seven_native_articles.py'
+      - '.github/workflows/mojtaba-seven-native-articles-tests.yml'
+      - '.github/workflows/mojtaba-seven-native-articles-publish.yml'
+  pull_request:
+    paths:
+      - 'scripts/mojtaba_seven_native_articles_publish.py'
+      - 'content/mojtaba_seven_full_independent_journal_20261016.json'
+      - 'tests/test_mojtaba_seven_native_articles.py'
+      - '.github/workflows/mojtaba-seven-native-articles-tests.yml'
+      - '.github/workflows/mojtaba-seven-native-articles-publish.yml'
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile guarded native Post publisher
+        run: python3 -m py_compile scripts/mojtaba_seven_native_articles_publish.py
+      - name: Validate unique slugs, seven complete articles and protective template guards
+        run: python3 -m unittest discover -s tests -p 'test_mojtaba_seven_native_articles.py' -v

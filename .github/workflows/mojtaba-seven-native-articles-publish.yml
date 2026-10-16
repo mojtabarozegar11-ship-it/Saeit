@@ -1,0 +1,201 @@
+name: Publish seven standalone Mojtaba research articles
+on:
+  issues:
+    types: [opened]
+permissions:
+  contents: read
+concurrency:
+  group: mojtaba-v17-seven-standalone-articles-production
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event.issue.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.issue.title == 'Ops: Publish seven standalone Mojtaba journal articles 2026-10-16'
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate substantive independent articles and preserved site content
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mojtaba_seven_native_articles_publish.py
+          python3 -m unittest discover -s tests -p test_mojtaba_seven_native_articles.py -v
+      - name: Prepare pinned SSH relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/photo-relay"
+          mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          python3 - "$d/host.key" <<'PY'
+          import pathlib,sys
+          p=pathlib.Path(sys.argv[1]);t=p.read_text().replace('\r\n','\n').strip()
+          p.write_text(t.replace('\\n','\n')+'\n')
+          PY
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host saeit-host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+            ConnectionAttempts 1
+          EOF
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          echo "SSH_CONFIG=$d/config" >> "$GITHUB_ENV"
+      - name: Transfer journal installer and articles to private V17 stage
+        shell: bash
+        run: |
+          set -euo pipefail
+          stage="/home/zomorod2/.mpw-seven-journal-$GITHUB_RUN_ID"
+          timeout 30s ssh -F "$SSH_CONFIG" saeit-host "test ! -e '$stage' && install -d -m 700 '$stage'"
+          timeout 75s scp -F "$SSH_CONFIG" scripts/mojtaba_seven_native_articles_publish.py "saeit-host:$stage/installer.py"
+          timeout 75s scp -F "$SSH_CONFIG" content/mojtaba_seven_full_independent_journal_20261016.json "saeit-host:$stage/articles.json"
+      - name: Preflight native Post model, install seven articles, verify public URLs with rollback
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 690s ssh -F "$SSH_CONFIG" saeit-host "bash -s -- '$GITHUB_RUN_ID'" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          id="$1"
+          app="/home/zomorod2/mojtaba_personal/mojtaba_roozegar_personal_v17"
+          stage="/home/zomorod2/.mpw-seven-journal-$id"
+          script="$stage/installer.py"
+          source="$stage/articles.json"
+          backup="$HOME/.backups/mojtaba-seven-native-articles/$id"
+          py="$app/../.venv_personal_test/bin/python"
+          installed=0
+          success=0
+          cleanup() {
+            status=$?
+            trap - EXIT
+            if test "$installed" = 1 && test "$success" = 0 && test -f "$backup/manifest.json"; then
+              "$py" "$script" rollback --app "$app" --backup "$backup" && echo "SEVEN_ARTICLES_AUTO_ROLLBACK=yes" || echo "SEVEN_ARTICLES_ROLLBACK_ATTENTION_REQUIRED=yes"
+            fi
+            exit "$status"
+          }
+          trap cleanup EXIT
+          test -f "$app/manage.py" && test ! -L "$app" && test -x "$py"
+          test -f "$script" && test -f "$source"
+          "$py" "$script" check --app "$app" --content "$source"
+          cd "$app"
+          "$py" - "$source" <<'PY_PRE'
+          import json,os,sys
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          import django
+          django.setup()
+          from django.urls import reverse
+          from core.models import Post
+          articles=json.load(open(sys.argv[1],encoding="utf-8"))["articles"]
+          for row in articles:
+              assert not Post.objects.filter(slug=row["slug"]).exists(),"Collision with existing personal Post"
+              url=reverse("personal_site:post_detail",kwargs={"slug":row["slug"]})
+              assert url=="/mojtaba.roozegar/blog/"+row["slug"]+"/", url
+              assert len(row["content"].split())>=400
+              print("NATIVE_POST_ROUTE_VALID="+url,flush=True)
+          print("SEVEN_NATIVE_ROUTE_AND_SLUG_PREFLIGHT=yes",flush=True)
+          PY_PRE
+          installed=1
+          "$py" "$script" install --app "$app" --content "$source" --backup "$backup"
+          "$py" manage.py check --deploy
+          if test -d "$app/tmp"; then touch "$app/tmp/restart.txt"; fi
+          "$py" - "$source" <<'PY_LIVE'
+          from html.parser import HTMLParser
+          from urllib.request import Request,urlopen
+          import json,time,sys
+          data=json.load(open(sys.argv[1],encoding="utf-8"))
+          base="https://mojplaywin.com/mojtaba.roozegar/"
+          rows=data["articles"]
+          class PhotoParser(HTMLParser):
+              def __init__(self):super().__init__();self.first=[];self.second=[]
+              def handle_starttag(self,tag,attrs):
+                  if tag!="img":return
+                  src=dict(attrs).get("src","")
+                  if "owner_gallery_20261015_b/" in src:self.second.append(src)
+                  elif "owner_gallery_20261015/" in src:self.first.append(src)
+          def get(relative):
+              with urlopen(Request(base+relative+("?journal_test=" if "?" not in relative else "&journal_test=")+str(time.time_ns()),headers={"User-Agent":"MojtabaSevenArticlesPublishVerification/1"}),timeout=24) as resp:
+                  if resp.status!=200:raise ValueError("HTTP_NOT_200="+relative)
+                  return resp.read(4500000).decode("utf-8","replace")
+          for url in ("","blog/"):
+              last=""
+              for attempt in range(8):
+                  try:
+                      page=get(url)
+                      for tag in ('id="mpw-journal-longform-index-20261016"','id="mpw-fifty-editorials-20261015"','id="mpw-new-originals-20261015-b"','id="mpw-academic-profile-20261016"','id="mpw-personal-expanded-20261016"'):
+                          if tag not in page:raise ValueError("Old/new preserved content missing:"+tag)
+                      if any("/blog/"+row["slug"]+"/" not in page for row in rows):raise ValueError("Journal links missing")
+                      print("JOURNAL_INDEX_PUBLIC_VERIFIED="+(url or "home"),flush=True)
+                      break
+                  except Exception as exc:
+                      last=str(exc);time.sleep(3)
+              else:raise SystemExit("JOURNAL_INDEX_UNVERIFIED="+url+" "+last)
+          for row in rows:
+              path="blog/"+row["slug"]+"/"
+              last=""
+              for attempt in range(8):
+                  try:
+                      page=get(path)
+                      if row["title"] not in page:raise ValueError("Title missing")
+                      # Templates may apply autoescaping or text layout; verify meaningful text survives.
+                      snippet=row["content"].splitlines()[1].strip()[:65]
+                      if snippet not in page:raise ValueError("Article body missing: "+snippet)
+                      print("NATIVE_FULL_ARTICLE_PUBLIC_VERIFIED="+row["slug"],flush=True)
+                      break
+                  except Exception as exc:
+                      last=str(exc);time.sleep(3)
+              else:raise SystemExit("NATIVE_ARTICLE_FAILED="+path+" "+last)
+          gallery=get("gallery/")
+          parser=PhotoParser();parser.feed(gallery)
+          if len(parser.first)!=10 or len(parser.second)!=10:raise ValueError("Twenty original photos changed")
+          print("JOURNAL_GALLERY_ALL_20_ORIGINAL_PHOTOS_PRESERVED=yes",flush=True)
+          print("SEVEN_ARTICLES_7_INDEPENDENT_URLS_PASS=yes",flush=True)
+          PY_LIVE
+          success=1
+          trap - EXIT
+          echo "SEVEN_NEW_NATIVE_DJANGO_POSTS_PUBLISHED=yes"
+          echo "SEVEN_JOURNAL_BACKUP=$backup"
+          rm -rf "$stage"
+          REMOTE
+      - name: Confirm independent main websites remain healthy
+        shell: bash
+        run: |
+          set -euo pipefail
+          for site in "https://mojplaywin.com/" "https://zomorodmelal.ir/"; do
+            code="$(curl -sSL -o /dev/null -w '%{http_code}' --max-time 22 "$site")"
+            test "$code" = "200"
+            echo "MAIN_SITE_UNCHANGED_HTTP_200=$site"
+          done
+      - name: Remove ephemeral SSH credentials
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/photo-relay"
