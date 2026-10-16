@@ -22,4 +22,18 @@ if os.path.exists(env_path):
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 
+# CloudLinux keeps its Passenger/lswsgi launcher, but this app's wheels are
+# split across lib/ (pure Python) and lib64/ (native extensions). Loading both
+# resolves the compiled pydantic_core dependency without re-execing Passenger.
+import site
+
+VENV_ROOT = os.path.join(os.path.expanduser("~"), "virtualenv", "Saeit", "3.10")
+for package_dir in (
+    os.path.join(VENV_ROOT, "lib64", "python3.10", "site-packages"),
+    os.path.join(VENV_ROOT, "lib", "python3.10", "site-packages"),
+):
+    if not os.path.isdir(package_dir):
+        raise RuntimeError("CloudLinux virtualenv site-packages directory is unavailable")
+    site.addsitedir(package_dir)
+
 from config.wsgi import application
