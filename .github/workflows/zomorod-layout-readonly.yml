@@ -132,7 +132,7 @@ jobs:
       - name: Check public response codes
         shell: bash
         run: |
-          for route in "" "industry/" "research/" "knowledge/" "company/" "blog/" "store/" "amozeshgah/" "agriculture/"; do
+          for route in "" "industry/" "research/" "knowledge/" "market/" "economy/" "studio/" "taniya/" "agents/" "search/" "robots.txt" "sitemap.xml" "store/" "auctions/" "company-gallery/" "company/" "about/" "contact/" "weather/" "amozeshgah/" "education/" "academy/" "services/" "staff/command-center/" "staff/" "admin/" "admin/login/" "api/health/" "api/weather/" "api/bridge/health/" "api/bridge/dispatch/" "newsletter/" "newsletter/archive/" "blog/" "mohammad/" "ghanadi/" "agriculture/" "agriculture/livestock/" "agriculture/horticulture/" "agriculture/greenhouse/" "agriculture/poultry/" "agriculture/aquaculture/" "agriculture/inputs/" "agriculture/seeds/" "agriculture/fertilizers/" "agriculture/pesticides/" "agriculture/offices/" "agriculture/water-soil/" "agriculture/machinery/" "agriculture/market/"; do
             status="$(curl -sSL --max-time 15 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir/$route" || true)"
             echo "HTTP /$route = $status"
           done
@@ -140,7 +140,7 @@ jobs:
         shell: bash
         run: |
           set -u
-          for route in "" "industry/" "research/" "knowledge/" "company/" "blog/" "store/" "agriculture/" "amozeshgah/"; do
+          for route in "" "industry/" "research/" "knowledge/" "market/" "economy/" "studio/" "taniya/" "agents/" "search/" "robots.txt" "sitemap.xml" "store/" "auctions/" "company-gallery/" "company/" "about/" "contact/" "weather/" "amozeshgah/" "education/" "academy/" "services/" "staff/command-center/" "staff/" "admin/" "admin/login/" "api/health/" "api/weather/" "api/bridge/health/" "api/bridge/dispatch/" "newsletter/" "newsletter/archive/" "blog/" "mohammad/" "ghanadi/" "agriculture/" "agriculture/livestock/" "agriculture/horticulture/" "agriculture/greenhouse/" "agriculture/poultry/" "agriculture/aquaculture/" "agriculture/inputs/" "agriculture/seeds/" "agriculture/fertilizers/" "agriculture/pesticides/" "agriculture/offices/" "agriculture/water-soil/" "agriculture/machinery/" "agriculture/market/"; do
             file="$RUNNER_TEMP/zomorod-public-page.html"
             status="$(curl -sSL --max-time 20 -o "$file" -w '%{http_code}' "https://zomorodmelal.ir/$route" || true)"
             if [ "$status" != "200" ]; then
