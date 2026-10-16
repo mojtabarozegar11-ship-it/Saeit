@@ -1,3 +1,4 @@
+# Re-run read-only first-exception diagnostic after Passenger rollback.
 name: Zomorod Passenger first-error diagnostic
 on:
   push:
