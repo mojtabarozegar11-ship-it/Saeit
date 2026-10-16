@@ -24,7 +24,7 @@ PROTECTED = (
     'id="mpw-fifty-editorials-20261015"',
     'id="mpw-academic-profile-20261016"',
     'id="mpw-personal-expanded-20261016"',
-    'id="mpw-journal-advanced-index-20261016"',
+    'id="mpw-journal-longform-index-20261016"',
 )
 CSS = """
 <style>
