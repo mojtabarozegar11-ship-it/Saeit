@@ -1,0 +1,25 @@
+name: MojPlayWin read-only site quality agent
+on:
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: mojplaywin-read-only-site-agent
+  cancel-in-progress: false
+jobs:
+  read-only-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Audit only whitelisted public MojPlayWin pages
+        run: |
+          python3 scripts/mojplaywin_site_quality_agent.py --output mojplaywin-quality-report.json
+      - name: Upload report
+        uses: actions/upload-artifact@v4
+        with:
+          name: mojplaywin-public-site-quality
+          path: mojplaywin-quality-report.json
+          retention-days: 14
