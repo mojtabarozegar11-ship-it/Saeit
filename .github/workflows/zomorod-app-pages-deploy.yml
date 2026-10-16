@@ -165,10 +165,16 @@ jobs:
           recovery="$HOME/.backups/zomorodmelal-app/b78498ecccc3b99784a0cb060ea2c59bec65c505"
           if test -f "$recovery/deployed.flag"; then
             original_htaccess="$recovery/public_html/.htaccess"
-            expected_htaccess="$(cat "$recovery/htaccess.sha256")"
-            actual_htaccess="$(sha256sum "$original_htaccess" | awk '{print $1}')"
-            test "$expected_htaccess" = "$actual_htaccess"
+            test -f "$original_htaccess" && ! test -L "$original_htaccess"
+            grep -Fq 'PassengerAppRoot "/home/zomorod2/Saeit"' "$original_htaccess"
             grep -Fq 'PassengerPython "/opt/alt/python310/bin/lswsgi"' "$original_htaccess"
+            if test -f "$recovery/htaccess.sha256"; then
+              expected_htaccess="$(cat "$recovery/htaccess.sha256")"
+              actual_htaccess="$(sha256sum "$original_htaccess" | awk '{print $1}')"
+              test "$expected_htaccess" = "$actual_htaccess"
+            else
+              echo "LEGACY_BACKUP_DIRECTIVES=verified"
+            fi
             if grep -Fq 'PassengerPython /home/zomorod2/virtualenv/Saeit/3.10/bin/python' "$htaccess"; then
               cp -p "$original_htaccess" "$htaccess.recovery"
               mv -f "$htaccess.recovery" "$htaccess"
