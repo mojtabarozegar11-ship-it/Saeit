@@ -1,0 +1,70 @@
+name: VPS Activate Single Master Agent and Evolution
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/vps-master-agent-activate.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: vps-single-master-activation
+  cancel-in-progress: false
+jobs:
+  activate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate private deployment sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n deploy/activate_vps_master_agent.sh
+          python3 -m py_compile scripts/vps_master_evolution_cycle.py
+          python3 -m unittest discover -s tests -p 'test_autonomous_brain*.py' -v
+      - name: Backup, seed, activate and schedule bounded evolution on VPS
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/vps-master-agent"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          opts=(-i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15)
+          tar -cf "$d/bundle.tar" deploy/activate_vps_master_agent.sh scripts/vps_master_evolution_cycle.py
+          digest="$(sha256sum "$d/bundle.tar" | awk '{print $1}')"
+          ssh "${opts[@]}" githubops@178.239.147.150 'install -d -m 700 "$HOME/factory-runtime/operations/master-activation-source"'
+          scp "${opts[@]}" "$d/bundle.tar" githubops@178.239.147.150:/home/githubops/factory-runtime/operations/master-activation-source/bundle.tar
+          ssh "${opts[@]}" githubops@178.239.147.150 bash -se -- "$digest" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          expected="$1"
+          stage="$HOME/factory-runtime/operations/master-activation-source"
+          printf '%s  %s\n' "$expected" "$stage/bundle.tar" | sha256sum -c --status
+          python3 - "$stage" <<'PY'
+          import sys,tarfile
+          from pathlib import Path
+          root=Path(sys.argv[1])
+          expected={"deploy/activate_vps_master_agent.sh","scripts/vps_master_evolution_cycle.py"}
+          with tarfile.open(root/"bundle.tar","r:") as archive:
+              members=archive.getmembers()
+              assert {m.name for m in members}==expected
+              assert all(m.isfile() and not m.issym() and not m.islnk() for m in members)
+              for item in members:
+                  target=root/item.name
+                  target.parent.mkdir(mode=0o700,parents=True,exist_ok=True)
+                  target.write_bytes(archive.extractfile(item).read())
+                  target.chmod(0o700 if item.name.endswith(".sh") else 0o600)
+          print("MASTER_DEPLOY_SOURCE_INTEGRITY_VERIFIED")
+          PY
+          rm -f "$stage/bundle.tar"
+          bash "$stage/deploy/activate_vps_master_agent.sh"
+          REMOTE
