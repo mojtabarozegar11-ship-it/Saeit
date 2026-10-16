@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 
 from django.http import FileResponse, Http404, HttpResponse
 from django.utils.cache import patch_cache_control
@@ -12,6 +13,9 @@ AGRICULTURE_SLUGS = frozenset({
 
 
 def agriculture_index(request):
+    if request.get_host().split(":")[0].lower() in {"mojplaywin.com", "www.mojplaywin.com"}:
+        from core.views import platform_page
+        return platform_page(request, "agriculture")
     page = BASE_DIR / "public" / "agriculture" / "index.html"
     if not page.is_file():
         raise Http404
@@ -28,11 +32,10 @@ def agriculture_guide(request, slug):
 
 
 def zomorod_hero_image(request, filename):
-    # Restrict this public endpoint to existing WebP hero files; never join
-    # arbitrary user paths into the filesystem.
-    if "/" in filename or "\\" in filename or not filename.endswith(".webp"):
+    # The URL captures only the stem before the fixed .webp suffix.
+    if not re.fullmatch(r"[a-z0-9-]+", filename):
         raise Http404
-    image = BASE_DIR / "core" / "static" / "site" / "heroes" / filename
+    image = BASE_DIR / "core" / "static" / "site" / "heroes" / f"{filename}.webp"
     if not image.is_file():
         raise Http404
     response = FileResponse(image.open("rb"), content_type="image/webp")
