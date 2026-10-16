@@ -122,7 +122,7 @@ jobs:
           assert b"ZM_HOME_RIBBON_BEGIN" not in original
           assert original.count(b"</header>")>=1
           assert original.count(b"</main>")==1
-          assert b'<section class="wrap hero"' in original, "Original hero changed, refusing risky insertion"
+          assert b"<main" in original and b"</main>" in original, "Missing normal page body"
           assert b'zm-specialist-library-20261016' in original, "Existing expert articles missing"
           assert b'zm-compendium-navigation-20261016' in original, "Existing compendium link missing"
           ribbon_begin=src.index(b"<!-- ZM_HOME_RIBBON_BEGIN -->")
@@ -160,11 +160,12 @@ jobs:
                   mf.write(name+"\n")
               print("MISSING_IMAGE_RESTORED="+name)
           amended=original.replace(b"</header>",b"\n"+ribbon+b"\n</header>",1)
-          hero_start=amended.index(b'<section class="wrap hero"')
-          hero_end=amended.find(b"</section>",hero_start)
-          assert hero_end>hero_start and hero_end-hero_start<8000
-          hero_end+=len(b"</section>")
-          amended=amended[:hero_end]+b"\n"+feature+b"\n"+amended[hero_end:]
+          # Insert first inside the real <main> element regardless of old hero layout.
+          import re
+          main=re.search(rb"<main(?:\s[^>]*)?>",amended,re.IGNORECASE)
+          assert main is not None, "No recognizable main element"
+          insertion=main.end()
+          amended=amended[:insertion]+b"\n"+feature+b"\n"+amended[insertion:]
           assert amended.count(b"ZM_HOME_RIBBON_BEGIN")==1
           assert amended.count(b"ZM_HOME_FEATURE_BEGIN")==1
           assert amended.count(b"</main>")==1
