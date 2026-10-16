@@ -133,7 +133,7 @@ jobs:
               raise SystemExit(1)
           PY
           rm -f -- "$restart_result"
-          python3 - "$app" "$venv_python" <<'PY'
+          "$venv_python" - "$app" <<'PY'
           import os,sys
           os.chdir(sys.argv[1])
           os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
@@ -146,6 +146,10 @@ jobs:
               if response.status_code!=200:
                   raise SystemExit(1)
           PY
+          active=0
+          printf 'awaiting_public\n' > "$backup/state"
+          trap - EXIT
+          echo "PASSENGER_CONFIG_CANARY=awaiting_public"
           REMOTE
           check_route() {
             local route="$1" file="$RUNNER_TEMP/zomorod-passenger-$2.html"
@@ -170,6 +174,41 @@ jobs:
           printf 'verified_live\n' > "$backup/state"
           echo "PASSENGER_CONFIG_CANARY=verified_live"
           REMOTE
+      - name: Preserve verified canary or restore original .htaccess
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-passenger-canary"
+          if test ! -f "$d/config"; then
+            echo "CANARY_CLEANUP=ssh_material_unavailable"
+            exit 0
+          fi
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          backup="$HOME/.backups/zomorodmelal-passenger-python/$1"
+          htaccess="$HOME/public_html/.htaccess"
+          state=""
+          if test -f "$backup/state"; then state="$(cat "$backup/state")"; fi
+          if test "$state" = verified_live; then
+            echo "PASSENGER_CONFIG_CANARY=retained_verified"
+          elif test "$state" = awaiting_public; then
+            expected="$(cat "$backup/htaccess.sha256")"
+            actual="$(sha256sum "$backup/htaccess.original" | awk '{print $1}')"
+            test "$expected" = "$actual"
+            cp -p "$backup/htaccess.original" "$htaccess.rollback"
+            mv -f "$htaccess.rollback" "$htaccess"
+            selector="$(command -v cloudlinux-selector || true)"
+            if test -z "$selector" && test -x /usr/sbin/cloudlinux-selector; then selector=/usr/sbin/cloudlinux-selector; fi
+            test -n "$selector"
+            "$selector" restart --json --interpreter python --user "$USER" --app-root Saeit >/dev/null
+            printf 'rolled_back\n' > "$backup/state"
+            echo "PASSENGER_CONFIG_ROLLBACK=complete"
+          else
+            echo "PASSENGER_CONFIG_CANARY_STATE=${state:-no_change}"
+          fi
+          REMOTE
+
       - name: Remove temporary SSH material
         if: always()
         shell: bash
