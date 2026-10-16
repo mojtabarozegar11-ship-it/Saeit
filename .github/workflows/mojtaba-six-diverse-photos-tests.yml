@@ -1,0 +1,28 @@
+name: Six varied Mojtaba collaboration photographs tests
+on:
+  push:
+    branches: ['feat/mojtaba-six-diverse-collaboration-photos-20261016']
+    paths:
+      - 'content/mojtaba_diverse_collab_photo_chunk_*.b64'
+      - 'scripts/mojtaba_six_diverse_collab_photos_publish.py'
+      - 'tests/test_mojtaba_six_diverse_collab_photos.py'
+      - '.github/workflows/mojtaba-six-diverse-photos-*.yml'
+  pull_request:
+    paths:
+      - 'content/mojtaba_diverse_collab_photo_chunk_*.b64'
+      - 'scripts/mojtaba_six_diverse_collab_photos_publish.py'
+      - 'tests/test_mojtaba_six_diverse_collab_photos.py'
+      - '.github/workflows/mojtaba-six-diverse-photos-*.yml'
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check six diverse assets and original collaboration markers
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mojtaba_six_diverse_collab_photos_publish.py
+          python3 -m unittest discover -s tests -p 'test_mojtaba_six_diverse_collab_photos.py' -v
