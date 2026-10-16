@@ -266,8 +266,8 @@ def rollback(app,backup):
             if tmp.exists():raise ValueError("Restore temporary file exists")
             shutil.copy2(backup/filename,tmp)
             os.replace(tmp,target)
-    for ref in meta["new"].values():
-        (app/"static"/expected_path(next(slug for slug,record in meta["new"].items() if record is ref))).unlink()
+    for slug,ref in meta["new"].items():
+        (app/"static"/expected_path(slug)).unlink()
     try:(app/"static"/IMAGE_FOLDER).rmdir()
     except OSError:pass
     if (app/"tmp").is_dir():(app/"tmp/restart.txt").touch()
