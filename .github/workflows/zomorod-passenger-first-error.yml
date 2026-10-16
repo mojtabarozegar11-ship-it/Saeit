@@ -118,6 +118,31 @@ jobs:
                   print("ALT_VENV_SITE_CHECK_ERROR="+type(error).__name__)
           else:
               print("ALT_VENV_SITE_CHECK_ERROR=site_missing")
+          # Compare all Python 3.10 virtualenv locations for the compiled wheel.
+          probe_paths="import os,sys,importlib.util,pathlib;h=pathlib.Path.home();base=h/'virtualenv'/'Saeit'/'3.10';print('VENV_SEARCH_PATHS='+'|'.join(str(pathlib.Path(p).relative_to(base)) for p in sys.path if p and pathlib.Path(p).is_relative_to(base)));m=importlib.util.find_spec('pydantic_core');print('VENV_PYDANTIC_MODULE='+str(pathlib.Path(m.origin).relative_to(base)) if m and m.origin else 'VENV_PYDANTIC_MODULE=missing')"
+          try:
+              r=subprocess.run([str(home/"virtualenv"/"Saeit"/"3.10"/"bin"/"python"),"-B","-c",probe_paths],capture_output=True,text=True,timeout=9,check=False)
+              print("VENV_PATHS_CHECK_EXIT="+str(r.returncode))
+              for line in r.stdout.splitlines():
+                  if line.startswith(("VENV_SEARCH_PATHS=","VENV_PYDANTIC_MODULE=")): print(line)
+          except (OSError,subprocess.TimeoutExpired) as error:
+              print("VENV_PATHS_CHECK_ERROR="+type(error).__name__)
+          for rel in ("lib/python3.10/site-packages","lib64/python3.10/site-packages"):
+              sitepath=home/"virtualenv"/"Saeit"/"3.10"/rel
+              if not sitepath.is_dir(): continue
+              print("VENV_SITE_EXISTS="+rel)
+              for mod in ("pydantic_core","openai","django"):
+                  spec=sitepath/mod
+                  if spec.exists(): print("VENV_SITE_PACKAGE "+rel+" "+mod+"=present")
+          probe3="import sys,site,importlib.util;[site.addsitedir(x) for x in sys.argv[1:]];print('ALT_DUALSITE_CORE='+str(importlib.util.find_spec('pydantic_core') is not None));import pydantic_core;print('ALT_DUALSITE_CORE_IMPORT=passed')"
+          try:
+              sites=[str(home/"virtualenv"/"Saeit"/"3.10"/rel) for rel in ("lib/python3.10/site-packages","lib64/python3.10/site-packages")]
+              r=subprocess.run(["/opt/alt/python310/bin/python3.10","-B","-c",probe3,*sites],capture_output=True,text=True,timeout=10,check=False)
+              print("ALT_DUALSITE_EXIT="+str(r.returncode))
+              for line in r.stdout.splitlines():
+                  if line.startswith(("ALT_DUALSITE_CORE=","ALT_DUALSITE_CORE_IMPORT=")): print(line)
+          except (OSError,subprocess.TimeoutExpired) as error:
+              print("ALT_DUALSITE_ERROR="+type(error).__name__)
           log=app/"stderr.log"
           if not log.is_file():
               print("PASSENGER_LOG=missing");raise SystemExit(0)
