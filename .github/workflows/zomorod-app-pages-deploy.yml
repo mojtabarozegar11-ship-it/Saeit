@@ -144,6 +144,14 @@ jobs:
           print("SELECTOR_ROOT_APP_MAPPING=verified")
           print("SELECTOR_PYTHON_VERSION=3.10")
           PY
+          # Passenger imports with this virtualenv. Install only the declared API dependency
+          # proven missing in that runtime; --no-deps prevents changing Django or other packages.
+          passenger_python="$HOME/virtualenv/Saeit/3.10/bin/python"
+          test -x "$passenger_python" || { echo "PASSENGER_PYTHON=missing" >&2; exit 1; }
+          if ! "$passenger_python" -c 'import rest_framework' >/dev/null 2>&1; then
+            "$passenger_python" -m pip --disable-pip-version-check install --no-deps 'djangorestframework>=3.16,<4.0'
+          fi
+          "$passenger_python" -c 'import rest_framework; print("PASSENGER_DRF="+rest_framework.__version__)'
           recovery="$HOME/.backups/zomorodmelal-app/b78498ecccc3b99784a0cb060ea2c59bec65c505"
           if test -f "$recovery/deployed.flag" && test ! -f "$recovery/recovered.flag"; then
             echo "RECOVERING_PREVIOUS_UNVERIFIED_GENERATION=b78498ecccc3b99784a0cb060ea2c59bec65c505"
