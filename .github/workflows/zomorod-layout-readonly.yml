@@ -136,6 +136,16 @@ jobs:
             status="$(curl -sSL --max-time 15 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir/$route" || true)"
             echo "HTTP /$route = $status"
           done
+      - name: Compare live route identities
+        shell: bash
+        run: |
+          for route in "" "industry/" "research/" "knowledge/" "company/" "blog/" "store/" "agriculture/" "amozeshgah/"; do
+            file="$RUNNER_TEMP/zomorod-public-page.html"
+            curl -fsSL --max-time 20 "https://zomorodmelal.ir/$route" -o "$file"
+            digest="$(sha256sum "$file" | cut -c1-16)"
+            title="$(grep -oim1 '<title>[^<]*</title>' "$file" | cut -c1-120 || true)"
+            echo "PAGE_IDENTITY=/$route HASH=$digest SIZE=$(wc -c < "$file") TITLE=$title"
+          done
       - name: Clean temporary access materials
         if: always()
         run: rm -rf "$RUNNER_TEMP/zomorod-root"
