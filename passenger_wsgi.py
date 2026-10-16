@@ -46,17 +46,31 @@ print("PASSENGER_REGISTRY_INITIAL_READY=" + str(django_apps.ready), file=sys.std
 print("PASSENGER_PRELOADED_CONFIG_WSGI=" + str("config.wsgi" in sys.modules), file=sys.stderr)
 
 _original_populate = Apps.populate
+
 def _trace_passenger_populate(self, installed_apps):
+    print("PASSENGER_REENTRANT_CALL_STACK_BEGIN", file=sys.stderr)
+    print("PASSENGER_POPULATE_STATE=loading:%s ready:%s apps_ready:%s thread:%s" % (
+        self.loading, self.ready, self.apps_ready, threading.current_thread().name
+    ), file=sys.stderr)
     if self.loading:
-        print("PASSENGER_REENTRANT_CALL_STACK_BEGIN", file=sys.stderr)
         print("PASSENGER_PROCESS_ID=" + str(os.getpid()), file=sys.stderr)
         frames = sys._current_frames()
         threads = {thread.ident: thread.name for thread in threading.enumerate()}
         for thread_id, frame in frames.items():
             print("PASSENGER_THREAD_FRAME=" + str(thread_id) + ":" + threads.get(thread_id, "unknown"), file=sys.stderr)
             traceback.print_stack(frame, limit=60, file=sys.stderr)
+    try:
+        result = _original_populate(self, installed_apps)
+    except BaseException as error:
+        print("PASSENGER_POPULATE_EXCEPTION=" + type(error).__name__, file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
+        raise
+    else:
+        print("PASSENGER_POPULATE_RESULT=success", file=sys.stderr)
+        return result
+    finally:
         print("PASSENGER_REENTRANT_CALL_STACK_END", file=sys.stderr)
-    return _original_populate(self, installed_apps)
+
 Apps.populate = _trace_passenger_populate
 
 from config.wsgi import application
