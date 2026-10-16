@@ -569,7 +569,7 @@ jobs:
                   safe=secret.sub(r"\1=[redacted]",line)
                   safe=uri.sub(r"\1[redacted]@",safe)
                   print("PASSENGER_REENTRANT_TRACE="+safe[:280])
-          for error_index in [i for i,line in enumerate(lines) if re.search(r"ModuleNotFoundError|ImportError|RuntimeError|TemplateSyntaxError|TemplateDoesNotExist|OperationalError|DatabaseError",line)][-3:]:
+          for error_index in [i for i,line in enumerate(lines) if re.search(r"ModuleNotFoundError|ImportError|RuntimeError|TemplateSyntaxError|TemplateDoesNotExist|OperationalError|DatabaseError|Exception",line)][:12]:
               starts=[i for i in range(error_index+1) if "Traceback (most recent call last):" in lines[i]]
               start=starts[-1] if starts else max(0,error_index-24)
               for line in lines[start:error_index+1]:
