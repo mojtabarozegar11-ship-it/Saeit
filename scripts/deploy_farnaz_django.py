@@ -104,7 +104,7 @@ def install(run_id: str, commit: str, stage: Path) -> None:
         subprocess.run([str(PYTHON), str(APP / "manage.py"), "migrate", "farnaz", "--noinput"], cwd=APP, check=True, timeout=180)
         route_check = (
             "from django.test import Client; "
-            "response = Client(HTTP_HOST='mojplaywin.com').get('/farnaz/'); "
+            "response = Client(HTTP_HOST='mojplaywin.com').get('/farnaz/', secure=True); "
             "print('FARNAZ_DJANGO_CLIENT_STATUS=' + str(response.status_code)); "
             "assert response.status_code == 200"
         )
