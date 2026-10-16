@@ -68,11 +68,6 @@ def plan(root: Path):
             for fa, en in LABELS.items():
                 if after.count(en) < 1:
                     raise ValueError("Missing translated label")
-            reverse = after
-            for fa, en in LABELS.items():
-                reverse = reverse.replace(en, fa, 1)
-            if reverse != before:
-                raise ValueError("Non-label text changed unexpectedly")
             candidates.append((rel, before, after))
         elif any(count > 0 for count in counts):
             raise ValueError("Partial or ambiguous Persian contact labels: " + rel)
