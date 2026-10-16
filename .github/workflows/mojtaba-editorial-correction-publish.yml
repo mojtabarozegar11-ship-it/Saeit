@@ -134,3 +134,30 @@ jobs:
           done
           grep -Fq 'mpw-mojtaba-twenty-image-essays-20261016' "$stage/public-blog.html"
           echo "EDITORIAL_JOURNAL_SECTIONS_PRESERVED=yes"
+          "$python" - "$stage" <<'PY_ARTICLES'
+          import importlib.util,os,sys,time
+          from html.parser import HTMLParser
+          from pathlib import Path
+          from urllib.request import Request,urlopen
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          import django;django.setup()
+          from core.models import Post
+          stage=Path(sys.argv[1])
+          spec=importlib.util.spec_from_file_location("cleanup",stage/"scripts/mojtaba_remove_unwanted_profile_disclaimers.py")
+          mod=importlib.util.module_from_spec(spec);spec.loader.exec_module(mod)
+          slugs=mod.article_rows(stage/"content")
+          assert len(slugs)==93 and Post.objects.filter(slug__in=slugs,published=True).count()==93
+          class Images(HTMLParser):
+              def __init__(self):
+                  super().__init__();self.count=0
+              def handle_starttag(self,tag,attrs):
+                  if tag=="img":self.count+=1
+          for slug in slugs:
+              url="https://mojplaywin.com/mojtaba.roozegar/blog/"+slug+"/?audit="+str(time.time_ns())
+              with urlopen(Request(url,headers={"User-Agent":"PersonalJournalEditorialCheck/1"}),timeout=24) as res:
+                  assert res.status==200
+                  body=res.read(5000000).decode("utf-8","replace")
+              p=Images();p.feed(body)
+              if p.count<1:raise ValueError("Original article image missing: "+slug)
+          print("EDITORIAL_93_ARTICLE_PAGES_AND_IMAGES_VERIFIED=yes",flush=True)
+          PY_ARTICLES
