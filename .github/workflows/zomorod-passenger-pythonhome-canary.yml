@@ -1,0 +1,146 @@
+name: Safely test removing conflicting Passenger PYTHONHOME directive
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/zomorod-passenger-pythonhome-canary.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-passenger-pythonhome-canary
+  cancel-in-progress: false
+jobs:
+  canary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - name: Snapshot root configuration and all independent public sites
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1"; web="$HOME/public_html"; app="$HOME/Saeit"
+          conf="$web/.htaccess"; backup="$HOME/.backups/zomorod-passenger-pythonhome/$sha"
+          test -s "$conf" && test ! -L "$conf"
+          test -f "$app/tmp/restart.txt"
+          test -s "$web/index.html" && grep -Fq 'zm-nova-home-2026-v1' "$web/index.html"
+          test -s "$web/site-heritage/home-before-redesign/index.html"
+          for folder in mohammad ghanadi amozeshgah; do test -s "$web/$folder/index.html"; done
+          test "$(grep -Eic '^[[:space:]]*SetEnv[[:space:]]+PYTHONHOME[[:space:]]' "$conf")" = 1
+          mkdir -p "$(dirname "$backup")"; test ! -e "$backup"
+          mkdir -m 700 "$backup"
+          cp -p "$conf" "$backup/htaccess.original"
+          cmp -s "$conf" "$backup/htaccess.original"
+          sha256sum "$web/index.html" "$web/agriculture/index.html" \
+            "$web/site-heritage/home-before-redesign/index.html" \
+            "$web/mohammad/index.html" "$web/ghanadi/index.html" "$web/amozeshgah/index.html" > "$backup/immutable.sha256"
+          echo "ZM_PYTHONHOME_CANARY_BACKUP=verified"
+          REMOTE
+      - name: Temporarily remove only PYTHONHOME directive and verify admin response; auto restore otherwise
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1"; web="$HOME/public_html"; app="$HOME/Saeit"
+          backup="$HOME/.backups/zomorod-passenger-pythonhome/$sha"
+          conf="$web/.htaccess"; original="$backup/htaccess.original"
+          cmp -s "$conf" "$original"
+          rollback() {
+            set +e
+            if test -s "$original"; then
+              cp -p "$original" "$conf.restore"
+              mv -f "$conf.restore" "$conf"
+              touch "$app/tmp/restart.txt"
+              echo "ZM_PYTHONHOME_CANARY_ROLLBACK=original_htaccess_restored"
+            fi
+          }
+          active=1
+          trap 'rc=$?; trap - EXIT; if test "$active" = 1; then rollback; fi; exit "$rc"' EXIT
+          python3 - "$conf" "$original" <<'PY'
+          from pathlib import Path
+          import os,re,stat,sys
+          target=Path(sys.argv[1]);original=Path(sys.argv[2]).read_bytes()
+          assert target.read_bytes()==original
+          lines=original.splitlines(keepends=True)
+          altered=[line for line in lines if not re.match(rb'^\s*SetEnv\s+PYTHONHOME\s+',line,re.I)]
+          assert len(lines)-len(altered)==1
+          content=b''.join(altered)
+          assert content.replace(b"__NOOP__",b"")==content
+          temp=target.with_name(".htaccess.pyhome-staging")
+          temp.write_bytes(content)
+          temp.chmod(stat.S_IMODE(target.stat().st_mode))
+          os.replace(temp,target)
+          print("ZM_PYTHONHOME_DIRECTIVE=temporarily_disabled")
+          PY
+          touch "$app/tmp/restart.txt"
+          sleep 5
+          admin="$(curl -sS -L --max-time 22 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir/admin/login/?pyhome=$sha" || true)"
+          health="$(curl -sS -L --max-time 22 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir/api/health/?pyhome=$sha" || true)"
+          echo "ZM_PYTHONHOME_PUBLIC_ADMIN_HTTP=$admin"
+          echo "ZM_PYTHONHOME_PUBLIC_HEALTH_HTTP=$health"
+          test "$admin" = 200
+          for route in / /agriculture/ /mohammad/ /ghanadi/ /amozeshgah/; do
+            code="$(curl -sS -L --max-time 16 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir$route" || true)"
+            echo "ZM_PYTHONHOME_PROTECTED_ROUTE=$route status=$code"
+            test "$code" = 200
+          done
+          sha256sum -c --status "$backup/immutable.sha256"
+          active=0
+          trap - EXIT
+          echo "ZM_PYTHONHOME_CANARY_DJANGO_ADMIN=confirmed"
+          REMOTE
+      - name: Remove temporary SSH keys
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
