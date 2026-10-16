@@ -214,3 +214,20 @@ body.mpw-atelier-v4{
 @media(max-width:760px){.mpw-atelier-v4 .mpw-support-handbook{padding:24px 17px;border-radius:19px}
 .mpw-atelier-v4 .mpw-support-handbook-gallery,.mpw-atelier-v4 .mpw-support-handbook-grid{grid-template-columns:1fr}
 .mpw-atelier-v4 .mpw-support-handbook-gallery img{height:200px}}
+
+/* Bespoke AI and blockchain visual chapters on main-domain specialist pages. */
+.mpw-atelier-v4 .mpw-topical-art{
+ display:grid;grid-template-columns:.9fr 1.1fr;gap:30px;align-items:center;
+ margin:19px 0 29px;overflow:hidden;padding:clamp(22px,3.3vw,45px);
+ border:1px solid var(--mw-line);border-radius:25px;
+ background:radial-gradient(circle at 90% 50%,rgba(191,144,74,.16),transparent 45%),#15171c
+}
+.mpw-atelier-v4 .mpw-topical-art-copy{padding:clamp(6px,2vw,24px)}
+.mpw-atelier-v4 .mpw-topical-art h2{font-size:clamp(1.9rem,3.3vw,3.3rem);line-height:1.11;letter-spacing:-.05em;margin:20px 0}
+.mpw-atelier-v4 .mpw-topical-art p{line-height:1.82;max-width:61ch;font-size:.96rem}
+.mpw-atelier-v4 .mpw-topical-art img{display:block;width:100%;height:auto;min-height:260px;max-height:430px;object-fit:cover;border:1px solid rgba(233,190,124,.27);border-radius:19px}
+@media(max-width:760px){
+ .mpw-atelier-v4 .mpw-topical-art{grid-template-columns:1fr;gap:12px;padding:18px;border-radius:19px}
+ .mpw-atelier-v4 .mpw-topical-art-copy{padding:12px}
+ .mpw-atelier-v4 .mpw-topical-art img{min-height:180px;max-height:280px}
+}
