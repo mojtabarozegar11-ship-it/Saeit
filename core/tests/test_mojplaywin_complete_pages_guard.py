@@ -80,6 +80,33 @@ class MojPlayWinCompletePageGuardTests(TestCase):
             self.assertIn('{% extends "mojplaywin/base.html" %}',
                           (pages / filename).read_text(encoding="utf-8"))
 
+    def test_owned_template_image_assets_exist_without_broken_static_references(self):
+        import re
+
+        root = ROOT / "core" / "templates"
+        owned_templates = (
+            "brands/mojplaywin/base.html",
+            "brands/mojplaywin/home.html",
+            "brands/mojplaywin/page.html",
+            "brands/mojplaywin/support_guide.html",
+            "mojplaywin/base.html",
+            "mojplaywin/theme.html",
+            "mojplaywin/home.html",
+            "mojplaywin/section.html",
+            "mojplaywin/store.html",
+            "mojplaywin/editorial_experience.html",
+        )
+        pattern = re.compile(r"""{%\s*static\s+['"]([^'"]+)['"]\s*%}""")
+        for template_name in owned_templates:
+            with self.subTest(template=template_name):
+                source = (root / template_name).read_text(encoding="utf-8")
+                self.assertNotIn("mojplaywin-coin-logo.png", source)
+                for relative_asset in pattern.findall(source):
+                    self.assertTrue(
+                        (HEROES / relative_asset).is_file(),
+                        f"Broken image or CSS reference {relative_asset} in {template_name}",
+                    )
+
     def test_django_admin_and_agent_models_are_not_removed(self):
         for model in (Agent, AgentCapability, AgentTask):
             self.assertIn(model, admin.site._registry)
