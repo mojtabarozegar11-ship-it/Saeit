@@ -1,4 +1,24 @@
-{% extends 'brands/mojplaywin/base.html' %}{% block title %}{{ page.title }} — MojPlayWin{% endblock %}{% block meta_description %}{{ page.body|striptags|truncatechars:155 }}{% endblock %}{% block content %}<section class="mpw-page-hero"><span class="eyebrow">{{ page.kicker }}</span><h1>{{ page.headline }}</h1><p>{{ page.body }}</p><div class="mpw-lux-rule" aria-hidden="true"></div></section><div class="mpw-section-label">MOJPLAYWIN / CURATED</div><section class="mpw-page-grid">{% for title,meta,text in page.cards %}<article class="mpw-page-card"><small>{{ meta }}</small><h2>{{ title }}</h2><p>{{ text }}</p>{% if page_key == 'games' and forloop.first %}<a href="/games/first-realm/">View project →</a>{% endif %}</article>{% endfor %}</section>{% if page_key == 'agro-industry' %}
+{% extends 'brands/mojplaywin/base.html' %}{% load static %}{% block title %}{{ page.title }} — MojPlayWin{% endblock %}{% block meta_description %}{{ page.body|striptags|truncatechars:155 }}{% endblock %}{% block content %}<section class="mpw-page-hero"><span class="eyebrow">{{ page.kicker }}</span><h1>{{ page.headline }}</h1><p>{{ page.body }}</p><div class="mpw-lux-rule" aria-hidden="true"></div></section>
+{% if page_key == 'ai' %}
+<section class="mpw-topical-art" aria-labelledby="mpw-topical-art-title">
+  <div class="mpw-topical-art-copy"><span class="eyebrow">AI · ENGINEERING · WORKFLOWS</span>
+    <h2 id="mpw-topical-art-title">From useful prototypes to controlled systems</h2>
+    <p>Explore practical AI workflow design: task boundaries, approved evidence, reviewable outputs, test cases and explicit safeguards before production deployment.</p>
+    <p>Illustration represents a technology concept, not a live agent dashboard or verified autonomous deployment.</p>
+  </div>
+  <img src="{% static 'site/mojplaywin-atelier/ai-workflow.svg' %}" alt="Illustration of connected artificial intelligence workflow components" width="720" height="500" decoding="async">
+</section>
+{% elif page_key == 'blockchain' or page_key == 'crypto-payments' %}
+<section class="mpw-topical-art" aria-labelledby="mpw-topical-art-title">
+  <div class="mpw-topical-art-copy"><span class="eyebrow">BLOCKCHAIN · SECURITY · WEB3</span>
+    <h2 id="mpw-topical-art-title">Built around verifiable transactions and responsible technology</h2>
+    <p>Understand distributed networks, wallet signing, confirmation policies, contract testing and traceable payment reconciliation without overstating live integrations.</p>
+    <p>Illustration describes technical architecture and is not an offer of trading, custodial services or a verified checkout.</p>
+  </div>
+  <img src="{% static 'site/mojplaywin-atelier/blockchain-network.svg' %}" alt="Illustration of connected distributed blockchain network components" width="720" height="500" decoding="async">
+</section>
+{% endif %}
+<div class="mpw-section-label">MOJPLAYWIN / CURATED</div><section class="mpw-page-grid">{% for title,meta,text in page.cards %}<article class="mpw-page-card"><small>{{ meta }}</small><h2>{{ title }}</h2><p>{{ text }}</p>{% if page_key == 'games' and forloop.first %}<a href="/games/first-realm/">View project →</a>{% endif %}</article>{% endfor %}</section>{% if page_key == 'agro-industry' %}
 <section class="mpw-venture-detail" aria-labelledby="mpw-venture-title">
   <header><span class="eyebrow">20% / CONNECTED VENTURES</span><h2 id="mpw-venture-title">Seven practical fields, one careful standard.</h2>
   <p>These are portfolio directions for research and future projects. The page does not claim active locations, product stock, exchange services, or operating businesses.</p></header>
