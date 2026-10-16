@@ -29,9 +29,9 @@ from django.apps.registry import Apps
 _original_populate = Apps.populate
 def _trace_passenger_populate(self, installed_apps):
     if self.loading:
-        print("ZOMOROD_PASSENGER_REENTRANT_BEGIN", file=sys.stderr)
+        print("PASSENGER_REENTRANT_CALL_STACK_BEGIN", file=sys.stderr)
         traceback.print_stack(limit=60, file=sys.stderr)
-        print("ZOMOROD_PASSENGER_REENTRANT_END", file=sys.stderr)
+        print("PASSENGER_REENTRANT_CALL_STACK_END", file=sys.stderr)
     return _original_populate(self, installed_apps)
 Apps.populate = _trace_passenger_populate
 
