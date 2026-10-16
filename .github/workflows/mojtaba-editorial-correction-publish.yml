@@ -161,3 +161,21 @@ jobs:
               if p.count<1:raise ValueError("Original article image missing: "+slug)
           print("EDITORIAL_93_ARTICLE_PAGES_AND_IMAGES_VERIFIED=yes",flush=True)
           PY_ARTICLES
+          curl -fsSL --max-time 30 "$base/gallery/" -o "$stage/public-gallery.html"
+          grep -Fq 'owner_gallery_20261015/' "$stage/public-gallery.html"
+          grep -Fq 'owner_gallery_20261015_b/' "$stage/public-gallery.html"
+          echo "EDITORIAL_OWNER_PHOTO_GALLERY_PRESERVED=yes"
+          for site in "https://mojplaywin.com/" "https://zomorodmelal.ir/"; do
+            status="$(curl -sSL -o /dev/null -w '%{http_code}' --max-time 25 "$site")"
+            test "$status" = 200
+            echo "EDITORIAL_ORIGINAL_SITE_HEALTHY=$site HTTP_200"
+          done
+          verified=1
+          trap - EXIT
+          echo "EDITORIAL_CONTENT_CLEANUP_LIVE_VERIFIED=yes"
+          echo "EDITORIAL_BACKUP_PATH=$backup"
+          rm -rf "$stage"
+          REMOTE
+      - name: Remove ephemeral relay SSH files
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/photo-relay"
