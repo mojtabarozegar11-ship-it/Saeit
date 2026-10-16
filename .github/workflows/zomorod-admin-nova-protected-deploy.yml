@@ -133,6 +133,7 @@ jobs:
           django.setup()
           from django.conf import settings
           from django.template import Engine,RequestContext
+          from django.template.backends.django import get_installed_libraries
           from django.test import RequestFactory
           from django.contrib.auth.models import AnonymousUser
           assert "/zomorodmelal-db-recovery-validation/" in settings.DATABASES["default"]["NAME"]
@@ -140,7 +141,7 @@ jobs:
           assert (source/"base_site.html").is_file()
           staging=source
           template_dir=Path(settings.BASE_DIR)/"templates"
-          engine=Engine(dirs=[str(staging),str(template_dir)],app_dirs=True)
+          engine=Engine(dirs=[str(staging),str(template_dir)],app_dirs=True,libraries=get_installed_libraries())
           tpl=engine.get_template("base_site.html")
           for host in ("zomorodmelal.ir","mojplaywin.com"):
               request=RequestFactory().get("/admin/",HTTP_HOST=host)
