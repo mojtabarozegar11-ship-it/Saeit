@@ -193,8 +193,8 @@ jobs:
               if label=="SELECTOR_MIGRATE_CHECK" and not ok:
                   for line in raw_output.splitlines():
                       if re.search(r"migrat|operation|error|traceback|database",line,re.I):
-                          line=re.sub(r"(?i)(password|secret|token|api[_-]?key|private[_-]?key)(\\s*[:=]\\s*)[^\\s,;]+",r"\\1\\2[redacted]",line)
-                          line=re.sub(r"(?i)(://[^/\\s:@]+:)[^/@\\s]+@",r"\\1[redacted]@",line)
+                          line=re.sub(r"(?i)(password|secret|token|api[_-]?key|private[_-]?key)(\s*[:=]\s*)[^\s,;]+",r"\1\\2[redacted]",line)
+                          line=re.sub(r"(?i)(://[^/\s:@]+:)[^/@\s]+@",r"\1[redacted]@",line)
                           print("MIGRATE_DIAGNOSTIC="+line[:220])
               return ok
           good=inspect(sys.argv[1],"SELECTOR_MANAGE_CHECK",("system check identified no issues",))
@@ -236,8 +236,8 @@ jobs:
               print("LOG_FILE="+relative+" bytes="+str(size))
           cutoff=time.time()-6*60*60
           needles=re.compile(r"(ModuleNotFoundError|ImportError|RuntimeError|TemplateSyntaxError|OperationalError|Application initialization failed|reentrant|Passenger.*(?:error|fail)|Traceback)",re.I)
-          redact=re.compile(r"(?i)(password|passwd|secret|token|api[_-]?key|authorization|cookie)(\\s*[:=]\\s*)[^\\s,;]+")
-          uri=re.compile(r"(://[^/\\s:@]+:)[^/@\\s]+@")
+          redact=re.compile(r"(?i)(password|passwd|secret|token|api[_-]?key|authorization|cookie)(\s*[:=]\s*)[^\s,;]+")
+          uri=re.compile(r"(://[^/\s:@]+:)[^/@\s]+@")
           emitted=0
           for modified,p,size in found:
               if modified<cutoff or emitted>=24:
@@ -251,8 +251,8 @@ jobs:
                   continue
               for line in data.splitlines():
                   if needles.search(line):
-                      safe=redact.sub(r"\\1=[redacted]",line)
-                      safe=uri.sub(r"\\1[redacted]@",safe)
+                      safe=redact.sub(r"\1=[redacted]",line)
+                      safe=uri.sub(r"\1[redacted]@",safe)
                       try:
                           label=str(p.relative_to(home))
                       except ValueError:
@@ -270,7 +270,7 @@ jobs:
           set -euo pipefail
           for route in / /agriculture/ /agriculture/genetics/ /api/health/ /api/bridge/health/; do
             code="$(curl -sS --max-time 20 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir$route" || true)"
-            printf 'PUBLIC_ROUTE_STATUS %s %s\\n' "$route" "$code"
+            printf 'PUBLIC_ROUTE_STATUS %s %s\n' "$route" "$code"
           done
       - name: Remove temporary SSH material
         if: always()
