@@ -59,7 +59,7 @@ def request(path,required=None):
     url="https://zomorodmelal.ir"+path
     q="?logo_release="+STAGE.parent.name
     p=subprocess.run(["curl","-sS","-L","--max-time","23","-o","-","-w","\\n%{http_code}",url+q],capture_output=True,timeout=30)
-    data,sep,status=p.stdout.rpartition(b"\\n")
+    data,sep,status=p.stdout.rpartition(b"\n")
     code=status.decode("ascii","replace").strip() if sep else "missing"
     print("ZM_LOGO_HTTP="+path+" code="+code,flush=True)
     if p.returncode or code!="200":
