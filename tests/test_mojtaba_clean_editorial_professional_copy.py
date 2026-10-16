@@ -15,7 +15,8 @@ class PersonalEditorialCopyTest(unittest.TestCase):
         for which in ("home","about"):
             template="{% load static %}\n{% block content %}\n"+p.profile_section(which)+"\n{% endblock %}"
             after,count=m.template_copy(template)
-            self.assertEqual(count,1)
+            self.assertEqual(count,0)
+            self.assertEqual(after,template)
             self.assertEqual(after.count(m.PROFILE),1)
             self.assertIn(m.PROFILE_COPY,after)
             self.assertIn(m.CAPTION,after)
@@ -24,6 +25,20 @@ class PersonalEditorialCopyTest(unittest.TestCase):
             self.assertIn("intelligent industrial and commercial websites",after)
             self.assertIn("/mojtaba.roozegar/contact/",after)
             self.assertEqual(after.count("<img "),1)
+
+    def test_legacy_profile_paragraph_still_migrates_cleanly(self):
+        legacy=(
+            '<section id="mpw-primary-personal-profile-20261016">'
+            '<p style="font:14px/1.8 system-ui,sans-serif">'
+            'This is a personal photograph selected by the profile owner. '
+            'It is not presented as evidence of a Vancouver office or a completed client project.'
+            '</p><figcaption>Official owner-selected profile photograph</figcaption></section>'
+        )
+        corrected,count=m.template_copy(legacy)
+        self.assertEqual(count,1)
+        self.assertIn(m.PROFILE_COPY,corrected)
+        self.assertIn(m.CAPTION,corrected)
+        self.assertNotIn("It is not presented as",corrected)
 
     def test_professional_copy_avoids_unwanted_meta_commentary(self):
         self.assertNotIn("claim",m.PROFILE_COPY.lower())

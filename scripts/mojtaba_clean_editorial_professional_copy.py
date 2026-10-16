@@ -105,7 +105,9 @@ def replace_profile_block(source:str):
     # The exact introductory paragraph shown below the chosen professional photograph.
     pat=r'<p\b[^>]*>\s*This is a personal photograph selected by the profile owner\.\s*It is not presented as\s*evidence of a Vancouver office or a completed client project\.\s*</p>'
     section,n=re.subn(pat,'<p style="font:15px/1.8 system-ui,sans-serif">'+PROFILE_COPY+'</p>',section,flags=re.I|re.S)
-    if n!=1:raise ValueError("Owner profile unwanted paragraph changed from expected source")
+    if n==0 and PROFILE_COPY in section and CAPTION in section:
+        return source,0  # Already contains the corrected approved professional copy.
+    if n!=1:raise ValueError("Owner profile text differs from approved versions")
     section=section.replace("Official owner-selected profile photograph",CAPTION)
     if section==original:raise ValueError("Owner portrait copy not changed")
     return source[:start]+section+source[end:],1

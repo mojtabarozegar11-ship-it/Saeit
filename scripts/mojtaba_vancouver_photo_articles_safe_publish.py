@@ -55,7 +55,7 @@ def index_html(rows,media_url):
     parts=['{% load static %}\n<section '+MARKER+' class="mpw-vancouver-photo-series" aria-label="Open to professional collaboration in Vancouver">',
     '<style>.mpw-vancouver-photo-series{background:#161513;color:#f5e7d2;border:4px solid #c69b55;border-radius:14px;padding:clamp(18px,3vw,34px);margin:36px auto;max-width:1180px}.mpw-vancouver-photo-series h2{font:600 clamp(24px,3vw,36px)/1.3 Georgia,serif;color:#ebc785}.mpw-vancouver-photo-series .intro{font:400 16px/1.8 system-ui,sans-serif}.mpw-vancouver-photo-series .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.mpw-vancouver-photo-series article{background:#26221e;border:1px solid #a8864d;border-radius:10px;overflow:hidden}.mpw-vancouver-photo-series img{width:100%;aspect-ratio:16/9;object-fit:cover;display:block}.mpw-vancouver-photo-series a{color:#f5db9f;text-decoration:none}.mpw-vancouver-photo-series a:hover{text-decoration:underline}.mpw-vancouver-photo-series .copy{padding:16px}.mpw-vancouver-photo-series h3{font:600 21px/1.38 Georgia,serif;margin:4px 0 12px}.mpw-vancouver-photo-series p{line-height:1.65}.mpw-vancouver-photo-series small{color:#ded0b7}@media(max-width:750px){.mpw-vancouver-photo-series .grid{grid-template-columns:1fr}}</style>',
     '<h2>Open to Collaboration in Vancouver — Ten Illustrated Articles</h2>',
-    '<p class="intro">Mojtaba Roozegar welcomes appropriate discussions about research, education, original games, artificial intelligence and professional website projects. This is an invitation to explore possibilities—not a claim of a Canadian office, completed partnership or work authorization.</p>',
+    '<p class="intro">Mojtaba Roozegar welcomes appropriate discussions about research, education, original games, artificial intelligence and professional website projects. I welcome thoughtful professional conversations about research, digital services and relevant projects.</p>',
     '<div class="grid">']
     for a in rows:
         slug,title,excerpt=a["slug"],a["title"],a["excerpt"]
@@ -166,7 +166,7 @@ def legacy_photo_fallback(source,missing_to_image):
         if any(c not in "abcdefghijklmnopqrstuvwxyz0123456789-" for c in slug):raise ValueError("Unsafe old slug")
         test="{% if" if i==0 else "{% elif"
         snippets.append(test+' item.slug == "'+slug+'" %}')
-        snippets.append('<figure '+mark+' style="border:3px solid #c19a51;background:#161513;padding:10px;margin:20px auto;max-width:1050px"><img src="'+html.escape(url,quote=True)+'" alt="Photograph from Mojtaba Roozegar’s original personal gallery" width="1200" height="675" loading="lazy" decoding="async" style="width:100%;height:auto;object-fit:cover"><figcaption style="color:#ddc6a0;font:14px/1.5 system-ui,sans-serif">Personal gallery photograph used as an editorial illustration, not evidence of a business partnership.</figcaption></figure>')
+        snippets.append('<figure '+mark+' style="border:3px solid #c19a51;background:#161513;padding:10px;margin:20px auto;max-width:1050px"><img src="'+html.escape(url,quote=True)+'" alt="Photograph from Mojtaba Roozegar’s original personal gallery" width="1200" height="675" loading="lazy" decoding="async" style="width:100%;height:auto;object-fit:cover"><figcaption style="color:#ddc6a0;font:14px/1.5 system-ui,sans-serif">Personal gallery photograph.</figcaption></figure>')
     snippets.extend(['{% endif %}','{% endif %}'])
     where=source.index(block)+len(block)
     return source[:where]+"\n"+"\n".join(snippets)+"\n"+source[where:]

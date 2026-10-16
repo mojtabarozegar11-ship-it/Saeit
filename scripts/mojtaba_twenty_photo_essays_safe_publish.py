@@ -131,7 +131,7 @@ def detail_block(rows):
         condition="{% if" if i==0 else "{% elif"
         content.append(condition+' item.slug == "'+row["slug"]+'" %}')
         file="{% static '"+image_name(row["slug"])+"' %}"
-        content.append('<figure '+DETAIL_MARK+' style="border:3px solid #b9955c;background:#171717;padding:12px;max-width:1100px;margin:24px auto;border-radius:11px"><img src="'+file+'" alt="'+html.escape("Essay illustration: "+row["title"],quote=True)+'" width="640" height="360" loading="eager" decoding="async" style="width:100%;height:auto;display:block"><figcaption style="color:#e4cca1;font:14px/1.6 system-ui,sans-serif">Personal portrait or illustrative digital artwork supplied for this essay. The image is not proof of a Vancouver office, professional engagement or completed enterprise project.</figcaption></figure>')
+        content.append('<figure '+DETAIL_MARK+' style="border:3px solid #b9955c;background:#171717;padding:12px;max-width:1100px;margin:24px auto;border-radius:11px"><img src="'+file+'" alt="'+html.escape("Essay illustration: "+row["title"],quote=True)+'" width="640" height="360" loading="eager" decoding="async" style="width:100%;height:auto;display:block"><figcaption style="color:#e4cca1;font:14px/1.6 system-ui,sans-serif">Portrait or technology illustration accompanying this article.</figcaption></figure>')
     content.extend(['{% endif %}','{% endif %}'])
     return "\n".join(content)
 

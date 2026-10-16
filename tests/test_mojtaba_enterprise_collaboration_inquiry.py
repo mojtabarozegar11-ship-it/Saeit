@@ -47,7 +47,8 @@ class CollaborationInquiryTests(unittest.TestCase):
         self.assertEqual(s.count("Read the relevant technical article"),6)
         self.assertIn("Send a collaboration inquiry",s)
         self.assertIn(m.CONTACT,s)
-        self.assertIn("not completed client contracts",s)
+        self.assertIn("These proposals provide practical starting points",s)
+        self.assertNotIn("not completed client contracts",s)
     def test_additive_home_and_journal(self):
         for page in ("home","posts"):
             updated=m.patch(page,home(),self.new)
