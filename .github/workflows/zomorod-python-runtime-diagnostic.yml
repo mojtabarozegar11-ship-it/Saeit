@@ -257,7 +257,7 @@ jobs:
                   found.append((st.st_mtime,p,st.st_size))
               except OSError:
                   pass
-          found.sort(reverse=True)
+          found.sort(key=lambda row: (0 if home/"Saeit" in row[1].parents else 1, -row[0]))
           print("SELECTOR_EXPLICIT_LOG_FILES="+str(len(explicit_logs)))
           print("CANDIDATE_LOG_FILES="+str(len(found)))
           for _,p,size in found[:16]:
