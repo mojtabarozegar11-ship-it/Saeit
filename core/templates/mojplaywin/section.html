@@ -56,6 +56,21 @@
   </section>
   {% endif %}
   {% include "mojplaywin/editorial_experience.html" %}
+  {% if request.path == "/agents/" and request.user.is_staff %}
+  <section class="mpx-section" id="mpx-staff-agent-operations" aria-labelledby="mpx-staff-agent-title">
+    <div class="mpx-section-head"><div>
+      <span class="mpx-kicker">AUTHORIZED STAFF ONLY</span>
+      <h2 id="mpx-staff-agent-title">Agent operations and Django administration</h2>
+      <p>Review registered agents, permissions, queue health and audit evidence before authorizing any runtime change. Shared agents must not be activated without verified main-domain isolation.</p>
+    </div></div>
+    <div class="mw-links">
+      <a href="/staff/command-center/">Open staff operations dashboard ↗</a>
+      <a href="/staff/command-center/api/agents/directory/">Read-only agent directory ↗</a>
+      <a href="/admin/core/agent/">Manage registered agents in Django ↗</a>
+      <a href="/admin/core/agenttask/">Review agent tasks in Django ↗</a>
+    </div>
+  </section>
+  {% endif %}
 </div>
 {% include "mojplaywin/footer.html" %}
 {% endblock %}
