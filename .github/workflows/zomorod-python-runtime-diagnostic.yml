@@ -167,6 +167,35 @@ jobs:
                   if isinstance(value,(str,int,float,bool)):
                       print(f"SELECTOR_RECORD_{i}_{key.upper().replace('-','_')}={value}")
           PY
+          check_raw="$(mktemp "$HOME/.zomorod-manage-check.XXXXXX.json")"
+          migrate_raw="$(mktemp "$HOME/.zomorod-migrate-check.XXXXXX.json")"
+          trap 'rm -f -- "$raw" "$check_raw" "$migrate_raw"' EXIT
+          if ! "$selector" run-script --json --interpreter python --user "$USER" --app-root Saeit --script-name manage.py -- check > "$check_raw"; then
+            echo "SELECTOR_MANAGE_CHECK=not_verified"
+            exit 1
+          fi
+          if ! "$selector" run-script --json --interpreter python --user "$USER" --app-root Saeit --script-name manage.py -- migrate --check > "$migrate_raw"; then
+            echo "SELECTOR_MIGRATE_CHECK=not_verified"
+            exit 1
+          fi
+          python3 - "$check_raw" "$migrate_raw" <<'PY'
+          import base64,json,sys
+          def inspect(path,label,needle):
+              result=json.load(open(path,encoding="utf-8"))
+              payload=result.get("data","")
+              try:
+                  output=base64.b64decode(payload).decode("utf-8","replace")
+              except Exception:
+                  output=""
+              ok=result.get("result")=="success" and needle in output
+              print(f"{label}={'passed' if ok else 'not_verified'}")
+              return ok
+          good=inspect(sys.argv[1],"SELECTOR_MANAGE_CHECK","System check identified no issues")
+          good=inspect(sys.argv[2],"SELECTOR_MIGRATE_CHECK","No changes detected") and good
+          if not good:
+              raise SystemExit(1)
+          print("SELECTOR_APP_RUNTIME=verified")
+          PY
           REMOTE
       - name: Remove temporary SSH material
         if: always()
