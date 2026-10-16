@@ -522,15 +522,15 @@ jobs:
           secret=re.compile(r"(?i)(password|passwd|secret|token|api[_-]?key|authorization|cookie)(\s*[:=]\s*)[^\s,;]+")
           uri=re.compile(r"(://[^/\s:@]+:)[^/@\s]+@")
           emitted=0
-          for line in lines:
-              if pattern.search(line):
+          for error_index in [i for i,line in enumerate(lines) if re.search(r"ModuleNotFoundError|ImportError|RuntimeError|TemplateSyntaxError|TemplateDoesNotExist|OperationalError|DatabaseError",line)][-3:]:
+              starts=[i for i in range(error_index+1) if "Traceback (most recent call last):" in lines[i]]
+              start=starts[-1] if starts else max(0,error_index-24)
+              for line in lines[start:error_index+1]:
                   safe=secret.sub(r"\1=[redacted]",line)
                   safe=uri.sub(r"\1[redacted]@",safe)
-                  print("PASSENGER_EXCEPTION="+safe[:280])
+                  print("PASSENGER_LATEST_TRACE="+safe[:280])
                   emitted+=1
-                  if emitted>=80:
-                      break
-          print("PASSENGER_EXCEPTION_LINES="+str(emitted))
+          print("PASSENGER_LATEST_TRACE_LINES="+str(emitted))
           PY
           DIAGNOSTIC
       - name: Roll back if public verification failed
