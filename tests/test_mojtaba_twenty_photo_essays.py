@@ -92,6 +92,12 @@ class TestPhotoLedPersonalJournal(unittest.TestCase):
             with self.assertRaises(ValueError):
                 m.patch("home",original_template().replace(marker,"missing"),self.rows)
 
+    def test_upload_manifest_archive_listing_does_not_break_pipefail(self):
+        workflow=(ROOT/".github/workflows/mojtaba-twenty-photo-essays-publish.yml").read_text()
+        self.assertIn('tar -tzf "$stage/photos.tgz" > "$stage/photo-archive-list.txt"',workflow)
+        self.assertIn('grep -Fxq "mojtaba20pics/manifest.json" "$stage/photo-archive-list.txt"',workflow)
+        self.assertNotIn('tar -tzf "$stage/photos.tgz" | grep -q',workflow)
+
     def test_scope_limited_to_three_personal_templates(self):
         self.assertEqual(set(m.TEMPLATES),{"home","posts","detail"})
         self.assertEqual(m.STATIC_FOLDER,"personal_site/mojtaba_personal_image_essays_20261016")
