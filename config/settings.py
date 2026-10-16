@@ -1,6 +1,11 @@
 from pathlib import Path
 
-import environ
+try:
+    import environ
+except ModuleNotFoundError as error:
+    if error.name != "environ":
+        raise
+    from config import env_compat as environ
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 env = environ.Env(DEBUG=(bool, False))
