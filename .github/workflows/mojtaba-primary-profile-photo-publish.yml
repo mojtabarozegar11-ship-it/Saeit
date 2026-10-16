@@ -1,0 +1,228 @@
+name: Publish owner-selected Mojtaba personal profile photo
+on:
+  issues:
+    types: [opened]
+permissions:
+  contents: read
+concurrency:
+  group: mojtaba-personal-profile-photo-20261016
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event.issue.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.issue.title == 'Ops: Set new owner photo as Mojtaba personal profile 2026-10-16'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify owner-uploaded portrait and unchanged existing content
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mojtaba_set_primary_profile_photo_20261016.py
+          python3 -m unittest discover -s tests -p test_mojtaba_primary_profile_photo.py -v
+      - name: Reconstruct authentic owner-uploaded profile images and check SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/owner-profile-photos"
+          python3 - "$RUNNER_TEMP/owner-profile-photos" <<'PY_PHOTOS'
+          from pathlib import Path
+          import base64,hashlib,io,zipfile,sys,json
+          b64=Path("content/mojtaba_primary_profile_source_20261016.b64").read_text(encoding="ascii")
+          raw=base64.b64decode(b64)
+          assert hashlib.sha256(raw).hexdigest()=="fa1923539c59fa55578787407169ad2dee4aaad2883dac0360eda19eb095a675"
+          folder=Path(sys.argv[1])
+          with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+              assert set(archive.namelist())=={"avatar.webp","portrait.webp","manifest.json"}
+              m=json.loads(archive.read("manifest.json"))
+              assert m["source_uploaded_photo_sha256"]=="50493b0e83f475b7f54405570e0cbce210bf6eb9e2520f024e316e999779e04a"
+              expected={"avatar.webp":"16969b7fb6b2d5dd7288b53a1000006abd521b05deb350a1cfcec2eed346ebf1","portrait.webp":"482cad022c1739a464d17f0e023c69fcd6971d72bc67881f8ec24218bd2d8e41"}
+              for name,digest in expected.items():
+                  data=archive.read(name)
+                  assert data[:4]==b"RIFF" and data[8:12]==b"WEBP"
+                  assert hashlib.sha256(data).hexdigest()==digest
+                  (folder/name).write_bytes(data)
+              (folder/"manifest.json").write_bytes(archive.read("manifest.json"))
+          print("PROFILE_PHOTO_UNCHANGED_OWNER_SOURCE_CONFIRMED=yes",flush=True)
+          print("PROFILE_PHOTO_WEBP_AVATAR_AND_PORTRAIT_CONFIRMED=yes",flush=True)
+          PY_PHOTOS
+          tar -czf "$RUNNER_TEMP/owner-profile-photo-bundle.tgz" -C "$RUNNER_TEMP" owner-profile-photos
+      - name: Prepare pinned SSH relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/photo-relay"
+          mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          python3 - "$d/host.key" <<'PY'
+          import pathlib,sys
+          p=pathlib.Path(sys.argv[1]);t=p.read_text().replace('\r\n','\n').strip()
+          p.write_text(t.replace('\\n','\n')+'\n')
+          PY
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host saeit-host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+            ConnectionAttempts 1
+          EOF
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          echo "SSH_CONFIG=$d/config" >> "$GITHUB_ENV"
+      - name: Transfer profile photos and allowlisted personal deployment code only
+        shell: bash
+        run: |
+          set -euo pipefail
+          stage="/home/zomorod2/.mpw-new-profile-photo-$GITHUB_RUN_ID"
+          timeout 32s ssh -F "$SSH_CONFIG" saeit-host "test ! -e '$stage' && install -d -m 700 '$stage'"
+          timeout 120s scp -F "$SSH_CONFIG" "$RUNNER_TEMP/owner-profile-photo-bundle.tgz" "saeit-host:$stage/photos.tgz"
+          timeout 120s scp -F "$SSH_CONFIG" scripts/mojtaba_set_primary_profile_photo_20261016.py "saeit-host:$stage/profile.py"
+      - name: Install only personal home/about hero and verify original site health
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 920s ssh -F "$SSH_CONFIG" saeit-host "bash -s -- '$GITHUB_RUN_ID'" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          id="$1"
+          stage="/home/zomorod2/.mpw-new-profile-photo-$id"
+          app="/home/zomorod2/mojtaba_personal/mojtaba_roozegar_personal_v17"
+          py="$app/../.venv_personal_test/bin/python"
+          script="$stage/profile.py"
+          backup="$HOME/.backups/mojtaba-official-profile-photo/$id"
+          images="$stage/owner-profile-photos"
+          installed=0
+          verified=0
+          rollback_if_required() {
+            code=$?
+            trap - EXIT
+            if test "$installed" = 1 && test "$verified" = 0 && test -f "$backup/state.json"; then
+              "$py" "$script" rollback --app "$app" --backup "$backup" && echo "PROFILE_PHOTO_AUTO_ROLLBACK=success" || echo "PROFILE_PHOTO_AUTO_ROLLBACK=manual_review_needed"
+            fi
+            exit "$code"
+          }
+          trap rollback_if_required EXIT
+          test -f "$app/manage.py" && test ! -L "$app" && test -x "$py"
+          tar -tzf "$stage/photos.tgz" > "$stage/archive-file-list.txt"
+          grep -Fxq 'owner-profile-photos/portrait.webp' "$stage/archive-file-list.txt"
+          grep -Fxq 'owner-profile-photos/avatar.webp' "$stage/archive-file-list.txt"
+          cd "$stage"
+          tar -xzf photos.tgz --no-same-owner
+          "$py" "$script" check --app "$app" --pictures "$images"
+          cd "$app"
+          "$py" "$script" install --app "$app" --pictures "$images" --backup "$backup"
+          installed=1
+          "$py" manage.py check --deploy
+          "$py" manage.py collectstatic --noinput --verbosity 0
+          test ! -d "$app/tmp" || touch "$app/tmp/restart.txt"
+          "$py" - "$stage" <<'PY_PUBLIC'
+          import hashlib,sys,time,os
+          from html.parser import HTMLParser
+          from pathlib import Path
+          from urllib.request import Request,urlopen
+          from urllib.parse import urljoin
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          import django;django.setup()
+          from core.models import Post
+          if Post.objects.filter(published=True).count()<93:raise ValueError("Prior 93 posts missing")
+          base="https://mojplaywin.com/mojtaba.roozegar/"
+          root=Path(sys.argv[1])
+          class Pictures(HTMLParser):
+              def __init__(self):
+                  super().__init__();self.src=[];self.figure=0;self.gallery_a=[];self.gallery_b=[]
+              def handle_starttag(self,t,attrs):
+                  d=dict(attrs)
+                  if t=="img":
+                      src=d.get("src","")
+                      if src:self.src.append(src)
+                      if "owner_gallery_20261015_b/" in src:self.gallery_b.append(src)
+                      elif "owner_gallery_20261015/" in src:self.gallery_a.append(src)
+                  if t=="section" and d.get("id")=="mpw-primary-personal-profile-20261016":
+                      self.figure+=1
+          def fetch(url):
+              with urlopen(Request(url,headers={"User-Agent":"MojtabaOfficialOwnerProfilePhotoCheck/1"}),timeout=24) as r:
+                  if r.status!=200:raise ValueError("Non-200 "+url)
+                  return r.read(5000000)
+          def page(route,verify):
+              err=""
+              for attempt in range(7):
+                  try:
+                      text=fetch(base+route+"?owner_profile_verification="+str(time.time_ns())).decode("utf-8","replace")
+                      return verify(text)
+                  except Exception as exc:
+                      err=str(exc);time.sleep(2)
+              raise RuntimeError("Public page check failed "+route+" "+err)
+          for route,name,digest in (("","portrait.webp","482cad022c1739a464d17f0e023c69fcd6971d72bc67881f8ec24218bd2d8e41"),("about/","avatar.webp","16969b7fb6b2d5dd7288b53a1000006abd521b05deb350a1cfcec2eed346ebf1")):
+              def check(body,name=name):
+                  p=Pictures();p.feed(body)
+                  if p.figure!=1:raise ValueError("Primary owner portrait missing from "+route)
+                  matches=[u for u in p.src if "official_profile_20261016/" in u and name in u]
+                  if len(matches)!=1:raise ValueError("Incorrect profile photo "+name)
+                  if "/mojtaba.roozegar/contact/" not in body:raise ValueError("Contact information missing")
+                  if route=="" and ('id="mpw-new-originals-20261015-b"' not in body or 'id="mpw-mojtaba-twenty-image-essays-20261016"' not in body):
+                      raise ValueError("Original homepage content changed")
+                  if route=="about/" and "mpw-academic-profile-20261016" not in body:
+                      raise ValueError("Original academic profile missing")
+                  return matches[0]
+              src=page(route,check)
+              asset=fetch(urljoin(base,src))
+              if asset[:4]!=b"RIFF" or asset[8:12]!=b"WEBP" or hashlib.sha256(asset).hexdigest()!=digest:
+                  raise ValueError("Uploaded owner photo not actually served")
+              print("PROFILE_PHOTO_LIVE_OWNER_IMAGE_VERIFIED="+(route or "home"),flush=True)
+          def gallery(body):
+              p=Pictures();p.feed(body)
+              if len(p.gallery_a)!=10 or len(p.gallery_b)!=10:
+                  raise ValueError("20 earlier original gallery photos missing")
+          page("gallery/",gallery)
+          print("PROFILE_PHOTO_20_EXISTING_GALLERY_PHOTOS_UNCHANGED=yes",flush=True)
+          def blog(body):
+              p=Pictures();p.feed(body)
+              if len([s for s in p.src if "mojtaba_personal_image_essays_20261016/" in s])<20:
+                  raise ValueError("Original 20 editorial essay photos missing")
+          page("blog/",blog)
+          print("PROFILE_PHOTO_20_ILLUSTRATED_BLOG_IMAGES_UNCHANGED=yes",flush=True)
+          print("PROFILE_PHOTO_PUBLISHED_POSTS_PRESERVED_93_PLUS=yes",flush=True)
+          PY_PUBLIC
+          for domain in "https://mojplaywin.com/" "https://zomorodmelal.ir/"; do
+            code="$(curl -sSL -o /dev/null -w '%{http_code}' --max-time 24 "$domain")"
+            test "$code" = 200
+            echo "PROFILE_PHOTO_UNRELATED_DOMAIN_HEALTHY=$domain HTTP_200"
+          done
+          verified=1
+          trap - EXIT
+          echo "PROFILE_PHOTO_LIVE_PUBLICATION_SUCCESS=yes"
+          echo "PROFILE_PHOTO_SAFE_BACKUP=$backup"
+          rm -rf "$stage"
+          REMOTE
+      - name: Remove short-lived SSH credentials
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/photo-relay"
