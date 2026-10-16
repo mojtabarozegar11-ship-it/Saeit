@@ -39,7 +39,7 @@ FILE_PATH_RE = re.compile(r'(["\'])/static/([^"\']+)\1')
 
 def rewrite_local_static(html: str, copied: set[str], static_root: Path) -> str:
     def replace(match):
-        relative = unquote(match.group(2))
+        relative = unquote(match.group(2)).split('?', 1)[0].split('#', 1)[0]
         if relative.startswith("/") or ".." in Path(relative).parts or "\\" in relative:
             raise ValueError("unsafe static asset path")
         src = static_root / relative
