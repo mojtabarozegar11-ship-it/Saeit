@@ -101,7 +101,7 @@ jobs:
           ssh -F "$d/config" saeit-cpanel "python3 '$stage/rollback.py' rollback '38827723099' restore"
           ssh -F "$d/config" saeit-cpanel "rm -rf -- '$stage'"
       - name: Package application changes with merge baselines
-        if: "!contains(github.event.head_commit.message, 'MOJPLAYWIN_ROLLBACK_38827723099')"
+        if: ${{ !contains(github.event.head_commit.message, 'MOJPLAYWIN_ROLLBACK_38827723099') }}
         shell: bash
         run: |
           set -euo pipefail
@@ -126,7 +126,7 @@ jobs:
           PY
           tar -czf "$RUNNER_TEMP/mojplaywin-main.tar.gz" scripts/deploy_mojplaywin_branding.py config/urls.py core/services_views.py core/commerce_views.py core/views.py core/mojplaywin_views.py core/templates/base.html core/templates/mojplaywin/home.html core/templates/mojplaywin/store.html core/templates/mojplaywin/section.html core/templates/mojplaywin/theme.html -C "$RUNNER_TEMP/mojplaywin-main" deploy_baseline
       - name: Stage and install on the verified cPanel app
-        if: "!contains(github.event.head_commit.message, 'MOJPLAYWIN_ROLLBACK_38827723099')"
+        if: ${{ !contains(github.event.head_commit.message, 'MOJPLAYWIN_ROLLBACK_38827723099') }}
         id: deploy
         shell: bash
         run: |
@@ -158,7 +158,7 @@ jobs:
           PY
           python3 '$stage/scripts/deploy_mojplaywin_branding.py' deploy '$GITHUB_RUN_ID' '$GITHUB_SHA' '$stage'"
       - name: Smoke-test MojPlayWin pages
-        if: "!contains(github.event.head_commit.message, 'MOJPLAYWIN_ROLLBACK_38827723099')"
+        if: ${{ !contains(github.event.head_commit.message, 'MOJPLAYWIN_ROLLBACK_38827723099') }}
         id: smoke
         shell: bash
         run: |
