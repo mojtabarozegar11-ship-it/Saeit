@@ -102,7 +102,7 @@ jobs:
             python3 - "$selector_config" <<'PY'
           import json,sys
           data=json.load(open(sys.argv[1],encoding="utf-8"))
-          allowed={"app_root","app-root","domain","app_uri","app-uri","version","python_version","virtualenv","virtualenv_path","python_path","path","app_mode","enabled"}
+          allowed={"app_root","app-root","domain","app_uri","app-uri","version","python_version","virtualenv","virtualenv_path","python_path","path","app_mode","enabled","passenger_log_file","startup_file","entry_point","virtualenv"}
           print("SELECTOR_CONFIG_TOP_KEYS="+",".join(sorted(data.keys())) if isinstance(data,dict) else "SELECTOR_CONFIG_TOP_TYPE="+type(data).__name__)
           matches=[]; shapes=[]; stack=[data]
           while stack:
@@ -135,7 +135,7 @@ jobs:
           python3 - "$raw" <<'PY'
           import json,sys
           data=json.load(open(sys.argv[1],encoding="utf-8"))
-          allowed={"app_root","app-root","domain","app_uri","app-uri","version","python_version","virtualenv","virtualenv_path","python_path","path","app_mode","enabled","result","selector_enabled","default_version"}
+          allowed={"app_root","app-root","domain","app_uri","app-uri","version","python_version","virtualenv","virtualenv_path","python_path","path","app_mode","enabled","result","selector_enabled","default_version","passenger_log_file","startup_file","entry_point","virtualenv"}
           print("SELECTOR_TOP_KEYS="+",".join(sorted(data.keys())) if isinstance(data,dict) else "SELECTOR_TOP_TYPE="+type(data).__name__)
           matches=[]; related=[]; keysets=[]; stack=[data]
           while stack:
@@ -211,6 +211,22 @@ jobs:
           home=Path.home()
           roots=[home/"logs",home/"Saeit"/"log",home/"Saeit"/"tmp",home/"public_html"]
           found=[]
+          explicit_logs=[]
+          selector_config=home/".cl.selector"/"python-selector.json"
+          try:
+              selector_data=json.loads(selector_config.read_text(encoding="utf-8"))
+              app_record=selector_data.get("Saeit",{})
+              log_value=app_record.get("passenger_log_file")
+              if isinstance(log_value,str) and log_value:
+                  log_path=Path(log_value)
+                  if not log_path.is_absolute():
+                      log_path=home/log_path
+                  if log_path.is_file():
+                      explicit_logs.append(log_path)
+                  elif log_path.is_dir():
+                      roots.append(log_path)
+          except (OSError,ValueError,AttributeError):
+              pass
           for base in roots:
               if not base.is_dir():
                   print("LOG_DIRECTORY=missing:"+str(base.relative_to(home)))
@@ -227,7 +243,14 @@ jobs:
                               found.append((st.st_mtime,p,st.st_size))
                           except OSError:
                               pass
+          for p in explicit_logs:
+              try:
+                  st=p.stat()
+                  found.append((st.st_mtime,p,st.st_size))
+              except OSError:
+                  pass
           found.sort(reverse=True)
+          print("SELECTOR_EXPLICIT_LOG_FILES="+str(len(explicit_logs)))
           print("CANDIDATE_LOG_FILES="+str(len(found)))
           for _,p,size in found[:16]:
               try:
