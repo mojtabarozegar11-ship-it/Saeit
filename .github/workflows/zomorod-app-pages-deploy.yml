@@ -435,26 +435,10 @@ jobs:
               raise SystemExit(1)
           PY
           rm -f -- "$restart_result"
-          # CloudLinux selector restart may regenerate its managed PassengerPython line.
-          # Reapply the verified virtualenv path only after selector restart, then signal Passenger.
-          python3 - "$htaccess" "$passenger_python" <<'PY'
-          from pathlib import Path
-          import os,sys
-          path=Path(sys.argv[1])
-          source=path.read_text(encoding="utf-8")
-          old='PassengerPython "/opt/alt/python310/bin/lswsgi"'
-          new=f"PassengerPython {sys.argv[2]}"
-          if source.count(old)!=1:
-              raise SystemExit("SELECTOR_RESTART_CHANGED_PASSENGER_PYTHON_UNEXPECTEDLY")
-          replacement=path.with_name(path.name+".python-switch")
-          replacement.write_text(source.replace(old,new,1),encoding="utf-8")
-          os.chmod(replacement,path.stat().st_mode)
-          os.replace(replacement,path)
-          PY
-          grep -Fq "PassengerPython $passenger_python" "$htaccess"
+          grep -Fq 'PassengerPython "/opt/alt/python310/bin/lswsgi"' "$htaccess"
           mkdir -p "$app/tmp"
           touch "$app/tmp/restart.txt"
-          echo "PASSENGER_PYTHON_FINAL=direct_virtualenv"
+          echo "PASSENGER_PYTHON_FINAL=verified_cpanel_entrypoint"
           echo "PASSENGER_TOUCH_RESTART=done"
           cd "$app"
           if ! "$passenger_python" - <<'PY'
