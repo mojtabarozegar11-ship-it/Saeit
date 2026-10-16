@@ -96,7 +96,6 @@ jobs:
           print("STANDALONE_MODULES="+str(16*3))
           PY
           node --check zm-inpage-editorial-2026.js
-          node --check zm-modern-loader.txt || true
       - name: Capture live shared JS checksum to avoid wrong-path changes
         run: |
           set -euo pipefail
@@ -158,8 +157,7 @@ jobs:
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/zomorod-root"
-          stage="$HOME"
-          tar -czf - zm-inpage-editorial-2026.js zm-modern-loader.txt | ssh -F "$d/config" saeit-cpanel "mkdir -p '$HOME'/.zm-stage-$GITHUB_SHA && tar -xzf - -C '$HOME'/.zm-stage-$GITHUB_SHA"
+          tar -czf - zm-inpage-editorial-2026.js zm-modern-loader.txt | ssh -F "$d/config" saeit-cpanel "mkdir -p /home/zomorod2/.zm-stage-$GITHUB_SHA && tar -xzf - -C /home/zomorod2/.zm-stage-$GITHUB_SHA"
       - name: Back up original JS and append isolated loader
         id: install
         shell: bash
