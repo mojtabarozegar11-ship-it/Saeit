@@ -101,6 +101,15 @@ def photo_binary(row:dict,pictures:Path)->bytes:
     raw=p.read_bytes()
     if len(raw)<4000 or len(raw)>2000000 or raw[:4]!=b"RIFF" or raw[8:12]!=b"WEBP":
         raise ValueError("Corrupt or unexpected personal WebP image")
+    recordfile=pictures/"manifest.json"
+    if recordfile.is_symlink() or not recordfile.is_file():raise ValueError("Image provenance manifest missing")
+    records=json.loads(recordfile.read_text(encoding="utf-8"))
+    if len(records)!=20:raise ValueError("Unexpected photo manifest count")
+    index=row["photo_index"]
+    record=next((x for x in records if x.get("number")==index),None)
+    expected_kind="owner_supplied" if index<=10 else "AI_generated_illustration"
+    if record is None or record.get("name")!=p.name or record.get("source_type")!=expected_kind or record.get("sha256")!=hashbytes(raw):
+        raise ValueError("Photograph source and content checksum mismatch")
     return raw
 
 def index_block(rows):
