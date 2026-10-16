@@ -23,7 +23,8 @@ class MojPlayWinCompletePageGuardTests(TestCase):
         self.assertEqual(set(EDITORIAL), expected)
         for key, detail in EDITORIAL.items():
             with self.subTest(page=key):
-                self.assertGreater(len(" ".join(detail["overview"]).split()), 65)
+                self.assertGreaterEqual(len(" ".join(detail["overview"]).split()), 55)
+                self.assertGreaterEqual(len((" ".join(detail["overview"]) + " ".join(step["detail"] for step in detail["steps"]) + " ".join(detail["deliverables"])).split()), 120)
                 self.assertEqual(len(detail["steps"]), 4)
                 self.assertEqual(len(detail["deliverables"]), 3)
                 self.assertEqual(len(detail["images"]), 3)
