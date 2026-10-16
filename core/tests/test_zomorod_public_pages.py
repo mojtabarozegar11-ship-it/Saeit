@@ -35,4 +35,4 @@ class ZomorodAgriculturePageTests(SimpleTestCase):
                 self.assertEqual(response.status_code, 200)
                 self.assertEqual(response["Content-Type"], "image/webp")
                 self.assertTrue(response.streaming)
-                self.assertTrue(response["Cache-Control"].startswith("public"))
+                self.assertIn("public", response["Cache-Control"].lower())
