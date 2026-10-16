@@ -1,0 +1,150 @@
+name: Validate recovered Zomorod Django database on isolated private copy
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/zomorod-db-recovery-candidate-validate.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-main-db-clone-validate
+  cancel-in-progress: false
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - name: Clone verified historical DB only to private test directory
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          sha="$1"
+          src="$HOME/Saeit/backups/pre_phase19_cleanup_20261004-124041/db.sqlite3"
+          target_base="$HOME/.backups/zomorodmelal-db-recovery-validation/$sha"
+          dst="$target_base/validation.sqlite3"
+          test -f "$src" && ! test -L "$src" && test "$(stat -c %s "$src")" -gt 1000000
+          test ! -e "$target_base"
+          # Never write a copy if there is insufficient free space on this account.
+          available="$(df -Pk "$HOME" | awk 'NR==2 {print $4}')"
+          src_kb="$(( ($(stat -c %s "$src") + 1023) / 1024 ))"
+          if test "$available" -lt "$((src_kb * 2 + 51200))"; then
+            echo "ISOLATED_DB_CLONE=not_created_insufficient_disk"
+            exit 2
+          fi
+          mkdir -p "$target_base"
+          chmod 700 "$target_base"
+          cp -p "$src" "$dst"
+          chmod 600 "$dst"
+          test -s "$dst"
+          cmp -s "$src" "$dst"
+          echo "ISOLATED_DB_CLONE=bitwise_verified"
+          echo "ISOLATED_DB_PRODUCTION_FILE=unchanged"
+          REMOTE
+      - name: Test isolated snapshot with current Django models, no migrations applied
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1"
+          cd "$HOME/Saeit"
+          export PYTHONDONTWRITEBYTECODE=1
+          export DATABASE_URL="sqlite:///$HOME/.backups/zomorodmelal-db-recovery-validation/$sha/validation.sqlite3"
+          unset OPENAI_API_KEY || true
+          "$HOME/virtualenv/Saeit/3.10/bin/python" - <<'PY'
+          import os,sqlite3,pathlib,urllib.parse
+          dbpath=pathlib.Path(os.environ["DATABASE_URL"].split("sqlite:///",1)[1])
+          assert dbpath.is_file() and dbpath.stat().st_size>1_000_000
+          uri="file:"+urllib.parse.quote(str(dbpath))+"?mode=ro"
+          conn=sqlite3.connect(uri,uri=True)
+          try:
+              integrity=conn.execute("PRAGMA quick_check").fetchone()[0]
+              assert integrity=="ok"
+              print("STAGED_DB_SQLITE_INTEGRITY=ok")
+          finally:conn.close()
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          import django
+          django.setup()
+          from django.conf import settings
+          assert pathlib.Path(settings.DATABASES["default"]["NAME"])==dbpath
+          from django.db import connection
+          from django.db.migrations.executor import MigrationExecutor
+          from django.db.migrations.loader import MigrationLoader
+          from django.core.checks import run_checks
+          errors=run_checks()
+          print("STAGED_DB_DJANGO_CHECK_ISSUES="+str(len(errors)))
+          for issue in errors[:8]:
+              print("STAGED_DB_DJANGO_CHECK_ID="+str(issue.id))
+          try:
+              loader=MigrationLoader(connection)
+              plan=MigrationExecutor(connection).migration_plan(loader.graph.leaf_nodes())
+              print("STAGED_DB_UNAPPLIED_MIGRATIONS="+str(len(plan)))
+              for migration,_ in plan[:12]:
+                  print("STAGED_DB_MIGRATION_PENDING="+migration.app_label+"."+migration.name)
+          except Exception as e:
+              print("STAGED_DB_MIGRATION_GRAPH_FAILED="+type(e).__name__)
+              raise
+          from core.models import Agent,AgentTask
+          print("STAGED_DB_AGENTS="+str(Agent.objects.count()))
+          print("STAGED_DB_ACTIVE_AGENTS="+str(Agent.objects.filter(active=True).count()))
+          for status in ("queued","running","completed","failed","blocked"):
+              print("STAGED_DB_TASKS_"+status.upper()+"="+str(AgentTask.objects.filter(status=status).count()))
+          print("STAGED_DB_DJANGO_READONLY=passed")
+          PY
+          REMOTE
+      - name: Erase temporary runner SSH files only
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
