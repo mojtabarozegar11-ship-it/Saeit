@@ -1,0 +1,163 @@
+name: Personal contact English labels only
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/mojtaba-personal-contact-english-labels.yml
+      - scripts/mojtaba_personal_contact_english_labels.py
+      - tests/test_mojtaba_personal_contact_english_labels.py
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mojtaba-v17-contact-english-labels
+  cancel-in-progress: false
+
+jobs:
+  update-four-labels:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Test minimal reversible label change
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p 'test_mojtaba_personal_contact_english_labels.py' -v
+
+      - name: Authenticate pinned GitHub to VPS to private cPanel path
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/mojtaba-contact-label-relay"
+          mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          python3 - "$d/host.key" <<'PY'
+          import pathlib,sys
+          p=pathlib.Path(sys.argv[1])
+          t=p.read_text().replace('\r\n','\n').strip()
+          p.write_text(t.replace('\\n','\n')+'\n')
+          PY
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host saeit-host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+            ConnectionAttempts 1
+          EOF
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          echo "SSH_CONFIG=$d/config" >> "$GITHUB_ENV"
+
+      - name: Protected only-four-label install with rollback on failure
+        shell: bash
+        run: |
+          set -euo pipefail
+          stage="/home/zomorod2/.personal-contact-translation-$GITHUB_RUN_ID"
+          timeout 25s ssh -F "$SSH_CONFIG" saeit-host "test ! -e '$stage' && install -d -m 700 '$stage'"
+          timeout 65s scp -F "$SSH_CONFIG" scripts/mojtaba_personal_contact_english_labels.py "saeit-host:$stage/installer.py"
+          timeout 400s ssh -F "$SSH_CONFIG" saeit-host "bash -s -- '$GITHUB_RUN_ID'" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          app="/home/zomorod2/mojtaba_personal/mojtaba_roozegar_personal_v17"
+          stage="/home/zomorod2/.personal-contact-translation-$1"
+          script="$stage/installer.py"
+          backup="/home/zomorod2/.backups/mojtaba-personal-contact-translation/$1"
+          verified=0
+          finish() {
+            rc=$?
+            trap - EXIT
+            if test "$verified" -ne 1 && test -f "$backup/manifest.json"; then
+              echo "PUBLIC_SMOKE_OR_INSTALL_FAILED_ROLLBACK_START=yes"
+              if python3 "$script" rollback --backup "$backup"; then
+                test -d "$app/tmp" && touch "$app/tmp/restart.txt"
+                echo "PERSONAL_CONTACT_ROLLBACK_APPLIED=yes"
+              else
+                echo "PERSONAL_CONTACT_MANUAL_ROLLBACK_REQUIRED=yes"
+              fi
+            fi
+            rm -rf -- "$stage"
+            exit "$rc"
+          }
+          trap finish EXIT
+          test -f "$app/manage.py" && test ! -L "$app" && test -f "$script"
+          test ! -e "$backup" && test -d "$app/tmp"
+          python3 "$script" check
+          py="$app/../.venv_personal_test/bin/python"
+          test -x "$py"
+          "$py" -c 'import django'
+          python3 "$script" install --backup "$backup"
+          cd "$app"
+          "$py" manage.py check
+          touch "$app/tmp/restart.txt"
+          sleep 3
+          python3 - <<'SMOKE'
+          import re,time
+          from urllib.request import Request,urlopen
+          url="https://mojplaywin.com/mojtaba.roozegar/contact/"
+          expected={"name":"Your Name","email":"Email Address","subject":"Subject","message":"Your Message"}
+          error=None
+          for n in range(12):
+              try:
+                  req=Request(url+"?contact_en="+str(time.time_ns()),headers={"User-Agent":"SaeitPersonalContactLabelSmoke/1.0","Cache-Control":"no-cache"})
+                  with urlopen(req,timeout=15) as resp:
+                      content=resp.read(1000000).decode("utf-8","replace")
+                      if resp.status!=200:
+                          raise ValueError("Contact page did not return HTTP 200")
+                  for field,label in expected.items():
+                      pattern=r'<label\b[^>]*\bfor=["\x27]id_'+field+r'["\x27][^>]*>\s*'+re.escape(label)+r'\s*</label>'
+                      if not re.search(pattern,content,re.I):
+                          raise ValueError("Missing translated field label: "+field)
+                      if not re.search(r'\bname=["\x27]'+field+r'["\x27]',content):
+                          raise ValueError("Missing original form field: "+field)
+                  for item in ("csrfmiddlewaretoken","<form","Send message"):
+                      if item not in content:
+                          raise ValueError("Contact form changed unexpectedly")
+                  print("CONTACT_FORM_ENGLISH_LABELS_PUBLICLY_VERIFIED=4",flush=True)
+                  print("FORM_FIELDS_CSRF_AND_BUTTON_PRESERVED=yes",flush=True)
+                  break
+              except Exception as e:
+                  error=str(e)
+                  print("PERSONAL_CONTACT_PUBLIC_VERIFY_RETRY="+str(n+1)+" "+error[:160],flush=True)
+                  time.sleep(3)
+          else:
+              raise SystemExit("Public contact verification failed: "+str(error))
+          SMOKE
+          verified=1
+          echo "PERSONAL_CONTACT_ENGLISH_LABELS_DEPLOYED=yes"
+          echo "PERSONAL_CONTACT_SITE_OTHER_PAGES_UNTOUCHED=yes"
+          REMOTE
+
+      - name: Clean temporary SSH credentials
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/mojtaba-contact-label-relay"
