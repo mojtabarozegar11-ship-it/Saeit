@@ -179,16 +179,23 @@ jobs:
             exit 1
           fi
           python3 - "$check_raw" "$migrate_raw" <<'PY'
-          import base64,json,sys
+          import base64,json,re,sys
           def inspect(path,label,needles):
               result=json.load(open(path,encoding="utf-8"))
               payload=result.get("data","")
               try:
-                  output=base64.b64decode(payload).decode("utf-8","replace").lower()
+                  raw_output=base64.b64decode(payload).decode("utf-8","replace")
               except Exception:
-                  output=""
+                  raw_output=""
+              output=raw_output.lower()
               ok=result.get("result")=="success" and any(needle in output for needle in needles)
               print(f"{label}={'passed' if ok else 'not_verified'}")
+              if label=="SELECTOR_MIGRATE_CHECK" and not ok:
+                  for line in raw_output.splitlines():
+                      if re.search(r"migrat|operation|error|traceback|database",line,re.I):
+                          line=re.sub(r"(?i)(password|secret|token|api[_-]?key|private[_-]?key)(\\s*[:=]\\s*)[^\\s,;]+",r"\\1\\2[redacted]",line)
+                          line=re.sub(r"(?i)(://[^/\\s:@]+:)[^/@\\s]+@",r"\\1[redacted]@",line)
+                          print("MIGRATE_DIAGNOSTIC="+line[:220])
               return ok
           good=inspect(sys.argv[1],"SELECTOR_MANAGE_CHECK",("system check identified no issues",))
           migrate_ok=inspect(sys.argv[2],"SELECTOR_MIGRATE_CHECK",("no changes detected","no migrations to apply","no operations to perform"))
