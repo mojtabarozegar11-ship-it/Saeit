@@ -1,0 +1,282 @@
+name: Publish twenty illustrated Mojtaba professional photo essays
+on:
+  issues:
+    types: [opened]
+permissions:
+  contents: read
+concurrency:
+  group: personal-v17-twenty-photo-essays-20261016
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event.issue.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.issue.title == 'Ops: Publish twenty original personal photo essays 2026-10-16'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate twenty substantial essays and all twenty exact image file checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mojtaba_twenty_photo_essays_safe_publish.py
+          python3 -m unittest discover -s tests -p test_mojtaba_twenty_photo_essays.py -v
+      - name: Reconstitute twenty user portraits and editorial images safely
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/mojtaba20pics"
+          python3 - "$RUNNER_TEMP/mojtaba20pics" <<'PY'
+          import base64,hashlib,json,re,sys,zipfile,io
+          from pathlib import Path
+          files=sorted(Path("content").glob("mojtaba_20_photo_hq_asset_part_*.b64"))
+          assert len(files)==32
+          raw=base64.b64decode("".join(x.read_text(encoding="ascii") for x in files),validate=False)
+          expected="ed62ebc89eee676d9a12627f4fe0be45655168c22facbad89360b4c4e505586c"
+          assert hashlib.sha256(raw).hexdigest()==expected,"Archive checksum mismatch"
+          out=Path(sys.argv[1])
+          with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+              expected_names={f"photo_{i:02d}.webp" for i in range(1,21)}|{"manifest.json"}
+              assert set(archive.namelist())==expected_names
+              manifest=json.loads(archive.read("manifest.json"))
+              assert len(manifest)==20
+              for meta in manifest:
+                  n=meta["name"]
+                  assert n in expected_names and n.endswith(".webp")
+                  b=archive.read(n)
+                  assert b[:4]==b"RIFF" and b[8:12]==b"WEBP"
+                  assert hashlib.sha256(b).hexdigest()==meta["sha256"]
+                  (out/n).write_bytes(b)
+              (out/"manifest.json").write_bytes(archive.read("manifest.json"))
+          print("PERSONAL_PHOTO20_SOURCE_ZIP_SHA256_CONFIRMED=yes",flush=True)
+          print("PERSONAL_PHOTO20_TWENTY_WEBP_FILES_VERIFIED=yes",flush=True)
+          PY
+          tar -czf "$RUNNER_TEMP/mojtaba20pics.tgz" -C "$RUNNER_TEMP" mojtaba20pics
+      - name: Prepare pinned SSH relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/photo-relay"
+          mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          python3 - "$d/host.key" <<'PY'
+          import pathlib,sys
+          p=pathlib.Path(sys.argv[1]);t=p.read_text().replace('\r\n','\n').strip()
+          p.write_text(t.replace('\\n','\n')+'\n')
+          PY
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host saeit-host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+            ConnectionAttempts 1
+          EOF
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          echo "SSH_CONFIG=$d/config" >> "$GITHUB_ENV"
+      - name: Transfer scoped manuscripts and all twenty real web photographs to separate personal app
+        shell: bash
+        run: |
+          set -euo pipefail
+          stage="/home/zomorod2/.mpw-personal-photos20-$GITHUB_RUN_ID"
+          timeout 35s ssh -F "$SSH_CONFIG" saeit-host "test ! -e '$stage' && install -d -m 700 '$stage'"
+          timeout 90s scp -F "$SSH_CONFIG" scripts/mojtaba_twenty_photo_essays_safe_publish.py "saeit-host:$stage/publisher.py"
+          timeout 90s scp -F "$SSH_CONFIG" "$RUNNER_TEMP/mojtaba20pics.tgz" "saeit-host:$stage/photos.tgz"
+          for n in 1 3 5 7 9 11 13 15 17 19; do
+            printf -v f 'content/mojtaba_twenty_photo_essays_%02d_%02d.json' "$n" "$((n+1))"
+            timeout 90s scp -F "$SSH_CONFIG" "$f" "saeit-host:$stage/"
+          done
+          for f in \
+            mojtaba_seven_full_independent_journal_20261016.json \
+            mojtaba_six_advanced_journal_articles_20261016.json \
+            mojtaba_ten_advanced_website_engineering_20261016.json \
+            mojtaba_vancouver_collab_part_a_20261016.json \
+            mojtaba_vancouver_collab_part_b_20261016.json \
+            mojtaba_vancouver_enterprise_web_part_1_20261016.json \
+            mojtaba_vancouver_enterprise_web_part_2_20261016.json \
+            mojtaba_vancouver_enterprise_web_part_3_20261016.json \
+            mojtaba_vancouver_enterprise_web_part_4_20261016.json \
+            mojtaba_vancouver_enterprise_web_series2_part_1_20261016.json \
+            mojtaba_vancouver_enterprise_web_series2_part_2_20261016.json \
+            mojtaba_vancouver_enterprise_web_series2_part_3_20261016.json \
+            mojtaba_vancouver_enterprise_web_series2_part_4_20261016.json; do
+            timeout 90s scp -F "$SSH_CONFIG" "content/$f" "saeit-host:$stage/"
+          done
+      - name: Guarded publish on independent personal V17, then verify all 93 article pages and photos
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 1100s ssh -F "$SSH_CONFIG" saeit-host "bash -s -- '$GITHUB_RUN_ID'" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          id="$1"
+          app="/home/zomorod2/mojtaba_personal/mojtaba_roozegar_personal_v17"
+          stage="/home/zomorod2/.mpw-personal-photos20-$id"
+          py="$app/../.venv_personal_test/bin/python"
+          script="$stage/publisher.py"
+          backup="$HOME/.backups/mojtaba-personal-image-essays/$id"
+          pictures="$stage/mojtaba20pics"
+          installed=0
+          verified=0
+          on_exit() {
+            code=$?
+            trap - EXIT
+            if test "$installed" = 1 && test "$verified" = 0 && test -f "$backup/state.json"; then
+              "$py" "$script" rollback --app "$app" --backup "$backup" && echo "PERSONAL_PHOTO20_AUTO_ROLLBACK=success" || echo "PERSONAL_PHOTO20_AUTO_ROLLBACK=manual_review_needed"
+            fi
+            exit "$code"
+          }
+          trap on_exit EXIT
+          test -f "$app/manage.py" && test -x "$py" && test ! -L "$app"
+          "$py" "$script" check --app "$app" --content "$stage"
+          tar -tzf "$stage/photos.tgz" | grep -q '^mojtaba20pics/manifest.json$'
+          cd "$stage"
+          tar -xzf photos.tgz --no-same-owner
+          cd "$app"
+          "$py" - "$stage" <<'PY_PREFLIGHT'
+          import importlib.util,os,sys
+          from pathlib import Path
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          import django;django.setup()
+          from django.template import engines
+          from django.urls import reverse
+          from core.models import Post
+          folder=Path(sys.argv[1])
+          spec=importlib.util.spec_from_file_location("photo20",folder/"publisher.py")
+          m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
+          new=m.load_articles(folder)
+          old=m.load_older(folder)
+          assert len(new)==20 and len(old)==73
+          assert Post.objects.filter(slug__in=old,published=True).count()==73
+          assert not Post.objects.filter(slug__in=[row["slug"] for row in new]).exists()
+          for row in new:
+              m.photo_binary(row,folder/"mojtaba20pics")
+              assert reverse("personal_site:post_detail",kwargs={"slug":row["slug"]})=="/mojtaba.roozegar/blog/"+row["slug"]+"/"
+          for name,original in m.templates(m.APP).items():
+              engines["django"].engine.from_string(m.patch(name,original,new))
+              print("PERSONAL_PHOTO20_DJANGO_TEMPLATE_VALID="+name,flush=True)
+          print("PERSONAL_PHOTO20_PRIOR_73_POSTS_AND_ALL_20_IMAGES_PREFLIGHT=yes",flush=True)
+          PY_PREFLIGHT
+          "$py" "$script" install --app "$app" --content "$stage" --pictures "$pictures" --backup "$backup"
+          installed=1
+          "$py" manage.py check --deploy
+          "$py" manage.py collectstatic --noinput --verbosity 0
+          test ! -d "$app/tmp" || touch "$app/tmp/restart.txt"
+          "$py" - "$stage" <<'PY_LIVE'
+          import json,sys,time,hashlib
+          from pathlib import Path
+          from urllib.parse import urljoin
+          from urllib.request import Request,urlopen
+          from html import unescape
+          from html.parser import HTMLParser
+          folder=Path(sys.argv[1])
+          new=sum((json.loads((folder/f"mojtaba_twenty_photo_essays_{n:02d}_{n+1:02d}.json").read_text())["articles"] for n in range(1,21,2)),[])
+          old_files=("mojtaba_seven_full_independent_journal_20261016.json","mojtaba_six_advanced_journal_articles_20261016.json","mojtaba_ten_advanced_website_engineering_20261016.json","mojtaba_vancouver_collab_part_a_20261016.json","mojtaba_vancouver_collab_part_b_20261016.json","mojtaba_vancouver_enterprise_web_part_1_20261016.json","mojtaba_vancouver_enterprise_web_part_2_20261016.json","mojtaba_vancouver_enterprise_web_part_3_20261016.json","mojtaba_vancouver_enterprise_web_part_4_20261016.json","mojtaba_vancouver_enterprise_web_series2_part_1_20261016.json","mojtaba_vancouver_enterprise_web_series2_part_2_20261016.json","mojtaba_vancouver_enterprise_web_series2_part_3_20261016.json","mojtaba_vancouver_enterprise_web_series2_part_4_20261016.json")
+          older=sum((json.loads((folder/x).read_text())["articles"] for x in old_files),[])
+          photo_index={v["number"]:v for v in json.loads((folder/"mojtaba20pics/manifest.json").read_text())}
+          assert len(new)==20 and len(older)==73
+          base="https://mojplaywin.com/mojtaba.roozegar/"
+          class Pictures(HTMLParser):
+              def __init__(self):
+                  super().__init__();self.src=[];self.gallery_a=[];self.gallery_b=[]
+              def handle_starttag(self,tag,attrs):
+                  if tag!="img":return
+                  src=dict(attrs).get("src","")
+                  if src:self.src.append(src)
+                  if "owner_gallery_20261015_b/" in src:self.gallery_b.append(src)
+                  elif "owner_gallery_20261015/" in src:self.gallery_a.append(src)
+          def fetch(url):
+              with urlopen(Request(url,headers={"User-Agent":"MojtabaTwentyPhotographicArticlesVerifier/1"}),timeout=24) as r:
+                  if r.status!=200:raise ValueError("HTTP status "+str(r.status)+" "+url)
+                  return r.read(4700000)
+          def retry(route,condition):
+              error=""
+              for n in range(6):
+                  try:
+                      text=fetch(base+route+"?photoessayproof="+str(time.time_ns())).decode("utf-8","replace")
+                      return condition(text)
+                  except Exception as e:
+                      error=str(e);time.sleep(2)
+              raise RuntimeError("PUBLIC_CHECK_FAIL "+route+" "+error)
+          for route in ("","blog/"):
+              def verify_index(body):
+                  for marker in ('id="mpw-mojtaba-twenty-image-essays-20261016"','id="mpw-vancouver-enterprise-20-series2-index-20261016"','id="mpw-fifty-editorials-20261015"'):
+                      if marker not in body:raise ValueError("Missing previous or new content marker "+marker)
+                  p=Pictures();p.feed(body)
+                  if sum("mojtaba_personal_image_essays_20261016/" in v for v in p.src)<20:
+                      raise ValueError("Not all 20 actual image cards published")
+              retry(route,verify_index)
+              print("PERSONAL_PHOTO20_PUBLIC_INDEX_VALID="+(route or "home"),flush=True)
+          for row in new:
+              selected=[]
+              def check_article(body,row=row):
+                  if row["title"] not in unescape(body):raise ValueError("Article title missing")
+                  if 'id="mpw-mojtaba-essay-cover-20261016"' not in body:
+                      raise ValueError("Photo figure not present")
+                  p=Pictures();p.feed(body)
+                  matched=[x for x in p.src if row["slug"] in x and "mojtaba_personal_image_essays_20261016/" in x]
+                  if not matched:raise ValueError("Wrong or missing image")
+                  selected.append(matched[0])
+              retry("blog/"+row["slug"]+"/",check_article)
+              data=fetch(urljoin(base,selected[0]))
+              rec=photo_index[row["photo_index"]]
+              if data[:4]!=b"RIFF" or data[8:12]!=b"WEBP" or hashlib.sha256(data).hexdigest()!=rec["sha256"]:
+                  raise ValueError("Actual public image mismatches attached owner input")
+              print("PERSONAL_PHOTO20_LIVE_ESSAY_WITH_EXACT_SOURCE_IMAGE="+row["slug"],flush=True)
+          for row in older:
+              def check_old(body,row=row):
+                  if row["title"] not in unescape(body):raise ValueError("Old native article missing")
+                  p=Pictures();p.feed(body)
+                  if not p.src:raise ValueError("Old native article lost photographs")
+              retry("blog/"+row["slug"]+"/",check_old)
+          print("PERSONAL_PHOTO20_ALL_73_OLDER_ARTICLES_AND_PHOTOS_PRESERVED=yes",flush=True)
+          def gallery_check(body):
+              p=Pictures();p.feed(body)
+              if len(p.gallery_a)!=10 or len(p.gallery_b)!=10:raise ValueError("Original 20 owner gallery images changed")
+          retry("gallery/",gallery_check)
+          print("PERSONAL_PHOTO20_ORIGINAL_OWNER_GALLERY_20_SAFE=yes",flush=True)
+          print("PERSONAL_PHOTO20_TWENTY_REAL_PHOTOGRAPHS_AND_ESSAYS_PUBLIC_VERIFIED=yes",flush=True)
+          PY_LIVE
+          for domain in "https://mojplaywin.com/" "https://zomorodmelal.ir/"; do
+            code="$(curl -sSL -o /dev/null -w '%{http_code}' --max-time 24 "$domain")"
+            test "$code" = 200
+            echo "PERSONAL_PHOTO20_ORIGINAL_DOMAIN_HEALTHY=$domain HTTP_200"
+          done
+          verified=1
+          trap - EXIT
+          echo "PERSONAL_PHOTO20_LIVE_RELEASE_SUCCESS=yes"
+          echo "PERSONAL_PHOTO20_BACKUP=$backup"
+          rm -rf "$stage"
+          REMOTE
+      - name: Delete temporary SSH keys
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/photo-relay"
