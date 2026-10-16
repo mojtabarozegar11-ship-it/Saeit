@@ -1,0 +1,128 @@
+name: Restore Zomorod Django runtime dependency safely
+on:
+  push:
+    branches:
+      - codex/zomorod-runtime-repair-20261016
+    paths:
+      - ".github/workflows/zomorod-runtime-repair-20261016.yml"
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-runtime-repair
+  cancel-in-progress: false
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-runtime"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_CPANEL_RELAY=verified"
+      - name: Install the declared missing dependency and verify live routes
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-runtime"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -Eeuo pipefail
+          app=/home/zomorod2/Saeit
+          web=/home/zomorod2/public_html
+          py=/home/zomorod2/virtualenv/Saeit/3.10/bin/python
+          backup=/home/zomorod2/.backups/zomorodmelal-complete/9fcadc9ea749075785829565e57770f5cc173a8b
+          test -d "$app" && test -f "$app/manage.py" && test -x "$py"
+          test -s "$backup/public_html.tar.gz" && test -s "$backup/application-source.tar.gz"
+          test -s "$backup/database-manifest.json"
+          echo "RECOVERY_SNAPSHOT_PRESENT=verified"
+          actual_before=no
+          if "$py" -c 'import environ' >/dev/null 2>&1; then actual_before=yes; fi
+          echo "DJANGO_ENVIRON_PRESENT_BEFORE=$actual_before"
+          changed=no
+          rollback() {
+            status=$?
+            if [ "$status" -ne 0 ] && [ "$changed" = yes ] && [ "$actual_before" = no ]; then
+              echo "SMOKE_FAILED=rolling_back_added_dependency"
+              "$py" -m pip uninstall -y django-environ || true
+              mkdir -p "$app/tmp"
+              touch "$app/tmp/restart.txt"
+              echo "DEPENDENCY_ROLLBACK=completed"
+            fi
+            exit "$status"
+          }
+          trap rollback EXIT
+          if [ "$actual_before" = no ]; then
+            "$py" -m pip install --disable-pip-version-check --no-input 'django-environ>=0.12,<1.0'
+            changed=yes
+          fi
+          "$py" -c 'import environ,django; print("DJANGO_ENVIRON_IMPORT=passed"); print("DJANGO_VERSION="+django.get_version())'
+          cd "$app"
+          "$py" manage.py check
+          "$py" manage.py migrate --check
+          mkdir -p "$app/tmp"
+          touch "$app/tmp/restart.txt"
+          echo "PASSENGER_RESTART_TRIGGERED=yes"
+          REMOTE
+      - name: Verify public app and protected sibling routes
+        shell: bash
+        run: |
+          set -euo pipefail
+          failures=0
+          for path in / /industry/ /agents/ /api/health/ /api/bridge/health/ /admin/login/ /amozeshgah/ /mohammad/ /ghanadi/ /agriculture/livestock/; do
+            status="$(curl --silent --show-error --location --max-redirs 5 --connect-timeout 10 --max-time 25 -o /dev/null -w '%{http_code}' -H 'Cache-Control: no-cache' "https://zomorodmelal.ir${path}?runtime_repair=20261016" || true)"
+            echo "LIVE_ROUTE=${path} HTTP=${status}"
+            if [ "$status" != 200 ]; then failures=$((failures+1)); fi
+          done
+          if [ "$failures" -ne 0 ]; then
+            echo "LIVE_ROUTE_FAILURES=$failures"
+            exit 1
+          fi
+          echo "RUNTIME_REPAIR_LIVE_SMOKE=passed"
+      - name: Remove temporary SSH material
+        if: always()
+        shell: bash
+        run: rm -rf -- "$RUNNER_TEMP/zomorod-runtime"
