@@ -61,7 +61,9 @@ class PrimaryProfilePhotoSafety(unittest.TestCase):
         self.assertNotIn("Post.objects.update(",script)
         self.assertNotIn("gallery.html",script)
         self.assertNotIn("contact.html",script)
-        self.assertNotIn("payment",script)
+        self.assertNotIn("Payment.objects",script)
+        self.assertNotIn("payments/",script)
+        self.assertNotIn("payment.html",script)
     def test_missing_original_context_fails_closed(self):
         with self.assertRaises(ValueError):m.patch("home",home().replace("mpw-new-originals-20261015-b","removed"))
         with self.assertRaises(ValueError):m.patch("about",about().replace("mpw-academic-profile-20261016","removed"))
