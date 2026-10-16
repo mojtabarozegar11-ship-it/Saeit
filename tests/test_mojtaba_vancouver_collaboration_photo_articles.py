@@ -1,4 +1,4 @@
-import importlib.util,json
+import importlib.util,json,html
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
@@ -41,7 +41,7 @@ class TestVancouverCollaborationImages(unittest.TestCase):
         self.assertEqual(block.count('alt="'),10)
         for r in self.rows:
             self.assertIn(r["slug"]+".jpg",block)
-            self.assertIn(r["title"],block)
+            self.assertIn(r["title"],html.unescape(block))
 
     def test_additive_home_and_blog_preserves_all_prior_markers(self):
         for page in ("home","posts"):
