@@ -207,7 +207,7 @@ jobs:
           PY
           python3 - <<'PY'
           from pathlib import Path
-          import os, re, time
+          import json, os, re, time
           home=Path.home()
           roots=[home/"logs",home/"Saeit"/"log",home/"Saeit"/"tmp",home/"public_html"]
           found=[]
