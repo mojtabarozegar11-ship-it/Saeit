@@ -1,0 +1,102 @@
+name: Inventory Zomorod SQLite backup snapshots read-only
+on:
+  push:
+    branches:
+      - codex/zomorod-runtime-repair-20261016
+    paths:
+      - ".github/workflows/zomorod-db-snapshot-inventory.yml"
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-db-snapshot-inventory
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077; test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-db-snapshots"; install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d"/*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null; ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"; printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+      - name: Count snapshot tables read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-db-snapshots"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          base=/home/zomorod2/.backups/zomorodmelal-complete/9fcadc9ea749075785829565e57770f5cc173a8b
+          test -f "$base/database-manifest.json"
+          python3 - "$base" <<'PY'
+          import json, pathlib, sqlite3, sys, urllib.parse
+          base=pathlib.Path(sys.argv[1])
+          manifest=json.loads((base/"database-manifest.json").read_text())
+          print("SNAPSHOT_COUNT="+str(manifest.get("count",len(manifest.get("databases",[])))))
+          rows=[]
+          for item in manifest.get("databases",[]):
+              p=(base/"database"/item["snapshot"]).resolve()
+              if not p.is_file(): continue
+              uri="file:"+urllib.parse.quote(str(p),safe="/")+ "?mode=ro&immutable=1"
+              con=sqlite3.connect(uri,uri=True)
+              tables=[r[0] for r in con.execute("select name from sqlite_master where type='table' and name not like 'sqlite_%'").fetchall()]
+              django=[t for t in tables if t.startswith("django_") or t.startswith("core_") or t.startswith("content_")]
+              migrations=0
+              if "django_migrations" in tables:
+                  migrations=con.execute("select count(*) from django_migrations").fetchone()[0]
+              rowcounts={}
+              for t in tables:
+                  if t.startswith(("core_","content_","catalog_")):
+                      try: rowcounts[t]=con.execute('select count(*) from "'+t.replace('"','""')+'"').fetchone()[0]
+                      except sqlite3.Error: pass
+              con.close()
+              rows.append((p.stat().st_size,item.get("path","?"),len(tables),len(django),migrations,rowcounts))
+          for size,path,nt,nd,nm,counts in sorted(rows,reverse=True):
+              interesting=",".join(k+":"+str(v) for k,v in sorted(counts.items()) if v) or "-"
+              print(f"DB bytes={size} app-relative={path} tables={nt} django_tables={nd} migrations={nm} populated_core={interesting}")
+          PY
+          REMOTE
+      - name: Remove temporary SSH material
+        if: always()
+        shell: bash
+        run: rm -rf -- "$RUNNER_TEMP/zomorod-db-snapshots"
