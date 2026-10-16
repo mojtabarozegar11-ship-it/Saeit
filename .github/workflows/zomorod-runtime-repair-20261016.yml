@@ -64,7 +64,7 @@ jobs:
           test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
           cp "$d/host.candidate" "$d/host.known"
           echo "PINNED_CPANEL_RELAY=verified"
-      - name: Install only declared packages, test, and restore package state on failure
+      - name: Build, test, and safely activate a complete root-app release
         shell: bash
         run: |
           set -euo pipefail
@@ -72,34 +72,60 @@ jobs:
           ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
           set -Eeuo pipefail
           sha="$1"
-          app=/home/zomorod2/Saeit
-          py=/home/zomorod2/virtualenv/Saeit/3.10/bin/python
-          backup=/home/zomorod2/.backups/zomorodmelal-complete/9fcadc9ea749075785829565e57770f5cc173a8b
-          state_dir=/home/zomorod2/.backups/zomorodmelal-runtime-repair
-          baseline="$state_dir/$sha-packages.json"
+          home=/home/zomorod2
+          app="$home/Saeit"
+          py="$home/virtualenv/Saeit/3.10/bin/python"
+          backup="$home/.backups/zomorodmelal-complete/9fcadc9ea749075785829565e57770f5cc173a8b"
+          stage="$home/.backups/zomorodmelal-complete/source-preflight-47c38ec3810326790f6f954b515b4f11d59042d1"
+          packages="$home/.backups/zomorodmelal-complete/packages-preflight-47c38ec3810326790f6f954b515b4f11d59042d1"
+          source_db="$app/backups/pre_phase19_cleanup_20261004-124041/db.sqlite3"
+          proven_db="$home/.backups/zomorodmelal-complete/9fcadc9ea749075785829565e57770f5cc173a8b/compatibility-test-pre-phase19-v2-20261016/db.sqlite3"
+          release="$backup/release-candidate-$sha"
+          old="$backup/previous-app-$sha"
+          failed="$backup/failed-app-$sha"
+          baseline="$backup/$sha-packages.json"
+          changed=no
+          active_new=no
           test -d "$app" && test -f "$app/manage.py" && test -x "$py"
-          test -s "$backup/public_html.tar.gz" && test -s "$backup/application-source.tar.gz"
-          test -s "$backup/database-manifest.json"
-          mkdir -p "$state_dir"
-          chmod 700 "$state_dir"
+          test -f "$stage/manage.py" && test -d "$packages"
+          test -f "$app/.env" && test -s "$source_db" && test -s "$proven_db"
+          test ! -e "$app/db.sqlite3"
+          test ! -e "$release" && test ! -e "$old" && test ! -e "$failed" && test ! -e "$baseline"
+          if grep -q '^[[:space:]]*DATABASE_URL=' "$app/.env"; then
+            echo "RELEASE_ABORTED=unexpected_DATABASE_URL_in_live_environment"
+            exit 1
+          fi
+          cmp -s "$source_db" "$proven_db"
+          echo "PINNED_SOURCE_COMMIT=47c38ec3810326790f6f954b515b4f11d59042d1"
+          echo "LIVE_DATABASE_TARGET=db.sqlite3_absent"
+          echo "RECOVERY_DATABASE=verified_copy_of_named_pre_cleanup_snapshot"
           "$py" - "$baseline" <<'PY'
           import importlib.metadata,json,sys
           packages={}
           for dist in importlib.metadata.distributions():
               name=dist.metadata.get("Name")
               if name: packages[name.lower().replace("_","-")]=dist.version
-          with open(sys.argv[1],"x",encoding="utf-8") as f:
-              json.dump(packages,f,sort_keys=True)
-          print("RUNTIME_BASELINE_PACKAGE_COUNT="+str(len(packages)))
+          with open(sys.argv[1],"x",encoding="utf-8") as f: json.dump(packages,f,sort_keys=True)
+          print("LIVE_PACKAGE_BASELINE_COUNT="+str(len(packages)))
           PY
           chmod 600 "$baseline"
-          echo "RECOVERY_SNAPSHOT_PRESENT=verified"
-          changed=no
           rollback() {
             status=$?
-            if [ "$status" -ne 0 ] && [ "$changed" = yes ]; then
-              echo "SMOKE_FAILED=restoring_original_package_set"
-              "$py" - "$baseline" <<'PY'
+            if [ "$status" -ne 0 ]; then
+              echo "RELEASE_RESULT=failed_rollback_started"
+              if [ -d "$old" ] && [ ! -e "$app" ]; then
+                mv -T "$old" "$app"
+                active_new=no
+                echo "SOURCE_ROLLBACK=previous_app_restored"
+              elif [ "$active_new" = yes ] && [ -d "$old" ] && [ -d "$app" ]; then
+                test ! -e "$failed"
+                mv -T "$app" "$failed"
+                mv -T "$old" "$app"
+                active_new=no
+                echo "SOURCE_ROLLBACK=previous_app_restored"
+              fi
+              if [ "$changed" = yes ]; then
+                "$py" - "$baseline" <<'PY'
           import importlib.metadata,json,subprocess,sys
           before=json.load(open(sys.argv[1],encoding="utf-8"))
           current={}
@@ -107,20 +133,13 @@ jobs:
               name=dist.metadata.get("Name")
               if name: current[name.lower().replace("_","-")]=dist.version
           added=sorted(name for name in current if name not in before)
-          if added:
-              subprocess.run([sys.executable,"-m","pip","uninstall","-y",*added],check=False)
-          changed=[]
-          for name,version in sorted(before.items()):
-              if current.get(name)!=version:
-                  changed.append(f"{name}=={version}")
-          if changed:
-              subprocess.run([sys.executable,"-m","pip","install","--disable-pip-version-check","--no-input","--no-deps","--force-reinstall",*changed],check=False)
-          print("PACKAGE_ROLLBACK_ADDED_COUNT="+str(len(added)))
-          print("PACKAGE_ROLLBACK_RESTORED_VERSIONS="+str(len(changed)))
+          if added: subprocess.run([sys.executable,"-m","pip","uninstall","-y",*added],check=False)
+          restore=[f"{name}=={version}" for name,version in sorted(before.items()) if current.get(name)!=version]
+          if restore: subprocess.run([sys.executable,"-m","pip","install","--disable-pip-version-check","--no-input","--no-deps","--force-reinstall",*restore],check=False)
+          print("DEPENDENCY_ROLLBACK=completed")
           PY
-              mkdir -p "$app/tmp"
-              touch "$app/tmp/restart.txt"
-              echo "DEPENDENCY_ROLLBACK=completed"
+              fi
+              if [ -d "$app" ]; then mkdir -p "$app/tmp"; touch "$app/tmp/restart.txt"; fi
             fi
             exit "$status"
           }
@@ -133,25 +152,101 @@ jobs:
             'openai>=1.100,<2.0'
           changed=yes
           "$py" -m pip check
-          "$py" -c 'import django,environ,rest_framework,whitenoise,PIL,psycopg,openai; print("ALL_REQUIRED_IMPORTS=passed"); print("DJANGO_VERSION="+django.get_version())'
-          cd "$app"
+          "$py" -c 'import django,environ,rest_framework,whitenoise,PIL,psycopg,openai; print("REQUIRED_IMPORTS=passed"); print("DJANGO_VERSION="+django.get_version())'
+          install -d -m 700 "$release"
+          tar -C "$stage" --exclude=./db.sqlite3 --exclude=./.env --exclude=./media --exclude=./var --exclude=./tmp --exclude=./logs --exclude=./backups --exclude=./.git -cf - . | tar -xf - -C "$release"
+          cp -p "$app/.env" "$release/.env"
+          chmod 600 "$release/.env"
+          cp -p "$source_db" "$release/db.sqlite3"
+          chmod 600 "$release/db.sqlite3"
+          for directory in media var backups logs; do
+            if [ -d "$app/$directory" ] && [ ! -e "$release/$directory" ]; then
+              ln -s "$app/$directory" "$release/$directory"
+            fi
+          done
+          mkdir -p "$release/tmp"
+          "$py" - "$release/db.sqlite3" <<'PY'
+          import sqlite3,sys
+          con=sqlite3.connect("file:"+sys.argv[1]+"?mode=ro",uri=True)
+          quick=con.execute("pragma quick_check").fetchone()[0]
+          rows=con.execute("select count(*) from django_migrations").fetchone()[0]
+          def count(name):
+              try: return con.execute('select count(*) from "'+name+'"').fetchone()[0]
+              except sqlite3.Error: return -1
+          print("RELEASE_DB_QUICK_CHECK="+quick)
+          print("RELEASE_DB_MIGRATION_ROWS="+str(rows))
+          print("RELEASE_DB_BLOG_ARTICLES="+str(count("core_blogarticle")))
+          print("RELEASE_DB_BLOG_PAGES="+str(count("core_blogpage")))
+          print("RELEASE_DB_AGENTS="+str(count("core_agent")))
+          con.close()
+          if quick!="ok" or count("core_blogarticle")<1: raise SystemExit("release_database_not_usable")
+          PY
+          cd "$release"
+          export DJANGO_SETTINGS_MODULE=config.settings
           "$py" manage.py check
-          "$py" manage.py migrate --check
-          mkdir -p "$app/tmp"
+          plan="$("$py" manage.py migrate --plan 2>&1)"
+          printf '%s\n' "$plan" | awk 'NF { print "RELEASE_MIGRATION_PLAN=" $0; n++; if(n==8) exit }'
+          "$py" manage.py collectstatic --noinput
+          "$py" - <<'PY'
+          import django
+          django.setup()
+          from django.test import Client
+          client=Client(HTTP_HOST="zomorodmelal.ir")
+          paths=["/","/industry/","/agriculture/","/agents/","/api/health/","/api/bridge/health/","/admin/login/","/agriculture/livestock/","/blog/"]
+          failed=[]
+          for path in paths:
+              response=client.get(path,secure=True)
+              print(f"RELEASE_ROUTE_{path.replace('/','_')}_STATUS={response.status_code}")
+              if response.status_code!=200: failed.append(path)
+          if failed: raise SystemExit("RELEASE_ROUTE_PREFLIGHT_FAILED="+",".join(failed))
+          PY
+          echo "ISOLATED_RELEASE_PREFLIGHT=passed"
+          cd "$home"
+          mv -T "$app" "$old"
+          if ! mv -T "$release" "$app"; then
+            mv -T "$old" "$app"
+            echo "SOURCE_SWITCH=failed_previous_restored"
+            exit 1
+          fi
+          active_new=yes
           touch "$app/tmp/restart.txt"
-          echo "PASSENGER_RESTART_TRIGGERED=yes"
           failures=0
-          for path in / /industry/ /agents/ /api/health/ /api/bridge/health/ /admin/login/ /amozeshgah/ /mohammad/ /ghanadi/ /agriculture/livestock/; do
-            code="$(curl --silent --show-error --location --max-redirs 5 --connect-timeout 10 --max-time 25 -o /dev/null -w '%{http_code}' -H 'Cache-Control: no-cache' "https://zomorodmelal.ir${path}?runtime_repair=20261016" || true)"
-            echo "LIVE_ROUTE=${path} HTTP=${code}"
+          for path in / /industry/ /agriculture/ /agents/ /api/health/ /api/bridge/health/ /admin/login/ /amozeshgah/ /mohammad/ /ghanadi/ /agriculture/livestock/ /blog/; do
+            code="$(curl --silent --show-error --location --retry 2 --retry-all-errors --retry-delay 2 --max-redirs 5 --connect-timeout 10 --max-time 30 -o /dev/null -w '%{http_code}' -H 'Cache-Control: no-cache' "https://zomorodmelal.ir$path?release_check=$sha" || true)"
+            echo "LIVE_RELEASE_ROUTE=$path HTTP=$code"
+            if [ "$code" != 200 ]; then failures=$((failures+1)); fi
+          done
+          for image in agriculture.webp platform-home.webp research.webp; do
+            code="$(curl --silent --show-error --location --retry 2 --retry-all-errors --retry-delay 2 --max-time 30 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir/static/site/heroes/$image?release_check=$sha" || true)"
+            echo "LIVE_RELEASE_IMAGE=$image HTTP=$code"
             if [ "$code" != 200 ]; then failures=$((failures+1)); fi
           done
           if [ "$failures" -ne 0 ]; then
-            echo "LIVE_ROUTE_FAILURES=$failures"
+            echo "LIVE_RELEASE_FAILURES=$failures"
             exit 1
           fi
+          "$py" - "$app/db.sqlite3" <<'PY'
+          import sqlite3,sys
+          con=sqlite3.connect("file:"+sys.argv[1]+"?mode=ro",uri=True)
+          quick=con.execute("pragma quick_check").fetchone()[0]
+          migrations=con.execute("select count(*) from django_migrations").fetchone()[0]
+          articles=con.execute("select count(*) from core_blogarticle").fetchone()[0]
+          pages=con.execute("select count(*) from core_blogpage").fetchone()[0]
+          agents=con.execute("select count(*) from core_agent").fetchone()[0]
+          print(f"LIVE_RELEASE_DB_QUICK_CHECK={quick}")
+          print(f"LIVE_RELEASE_DB_MIGRATIONS={migrations}")
+          print(f"LIVE_RELEASE_DB_BLOG_ARTICLES={articles}")
+          print(f"LIVE_RELEASE_DB_BLOG_PAGES={pages}")
+          print(f"LIVE_RELEASE_DB_AGENTS={agents}")
+          con.close()
+          if quick!="ok" or migrations!=113 or articles!=25139 or pages!=50 or agents!=45:
+              raise SystemExit("live_database_content_guard_failed")
+          PY
+          echo "LIVE_RELEASE_VALIDATION=passed"
+          echo "PREVIOUS_APP_BACKUP=$old"
           echo "RUNTIME_REPAIR_LIVE_SMOKE=passed"
           REMOTE
+      - name: Remove temporary SSH material
       - name: Remove temporary SSH material
         if: always()
         shell: bash
