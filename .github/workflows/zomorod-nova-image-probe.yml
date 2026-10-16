@@ -1,0 +1,31 @@
+name: Verify Zomorod real production image paths read-only
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/zomorod-nova-image-probe.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Probe only publicly available logo and source images
+        shell: bash
+        run: |
+          set -euo pipefail
+          for img in agriculture smart-agriculture platform-home industry economy research knowledge services ai laboratory marketplace academy; do
+            url="https://zomorodmelal.ir/static/site/heroes/$img.webp"
+            code="$(curl -sS -L --max-time 12 -o /dev/null -w '%{http_code}' "$url" || true)"
+            echo "NOVA_STATIC_HERO=$img code=$code"
+          done
+          for img in agriculture smart-agriculture platform-home industry economy research knowledge genetics laboratory; do
+            url="https://zomorodmelal.ir/agriculture/assets/zomorod-olive-v1/$img.webp"
+            code="$(curl -sS -L --max-time 12 -o /dev/null -w '%{http_code}' "$url" || true)"
+            echo "NOVA_AGRICULTURE_HERO=$img code=$code"
+          done
+          for img in company-logo.png company-hero.webp; do
+            code="$(curl -sS -L --max-time 12 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir/static/site/company/$img" || true)"
+            echo "NOVA_COMPANY_HERO=$img code=$code"
+          done
