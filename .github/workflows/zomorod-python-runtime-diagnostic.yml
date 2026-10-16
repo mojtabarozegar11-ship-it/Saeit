@@ -97,6 +97,35 @@ jobs:
             exit 0
           fi
           echo "CLOUDLINUX_SELECTOR=available"
+          selector_config="$HOME/.cl.selector/python-selector.json"
+          if test -f "$selector_config"; then
+            python3 - "$selector_config" <<'PY'
+          import json,sys
+          data=json.load(open(sys.argv[1],encoding="utf-8"))
+          allowed={"app_root","app-root","domain","app_uri","app-uri","version","python_version","virtualenv","virtualenv_path","python_path","path","app_mode","enabled"}
+          print("SELECTOR_CONFIG_TOP_KEYS="+",".join(sorted(data.keys())) if isinstance(data,dict) else "SELECTOR_CONFIG_TOP_TYPE="+type(data).__name__)
+          matches=[]; shapes=[]; stack=[data]
+          while stack:
+              value=stack.pop()
+              if isinstance(value,dict):
+                  keys=set(value)
+                  if keys & {"app_root","app-root","app_uri","app-uri","domain","applications","apps"}:
+                      shapes.append(",".join(sorted(map(str,keys))))
+                  vals=[str(v) for k,v in value.items() if isinstance(v,(str,int,float,bool)) and k in allowed]
+                  if any("saeit" in v.lower() or "zomorodmelal.ir" in v.lower() for v in vals):
+                      matches.append(value)
+                  stack.extend(value.values())
+              elif isinstance(value,list):
+                  stack.extend(value)
+          print("SELECTOR_CONFIG_RECORD_SHAPES="+("|".join(sorted(set(shapes))[:20]) or "none"))
+          print("SELECTOR_CONFIG_RELATED_RECORDS="+str(len(matches)))
+          for i,record in enumerate(matches,1):
+              for key in sorted(allowed):
+                  value=record.get(key)
+                  if isinstance(value,(str,int,float,bool)):
+                      print(f"SELECTOR_CONFIG_{i}_{key.upper().replace('-','_')}={value}")
+          PY
+          fi
           raw="$(mktemp "$HOME/.zomorod-selector-readonly.XXXXXX.json")"
           trap 'rm -f -- "$raw"' EXIT
           if ! "$selector" get --json --interpreter python --user "$USER" > "$raw"; then
@@ -137,7 +166,8 @@ jobs:
                   value=record.get(key)
                   if isinstance(value,(str,int,float,bool)):
                       print(f"SELECTOR_RECORD_{i}_{key.upper().replace('-','_')}={value}")
-          PY          REMOTE
+          PY
+          REMOTE
       - name: Remove temporary SSH material
         if: always()
         shell: bash
