@@ -344,16 +344,16 @@ jobs:
           headers="$RUNNER_TEMP/zomorod-live-headers.txt"
           fetch() {
             local url="$1" output="$2"
-            if ! curl -fsS --retry 5 --retry-connrefused --retry-delay 3 --max-time 25 "$url" -o "$output"; then
+            if ! curl -fsS -H "Cache-Control: no-cache" -H "Pragma: no-cache" --retry 5 --retry-connrefused --retry-delay 3 --max-time 25 "$url" -o "$output"; then
               echo "LIVE_HTTP_CHECK_FAILED=$url" >&2
               return 1
             fi
           }
-          fetch https://zomorodmelal.ir/ "$tmp"
+          fetch "https://zomorodmelal.ir/?__zomorod_verify=$GITHUB_SHA" "$tmp"
           grep -Eq 'کشاورزی|دامپروری' "$tmp"
           echo "LIVE_ROUTE_CHECK=home passed"
           for route in agriculture agriculture/livestock agriculture/horticulture agriculture/greenhouse agriculture/poultry agriculture/aquaculture agriculture/inputs agriculture/seeds agriculture/fertilizers agriculture/pesticides agriculture/offices agriculture/water-soil agriculture/machinery agriculture/market; do
-            fetch "https://zomorodmelal.ir/$route/" "$tmp"
+            fetch "https://zomorodmelal.ir/$route/?__zomorod_verify=$GITHUB_SHA" "$tmp"
             case "$route" in
               agriculture) expected='راهنمای جامع کشاورزی' ;;
               agriculture/livestock) expected='دامپروری' ;;
@@ -375,7 +375,7 @@ jobs:
           done
           check_webp() {
             local url="$1" file="$2" result code type
-            result="$(curl -fsS --retry 5 --retry-connrefused --retry-delay 3 --max-time 25 -o "$file" -w '%{http_code}|%{content_type}' "$url")"
+            result="$(curl -fsS -H "Cache-Control: no-cache" -H "Pragma: no-cache" --retry 5 --retry-connrefused --retry-delay 3 --max-time 25 -o "$file" -w '%{http_code}|%{content_type}' "$url?__zomorod_verify=$GITHUB_SHA")"
             code="${result%%|*}"
             type="${result#*|}"
             if python3 - "$file" <<'PY'
