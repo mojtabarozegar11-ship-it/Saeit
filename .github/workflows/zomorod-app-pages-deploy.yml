@@ -180,6 +180,8 @@ jobs:
           set -Eeuo pipefail
           sha="$1"
           app=/home/zomorod2/Saeit
+          public_root=/home/zomorod2/public_html
+          test -d "$public_root" && test "$(stat -c %U "$public_root")" = "zomorod2" && test -w "$public_root"
           stage="$app/.zomorod-stage-$sha"
           backup="$HOME/.backups/zomorodmelal-app/$sha"
           test -d "$stage" && test -d "$app" && test "$(stat -c %U "$app")" = "zomorod2" && test -w "$app"
@@ -214,7 +216,6 @@ jobs:
           rm -rf -- "$backup"
           mkdir -p "$backup"
           : > "$backup/existing.txt"
-          public_root=/home/zomorod2/public_html
           asset_existing="$backup/assets-existing.txt"
           : > "$asset_existing"
           paths=(config/urls.py config/settings.py core/views.py core/company_content_models.py core/zomorod_public_views.py core/services_views.py core/templates/base.html core/templates/core/services.html core/templates/core/platform_page.html core/management/commands/knowledge_agent_generate.py core/tests/test_zomorod_public_pages.py public/agriculture/index.html public/agriculture/livestock/index.html public/agriculture/horticulture/index.html public/agriculture/greenhouse/index.html public/agriculture/poultry/index.html public/agriculture/aquaculture/index.html public/agriculture/inputs/index.html public/agriculture/seeds/index.html public/agriculture/fertilizers/index.html public/agriculture/pesticides/index.html public/agriculture/offices/index.html public/agriculture/water-soil/index.html public/agriculture/machinery/index.html public/agriculture/market/index.html core/static/site/heroes/platform-home.webp core/static/site/heroes/agriculture.webp core/static/site/heroes/smart-agriculture.webp core/static/site/heroes/industry.webp core/static/site/heroes/economy.webp core/static/site/heroes/research.webp core/static/site/heroes/knowledge.webp core/static/site/heroes/academy.webp core/static/site/heroes/education-detail.webp core/static/site/heroes/ai.webp)
@@ -358,6 +359,7 @@ jobs:
           set -euo pipefail
           sha="$1"
           app=/home/zomorod2/Saeit
+          root=/home/zomorod2/public_html
           backup="$HOME/.backups/zomorodmelal-app/$sha"
           if test ! -f "$backup/deployed.flag"; then
             echo "ROLLBACK_SKIPPED=no completed app publish"
