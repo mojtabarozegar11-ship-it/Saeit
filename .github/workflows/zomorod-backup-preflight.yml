@@ -172,6 +172,48 @@ jobs:
                   for z in v: walk(z)
           walk(json.load(sys.stdin))' || echo "PASSENGER_ENV_INSPECTION=unavailable"
           python3 - "$app/config/settings.py" <<'PY'
+          import ast,pathlib,re,sys
+          p=pathlib.Path(sys.argv[1])
+          if not p.exists():
+              print("DB_CONFIG_INSPECTION=no_settings_file")
+              raise SystemExit(0)
+          try:
+              root=ast.parse(p.read_text(errors="replace"))
+          except Exception as exc:
+              print("DB_CONFIG_INSPECTION=parse_error_"+type(exc).__name__)
+              raise SystemExit(0)
+          seen=set()
+          for n in ast.walk(root):
+              if isinstance(n,ast.Dict):
+                  keys=[k.value for k in n.keys if isinstance(k,ast.Constant) and isinstance(k.value,str)]
+                  if "ENGINE" in keys or "NAME" in keys:
+                      vals={k.value:v for k,v in zip(n.keys,n.values) if isinstance(k,ast.Constant) and isinstance(k.value,str)}
+                      eng=vals.get("ENGINE")
+                      name=vals.get("NAME")
+                      if eng is not None and "ENGINE" in vals:
+                          engine=eng.value if isinstance(eng,ast.Constant) and isinstance(eng.value,str) else "dynamic"
+                          base=name.value if isinstance(name,ast.Constant) and isinstance(name.value,str) else "dynamic"
+                          base=pathlib.Path(base).name if base!="dynamic" else "dynamic"
+                          pair=(engine,base)
+                          if pair not in seen:
+                              print("DB_CONFIG_ENGINE="+engine)
+                              print("DB_CONFIG_NAME_BASENAME="+base)
+                              seen.add(pair)
+              if isinstance(n,ast.Call):
+                  fn=n.func
+                  if isinstance(fn,ast.Attribute) and fn.attr in ("db","parse"):
+                      for a in n.args[:1]:
+                          if isinstance(a,ast.Constant) and isinstance(a.value,str) and ("DATABASE" in a.value.upper() or "DB"==a.value.upper()):
+                              print("DB_ENV_REFERENCE="+a.value[:40])
+          if not seen:
+              for n in ast.walk(root):
+                  if isinstance(n,ast.Constant) and isinstance(n.value,str):
+                      v=n.value
+                      if "sqlite" in v.lower():
+                          m=re.search(r"([^/\\\\]+\\.sqlite3?|[^/\\\\]+\\.db)$",v)
+                          if m: print("DB_SQLITE_BASENAME_CANDIDATE="+m.group(1))
+              print("DB_CONFIG_ENGINE=dynamic_or_indirect")
+          PY
           import pathlib,re,sys
           p=pathlib.Path(sys.argv[1])
           if not p.exists():
