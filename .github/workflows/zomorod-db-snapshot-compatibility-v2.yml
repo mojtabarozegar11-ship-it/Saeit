@@ -111,6 +111,8 @@ jobs:
               else:
                   print(f"{name}_SUMMARY="+(lines[-1][:220] if lines else "no output"))
               if p.returncode: sys.exit(p.returncode)
+          import django
+          django.setup()
           from django.test import Client
           client=Client(HTTP_HOST="zomorodmelal.ir")
           for path in ["/","/industry/","/agriculture/","/agents/","/api/health/","/api/bridge/health/","/admin/login/","/amozeshgah/","/blog/"]:
