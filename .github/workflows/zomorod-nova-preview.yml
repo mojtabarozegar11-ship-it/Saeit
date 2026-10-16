@@ -23,6 +23,7 @@ jobs:
           python3 -m unittest discover -s tests -p test_zomorod_nova_home.py -v
           test "$(stat -c %s content/zomorod-new-home/index.html)" -gt 18000
           test "$(stat -c %s content/zomorod-new-home/nova.css)" -gt 16000
+          grep -Fq "/agriculture/assets/zomorod-olive-v1/laboratory.webp" content/zomorod-new-home/index.html
           echo "NOVA_SOURCE_ARCHITECTURE=validated"
       - name: Prepare pinned cPanel relay
         shell: bash
@@ -168,7 +169,7 @@ jobs:
           grep -Fq 'name="robots" content="noindex, nofollow"' "$backup/preview.response.html"
           grep -Fq '/static/site/company/company-logo.png' "$backup/preview.response.html"
           grep -Fq '.hero-grid' "$backup/css.response"
-          for img in /static/site/company/company-logo.png /static/site/heroes/agriculture.webp /static/site/heroes/laboratory.webp /static/site/heroes/ai.webp; do
+          for img in /static/site/company/company-logo.png /static/site/heroes/agriculture.webp /agriculture/assets/zomorod-olive-v1/laboratory.webp /static/site/heroes/ai.webp; do
             status="$(curl -sS --max-time 15 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir$img" || true)"
             echo "NOVA_ASSET=$img status=$status"
             test "$status" = 200
