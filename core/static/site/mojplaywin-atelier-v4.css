@@ -2,6 +2,7 @@
    This static file is used exclusively by brands/mojplaywin/base.html.
    Existing page editorial content and structured data are untouched. */
 body.mpw-atelier-v4{
+ margin:0;min-width:0;
  --mw-bg:#08090b;--mw-surface:#111318;--mw-ink:#f7f4ed;--mw-muted:#b9b7b2;
  --mw-gold:#c9a970;--mw-gold-bright:#f1d49b;--mw-line:rgba(223,190,127,.25);
  --bg:#08090b;--panel:#191b20;--ink:#f7f4ed;--muted:#b9b7b2;--line:rgba(223,190,127,.25);
@@ -231,3 +232,10 @@ body.mpw-atelier-v4{
  .mpw-atelier-v4 .mpw-topical-art-copy{padding:12px}
  .mpw-atelier-v4 .mpw-topical-art img{min-height:180px;max-height:280px}
 }
+
+/* Self-contained brand shell; no legacy MojPlayWin CSS dependency. */
+.mpw-atelier-v4 .mpw-skip{position:absolute;left:-10000px;width:1px;height:1px;overflow:hidden}
+.mpw-atelier-v4 .mpw-skip:focus{left:12px;top:12px;z-index:999;overflow:visible;width:auto;height:auto;padding:12px 15px;background:#fff7e9;color:#111;border-radius:6px}
+.mpw-atelier-v4 img{max-width:100%}
+.mpw-atelier-v4 :is(.mpw-page-hero,.mpw-hero,.mpw-games,.mpw-support-handbook){box-shadow:inset 0 1px 0 rgba(246,220,166,.05),0 20px 65px rgba(0,0,0,.22)}
+.mpw-atelier-v4 :is(.mpw-page-card,.mpw-venture-card){min-width:0;overflow-wrap:anywhere}
