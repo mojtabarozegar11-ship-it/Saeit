@@ -81,3 +81,121 @@ jobs:
           tar -czf "$archive" scripts/mojtaba_photo_essays_reading_paths.py scripts/mojtaba_twenty_photo_essays_safe_publish.py content/mojtaba_twenty_photo_essays_*.json content/mojtaba_seven_full_independent_journal_20261016.json content/mojtaba_six_advanced_journal_articles_20261016.json content/mojtaba_ten_advanced_website_engineering_20261016.json content/mojtaba_vancouver_collab_part_*.json content/mojtaba_vancouver_enterprise_web_part_*.json content/mojtaba_vancouver_enterprise_web_series2_part_*.json
           timeout 30s ssh -F "$SSH_CONFIG" saeit-host "test ! -e '$stage' && install -d -m 700 '$stage'"
           timeout 120s scp -F "$SSH_CONFIG" "$archive" "saeit-host:$stage/source.tgz"
+      - name: Install additive reading maps on separate personal website with safe rollback
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 790s ssh -F "$SSH_CONFIG" saeit-host "bash -s -- '$GITHUB_RUN_ID'" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          id="$1"
+          app="/home/zomorod2/mojtaba_personal/mojtaba_roozegar_personal_v17"
+          stage="/home/zomorod2/.mpw-readingpaths-$id"
+          py="$app/../.venv_personal_test/bin/python"
+          script="$stage/scripts/mojtaba_photo_essays_reading_paths.py"
+          backup="$HOME/.backups/mojtaba-photo-reading-paths/$id"
+          installed=0
+          verified=0
+          finish() {
+            code=$?
+            trap - EXIT
+            if test "$installed" = 1 && test "$verified" = 0 && test -f "$backup/manifest.json"; then
+              "$py" "$script" rollback --app "$app" --backup "$backup" && echo "PHOTO_READING_PATHS_AUTO_ROLLBACK=success" || echo "PHOTO_READING_PATHS_AUTO_ROLLBACK=manual_review_required"
+            fi
+            exit "$code"
+          }
+          trap finish EXIT
+          test -f "$app/manage.py" && test ! -L "$app" && test -x "$py"
+          tar -tzf "$stage/source.tgz" > "$stage/archive-list.txt"
+          grep -Fxq 'scripts/mojtaba_photo_essays_reading_paths.py' "$stage/archive-list.txt"
+          cd "$stage"
+          tar -xzf source.tgz --no-same-owner
+          "$py" "$script" check --app "$app" --content "$stage/content"
+          cd "$app"
+          "$py" "$script" install --app "$app" --content "$stage/content" --backup "$backup"
+          installed=1
+          "$py" manage.py check --deploy
+          test ! -d "$app/tmp" || touch "$app/tmp/restart.txt"
+          "$py" - "$stage" <<'PY_CHECK'
+          import importlib.util,os,sys,time
+          from html import unescape
+          from html.parser import HTMLParser
+          from pathlib import Path
+          from urllib.request import Request,urlopen
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          import django;django.setup()
+          from core.models import Post
+          stage=Path(sys.argv[1])
+          spec=importlib.util.spec_from_file_location("paths",stage/"scripts/mojtaba_photo_essays_reading_paths.py")
+          mod=importlib.util.module_from_spec(spec);spec.loader.exec_module(mod)
+          rows,old=mod.rows_and_older(stage/"content")
+          mod.django_post_checks(mod.APP,rows,old)
+          print("PHOTO_READING_PATHS_93_DB_ARTICLES_PRESERVED=yes",flush=True)
+          base="https://mojplaywin.com/mojtaba.roozegar/"
+          class Images(HTMLParser):
+              def __init__(self):
+                  super().__init__();self.src=[];self.ga=[];self.gb=[]
+              def handle_starttag(self,tag,attrs):
+                  if tag!="img":return
+                  x=dict(attrs).get("src","")
+                  if x:self.src.append(x)
+                  if "owner_gallery_20261015_b/" in x:self.gb.append(x)
+                  elif "owner_gallery_20261015/" in x:self.ga.append(x)
+          def verify(route,fn):
+              last=""
+              for t in range(5):
+                  try:
+                      url=base+route+"?navigation_live="+str(time.time_ns())
+                      with urlopen(Request(url,headers={"User-Agent":"PersonalImageJournalReadingPathsAudit/1"}),timeout=22) as r:
+                          if r.status!=200:raise ValueError("HTTP "+str(r.status))
+                          body=r.read(5000000).decode("utf-8","replace")
+                      fn(body);return
+                  except Exception as e:
+                      last=str(e);time.sleep(2)
+              raise RuntimeError("Live route check failed "+route+": "+last)
+          for route in ("","blog/"):
+              def index_check(body):
+                  if mod.HOMEBLOCK not in body or 'id="mpw-mojtaba-twenty-image-essays-20261016"' not in body:
+                      raise ValueError("Original photo essays or new guide missing")
+                  p=Images();p.feed(body)
+                  if sum("mojtaba_personal_image_essays_20261016/" in s for s in p.src)<20:
+                      raise ValueError("Twenty original image cards missing")
+                  for row in rows.values():
+                      if mod.article_url(row) not in body:raise ValueError("One article link missing")
+              verify(route,index_check)
+              print("PHOTO_READING_PATHS_INDEX_OK="+(route or "home"),flush=True)
+          for row in rows.values():
+              def one_new(body,row=row):
+                  if mod.DETAILBLOCK not in body or row["title"] not in unescape(body):
+                      raise ValueError("Original article or related navigation missing")
+                  p=Images();p.feed(body)
+                  if not any(row["slug"] in src and "mojtaba_personal_image_essays_20261016/" in src for src in p.src):
+                      raise ValueError("Original image absent")
+              verify("blog/"+row["slug"]+"/",one_new)
+              print("PHOTO_READING_PATHS_NEW_ARTICLE_OK="+row["slug"],flush=True)
+          for slug in old:
+              def one_old(body):
+                  p=Images();p.feed(body)
+                  if not p.src:raise ValueError("Older article lost an image")
+              verify("blog/"+slug+"/",one_old)
+          print("PHOTO_READING_PATHS_ALL_73_OLD_ARTICLES_SAFE=yes",flush=True)
+          def check_gallery(body):
+              p=Images();p.feed(body)
+              if len(p.ga)!=10 or len(p.gb)!=10:raise ValueError("Existing 20 owner photos missing")
+          verify("gallery/",check_gallery)
+          print("PHOTO_READING_PATHS_OWNER_20_GALLERY_PHOTOS_SAFE=yes",flush=True)
+          PY_CHECK
+          for site in "https://mojplaywin.com/" "https://zomorodmelal.ir/"; do
+            status="$(curl -sSL -o /dev/null -w '%{http_code}' --max-time 24 "$site")"
+            test "$status" = 200
+            echo "PHOTO_READING_PATHS_PARENT_DOMAIN_OK=$site HTTP_200"
+          done
+          verified=1
+          trap - EXIT
+          echo "PHOTO_READING_PATHS_PUBLICATION_VERIFIED=yes"
+          echo "PHOTO_READING_PATHS_BACKUP=$backup"
+          rm -rf "$stage"
+          REMOTE
+      - name: Remove short-lived SSH credentials
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/photo-relay"
