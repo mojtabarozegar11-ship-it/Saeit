@@ -54,6 +54,18 @@ class UpgradeTests(unittest.TestCase):
         self.assertIn('<a href="/mojtaba.roozegar/about/">About</a>',after)
         self.assertEqual(before.count("{% endblock %}"),after.count("{% endblock %}"))
 
+    def test_multiple_page_level_blocks_survive_unchanged(self):
+        original = """{% extends 'personal_site/base.html' %}
+{% block title %}Existing title{% endblock %}
+{% block description %}Existing summary{% endblock %}
+{% block content %}<h1>Independent resume</h1>{% endblock %}"""
+        patched = mod.patch("resume", original)
+        self.assertIn("{% block title %}Existing title{% endblock %}", patched)
+        self.assertIn("{% block description %}Existing summary{% endblock %}", patched)
+        self.assertIn("<h1>Independent resume</h1>", patched)
+        self.assertEqual(patched.count("{% endblock %}"), 3)
+        self.assertEqual(patched.count('id="'+mod.MARK+'-resume"'), 1)
+
     def test_dynamic_detail_seo(self):
         self.assertIn("{{ item.title }}",mod.seo_fallback("title"))
         self.assertIn("post_detail",mod.seo_fallback("description"))
