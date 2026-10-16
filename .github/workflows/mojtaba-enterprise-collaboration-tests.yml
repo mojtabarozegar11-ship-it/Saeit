@@ -1,0 +1,26 @@
+name: Mojtaba enterprise collaboration inquiry checks
+on:
+  push:
+    branches: ['feat/mojtaba-enterprise-collaboration-inquiry-20261016']
+    paths:
+      - 'scripts/mojtaba_enterprise_collaboration_inquiry.py'
+      - 'tests/test_mojtaba_enterprise_collaboration_inquiry.py'
+      - '.github/workflows/mojtaba-enterprise-collaboration-*.yml'
+  pull_request:
+    paths:
+      - 'scripts/mojtaba_enterprise_collaboration_inquiry.py'
+      - 'tests/test_mojtaba_enterprise_collaboration_inquiry.py'
+      - '.github/workflows/mojtaba-enterprise-collaboration-*.yml'
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test all proposed engagement offers and existing contact preservation
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mojtaba_enterprise_collaboration_inquiry.py
+          python3 -m unittest discover -s tests -p test_mojtaba_enterprise_collaboration_inquiry.py -v
