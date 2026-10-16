@@ -1,0 +1,254 @@
+name: Publish Zomorod Ghanadi subpage safely
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/zomorod-mohammad-deploy.yml"
+      - "public/mohammad/**"
+permissions:
+  contents: read
+concurrency:
+  group: zomorodmelal-mohammad
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate the static page and assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s public/mohammad/index.html
+          test -s public/mohammad/.htaccess
+          grep -Fxq 'DirectoryIndex index.html' public/mohammad/.htaccess
+          grep -Fxq 'PassengerEnabled off' public/mohammad/.htaccess
+          grep -Fq '<!-- saeit-zomorod-mohammad-v1 -->' public/mohammad/index.html
+          grep -Fq 'https://zomorodmelal.ir/mohammad/' public/mohammad/index.html
+          test -s public/mohammad/styles.css
+          test -s public/mohammad/app.js
+          test -s public/mohammad/assets/checklist-before-renovation.html
+          test -s public/mohammad/assets/renovation-budget-template.csv
+          test -s public/mohammad/assets/seasonal-maintenance.html
+          echo "MOHAMMAD_SOURCE=valid"
+      - name: Prepare pinned VPS to cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-mohammad"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY_READY=yes"
+      - name: Resolve and verify the actual domain root
+        id: target
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-mohammad"
+          candidates="$RUNNER_TEMP/mohammad-roots.tsv"
+          : > "$candidates"
+          for account in zomorod2 zomorodm; do
+            json="$RUNNER_TEMP/domain-$account.json"
+            if ssh -o User="$account" -F "$d/config" saeit-cpanel 'uapi --output=json DomainInfo domains_data' > "$json" 2>"$RUNNER_TEMP/domain-$account.err"; then
+              python3 - "$json" "$account" >> "$candidates" <<'PY'
+          import json,sys
+          account=sys.argv[2]
+          obj=json.load(open(sys.argv[1],encoding='utf-8'))
+          targets={'zomorodmelal.ir','www.zomorodmelal.ir'}
+          found=set()
+          def walk(x):
+              if isinstance(x,dict):
+                  domain=x.get('domain') or x.get('servername')
+                  root=x.get('documentroot') or x.get('document_root') or x.get('docroot')
+                  if isinstance(domain,str) and domain.rstrip('.').lower() in targets and isinstance(root,str): found.add(root.rstrip('/'))
+                  for v in x.values(): walk(v)
+              elif isinstance(x,list):
+                  for v in x: walk(v)
+          walk(obj)
+          for root in sorted(found): print(f'{account}\t{root}')
+          PY
+            fi
+          done
+          selection="$(python3 - "$candidates" <<'PY'
+          import re,sys
+          rows=[]
+          for line in open(sys.argv[1],encoding='utf-8'):
+              parts=line.rstrip('\n').split('\t',1)
+              if len(parts)==2: rows.append(tuple(parts))
+          roots={root for _,root in rows}
+          if len(roots)!=1: raise SystemExit(f'Expected one domain root; found {sorted(roots)}')
+          root=next(iter(roots))
+          match=re.fullmatch(r'/home/([A-Za-z0-9_-]+)/.+',root)
+          if not match: raise SystemExit(f'Refusing unexpected document root: {root}')
+          account=match.group(1)
+          if (account,root) not in rows: raise SystemExit('Document root owner account not confirmed by cPanel')
+          print(account+'\t'+root)
+          PY
+          )"
+          IFS=$'\t' read -r account root <<< "$selection"
+          case "$root" in "/home/$account/"*) ;; *) echo "Refusing document root outside its cPanel account" >&2; exit 32;; esac
+          ssh -o User="$account" -F "$d/config" saeit-cpanel "bash -se -- '$root' '$account'" <<'REMOTE'
+          set -euo pipefail
+          root="$1"; account="$2"
+          test "$(id -un)" = "$account"
+          test -d "$root" && test ! -L "$root" && test "$(stat -c %U "$root")" = "$account" && test -w "$root" || { echo "Resolved domain root is not writable by its owner" >&2; exit 33; }
+          test -f "$root/.htaccess" && test ! -L "$root/.htaccess" || { echo "ROOT_HTACCESS_MISSING_OR_UNSAFE" >&2; exit 34; }
+          if test -e "$root/mohammad" || test -L "$root/mohammad"; then
+            test -d "$root/mohammad" && test ! -L "$root/mohammad"
+            test -f "$root/mohammad/index.html" && test ! -L "$root/mohammad/index.html"
+            grep -Fq '<!-- saeit-zomorod-mohammad-v1 -->' "$root/mohammad/index.html"
+            echo "MOHAMMAD_TARGET=managed"
+          else echo "MOHAMMAD_TARGET=available"; fi
+          if test -f "$root/index.html"; then root_sha="$(sha256sum "$root/index.html" | awk '{print $1}')"; else root_sha=ABSENT; fi
+          htaccess_sha="$(sha256sum "$root/.htaccess" | awk '{print $1}')"
+          echo "ROOT_INDEX_SHA=$root_sha"
+          echo "ROOT_HTACCESS_SHA=$htaccess_sha"
+          REMOTE
+          echo "docroot=$root" >> "$GITHUB_OUTPUT"
+          echo "account=$account" >> "$GITHUB_OUTPUT"
+      - name: Stage only /mohammad/
+        shell: bash
+        env:
+          DOMAIN_ROOT: ${{ steps.target.outputs.docroot }}
+          CPANEL_ACCOUNT: ${{ steps.target.outputs.account }}
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-mohammad"
+          root="$DOMAIN_ROOT"; account="$CPANEL_ACCOUNT"
+          case "$root" in "/home/$account/"*) ;; *) echo "Invalid resolved domain root" >&2; exit 1;; esac
+          stage="$root/.zomorod-mohammad-stage-$GITHUB_SHA"
+          ssh -o User="$account" -F "$d/config" saeit-cpanel "set -eu; test ! -e '$stage'; mkdir -m 700 '$stage'"
+          tar -C public/mohammad -czf - . | ssh -o User="$account" -F "$d/config" saeit-cpanel "tar -xzf - -C '$stage'"
+      - name: Atomically publish the managed subdirectory
+        id: publish
+        shell: bash
+        env:
+          DOMAIN_ROOT: ${{ steps.target.outputs.docroot }}
+          CPANEL_ACCOUNT: ${{ steps.target.outputs.account }}
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-mohammad"
+          root="$DOMAIN_ROOT"; account="$CPANEL_ACCOUNT"
+          case "$root" in "/home/$account/"*) ;; *) echo "Invalid resolved domain root" >&2; exit 1;; esac
+          stage="$root/.zomorod-mohammad-stage-$GITHUB_SHA"
+          target="$root/mohammad"
+          expected_root="$(ssh -o User="$account" -F "$d/config" saeit-cpanel "if test -f '$root/index.html'; then sha256sum '$root/index.html' | cut -d ' ' -f1; else echo ABSENT; fi")"
+          expected_htaccess="$(ssh -o User="$account" -F "$d/config" saeit-cpanel "sha256sum '$root/.htaccess' | cut -d ' ' -f1")"
+          expected_page="$(sha256sum public/mohammad/index.html | awk '{print $1}')"
+          ssh -o User="$account" -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" "$expected_page" "$expected_root" "$expected_htaccess" "$root" "$account" <<'REMOTE'
+          set -euo pipefail
+          commit_sha="$1"; expected_page="$2"; expected_root="$3"; expected_htaccess="$4"; root="$5"; account="$6"
+          case "$root" in "/home/$account/"*) ;; *) echo "Invalid resolved document root" >&2; exit 40;; esac
+          test "$(id -un)" = "$account"
+          stage="$root/.zomorod-mohammad-stage-$commit_sha"; target="$root/mohammad"
+          backup="$HOME/.backups/zomorodmelal-mohammad/$commit_sha"
+          current_root=ABSENT
+          if test -f "$root/index.html"; then current_root="$(sha256sum "$root/index.html" | awk '{print $1}')"; fi
+          test "$current_root" = "$expected_root"
+          test "$(sha256sum "$root/.htaccess" | awk '{print $1}')" = "$expected_htaccess"
+          test "$(sha256sum "$stage/index.html" | awk '{print $1}')" = "$expected_page"
+          test "$(stat -c %U "$root")" = "$account"
+          if test -e "$target" || test -L "$target"; then
+            test -d "$target" && test ! -L "$target"
+            test -f "$target/index.html" && test ! -L "$target/index.html"
+            grep -Fq '<!-- saeit-zomorod-mohammad-v1 -->' "$target/index.html"
+            install -d -m 700 "$(dirname "$backup")"; test ! -e "$backup"
+            cp -a -- "$target" "$backup"; rm -rf -- "$target"
+          fi
+          if ! mv -T "$stage" "$target"; then
+            if test -d "$backup"; then cp -a -- "$backup" "$target"; fi
+            exit 1
+          fi
+          find "$target" -type d -exec chmod 755 {} +
+          find "$target" -type f -exec chmod 644 {} +
+          test -s "$target/index.html"
+          test "$(sha256sum "$target/index.html" | awk '{print $1}')" = "$expected_page"
+          current_root=ABSENT
+          if test -f "$root/index.html"; then current_root="$(sha256sum "$root/index.html" | awk '{print $1}')"; fi
+          test "$current_root" = "$expected_root"
+          test "$(sha256sum "$root/.htaccess" | awk '{print $1}')" = "$expected_htaccess"
+          echo "MOHAMMAD_INSTALLED=/mohammad/"
+          echo "ROOT_INDEX_UNCHANGED=yes"
+          echo "ROOT_HTACCESS_UNCHANGED=yes"
+          REMOTE
+      - name: Verify the live subpage and root
+        shell: bash
+        run: |
+          set -euo pipefail
+          page="$(curl --fail --silent --show-error --retry 4 --retry-delay 2 https://zomorodmelal.ir/mohammad/)"
+          printf '%s' "$page" | grep -Fq 'کلینیک ساختمان محمد'
+          curl --fail --silent --show-error --retry 4 --retry-delay 2 -o /dev/null https://zomorodmelal.ir/mohammad/assets/hero.webp
+          curl --fail --silent --show-error --retry 4 --retry-delay 2 -o /dev/null https://zomorodmelal.ir/
+          echo "MOHAMMAD_LIVE=https://zomorodmelal.ir/mohammad/"
+          echo "ROOT_ROUTE_HTTP=200"
+      - name: Restore the previous subpage if live verification fails
+        if: failure() && steps.publish.outcome == 'success'
+        shell: bash
+        env:
+          DOMAIN_ROOT: ${{ steps.target.outputs.docroot }}
+          CPANEL_ACCOUNT: ${{ steps.target.outputs.account }}
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-mohammad"
+          root="$DOMAIN_ROOT"; account="$CPANEL_ACCOUNT"
+          case "$root" in "/home/$account/"*) ;; *) echo "Invalid resolved domain root" >&2; exit 1;; esac
+          ssh -o User="$account" -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" "$root" "$account" <<'REMOTE'
+          set -euo pipefail
+          commit_sha="$1"; root="$2"; account="$3"
+          case "$root" in "/home/$account/"*) ;; *) echo "Invalid resolved document root" >&2; exit 1;; esac
+          test "$(id -un)" = "$account"
+          target="$root/mohammad"
+          backup="$HOME/.backups/zomorodmelal-mohammad/$commit_sha"
+          test -d "$target" && test -f "$target/index.html" && grep -Fq '<!-- saeit-zomorod-mohammad-v1 -->' "$target/index.html"
+          test -d "$backup" && test -f "$backup/index.html" && grep -Fq '<!-- saeit-zomorod-mohammad-v1 -->' "$backup/index.html"
+          stage="$root/.zomorod-mohammad-restore-$commit_sha"
+          test ! -e "$stage"
+          mkdir -m 700 "$stage"
+          cp -a -- "$backup/." "$stage/"
+          rm -rf -- "$target"
+          mv -T "$stage" "$target"
+          find "$target" -type d -exec chmod 755 {} +
+          find "$target" -type f -exec chmod 644 {} +
+          echo "PREVIOUS_MOHAMMAD_PAGE_RESTORED=yes"
+          REMOTE
