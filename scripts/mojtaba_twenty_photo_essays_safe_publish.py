@@ -112,7 +112,7 @@ def index_block(rows):
         path=image_name(row["slug"])
         image="{% static '"+path+"' %}"
         url="/mojtaba.roozegar/blog/"+row["slug"]+"/"
-        parts.append('<article style="border:2px solid #a8895d;border-radius:11px;background:#292622;overflow:hidden"><a href="'+html.escape(url,quote=True)+'" style="color:#f5deb0;text-decoration:none"><img src="'+image+'" width="640" height="360" loading="lazy" decoding="async" alt="'+html.escape("Original four-stage engineering diagram: "+row["title"],quote=True)+'" style="width:100%;height:auto;aspect-ratio:16/9;display:block"><div style="padding:17px"><h3 style="font:600 21px/1.45 Georgia,serif">'+html.escape(row["title"])+'</h3><p style="color:#e6dccd;font:15px/1.7 system-ui,sans-serif">'+html.escape(row["excerpt"])+'</p></div></a></article>')
+        parts.append('<article style="border:2px solid #a8895d;border-radius:11px;background:#292622;overflow:hidden"><a href="'+html.escape(url,quote=True)+'" style="color:#f5deb0;text-decoration:none"><img src="'+image+'" width="640" height="360" loading="lazy" decoding="async" alt="'+html.escape("Editorial image accompanying: "+row["title"],quote=True)+'" style="width:100%;height:auto;aspect-ratio:16/9;display:block"><div style="padding:17px"><h3 style="font:600 21px/1.45 Georgia,serif">'+html.escape(row["title"])+'</h3><p style="color:#e6dccd;font:15px/1.7 system-ui,sans-serif">'+html.escape(row["excerpt"])+'</p></div></a></article>')
     parts.append('</div></section>')
     return "\n".join(parts)
 
@@ -184,14 +184,14 @@ def install(app,folder,backup,pictures):
     older=load_older(folder)
     before=templates(app)
     Post,transaction,engines,target=prepare(app)
-    if target.exists() or target.is_symlink():raise ValueError("Reserved diagram folder exists")
+    if target.exists() or target.is_symlink():raise ValueError("Dedicated portrait archive folder already exists")
     if backup.exists() or backup.is_symlink():raise ValueError("Backup collision")
     if Post.objects.filter(slug__in=[a["slug"] for a in rows]).exists():raise ValueError("New slug collides with existing post")
     if Post.objects.filter(slug__in=older,published=True).count()!=73:raise ValueError("Previous 73 posts must remain published")
     after={k:patch(k,v,rows) for k,v in before.items()}
     for key,proposal in after.items():
         engines["django"].engine.from_string(proposal)
-        print("ENTERPRISE_20_TEMPLATE_PREFLIGHT="+key,flush=True)
+        print("PERSONAL_PHOTO20_TEMPLATE_PREFLIGHT="+key,flush=True)
     graphics={a["slug"]:photo_binary(a,pictures) for a in rows}
     backup.mkdir(parents=True,mode=0o700)
     template_meta={}
