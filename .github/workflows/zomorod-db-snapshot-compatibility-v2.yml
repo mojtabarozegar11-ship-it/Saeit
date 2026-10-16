@@ -1,0 +1,124 @@
+name: Validate pre-cleanup Zomorod DB snapshot in isolation
+on:
+  push:
+    branches:
+      - codex/zomorod-runtime-repair-20261016
+    paths:
+      - ".github/workflows/zomorod-db-snapshot-compatibility-v2.yml"
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-db-snapshot-compatibility-v2
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077; test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-db-test-v2"; install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d"/*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null; ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"; printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+      - name: Run checks on a temporary copy of the saved database
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-db-test-v2"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          source_db=/home/zomorod2/Saeit/backups/pre_phase19_cleanup_20261004-124041/db.sqlite3
+          root=/home/zomorod2/.backups/zomorodmelal-complete/9fcadc9ea749075785829565e57770f5cc173a8b
+          stage=/home/zomorod2/.backups/zomorodmelal-complete/source-preflight-47c38ec3810326790f6f954b515b4f11d59042d1
+          packages=/home/zomorod2/.backups/zomorodmelal-complete/packages-preflight-47c38ec3810326790f6f954b515b4f11d59042d1
+          py=/home/zomorod2/virtualenv/Saeit/3.10/bin/python
+          test -f "$source_db" && test -f "$stage/manage.py" && test -d "$packages" && test -x "$py"
+          df -Pk "$root" | tail -1 | awk '{print "BACKUP_FS_AVAILABLE_KB="$4}'
+          isolated="$root/compatibility-test-pre-phase19-v2-20261016"
+          install -d -m 700 "$isolated"
+          cp -p "$source_db" "$isolated/db.sqlite3"
+          chmod 600 "$isolated/db.sqlite3"
+          export PYTHONPATH="$packages:$stage"
+          export DJANGO_SETTINGS_MODULE=config.settings
+          export DATABASE_URL="sqlite:////${isolated#/}/db.sqlite3"
+          cd "$stage"
+          "$py" - <<'PY'
+          import os,sqlite3,subprocess,sys
+          db=os.environ["DATABASE_URL"].split("////",1)[1]
+          con=sqlite3.connect("file:"+db+"?mode=ro",uri=True)
+          quick=con.execute("pragma quick_check").fetchone()[0]
+          migration_count=con.execute("select count(*) from django_migrations").fetchone()[0]
+          table_count=con.execute("select count(*) from sqlite_master where type='table' and name not like 'sqlite_%'").fetchone()[0]
+          def count(name):
+              exists=con.execute("select 1 from sqlite_master where type='table' and name=?",(name,)).fetchone()
+              return con.execute('select count(*) from "'+name+'"').fetchone()[0] if exists else -1
+          print(f"SNAPSHOT_QUICK_CHECK={quick}")
+          print(f"SNAPSHOT_MIGRATION_ROWS_BEFORE={migration_count}")
+          print(f"SNAPSHOT_TABLES={table_count}")
+          print(f"SNAPSHOT_BLOGARTICLES={count('core_blogarticle')}")
+          print(f"SNAPSHOT_BLOGPAGES={count('core_blogpage')}")
+          print(f"SNAPSHOT_AGENTS={count('core_agent')}")
+          con.close()
+          for name,cmd in [
+            ("SYSTEM_CHECK",[sys.executable,"manage.py","check"]),
+            ("MIGRATION_PLAN",[sys.executable,"manage.py","migrate","--plan"]),
+            ("MODEL_MIGRATION_CHECK",[sys.executable,"manage.py","makemigrations","--check","--dry-run"]),
+          ]:
+              p=subprocess.run(cmd,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)
+              lines=[x for x in p.stdout.splitlines() if x.strip()]
+              print(f"{name}_EXIT={p.returncode}")
+              if name=="MIGRATION_PLAN":
+                  print(f"{name}_PENDING_LINES={sum(1 for x in lines if x.startswith('  '))}")
+              else:
+                  print(f"{name}_SUMMARY="+(lines[-1][:220] if lines else "no output"))
+              if p.returncode: sys.exit(p.returncode)
+          con=sqlite3.connect("file:"+db+"?mode=ro",uri=True)
+          after=con.execute("select count(*) from django_migrations").fetchone()[0]
+          print(f"SNAPSHOT_MIGRATION_ROWS_AFTER={after}")
+          print("SNAPSHOT_UNCHANGED="+str(after==migration_count).lower())
+          con.close()
+          PY
+          REMOTE
+      - name: Remove temporary SSH material
+        if: always()
+        shell: bash
+        run: rm -rf -- "$RUNNER_TEMP/zomorod-db-test-v2"
