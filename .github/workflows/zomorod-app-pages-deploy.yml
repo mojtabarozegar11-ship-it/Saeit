@@ -170,11 +170,17 @@ jobs:
             mv -f "$target.new" "$target"
           done
           cd "$app"
-          python=/home/zomorod2/virtualenv/Saeit/3.11/bin/python
-          test -x "$python" || python=/home/zomorod2/virtualenv/Saeit/3.11/bin/python3
-          test -x "$python"
+          python=""
+          for candidate in "${VIRTUAL_ENV:-}/bin/python" "$HOME/virtualenv/Saeit/3.11/bin/python" "$HOME/virtualenv/repositories/Saeit/3.11/bin/python" /home/zomorod2/virtualenv/Saeit/3.11/bin/python /home/zomorod2/virtualenv/repositories/Saeit/3.11/bin/python; do
+            if test -n "$candidate" && test -x "$candidate"; then python="$candidate"; break; fi
+          done
+          if test -z "$python"; then
+            echo "DJANGO_VIRTUALENV_NOT_FOUND=failed" >&2
+            exit 1
+          fi
+          "$python" --version
           check_log="$HOME/.zomorod-django-check-$sha.log"
-          if "$python" manage.py check > "$check_log" 2>&1; then
+          if "$python" manage.py check --deploy > "$check_log" 2>&1; then
             cat "$check_log"
           else
             cat "$check_log" >&2
