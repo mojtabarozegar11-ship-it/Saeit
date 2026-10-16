@@ -84,6 +84,7 @@ jobs:
           old="$backup/previous-app-$sha"
           failed="$backup/failed-app-$sha"
           baseline="$backup/$sha-packages.json"
+          smoke_file="$home/.zomorod-release-smoke-$sha.html"
           changed=no
           active_new=no
           test -d "$app" && test -f "$app/manage.py" && test -x "$py"
@@ -111,6 +112,7 @@ jobs:
           chmod 600 "$baseline"
           rollback() {
             status=$?
+            rm -f -- "$smoke_file"
             if [ "$status" -ne 0 ]; then
               echo "RELEASE_RESULT=failed_rollback_started"
               if [ -d "$old" ] && [ ! -e "$app" ]; then
@@ -213,7 +215,7 @@ jobs:
           touch "$app/tmp/restart.txt"
           failures=0
           for path in / /industry/ /agriculture/ /agents/ /api/health/ /api/bridge/health/ /admin/login/ /amozeshgah/ /mohammad/ /ghanadi/ /agriculture/livestock/ /blog/; do
-            code="$(curl --silent --show-error --location --retry 2 --retry-all-errors --retry-delay 2 --max-redirs 5 --connect-timeout 10 --max-time 30 -o /dev/null -w '%{http_code}' -H 'Cache-Control: no-cache' "https://zomorodmelal.ir$path?release_check=$sha" || true)"
+            code="$(curl --silent --show-error --location --retry 2 --retry-all-errors --retry-delay 2 --max-redirs 5 --connect-timeout 10 --max-time 30 -o "$smoke_file" -w '%{http_code}' -H 'Cache-Control: no-cache' "https://zomorodmelal.ir$path?release_check=$sha" || true)"
             echo "LIVE_RELEASE_ROUTE=$path HTTP=$code"
             if [ "$code" != 200 ]; then failures=$((failures+1)); fi
           done
