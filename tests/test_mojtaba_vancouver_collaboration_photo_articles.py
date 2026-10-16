@@ -38,6 +38,8 @@ class TestVancouverCollaborationImages(unittest.TestCase):
         block=m.index_html(self.rows,"/mojtaba.roozegar/media/")
         self.assertEqual(block.count('loading="lazy"'),10)
         self.assertEqual(block.count("Photograph:"),10)
+        self.assertEqual(block.count("{% static"),10)
+        self.assertNotIn("/mojtaba.roozegar/uploads/",block)
         self.assertEqual(block.count('alt="'),10)
         for r in self.rows:
             self.assertIn(r["slug"]+".jpg",block)
@@ -57,11 +59,11 @@ class TestVancouverCollaborationImages(unittest.TestCase):
         template="""{% extends 'personal_site/base.html' %}{% block content %}
         <h1>{{ item.title }}</h1><p>{{ item.content|linebreaks }}</p>{% endblock %}"""
         out=m.patch("detail",template,self.rows,"/media/")
-        self.assertEqual(out.count(m.DETAIL_MARKER),1)
-        self.assertIn("item.cover.url",out)
-        self.assertIn('{% if kind == "Article" and item.cover %}',out)
+        self.assertEqual(out.count(m.DETAIL_MARKER),10)
+        self.assertIn("{% static",out)
+        self.assertIn('{% if kind == "Article" %}',out)
         already=template.replace("<h1>","{% if item.cover %}<img src='{{ item.cover.url }}'>{% endif %}<h1>")
-        self.assertEqual(m.patch("detail",already,self.rows,"/media/"),already)
+        self.assertIn(m.DETAIL_MARKER,m.patch("detail",already,self.rows,"/media/"))
 
     def test_fail_when_prior_article_blocks_missing(self):
         for mark in m.PREVIOUS:
@@ -93,7 +95,7 @@ class TestVancouverCollaborationImages(unittest.TestCase):
     def test_strict_scope_and_media_name(self):
         self.assertEqual(set(m.TEMPLATES),{"home","posts","detail"})
         for row in self.rows:
-            self.assertEqual(m.expected_path(row["slug"]),"posts/vancouver-collab-20261016/"+row["slug"]+".jpg")
+            self.assertEqual(m.expected_path(row["slug"]),"personal_site/vancouver_collab_20261016/"+row["slug"]+".jpg")
         self.assertEqual(len(m.OLD_MANIFESTS),3)
 
 if __name__=="__main__":unittest.main()
