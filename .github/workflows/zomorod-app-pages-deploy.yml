@@ -227,6 +227,8 @@ jobs:
           sha="$1"
           app=/home/zomorod2/Saeit
           public_root=/home/zomorod2/public_html
+          passenger_python="$HOME/virtualenv/Saeit/3.10/bin/python"
+          test -x "$passenger_python"
           test -d "$public_root" && test "$(stat -c %U "$public_root")" = "zomorod2" && test -w "$public_root"
           stage="$app/.zomorod-stage-$sha"
           backup="$HOME/.backups/zomorodmelal-app/$sha"
