@@ -1,6 +1,8 @@
+import os
 from django.conf import settings
 from .company_content_models import CompanyContentLink
 from django.db import connection
+from django.db.utils import DatabaseError
 from django.http import Http404
 from django.shortcuts import render
 from django.views.decorators.cache import never_cache
@@ -8,6 +10,41 @@ from rest_framework.response import Response
 from rest_framework.status import HTTP_503_SERVICE_UNAVAILABLE
 from rest_framework.views import APIView
 
+
+
+
+def _agent_runtime_snapshot():
+    """Return only public, non-sensitive runtime indicators for the site agents."""
+    model_ready = bool(getattr(settings, "OPENAI_API_KEY", "") or os.getenv("OPENAI_API_KEY"))
+    try:
+        from .knowledge_agent_models import KnowledgeAgentPlan, KnowledgeAgentRun
+        from .knowledge_agent_models import KnowledgeBook
+        plan = KnowledgeAgentPlan.objects.filter(code="knowledge-content-director").first()
+        if plan is None:
+            return {"available": True, "plan_active": False, "model_ready": model_ready,
+                    "cadence_hours": 24, "queued_runs": 0, "blocked_runs": 0,
+                    "completed_runs": 0, "review_books": 0, "last_run_status": "never",
+                    "last_run_at": None, "next_run_at": None}
+        runs = KnowledgeAgentRun.objects.filter(plan=plan)
+        latest = runs.order_by("-created_at", "-id").first()
+        return {
+            "available": True,
+            "plan_active": plan.active,
+            "model_ready": model_ready,
+            "cadence_hours": plan.cadence_hours,
+            "queued_runs": runs.filter(status="queued").count(),
+            "blocked_runs": runs.filter(status="blocked").count(),
+            "completed_runs": runs.filter(status="completed").count(),
+            "review_books": KnowledgeBook.objects.filter(plan=plan, status="review").count(),
+            "last_run_status": latest.status if latest else "never",
+            "last_run_at": plan.last_run_at,
+            "next_run_at": plan.next_run_at,
+        }
+    except DatabaseError:
+        return {"available": False, "plan_active": False, "model_ready": model_ready,
+                "cadence_hours": 24, "queued_runs": 0, "blocked_runs": 0,
+                "completed_runs": 0, "review_books": 0, "last_run_status": "unknown",
+                "last_run_at": None, "next_run_at": None}
 
 @never_cache
 def home(request):
@@ -507,4 +544,6 @@ def platform_page(request, section):
             "breadcrumb":{"@id":"https://zomorodmelal.ir/company/#breadcrumb"}
         }, ensure_ascii=False)
         page["company_breadcrumb_jsonld"] = _json.dumps({"@context":"https://schema.org","@type":"BreadcrumbList","@id":"https://zomorodmelal.ir/company/#breadcrumb","itemListElement":[{"@type":"ListItem","position":1,"name":"شرکت","item":"https://zomorodmelal.ir/company/"}]}, ensure_ascii=False)
+    if section == "agents":
+        page["agent_runtime"] = _agent_runtime_snapshot()
     return render(request, "core/platform_page.html", {"page": page, "company_page_jsonld": page.get("company_page_jsonld", ""), "company_breadcrumb_jsonld": page.get("company_breadcrumb_jsonld", "")})

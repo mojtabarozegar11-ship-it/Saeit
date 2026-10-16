@@ -1,0 +1,120 @@
+name: Run Zomorod site agent cycle
+on:
+  schedule:
+    - cron: "45 4 * * *"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-site-agent-cycle
+  cancel-in-progress: false
+jobs:
+  site-agent-cycle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Prepare the pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-agent"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_CPANEL_RELAY=verified"
+      - name: Verify the exact Zomorod app and runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-agent"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          app=/home/zomorod2/Saeit
+          htaccess=/home/zomorod2/public_html/.htaccess
+          test -d "$app" && test -f "$app/manage.py" && test -f "$htaccess"
+          raw="$(mktemp "$HOME/.zomorod-agent-app.XXXXXX.json")"
+          trap 'rm -f -- "$raw"' EXIT
+          uapi --output=json PassengerApps list_applications > "$raw"
+          python3 - "$raw" <<'PY'
+          import json,sys
+          data=json.load(open(sys.argv[1],encoding="utf-8"))
+          stack=[data]; matches=[]
+          while stack:
+              value=stack.pop()
+              if isinstance(value,dict):
+                  if str(value.get("domain","")).lower()=="zomorodmelal.ir" and value.get("base_uri")=="/" and value.get("path")=="/home/zomorod2/Saeit":
+                      matches.append(value)
+                  stack.extend(value.values())
+              elif isinstance(value,list):
+                  stack.extend(value)
+          if len(matches)!=1:
+              raise SystemExit("ZOMOROD_ROOT_APP_MAPPING=not_verified")
+          print("ZOMOROD_ROOT_APP_MAPPING=verified")
+          PY
+          python_path="$(awk '$1 == "PassengerPython" { gsub(/"/, "", $2); print $2; exit }' "$htaccess")"
+          case "$python_path" in "$HOME"/virtualenv/*) ;; *) echo "PASSENGER_PYTHON_PATH=not_verified" >&2; exit 1 ;; esac
+          test -x "$python_path"
+          "$python_path" -c 'import django, environ, rest_framework, whitenoise'
+          cd "$app"
+          "$python_path" manage.py check
+          "$python_path" manage.py migrate --check
+          echo "SITE_AGENT_RUNTIME=ready"
+          REMOTE
+      - name: Run one bounded, approval-gated site cycle
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-agent"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          app=/home/zomorod2/Saeit
+          htaccess=/home/zomorod2/public_html/.htaccess
+          python_path="$(awk '$1 == "PassengerPython" { gsub(/"/, "", $2); print $2; exit }' "$htaccess")"
+          cd "$app"
+          "$python_path" manage.py company_activity_agent_cycle
+          "$python_path" manage.py knowledge_agent_cycle
+          "$python_path" manage.py knowledge_agent_generate
+          REMOTE
+      - name: Remove temporary SSH material
+        if: always()
+        shell: bash
+        run: rm -rf -- "$RUNNER_TEMP/zomorod-agent"
