@@ -102,7 +102,8 @@ jobs:
           stage="$app/.zomorod-stage-$GITHUB_SHA"
           ssh -F "$d/config" saeit-cpanel "test -d '$app' && test ! -e '$stage' && mkdir -m 700 '$stage'"
           tar -czf - config/urls.py core/zomorod_public_views.py core/services_views.py core/templates/base.html core/templates/core/services.html core/tests/test_zomorod_public_pages.py public/agriculture core/static/site/heroes/platform-home.webp core/static/site/heroes/agriculture.webp core/static/site/heroes/smart-agriculture.webp core/static/site/heroes/industry.webp core/static/site/heroes/economy.webp core/static/site/heroes/research.webp core/static/site/heroes/knowledge.webp core/static/site/heroes/academy.webp core/static/site/heroes/education-detail.webp core/static/site/heroes/ai.webp | ssh -F "$d/config" saeit-cpanel "tar -xzf - -C '$stage'"
-      - name: Back up, publish, verify live routes, or roll back
+      - name: Install Django app files
+        id: install
         shell: bash
         run: |
           set -euo pipefail
@@ -174,27 +175,84 @@ jobs:
           test -x "$python"
           "$python" manage.py check --deploy
           touch passenger_wsgi.py
-          tmp="$HOME/.zomorod-health-$sha"
-          curl -fsS --max-time 25 https://zomorodmelal.ir/ -o "$tmp"
+          if ! "$python" manage.py check --deploy; then
+            echo "DJANGO_DEPLOY_CHECK=failed" >&2
+            exit 1
+          fi
+          echo "DJANGO_DEPLOY_CHECK=passed"
+          touch passenger_wsgi.py
+          rm -rf -- "$stage"
+          printf 'ready\n' > "$backup/deployed.flag"
+          active=0
+          trap - EXIT
+          echo "APP_FILES_INSTALLED=yes"
+          echo "DEPLOYMENT_ROLLBACK=available:$backup"
+          REMOTE
+      - name: Verify public agriculture pages and images
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          tmp="$RUNNER_TEMP/zomorod-live-page.html"
+          headers="$RUNNER_TEMP/zomorod-live-headers.txt"
+          fetch() {
+            local url="$1" output="$2"
+            if ! curl -fsS --retry 5 --retry-connrefused --retry-delay 3 --max-time 25 "$url" -o "$output"; then
+              echo "LIVE_HTTP_CHECK_FAILED=$url" >&2
+              return 1
+            fi
+          }
+          fetch https://zomorodmelal.ir/ "$tmp"
           grep -Eq 'کشاورزی|دامپروری' "$tmp"
           for route in agriculture agriculture/livestock agriculture/horticulture agriculture/greenhouse agriculture/poultry agriculture/aquaculture agriculture/inputs agriculture/seeds agriculture/fertilizers agriculture/pesticides agriculture/offices agriculture/water-soil agriculture/machinery agriculture/market; do
-            curl -fsS --max-time 25 "https://zomorodmelal.ir/$route/" -o "$tmp"
+            fetch "https://zomorodmelal.ir/$route/" "$tmp"
             grep -Fq 'saeit-zomorod-agriculture-v1' "$tmp"
           done
           for image in platform-home agriculture smart-agriculture industry economy research knowledge; do
-            curl -fsS --max-time 25 "https://zomorodmelal.ir/agriculture/assets/zomorod-olive-v1/$image.webp" -o /dev/null
+            url="https://zomorodmelal.ir/agriculture/assets/zomorod-olive-v1/$image.webp"
+            curl -fsS --retry 5 --retry-connrefused --retry-delay 3 --max-time 25 -D "$headers" "$url" -o /dev/null
+            grep -qi '^content-type: *image/webp' "$headers"
           done
           for image in academy education-detail research knowledge agriculture industry ai economy; do
-            curl -fsS --max-time 25 "https://zomorodmelal.ir/amozeshgah/assets/zomorod-education-v1/$image.webp" -o /dev/null
+            url="https://zomorodmelal.ir/amozeshgah/assets/zomorod-education-v1/$image.webp"
+            curl -fsS --retry 5 --retry-connrefused --retry-delay 3 --max-time 25 -D "$headers" "$url" -o /dev/null
+            grep -qi '^content-type: *image/webp' "$headers"
           done
           for route in amozeshgah education ghanadi; do
-            curl -fsS --max-time 25 "https://zomorodmelal.ir/$route/" -o /dev/null
+            fetch "https://zomorodmelal.ir/$route/" /dev/null
           done
-          rm -f -- "$tmp"
-          rm -rf -- "$stage"
-          active=0
-          trap - EXIT
+          rm -f -- "$tmp" "$headers"
           echo "LIVE_AGRICULTURE_PAGES=14"
           echo "LIVE_IMAGE_ROUTES=15"
-          echo "DEPLOYMENT_ROLLBACK=available:$backup"
-          REMOTE
+      - name: Roll back if public verification failed
+        if: failure() && steps.install.outcome == 'success'
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-app"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'ROLLBACK'
+          set -euo pipefail
+          sha="$1"
+          app=/home/zomorod2/Saeit
+          backup="$HOME/.backups/zomorodmelal-app/$sha"
+          if test ! -f "$backup/deployed.flag"; then
+            echo "ROLLBACK_SKIPPED=no completed app publish"
+            exit 0
+          fi
+          paths=(config/urls.py core/zomorod_public_views.py core/services_views.py core/templates/base.html core/templates/core/services.html core/tests/test_zomorod_public_pages.py public/agriculture/index.html public/agriculture/livestock/index.html public/agriculture/horticulture/index.html public/agriculture/greenhouse/index.html public/agriculture/poultry/index.html public/agriculture/aquaculture/index.html public/agriculture/inputs/index.html public/agriculture/seeds/index.html public/agriculture/fertilizers/index.html public/agriculture/pesticides/index.html public/agriculture/offices/index.html public/agriculture/water-soil/index.html public/agriculture/machinery/index.html public/agriculture/market/index.html core/static/site/heroes/platform-home.webp core/static/site/heroes/agriculture.webp core/static/site/heroes/smart-agriculture.webp core/static/site/heroes/industry.webp core/static/site/heroes/economy.webp core/static/site/heroes/research.webp core/static/site/heroes/knowledge.webp core/static/site/heroes/academy.webp core/static/site/heroes/education-detail.webp core/static/site/heroes/ai.webp)
+          for rel in "${paths[@]}"; do
+            target="$app/$rel"
+            if grep -Fxq "$rel" "$backup/existing.txt"; then
+              cp -p "$backup/$rel" "$target.rollback"
+              mv -f "$target.rollback" "$target"
+            else
+              rm -f -- "$target"
+            fi
+          done
+          touch "$app/passenger_wsgi.py"
+          rm -f "$backup/deployed.flag"
+          echo "PUBLIC_VERIFICATION_ROLLBACK=complete"
+          ROLLBACK
