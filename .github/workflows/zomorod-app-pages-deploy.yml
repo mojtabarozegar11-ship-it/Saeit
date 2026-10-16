@@ -181,6 +181,8 @@ jobs:
             fi
             touch "$app/passenger_wsgi.py"
             "$selector" restart --json --interpreter python --user "$USER" --app-root Saeit >/dev/null
+            mkdir -p "$app/tmp"
+            touch "$app/tmp/restart.txt"
             : > "$recovery/recovered.flag"
             echo "PREVIOUS_GENERATION_RECOVERY=complete"
           else
@@ -317,6 +319,8 @@ jobs:
             touch "$app/passenger_wsgi.py"
             if test -n "${selector:-}"; then
               "$selector" restart --json --interpreter python --user "$USER" --app-root Saeit >/dev/null 2>&1
+              mkdir -p "$app/tmp"
+              touch "$app/tmp/restart.txt"
             fi
             echo "DEPLOYMENT_ROLLED_BACK=yes"
           }
@@ -359,6 +363,8 @@ jobs:
               raise SystemExit(1)
           PY
           rm -f -- "$restart_result"
+          mkdir -p "$app/tmp"
+          touch "$app/tmp/restart.txt"
           cd "$app"
           check_result="$(mktemp "$HOME/.zomorod-django-check-$sha.XXXXXX.json")"
           if ! "$selector" run-script --json --interpreter python --user "$USER" --app-root Saeit --script-name manage.py -- check --deploy > "$check_result"; then
@@ -472,6 +478,8 @@ jobs:
               print("PASSENGER_ERROR_LOG=missing")
               raise SystemExit(0)
           lines=path.read_text(encoding="utf-8",errors="replace").splitlines()[-500:]
+          secret=re.compile(r"(?i)(password|passwd|secret|token|api[_-]?key|authorization|cookie)(\s*[:=]\s*)[^\s,;]+")
+          uri=re.compile(r"(://[^/\s:@]+:)[^/@\s]+@")
           for trace_index in [i for i,line in enumerate(lines) if "populate() isn't reentrant" in line][-2:]:
               for context_line in lines[max(0,trace_index-18):trace_index+1]:
                   safe=secret.sub(r"\1=[redacted]",context_line)
@@ -545,6 +553,8 @@ jobs:
           fi
           touch "$app/passenger_wsgi.py"
           "$selector" restart --json --interpreter python --user "$USER" --app-root Saeit >/dev/null
+          mkdir -p "$app/tmp"
+          touch "$app/tmp/restart.txt"
           rm -f "$backup/deployed.flag"
           echo "PUBLIC_VERIFICATION_ROLLBACK=complete"
           ROLLBACK
