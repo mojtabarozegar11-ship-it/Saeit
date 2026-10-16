@@ -78,6 +78,41 @@ jobs:
           sha256sum "$app/passenger_wsgi.py" "$app/config/wsgi.py" "$app/config/settings.py" 2>/dev/null || true
           sed -n '1,30p' "$app/passenger_wsgi.py" 2>/dev/null || true
           echo "ACTIVE_APP_IDENTITY_END"
+          echo "PASSENGER_LOG_PATHS_BEGIN"
+          find "$app" -maxdepth 3 -type f \( -iname '*passenger*log*' -o -iname '*stderr*' -o -iname 'error_log' \) -printf '%p %s bytes\n' 2>/dev/null | head -40
+          python3 - "$app" <<'PY'
+          import pathlib,sys
+          root=pathlib.Path(sys.argv[1])
+          files=[]
+          for pattern in ("**/stderr.log","**/*passenger*log*","**/error_log","**/error.log"):
+              files.extend(root.glob(pattern))
+          seen=set()
+          for p in files:
+              try:
+                  p=p.resolve()
+                  if p in seen or not p.is_file(): continue
+                  seen.add(p)
+                  lines=p.read_text(errors="replace").splitlines()[-10000:]
+                  blocks=[]; cur=[]
+                  for line in lines:
+                      if "Traceback (most recent call last):" in line:
+                          if cur: blocks.append(cur)
+                          cur=[line]
+                      elif cur:
+                          cur.append(line)
+                          if any(k in line for k in ("RuntimeError:","ModuleNotFoundError:","ImportError:","Error:")):
+                              blocks.append(cur); cur=[]
+                  if cur: blocks.append(cur)
+                  if blocks:
+                      print("LOG_TRACE_FILE="+str(p))
+                      for block in blocks[-8:]:
+                          print("---")
+                          for line in block:
+                              if any(k in line for k in ("Traceback","File \"","RuntimeError:","ModuleNotFoundError:","ImportError:","Error:")):
+                                  print(line.strip()[:400])
+              except (OSError,PermissionError): pass
+          PY
+          echo "PASSENGER_LOG_PATHS_END"
           echo "PASSENGER_EXCEPTION_FRAMES_BEGIN"
           python3 - "$app/stderr.log" <<'PY'
           import pathlib,sys
