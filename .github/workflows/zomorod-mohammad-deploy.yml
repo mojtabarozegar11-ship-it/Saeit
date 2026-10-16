@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/zomorod-mohammad-deploy.yml"
+      - "scripts/mohammad_bundle_photos.py"
       - "public/mohammad/**"
 permissions:
   contents: read
