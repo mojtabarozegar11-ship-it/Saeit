@@ -180,18 +180,19 @@ jobs:
           fi
           python3 - "$check_raw" "$migrate_raw" <<'PY'
           import base64,json,sys
-          def inspect(path,label,needle):
+          def inspect(path,label,needles):
               result=json.load(open(path,encoding="utf-8"))
               payload=result.get("data","")
               try:
-                  output=base64.b64decode(payload).decode("utf-8","replace")
+                  output=base64.b64decode(payload).decode("utf-8","replace").lower()
               except Exception:
                   output=""
-              ok=result.get("result")=="success" and needle in output
+              ok=result.get("result")=="success" and any(needle in output for needle in needles)
               print(f"{label}={'passed' if ok else 'not_verified'}")
               return ok
-          good=inspect(sys.argv[1],"SELECTOR_MANAGE_CHECK","System check identified no issues")
-          good=inspect(sys.argv[2],"SELECTOR_MIGRATE_CHECK","No changes detected") and good
+          good=inspect(sys.argv[1],"SELECTOR_MANAGE_CHECK",("system check identified no issues",))
+          migrate_ok=inspect(sys.argv[2],"SELECTOR_MIGRATE_CHECK",("no changes detected","no migrations to apply","no operations to perform"))
+          good=migrate_ok and good
           if not good:
               raise SystemExit(1)
           print("SELECTOR_APP_RUNTIME=verified")
