@@ -1,4 +1,4 @@
-name: Restore Zomorod Django runtime dependency safely
+name: Restore Zomorod Django runtime dependencies safely
 on:
   push:
     branches:
@@ -13,7 +13,7 @@ concurrency:
 jobs:
   repair:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - name: Prepare pinned cPanel relay
@@ -64,7 +64,7 @@ jobs:
           test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
           cp "$d/host.candidate" "$d/host.known"
           echo "PINNED_CPANEL_RELAY=verified"
-      - name: Install the declared missing dependency and verify live routes
+      - name: Install declared requirements, test, and restore packages on failure
         shell: bash
         run: |
           set -euo pipefail
@@ -72,22 +72,52 @@ jobs:
           ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
           set -Eeuo pipefail
           app=/home/zomorod2/Saeit
-          web=/home/zomorod2/public_html
           py=/home/zomorod2/virtualenv/Saeit/3.10/bin/python
           backup=/home/zomorod2/.backups/zomorodmelal-complete/9fcadc9ea749075785829565e57770f5cc173a8b
+          runtime_backup=/home/zomorod2/.backups/zomorodmelal-runtime-repair/20261016
           test -d "$app" && test -f "$app/manage.py" && test -x "$py"
           test -s "$backup/public_html.tar.gz" && test -s "$backup/application-source.tar.gz"
           test -s "$backup/database-manifest.json"
+          test -s "$app/requirements.txt"
+          mkdir -p "$runtime_backup"
+          chmod 700 "$runtime_backup"
+          baseline="$runtime_backup/python310-packages-before.txt"
+          if test -e "$baseline"; then baseline="$runtime_backup/python310-packages-before-$(date -u +%H%M%S).txt"; fi
+          "$py" -m pip freeze | sort > "$baseline"
+          chmod 600 "$baseline"
           echo "RECOVERY_SNAPSHOT_PRESENT=verified"
-          actual_before=no
-          if "$py" -c 'import environ' >/dev/null 2>&1; then actual_before=yes; fi
-          echo "DJANGO_ENVIRON_PRESENT_BEFORE=$actual_before"
+          echo "RUNTIME_BASELINE_CAPTURED=yes"
           changed=no
           rollback() {
             status=$?
-            if [ "$status" -ne 0 ] && [ "$changed" = yes ] && [ "$actual_before" = no ]; then
-              echo "SMOKE_FAILED=rolling_back_added_dependency"
-              "$py" -m pip uninstall -y django-environ || true
+            if [ "$status" -ne 0 ] && [ "$changed" = yes ]; then
+              echo "SMOKE_FAILED=restoring_original_package_set"
+              "$py" - "$baseline" <<'PY'
+          import importlib.metadata
+          import subprocess,sys
+          before={}
+          for line in open(sys.argv[1],encoding="utf-8"):
+              line=line.strip()
+              if not line or line.startswith("#") or line.startswith("-e "): continue
+              name=line.split("==",1)[0].split("@",1)[0].strip()
+              if name: before[name.lower().replace("_","-")]=line
+          current={}
+          for dist in importlib.metadata.distributions():
+              name=dist.metadata.get("Name")
+              if name: current[name.lower().replace("_","-")]=dist.version
+          added=sorted(name for name in current if name not in before)
+          if added:
+              subprocess.run([sys.executable,"-m","pip","uninstall","-y",*added],check=False)
+          changed=[]
+          for name,line in before.items():
+              version=line.split("==",1)[1] if "==" in line else None
+              if version and current.get(name)!=version:
+                  changed.append(line)
+          if changed:
+              subprocess.run([sys.executable,"-m","pip","install","--disable-pip-version-check","--no-input","--force-reinstall",*changed],check=False)
+          print("PACKAGE_ROLLBACK_ADDED_COUNT="+str(len(added)))
+          print("PACKAGE_ROLLBACK_RESTORED_VERSIONS="+str(len(changed)))
+          PY
               mkdir -p "$app/tmp"
               touch "$app/tmp/restart.txt"
               echo "DEPENDENCY_ROLLBACK=completed"
@@ -95,33 +125,28 @@ jobs:
             exit "$status"
           }
           trap rollback EXIT
-          if [ "$actual_before" = no ]; then
-            "$py" -m pip install --disable-pip-version-check --no-input 'django-environ>=0.12,<1.0'
-            changed=yes
-          fi
-          "$py" -c 'import environ,django; print("DJANGO_ENVIRON_IMPORT=passed"); print("DJANGO_VERSION="+django.get_version())'
+          "$py" -m pip install --disable-pip-version-check --no-input -r "$app/requirements.txt"
+          changed=yes
+          "$py" -m pip check
+          "$py" -c 'import django,environ,rest_framework,whitenoise,PIL,psycopg,openai; print("ALL_REQUIRED_IMPORTS=passed"); print("DJANGO_VERSION="+django.get_version())'
           cd "$app"
           "$py" manage.py check
           "$py" manage.py migrate --check
           mkdir -p "$app/tmp"
           touch "$app/tmp/restart.txt"
           echo "PASSENGER_RESTART_TRIGGERED=yes"
-          REMOTE
-      - name: Verify public app and protected sibling routes
-        shell: bash
-        run: |
-          set -euo pipefail
           failures=0
           for path in / /industry/ /agents/ /api/health/ /api/bridge/health/ /admin/login/ /amozeshgah/ /mohammad/ /ghanadi/ /agriculture/livestock/; do
-            status="$(curl --silent --show-error --location --max-redirs 5 --connect-timeout 10 --max-time 25 -o /dev/null -w '%{http_code}' -H 'Cache-Control: no-cache' "https://zomorodmelal.ir${path}?runtime_repair=20261016" || true)"
-            echo "LIVE_ROUTE=${path} HTTP=${status}"
-            if [ "$status" != 200 ]; then failures=$((failures+1)); fi
+            code="$(curl --silent --show-error --location --max-redirs 5 --connect-timeout 10 --max-time 25 -o /dev/null -w '%{http_code}' -H 'Cache-Control: no-cache' "https://zomorodmelal.ir${path}?runtime_repair=20261016" || true)"
+            echo "LIVE_ROUTE=${path} HTTP=${code}"
+            if [ "$code" != 200 ]; then failures=$((failures+1)); fi
           done
           if [ "$failures" -ne 0 ]; then
             echo "LIVE_ROUTE_FAILURES=$failures"
             exit 1
           fi
           echo "RUNTIME_REPAIR_LIVE_SMOKE=passed"
+          REMOTE
       - name: Remove temporary SSH material
         if: always()
         shell: bash
