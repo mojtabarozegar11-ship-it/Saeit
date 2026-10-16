@@ -19,7 +19,7 @@ import django  # noqa: E402
 django.setup()
 
 from django.conf import settings  # noqa: E402
-from django.test import Client  # noqa: E402
+from django.test import Client, override_settings  # noqa: E402
 
 
 ROUTES = {
@@ -59,28 +59,41 @@ def make_html_snapshots():
     static_root = Path(settings.STATIC_ROOT).resolve()
     if not static_root.is_dir():
         raise RuntimeError("collectstatic must run first")
-    client = Client()
     copied: set[str] = set()
     manifest = {}
-    for key, route in ROUTES.items():
-        response = client.get(route, HTTP_HOST=MAIN_HOST)
-        if response.status_code != 200:
-            raise RuntimeError(f"{route} unexpectedly returned {response.status_code}")
-        html = response.content.decode("utf-8")
-        expected_canonical = f'<link rel="canonical" href="https://{MAIN_HOST}{route}">'
-        if expected_canonical not in html:
-            raise RuntimeError(f"unexpected canonical for {route}")
-        if "mojplaywin-atelier-v4" not in html:
-            raise RuntimeError(f"new template missing from {route}")
-        document = rewrite_local_static(html, copied, static_root).replace('loading="lazy"', 'loading="eager"')
-        (OUTPUT / f"{key}.html").write_text(document, encoding="utf-8")
-        manifest[key] = {"path": route, "filename": f"{key}.html", "bytes": len(document)}
+    # This URLConf exists for previews only. Production route configuration is unchanged.
+    with override_settings(ROOT_URLCONF="core.mojplaywin_atelier_preview_urls"):
+        client = Client()
+        for key, route in ROUTES.items():
+            response = client.get(route, HTTP_HOST=MAIN_HOST)
+            if response.status_code != 200:
+                raise RuntimeError(f"{route} unexpectedly returned {response.status_code}")
+            html = response.content.decode("utf-8")
+            expected_canonical = f'<link rel="canonical" href="https://{MAIN_HOST}{route}">'
+            if expected_canonical not in html:
+                raise RuntimeError(f"unexpected canonical for {route}")
+            if "mojplaywin-atelier-v4" not in html:
+                raise RuntimeError(f"new template missing from {route}")
+            document = rewrite_local_static(html, copied, static_root).replace('loading="lazy"', 'loading="eager"')
+            (OUTPUT / f"{key}.html").write_text(document, encoding="utf-8")
+            manifest[key] = {
+                "path": route,
+                "filename": f"{key}.html",
+                "bytes": len(document),
+                "source": "representative_preview_not_live"
+                    if key in ("ai", "blockchain", "support") else "version_controlled_route",
+            }
     (OUTPUT / "manifest.json").write_text(
-        json.dumps({"host": MAIN_HOST, "routes": manifest, "local_assets": len(copied)}, indent=2),
-        encoding="utf-8",
+        json.dumps({
+            "host": MAIN_HOST,
+            "preview_only": True,
+            "production_routes_unchanged": True,
+            "unversioned_live_routes": ["/ai/", "/blockchain/", "/support/"],
+            "routes": manifest,
+            "local_assets": len(copied)
+        }, indent=2), encoding="utf-8",
     )
     return manifest
-
 
 def capture_viewports(manifest):
     from playwright.sync_api import sync_playwright
