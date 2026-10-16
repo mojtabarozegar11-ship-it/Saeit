@@ -100,7 +100,7 @@ jobs:
             echo "CPANEL_DISK_API=command_unavailable"
           fi
           if command -v uapi >/dev/null 2>&1; then
-            uapi --output=json StatsBar get_stats 2>/dev/null | python3 -c 'import sys,json
+            uapi --output=json --user=zomorod2 StatsBar get_stats display=diskusage 2>/dev/null | python3 -c 'import sys,json
           def walk(v):
               if isinstance(v,dict):
                   labels=[v.get(k) for k in ("name","label","key","display_name","display")]
