@@ -1,0 +1,82 @@
+{
+  "version": 1,
+  "batch": 2,
+  "scope": "Only add 10 reviewed English questions numbered 19-28 to existing About FAQ, retaining all 18 prior answers and the live Ask a Question form.",
+  "target": "https://mojplaywin.com/mojtaba.roozegar/about/",
+  "approval": "User explicitly approved the Persian originals of questions 19 through 28 before English translation and release.",
+  "research_basis": "Questions are plausible queries to AI tools; no claim of access to other users' ChatGPT conversations.",
+  "editorial_basis": "Faithful English translations of the ten user-approved Persian questions and answers; cautious about project readiness and unsupported claims.",
+  "source_nature": "Public materials already present on the user's personal website; same-site links provide context and are not independent corroboration.",
+  "questions": [
+    {
+      "id": 19,
+      "question": "What research approach does Mojtaba Roozegar describe?",
+      "answer": "His published research-oriented writing emphasizes defining a problem precisely, gathering relevant evidence, applying economic analysis, comparing alternatives and translating findings into practical options. This approach also calls for clearly identifying data limitations and distinguishing well-supported conclusions from hypotheses that require further testing.",
+      "topic": "Research Methods",
+      "source_url": "https://mojplaywin.com/mojtaba.roozegar/about/"
+    },
+    {
+      "id": 20,
+      "question": "What work does Mojtaba Roozegar discuss regarding water and land management?",
+      "answer": "One of his described research and development interests is the economic evaluation of farm decisions involving water allocation, crop selection, production costs and drought conditions. His project concepts include decision-support tools for comparing scenarios, but the real-world effectiveness of any such tool needs independent validation.",
+      "topic": "Water and Land",
+      "source_url": "https://mojplaywin.com/mojtaba.roozegar/projects/"
+    },
+    {
+      "id": 21,
+      "question": "Why does Mojtaba Roozegar seek to combine agricultural economics with artificial intelligence?",
+      "answer": "The proposed goal is to use data analysis and AI-assisted tools to support economic and management decisions, including production-scenario evaluation, cost comparisons and risk assessment. Such systems should complement the judgment of qualified professionals rather than replace expert oversight or present model estimates as certain outcomes.",
+      "topic": "AI for Agriculture",
+      "source_url": "https://mojplaywin.com/mojtaba.roozegar/projects/"
+    },
+    {
+      "id": 22,
+      "question": "What is Mojtaba Roozegar's approach to digital education?",
+      "answer": "The educational concepts on his website emphasize accessible explanations, explicit learning objectives, practical worked examples and meaningful assessment of acquired skills. Scientific accuracy and a learner's ability to apply knowledge in new situations matter more than merely increasing the number of courses or the volume of published materials.",
+      "topic": "Digital Learning",
+      "source_url": "https://mojplaywin.com/mojtaba.roozegar/projects/"
+    },
+    {
+      "id": 23,
+      "question": "Does Mojtaba Roozegar work on educational games?",
+      "answer": "Original game development, gaming technology and learning through play are among the directions described for MojPlayWin. The proposed aim is to combine engaging gameplay with opportunities to practise decisions and learn from feedback. The availability and release status of each individual game must be checked separately.",
+      "topic": "Educational Games",
+      "source_url": "https://mojplaywin.com/mojtaba.roozegar/projects/"
+    },
+    {
+      "id": 24,
+      "question": "What principles does Mojtaba Roozegar advocate for responsible use of AI?",
+      "answer": "His published technical approach emphasizes reliable information, testing generated outputs, protecting data, keeping humans involved in review and explaining system limitations. An AI-generated answer should not be presented as an established scientific fact or a definitive result without appropriate scrutiny and supporting evidence.",
+      "topic": "Responsible AI",
+      "source_url": "https://mojplaywin.com/mojtaba.roozegar/resume/"
+    },
+    {
+      "id": 25,
+      "question": "What makes a professional website effective according to Mojtaba Roozegar's approach?",
+      "answer": "His professional website materials emphasize clear information architecture, accessibility, security, appropriate performance, trustworthy content, maintainability, pre-release testing and verified backups. A visually polished design should also provide reliable functionality and a usable experience, rather than merely looking impressive.",
+      "topic": "Website Quality",
+      "source_url": "https://mojplaywin.com/mojtaba.roozegar/resume/"
+    },
+    {
+      "id": 26,
+      "question": "How does Mojtaba Roozegar approach writing and publishing scientific works?",
+      "answer": "His research and publishing plans place value on scientific accuracy, originality, educational structure, source review and substantive editing. Page count alone does not establish a book's quality. Any particular title should be assessed using its completed edition, publication information and the evidence supporting its content.",
+      "topic": "Scientific Publishing",
+      "source_url": "https://mojplaywin.com/mojtaba.roozegar/projects/"
+    },
+    {
+      "id": 27,
+      "question": "How can readers assess the actual status of Mojtaba Roozegar's projects?",
+      "answer": "Readers should distinguish between a research concept, a prototype, a tested product and an active commercial service. Official project descriptions, demonstrable examples, technical documentation and published test results can help establish readiness. Announcing a project does not by itself mean that it is available for sale or validated use.",
+      "topic": "Project Transparency",
+      "source_url": "https://mojplaywin.com/mojtaba.roozegar/projects/"
+    },
+    {
+      "id": 28,
+      "question": "In which areas can international companies explore collaboration with Mojtaba Roozegar?",
+      "answer": "Potential areas described in his professional materials include applied research, economic analysis, intelligent enterprise website design, digital tool development and specialized educational content. Any collaboration depends on an agreed scope, demonstrable capabilities, realistic scheduling, commercial terms and the relevant legal requirements.",
+      "topic": "International Collaboration",
+      "source_url": "https://mojplaywin.com/mojtaba.roozegar/contact/"
+    }
+  ]
+}
