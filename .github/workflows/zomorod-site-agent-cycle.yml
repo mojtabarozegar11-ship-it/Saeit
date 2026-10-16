@@ -114,14 +114,23 @@ jobs:
               return 1
             fi
             python3 - "$output" "$label" <<'PY'
-          import json,sys
+          import base64,json,sys
           data=json.load(open(sys.argv[1],encoding="utf-8"))
           result=data.get("result")
           print(f"SELECTOR_{sys.argv[2]}={result}")
-          for key in ("stdout","output"):
-              value=data.get(key)
-              if isinstance(value,str) and value.strip():
-                  print(value.strip())
+          payload=data.get("data")
+          if isinstance(payload,str) and payload:
+              try:
+                  output=base64.b64decode(payload,validate=True).decode("utf-8","replace")
+              except Exception as exc:
+                  raise SystemExit(f"SELECTOR_{sys.argv[2]}_OUTPUT_DECODE_FAILED={type(exc).__name__}")
+              if output.strip():
+                  print(output.rstrip())
+          else:
+              for key in ("stdout","output"):
+                  value=data.get(key)
+                  if isinstance(value,str) and value.strip():
+                      print(value.strip())
           if result!="success":
               raise SystemExit(1)
           PY
@@ -158,14 +167,23 @@ jobs:
               return 1
             fi
             python3 - "$output" "$label" <<'PY'
-          import json,sys
+          import base64,json,sys
           data=json.load(open(sys.argv[1],encoding="utf-8"))
           result=data.get("result")
           print(f"SELECTOR_{sys.argv[2]}={result}")
-          for key in ("stdout","output"):
-              value=data.get(key)
-              if isinstance(value,str) and value.strip():
-                  print(value.strip())
+          payload=data.get("data")
+          if isinstance(payload,str) and payload:
+              try:
+                  output=base64.b64decode(payload,validate=True).decode("utf-8","replace")
+              except Exception as exc:
+                  raise SystemExit(f"SELECTOR_{sys.argv[2]}_OUTPUT_DECODE_FAILED={type(exc).__name__}")
+              if output.strip():
+                  print(output.rstrip())
+          else:
+              for key in ("stdout","output"):
+                  value=data.get(key)
+                  if isinstance(value,str) and value.strip():
+                      print(value.strip())
           if result!="success":
               raise SystemExit(1)
           PY
