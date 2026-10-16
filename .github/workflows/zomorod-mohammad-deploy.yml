@@ -225,6 +225,12 @@ jobs:
           set -euo pipefail
           page="$(curl --fail --silent --show-error --retry 4 --retry-delay 2 https://zomorodmelal.ir/mohammad/)"
           grep -Fq 'کلینیک ساختمان محمد' <<< "$page"
+          grep -Fq '/mohammad/assets/photos/' <<< "$page"
+          photo_file="$RUNNER_TEMP/mohammad-live-photo.jpg"
+          curl --fail --location --silent --show-error --retry 4 --retry-delay 2 -o "$photo_file" "https://zomorodmelal.ir/mohammad/assets/photos/photo-1600607687939-ce8a6c25118c.jpg"
+          test "$(file -b --mime-type "$photo_file")" = "image/jpeg"
+          test "$(wc -c < "$photo_file")" -gt 3500
+          echo "MOHAMMAD_LOCAL_PHOTO=verified"
           curl --fail --silent --show-error --retry 4 --retry-delay 2 -o /dev/null https://zomorodmelal.ir/mohammad/styles.css
           curl --fail --silent --show-error --retry 4 --retry-delay 2 -o /dev/null https://zomorodmelal.ir/mohammad/app.js
           curl --fail --silent --show-error --retry 4 --retry-delay 2 -o /dev/null https://zomorodmelal.ir/mohammad/assets/checklist-before-renovation.html
