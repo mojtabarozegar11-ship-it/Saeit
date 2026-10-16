@@ -135,6 +135,7 @@ jobs:
           from django.template import Engine,RequestContext
           from django.template.backends.django import get_installed_libraries
           from django.test import RequestFactory
+          from django.test.utils import override_settings
           from django.contrib.auth.models import AnonymousUser
           assert "/zomorodmelal-db-recovery-validation/" in settings.DATABASES["default"]["NAME"]
           source=Path.home()/".backups"/"zomorod-admin-nova"/sys.argv[1]/"staging"
@@ -144,10 +145,11 @@ jobs:
           engine=Engine(dirs=[str(staging),str(template_dir)],app_dirs=True,libraries=get_installed_libraries())
           tpl=engine.get_template("base_site.html")
           for host in ("zomorodmelal.ir","mojplaywin.com"):
-              request=RequestFactory().get("/admin/",HTTP_HOST=host)
+              with override_settings(ALLOWED_HOSTS=["zomorodmelal.ir","mojplaywin.com"]):
+                  request=RequestFactory().get("/admin/",HTTP_HOST=host)
               request.user=AnonymousUser()
               rendered=tpl.render(RequestContext(request,{
-                  "title":"مدیریت","site_header":"Admin","site_title":"Admin",
+                  "title":"مدیریت","site_header":"Admin","site_title":"Admin","request":request,
                   "user":request.user,"has_permission":False,
                   "is_popup":False,"is_nav_sidebar_enabled":False,
                   "available_apps":[],"app_list":[],
