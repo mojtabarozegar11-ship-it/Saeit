@@ -1,0 +1,112 @@
+name: Read live Django database configuration
+on:
+  push:
+    branches:
+      - codex/zomorod-runtime-repair-20261016
+    paths:
+      - ".github/workflows/zomorod-live-db-config.yml"
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-live-db-config
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-live-db"; install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null; ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"; printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_CPANEL_RELAY=verified"
+      - name: Read database target without connecting or writing
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-live-db"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          app=/home/zomorod2/Saeit
+          py=/home/zomorod2/virtualenv/Saeit/3.10/bin/python
+          packages=/home/zomorod2/.backups/zomorodmelal-complete/packages-preflight-47c38ec3810326790f6f954b515b4f11d59042d1
+          stage=/home/zomorod2/.backups/zomorodmelal-complete/9fcadc9ea749075785829565e57770f5cc173a8b
+          test -f "$app/manage.py" && test -d "$packages" && test -x "$py"
+          echo "LIVE_PROJECT_FILES_BEGIN"
+          find "$app" -maxdepth 3 -type f \( -path '*/settings.py' -o -name 'manage.py' -o -name 'passenger_wsgi.py' \) -printf '%P\n' | sort | head -40
+          echo "LIVE_PROJECT_FILES_END"
+          echo "LIVE_MANAGE_SETTINGS_MODULE=$(sed -n 's/.*DJANGO_SETTINGS_MODULE[^=]*= *["'"']\([^"'"']*\).*/\1/p' "$app/manage.py" | head -1)"
+          cd "$app"
+          export PYTHONPATH="$packages:$app"
+          "$py" - <<'PY'
+          import json, os, pathlib
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          from django.conf import settings
+          db=settings.DATABASES["default"]
+          print("LIVE_DB_BACKEND="+db["ENGINE"].split(".")[-1])
+          if db["ENGINE"].endswith("sqlite3"):
+              p=pathlib.Path(db["NAME"]).resolve()
+              print("LIVE_DB_PATH="+str(p))
+              print("LIVE_DB_EXISTS="+str(p.is_file()).lower())
+              print("LIVE_DB_BYTES="+str(p.stat().st_size if p.is_file() else 0))
+              manifest=pathlib.Path("/home/zomorod2/.backups/zomorodmelal-complete/9fcadc9ea749075785829565e57770f5cc173a8b/database-manifest.json")
+              data=json.loads(manifest.read_text())
+              exact=[]
+              for row in data.get("databases",[]):
+                  original=(pathlib.Path("/home/zomorod2/Saeit")/row["path"]).resolve()
+                  if original==p: exact.append(row)
+              print("LIVE_DB_EXACT_SNAPSHOTS="+str(len(exact)))
+              if exact:
+                  print("LIVE_DB_SNAPSHOT_VERIFIED="+str((pathlib.Path("/home/zomorod2/.backups/zomorodmelal-complete/9fcadc9ea749075785829565e57770f5cc173a8b/database")/exact[0]["snapshot"]).is_file()).lower())
+          env=pathlib.Path("/home/zomorod2/Saeit/.env")
+          print("LIVE_DATABASE_URL_PRESENT="+str(any(x.strip().startswith("DATABASE_URL=") for x in env.read_text(errors="replace").splitlines()) if env.is_file() else False).lower())
+          PY
+          echo "LIVE_TOPLEVEL_DB_FILES_BEGIN"
+          find "$app" -maxdepth 2 -type f \( -name '*.sqlite3' -o -name '*.sqlite' -o -name '*.db' \) -printf '%P %s bytes\n' | sort
+          echo "LIVE_TOPLEVEL_DB_FILES_END"
+          REMOTE
+      - name: Remove temporary SSH material
+        if: always()
+        shell: bash
+        run: rm -rf -- "$RUNNER_TEMP/zomorod-live-db"
