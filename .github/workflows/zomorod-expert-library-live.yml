@@ -1,0 +1,206 @@
+name: Publish independent Zomorod expert library safely
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/zomorod-expert-library-live.yml"
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-root-homepage
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 17
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build sixteen original illustrative expert pages
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          from html import escape
+          import re
+          text=Path("core/templates/core/includes/zomorod_editorial_20261016.html").read_text(encoding="utf-8")
+          token=re.compile(r'\{%\s*(?:if|elif)\s+request.path\s*==\s*"(/[^"]+/)"\s*%\}')
+          found=list(token.finditer(text))
+          assert len(found)==16, len(found)
+          target=Path("zomorod-expert-library")/"specialist-content"
+          target.mkdir(parents=True)
+          links=[]
+          for i,match in enumerate(found):
+              slug=match.group(1).strip("/")
+              end=found[i+1].start() if i+1<len(found) else text.index("{% endif %}",match.end())
+              block=text[match.end():end].strip()
+              assert block.count("<article>")==3 and 'id="zm-editorial-20261016"' in block,(slug,block.count("<article>"))
+              title=re.search(r'<h2>(.*?)</h2>',block).group(1)
+              directory=target/slug
+              directory.mkdir()
+              links.append((slug,title))
+              document=f'''<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="{escape(title,quote=True)}؛ راهنمای تخصصی شرکت کشت و صنعت زمرد ملل"><link rel="canonical" href="https://zomorodmelal.ir/specialist-content/{slug}/"><title>{title} | زمرد ملل</title><style>body{{margin:0;background:#202617;color:#f4f0df;font-family:Tahoma,Arial,sans-serif}}a{{color:#e2c373}}.zm-page-top,.zm-page-footer{{padding:17px;background:#303822;border-block:3px solid #e2c373}}.zm-page-top nav{{display:flex;gap:20px;flex-wrap:wrap;justify-content:center}}.zm-page-footer{{text-align:center}}</style></head><body><!-- zm-live-specialist-content-20261016 --><header class="zm-page-top"><nav><a href="/">زمرد ملل</a><a href="/specialist-content/">کتابخانه تخصصی</a><a href="/agriculture/">کشاورزی</a><a href="/amozeshgah/">آموزشگاه</a><a href="/company/">همکاری</a></nav></header><main>{block}</main><footer class="zm-page-footer">زمرد ملل · دانش تخصصی و راهنمای پژوهش‌محور · <a href="/specialist-content/">فهرست همه مطالب</a></footer></body></html>'''
+              (directory/"index.html").write_text(document,encoding="utf-8")
+          cards="".join(f'<article><h2>{escape(title)}</h2><p>مقاله تخصصی با سه مبحث تحلیلی و تصویر مرتبط.</p><a href="/specialist-content/{slug}/">مطالعه مقاله ←</a></article>' for slug,title in links)
+          homepage=f'''<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="کتابخانه مقالات تخصصی پژوهش، کشاورزی، صنعت، اقتصاد و فناوری زمرد ملل"><link rel="canonical" href="https://zomorodmelal.ir/specialist-content/"><title>کتابخانه تخصصی زمرد ملل</title><style>body{{margin:0;background:#252b19;color:#f4f0df;font:16px/2 Tahoma,Arial,sans-serif}}main{{max-width:1180px;margin:auto;padding:20px}}header,footer{{background:#303822;border-block:4px solid #e2c373;padding:14px 22px}}h1,h2{{color:#f4dc9a}}.grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:18px}}article{{border:4px double #e2c373;background:#303822;padding:20px}}a{{color:#f6dda0}}p{{color:#ddd}}</style></head><body><!-- zm-live-specialist-content-index-20261016 --><header><a href="/">زمرد ملل ← صفحه اصلی</a> · <a href="/agriculture/">کشاورزی</a> · <a href="/amozeshgah/">آموزشگاه</a></header><main><h1>کتابخانه تخصصی زمرد ملل</h1><p>۱۶ پرونده موضوعی با ۴۸ مبحث آموزشی درباره مدیریت مزرعه، صنعت، پژوهش، اقتصاد، فناوری، تجارت، آموزش و خدمات. مطالب مستقل از فروش واقعی و ادعاهای عملیاتی‌اند و پیش از تصمیم تخصصی باید با داده محلی و منابع معتبر تطبیق داده شوند.</p><div class="grid">{cards}</div></main><footer>شرکت کشت و صنعت زمرد ملل · <a href="/company/">درباره شرکت و همکاری</a></footer></body></html>'''
+          (target/"index.html").write_text(homepage,encoding="utf-8")
+          print("SPECIALIST_PAGES_READY=16")
+          PY
+      - name: Prepare the confirmed pinned VPS to cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-root"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "CONFIRMED_PINNED_RELAY_READY=yes"
+
+
+      - name: Stage isolated new pages only
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-root"
+          stage="/home/zomorod2/.zomorod-expert-stage-$GITHUB_SHA"
+          ssh -F "$d/config" saeit-cpanel "test ! -e '$stage' && mkdir -m 700 '$stage'"
+          tar -C zomorod-expert-library -czf - specialist-content | ssh -F "$d/config" saeit-cpanel "tar -xzf - -C '$stage'"
+      - name: Install the new route directory without overwriting existing site
+        id: install
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-root"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1"
+          root=/home/zomorod2/public_html
+          target="$root/specialist-content"
+          staged="$HOME/.zomorod-expert-stage-$sha/specialist-content"
+          test -d "$root" && test "$(stat -c %U "$root")" = "zomorod2"
+          test ! -e "$target" && test ! -L "$target"
+          test -f "$staged/index.html"
+          test "$(find "$staged" -name index.html -type f | wc -l)" -eq 17
+          grep -Fq 'zm-live-specialist-content-index-20261016' "$staged/index.html"
+          find "$staged" -type d -exec chmod 755 {} +
+          find "$staged" -type f -exec chmod 644 {} +
+          mv -T "$staged" "$target"
+          echo "NEW_EXPERT_LIBRARY_INSTALLED=17_PAGES"
+          REMOTE
+      - name: Verify seventeen public static routes
+        id: routecheck
+        run: |
+          set -euo pipefail
+          base="https://zomorodmelal.ir/specialist-content"
+          curl -fsSL --max-time 30 -H 'Cache-Control: no-cache' "$base/?release=$GITHUB_SHA" -o "$RUNNER_TEMP/zomorod-library.html"
+          grep -Fq 'zm-live-specialist-content-index-20261016' "$RUNNER_TEMP/zomorod-library.html"
+          for slug in industry research knowledge market economy studio agents company blog weather amozeshgah academy education store auctions newsletter; do
+            file="$RUNNER_TEMP/zm-$slug.html"
+            code="$(curl -sSL --max-time 25 -H 'Cache-Control: no-cache' -o "$file" -w '%{http_code}' "$base/$slug/?release=$GITHUB_SHA")"
+            test "$code" = 200
+            grep -Fq 'zm-live-specialist-content-20261016' "$file"
+            grep -Fq 'id="zm-editorial-20261016"' "$file"
+          done
+          echo "ALL_17_EXPERT_ROUTES_PUBLIC=verified"
+      - name: Add a link to the library without modifying the old homepage sections
+        id: link
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-root"
+          ssh -F "$d/config" saeit-cpanel python3 - "$GITHUB_SHA" <<'PY'
+          from pathlib import Path
+          import hashlib,os,sys
+          sha=sys.argv[1]
+          target=Path("/home/zomorod2/public_html/index.html")
+          backup=Path.home()/".backups"/"zomorod-expert-library-home-link"/sha
+          assert target.is_file() and not target.is_symlink()
+          original=target.read_bytes()
+          assert b'zm-specialist-library-20261016' in original
+          assert b'zm-expert-library-link-20261016' not in original
+          assert original.count(b'</main>')==1
+          assert Path("/home/zomorod2/public_html/specialist-content/index.html").is_file()
+          backup.mkdir(parents=True,exist_ok=False)
+          snapshot=backup/"index.original.html"
+          snapshot.write_bytes(original)
+          html=b'<section id="zm-expert-library-link-20261016" dir="rtl" style="padding:25px;background:#303822;border:5px double #e2c373;color:#f4f0df;text-align:center"><h2>16 expert topics and 48 specialist lessons | \xd8\xb2\xd9\x85\xd8\xb1\xd8\xaf \xd9\x85\xd9\x84\xd9\x84</h2><p><a style="color:#ffe3a0;font-size:20px" href="/specialist-content/">\xd9\x85\xd8\xb7\xd8\xa7\xd9\x84\xd8\xb9\xd9\x87 \xda\xa9\xd8\xaa\xd8\xa7\xd8\xa8\xd8\xae\xd8\xa7\xd9\x86\xd9\x87 \xd8\xaa\xd8\xae\xd8\xb5\xd8\xb5\xdb\x8c \xe2\x86\x90</a></p></section>'
+          new=original.replace(b'</main>',html+b'\n</main>',1)
+          temp=target.with_name("index.zm-library-"+sha+".tmp")
+          temp.write_bytes(new)
+          os.chmod(temp,target.stat().st_mode & 0o777)
+          os.replace(temp,target)
+          print("HOME_LINK_TO_SPECIALIST_LIBRARY=installed")
+          PY
+      - name: Verify homepage navigation and retain all original routes
+        run: |
+          set -euo pipefail
+          curl -fsSL --max-time 30 -H 'Cache-Control: no-cache' "https://zomorodmelal.ir/?library=$GITHUB_SHA" -o "$RUNNER_TEMP/root.html"
+          grep -Fq 'zm-expert-library-link-20261016' "$RUNNER_TEMP/root.html"
+          grep -Fq 'zm-specialist-library-20261016' "$RUNNER_TEMP/root.html"
+          for route in amozeshgah/ agriculture/ industry/ research/ knowledge/ company/ blog/ store/; do
+            code="$(curl -sSL --max-time 20 "https://zomorodmelal.ir/$route" -o /dev/null -w '%{http_code}')"
+            test "$code" = 200
+          done
+          echo "ROOT_AND_17_GUIDES=published"
+      - name: Roll back newly created files and the home link on failure
+        if: failure() && steps.install.outcome == 'success'
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-root"
+          ssh -F "$d/config" saeit-cpanel python3 - "$GITHUB_SHA" <<'PY'
+          from pathlib import Path
+          import os,sys
+          sha=sys.argv[1]
+          target=Path("/home/zomorod2/public_html/index.html")
+          backup=Path.home()/".backups"/"zomorod-expert-library-home-link"/sha/"index.original.html"
+          if backup.is_file() and target.is_file() and b"zm-expert-library-link-20261016" in target.read_bytes():
+              temp=target.with_name("index.zm-library-rollback-"+sha+".tmp")
+              temp.write_bytes(backup.read_bytes())
+              os.chmod(temp,target.stat().st_mode & 0o777)
+              os.replace(temp,target)
+          directory=Path("/home/zomorod2/public_html/specialist-content")
+          archive=Path.home()/".backups"/"zomorod-expert-library-unpublished"/sha
+          if directory.is_dir() and not directory.is_symlink() and (directory/"index.html").is_file() and b"zm-live-specialist-content-index-20261016" in (directory/"index.html").read_bytes():
+              archive.parent.mkdir(parents=True,exist_ok=True)
+              directory.rename(archive)
+          print("FAILED_PUBLICATION_FILES_MOVED_OUT_OF_LIVE_PATH")
+          PY
+      - name: Remove temporary SSH configuration
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/zomorod-root"
