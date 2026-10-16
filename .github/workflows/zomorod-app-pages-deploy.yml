@@ -12,6 +12,8 @@ on:
       - "core/services_views.py"
       - "core/templates/base.html"
       - "core/templates/core/services.html"
+      - "core/templates/core/platform_page.html"
+      - "core/management/commands/knowledge_agent_generate.py"
       - "core/tests/test_zomorod_public_pages.py"
       - "public/agriculture/**"
       - "core/static/site/heroes/**"
@@ -50,7 +52,7 @@ jobs:
                   raise SystemExit(f"Invalid page: {page}")
           print("AGRICULTURE_PAGES=14")
           PY
-          python -m py_compile config/urls.py core/zomorod_public_views.py core/services_views.py
+          python -m py_compile config/urls.py config/settings.py core/views.py core/zomorod_public_views.py core/services_views.py core/management/commands/knowledge_agent_generate.py
       - name: Prepare pinned VPS relay and cPanel SSH
         env:
           VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
@@ -106,22 +108,20 @@ jobs:
           set -euo pipefail
           sha="$1"
           selected="$HOME/.zomorod-python-selected-$sha"
-          candidate_list="$HOME/.zomorod-python-candidates-$sha"
-          rm -f -- "$selected" "$candidate_list"
-          find "$HOME/virtualenv" -path '*/Saeit/*/bin/python*' -executable -print 2>/dev/null | sort -u > "$candidate_list"
-          while IFS= read -r candidate; do
-            if test -x "$candidate" && "$candidate" -c 'import django, environ, rest_framework, whitenoise' >/dev/null 2>&1; then
-              printf '%s\n' "$candidate" > "$selected.tmp"
-              mv -f "$selected.tmp" "$selected"
-              echo "DJANGO_VIRTUALENV_READY=$candidate"
-              rm -f -- "$candidate_list"
-              exit 0
-            fi
-            echo "DJANGO_VIRTUALENV_INCOMPLETE=$candidate"
-          done < "$candidate_list"
-          rm -f -- "$candidate_list"
-          echo "DJANGO_VIRTUALENV_WITH_REQUIRED_PACKAGES_NOT_FOUND=failed" >&2
-          exit 1
+          htaccess="$HOME/public_html/.htaccess"
+          app="$HOME/Saeit"
+          rm -f -- "$selected" "$selected.tmp"
+          test -f "$htaccess" && test -f "$app/manage.py"
+          python_path="$(awk '$1 == "PassengerPython" { gsub(/"/, "", $2); print $2; exit }' "$htaccess")"
+          case "$python_path" in "$HOME"/virtualenv/*) ;; *) echo "PASSENGER_PYTHON_PATH=not_verified" >&2; exit 1 ;; esac
+          test -x "$python_path"
+          "$python_path" -c 'import django, environ, rest_framework, whitenoise'
+          cd "$app"
+          "$python_path" manage.py check
+          "$python_path" manage.py migrate --check
+          printf '%s\n' "$python_path" > "$selected.tmp"
+          mv -f "$selected.tmp" "$selected"
+          echo "DJANGO_VIRTUALENV_READY=PassengerPython"
           PREFLIGHT
       - name: Stage only scoped Django and guide files
         run: |
@@ -130,7 +130,7 @@ jobs:
           app=/home/zomorod2/Saeit
           stage="$app/.zomorod-stage-$GITHUB_SHA"
           ssh -F "$d/config" saeit-cpanel "test -d '$app' && test ! -e '$stage' && mkdir -m 700 '$stage'"
-          tar -czf - config/urls.py config/settings.py core/views.py core/company_content_models.py core/zomorod_public_views.py core/services_views.py core/templates/base.html core/templates/core/services.html core/tests/test_zomorod_public_pages.py public/agriculture core/static/site/heroes/platform-home.webp core/static/site/heroes/agriculture.webp core/static/site/heroes/smart-agriculture.webp core/static/site/heroes/industry.webp core/static/site/heroes/economy.webp core/static/site/heroes/research.webp core/static/site/heroes/knowledge.webp core/static/site/heroes/academy.webp core/static/site/heroes/education-detail.webp core/static/site/heroes/ai.webp | ssh -F "$d/config" saeit-cpanel "tar -xzf - -C '$stage'"
+          tar -czf - config/urls.py config/settings.py core/views.py core/company_content_models.py core/zomorod_public_views.py core/services_views.py core/templates/base.html core/templates/core/services.html core/templates/core/platform_page.html core/management/commands/knowledge_agent_generate.py core/tests/test_zomorod_public_pages.py public/agriculture core/static/site/heroes/platform-home.webp core/static/site/heroes/agriculture.webp core/static/site/heroes/smart-agriculture.webp core/static/site/heroes/industry.webp core/static/site/heroes/economy.webp core/static/site/heroes/research.webp core/static/site/heroes/knowledge.webp core/static/site/heroes/academy.webp core/static/site/heroes/education-detail.webp core/static/site/heroes/ai.webp | ssh -F "$d/config" saeit-cpanel "tar -xzf - -C '$stage'"
       - name: Install Django app files
         id: install
         shell: bash
@@ -170,7 +170,7 @@ jobs:
           rm -rf -- "$backup"
           mkdir -p "$backup"
           : > "$backup/existing.txt"
-          paths=(config/urls.py config/settings.py core/views.py core/company_content_models.py core/zomorod_public_views.py core/services_views.py core/templates/base.html core/templates/core/services.html core/tests/test_zomorod_public_pages.py public/agriculture/index.html public/agriculture/livestock/index.html public/agriculture/horticulture/index.html public/agriculture/greenhouse/index.html public/agriculture/poultry/index.html public/agriculture/aquaculture/index.html public/agriculture/inputs/index.html public/agriculture/seeds/index.html public/agriculture/fertilizers/index.html public/agriculture/pesticides/index.html public/agriculture/offices/index.html public/agriculture/water-soil/index.html public/agriculture/machinery/index.html public/agriculture/market/index.html core/static/site/heroes/platform-home.webp core/static/site/heroes/agriculture.webp core/static/site/heroes/smart-agriculture.webp core/static/site/heroes/industry.webp core/static/site/heroes/economy.webp core/static/site/heroes/research.webp core/static/site/heroes/knowledge.webp core/static/site/heroes/academy.webp core/static/site/heroes/education-detail.webp core/static/site/heroes/ai.webp)
+          paths=(config/urls.py config/settings.py core/views.py core/company_content_models.py core/zomorod_public_views.py core/services_views.py core/templates/base.html core/templates/core/services.html core/templates/core/platform_page.html core/management/commands/knowledge_agent_generate.py core/tests/test_zomorod_public_pages.py public/agriculture/index.html public/agriculture/livestock/index.html public/agriculture/horticulture/index.html public/agriculture/greenhouse/index.html public/agriculture/poultry/index.html public/agriculture/aquaculture/index.html public/agriculture/inputs/index.html public/agriculture/seeds/index.html public/agriculture/fertilizers/index.html public/agriculture/pesticides/index.html public/agriculture/offices/index.html public/agriculture/water-soil/index.html public/agriculture/machinery/index.html public/agriculture/market/index.html core/static/site/heroes/platform-home.webp core/static/site/heroes/agriculture.webp core/static/site/heroes/smart-agriculture.webp core/static/site/heroes/industry.webp core/static/site/heroes/economy.webp core/static/site/heroes/research.webp core/static/site/heroes/knowledge.webp core/static/site/heroes/academy.webp core/static/site/heroes/education-detail.webp core/static/site/heroes/ai.webp)
           for rel in "${paths[@]}"; do
             test -f "$stage/$rel" || { echo "Missing staged file: $rel"; exit 1; }
             target="$app/$rel"
@@ -277,7 +277,7 @@ jobs:
             echo "ROLLBACK_SKIPPED=no completed app publish"
             exit 0
           fi
-          paths=(config/urls.py config/settings.py core/views.py core/company_content_models.py core/zomorod_public_views.py core/services_views.py core/templates/base.html core/templates/core/services.html core/tests/test_zomorod_public_pages.py public/agriculture/index.html public/agriculture/livestock/index.html public/agriculture/horticulture/index.html public/agriculture/greenhouse/index.html public/agriculture/poultry/index.html public/agriculture/aquaculture/index.html public/agriculture/inputs/index.html public/agriculture/seeds/index.html public/agriculture/fertilizers/index.html public/agriculture/pesticides/index.html public/agriculture/offices/index.html public/agriculture/water-soil/index.html public/agriculture/machinery/index.html public/agriculture/market/index.html core/static/site/heroes/platform-home.webp core/static/site/heroes/agriculture.webp core/static/site/heroes/smart-agriculture.webp core/static/site/heroes/industry.webp core/static/site/heroes/economy.webp core/static/site/heroes/research.webp core/static/site/heroes/knowledge.webp core/static/site/heroes/academy.webp core/static/site/heroes/education-detail.webp core/static/site/heroes/ai.webp)
+          paths=(config/urls.py config/settings.py core/views.py core/company_content_models.py core/zomorod_public_views.py core/services_views.py core/templates/base.html core/templates/core/services.html core/templates/core/platform_page.html core/management/commands/knowledge_agent_generate.py core/tests/test_zomorod_public_pages.py public/agriculture/index.html public/agriculture/livestock/index.html public/agriculture/horticulture/index.html public/agriculture/greenhouse/index.html public/agriculture/poultry/index.html public/agriculture/aquaculture/index.html public/agriculture/inputs/index.html public/agriculture/seeds/index.html public/agriculture/fertilizers/index.html public/agriculture/pesticides/index.html public/agriculture/offices/index.html public/agriculture/water-soil/index.html public/agriculture/machinery/index.html public/agriculture/market/index.html core/static/site/heroes/platform-home.webp core/static/site/heroes/agriculture.webp core/static/site/heroes/smart-agriculture.webp core/static/site/heroes/industry.webp core/static/site/heroes/economy.webp core/static/site/heroes/research.webp core/static/site/heroes/knowledge.webp core/static/site/heroes/academy.webp core/static/site/heroes/education-detail.webp core/static/site/heroes/ai.webp)
           for rel in "${paths[@]}"; do
             target="$app/$rel"
             if grep -Fxq "$rel" "$backup/existing.txt"; then
