@@ -35,4 +35,23 @@ for package_dir in (
         raise RuntimeError("CloudLinux virtualenv site-packages directory is unavailable")
     site.addsitedir(package_dir)
 
+# Temporary Passenger reentrancy diagnostic.
+import threading
+import traceback
+from django.apps.registry import Apps
+
+_original_populate = Apps.populate
+def _trace_passenger_populate(self, installed_apps):
+    if self.loading:
+        print("PASSENGER_REENTRANT_CALL_STACK_BEGIN", file=sys.stderr)
+        print("PASSENGER_PROCESS_ID=" + str(os.getpid()), file=sys.stderr)
+        frames = sys._current_frames()
+        threads = {thread.ident: thread.name for thread in threading.enumerate()}
+        for thread_id, frame in frames.items():
+            print("PASSENGER_THREAD_FRAME=" + str(thread_id) + ":" + threads.get(thread_id, "unknown"), file=sys.stderr)
+            traceback.print_stack(frame, limit=60, file=sys.stderr)
+        print("PASSENGER_REENTRANT_CALL_STACK_END", file=sys.stderr)
+    return _original_populate(self, installed_apps)
+Apps.populate = _trace_passenger_populate
+
 from config.wsgi import application
