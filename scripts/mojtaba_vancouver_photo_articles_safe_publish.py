@@ -187,10 +187,10 @@ def stage_install(app,rows,photo_dir,contents,backup):
     fallback={p.slug:gallery[j%len(gallery)] for j,p in enumerate(sorted(prior,key=lambda v:v.slug)) if not p.cover}
     changes={}
     proposed={page:(legacy_photo_fallback(patch(page,text,rows,media_url),fallback) if page=="detail" else patch(page,text,rows,media_url)) for page,text in current.items()}
-    media_target=media/IMAGE_FOLDER
+    media_target=app/"static"/IMAGE_FOLDER
     if media_target.is_symlink() or media_target.exists():raise ValueError("Dedicated image destination must be new")
     backup.mkdir(parents=True,mode=0o700)
-    meta={"schema":1,"new":{r["slug"]:{"title":r["title"],"body_sha256":digest(r["content"].encode()),"cover":expected_path(r["slug"]),"file_sha256":photos[r["slug"]]["sha256"]} for r in rows},
+    meta={"schema":1,"new":{r["slug"]:{"title":r["title"],"body_sha256":digest(r["content"].encode()),"cover":"","file_sha256":photos[r["slug"]]["sha256"]} for r in rows},
           "previous_covers":changes,"templates":{p:{"old":digest(current[p].encode()),"new":digest(proposed[p].encode())} for p in TEMPLATES}}
     for p,filename in TEMPLATES.items():
         out=backup/filename
@@ -202,7 +202,7 @@ def stage_install(app,rows,photo_dir,contents,backup):
     try:
         media_target.mkdir(parents=True,mode=0o755)
         for r in rows:
-            target=media/expected_path(r["slug"])
+            target=app/"static"/expected_path(r["slug"])
             with target.open("xb") as out:
                 with photos[r["slug"]]["filename"].open("rb") as input_file:shutil.copyfileobj(input_file,out)
             target.chmod(0o644)
@@ -210,7 +210,7 @@ def stage_install(app,rows,photo_dir,contents,backup):
         with transaction.atomic():
             if Post.objects.filter(slug__in=[r["slug"] for r in rows]).exists():raise ValueError("Concurrent slug collision")
             for r in rows:
-                Post.objects.create(title=r["title"],slug=r["slug"],excerpt=r["excerpt"],content=r["content"],cover=expected_path(r["slug"]),published=True)
+                Post.objects.create(title=r["title"],slug=r["slug"],excerpt=r["excerpt"],content=r["content"],published=True)
             for page,filename in TEMPLATES.items():
                 path=app/"templates/personal_site/core"/filename
                 if proposed[page]==current[page]:continue
@@ -224,7 +224,7 @@ def stage_install(app,rows,photo_dir,contents,backup):
         for page in changed:
             shutil.copy2(backup/TEMPLATES[page],app/"templates/personal_site/core"/TEMPLATES[page])
         for row in rows:
-            target=media/expected_path(row["slug"])
+            target=app/"static"/expected_path(row["slug"])
             if target.exists() and file_sha(target)==photos[row["slug"]]["sha256"]:target.unlink()
         try:media_target.rmdir()
         except OSError:pass
@@ -232,7 +232,7 @@ def stage_install(app,rows,photo_dir,contents,backup):
     if (app/"tmp").is_dir():(app/"tmp/restart.txt").touch()
     print("VANCOUVER_NEW_TEN_NATIVE_ARTICLES_INSTALLED=yes",flush=True)
     print("VANCOUVER_LEGACY_POST_IMAGES_INSERTED_IN_DETAIL="+str(len(fallback)),flush=True)
-    print("VANCOUVER_TEN_LOCAL_JPEG_FILES_SAVED=yes",flush=True)
+    print("VANCOUVER_TEN_STATIC_JPEG_FILES_SAVED=yes",flush=True)
     print("VANCOUVER_BACKUP="+str(backup),flush=True)
 
 def rollback(app,backup):
@@ -249,7 +249,7 @@ def rollback(app,backup):
         ref=meta["new"][obj.slug]
         if obj.title!=ref["title"] or digest(obj.content.encode())!=ref["body_sha256"] or obj.cover.name!=ref["cover"]:
             raise ValueError("Article edited after release; refuse rollback")
-        p=media/ref["cover"]
+        p=app/"static"/expected_path(obj.slug)
         if not p.is_file() or file_sha(p)!=ref["file_sha256"]:raise ValueError("Media changed; refuse cleanup")
     previous={p.slug:p for p in Post.objects.filter(slug__in=meta["previous_covers"])}
     if len(previous)!=len(meta["previous_covers"]):raise ValueError("Prior posts changed")
@@ -267,8 +267,8 @@ def rollback(app,backup):
             shutil.copy2(backup/filename,tmp)
             os.replace(tmp,target)
     for ref in meta["new"].values():
-        (media/ref["cover"]).unlink()
-    try:(media/IMAGE_FOLDER).rmdir()
+        (app/"static"/expected_path(next(slug for slug,record in meta["new"].items() if record is ref))).unlink()
+    try:(app/"static"/IMAGE_FOLDER).rmdir()
     except OSError:pass
     if (app/"tmp").is_dir():(app/"tmp/restart.txt").touch()
     print("VANCOUVER_NEW_TEN_SAFE_FULL_ROLLBACK=yes",flush=True)
