@@ -72,6 +72,25 @@ def plan(root: Path):
         elif any(count > 0 for count in counts):
             raise ValueError("Partial or ambiguous Persian contact labels: " + rel)
     if len(candidates) != 1:
+        print("READ_ONLY_PERSONAL_LABEL_SOURCE_DIAGNOSTIC_BEGIN", flush=True)
+        reported = 0
+        for path in sorted(root.rglob("*")):
+            if path.suffix not in (".py", ".html") or path.is_symlink() or not path.is_file():
+                continue
+            rel = path.relative_to(root).as_posix()
+            if any(part in rel.split("/") for part in ("media", "static", "venv", ".venv", "backups", "__pycache__")):
+                continue
+            try:
+                txt = path.read_text(encoding="utf-8")
+            except (UnicodeError, OSError):
+                continue
+            counts = [txt.count(s) for s in LABELS]
+            if any(counts):
+                print("READ_ONLY_LABEL_FILE=" + rel + " COUNTS=" + ",".join(map(str, counts)), flush=True)
+                reported += 1
+            if reported >= 30:
+                break
+        print("READ_ONLY_PERSONAL_LABEL_SOURCE_DIAGNOSTIC_END", flush=True)
         raise ValueError("Expected exactly one contact label source, found " + str(len(candidates)))
     return candidates[0]
 
