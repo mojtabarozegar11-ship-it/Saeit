@@ -1,0 +1,157 @@
+name: Publish expert content into existing Zomorod homepage
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/zomorod-root-expert-additive.yml"
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-root-homepage
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract the 12 additive articles and style them without replacing the theme
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          content=Path("public/index.html").read_text(encoding="utf-8")
+          marker="<!-- zm-specialist-library-20261016:"
+          assert content.count(marker)==1
+          start=content.index(marker)
+          end=content.index("</section>",start)+len("</section>")
+          block=content[start:end]
+          assert block.count("<article")==12 and len(block)>9000
+          css="<style>#zm-specialist-library-20261016{padding:35px 0;background:#252b19;color:#f4f0df;border-top:6px double #e2c373}#zm-specialist-library-20261016 .wrap{max-width:1160px;margin:auto;padding:0 18px}#zm-specialist-library-20261016 h2,#zm-specialist-library-20261016 h3{color:#f6dfa1}#zm-specialist-library-20261016 .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:18px;margin:25px 0}#zm-specialist-library-20261016 .card{background:#303822;border:3px solid #e2c373;padding:16px}#zm-specialist-library-20261016 .product-photo{width:100%;height:155px;object-fit:cover;border:2px solid #e2c373}#zm-specialist-library-20261016 .product-link{color:#ffe5a3;display:inline-block;margin-top:10px}#zm-specialist-library-20261016 p{line-height:2;color:#e8e8d8}</style>"
+          Path("zm-root-fragment.html").write_text(css+"\n"+block,encoding="utf-8")
+          print("EXPERT_ARTICLES_READY=12")
+          PY
+      - name: Prepare the confirmed pinned VPS to cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-root"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "CONFIRMED_PINNED_RELAY_READY=yes"
+
+
+      - name: Stage one additive document fragment
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-root"
+          cat zm-root-fragment.html | ssh -F "$d/config" saeit-cpanel "cat > /home/zomorod2/.zomorod-expert-fragment-$GITHUB_SHA"
+      - name: Back up and insert into existing root without replacing its HTML
+        id: insert
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-root"
+          ssh -F "$d/config" saeit-cpanel python3 - "$GITHUB_SHA" <<'PY'
+          from pathlib import Path
+          import hashlib,os,sys
+          sha=sys.argv[1]
+          root=Path("/home/zomorod2/public_html")
+          target=root/"index.html"
+          source=Path("/home/zomorod2")/(".zomorod-expert-fragment-"+sha)
+          backup=Path.home()/".backups"/"zomorod-root-experts"/sha
+          assert root.is_dir() and not target.is_symlink() and target.is_file()
+          assert target.stat().st_uid==os.getuid()
+          original=target.read_bytes()
+          assert hashlib.sha256(original).hexdigest().startswith("ea4f9eace9a81e96"), "Root changed since live audit; refusing"
+          assert b"zm-specialist-library-20261016" not in original
+          assert original.count(b"</main>")==1
+          assert source.is_file() and not source.is_symlink()
+          fragment=source.read_bytes()
+          assert fragment.count(b'<article')==12
+          assert b"zm-specialist-library-20261016" in fragment
+          assert not backup.exists()
+          backup.mkdir(parents=True)
+          snapshot=backup/"index.original.html"
+          snapshot.write_bytes(original)
+          assert snapshot.read_bytes()==original
+          revised=original.replace(b"</main>",b"\n"+fragment+b"\n</main>",1)
+          temp=target.with_name("index.zm-experts-"+sha+".tmp")
+          temp.write_bytes(revised)
+          os.chmod(temp,target.stat().st_mode & 0o777)
+          os.replace(temp,target)
+          print("LIVE_ROOT_ADDITIVE_BYTES="+str(len(revised)-len(original)))
+          print("ORIGINAL_ROOT_BACKUP="+str(snapshot))
+          PY
+      - name: Verify new live articles and unchanged essential sections
+        run: |
+          set -euo pipefail
+          file="$RUNNER_TEMP/new-zomorod-root.html"
+          status="$(curl --fail -L -sS --max-time 30 -H 'Cache-Control: no-cache' "https://zomorodmelal.ir/?zm_content=$GITHUB_SHA" -o "$file" -w '%{http_code}')"
+          test "$status" = 200
+          grep -Fq 'id="zm-specialist-library-20261016"' "$file"
+          grep -Fq 'اقتصاد تولید و مدیریت مزرعه' "$file"
+          test "$(grep -o '<article class="card product-card">' "$file" | wc -l)" -ge 12
+          for route in amozeshgah/ agriculture/ industry/ research/ company/; do
+            code="$(curl -L -sS --max-time 20 "https://zomorodmelal.ir/$route" -o /dev/null -w '%{http_code}')"
+            test "$code" = 200
+          done
+          echo "ROOT_CONTENT_12_LIVE=verified"
+      - name: Restore original homepage if verification fails
+        if: failure() && steps.insert.outcome == 'success'
+        run: |
+          d="$RUNNER_TEMP/zomorod-root"
+          ssh -F "$d/config" saeit-cpanel python3 - "$GITHUB_SHA" <<'PY'
+          from pathlib import Path
+          import os,sys
+          sha=sys.argv[1]
+          target=Path("/home/zomorod2/public_html/index.html")
+          backup=Path.home()/".backups"/"zomorod-root-experts"/sha/"index.original.html"
+          if target.is_file() and backup.is_file() and b"zm-specialist-library-20261016" in target.read_bytes():
+              temp=target.with_name("index.zm-rollback-"+sha+".tmp")
+              temp.write_bytes(backup.read_bytes())
+              os.chmod(temp,target.stat().st_mode & 0o777)
+              os.replace(temp,target)
+              print("ROOT_RESTORED=verified")
+          PY
+      - name: Clean temporary SSH configuration
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/zomorod-root"
