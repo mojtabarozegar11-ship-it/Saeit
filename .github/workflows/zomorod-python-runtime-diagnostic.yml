@@ -329,7 +329,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for route in / /agriculture/ /agriculture/genetics/ /api/health/ /api/bridge/health/; do
+          for route in / /about/ /company/ /agents/ /agriculture/ /agriculture/genetics/ /api/health/ /api/bridge/health/; do
             code="$(curl -sS --max-time 20 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir$route" || true)"
             printf 'PUBLIC_ROUTE_STATUS %s %s\n' "$route" "$code"
           done
