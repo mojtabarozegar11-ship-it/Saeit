@@ -147,10 +147,11 @@ jobs:
           py=/home/zomorod2/virtualenv/Saeit/3.10/bin/python
           candidate=/home/zomorod2/Saeit/backups/pre_phase19_cleanup_20261004-124041/db.sqlite3
           test -s "$root/application-source.tar.gz" && test -f "$stage/core/mojplaywin_views.py" && test -f "$candidate"
-          isolated="$root/live-source-compat-v1-20261016"
+          isolated="$root/live-source-compat-v2-20261016"
           mkdir -m 700 "$isolated"
           tar -xzf "$root/application-source.tar.gz" -C "$isolated"
           install -D -m 644 "$stage/core/mojplaywin_views.py" "$isolated/core/mojplaywin_views.py"
+          install -D -m 644 "$stage/core/commerce_views.py" "$isolated/core/commerce_views.py"
           cp -p "$candidate" "$isolated/db.sqlite3"
           chmod 600 "$isolated/db.sqlite3"
           export PYTHONPATH="$packages:$isolated"
