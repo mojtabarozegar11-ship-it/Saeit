@@ -144,6 +144,53 @@ jobs:
                   if line.startswith(("ALT_DUALSITE_CORE=","ALT_DUALSITE_CORE_IMPORT=")): print(line)
           except (OSError,subprocess.TimeoutExpired) as error:
               print("ALT_DUALSITE_ERROR="+type(error).__name__)
+          # Reproduce the Passenger startup using the selector venv, adding lib64 without executing .pth hooks.
+          probe4="""
+          import os,sys,traceback
+          from pathlib import Path
+          root=Path(sys.argv[1]); home=Path.home()
+          os.chdir(root); sys.path.insert(0,str(root))
+          venv=home/'virtualenv'/'Saeit'/'3.10'
+          for rel in ('lib64/python3.10/site-packages','lib/python3.10/site-packages'):
+              candidate=venv/rel
+              if candidate.is_dir() and str(candidate) not in sys.path: sys.path.insert(0,str(candidate))
+          envfile=root/'.env'
+          if envfile.is_file():
+              for raw in envfile.read_text(encoding='utf-8',errors='replace').splitlines():
+                  raw=raw.strip()
+                  if not raw or raw.startswith('#') or '=' not in raw: continue
+                  key,value=raw.split('=',1); key=key.strip()
+                  if key: os.environ.setdefault(key,value.strip().strip('"').strip("'"))
+          os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          from django.apps.registry import Apps
+          original=Apps.populate
+          def traced(self,installed_apps):
+              if self.loading:
+                  print('FIRST_ERROR_PROBE_REENTRY=yes')
+                  traceback.print_stack(limit=35,file=sys.stderr)
+              return original(self,installed_apps)
+          Apps.populate=traced
+          try:
+              from config.wsgi import application
+              print('FIRST_ERROR_PROBE_WSGI=passed')
+          except BaseException as exc:
+              print('FIRST_ERROR_PROBE_EXCEPTION='+type(exc).__name__)
+              print('FIRST_ERROR_PROBE_MODULE='+str(getattr(exc,'name','') or ''))
+              raise
+          """
+          try:
+              r=subprocess.run([str(home/"virtualenv"/"Saeit"/"3.10"/"bin"/"python"),"-B","-c",probe4,str(app)],capture_output=True,text=True,timeout=35,check=False,env={**os.environ,"PYTHONDONTWRITEBYTECODE":"1"})
+              print("FIRST_ERROR_PROBE_EXIT="+str(r.returncode))
+              for line in r.stdout.splitlines():
+                  if line.startswith(("FIRST_ERROR_PROBE_WSGI=","FIRST_ERROR_PROBE_EXCEPTION=","FIRST_ERROR_PROBE_MODULE=","FIRST_ERROR_PROBE_REENTRY=")): print(line)
+              if r.returncode and r.stderr:
+                  for line in r.stderr.splitlines()[-35:]: print("FIRST_ERROR_PROBE_TRACE="+line[:220])
+          except (OSError,subprocess.TimeoutExpired) as error:
+              print("FIRST_ERROR_PROBE_ERROR_CLASS="+type(error).__name__)
+          import subprocess as _sp
+          scan=_sp.run(["grep","-RInE","django\\.setup|MasterAgentChat|chat_runtime|get_wsgi_application",str(app),"--include=*.py","--exclude-dir=tests","--exclude-dir=migrations"],capture_output=True,text=True,timeout=10,check=False)
+          for line in scan.stdout.splitlines()[:60]:
+              if ".env" not in line: print("STARTUP_IMPORT_REFERENCE="+line[:240])
           # Import the real Django WSGI application with the selector interpreter.
           # This is an isolated child process: no website config changes or GET requests.
           import_probe="""
@@ -209,7 +256,7 @@ jobs:
               print("LOG_SEGMENT="+segment+" ERRORS="+str(len(found)))
               for kind,count in counts.items():
                   print("ERROR_COUNT "+segment+" "+kind+"="+str(count))
-              selected=found[:8]+found[-5:]
+              selected=found[:8]+[item for item in found if item[1]=="ModuleNotFoundError"][:8]+found[-5:]
               for i,name,detail in selected:
                   print("ERROR "+segment+" line="+str(i)+" kind="+name+" detail="+detail)
                   for context in lines[max(0,i-15):i]:
