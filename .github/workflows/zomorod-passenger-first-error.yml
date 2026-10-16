@@ -101,6 +101,23 @@ jobs:
                       print("PYTHON_PROBE "+label+" error_class=nonzero")
               except (OSError,subprocess.TimeoutExpired) as error:
                   print("PYTHON_PROBE "+label+" error_class="+type(error).__name__)
+          # Check whether the selector's Python can import existing virtualenv wheels
+          # after resolving the virtualenv site directory, without installing packages.
+          venv_site=home/"virtualenv"/"Saeit"/"3.10"/"lib"/"python3.10"/"site-packages"
+          if venv_site.is_dir():
+              probe2="import sys,site,importlib.util;site.addsitedir(sys.argv[1]);print('ALT_VENV_DJANGO='+str(importlib.util.find_spec('django') is not None));print('ALT_VENV_CORE='+str(importlib.util.find_spec('pydantic_core') is not None));print('ALT_VENV_OPENAI='+str(importlib.util.find_spec('openai') is not None));import django,pydantic_core;print('ALT_VENV_IMPORTS=passed')"
+              try:
+                  r=subprocess.run(["/opt/alt/python310/bin/python3.10","-B","-c",probe2,str(venv_site)],capture_output=True,text=True,timeout=12,check=False)
+                  print("ALT_VENV_SITE_CHECK_EXIT="+str(r.returncode))
+                  for line in r.stdout.splitlines():
+                      if line.startswith(("ALT_VENV_DJANGO=","ALT_VENV_CORE=","ALT_VENV_OPENAI=","ALT_VENV_IMPORTS=")):
+                          print(line)
+                  if r.returncode:
+                      print("ALT_VENV_SITE_CHECK_ERROR=nonzero")
+              except (OSError,subprocess.TimeoutExpired) as error:
+                  print("ALT_VENV_SITE_CHECK_ERROR="+type(error).__name__)
+          else:
+              print("ALT_VENV_SITE_CHECK_ERROR=site_missing")
           log=app/"stderr.log"
           if not log.is_file():
               print("PASSENGER_LOG=missing");raise SystemExit(0)
