@@ -134,7 +134,7 @@ jobs:
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/mojplaywin-main-ssh"
-          ssh -F "$d/config" saeit-cpanel 'python3 - <<'"'PY'"'
+          ssh -F "$d/config" saeit-cpanel python3 - <<'PY'
           from pathlib import Path
           import re
           roots = [Path("/home/zomorod2/logs"), Path("/home/zomorod2/mojplaywin.com"), Path("/home/zomorod2/Saeit-staging")]
@@ -158,7 +158,7 @@ jobs:
                       seen += 1
           if not seen:
               print("SERVER_LOG no matching known log files")
-          PY'
+          PY
       - name: Package application changes with merge baselines
         if: ${{ !contains(github.event.head_commit.message, 'MOJPLAYWIN_ROLLBACK_38827723099') && !contains(github.event.head_commit.message, 'MOJPLAYWIN_DIAG_20261016') }}
         shell: bash
