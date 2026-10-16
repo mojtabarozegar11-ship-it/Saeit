@@ -204,7 +204,74 @@ jobs:
               raise SystemExit(1)
           print("SELECTOR_APP_RUNTIME=verified")
           PY
+          python3 - <<'PY'
+          from pathlib import Path
+          import os, re, time
+          home=Path.home()
+          roots=[home/"logs",home/"Saeit"/"log",home/"Saeit"/"tmp",home/"public_html"]
+          found=[]
+          for base in roots:
+              if not base.is_dir():
+                  print("LOG_DIRECTORY=missing:"+str(base.relative_to(home)))
+                  continue
+              for current, dirs, names in os.walk(base):
+                  depth=len(Path(current).relative_to(base).parts)
+                  dirs[:]=[d for d in dirs if depth<3 and d not in {".git","static","media","node_modules"}]
+                  for name in names:
+                      low=name.lower()
+                      if low in {"error_log","error.log","stderr.log","passenger.log"} or ("error" in low and low.endswith(".log")) or "passenger" in low:
+                          p=Path(current)/name
+                          try:
+                              st=p.stat()
+                              found.append((st.st_mtime,p,st.st_size))
+                          except OSError:
+                              pass
+          found.sort(reverse=True)
+          print("CANDIDATE_LOG_FILES="+str(len(found)))
+          for _,p,size in found[:16]:
+              try:
+                  relative=str(p.relative_to(home))
+              except ValueError:
+                  relative=p.name
+              print("LOG_FILE="+relative+" bytes="+str(size))
+          cutoff=time.time()-6*60*60
+          needles=re.compile(r"(ModuleNotFoundError|ImportError|RuntimeError|TemplateSyntaxError|OperationalError|Application initialization failed|reentrant|Passenger.*(?:error|fail)|Traceback)",re.I)
+          redact=re.compile(r"(?i)(password|passwd|secret|token|api[_-]?key|authorization|cookie)(\\s*[:=]\\s*)[^\\s,;]+")
+          uri=re.compile(r"(://[^/\\s:@]+:)[^/@\\s]+@")
+          emitted=0
+          for modified,p,size in found:
+              if modified<cutoff or emitted>=24:
+                  continue
+              try:
+                  with p.open("rb") as stream:
+                      if size>131072:
+                          stream.seek(-131072,os.SEEK_END)
+                      data=stream.read().decode("utf-8","replace")
+              except OSError:
+                  continue
+              for line in data.splitlines():
+                  if needles.search(line):
+                      safe=redact.sub(r"\\1=[redacted]",line)
+                      safe=uri.sub(r"\\1[redacted]@",safe)
+                      try:
+                          label=str(p.relative_to(home))
+                      except ValueError:
+                          label=p.name
+                      print("SANITIZED_RUNTIME_ERROR "+label+": "+safe[:240])
+                      emitted+=1
+                      if emitted>=24: break
+          print("SANITIZED_RUNTIME_ERROR_LINES="+str(emitted))
+          PY
           REMOTE
+
+      - name: Record public route status without changing the site
+        shell: bash
+        run: |
+          set -euo pipefail
+          for route in / /agriculture/ /agriculture/genetics/ /api/health/ /api/bridge/health/; do
+            code="$(curl -sS --max-time 20 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir$route" || true)"
+            printf 'PUBLIC_ROUTE_STATUS %s %s\\n' "$route" "$code"
+          done
       - name: Remove temporary SSH material
         if: always()
         shell: bash
