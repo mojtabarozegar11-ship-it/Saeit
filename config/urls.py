@@ -6,7 +6,8 @@ from django.views.generic import RedirectView
 from command_center.views import dashboard as staff_dashboard
 
 from core.views import home, platform_page, taniya_studio
-from core.mojplaywin_views import venture
+from core.brand_views import branded_home, branded_page, branded_game, branded_store, branded_product, branded_ceo, branded_venture
+from core.brand import brand_for_request
 from core.commerce_views import store_home, auctions_home
 from core.seo_views import site_search, robots_txt, sitemap_xml
 from core.weather_views import weather
@@ -22,7 +23,7 @@ from core.company_content_views import company_gallery, company_content_feed, co
 from core.knowledge_views import knowledge_article_detail, knowledge_book_detail, knowledge_domain_detail
 
 urlpatterns = [
-    path("", services, name="home"),
+    path("", branded_home, name="home"),
     path("ghanadi/", TemplateView.as_view(template_name="core/ghanadi.html"), name="ghanadi"),
     path("agriculture/", agriculture_index, name="agriculture"),
     path("agriculture/assets/zomorod-olive-v1/<str:filename>.webp", zomorod_hero_image, name="agriculture_hero_asset"),
@@ -30,7 +31,26 @@ urlpatterns = [
     path("amozeshgah/assets/zomorod-education-v1/<str:filename>.webp", zomorod_hero_image, name="education_hero_asset"),
     path("static/site/heroes/<str:filename>.webp", zomorod_hero_image, name="site_hero_image"),
     path("industry/", lambda request: platform_page(request, "industry"), name="industry"),
-    path("ventures/<slug:slug>/", venture, name="mojplaywin_venture"),
+    path("games/", branded_page, {"page": "games"}, name="mpw_games"),
+    path("games/first-realm/", branded_game, {"slug": "first-realm"}, name="mpw_first_realm"),
+    path("products/", branded_page, {"page": "products"}, name="mpw_products"),
+    path("worlds/", branded_page, {"page": "worlds"}, name="mpw_worlds"),
+    path("news/", branded_page, {"page": "news"}, name="mpw_news"),
+    path("community/", branded_page, {"page": "community"}, name="mpw_community"),
+    path("support/", branded_page, {"page": "support"}, name="mpw_support"),
+    path("ai/", branded_page, {"page": "ai"}, name="mpw_ai"),
+    path("software/", branded_page, {"page": "software"}, name="mpw_software"),
+    path("commerce/", branded_page, {"page": "commerce"}, name="mpw_commerce"),
+    path("crypto-payments/", branded_page, {"page": "crypto-payments"}, name="mpw_crypto_payments"),
+    path("blockchain/", branded_page, {"page": "blockchain"}, name="mpw_blockchain"),
+    path("research-lab/", branded_page, {"page": "research-lab"}, name="mpw_research_lab"),
+    path("game-factory/", branded_page, {"page": "game-factory"}, name="mpw_game_factory"),
+    path("global-business/", branded_page, {"page": "global-business"}, name="mpw_global_business"),
+    path("agro-industry/", branded_page, {"page": "agro-industry"}, name="mpw_agro_industry"),
+    path("canada-vision/", branded_page, {"page": "canada-vision"}, name="mpw_canada_vision"),
+    path("store/product/<int:pk>/", branded_product, name="mpw_product"),
+    path("about/mojtaba-rozegar/", branded_ceo, name="mpw_ceo"),
+    path("ventures/<slug:slug>/", branded_venture, name="mojplaywin_venture"),
     path("research/", lambda request: platform_page(request, "research"), name="research"),
     path("knowledge/", lambda request: platform_page(request, "knowledge"), name="knowledge"),
     path("knowledge/article/<slug:slug>/", knowledge_article_detail, name="knowledge_article_detail"),
@@ -44,7 +64,7 @@ urlpatterns = [
     path("search/", site_search, name="site_search"),
     path("robots.txt", robots_txt, name="robots_txt"),
     path("sitemap.xml", sitemap_xml, name="sitemap_xml"),
-    path("store/", store_home, name="store"),
+    path("store/", lambda request: branded_store(request) if brand_for_request(request) else store_home(request), name="store"),
     path("auctions/", auctions_home, name="auctions"),
     path("company-gallery/", company_gallery, name="company_gallery"),
     path("company-content/<slug:slug>/", company_content_feed, name="company_content_feed"),
@@ -78,7 +98,7 @@ urlpatterns = [
     path("education/course/<slug:slug>/assessment/<int:assessment_id>/submit/", education_assessment_submit, name="education_assessment_submit_legacy"),
     path("education/course/<slug:slug>/certificate/issue/", education_issue_certificate, name="education_issue_certificate_legacy"),
     path("academy/", academy, name="academy"),
-    path("services/", services, name="services"),
+    path("services/", lambda request: branded_page(request, "services") if brand_for_request(request) else services(request), name="services"),
     path("staff/command-center/", include("command_center.urls")),
     path("staff/", staff_dashboard, name="staff_management"),
     path("admin/", admin.site.urls),
