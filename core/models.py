@@ -468,3 +468,7 @@ class EducationCertificate(T):
     title = models.CharField(max_length=300)
     verification_note = models.TextField(blank=True)
     issued_at = models.DateTimeField(auto_now_add=True)
+
+
+# Farnaz subsite records are in a separate module to keep the new feature bounded.
+from .farnaz_models import FarnazService, FarnazProject, FarnazOffer, FarnazInquiry  # noqa: F401

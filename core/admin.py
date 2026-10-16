@@ -277,3 +277,7 @@ class CompanyInquiryAdmin(admin.ModelAdmin):
     search_fields = ("name", "organization", "email", "subject", "message")
     readonly_fields = ("created_at", "updated_at")
     fieldsets = (("درخواست", {"fields": ("kind", "name", "organization", "email", "phone", "subject", "message")}), ("مدیریت", {"fields": ("status", "internal_note", "created_at", "updated_at")}))
+
+
+# Keep Farnaz's content and incoming leads manageable through the existing Django admin.
+from .farnaz_admin import FarnazServiceAdmin, FarnazProjectAdmin, FarnazOfferAdmin, FarnazInquiryAdmin  # noqa: F401

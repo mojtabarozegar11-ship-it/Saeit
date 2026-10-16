@@ -90,3 +90,9 @@ urlpatterns += [path("newsletter/", newsletter_home, name="newsletter"), path("n
 
 from core.blog_views import blog_home, blog_page
 urlpatterns += [path("blog/", blog_home, name="blog"), path("blog/<path:slug>/", blog_page, name="blog_page")]
+
+from core.farnaz_views import farnaz_home, farnaz_inquiry
+urlpatterns += [
+    path("farnaz/", farnaz_home, name="farnaz_home"),
+    path("farnaz/inquiry/", farnaz_inquiry, name="farnaz_inquiry"),
+]
