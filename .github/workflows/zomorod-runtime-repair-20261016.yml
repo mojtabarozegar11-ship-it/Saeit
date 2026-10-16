@@ -161,7 +161,7 @@ jobs:
           chmod 600 "$release/db.sqlite3"
           for directory in media var backups logs; do
             if [ -d "$app/$directory" ] && [ ! -e "$release/$directory" ]; then
-              ln -s "$app/$directory" "$release/$directory"
+              ln -s "$old/$directory" "$release/$directory"
             fi
           done
           mkdir -p "$release/tmp"
@@ -178,8 +178,9 @@ jobs:
           print("RELEASE_DB_BLOG_ARTICLES="+str(count("core_blogarticle")))
           print("RELEASE_DB_BLOG_PAGES="+str(count("core_blogpage")))
           print("RELEASE_DB_AGENTS="+str(count("core_agent")))
+          article_count=count("core_blogarticle")
           con.close()
-          if quick!="ok" or count("core_blogarticle")<1: raise SystemExit("release_database_not_usable")
+          if quick!="ok" or article_count<1: raise SystemExit("release_database_not_usable")
           PY
           cd "$release"
           export DJANGO_SETTINGS_MODULE=config.settings
