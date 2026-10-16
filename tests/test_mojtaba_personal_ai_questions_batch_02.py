@@ -82,7 +82,7 @@ class UserApprovedBatchTwoTests(unittest.TestCase):
 
     def test_removed_existing_form_blocks_publication(self):
         damaged=self.before.replace(batch2.FORM_ID,'id="broken-existing-form"')
-        with self.assertRaisesRegex(ValueError,"previous eighteen"):
+        with self.assertRaisesRegex(ValueError,"Previous eighteen"):
             batch2.patch(damaged,self.rows)
 
     def test_bad_destination_is_refused(self):
