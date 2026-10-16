@@ -73,7 +73,7 @@ def reading_section(by_number):
     out=[
     '<section '+HOMEBLOCK+' aria-label="Photo essay reading guide" style="max-width:1180px;margin:36px auto;background:#141414;color:#f6ead3;border:3px solid #c39b5e;border-radius:16px;padding:clamp(18px,3vw,36px);clear:both">',
     '<h2 style="font:700 clamp(26px,3vw,36px)/1.2 Georgia,serif;color:#ebca92">Explore the 20 photo essays by professional interest</h2>',
-    '<p style="font:16px/1.8 system-ui,sans-serif">Each article has its own accompanying portrait or original conceptual illustration. Choose a research, website-engineering, trust or Vancouver-oriented collaboration pathway below. Images document editorial themes, not client contracts.</p>',
+    '<p style="font:16px/1.8 system-ui,sans-serif">Each article has its own accompanying portrait or original conceptual illustration. Choose a research, website-engineering, trust or Vancouver-oriented collaboration pathway below. Explore professional methods and practical ideas from each illustrated article.</p>',
     '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,250px),1fr));gap:16px">']
     for group,nums,explainer in GROUPS:
         out.append('<section style="background:#29251f;border:1px solid #a78450;padding:18px;border-radius:12px">'
@@ -85,7 +85,7 @@ def reading_section(by_number):
             out.append('<li><a href="'+html.escape(article_url(row),quote=True)+'" style="color:#f6d49d;line-height:1.55;text-decoration:underline;text-underline-offset:3px">'+html.escape(row["title"])+'</a></li>')
         out.append('</ol></section>')
     out.extend(['</div>',
-     '<p style="font:15px/1.8 system-ui,sans-serif;margin-top:18px">Interested in an enterprise website or applied-research discussion? <a href="/mojtaba.roozegar/" style="color:#f7d69b;text-decoration:underline">Explore the professional profile and collaboration information</a>. A discussion would start with project scope, not an assumption of an existing Vancouver engagement.</p>',
+     '<p style="font:15px/1.8 system-ui,sans-serif;margin-top:18px">Interested in an enterprise website or applied-research discussion? <a href="/mojtaba.roozegar/" style="color:#f7d69b;text-decoration:underline">Explore the professional profile and collaboration information</a>. A collaboration discussion begins with scope, responsibilities and practical milestones.</p>',
      '</section>'])
     return "\n".join(out)
 
