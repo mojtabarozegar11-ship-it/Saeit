@@ -9,6 +9,7 @@ import hashlib
 import html
 import json
 import os
+import sys
 import shutil
 import stat
 from pathlib import Path
@@ -225,6 +226,7 @@ def django_preflight(app: Path, patched: dict[str,str]) -> None:
 
 def install(app: Path, backup: Path) -> None:
     import django
+    sys.path.insert(0, str(app))
     os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
     django.setup()
     paths = safe_paths(app)
@@ -298,6 +300,7 @@ def rollback(app: Path, backup: Path) -> None:
 
 def verify(app: Path, backup: Path) -> None:
     import django
+    sys.path.insert(0, str(app))
     os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings"); django.setup()
     m=json.loads((backup/"manifest.json").read_text(encoding="utf-8"))
     paths=safe_paths(app)

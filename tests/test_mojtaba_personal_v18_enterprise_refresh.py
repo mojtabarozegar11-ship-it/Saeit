@@ -71,6 +71,14 @@ class UpgradeTests(unittest.TestCase):
         self.assertIn("post_detail",mod.seo_fallback("description"))
         self.assertNotIn("<script",mod.seo_fallback("description"))
 
+    def test_stage_installer_imports_personal_django_root(self):
+        source = SOURCE.read_text(encoding="utf-8")
+        self.assertIn("import sys", source)
+        # Both install and verify run from a staged script outside the Django root.
+        self.assertEqual(source.count("sys.path.insert(0, str(app))"), 2)
+        for name in ("install", "verify"):
+            self.assertIn("def "+name+"(app: Path,", source)
+
     def test_protected_scope_exactly_six(self):
         self.assertEqual(len(mod.PAGES),6)
         self.assertEqual(mod.PAGES["base"],"templates/personal_site/base.html")
