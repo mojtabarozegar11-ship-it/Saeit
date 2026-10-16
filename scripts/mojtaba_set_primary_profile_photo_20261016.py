@@ -70,17 +70,13 @@ def profile_section(which):
    width="{width}" height="{height}" decoding="async" loading="eager" fetchpriority="high"
    style="display:block;width:100%;height:auto;{shape}border:2px solid #d6ae79"/>
   <figcaption style="margin-top:10px;text-align:center;color:#e8d0a7;font:13px/1.5 system-ui,sans-serif">
-   Official owner-selected profile photograph
+   Mojtaba Roozegar
   </figcaption>
  </figure>
  <div style="flex:1 1 320px;max-width:570px">
   <p style="font:700 13px/1.6 system-ui,sans-serif;color:#dcbb85;letter-spacing:.1em">PROFESSIONAL PROFILE</p>
   <p style="font:700 clamp(26px,3vw,38px)/1.15 Georgia,serif;margin:6px 0 18px;color:#f6d59a">Mojtaba Roozegar</p>
   <p style="font:16px/1.8 system-ui,sans-serif">Research, applied economics, and intelligent industrial and commercial website collaboration.</p>
-  <p style="font:14px/1.8 system-ui,sans-serif">
-   This is a personal photograph selected by the profile owner. It is not presented as
-   evidence of a Vancouver office or a completed client project.
-  </p>
   <p><a href="/mojtaba.roozegar/contact/" style="color:#f5d39c;text-decoration:underline;
    font:700 16px system-ui,sans-serif">Discuss a professional collaboration →</a></p>
  </div>
