@@ -141,6 +141,7 @@ jobs:
           if test -d "$app/tmp"; then touch "$app/tmp/restart.txt"; fi
           "$py" - "$source" "$old_source" <<'PY_LIVE'
           from html.parser import HTMLParser
+          from html import unescape
           from urllib.request import Request,urlopen
           from urllib.parse import urlparse
           import json,time,sys
@@ -193,7 +194,7 @@ jobs:
           for row in new:
               path="blog/"+row["slug"]+"/"
               def verify_article(body):
-                  if row["title"] not in body or row["content"].splitlines()[1][:50] not in body:raise ValueError("Article text not displayed")
+                  if row["title"] not in unescape(body) or row["content"].splitlines()[1][:50] not in unescape(body):raise ValueError("Article text not displayed")
                   if 'id="mpw-journal-related-20261016"' not in body:raise ValueError("Related article links missing")
                   p=Parser();p.feed(body)
                   if row["title"] not in " ".join(p.t):raise ValueError("Missing unique HTML title")
