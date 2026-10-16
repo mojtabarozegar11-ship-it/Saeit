@@ -1,0 +1,175 @@
+name: Publish same luxury theme across sixteen agricultural subpages
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/zomorod-luxe-ui-all-guides.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-agriculture-static
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - name: Snapshot original guide pages and protected root/subsites
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1"; web="$HOME/public_html"
+          backup="$HOME/.backups/zomorod-luxe-all-guides/$sha"
+          css="$web/agriculture/assets/zm-agritech-luxe-v3.css"
+          test -s "$css" && grep -Fq 'prefers-reduced-motion' "$css"
+          test -f "$web/agriculture/.htaccess"
+          grep -Fq 'PassengerEnabled off' "$web/agriculture/.htaccess"
+          test -s "$web/index.html"
+          test -s "$web/agriculture/index.html"
+          slugs=(livestock horticulture greenhouse poultry aquaculture inputs seeds fertilizers pesticides offices water-soil machinery market genetics tools gardening-tools)
+          for slug in "${slugs[@]}"; do
+            file="$web/agriculture/$slug/index.html"
+            test -s "$file" && test ! -L "$file"
+            test ! -L "$web/agriculture/$slug"
+            ! grep -Fq 'zm-agri-design-v3' "$file"
+          done
+          for rel in mohammad ghanadi amozeshgah; do
+            test -s "$web/$rel/index.html"
+          done
+          mkdir -p "$(dirname "$backup")"
+          test ! -e "$backup"
+          mkdir -m 700 "$backup"
+          mkdir -m 700 "$backup/pages"
+          mkdir -m 700 "$backup/staging"
+          for slug in "${slugs[@]}"; do
+            cp -p "$web/agriculture/$slug/index.html" "$backup/pages/$slug.original.html"
+            cmp -s "$web/agriculture/$slug/index.html" "$backup/pages/$slug.original.html"
+          done
+          sha256sum "$web/index.html" "$web/.htaccess" "$web/agriculture/index.html" "$web/agriculture/.htaccess" "$css" \
+            "$web/mohammad/index.html" "$web/ghanadi/index.html" "$web/amozeshgah/index.html" > "$backup/protected.sha256"
+          echo "LUXE_16_GUIDES_BACKUP=verified"
+          REMOTE
+      - name: Stage audited menu snippet outside document root
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          tar -cf - -C content/zomorod-design agritech-mega-menu.html |
+            ssh -F "$d/config" saeit-cpanel "tar -xf - -C /home/zomorod2/.backups/zomorod-luxe-all-guides/$GITHUB_SHA/staging"
+      - name: Add same CSS link and menu to 16 guides, with rollback on any failure
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1"; web="$HOME/public_html"
+          backup="$HOME/.backups/zomorod-luxe-all-guides/$sha"
+          slugs=(livestock horticulture greenhouse poultry aquaculture inputs seeds fertilizers pesticides offices water-soil machinery market genetics tools gardening-tools)
+          rollback() {
+            set +e
+            for slug in "${slugs[@]}"; do
+              file="$web/agriculture/$slug/index.html"
+              original="$backup/pages/$slug.original.html"
+              if test -f "$file" && test -f "$original" && grep -Fq 'zm-agri-design-v3' "$file"; then
+                cp -p "$original" "$file.rollback"; mv -f "$file.rollback" "$file"
+              fi
+            done
+            echo "LUXE_16_GUIDES_ROLLBACK=complete"
+          }
+          active=1
+          trap 'rc=$?; trap - EXIT; if test "$active" = 1; then rollback; fi; exit "$rc"' EXIT
+          python3 - "$web/agriculture" "$backup/pages" "$backup/staging/agritech-mega-menu.html" <<'PY'
+          import pathlib,os,stat,sys
+          web,backup,menu_file=map(pathlib.Path,sys.argv[1:])
+          slugs=("livestock","horticulture","greenhouse","poultry","aquaculture","inputs","seeds","fertilizers","pesticides","offices","water-soil","machinery","market","genetics","tools","gardening-tools")
+          menu=menu_file.read_bytes()
+          assert menu.count(b'<details class="zm-mega-menu">')==1
+          marker=b'<!-- zm-agri-design-v3 --><link rel="stylesheet" href="/agriculture/assets/zm-agritech-luxe-v3.css">\n'
+          nav=b'\n'+menu+b'\n'
+          for slug in slugs:
+              file=web/slug/"index.html"
+              original=(backup/(slug+".original.html")).read_bytes()
+              assert file.read_bytes()==original
+              assert original.count(b"</head>")==1 and original.count(b"</nav>")==1,slug
+              assert b"zm-agri-design-v3" not in original
+              altered=original.replace(b"</head>",marker+b"</head>",1).replace(b"</nav>",nav+b"</nav>",1)
+              assert altered.replace(marker,b"",1).replace(nav,b"",1)==original
+              temp=file.with_name(file.name+".new-style")
+              temp.write_bytes(altered);temp.chmod(stat.S_IMODE(file.stat().st_mode))
+              os.replace(temp,file)
+              print("LUXE_16_GUIDES_ADDITIVE="+slug)
+          PY
+          for slug in "${slugs[@]}"; do
+            response="$backup/$slug.response"
+            code="$(curl -sS -L --max-time 25 -o "$response" -w '%{http_code}' "https://zomorodmelal.ir/agriculture/$slug/?__luxev3=$sha" || true)"
+            echo "LUXE_16_PUBLIC_PAGE=$slug status=$code"
+            test "$code" = 200
+            grep -Fq '<!-- zm-agri-design-v3 -->' "$response"
+            grep -Fq 'zm-mega-menu' "$response"
+          done
+          for route in / /agriculture/ /mohammad/ /ghanadi/ /amozeshgah/; do
+            code="$(curl -sS -L --max-time 20 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir$route" || true)"
+            echo "LUXE_PROTECTED_ROUTE=$route status=$code"
+            test "$code" = 200
+          done
+          sha256sum -c --status "$backup/protected.sha256"
+          echo "LUXE_16_GUIDES_PROTECTED_HASHES=unchanged"
+          active=0;trap - EXIT
+          echo "LUXE_ALL_17_AGRICULTURE_PAGES=passed"
+          REMOTE
+      - name: Remove runner credentials
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
