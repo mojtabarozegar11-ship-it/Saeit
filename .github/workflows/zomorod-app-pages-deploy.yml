@@ -387,7 +387,6 @@ jobs:
           echo "PASSENGER_STARTUP_ENTRYPOINT_BEGIN"
           sed -n '1,20p' "$app/passenger_wsgi.py"
           echo "PASSENGER_STARTUP_ENTRYPOINT_END"
-          touch "$app/passenger_wsgi.py"
           restart_result="$(mktemp "$HOME/.zomorod-passenger-restart-$sha.XXXXXX.json")"
           if ! "$selector" restart --json --interpreter python --user "$USER" --app-root Saeit > "$restart_result"; then
             rm -f -- "$restart_result"
@@ -404,7 +403,6 @@ jobs:
           PY
           rm -f -- "$restart_result"
           mkdir -p "$app/tmp"
-          touch "$app/tmp/restart.txt"
           cd "$app"
           if ! "$passenger_python" - <<'PY'
           import traceback
