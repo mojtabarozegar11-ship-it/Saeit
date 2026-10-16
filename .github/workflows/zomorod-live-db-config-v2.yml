@@ -183,6 +183,22 @@ jobs:
               for name,message in recent[-15:]:
                   print(f"PASSENGER_EXCEPTION_RECENT={name}: {message}")
           PY
+          python3 - <<'PY'
+          import pathlib
+          p=pathlib.Path("/home/zomorod2/Saeit/stderr.log")
+          if p.is_file():
+              lines=p.read_text(errors="replace").splitlines()[-10000:]
+              hits=[i for i,line in enumerate(lines) if "populate() isn't reentrant" in line]
+              if hits:
+                  end=hits[-1]
+                  starts=[i for i,line in enumerate(lines[:end+1]) if "Traceback (most recent call last):" in line]
+                  start=starts[-1] if starts else max(0,end-40)
+                  print("REENTRANT_TRACE_BEGIN")
+                  for line in lines[start:end+1]:
+                      if "Traceback" in line or "  File " in line or line.lstrip().startswith(("During handling","RuntimeError:")):
+                          print("REENTRANT_TRACE="+line[:500])
+                  print("REENTRANT_TRACE_END")
+          PY
           REMOTE
       - name: Remove temporary SSH material
         if: always()
