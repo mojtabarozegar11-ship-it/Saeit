@@ -52,6 +52,19 @@ class ReadOnlyQualityAgentTests(unittest.TestCase):
         self.assertIn("thin_main_content", result["issues"])
         self.assertIn("insufficient_images", result["issues"])
 
+    def test_accessible_decorative_empty_alt_is_accepted(self):
+        def fetch(url):
+            return 200, fixture(canonical=url).replace('alt="Illustration 0"', 'alt=""')
+        result = qa.inspect_page("/agents/", fetch=fetch)
+        self.assertNotIn("image_missing_src_or_alt_attribute", result["issues"])
+        self.assertTrue(result["ok"], result["issues"])
+
+    def test_missing_alt_attribute_is_reported(self):
+        def fetch(url):
+            return 200, fixture(canonical=url).replace(' alt="Illustration 0"', '')
+        result = qa.inspect_page("/agents/", fetch=fetch)
+        self.assertIn("image_missing_src_or_alt_attribute", result["issues"])
+
     def test_agent_has_no_write_action(self):
         def fetch(url):
             return 200, fixture(canonical=url)
