@@ -128,7 +128,7 @@ def template_copy(source:str):
             n=out.count(old);out=out.replace(old,new);num+=n
     # Some source photo captions use a distinct second wording.
     out=out.replace("Personal portrait or illustrative digital artwork supplied for this essay. The image is not proof of a Vancouver office, professional engagement or completed enterprise project.",
-        "Professional portrait and creative illustration for an article on research and intelligent website development.")
+        "Professional portrait and creative illustration for research and intelligent website development.")
     # Purposely avoid touching any CSS percentage declarations or route/schema code.
     return out,num
 
@@ -215,8 +215,9 @@ def rollback(app:Path,backup:Path):
     state=json.loads((backup/"manifest.json").read_text(encoding="utf-8"))
     paths=template_paths(app)
     slugs=[x["slug"] for x in state["articles"]]
-    rows,_=get_rows(app,slugs + []) if len(slugs)==93 else (None,None)
-    # In a bounded release some of the 93 unchanged posts were deliberately omitted:
+    sys.path.insert(0,str(app))
+    os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+    import django;django.setup()
     from core.models import Post
     records={x.slug:x for x in Post.objects.filter(slug__in=slugs,published=True)}
     if len(records)!=len(slugs):raise ValueError("One cleaned article no longer present")
