@@ -35,10 +35,9 @@ jobs:
           ))
           print("HOME_HEADER_GALLERY_AND_THREE_ARTICLES=valid")
           PY
-          for filename in platform-home agriculture smart-agriculture industry; do
-            code="$(curl -L -sS --max-time 25 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir/static/site/heroes/$filename.webp" || true)"
-            echo "REUSED_IMAGE=$filename HTTP=$code"
-            test "$code" = 200
+          for filename in platform-home agriculture smart-agriculture industry economy research knowledge academy ai marketplace; do
+            test -s "core/static/site/heroes/$filename.webp"
+            echo "REUSED_REPOSITORY_IMAGE=$filename FOUND=yes"
           done
       - name: Prepare the confirmed pinned VPS to cPanel relay
         shell: bash
@@ -96,7 +95,7 @@ jobs:
           d="$RUNNER_TEMP/zomorod-root"
           dir="/home/zomorod2/.zm-home-addition-$GITHUB_SHA"
           ssh -F "$d/config" saeit-cpanel "test ! -e '$dir' && mkdir -m 700 '$dir'"
-          tar -czf - public/zomorod-home-additive-20261016.html | ssh -F "$d/config" saeit-cpanel "tar -xzf - -C '$dir'"
+          tar -czf - public/zomorod-home-additive-20261016.html core/static/site/heroes/platform-home.webp core/static/site/heroes/agriculture.webp core/static/site/heroes/smart-agriculture.webp core/static/site/heroes/industry.webp core/static/site/heroes/economy.webp core/static/site/heroes/research.webp core/static/site/heroes/knowledge.webp core/static/site/heroes/academy.webp core/static/site/heroes/ai.webp core/static/site/heroes/marketplace.webp | ssh -F "$d/config" saeit-cpanel "tar -xzf - -C '$dir'"
       - name: Append header ribbon and visual editorial section to original live page
         id: install
         run: |
@@ -138,6 +137,28 @@ jobs:
           snapshot=backup/"index.before.html"
           snapshot.write_bytes(original)
           assert snapshot.read_bytes()==original
+          # Install only genuinely missing hero assets from site-owned repository files.
+          assets=root/"static/site/heroes"
+          assert not assets.is_symlink()
+          assets.mkdir(parents=True,exist_ok=True)
+          manifest=backup/"new_images.txt"
+          manifest.write_text("",encoding="utf-8")
+          for name in ("platform-home", "agriculture", "smart-agriculture", "industry", "economy", "research", "knowledge", "academy", "ai", "marketplace"):
+              source=home/(".zm-home-addition-"+sha)/"core/static/site/heroes"/(name+".webp")
+              target_asset=assets/(name+".webp")
+              assert source.is_file() and source.stat().st_size>1000
+              if target_asset.exists():
+                  assert target_asset.is_file() and not target_asset.is_symlink() and target_asset.stat().st_size>1000
+                  print("EXISTING_IMAGE_PRESERVED="+name)
+                  continue
+              assert not target_asset.is_symlink()
+              temp_image=assets/("."+name+"-"+sha+".tmp")
+              temp_image.write_bytes(source.read_bytes())
+              os.chmod(temp_image,0o644)
+              os.replace(temp_image,target_asset)
+              with manifest.open("a",encoding="utf-8") as mf:
+                  mf.write(name+"\n")
+              print("MISSING_IMAGE_RESTORED="+name)
           amended=original.replace(b"</header>",b"\n"+ribbon+b"\n</header>",1)
           hero_start=amended.index(b'<section class="wrap hero"')
           hero_end=amended.find(b"</section>",hero_start)
@@ -169,6 +190,11 @@ jobs:
           grep -Fq 'پیش از کشت: برآورد هزینه و نقطه سربه‌سر' "$html"
           grep -Fq 'در طول تولید: پایش آب و خاک با داده معتبر' "$html"
           grep -Fq 'پس از برداشت: کیفیت، فرآوری و بازار' "$html"
+          for name in platform-home agriculture smart-agriculture industry economy research knowledge academy ai marketplace; do
+            code="$(curl -L -sS --max-time 25 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir/static/site/heroes/$name.webp" || true)"
+            echo "HERO_IMAGE=$name HTTP=$code"
+            test "$code" = 200
+          done
           for route in agriculture/ agriculture/greenhouse/ agriculture/livestock/ industry/ research/ amozeshgah/ company/ blog/ store/; do
             result="$(curl -L -sS --max-time 25 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir/$route" || true)"
             echo "PROTECTED_ROUTE=/$route HTTP=$result"
@@ -180,6 +206,7 @@ jobs:
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/zomorod-root"
+          if test ! -f "$d/config"; then echo "NO_REMOTE_CHANGE_TO_ROLL_BACK=yes"; exit 0; fi
           ssh -F "$d/config" saeit-cpanel python3 - "$GITHUB_SHA" <<'PY'
           from pathlib import Path
           import os,sys
@@ -195,6 +222,17 @@ jobs:
               print("PREVIOUS_HOMEPAGE_RESTORED=verified")
           else:
               print("NO_NEW_GALLERY_INSTALLATION_TO_RESTORE=yes")
+          manifest=snapshot.parent/"new_images.txt"
+          source_dir=Path.home()/(".zm-home-addition-"+sha)/"core/static/site/heroes"
+          if manifest.is_file():
+              for name in manifest.read_text(encoding="utf-8").splitlines():
+                  if name not in ("platform-home", "agriculture", "smart-agriculture", "industry", "economy", "research", "knowledge", "academy", "ai", "marketplace"):
+                      continue
+                  image=Path("/home/zomorod2/public_html/static/site/heroes")/(name+".webp")
+                  source=source_dir/(name+".webp")
+                  if image.is_file() and not image.is_symlink() and source.is_file() and image.read_bytes()==source.read_bytes():
+                      image.unlink()
+                      print("ADDED_IMAGE_RESTORED="+name)
           PY
       - name: Remove temporary SSH keys
         if: always()
