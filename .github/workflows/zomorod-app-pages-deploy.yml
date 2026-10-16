@@ -326,19 +326,33 @@ jobs:
           }
           fetch https://zomorodmelal.ir/ "$tmp"
           grep -Eq 'کشاورزی|دامپروری' "$tmp"
+          echo "LIVE_ROUTE_CHECK=home passed"
           for route in agriculture agriculture/livestock agriculture/horticulture agriculture/greenhouse agriculture/poultry agriculture/aquaculture agriculture/inputs agriculture/seeds agriculture/fertilizers agriculture/pesticides agriculture/offices agriculture/water-soil agriculture/machinery agriculture/market; do
             fetch "https://zomorodmelal.ir/$route/" "$tmp"
             grep -Fq 'saeit-zomorod-agriculture-v1' "$tmp"
+            echo "LIVE_ROUTE_CHECK=$route passed"
           done
+          check_webp() {
+            local url="$1" file="$2" result code type
+            result="$(curl -fsS --retry 5 --retry-connrefused --retry-delay 3 --max-time 25 -o "$file" -w '%{http_code}|%{content_type}' "$url")"
+            code="${result%%|*}"
+            type="${result#*|}"
+            if python3 - "$file" <<'PY'
+          import pathlib,sys
+          data=pathlib.Path(sys.argv[1]).read_bytes()[:12]
+          raise SystemExit(0 if len(data)==12 and data[:4]==b"RIFF" and data[8:12]==b"WEBP" else 1)
+          PY
+            then magic=webp; else magic=invalid; fi
+            printf 'LIVE_IMAGE_CHECK %s result=%s|%s magic=%s\n' "$url" "$code" "$type" "$magic"
+            test "$code" = "200" && test "$magic" = "webp"
+          }
           for image in platform-home agriculture smart-agriculture industry economy research knowledge; do
             url="https://zomorodmelal.ir/agriculture/assets/zomorod-olive-v1/$image.webp"
-            curl -fsS --retry 5 --retry-connrefused --retry-delay 3 --max-time 25 -D "$headers" "$url" -o /dev/null
-            grep -qi '^content-type: *image/webp' "$headers"
+            check_webp "$url" "$RUNNER_TEMP/zomorod-agriculture-$image.webp"
           done
           for image in academy education-detail research knowledge agriculture industry ai economy; do
             url="https://zomorodmelal.ir/amozeshgah/assets/zomorod-education-v1/$image.webp"
-            curl -fsS --retry 5 --retry-connrefused --retry-delay 3 --max-time 25 -D "$headers" "$url" -o /dev/null
-            grep -qi '^content-type: *image/webp' "$headers"
+            check_webp "$url" "$RUNNER_TEMP/zomorod-education-$image.webp"
           done
           for route in amozeshgah education ghanadi; do
             fetch "https://zomorodmelal.ir/$route/" /dev/null
