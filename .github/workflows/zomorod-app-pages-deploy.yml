@@ -189,11 +189,9 @@ jobs:
               echo "LEGACY_BACKUP_DIRECTIVES=verified"
             fi
             if grep -Fq 'PassengerPython /home/zomorod2/virtualenv/Saeit/3.10/bin/python' "$htaccess"; then
-              cp -p "$original_htaccess" "$htaccess.recovery"
-              mv -f "$htaccess.recovery" "$htaccess"
-              echo "PREVIOUS_PASSENGER_CONFIG_RECOVERY=complete"
+              echo "PREVIOUS_PASSENGER_CONFIG_RECOVERY=already_verified_venv"
             elif grep -Fq 'PassengerPython "/opt/alt/python310/bin/lswsgi"' "$htaccess"; then
-              echo "PREVIOUS_PASSENGER_CONFIG_RECOVERY=not_needed"
+              echo "PREVIOUS_PASSENGER_CONFIG_RECOVERY=original_selector_config"
             else
               echo "PREVIOUS_PASSENGER_CONFIG_RECOVERY=unexpected_current_state" >&2
               exit 1
@@ -306,8 +304,34 @@ jobs:
           mkdir -p "$(dirname "$htaccess_backup")"
           cp -p "$htaccess" "$htaccess_backup"
           sha256sum "$htaccess_backup" | awk '{print $1}' > "$backup/htaccess.sha256"
+          # Match the tested staging interpreter; retain the original config in this backup for automatic rollback.
+          python3 - "$htaccess" "$passenger_python" <<'PY'
+          import os,stat,sys,tempfile
+          from pathlib import Path
+          target=Path(sys.argv[1])
+          text=target.read_text(encoding="utf-8")
+          old='PassengerPython "/opt/alt/python310/bin/lswsgi"'
+          new=f'PassengerPython "{sys.argv[2]}"'
+          if text.count(old)==1:
+              text=text.replace(old,new,1)
+          elif text.count(new)==1:
+              pass
+          else:
+              raise SystemExit("PASSENGER_PYTHON_CONFIG=unexpected")
+          fd,temp=tempfile.mkstemp(prefix=".htaccess.passenger.",dir=str(target.parent))
+          try:
+              with os.fdopen(fd,"w",encoding="utf-8") as stream:
+                  stream.write(text)
+                  stream.flush()
+                  os.fsync(stream.fileno())
+              os.chmod(temp,stat.S_IMODE(target.stat().st_mode))
+              os.replace(temp,target)
+          finally:
+              if os.path.exists(temp): os.unlink(temp)
+          print("PASSENGER_PYTHON_CONFIG=venv_interpreter")
+          PY
           grep -Fq 'PassengerAppRoot "/home/zomorod2/Saeit"' "$htaccess"
-          grep -Fq 'PassengerPython "/opt/alt/python310/bin/lswsgi"' "$htaccess"
+          grep -Fq 'PassengerPython "/home/zomorod2/virtualenv/Saeit/3.10/bin/python"' "$htaccess"
           asset_existing="$backup/assets-existing.txt"
           : > "$asset_existing"
           paths=(passenger_wsgi.py config/urls.py config/settings.py config/env_compat.py core/middleware.py core/models.py core/newsletter_models.py core/blog_models.py core/company_inquiry_models.py core/company_activity_models.py core/economic_trade_models.py core/views.py core/company_content_models.py core/zomorod_public_views.py core/services_views.py core/seo_views.py core/templates/base.html core/templates/core/services.html core/templates/core/platform_page.html core/management/commands/knowledge_agent_generate.py core/tests/test_zomorod_public_pages.py core/tests/test_seo_sitemap.py public/agriculture/index.html public/agriculture/livestock/index.html public/agriculture/horticulture/index.html public/agriculture/greenhouse/index.html public/agriculture/poultry/index.html public/agriculture/aquaculture/index.html public/agriculture/inputs/index.html public/agriculture/seeds/index.html public/agriculture/fertilizers/index.html public/agriculture/pesticides/index.html public/agriculture/offices/index.html public/agriculture/water-soil/index.html public/agriculture/machinery/index.html public/agriculture/market/index.html public/agriculture/genetics/index.html core/static/site/heroes/platform-home.webp core/static/site/heroes/agriculture.webp core/static/site/heroes/smart-agriculture.webp core/static/site/heroes/industry.webp core/static/site/heroes/economy.webp core/static/site/heroes/research.webp core/static/site/heroes/knowledge.webp core/static/site/heroes/genetics.webp core/static/site/heroes/laboratory.webp core/static/site/heroes/academy.webp core/static/site/heroes/education-detail.webp core/static/site/heroes/ai.webp)
@@ -422,8 +446,8 @@ jobs:
           mkdir -p "$(dirname "$page_target")"
           cp -p "$page_source" "$page_target.new"
           mv -f "$page_target.new" "$page_target"
-          grep -Fq 'PassengerPython "/opt/alt/python310/bin/lswsgi"' "$htaccess"
-          echo "PASSENGER_PYTHON_SELECTED=cloudlinux_lswsgi"
+          grep -Fq 'PassengerPython "/home/zomorod2/virtualenv/Saeit/3.10/bin/python"' "$htaccess"
+          echo "PASSENGER_PYTHON_SELECTED=venv_interpreter"
           if test -f "$app/stderr.log"; then
             stat -c %s "$app/stderr.log" > "$backup/passenger-log-offset.txt"
           else
@@ -432,8 +456,8 @@ jobs:
           echo "PASSENGER_STARTUP_ENTRYPOINT_BEGIN"
           sed -n '1,20p' "$app/passenger_wsgi.py"
           echo "PASSENGER_STARTUP_ENTRYPOINT_END"
-          grep -Fq 'PassengerPython "/opt/alt/python310/bin/lswsgi"' "$htaccess"
-          echo "PASSENGER_PYTHON_PRE_RESTART=cloudlinux_lswsgi"
+          grep -Fq 'PassengerPython "/home/zomorod2/virtualenv/Saeit/3.10/bin/python"' "$htaccess"
+          echo "PASSENGER_PYTHON_PRE_RESTART=venv_interpreter"
           restart_result="$(mktemp "$HOME/.zomorod-passenger-restart-$sha.XXXXXX.json")"
           if ! "$selector" restart --json --interpreter python --user "$USER" --app-root Saeit > "$restart_result"; then
             rm -f -- "$restart_result"
@@ -449,10 +473,10 @@ jobs:
               raise SystemExit(1)
           PY
           rm -f -- "$restart_result"
-          grep -Fq 'PassengerPython "/opt/alt/python310/bin/lswsgi"' "$htaccess"
+          grep -Fq 'PassengerPython "/home/zomorod2/virtualenv/Saeit/3.10/bin/python"' "$htaccess"
           mkdir -p "$app/tmp"
           touch "$app/tmp/restart.txt"
-          echo "PASSENGER_PYTHON_FINAL=verified_cloudlinux_lswsgi"
+          echo "PASSENGER_PYTHON_FINAL=verified_venv_interpreter"
           echo "PASSENGER_TOUCH_RESTART=done"
           cd "$app"
           if ! "$passenger_python" - <<'PY'
