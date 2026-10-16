@@ -4,7 +4,6 @@ from rest_framework.permissions import AllowAny, BasePermission, IsAuthenticated
 from rest_framework.response import Response
 
 from .approval import ApprovalService
-from .chat_runtime import MasterAgentChat
 from .task_runtime import TaskExecutionError, TaskRuntime
 
 
@@ -597,6 +596,7 @@ class MasterAgentChatViewSet(viewsets.ModelViewSet):
         message = str(request.data.get("message", "")).strip()
         if message:
             try:
+                from .chat_runtime import MasterAgentChat
                 reply = MasterAgentChat().respond(session, message)
             except Exception as exc:
                 return Response(
@@ -636,6 +636,7 @@ class MasterAgentChatViewSet(viewsets.ModelViewSet):
         if not text:
             return Response({"detail": "message is required."}, status=status.HTTP_400_BAD_REQUEST)
         try:
+            from .chat_runtime import MasterAgentChat
             reply = MasterAgentChat().respond(session, text)
         except Exception as exc:
             return Response(
