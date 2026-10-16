@@ -22,17 +22,17 @@ if os.path.exists(env_path):
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 
-# Temporary startup diagnostic: capture the caller if Passenger triggers nested Django setup.
-import traceback
-from django.apps.registry import Apps
+# Use the two package locations proven by the read-only CloudLinux WSGI smoke test.
+# Keep the cPanel-managed lswsgi process; do not re-exec a Passenger worker.
+import site
 
-_original_populate = Apps.populate
-def _trace_passenger_populate(self, installed_apps):
-    if self.loading:
-        print("PASSENGER_REENTRANT_CALL_STACK_BEGIN", file=sys.stderr)
-        traceback.print_stack(limit=60, file=sys.stderr)
-        print("PASSENGER_REENTRANT_CALL_STACK_END", file=sys.stderr)
-    return _original_populate(self, installed_apps)
-Apps.populate = _trace_passenger_populate
+VENV_ROOT = os.path.join(os.path.expanduser("~"), "virtualenv", "Saeit", "3.10")
+for package_dir in (
+    os.path.join(VENV_ROOT, "lib64", "python3.10", "site-packages"),
+    os.path.join(VENV_ROOT, "lib", "python3.10", "site-packages"),
+):
+    if not os.path.isdir(package_dir):
+        raise RuntimeError("CloudLinux virtualenv site-packages directory is unavailable")
+    site.addsitedir(package_dir)
 
 from config.wsgi import application
