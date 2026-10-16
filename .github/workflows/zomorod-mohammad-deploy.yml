@@ -34,6 +34,10 @@ jobs:
           test -s public/mohammad/panel/index.html
           grep -Fq 'میز کار مدیریت' public/mohammad/panel/index.html
           echo "MOHAMMAD_SOURCE=valid"
+      - name: Prepare local Mohammad photos
+        shell: bash
+        run: |
+          python3 scripts/mohammad_bundle_photos.py public/mohammad
       - name: Prepare pinned VPS to cPanel relay
         shell: bash
         env:
