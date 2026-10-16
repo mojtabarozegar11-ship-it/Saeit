@@ -205,27 +205,34 @@ jobs:
           else:
               print("SELECTOR_APP_RUNTIME=verified")
           PY
-          python3 - <<'PY'
+          python3 - "$raw" <<'PY'
           from pathlib import Path
-          import json, os, re, time
+          import json, os, re, sys, time
           home=Path.home()
           roots=[home/"logs",home/"Saeit"/"log",home/"Saeit"/"tmp",home/"public_html"]
           found=[]
           explicit_logs=[]
-          selector_config=home/".cl.selector"/"python-selector.json"
           try:
-              selector_data=json.loads(selector_config.read_text(encoding="utf-8"))
-              app_record=selector_data.get("Saeit",{})
-              log_value=app_record.get("passenger_log_file")
-              if isinstance(log_value,str) and log_value:
-                  log_path=Path(log_value)
-                  if not log_path.is_absolute():
-                      log_path=home/log_path
-                  if log_path.is_file():
-                      explicit_logs.append(log_path)
-                  elif log_path.is_dir():
-                      roots.append(log_path)
-          except (OSError,ValueError,AttributeError):
+              selector_data=json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+              stack=[selector_data]
+              while stack:
+                  value=stack.pop()
+                  if isinstance(value,dict):
+                      if str(value.get("domain","")).lower()=="zomorodmelal.ir":
+                          log_value=value.get("passenger_log_file")
+                          if isinstance(log_value,str) and log_value:
+                              log_path=Path(log_value)
+                              if not log_path.is_absolute():
+                                  log_path=home/log_path
+                              if log_path.is_relative_to(home):
+                                  if log_path.is_file():
+                                      explicit_logs.append(log_path)
+                                  elif log_path.is_dir():
+                                      roots.append(log_path)
+                      stack.extend(value.values())
+                  elif isinstance(value,list):
+                      stack.extend(value)
+          except (OSError,ValueError,TypeError):
               pass
           for base in roots:
               if not base.is_dir():
