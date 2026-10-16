@@ -1,4 +1,5 @@
 import importlib.util
+import html
 import json
 from pathlib import Path
 import tempfile
@@ -92,6 +93,13 @@ class SixAdvancedJournalTests(unittest.TestCase):
             data["articles"][0]["slug"]=data["articles"][1]["slug"]
             f.write_text(json.dumps(data))
             with self.assertRaises(ValueError):publisher.load_manifest(f)
+
+    def test_html_entity_normalization_for_live_article_text(self):
+        raw=self.doc["articles"][-1]["content"].splitlines()[1][:50]
+        self.assertIn("game's",raw)
+        encoded=html.escape(raw)
+        self.assertNotEqual(raw,encoded)
+        self.assertIn(raw,html.unescape("<p>"+encoded+"</p>"))
 
     def test_allowlisted_three_templates_and_no_other_files(self):
         self.assertEqual(set(publisher.TEMPLATES),{"home","posts","detail"})
