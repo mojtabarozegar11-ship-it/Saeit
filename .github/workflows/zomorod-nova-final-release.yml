@@ -1,0 +1,199 @@
+name: Safely publish entirely new Zomorod Nova main homepage
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/zomorod-nova-final-release.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-nova-root-redesign
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 13
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate new homepage content, assets and source before publish
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p test_zomorod_nova_home.py -v
+          grep -Fq '<!-- zm-nova-home-2026-v1' content/zomorod-new-home/index.html
+          grep -Fq 'href="/site-heritage/home-before-redesign/"' content/zomorod-new-home/index.html
+          ! grep -Fq 'این قالب با معماری جدید' content/zomorod-new-home/index.html
+          test "$(stat -c %s content/zomorod-new-home/index.html)" -gt 18000
+          test "$(stat -c %s content/zomorod-new-home/nova.css)" -gt 16000
+          echo "NOVA_GO_LIVE_SOURCE=verified"
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - name: Verify pristine original and back it up before any live replacement
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          sha="$1"
+          web="$HOME/public_html"
+          backup="$HOME/.backups/zomorod-nova-publish/$sha"
+          earlier="$HOME/.backups/zomorod-nova-home/dff0d510ee36f8b3bbe5ec9df88ff5e2072470fe/index.original.html"
+          archive="$web/site-heritage/home-before-redesign"
+          css="$web/assets/zm-nova-v1.css"
+          test -s "$earlier" && test -s "$web/index.html"
+          test ! -L "$web/index.html" && test ! -L "$web/.htaccess"
+          test ! -L "$web/site-heritage"
+          test ! -e "$archive" && test ! -L "$archive"
+          test -s "$css" && test ! -L "$css"
+          test ! -L "$web/assets"
+          test -s "$web/__zm_nova_preview_20261017/index.html"
+          cmp -s "$web/index.html" "$earlier"
+          ! grep -Fq 'zm-nova-home-2026-v1' "$web/index.html"
+          for dir in mohammad ghanadi amozeshgah; do
+            test -s "$web/$dir/index.html" && test ! -L "$web/$dir/index.html"
+          done
+          mkdir -p "$(dirname "$backup")"
+          test ! -e "$backup"
+          mkdir -m 700 "$backup"
+          mkdir -m 700 "$backup/staging"
+          cp -p "$web/index.html" "$backup/original-home.html"
+          cmp -s "$web/index.html" "$backup/original-home.html"
+          sha256sum "$web/.htaccess" "$web/mohammad/index.html" "$web/ghanadi/index.html" "$web/amozeshgah/index.html" "$css" > "$backup/protected.sha256"
+          sha256sum "$web/index.html" > "$backup/original.sha256"
+          echo "NOVA_GO_LIVE_BACKUP=verified_original_preserved"
+          REMOTE
+      - name: Stage final new template and premium CSS in private folder
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          tar -cf - -C content/zomorod-new-home index.html nova.css |
+            ssh -F "$d/config" saeit-cpanel "tar -xf - -C /home/zomorod2/.backups/zomorod-nova-publish/$GITHUB_SHA/staging"
+          echo "NOVA_GO_LIVE_STAGED=private"
+      - name: Keep entire old homepage publicly accessible then atomically switch to new design
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1"
+          web="$HOME/public_html"
+          backup="$HOME/.backups/zomorod-nova-publish/$sha"
+          stage="$backup/staging"
+          archive="$web/site-heritage/home-before-redesign"
+          css="$web/assets/zm-nova-v1.css"
+          test -s "$stage/index.html" && test -s "$stage/nova.css"
+          test -s "$backup/original-home.html"
+          sha256sum -c --status "$backup/original.sha256"
+          cmp -s "$css" "$stage/nova.css"
+          test ! -e "$archive"
+          rollback() {
+            set +e
+            if test -f "$web/index.html" && grep -Fq 'zm-nova-home-2026-v1' "$web/index.html"; then
+              cp -p "$backup/original-home.html" "$web/index.html.restore"
+              mv -f "$web/index.html.restore" "$web/index.html"
+              echo "NOVA_GO_LIVE_ROLLBACK_ROOT=restored"
+            fi
+            if test -f "$archive/index.html" && cmp -s "$archive/index.html" "$backup/original-home.html"; then
+              rm -f "$archive/index.html" "$archive/.htaccess"
+              rmdir "$archive" 2>/dev/null || true
+            fi
+            echo "NOVA_GO_LIVE_ROLLBACK=complete"
+          }
+          active=1
+          trap 'rc=$?; trap - EXIT; if test "$active" = 1; then rollback; fi; exit "$rc"' EXIT
+          mkdir -p "$web/site-heritage"
+          mkdir -m 755 "$archive"
+          cp -p "$backup/original-home.html" "$archive/index.html"
+          chmod 644 "$archive/index.html"
+          cmp -s "$archive/index.html" "$backup/original-home.html"
+          cat > "$archive/.htaccess" <<'HT'
+          PassengerEnabled off
+          DirectoryIndex index.html
+          Options -Indexes
+          Header set X-Robots-Tag "noindex, follow"
+          HT
+          chmod 644 "$archive/.htaccess"
+          archive_code="$(curl -sS -L --max-time 22 -o "$backup/legacy.response.html" -w '%{http_code}' "https://zomorodmelal.ir/site-heritage/home-before-redesign/?test=$sha" || true)"
+          echo "NOVA_GO_LIVE_ARCHIVE_HTTP=$archive_code"
+          test "$archive_code" = 200
+          cmp -s "$archive/index.html" "$backup/original-home.html"
+          # The atomic replacement is the only mutation of the original main website.
+          cp -p "$stage/index.html" "$web/index.html.nova.$sha"
+          chmod --reference="$web/index.html" "$web/index.html.nova.$sha"
+          mv -f "$web/index.html.nova.$sha" "$web/index.html"
+          root_code="$(curl -sS -L --max-time 28 -H 'Cache-Control: no-cache' -o "$backup/root.response.html" -w '%{http_code}' "https://zomorodmelal.ir/?__novarelease=$sha" || true)"
+          css_code="$(curl -sS -L --max-time 20 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir/assets/zm-nova-v1.css?v=$sha" || true)"
+          echo "NOVA_GO_LIVE_ROOT_HTTP=$root_code"
+          echo "NOVA_GO_LIVE_CSS_HTTP=$css_code"
+          test "$root_code" = 200 && test "$css_code" = 200
+          grep -Fq '<!-- zm-nova-home-2026-v1' "$backup/root.response.html"
+          grep -Fq '/site-heritage/home-before-redesign/' "$backup/root.response.html"
+          grep -Fq '/static/site/company/company-logo.png' "$backup/root.response.html"
+          for path in /agriculture/ /agriculture/genetics/ /agriculture/tools/ /agriculture/gardening-tools/ /mohammad/ /ghanadi/ /amozeshgah/; do
+            code="$(curl -sS -L --max-time 22 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir$path" || true)"
+            echo "NOVA_GO_LIVE_PROTECTED_ROUTE=$path status=$code"
+            test "$code" = 200
+          done
+          sha256sum -c --status "$backup/protected.sha256"
+          cmp -s "$archive/index.html" "$backup/original-home.html"
+          echo "NOVA_GO_LIVE_OLD_CONTENT=archived_byte_identical"
+          echo "NOVA_GO_LIVE_ROOT_HTACCESS_AND_SUBSITES=unchanged"
+          active=0
+          trap - EXIT
+          echo "NOVA_GO_LIVE=success"
+          REMOTE
+      - name: Remove temporary SSH keys from runner
+        if: always()
+        shell: bash
+        run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"

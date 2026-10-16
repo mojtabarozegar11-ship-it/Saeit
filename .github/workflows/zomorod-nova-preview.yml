@@ -1,0 +1,189 @@
+name: Zomorod Nova — preview completely new homepage safely
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/zomorod-nova-preview.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-nova-root-redesign
+  cancel-in-progress: false
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test new source architecture and existing corporate image routes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p test_zomorod_nova_home.py -v
+          test "$(stat -c %s content/zomorod-new-home/index.html)" -gt 18000
+          test "$(stat -c %s content/zomorod-new-home/nova.css)" -gt 16000
+          grep -Fq "/agriculture/assets/zomorod-olive-v1/laboratory.webp" content/zomorod-new-home/index.html
+          echo "NOVA_SOURCE_ARCHITECTURE=validated"
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - name: Snapshot original homepage and protected sites without editing them
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1"
+          web="$HOME/public_html"
+          backup="$HOME/.backups/zomorod-nova-home/$sha"
+          preview="$web/__zm_nova_preview_20261017"
+          css="$web/assets/zm-nova-v1.css"
+          test -s "$web/index.html" && test ! -L "$web/index.html"
+          test -f "$web/.htaccess" && test ! -L "$web/.htaccess"
+          test ! -e "$preview" && test ! -L "$preview"
+          test ! -e "$css" && test ! -L "$css"
+          test ! -L "$web/assets"
+          test -s "$web/static/site/company/company-logo.png"
+          test -s "$web/static/site/heroes/agriculture.webp"
+          for child in mohammad ghanadi amozeshgah; do
+            test -s "$web/$child/index.html" && test ! -L "$web/$child/index.html"
+          done
+          mkdir -p "$(dirname "$backup")"
+          test ! -e "$backup"
+          mkdir -m 700 "$backup"
+          mkdir -m 700 "$backup/staging"
+          cp -p "$web/index.html" "$backup/index.original.html"
+          cmp -s "$web/index.html" "$backup/index.original.html"
+          sha256sum "$web/index.html" "$web/.htaccess" "$web/mohammad/index.html" "$web/ghanadi/index.html" "$web/amozeshgah/index.html" > "$backup/protected.sha256"
+          echo "NOVA_ROOT_BACKUP=byte_verified"
+          REMOTE
+      - name: Stage Nova template files into private recovery directory
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          tar -cf - -C content/zomorod-new-home index.html nova.css |
+            ssh -F "$d/config" saeit-cpanel "tar -xf - -C /home/zomorod2/.backups/zomorod-nova-home/$GITHUB_SHA/staging"
+          echo "NOVA_STAGING=private_complete"
+      - name: Publish noindex preview only, verify root/subsites unmodified; auto rollback
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1"; web="$HOME/public_html"
+          backup="$HOME/.backups/zomorod-nova-home/$sha"
+          preview="$web/__zm_nova_preview_20261017"
+          css="$web/assets/zm-nova-v1.css"
+          source_css="$backup/staging/nova.css"
+          source_html="$backup/staging/index.html"
+          test -s "$source_html" && test -s "$source_css"
+          test ! -e "$preview" && test ! -e "$css"
+          rollback() {
+            set +e
+            if test -d "$preview" && test -f "$preview/index.html" && grep -Fq 'zm-nova-home-2026-v1' "$preview/index.html"; then
+              rm -f "$preview/index.html" "$preview/.htaccess"
+              rmdir "$preview" 2>/dev/null || true
+            fi
+            if test -f "$css" && cmp -s "$css" "$source_css"; then rm -f "$css"; fi
+            echo "NOVA_PREVIEW_ROLLBACK=complete"
+          }
+          active=1
+          trap 'rc=$?; trap - EXIT; if test "$active" = 1; then rollback; fi; exit "$rc"' EXIT
+          mkdir -p "$web/assets"
+          cp -p "$source_css" "$css.new.$sha"
+          chmod 644 "$css.new.$sha"
+          mv -n "$css.new.$sha" "$css"
+          cmp -s "$source_css" "$css"
+          mkdir -m 755 "$preview"
+          cat > "$preview/.htaccess" <<'HT'
+          PassengerEnabled off
+          DirectoryIndex index.html
+          Options -Indexes
+          HT
+          python3 - "$source_html" "$preview/index.html" <<'PY'
+          from pathlib import Path
+          import sys
+          src=Path(sys.argv[1]).read_bytes()
+          assert b'<!-- zm-nova-home-2026-v1' in src
+          assert src.count(b"</head>")==1
+          src=src.replace(b"</head>",b'<meta name="robots" content="noindex, nofollow"></head>',1)
+          Path(sys.argv[2]).write_bytes(src)
+          PY
+          chmod 644 "$preview/index.html"
+          url="https://zomorodmelal.ir/__zm_nova_preview_20261017/"
+          code="$(curl -sS -L --max-time 25 -o "$backup/preview.response.html" -w '%{http_code}' "$url?preview=$sha" || true)"
+          css_code="$(curl -sS -L --max-time 25 -o "$backup/css.response" -w '%{http_code}' "https://zomorodmelal.ir/assets/zm-nova-v1.css?v=$sha" || true)"
+          echo "NOVA_PREVIEW_HTTP=$code"
+          echo "NOVA_PREVIEW_CSS_HTTP=$css_code"
+          test "$code" = 200 && test "$css_code" = 200
+          grep -Fq 'zm-nova-home-2026-v1' "$backup/preview.response.html"
+          grep -Fq 'name="robots" content="noindex, nofollow"' "$backup/preview.response.html"
+          grep -Fq '/static/site/company/company-logo.png' "$backup/preview.response.html"
+          grep -Fq '.hero-grid' "$backup/css.response"
+          for img in /static/site/company/company-logo.png /static/site/heroes/agriculture.webp /agriculture/assets/zomorod-olive-v1/laboratory.webp /static/site/heroes/ai.webp; do
+            status="$(curl -sS --max-time 15 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir$img" || true)"
+            echo "NOVA_ASSET=$img status=$status"
+            test "$status" = 200
+          done
+          for route in / /agriculture/ /mohammad/ /ghanadi/ /amozeshgah/; do
+            status="$(curl -sS -L --max-time 18 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir$route" || true)"
+            echo "NOVA_PROTECTED_ROUTE=$route status=$status"
+            test "$status" = 200
+          done
+          sha256sum -c --status "$backup/protected.sha256"
+          echo "NOVA_PREVIEW_ORIGINAL_ROOT_UNCHANGED=verified"
+          active=0;trap - EXIT
+          echo "NOVA_PREVIEW=passed"
+          REMOTE
+      - name: Clear runner relay credentials
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
