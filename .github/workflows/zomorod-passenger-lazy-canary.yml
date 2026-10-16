@@ -1,0 +1,200 @@
+name: Reversible Passenger lazy-start canary for Zomorod Django only
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/zomorod-passenger-lazy-canary.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-main-app-startup-canary
+  cancel-in-progress: false
+jobs:
+  canary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 11
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate isolated WSGI source has no eager get_wsgi_application call
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          source=Path("content/zomorod-runtime/lazy_passenger_wsgi.py").read_text()
+          compile(source,"lazy_passenger_wsgi.py","exec")
+          assert "def application(environ, start_response):" in source
+          assert "from config.wsgi import application" not in source
+          print("ZM_LAZY_WSGI_SOURCE=syntax_valid")
+          PY
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - name: Backup exact Passenger entrypoint and protected domain files
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          sha="$1"; app="$HOME/Saeit"; web="$HOME/public_html"
+          backup="$HOME/.backups/zomorod-passenger-lazy/$sha"
+          current="$app/passenger_wsgi.py"
+          test -s "$current" && test ! -L "$current"
+          test -s "$app/config/wsgi.py"
+          test -f "$app/tmp/restart.txt"
+          test -s "$web/index.html" && grep -Fq 'zm-nova-home-2026-v1' "$web/index.html"
+          test -s "$web/site-heritage/home-before-redesign/index.html"
+          for name in mohammad ghanadi amozeshgah; do test -s "$web/$name/index.html"; done
+          test -s "$HOME/.backups/zomorodmelal-db-recovery-validation/4360521e0fd085b5c86f2bda1780f7cb1cf84073/validation.sqlite3"
+          mkdir -p "$(dirname "$backup")"
+          test ! -e "$backup"
+          mkdir -m 700 "$backup"
+          mkdir -m 700 "$backup/staging"
+          cp -p "$current" "$backup/passenger_wsgi.original.py"
+          cmp -s "$current" "$backup/passenger_wsgi.original.py"
+          sha256sum "$web/index.html" "$web/.htaccess" "$web/agriculture/index.html" \
+            "$web/site-heritage/home-before-redesign/index.html" \
+            "$web/mohammad/index.html" "$web/ghanadi/index.html" "$web/amozeshgah/index.html" > "$backup/immutable.sha256"
+          echo "ZM_LAZY_WSGI_BACKUP=verified"
+          REMOTE
+      - name: Stage alternate WSGI source privately
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          tar -cf - -C content/zomorod-runtime lazy_passenger_wsgi.py |
+            ssh -F "$d/config" saeit-cpanel "tar -xf - -C /home/zomorod2/.backups/zomorod-passenger-lazy/$GITHUB_SHA/staging"
+          echo "ZM_LAZY_WSGI_STAGED=yes"
+      - name: Exercise staged lazy WSGI against only private recovered database
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1"; cd "$HOME/Saeit"
+          export PYTHONDONTWRITEBYTECODE=1
+          export DATABASE_URL="sqlite:///$HOME/.backups/zomorodmelal-db-recovery-validation/4360521e0fd085b5c86f2bda1780f7cb1cf84073/validation.sqlite3"
+          unset OPENAI_API_KEY || true
+          "$HOME/virtualenv/Saeit/3.10/bin/python" - "$sha" <<'PY'
+          from pathlib import Path
+          import os,sys,runpy,io
+          from wsgiref.util import setup_testing_defaults
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          code=Path.home()/".backups"/"zomorod-passenger-lazy"/sys.argv[1]/"staging/lazy_passenger_wsgi.py"
+          assert code.is_file()
+          module=runpy.run_path(str(code))
+          assert callable(module["application"])
+          from django.conf import settings
+          status=[]
+          env={}
+          setup_testing_defaults(env)
+          env.update({"REQUEST_METHOD":"GET","PATH_INFO":"/admin/login/",
+                      "HTTP_HOST":"zomorodmelal.ir","SERVER_NAME":"zomorodmelal.ir",
+                      "wsgi.url_scheme":"https","SERVER_PORT":"443"})
+          def start_response(status_line, headers, exc_info=None):
+              status.append(status_line)
+          response=module["application"](env,start_response)
+          for _chunk in response:pass
+          if hasattr(response,"close"):response.close()
+          print("ZM_LAZY_WSGI_STAGED_ADMIN_STATUS="+str(status[0] if status else "none"))
+          assert status and status[0].startswith("200 "),status
+          assert "/zomorodmelal-db-recovery-validation/" in settings.DATABASES["default"]["NAME"]
+          print("ZM_LAZY_WSGI_STAGED=passed_private_database")
+          PY
+          REMOTE
+      - name: Switch WSGI entrypoint for a canary only; rollback automatically unless admin becomes HTTP 200
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1"; app="$HOME/Saeit"; web="$HOME/public_html"
+          backup="$HOME/.backups/zomorod-passenger-lazy/$sha"
+          target="$app/passenger_wsgi.py"
+          new="$backup/staging/lazy_passenger_wsgi.py"
+          test -s "$new" && cmp -s "$target" "$backup/passenger_wsgi.original.py"
+          rollback() {
+            set +e
+            if test -f "$target" && cmp -s "$target" "$new"; then
+              cp -p "$backup/passenger_wsgi.original.py" "$target.revert"
+              mv -f "$target.revert" "$target"
+              touch "$app/tmp/restart.txt"
+              echo "ZM_LAZY_WSGI_ROLLBACK=original_restored"
+            fi
+          }
+          active=1
+          trap 'rc=$?; trap - EXIT; if test "$active" = 1; then rollback; fi; exit "$rc"' EXIT
+          cp -p "$new" "$target.stage.$sha"
+          chmod --reference="$target" "$target.stage.$sha"
+          mv -f "$target.stage.$sha" "$target"
+          cmp -s "$new" "$target"
+          touch "$app/tmp/restart.txt"
+          echo "ZM_LAZY_WSGI_CANARY=started"
+          sleep 4
+          admin="$(curl -sS -L --max-time 22 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir/admin/login/?__lazy=$sha" || true)"
+          health="$(curl -sS -L --max-time 22 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir/api/health/?__lazy=$sha" || true)"
+          echo "ZM_LAZY_WSGI_PUBLIC_ADMIN_HTTP=$admin"
+          echo "ZM_LAZY_WSGI_PUBLIC_HEALTH_HTTP=$health"
+          test "$admin" = 200
+          for route in / /agriculture/ /mohammad/ /ghanadi/ /amozeshgah/; do
+            code="$(curl -sS -L --max-time 18 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir$route" || true)"
+            echo "ZM_LAZY_WSGI_PROTECTED_ROUTE=$route code=$code"
+            test "$code" = 200
+          done
+          sha256sum -c --status "$backup/immutable.sha256"
+          active=0
+          trap - EXIT
+          echo "ZM_LAZY_WSGI_CURED_PASSENGER=confirmed"
+          REMOTE
+      - name: Remove ephemeral runner keys
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
