@@ -122,3 +122,15 @@ jobs:
           installed=1
           "$python" manage.py check --deploy
           test ! -d "$app/tmp" || touch "$app/tmp/restart.txt"
+          base="https://mojplaywin.com/mojtaba.roozegar"
+          curl -fsSL --max-time 28 "$base/" -o "$stage/public-home.html"
+          curl -fsSL --max-time 28 "$base/about/" -o "$stage/public-about.html"
+          curl -fsSL --max-time 28 "$base/blog/" -o "$stage/public-blog.html"
+          for page in "$stage/public-home.html" "$stage/public-about.html"; do
+            grep -Fq 'mpw-primary-personal-profile-20261016' "$page"
+            grep -Fq 'official_profile_20261016/' "$page"
+            if grep -Fiq 'It is not presented as evidence of a Vancouver office' "$page"; then exit 22; fi
+            echo "EDITORIAL_LIVE_PROFILE_PHOTO_PRESERVED_AND_PHRASE_GONE=yes"
+          done
+          grep -Fq 'mpw-mojtaba-twenty-image-essays-20261016' "$stage/public-blog.html"
+          echo "EDITORIAL_JOURNAL_SECTIONS_PRESERVED=yes"
