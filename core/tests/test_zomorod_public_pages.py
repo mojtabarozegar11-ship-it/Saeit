@@ -29,6 +29,7 @@ class ZomorodAgriculturePageTests(SimpleTestCase):
         for url in (
             "/agriculture/assets/zomorod-olive-v1/agriculture.webp",
             "/amozeshgah/assets/zomorod-education-v1/agriculture.webp",
+            "/static/site/heroes/agriculture.webp",
         ):
             with self.subTest(url=url):
                 response = self.client.get(url)
