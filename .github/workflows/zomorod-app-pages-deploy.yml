@@ -163,6 +163,23 @@ jobs:
           fi
           "$passenger_python" -c 'import django, environ, rest_framework, whitenoise, openai, psycopg, PIL, pydantic_core; print("PASSENGER_RUNTIME_DEPENDENCIES=verified")'
           recovery="$HOME/.backups/zomorodmelal-app/b78498ecccc3b99784a0cb060ea2c59bec65c505"
+          if test -f "$recovery/deployed.flag"; then
+            original_htaccess="$recovery/public_html/.htaccess"
+            expected_htaccess="$(cat "$recovery/htaccess.sha256")"
+            actual_htaccess="$(sha256sum "$original_htaccess" | awk '{print $1}')"
+            test "$expected_htaccess" = "$actual_htaccess"
+            grep -Fq 'PassengerPython "/opt/alt/python310/bin/lswsgi"' "$original_htaccess"
+            if grep -Fq 'PassengerPython /home/zomorod2/virtualenv/Saeit/3.10/bin/python' "$htaccess"; then
+              cp -p "$original_htaccess" "$htaccess.recovery"
+              mv -f "$htaccess.recovery" "$htaccess"
+              echo "PREVIOUS_PASSENGER_CONFIG_RECOVERY=complete"
+            elif grep -Fq 'PassengerPython "/opt/alt/python310/bin/lswsgi"' "$htaccess"; then
+              echo "PREVIOUS_PASSENGER_CONFIG_RECOVERY=not_needed"
+            else
+              echo "PREVIOUS_PASSENGER_CONFIG_RECOVERY=unexpected_current_state" >&2
+              exit 1
+            fi
+          fi
           if test -f "$recovery/deployed.flag" && test ! -f "$recovery/recovered.flag"; then
             echo "RECOVERING_PREVIOUS_UNVERIFIED_GENERATION=b78498ecccc3b99784a0cb060ea2c59bec65c505"
             paths=(passenger_wsgi.py config/urls.py config/settings.py config/env_compat.py core/middleware.py core/models.py core/newsletter_models.py core/blog_models.py core/company_inquiry_models.py core/company_activity_models.py core/economic_trade_models.py core/views.py core/company_content_models.py core/zomorod_public_views.py core/services_views.py core/seo_views.py core/templates/base.html core/templates/core/services.html core/templates/core/platform_page.html core/management/commands/knowledge_agent_generate.py core/tests/test_zomorod_public_pages.py core/tests/test_seo_sitemap.py public/agriculture/index.html public/agriculture/livestock/index.html public/agriculture/horticulture/index.html public/agriculture/greenhouse/index.html public/agriculture/poultry/index.html public/agriculture/aquaculture/index.html public/agriculture/inputs/index.html public/agriculture/seeds/index.html public/agriculture/fertilizers/index.html public/agriculture/pesticides/index.html public/agriculture/offices/index.html public/agriculture/water-soil/index.html public/agriculture/machinery/index.html public/agriculture/market/index.html public/agriculture/genetics/index.html core/static/site/heroes/platform-home.webp core/static/site/heroes/agriculture.webp core/static/site/heroes/smart-agriculture.webp core/static/site/heroes/industry.webp core/static/site/heroes/economy.webp core/static/site/heroes/research.webp core/static/site/heroes/knowledge.webp core/static/site/heroes/genetics.webp core/static/site/heroes/laboratory.webp core/static/site/heroes/academy.webp core/static/site/heroes/education-detail.webp core/static/site/heroes/ai.webp)
@@ -394,21 +411,8 @@ jobs:
           echo "PASSENGER_STARTUP_ENTRYPOINT_BEGIN"
           sed -n '1,20p' "$app/passenger_wsgi.py"
           echo "PASSENGER_STARTUP_ENTRYPOINT_END"
-          python3 - "$htaccess" "$passenger_python" <<'PY'
-          from pathlib import Path
-          import os,sys
-          path=Path(sys.argv[1])
-          source=path.read_text(encoding="utf-8")
-          old='PassengerPython "/opt/alt/python310/bin/lswsgi"'
-          new=f"PassengerPython {sys.argv[2]}"
-          if source.count(old)!=1:
-              raise SystemExit("EXPECTED_PASSENGER_PYTHON_DIRECTIVE_NOT_UNIQUE")
-          replacement=path.with_name(path.name+".python-canary")
-          replacement.write_text(source.replace(old,new,1),encoding="utf-8")
-          os.chmod(replacement,path.stat().st_mode)
-          os.replace(replacement,path)
-          PY
-          echo "PASSENGER_PYTHON_DIRECTIVE=direct_virtualenv"
+          grep -Fq 'PassengerPython "/opt/alt/python310/bin/lswsgi"' "$htaccess"
+          echo "PASSENGER_PYTHON_DIRECTIVE=unchanged"
           restart_result="$(mktemp "$HOME/.zomorod-passenger-restart-$sha.XXXXXX.json")"
           if ! "$selector" restart --json --interpreter python --user "$USER" --app-root Saeit > "$restart_result"; then
             rm -f -- "$restart_result"
