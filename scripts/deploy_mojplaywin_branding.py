@@ -28,6 +28,7 @@ OWNED_FILES = (
     Path("core/templates/mojplaywin/store.html"),
     Path("core/templates/mojplaywin/section.html"),
     Path("core/templates/mojplaywin/theme.html"),
+    Path("core/templates/mojplaywin/footer.html"),
 )
 FILES = MERGED_FILES + OWNED_FILES
 ASSETS = (
