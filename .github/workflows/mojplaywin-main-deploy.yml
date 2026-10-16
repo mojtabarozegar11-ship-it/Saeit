@@ -134,6 +134,16 @@ jobs:
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/mojplaywin-main-ssh"
+          ssh -F "$d/config" saeit-cpanel 'uapi --output=json PassengerApps list_applications' | python3 -c 'import json,sys; data=json.load(sys.stdin); stack=[data]; keys=("domain","base_uri","path","app_root","app_uri","enabled","app_type"); found=0
+          while stack:
+              value=stack.pop()
+              if isinstance(value,dict):
+                  if str(value.get("domain","")).lower() in {"mojplaywin.com","www.mojplaywin.com"}:
+                      print("PASSENGER_MOJPLAYWIN_MAPPING="+json.dumps({key:value.get(key) for key in keys if key in value},ensure_ascii=False)); found+=1
+                  stack.extend(value.values())
+              elif isinstance(value,list):
+                  stack.extend(value)
+          print("PASSENGER_MOJPLAYWIN_MAPPING=not-found" if not found else "PASSENGER_MOJPLAYWIN_MAPPING_COUNT="+str(found))'
           ssh -F "$d/config" saeit-cpanel python3 - <<'PY'
           from pathlib import Path
           import re
