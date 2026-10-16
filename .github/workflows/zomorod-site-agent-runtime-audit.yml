@@ -98,17 +98,24 @@ jobs:
           print("PASSENGER_ROOT_APP_COUNT="+str(len(matches)))
           for x in matches:
               print("PASSENGER_ROOT_PATH_MATCH="+str(x.get("path")=="/home/zomorod2/Saeit").lower())
-              version=x.get("python_version") or x.get("python")
-              if version: print("PASSENGER_PYTHON_VERSION="+str(version)[:40])
+              version=x.get("python_version") or x.get("python_version_name")
+              if isinstance(version,str) and len(version)<10 and version[0].isdigit(): print("PASSENGER_PYTHON_VERSION="+version)
           PY
 
           selected=""
+          candidate_list="$(mktemp)"
+          trap 'rm -f -- "$candidate_list"' EXIT
+          if test -d "$HOME/virtualenv"; then
+            find "$HOME/virtualenv" -path '*/Saeit/*/bin/python*' -executable -print 2>/dev/null | sort -u > "$candidate_list"
+          fi
           while IFS= read -r candidate; do
             if test -x "$candidate" && "$candidate" -c 'import django, environ, rest_framework, whitenoise' >/dev/null 2>&1; then
               selected="$candidate"
               break
             fi
-          done < <(find "$HOME/virtualenv" -path '*/Saeit/*/bin/python*' -executable -print 2>/dev/null | sort -u)
+          done < "$candidate_list"
+          rm -f -- "$candidate_list"
+          trap - EXIT
           if test -n "$selected"; then
             echo "DJANGO_RUNTIME=ready"
             echo "DJANGO_RUNTIME_PATH=$selected"
