@@ -2,7 +2,7 @@
 {% load static %}
 {% block title %}زمرد ملل — مرجع خدمات کشاورزی{% endblock %}
 {% block body_class %}services-page{% endblock %}
-{% block extra_css %}<link rel="stylesheet" href="{% static 'site/home-luxury.css' %}">{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'site/home-luxury.css' %}"><link rel="stylesheet" href="{% static 'site/zomorod-expert-sections-v1.css' %}">{% endblock %}
 {% block content %}
 <section class="services-hero">
   <div class="services-index">SERVICES<br><strong>15</strong></div>
@@ -23,4 +23,5 @@
 </section>
 <section class="services-map" aria-label="معماری خدمات"><div><span>PLATFORM MAP</span><h2>یک هاب، چند مسیر مستقل</h2><p>کاربر از صفحه اصلی وارد خدمات می‌شود و بدون خروج از معماری پلتفرم، به حوزه تخصصی موردنیاز خود می‌رسد.</p></div><div class="services-map-flow"><b>خدمات</b><i>→</i><span>کشاورزی</span><span>صنعت</span><span>بازار</span><i>→</i><span>آب‌وهوا</span><span>اقتصاد</span><span>استودیو</span></div></section>
 <section class="services-cta"><span>ONE PLATFORM · MANY CAPABILITIES</span><h2>صفحه اصلی؛ یک درگاه برای همه خدمات و زنجیره‌ها.</h2><p>کشاورزی، صنعت و بازار در خدمات یکپارچه شده‌اند و آب‌وهوا، اقتصاد و استودیو نیز به‌عنوان مسیرهای مستقل این پلتفرم از همین درگاه قابل دسترسی‌اند.</p><a href="/company/">شرکت ↗</a></section>
+{% include 'core/partials/zomorod_expert_sections.html' %}
 {% endblock %}
