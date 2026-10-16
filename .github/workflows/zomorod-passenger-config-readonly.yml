@@ -73,6 +73,21 @@ jobs:
             awk 'tolower($0) ~ /passenger(app|base|python|startup)|lsapi|lswsgi/ {print}' "$pub/.htaccess" | head -40
           fi
           echo "HTACCESS_PASSENGER_LINES_END"
+          echo "ACTIVE_APP_IDENTITY_BEGIN"
+          readlink -f "$app"
+          sha256sum "$app/passenger_wsgi.py" "$app/config/wsgi.py" "$app/config/settings.py" 2>/dev/null || true
+          sed -n '1,30p' "$app/passenger_wsgi.py" 2>/dev/null || true
+          echo "ACTIVE_APP_IDENTITY_END"
+          echo "PASSENGER_EXCEPTION_FRAMES_BEGIN"
+          python3 - "$app/stderr.log" <<'PY'
+          import pathlib,sys
+          p=pathlib.Path(sys.argv[1])
+          if p.exists():
+              lines=p.read_text(errors="replace").splitlines()[-800:]
+              frames=[x.strip() for x in lines if 'Traceback (most recent call last)' in x or 'File "' in x or 'RuntimeError:' in x or 'Error:' in x]
+              for line in frames[-120:]: print(line[:500])
+          PY
+          echo "PASSENGER_EXCEPTION_FRAMES_END"
           python3 - "$app" <<'PY'
           import pathlib,re,sys
           root=pathlib.Path(sys.argv[1])
