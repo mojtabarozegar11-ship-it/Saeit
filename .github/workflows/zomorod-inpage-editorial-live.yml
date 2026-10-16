@@ -1,0 +1,241 @@
+name: Publish Zomorod specialist content within existing pages
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/zomorod-inpage-editorial-live.yml"
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-inpage-content
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile 16 expert sections into site-specific progressive enhancement
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import json,re
+          from html import escape
+          source=Path("core/templates/core/includes/zomorod_editorial_20261016.html").read_text(encoding="utf-8")
+          token=re.compile(r'\{%\s*(?:if|elif)\s+request.path\s*==\s*"(/[^"]+/)"\s*%\}')
+          found=list(token.finditer(source))
+          assert len(found)==16
+          sections={}
+          for i,match in enumerate(found):
+              end=found[i+1].start() if i+1<len(found) else source.index("{% endif %}",match.end())
+              section=source[match.end():end].strip()
+              route=match.group(1)
+              assert section.count("<article>")==3 and 'zm-editorial-20261016' in section, route
+              sections[route]=section
+          sections["/services/"]=sections["/company/"]
+          agri="<section class='zm-editorial' id='zm-editorial-20261016' aria-label='آموزش تخصصی کشاورزی'><style>.zm-editorial{margin:32px auto;max-width:1180px;padding:22px;background:#252b19;color:#f4f0df;border:5px double #e2c373;direction:rtl}.zm-editorial h2,.zm-editorial h3{color:#f5d991}.zm-editorial .zm-ed-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:15px}.zm-editorial article{border:2px solid #e2c373;padding:18px;background:#303822}.zm-editorial p{line-height:2}.zm-editorial a{color:#f8d98b}</style><h2>دانش کاربردی کشاورزی و تولید</h2><div class='zm-ed-grid'><article><h3>برنامه‌ریزی تولید</h3><p>برای هر قطعه یا واحد تولیدی، محدودیت‌های آب، زمین، نیروی انسانی، هزینه نهاده‌ها، کیفیت محصول و نیاز بازار را در یک جدول تصمیم ثبت کنید. سودآوری را در سناریوهای مختلف قیمت و عملکرد مقایسه کنید؛ سناریوی خوش‌بینانه به‌تنهایی برای سرمایه‌گذاری کافی نیست.</p></article><article><h3>پایش و کنترل کیفیت</h3><p>ثبت داده خاک و آب، سلامت نهاده، تغییرات دما و کیفیت محصول زمینه تصمیم علمی را فراهم می‌کند. زمان نمونه‌برداری، ابزار اندازه‌گیری و منشأ هر داده باید مشخص باشد تا تحلیل بعدی بازتولیدپذیر بماند.</p></article><article><h3>مسیر یادگیری</h3><p>در هر حوزه کشاورزی، ابتدا سؤال را دقیق تعریف کنید، شواهد معتبر محلی را بررسی و سپس گزینه‌ها را با معیارهای هزینه، کیفیت، ریسک و پایداری مقایسه کنید. توصیه تخصصی بدون اطلاعات واقعی محل، قابل تعمیم قطعی نیست.</p><a href='/zm-specialist-library-2026.html'>مطالعه راهنمای جامع ←</a></article></div></section>"
+          sections["/agriculture/"]=agri
+          guide_paths=sorted(Path("public/agriculture").glob("*/index.html"))
+          assert len(guide_paths)==13
+          for page in guide_paths:
+              slug=page.parent.name
+              content=page.read_text(encoding="utf-8")
+              title=re.search(r"<title>([^<]+)</title>",content).group(1).split("|")[0].strip()
+              texts=re.findall(r"<p[^>]*>(.*?)</p>",content,re.S)
+              snippets=[]
+              for p in texts:
+                  p=re.sub(r"<[^>]*>"," ",p)
+                  p=" ".join(p.split())
+                  if 95<=len(p)<=1100 and p not in snippets:
+                      snippets.append(p)
+                  if len(snippets)>=3: break
+              while len(snippets)<3:
+                  snippets.append("پیش از تصمیم عملی، نوع محصول، وضعیت منابع، داده اندازه‌گیری‌شده، شرایط اقلیمی و الزامات رسمی را ثبت کرده و نظر متخصص مرتبط را بررسی کنید.")
+              cards="".join("<article><h3>"+escape(["چارچوب بررسی تخصصی","نکات کاربردی برای اقدام","کنترل کیفیت و منابع"][j])+"</h3><p>"+escape(p)+"</p></article>" for j,p in enumerate(snippets[:3]))
+              sections["/agriculture/"+slug+"/"]=agri.replace("<h2>دانش کاربردی کشاورزی و تولید</h2>","<h2>راهنمای تخصصی "+escape(title)+"</h2>").replace(agri.split("<div class='zm-ed-grid'>")[1].split("</div>")[0],cards)
+          assert len(sections)>=30
+          lib=json.dumps(sections,ensure_ascii=False,separators=(",",":"))
+          code="""(function(){"use strict";
+          var pages=__MAP__;
+          function resolve(p){
+            if(pages[p]) return pages[p];
+            if(p.indexOf("/agriculture/")===0) return pages["/agriculture/"];
+            if(p.indexOf("/knowledge/")===0) return pages["/knowledge/"];
+            if(p.indexOf("/blog/")===0) return pages["/blog/"];
+            if(p.indexOf("/newsletter/")===0) return pages["/newsletter/"];
+            if(p.indexOf("/company/")===0) return pages["/company/"];
+            if(p.indexOf("/education/")===0 || p.indexOf("/amozeshgah/")===0) return pages["/education/"];
+            return null;
+          }
+          function inject(){
+            try{
+              if(location.hostname!=="zomorodmelal.ir" && location.hostname!=="www.zomorodmelal.ir")return;
+              var path=location.pathname;
+              if(path==="/" || path.indexOf("/admin/")===0 || path.indexOf("/staff/")===0 || path.indexOf("/api/")===0)return;
+              if(document.getElementById("zm-editorial-20261016"))return;
+              var html=resolve(path);
+              if(!html)return;
+              var root=document.querySelector("main") || document.querySelector("[role=main]");
+              if(!root)return;
+              var holder=document.createElement("div");
+              holder.innerHTML=html;
+              holder.setAttribute("data-zomorod-inpage-editorial","20261016");
+              root.appendChild(holder);
+            }catch(e){/* never interrupt existing site functionality */}
+          }
+          if(document.readyState==="loading") document.addEventListener("DOMContentLoaded",inject,{once:true});
+          else inject();
+          })();
+          """.replace("__MAP__",lib)
+          Path("zm-inpage-editorial-2026.js").write_text(code,encoding="utf-8")
+          loader=''';\n/* ZM_INPAGE_EDITORIAL_LOADER_20261016 additive / independent of master agents */\n(function(){try{if(location.hostname!=="zomorodmelal.ir"&&location.hostname!=="www.zomorodmelal.ir")return;var t=document.createElement("script");t.src="/zm-inpage-editorial-2026.js?v=20261016";t.async=true;t.setAttribute("data-zm-editorial","yes");(document.head||document.documentElement).appendChild(t)}catch(e){}})();\n'''
+          Path("zm-modern-loader.txt").write_text(loader,encoding="utf-8")
+          print("SITE_PAGES_WITH_EDITORIAL="+str(len(sections)))
+          print("STANDALONE_MODULES="+str(16*3))
+          PY
+          node --check zm-inpage-editorial-2026.js
+      - name: Capture live shared JS checksum to avoid wrong-path changes
+        run: |
+          set -euo pipefail
+          curl -fsSL --max-time 30 "https://zomorodmelal.ir/static/site/modern.js?v=20261006-final" -o "$RUNNER_TEMP/modern-public.js"
+          sha256sum "$RUNNER_TEMP/modern-public.js" | cut -d' ' -f1 > "$RUNNER_TEMP/public-sha"
+          echo "PUBLIC_SHARED_JAVASCRIPT_OBSERVED=yes"
+      - name: Prepare the confirmed pinned VPS to cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-root"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "CONFIRMED_PINNED_RELAY_READY=yes"
+
+
+      - name: Stage only editorial JavaScript and loader
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-root"
+          tar -czf - zm-inpage-editorial-2026.js zm-modern-loader.txt | ssh -F "$d/config" saeit-cpanel "mkdir -p /home/zomorod2/.zm-stage-$GITHUB_SHA && tar -xzf - -C /home/zomorod2/.zm-stage-$GITHUB_SHA"
+      - name: Back up original JS and append isolated loader
+        id: install
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-root"
+          public_sha="$(cat "$RUNNER_TEMP/public-sha")"
+          ssh -F "$d/config" saeit-cpanel python3 - "$GITHUB_SHA" "$public_sha" <<'PY'
+          from pathlib import Path
+          import hashlib,os,sys
+          sha,expected=sys.argv[1:]
+          home=Path.home()
+          root=home/"public_html"
+          modern=root/"static/site/modern.js"
+          page=root/"zm-inpage-editorial-2026.js"
+          stage=home/(".zm-stage-"+sha)
+          backup=home/".backups"/"zomorod-live-inpage"/sha
+          assert modern.is_file() and not modern.is_symlink()
+          assert modern.stat().st_uid==os.getuid()
+          original=modern.read_bytes()
+          assert len(original)>2500 and hashlib.sha256(original).hexdigest()==expected, "Public JS changed or mismatched"
+          assert b"ZM_INPAGE_EDITORIAL_LOADER_20261016" not in original
+          assert not page.exists() and not page.is_symlink()
+          loader=(stage/"zm-modern-loader.txt").read_bytes()
+          content=(stage/"zm-inpage-editorial-2026.js").read_bytes()
+          assert b"zm-editorial-20261016" in content and len(content)>40000
+          assert not backup.exists()
+          backup.mkdir(parents=True)
+          (backup/"modern.original.js").write_bytes(original)
+          assert (backup/"modern.original.js").read_bytes()==original
+          temp_page=page.with_suffix(".js.tmp")
+          temp_page.write_bytes(content)
+          os.chmod(temp_page,0o644)
+          os.replace(temp_page,page)
+          temp=modern.with_name("modern.zm-"+sha+".tmp")
+          temp.write_bytes(original+b"\n"+loader)
+          os.chmod(temp,modern.stat().st_mode & 0o777)
+          os.replace(temp,modern)
+          print("JS_ORIGINAL_PRESERVED=yes")
+          print("NEW_IN_PAGE_EDITORIAL_INSTALLED=yes")
+          PY
+      - name: Verify shared script plus content on public site and old pages remain online
+        run: |
+          set -euo pipefail
+          curl -fsSL --max-time 25 -H 'Cache-Control: no-cache' "https://zomorodmelal.ir/static/site/modern.js?v=20261006-final" -o "$RUNNER_TEMP/live-modern.js"
+          grep -Fq 'ZM_INPAGE_EDITORIAL_LOADER_20261016' "$RUNNER_TEMP/live-modern.js"
+          curl -fsSL --max-time 25 "https://zomorodmelal.ir/zm-inpage-editorial-2026.js?v=20261016" -o "$RUNNER_TEMP/live-editorial.js"
+          grep -Fq 'zm-editorial-20261016' "$RUNNER_TEMP/live-editorial.js"
+          node --check "$RUNNER_TEMP/live-editorial.js"
+          for route in "" agriculture/ industry/ research/ knowledge/ company/ blog/ weather/ store/ amozeshgah/; do
+            result="$(curl -L -sS --max-time 25 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir/$route")"
+            echo "PROTECTED_ROUTE=/$route HTTP=$result"
+            test "$result" = 200
+          done
+          echo "JS_CONTENT_AVAILABLE_AND_OLD_ROUTES_OK=yes"
+      - name: Automatically restore exact modern.js and remove content on failure
+        if: failure() && steps.install.outcome == 'success'
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-root"
+          ssh -F "$d/config" saeit-cpanel python3 - "$GITHUB_SHA" <<'PY'
+          from pathlib import Path
+          import os,sys
+          sha=sys.argv[1]
+          home=Path.home()
+          modern=home/"public_html/static/site/modern.js"
+          content=home/"public_html/zm-inpage-editorial-2026.js"
+          backup=home/".backups"/"zomorod-live-inpage"/sha/"modern.original.js"
+          if modern.is_file() and backup.is_file() and b"ZM_INPAGE_EDITORIAL_LOADER_20261016" in modern.read_bytes():
+              temp=modern.with_name("modern.zm-rollback-"+sha+".tmp")
+              temp.write_bytes(backup.read_bytes())
+              os.chmod(temp,modern.stat().st_mode & 0o777)
+              os.replace(temp,modern)
+          if content.is_file() and b"zm-editorial-20261016" in content.read_bytes():
+              target=home/".backups"/"zomorod-live-inpage"/sha/"editorial.unpublished.js"
+              content.rename(target)
+          print("SHARED_SCRIPT_ORIGINAL_RESTORED=yes")
+          PY
+      - name: Remove temporary SSH keys
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/zomorod-root"
