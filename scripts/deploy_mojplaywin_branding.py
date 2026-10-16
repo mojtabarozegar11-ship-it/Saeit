@@ -124,7 +124,7 @@ def route_mojplaywin_brand_home(urlconf):
     )
     if brand_import is None:
         raise RuntimeError("MojPlayWin brand root exists without its expected view import")
-    updated = urlconf.replace(brand_import, brand_import + "\\nfrom core.mojplaywin_views import branded_home_dispatch", 1)
+    updated = urlconf.replace(brand_import, brand_import + "\nfrom core.mojplaywin_views import branded_home_dispatch", 1)
     return updated.replace(old_route, new_route, 1)
 
 def restart_passenger():
