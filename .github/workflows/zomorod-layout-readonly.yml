@@ -176,13 +176,25 @@ jobs:
           d="$RUNNER_TEMP/zomorod-root"
           ssh -F "$d/config" saeit-cpanel 'bash -s' <<'REMOTE'
           for rel in Saeit Saeit-staging; do
-            echo "DIRECTORY=$rel"
-            if test -d "$HOME/$rel"; then
-              find "$HOME/$rel" -mindepth 1 -maxdepth 1 -printf '%f\n' | sort | head -60
-              echo "CORE_TEMPLATE_FILES=$rel"
-              if test -d "$HOME/$rel/core/templates/core"; then
-                find "$HOME/$rel/core/templates/core" -mindepth 1 -maxdepth 1 -type f -printf '%f\n' | sort | head -45
+            app="$HOME/$rel"
+            echo "APP_TREE=$rel PRESENT=$(test -d "$app" && echo yes || echo no)"
+            test -d "$app" || continue
+            if test -f "$app/.git/HEAD"; then
+              git -C "$app" rev-parse HEAD 2>/dev/null | sed "s/^/DEPLOYED_HEAD_$rel=/"
+              git -C "$app" status --porcelain --untracked-files=no 2>/dev/null | wc -l | awk -v r="$rel" '{print "TRACKED_MODIFICATION_COUNT_" r "=" $1}'
+            else
+              echo "DEPLOYED_HEAD_$rel=not_a_git_checkout"
+            fi
+            for file in manage.py requirements.txt config/urls.py core/models.py core/views.py core/templates/core/services.html core/templates/core/platform_page.html core/templates/core/blog.html core/templates/core/academy.html; do
+              if test -f "$app/$file"; then
+                sha256sum "$app/$file" | awk -v f="$file" -v r="$rel" '{print "FILE_SHA256_" r "_" f "=" $1}'
+              else
+                echo "FILE_MISSING_$rel=$file"
               fi
+            done
+            if test -d "$app/core/templates/core"; then
+              find "$app/core/templates/core" -maxdepth 1 -type f -name '*.html' -printf '%f\n' | sort | sed "s/^/CORE_TEMPLATE_$rel=/"
+              find "$app/core/templates/core" -maxdepth 1 -type f -name '*.html' | wc -l | awk -v r="$rel" '{print "CORE_TEMPLATE_COUNT_" r "=" $1}'
             fi
           done
           REMOTE
