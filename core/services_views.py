@@ -2,11 +2,11 @@ from django.shortcuts import render
 
 def services(request):
     items = [
-        {"no": "01", "title": "زنجیره ارزش", "meta": "VALUE · OPERATIONS", "text": "طراحی مسیر محصول از تولید و فرآوری تا بسته‌بندی، بازار و فروش.", "url": "/company/"},
-        {"no": "02", "title": "هوش مصنوعی", "meta": "AI · AGENTS", "text": "عامل‌های تخصصی، گردش‌کارهای قابل حسابرسی و اتوماسیون تصمیم‌یار.", "url": "/agents/"},
-        {"no": "03", "title": "آموزش", "meta": "EDUCATION · SKILLS", "text": "مسیرهای آموزشی کاربردی برای دانش، کسب‌وکار، فناوری و عملیات.", "url": "/education/"},
-        {"no": "04", "title": "بازار و محصولات", "meta": "MARKET · COMMERCE", "text": "معرفی، عرضه و اتصال خدمات و محصولات به مسیرهای بازار.", "url": "/market/"},
-        {"no": "05", "title": "دانش و محتوا", "meta": "KNOWLEDGE · MEDIA", "text": "تبدیل دانش تخصصی به مقاله، مرجع، محتوای آموزشی و رسانه.", "url": "/knowledge/"},
+        {"no": "01", "title": "دامپروری", "meta": "LIVESTOCK · FARM", "text": "راهنمای موضوعی برای برنامه‌ریزی، بهره‌وری و سلامت واحدهای دامداری.", "url": "/agriculture/livestock/"},
+        {"no": "02", "title": "باغبانی و گلخانه", "meta": "HORTICULTURE · GREENHOUSE", "text": "مدیریت باغ، گلخانه، تولید محصولات و مراقبت از گیاهان.", "url": "/agriculture/horticulture/"},
+        {"no": "03", "title": "طیور و آبزیان", "meta": "POULTRY · AQUACULTURE", "text": "راهنمای پرورش طیور و آبزیان و مدیریت واحدهای تولیدی.", "url": "/agriculture/poultry/"},
+        {"no": "04", "title": "نهاده، بذر و کود", "meta": "INPUTS · SEEDS · FERTILIZERS", "text": "شناخت نهاده‌های کشاورزی و مسیرهای تهیه بذر و کود.", "url": "/agriculture/inputs/"},
+        {"no": "05", "title": "سموم و خدمات کشاورزی", "meta": "CROP PROTECTION · SERVICES", "text": "اطلاعات ایمن و راهنمای دسترسی به ادارات و خدمات کشاورزی.", "url": "/agriculture/pesticides/"},
     ]
     if request.get_host().split(":")[0].lower() in {"mojplaywin.com", "www.mojplaywin.com"}:
         from .mojplaywin_views import home

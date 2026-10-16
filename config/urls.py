@@ -17,13 +17,18 @@ from core.academy_views import (
     education_certificate, education_issue_certificate,
 )
 from core.services_views import services
+from core.zomorod_public_views import agriculture_index, agriculture_guide, zomorod_hero_image
 from core.company_content_views import company_gallery, company_content_feed, company_portal_home
 from core.knowledge_views import knowledge_article_detail, knowledge_book_detail, knowledge_domain_detail
 
 urlpatterns = [
     path("", services, name="home"),
     path("ghanadi/", TemplateView.as_view(template_name="core/ghanadi.html"), name="ghanadi"),
-    path("agriculture/", lambda request: platform_page(request, "agriculture"), name="agriculture"),
+    path("agriculture/", agriculture_index, name="agriculture"),
+    path("agriculture/assets/zomorod-olive-v1/<str:filename>.webp", zomorod_hero_image, name="agriculture_hero_asset"),
+    path("agriculture/<slug:slug>/", agriculture_guide, name="agriculture_guide"),
+    path("amozeshgah/assets/zomorod-education-v1/<str:filename>.webp", zomorod_hero_image, name="education_hero_asset"),
+    path("static/site/heroes/<str:filename>.webp", zomorod_hero_image, name="site_hero_image"),
     path("industry/", lambda request: platform_page(request, "industry"), name="industry"),
     path("ventures/<slug:slug>/", venture, name="mojplaywin_venture"),
     path("research/", lambda request: platform_page(request, "research"), name="research"),
