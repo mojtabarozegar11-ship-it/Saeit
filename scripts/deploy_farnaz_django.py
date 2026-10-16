@@ -51,6 +51,18 @@ def verify_layout() -> None:
         raise RuntimeError(f"Expected executable Django Python: {PYTHON}")
     if "Saeit-staging" not in (DOMAIN / "passenger_wsgi.py").read_text(encoding="utf-8", errors="replace"):
         raise RuntimeError("Passenger is not pointed at the expected staging source")
+    route_path = DOMAIN / "farnaz"
+    route_kind = "missing"
+    if route_path.is_symlink():
+        route_kind = "symlink"
+    elif route_path.is_dir():
+        route_kind = "directory"
+    elif route_path.is_file():
+        route_kind = "file"
+    print(f"FARNAZ_DOCROOT_PATH={route_kind}")
+    for line in (DOMAIN / ".htaccess").read_text(encoding="utf-8", errors="replace").splitlines():
+        if line.startswith(("PassengerAppRoot", "PassengerBaseURI", "PassengerAppType", "PassengerStartupFile", "PassengerPython", "RewriteCond", "RewriteRule")):
+            print("MOJPLAYWIN_HTACCESS_ROUTE=" + line.strip())
 
 
 def restart_passenger() -> None:
