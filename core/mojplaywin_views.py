@@ -51,6 +51,12 @@ def branded_home_dispatch(request):
  from .brand_views import branded_home
  return branded_home(request)
 
+def branded_store_dispatch(request):
+ if _is_mojplaywin(request):
+  return store(request)
+ from .brand_views import branded_store
+ return branded_store(request)
+
 def store(request):
  return render(request,"mojplaywin/store.html",{"products":PRODUCTS})
 
