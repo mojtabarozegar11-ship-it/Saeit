@@ -1,0 +1,30 @@
+name: Mojtaba twenty photo essays tests
+on:
+  push:
+    branches: ['feat/mojtaba-twenty-photo-essays-20261016']
+    paths:
+      - 'content/mojtaba_twenty_photo_essays_*.json'
+      - 'content/mojtaba_20_photo_hq_asset_part_*.b64'
+      - 'scripts/mojtaba_twenty_photo_essays_safe_publish.py'
+      - 'tests/test_mojtaba_twenty_photo_essays.py'
+      - '.github/workflows/mojtaba-twenty-photo-essays-*.yml'
+  pull_request:
+    paths:
+      - 'content/mojtaba_twenty_photo_essays_*.json'
+      - 'content/mojtaba_20_photo_hq_asset_part_*.b64'
+      - 'scripts/mojtaba_twenty_photo_essays_safe_publish.py'
+      - 'tests/test_mojtaba_twenty_photo_essays.py'
+      - '.github/workflows/mojtaba-twenty-photo-essays-*.yml'
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile exact-scoped Django publisher and verify twenty photo essays
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mojtaba_twenty_photo_essays_safe_publish.py
+          python3 -m unittest discover -s tests -p test_mojtaba_twenty_photo_essays.py -v
