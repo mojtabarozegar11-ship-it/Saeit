@@ -100,6 +100,38 @@ jobs:
           cat scripts/deploy_mojplaywin_branding.py | ssh -F "$d/config" saeit-cpanel "cat > '$stage/rollback.py'"
           ssh -F "$d/config" saeit-cpanel "python3 '$stage/rollback.py' rollback '38827723099' restore"
           ssh -F "$d/config" saeit-cpanel "rm -rf -- '$stage'"
+      - name: Restore previous MojPlayWin live site
+        if: contains(github.event.head_commit.message, 'MOJPLAYWIN_ROLLBACK_38831290396')
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-main-ssh"
+          stage="/home/zomorod2/.mojplaywin-rollback-$GITHUB_RUN_ID"
+          ssh -F "$d/config" saeit-cpanel "test ! -e '$stage' && test ! -L '$stage' && install -d -m 700 '$stage'"
+          cat scripts/deploy_mojplaywin_branding.py | ssh -F "$d/config" saeit-cpanel "cat > '$stage/rollback.py'"
+          ssh -F "$d/config" saeit-cpanel "python3 '$stage/rollback.py' rollback '38831290396' restore"
+          ssh -F "$d/config" saeit-cpanel "rm -rf -- '$stage'"
+          python3 - <<'PY'
+          import re, time, urllib.error, urllib.request
+          routes = ["https://mojplaywin.com/", "https://mojplaywin.com/store/"]
+          for url in routes:
+              for attempt in range(1, 11):
+                  request = urllib.request.Request(url + "?__restore_check=" + str(attempt), headers={"Cache-Control":"no-cache"})
+                  try:
+                      with urllib.request.urlopen(request, timeout=20) as response:
+                          status, body = response.status, response.read(300000).decode("utf-8", "replace")
+                  except urllib.error.HTTPError as error:
+                      status, body = error.code, error.read(300000).decode("utf-8", "replace")
+                  title = re.search(r"<title[^>]*>(.*?)</title>", body, re.I | re.S)
+                  restored = status == 200 and "Ideas become knowledge" not in body and "INITIAL COLLECTION" not in body
+                  print(f"RESTORE_VERIFY url={url} status={status} title={(title.group(1).strip()[:140] if title else 'none')} old_site={restored} attempt={attempt}")
+                  if restored:
+                      break
+                  if attempt < 10:
+                      time.sleep(2)
+              else:
+                  raise SystemExit(f"Restored site check failed: {url}")
+          PY
       - name: Diagnose MojPlayWin public routes
         if: contains(github.event.head_commit.message, 'MOJPLAYWIN_DIAG_20261016')
         shell: bash
@@ -204,7 +236,7 @@ jobs:
                       print(f"LIVE_URLS_LINE {number}: {line[:300]}")
           PY
       - name: Package application changes with merge baselines
-        if: ${{ !contains(github.event.head_commit.message, 'MOJPLAYWIN_ROLLBACK_38827723099') && !contains(github.event.head_commit.message, 'MOJPLAYWIN_DIAG_20261016') }}
+        if: ${{ !contains(github.event.head_commit.message, 'MOJPLAYWIN_ROLLBACK_38827723099') && !contains(github.event.head_commit.message, 'MOJPLAYWIN_DIAG_20261016') && !contains(github.event.head_commit.message, 'MOJPLAYWIN_ROLLBACK_38831290396') }}
         shell: bash
         run: |
           set -euo pipefail
@@ -241,7 +273,7 @@ jobs:
           PY
           tar -czf "$RUNNER_TEMP/mojplaywin-main.tar.gz" -C "$source_root" scripts/deploy_mojplaywin_branding.py config/urls.py core/services_views.py core/commerce_views.py core/views.py core/mojplaywin_views.py core/templates/base.html core/templates/mojplaywin/home.html core/templates/mojplaywin/store.html core/templates/mojplaywin/section.html core/templates/mojplaywin/theme.html deploy_baseline
       - name: Stage and install on the verified cPanel app
-        if: ${{ !contains(github.event.head_commit.message, 'MOJPLAYWIN_ROLLBACK_38827723099') && !contains(github.event.head_commit.message, 'MOJPLAYWIN_DIAG_20261016') }}
+        if: ${{ !contains(github.event.head_commit.message, 'MOJPLAYWIN_ROLLBACK_38827723099') && !contains(github.event.head_commit.message, 'MOJPLAYWIN_DIAG_20261016') && !contains(github.event.head_commit.message, 'MOJPLAYWIN_ROLLBACK_38831290396') }}
         id: deploy
         shell: bash
         run: |
@@ -273,7 +305,7 @@ jobs:
           PY
           python3 '$stage/scripts/deploy_mojplaywin_branding.py' deploy '$GITHUB_RUN_ID' '$GITHUB_SHA' '$stage'"
       - name: Smoke-test MojPlayWin pages
-        if: ${{ !contains(github.event.head_commit.message, 'MOJPLAYWIN_ROLLBACK_38827723099') && !contains(github.event.head_commit.message, 'MOJPLAYWIN_DIAG_20261016') }}
+        if: ${{ !contains(github.event.head_commit.message, 'MOJPLAYWIN_ROLLBACK_38827723099') && !contains(github.event.head_commit.message, 'MOJPLAYWIN_DIAG_20261016') && !contains(github.event.head_commit.message, 'MOJPLAYWIN_ROLLBACK_38831290396') }}
         id: smoke
         shell: bash
         run: |
