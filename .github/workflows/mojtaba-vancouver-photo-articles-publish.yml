@@ -158,7 +158,7 @@ jobs:
           old=m.old_slugs(Path(sys.argv[4]))
           assert Post.objects.filter(slug__in=old,published=True).count()==23
           assert not Post.objects.filter(slug__in=[r["slug"] for r in rows]).exists()
-          assert settings.MEDIA_URL.startswith("/") and settings.MEDIA_URL.endswith("/")
+          assert settings.STATIC_URL.startswith("/mojtaba.roozegar/assets/"),settings.STATIC_URL
           for r in rows:
               assert reverse("personal_site:post_detail",kwargs={"slug":r["slug"]})=="/mojtaba.roozegar/blog/"+r["slug"]+"/"
           m.safe_photos(rows,Path(sys.argv[4])/"vancouver-pictures")
@@ -171,6 +171,7 @@ jobs:
           installed=1
           "$py" "$script" install --app "$app" --part-a "$source" --part-b "$source2" --photos "$stage/vancouver-pictures" --old-content "$stage" --backup "$backup"
           "$py" manage.py check --deploy
+          "$py" manage.py collectstatic --noinput --verbosity 1
           test ! -d "$app/tmp" || touch "$app/tmp/restart.txt"
           "$py" - "$source" "$source2" "$stage" <<'PY_LIVE'
           import os,json,sys,time
@@ -218,24 +219,38 @@ jobs:
                   for mk in ('id="mpw-vancouver-collab-photo-ten-20261016"','id="mpw-fifty-editorials-20261015"','id="mpw-website-ten-index-20261016"'):
                       if mk not in body:raise ValueError("Missing original or new section "+mk)
                   p=Page();p.feed(body)
-                  if sum("vancouver-collab-20261016/" in img for img,_ in p.img)<10:raise ValueError("Not ten visible cover photos")
+                  if sum("vancouver_collab_20261016/" in img for img,_ in p.img)<10:raise ValueError("Not ten visible cover photos")
               page(path,check_index)
               print("VANCOUVER_ARTICLE_INDEX_AND_IMAGES_VERIFIED="+(path or "home"),flush=True)
+          from urllib.parse import urljoin
+          new_slugs={v["slug"] for v in rows}
           for row in rows+old:
-              slug=row["slug"];post=posts[slug]
-              if slug in {v["slug"] for v in rows} and not post.cover:raise ValueError("New article missing photo "+slug)
-              image_url=post.cover.url if post.cover else ""
-              if image_url.startswith("/"):image_url="https://mojplaywin.com"+image_url
-              def verify_article(body,slug=slug,row=row):
-                  if row["title"] not in unescape(body):raise ValueError("Title missing")
+              slug=row["slug"]
+              post=posts[slug]
+              selected=[]
+              def verify_article(body,slug=slug,row=row,post=post):
+                  if row["title"] not in unescape(body):
+                      raise ValueError("Title missing "+slug)
                   p=Page();p.feed(body)
-                  if not any((post.cover.url in image_src or image_src.endswith(post.cover.name)) if post.cover else ("owner_gallery_20261015" in image_src) for image_src,alt in p.img):
-                      raise ValueError("Cover not rendered")
+                  sources=[src for src,alt in p.img]
+                  if slug in new_slugs:
+                      matches=[src for src in sources if "vancouver_collab_20261016/" in src and slug in src]
+                  else:
+                      matches=[src for src in sources if "owner_gallery_20261015" in src]
+                      if not matches and post.cover:
+                          matches=[src for src in sources if post.cover.name in src]
+                  if not matches:raise ValueError("Expected illustrated article image missing "+slug)
+                  selected.append(matches[0])
               page("blog/"+slug+"/",verify_article)
-              if slug in {v["slug"] for v in rows}:
-                  raw,headers=fetch(image_url)
-                  if not raw.startswith(b'\xff\xd8\xff') or len(raw)<35000:raise ValueError("Public JPEG missing")
-                  print("VANCOUVER_NEW_ARTICLE_WITH_PUBLIC_PHOTO="+slug,flush=True)
+              if not selected:raise ValueError("No image selected "+slug)
+              public_image=urljoin("https://mojplaywin.com/",selected[0])
+              raw,headers=fetch(public_image)
+              if len(raw)<4000 or not raw.startswith(b'\xff\xd8\xff') and not raw.startswith(b'\x89PNG\r\n\x1a\n'):
+                  raise ValueError("Image bytes not served "+slug)
+              if slug in new_slugs:
+                  if not raw.startswith(b'\xff\xd8\xff') or len(raw)<35000:
+                      raise ValueError("New static JPEG invalid")
+                  print("VANCOUVER_NEW_ARTICLE_WITH_PUBLIC_STATIC_PHOTO="+slug,flush=True)
           print("VANCOUVER_ALL_33_ARTICLES_HAVE_VISIBLE_IMAGES=yes",flush=True)
           def check_gallery(body):
               p=Page();p.feed(body)
