@@ -184,6 +184,7 @@ jobs:
           PY
           cd "$release"
           export DJANGO_SETTINGS_MODULE=config.settings
+          "$py" -c 'import passenger_wsgi; assert callable(passenger_wsgi.application); print("PASSENGER_WSGI_IMPORT=passed")'
           "$py" manage.py check
           plan="$("$py" manage.py migrate --plan 2>&1)"
           printf '%s\n' "$plan" | awk 'NF { print "RELEASE_MIGRATION_PLAN=" $0; n++; if(n==8) exit }'
