@@ -102,7 +102,8 @@ jobs:
           stage="$app/.zomorod-stage-$GITHUB_SHA"
           ssh -F "$d/config" saeit-cpanel "test -d '$app' && test ! -e '$stage' && mkdir -m 700 '$stage'"
           tar -czf - config/urls.py core/zomorod_public_views.py core/services_views.py core/templates/base.html core/templates/core/services.html core/tests/test_zomorod_public_pages.py public/agriculture core/static/site/heroes/platform-home.webp core/static/site/heroes/agriculture.webp core/static/site/heroes/smart-agriculture.webp core/static/site/heroes/industry.webp core/static/site/heroes/economy.webp core/static/site/heroes/research.webp core/static/site/heroes/knowledge.webp core/static/site/heroes/academy.webp core/static/site/heroes/education-detail.webp core/static/site/heroes/ai.webp | ssh -F "$d/config" saeit-cpanel "tar -xzf - -C '$stage'"
-      - name: Back up, publish, verify live routes, or roll back
+      - name: Install Django app files
+        id: install
         shell: bash
         run: |
           set -euo pipefail
