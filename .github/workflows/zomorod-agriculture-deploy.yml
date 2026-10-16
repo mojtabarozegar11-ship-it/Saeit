@@ -23,7 +23,7 @@ jobs:
           from html.parser import HTMLParser
           from pathlib import Path
           pages=sorted(Path("public/agriculture").rglob("index.html"))
-          if len(pages)!=14: raise SystemExit(f"Expected 14 pages, found {len(pages)}")
+          if len(pages)!=15: raise SystemExit(f"Expected 15 pages, found {len(pages)}")
           class Check(HTMLParser):
               def __init__(self):
                   super().__init__(); self.rtl=False; self.title=False; self.h1=False; self.canonical=False; self.images=0
@@ -40,5 +40,5 @@ jobs:
                   raise SystemExit(f"Invalid guide page: {page}")
               if "border:7px double var(--gold)" not in source or "background:#252b19" not in source or len(source.encode())<3000:
                   raise SystemExit(f"Olive background, thick gold frame, or content issue: {page}")
-          print("AGRICULTURE_GUIDES_VALIDATED=14")
+          print("AGRICULTURE_GUIDES_VALIDATED=15")
           PY

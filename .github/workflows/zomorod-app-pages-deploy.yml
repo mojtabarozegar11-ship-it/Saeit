@@ -10,11 +10,13 @@ on:
       - "core/company_content_models.py"
       - "core/zomorod_public_views.py"
       - "core/services_views.py"
+      - "core/seo_views.py"
       - "core/templates/base.html"
       - "core/templates/core/services.html"
       - "core/templates/core/platform_page.html"
       - "core/management/commands/knowledge_agent_generate.py"
       - "core/tests/test_zomorod_public_pages.py"
+      - "core/tests/test_seo_sitemap.py"
       - "public/agriculture/**"
       - "core/static/site/heroes/**"
   workflow_dispatch:
@@ -36,8 +38,8 @@ jobs:
           from html.parser import HTMLParser
           from pathlib import Path
           pages=sorted(Path("public/agriculture").rglob("index.html"))
-          if len(pages) != 14:
-              raise SystemExit(f"Expected 14 agriculture pages, found {len(pages)}")
+          if len(pages) != 15:
+              raise SystemExit(f"Expected 15 agriculture pages, found {len(pages)}")
           class Check(HTMLParser):
               def __init__(self):
                   super().__init__(); self.title=False; self.h1=False; self.rtl=False
@@ -50,9 +52,9 @@ jobs:
               source=page.read_text(encoding="utf-8"); check=Check(); check.feed(source)
               if "<!-- saeit-zomorod-agriculture-v1 -->" not in source or not all((check.title,check.h1,check.rtl)):
                   raise SystemExit(f"Invalid page: {page}")
-          print("AGRICULTURE_PAGES=14")
+          print("AGRICULTURE_PAGES=15")
           PY
-          python -m py_compile config/urls.py config/settings.py core/views.py core/zomorod_public_views.py core/services_views.py core/management/commands/knowledge_agent_generate.py
+          python -m py_compile config/urls.py config/settings.py core/views.py core/zomorod_public_views.py core/services_views.py core/seo_views.py core/management/commands/knowledge_agent_generate.py
       - name: Prepare pinned VPS relay and cPanel SSH
         env:
           VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
@@ -169,7 +171,7 @@ jobs:
           app=/home/zomorod2/Saeit
           stage="$app/.zomorod-stage-$GITHUB_SHA"
           ssh -F "$d/config" saeit-cpanel "test -d '$app' && test ! -e '$stage' && mkdir -m 700 '$stage'"
-          tar -czf - config/urls.py config/settings.py core/views.py core/company_content_models.py core/zomorod_public_views.py core/services_views.py core/templates/base.html core/templates/core/services.html core/templates/core/platform_page.html core/management/commands/knowledge_agent_generate.py core/tests/test_zomorod_public_pages.py public/agriculture core/static/site/heroes/platform-home.webp core/static/site/heroes/agriculture.webp core/static/site/heroes/smart-agriculture.webp core/static/site/heroes/industry.webp core/static/site/heroes/economy.webp core/static/site/heroes/research.webp core/static/site/heroes/knowledge.webp core/static/site/heroes/academy.webp core/static/site/heroes/education-detail.webp core/static/site/heroes/ai.webp | ssh -F "$d/config" saeit-cpanel "tar -xzf - -C '$stage'"
+          tar -czf - config/urls.py config/settings.py core/views.py core/company_content_models.py core/zomorod_public_views.py core/services_views.py core/seo_views.py core/templates/base.html core/templates/core/services.html core/templates/core/platform_page.html core/management/commands/knowledge_agent_generate.py core/tests/test_zomorod_public_pages.py core/tests/test_seo_sitemap.py public/agriculture core/static/site/heroes/platform-home.webp core/static/site/heroes/agriculture.webp core/static/site/heroes/smart-agriculture.webp core/static/site/heroes/industry.webp core/static/site/heroes/economy.webp core/static/site/heroes/research.webp core/static/site/heroes/knowledge.webp core/static/site/heroes/genetics.webp core/static/site/heroes/laboratory.webp core/static/site/heroes/academy.webp core/static/site/heroes/education-detail.webp core/static/site/heroes/ai.webp | ssh -F "$d/config" saeit-cpanel "tar -xzf - -C '$stage'"
       - name: Install Django app files
         id: install
         shell: bash
@@ -218,9 +220,9 @@ jobs:
           : > "$backup/existing.txt"
           asset_existing="$backup/assets-existing.txt"
           : > "$asset_existing"
-          paths=(config/urls.py config/settings.py core/views.py core/company_content_models.py core/zomorod_public_views.py core/services_views.py core/templates/base.html core/templates/core/services.html core/templates/core/platform_page.html core/management/commands/knowledge_agent_generate.py core/tests/test_zomorod_public_pages.py public/agriculture/index.html public/agriculture/livestock/index.html public/agriculture/horticulture/index.html public/agriculture/greenhouse/index.html public/agriculture/poultry/index.html public/agriculture/aquaculture/index.html public/agriculture/inputs/index.html public/agriculture/seeds/index.html public/agriculture/fertilizers/index.html public/agriculture/pesticides/index.html public/agriculture/offices/index.html public/agriculture/water-soil/index.html public/agriculture/machinery/index.html public/agriculture/market/index.html core/static/site/heroes/platform-home.webp core/static/site/heroes/agriculture.webp core/static/site/heroes/smart-agriculture.webp core/static/site/heroes/industry.webp core/static/site/heroes/economy.webp core/static/site/heroes/research.webp core/static/site/heroes/knowledge.webp core/static/site/heroes/academy.webp core/static/site/heroes/education-detail.webp core/static/site/heroes/ai.webp)
-          asset_paths=(agriculture/assets/zomorod-olive-v1/platform-home.webp agriculture/assets/zomorod-olive-v1/agriculture.webp agriculture/assets/zomorod-olive-v1/smart-agriculture.webp agriculture/assets/zomorod-olive-v1/industry.webp agriculture/assets/zomorod-olive-v1/economy.webp agriculture/assets/zomorod-olive-v1/research.webp agriculture/assets/zomorod-olive-v1/knowledge.webp)
-          asset_sources=(platform-home.webp agriculture.webp smart-agriculture.webp industry.webp economy.webp research.webp knowledge.webp)
+          paths=(config/urls.py config/settings.py core/views.py core/company_content_models.py core/zomorod_public_views.py core/services_views.py core/seo_views.py core/templates/base.html core/templates/core/services.html core/templates/core/platform_page.html core/management/commands/knowledge_agent_generate.py core/tests/test_zomorod_public_pages.py core/tests/test_seo_sitemap.py public/agriculture/index.html public/agriculture/livestock/index.html public/agriculture/horticulture/index.html public/agriculture/greenhouse/index.html public/agriculture/poultry/index.html public/agriculture/aquaculture/index.html public/agriculture/inputs/index.html public/agriculture/seeds/index.html public/agriculture/fertilizers/index.html public/agriculture/pesticides/index.html public/agriculture/offices/index.html public/agriculture/water-soil/index.html public/agriculture/machinery/index.html public/agriculture/market/index.html public/agriculture/genetics/index.html core/static/site/heroes/platform-home.webp core/static/site/heroes/agriculture.webp core/static/site/heroes/smart-agriculture.webp core/static/site/heroes/industry.webp core/static/site/heroes/economy.webp core/static/site/heroes/research.webp core/static/site/heroes/knowledge.webp core/static/site/heroes/genetics.webp core/static/site/heroes/laboratory.webp core/static/site/heroes/academy.webp core/static/site/heroes/education-detail.webp core/static/site/heroes/ai.webp)
+          asset_paths=(agriculture/assets/zomorod-olive-v1/platform-home.webp agriculture/assets/zomorod-olive-v1/agriculture.webp agriculture/assets/zomorod-olive-v1/smart-agriculture.webp agriculture/assets/zomorod-olive-v1/industry.webp agriculture/assets/zomorod-olive-v1/economy.webp agriculture/assets/zomorod-olive-v1/research.webp agriculture/assets/zomorod-olive-v1/knowledge.webp agriculture/assets/zomorod-olive-v1/genetics.webp agriculture/assets/zomorod-olive-v1/laboratory.webp)
+          asset_sources=(platform-home.webp agriculture.webp smart-agriculture.webp industry.webp economy.webp research.webp knowledge.webp genetics.webp laboratory.webp)
           page_rel=agriculture/index.html
           page_source="$stage/public/$page_rel"
           page_target="$public_root/$page_rel"
@@ -352,7 +354,7 @@ jobs:
           fetch "https://zomorodmelal.ir/?__zomorod_verify=$GITHUB_SHA" "$tmp"
           grep -Eq 'کشاورزی|دامپروری' "$tmp"
           echo "LIVE_ROUTE_CHECK=home passed"
-          for route in agriculture agriculture/livestock agriculture/horticulture agriculture/greenhouse agriculture/poultry agriculture/aquaculture agriculture/inputs agriculture/seeds agriculture/fertilizers agriculture/pesticides agriculture/offices agriculture/water-soil agriculture/machinery agriculture/market; do
+          for route in agriculture agriculture/livestock agriculture/horticulture agriculture/greenhouse agriculture/poultry agriculture/aquaculture agriculture/inputs agriculture/seeds agriculture/fertilizers agriculture/pesticides agriculture/offices agriculture/water-soil agriculture/machinery agriculture/market agriculture/genetics; do
             fetch "https://zomorodmelal.ir/$route/?__zomorod_verify=$GITHUB_SHA" "$tmp"
             case "$route" in
               agriculture) expected='راهنمای جامع کشاورزی' ;;
@@ -369,6 +371,7 @@ jobs:
               agriculture/water-soil) expected='آب، خاک و منابع مزرعه' ;;
               agriculture/machinery) expected='ماشین‌آلات و فناوری مزرعه' ;;
               agriculture/market) expected='بازار و زنجیرهٔ ارزش' ;;
+              agriculture/genetics) expected='ژنتیک و اصلاح نژاد' ;;
             esac
             grep -Fq "$expected" "$tmp" || { echo "LIVE_ROUTE_CONTENT_CHECK_FAILED=$route expected=$expected" >&2; exit 1; }
             echo "LIVE_ROUTE_CHECK=$route passed"
@@ -387,13 +390,13 @@ jobs:
             printf 'LIVE_IMAGE_CHECK %s result=%s|%s magic=%s\n' "$url" "$code" "$type" "$magic"
             test "$code" = "200" && test "$magic" = "webp"
           }
-          for image in platform-home agriculture smart-agriculture industry economy research knowledge; do
+          for image in platform-home agriculture smart-agriculture industry economy research knowledge genetics laboratory; do
             url="https://zomorodmelal.ir/agriculture/assets/zomorod-olive-v1/$image.webp"
             check_webp "$url" "$RUNNER_TEMP/zomorod-agriculture-$image.webp"
           done
           rm -f -- "$tmp" "$headers"
-          echo "LIVE_AGRICULTURE_PAGES=14"
-          echo "LIVE_IMAGE_ROUTES=7"
+          echo "LIVE_AGRICULTURE_PAGES=15"
+          echo "LIVE_IMAGE_ROUTES=9"
       - name: Roll back if public verification failed
         if: failure() && steps.install.outcome == 'success'
         env:
@@ -413,7 +416,7 @@ jobs:
             echo "ROLLBACK_SKIPPED=no completed app publish"
             exit 0
           fi
-          paths=(config/urls.py config/settings.py core/views.py core/company_content_models.py core/zomorod_public_views.py core/services_views.py core/templates/base.html core/templates/core/services.html core/templates/core/platform_page.html core/management/commands/knowledge_agent_generate.py core/tests/test_zomorod_public_pages.py public/agriculture/index.html public/agriculture/livestock/index.html public/agriculture/horticulture/index.html public/agriculture/greenhouse/index.html public/agriculture/poultry/index.html public/agriculture/aquaculture/index.html public/agriculture/inputs/index.html public/agriculture/seeds/index.html public/agriculture/fertilizers/index.html public/agriculture/pesticides/index.html public/agriculture/offices/index.html public/agriculture/water-soil/index.html public/agriculture/machinery/index.html public/agriculture/market/index.html core/static/site/heroes/platform-home.webp core/static/site/heroes/agriculture.webp core/static/site/heroes/smart-agriculture.webp core/static/site/heroes/industry.webp core/static/site/heroes/economy.webp core/static/site/heroes/research.webp core/static/site/heroes/knowledge.webp core/static/site/heroes/academy.webp core/static/site/heroes/education-detail.webp core/static/site/heroes/ai.webp)
+          paths=(config/urls.py config/settings.py core/views.py core/company_content_models.py core/zomorod_public_views.py core/services_views.py core/seo_views.py core/templates/base.html core/templates/core/services.html core/templates/core/platform_page.html core/management/commands/knowledge_agent_generate.py core/tests/test_zomorod_public_pages.py core/tests/test_seo_sitemap.py public/agriculture/index.html public/agriculture/livestock/index.html public/agriculture/horticulture/index.html public/agriculture/greenhouse/index.html public/agriculture/poultry/index.html public/agriculture/aquaculture/index.html public/agriculture/inputs/index.html public/agriculture/seeds/index.html public/agriculture/fertilizers/index.html public/agriculture/pesticides/index.html public/agriculture/offices/index.html public/agriculture/water-soil/index.html public/agriculture/machinery/index.html public/agriculture/market/index.html public/agriculture/genetics/index.html core/static/site/heroes/platform-home.webp core/static/site/heroes/agriculture.webp core/static/site/heroes/smart-agriculture.webp core/static/site/heroes/industry.webp core/static/site/heroes/economy.webp core/static/site/heroes/research.webp core/static/site/heroes/knowledge.webp core/static/site/heroes/genetics.webp core/static/site/heroes/laboratory.webp core/static/site/heroes/academy.webp core/static/site/heroes/education-detail.webp core/static/site/heroes/ai.webp)
           asset_paths=(agriculture/assets/zomorod-olive-v1/platform-home.webp agriculture/assets/zomorod-olive-v1/agriculture.webp agriculture/assets/zomorod-olive-v1/smart-agriculture.webp agriculture/assets/zomorod-olive-v1/industry.webp agriculture/assets/zomorod-olive-v1/economy.webp agriculture/assets/zomorod-olive-v1/research.webp agriculture/assets/zomorod-olive-v1/knowledge.webp)
           for rel in "${paths[@]}"; do
             target="$app/$rel"

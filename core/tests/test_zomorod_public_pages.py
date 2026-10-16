@@ -18,6 +18,15 @@ class ZomorodAgriculturePageTests(SimpleTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("دامپروری", response.content.decode())
 
+    def test_genetics_and_breeding_guide_is_served(self):
+        response = self.client.get(reverse("agriculture_guide", kwargs={"slug": "genetics"}))
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode("utf-8")
+        self.assertIn("ژنتیک و اصلاح نژاد", content)
+        self.assertGreaterEqual(content.count('<section class="section"'), 10)
+        for index in range(1, 13):
+            self.assertIn(f"/company/genetics-{index}/", content)
+
     def test_unknown_agriculture_guide_is_not_exposed(self):
         response = self.client.get("/agriculture/not-a-guide/")
         self.assertEqual(response.status_code, 404)

@@ -24,6 +24,7 @@ class SitemapRegressionTests(TestCase):
             "/weather/",
             "/economy/",
             "/studio/",
+            "/agriculture/genetics/",
             "/ghanadi/",
         ):
             with self.subTest(path=path):
@@ -31,10 +32,10 @@ class SitemapRegressionTests(TestCase):
         self.assertNotIn("https://zomorodmelal.ir/newsletter/archive/", locations)
         self.assertEqual(len(locations), len(set(locations)))
 
-    def test_service_hub_count_matches_the_fourteen_listed_paths(self):
+    def test_service_hub_count_matches_the_fifteen_listed_paths(self):
         response = self.client.get("/")
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "SERVICES<br><strong>14</strong>")
+        self.assertContains(response, "SERVICES<br><strong>15</strong>")
 
     def test_studio_has_its_own_topic_page_not_the_contact_fallback(self):
         response = self.client.get("/studio/")
