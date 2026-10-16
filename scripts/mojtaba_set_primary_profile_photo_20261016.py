@@ -30,7 +30,7 @@ def image_bytes(pics:Path):
     manifest=pics/"manifest.json"
     if manifest.is_symlink() or not manifest.is_file():raise ValueError("Photo manifest missing")
     m=json.loads(manifest.read_text(encoding="utf-8"))
-    if m.get("source_uploaded_photo_sha256")!="b1aee93703973475c7a9d8688c3e6c87f91240aebf40fbb1c87bc88c9027f742":
+    if m.get("source_uploaded_photo_sha256")!="50493b0e83f475b7f54405570e0cbce210bf6eb9e2520f024e316e999779e04a":
         raise ValueError("Unexpected original uploaded photo")
     if {x.get("name") for x in m.get("files",[])}!=set(IMAGES):
         raise ValueError("Wrong photo manifest contents")
