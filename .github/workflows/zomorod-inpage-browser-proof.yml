@@ -1,0 +1,37 @@
+name: Verify Zomorod editorial rendering in real headless browser
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/zomorod-inpage-browser-proof.yml"
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify browser-rendered expert content on existing routes
+        shell: bash
+        run: |
+          set -euo pipefail
+          browser="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
+          if test -z "$browser"; then echo "CHROMIUM_NOT_INSTALLED"; exit 1; fi
+          echo "BROWSER=$browser"
+          for route in industry research agriculture; do
+            file="$RUNNER_TEMP/zomorod-$route-dom.html"
+            debug="$RUNNER_TEMP/zomorod-$route-browser.log"
+            timeout 55s "$browser" --headless --no-sandbox --disable-gpu --disable-dev-shm-usage --disable-background-networking --virtual-time-budget=13000 --user-data-dir="$RUNNER_TEMP/browser-$route" --dump-dom "https://zomorodmelal.ir/$route/?editorial_probe=$GITHUB_SHA" > "$file" 2> "$debug" || true
+            bytes="$(wc -c < "$file")"
+            echo "PAGE=$route RENDERED_HTML_BYTES=$bytes"
+            if grep -Fq 'data-zomorod-inpage-editorial="20261016"' "$file"; then
+              echo "PAGE=$route EDITORIAL_INSERTED=yes"
+            else
+              echo "PAGE=$route EDITORIAL_INSERTED=no"
+              grep -E 'Content Security Policy|Refused to load|ERR_|Uncaught' "$debug" | head -10 || true
+              grep -o 'modern.js[^"]*' "$file" | head -2 || true
+              exit 1
+            fi
+          done
+          echo "BROWSER_RENDERED_CONTENT_PROOF=all_3_passed"
