@@ -133,3 +133,26 @@ body{background:#050505;color:#f7f3e8}
 @media(max-width:700px){.mpw-venture-grid{grid-template-columns:1fr}.mpw-hero,.mpw-games,.mpw-worlds,.mpw-news,.mpw-community,.mpw-support,.mpw-portfolio-mix,.mpw-page-hero,.mpw-page-grid,.mpw-page-cta,.mpw-venture-detail{margin:.65rem;border-radius:16px}}
 
 .mpw-nav .mw-nav-menu{position:relative}.mpw-nav .mw-nav-menu>summary{list-style:none;cursor:pointer;border:1px solid #9d7c33;border-radius:999px;padding:8px 12px;color:var(--acid);font-weight:800}.mpw-nav .mw-nav-menu>summary::-webkit-details-marker{display:none}.mpw-nav .mw-nav-menu>summary:after{content:" ▾"}.mpw-nav .mw-nav-menu[open]>summary:after{content:" ▴"}.mpw-nav .mw-nav-panel{position:absolute;top:calc(100% + 8px);left:auto;right:0;z-index:10001;width:min(960px,92vw);max-height:72vh;overflow:auto;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;padding:14px;border:1px solid var(--line);border-radius:16px;background:#0b0b0a;box-shadow:0 20px 60px #000b}.mpw-nav .mw-nav-panel section{padding:12px;border:1px solid var(--line);border-radius:12px;background:#121211}.mpw-nav .mw-nav-panel h3{margin:0 0 8px;color:var(--acid)}.mpw-nav .mw-nav-panel a{display:block;padding:7px 5px;border-bottom:1px solid #29251b;text-decoration:none}.mpw-nav .mw-nav-menu summary:focus-visible,.mpw-nav .mw-nav-panel a:focus-visible{outline:2px solid var(--ink);outline-offset:3px}@media(max-width:850px){.mpw-nav .mw-nav-panel{position:static;width:min(92vw,100%);max-height:60vh;grid-template-columns:1fr 1fr;margin-top:8px;padding:10px}}
+
+/* Unified matte black and restrained gold finish for both MojPlayWin shells. */
+:root{--bg:#080808;--panel:#121212;--ink:#f4efe1;--muted:#bcb6a8;--line:#302817;--acid:#c9a64b;--violet:#9d7c33;--gold:#c9a64b;--mpw-gold:#c9a64b;--mpw-gold-light:#ead28a}
+html,body{background:#080808!important;color:#f4efe1!important}
+#main{margin:0!important;border:0!important;background:#080808!important;box-shadow:none!important}
+.mpw-header,.mpw-footer{background:#0c0c0b!important;border-color:#302817!important}
+.mpw-header{border-top:0!important;border-bottom:1px solid #302817!important}
+.mpw-footer{border-top:1px solid #302817!important}
+.mpw-brand,.mpw-brand small,.mpw-nav,.mpw-footer,.mpw-footer a{color:#f4efe1}
+.mpw-mark,.mpw-cta,.primary,.actions a{border:1px solid #9d7c33;border-radius:999px}
+.mpw-nav a:hover,.mpw-footer a:hover,.mpw-page-card a:hover,.mpw-mix-split a:hover{color:#ead28a}
+.mpw-hero,.mpw-games,.mpw-worlds,.mpw-news,.mpw-community,.mpw-support,.mpw-portfolio-mix,.mpw-page-hero,.mpw-page-grid,.mpw-page-cta,.mpw-venture-detail{background:#080808!important;border:0!important;border-radius:0!important;margin:0!important}
+.mpw-hero{border-bottom:1px solid #302817!important}
+.mpw-games,.mpw-worlds,.mpw-news,.mpw-community,.mpw-support,.mpw-portfolio-mix{border-top:1px solid #302817!important}
+.game-feature,.game-card,.news-grid article,.principles article,.mpw-page-card,.mpw-page-cta,.mpw-mix-digital,.mpw-mix-ventures,.mpw-venture-card{background:#121212!important;border:1px solid #302817!important;border-radius:16px!important;box-shadow:none!important}
+.game-art{border:1px solid #302817!important;border-radius:14px!important;background:linear-gradient(135deg,#15130e,#090909)!important}
+.mpw-page-hero{border-bottom:1px solid #302817!important;padding:clamp(3rem,7vw,6rem) clamp(1.2rem,7vw,7rem)!important}
+.mpw-page-card small,.mpw-page-card>a,.mpw-section-label,.mpw-page-hero .eyebrow,.mpw-mix-heading .eyebrow{color:#c9a64b!important}
+.mpw-page-card p,.mpw-page-hero>p,.mpw-mix-heading p,.mpw-mix-split p,.mpw-mix-note{color:#bcb6a8!important}
+.mpw-page-card strong,.mpw-mix-split article>strong{color:#ead28a!important}
+.mpw-page-cta{max-width:1370px;margin:0 auto 4rem!important}
+.mpw-strip{border-block:1px solid #302817!important}
+@media(max-width:760px){.mpw-page-hero{padding:3.5rem 1.15rem 2.5rem!important}.mpw-page-grid{padding:1rem 1.15rem 4rem!important}}
