@@ -80,7 +80,7 @@ def card_section():
     '<section '+MARK+' aria-labelledby="mpw-collab-brief-title" style="max-width:1200px;margin:36px auto;padding:clamp(19px,3vw,36px);background:#141413;color:#f8e9d2;border:3px solid #c9a369;border-radius:16px;clear:both">',
     '<p style="font:700 13px/1.6 system-ui,sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#e5be82">Open to technical discussion • Vancouver / international teams</p>',
     '<h2 id="mpw-collab-brief-title" style="font:700 clamp(27px,3.3vw,42px)/1.22 Georgia,serif;color:#f1d09a">Intelligent Enterprise Website Collaboration</h2>',
-    '<p style="font:17px/1.8 system-ui,sans-serif;max-width:1020px">I am open to discussing research-led, professional web development for industrial and commercial organizations, including teams based in Vancouver. The following are proposed pilot formats, not completed client contracts, a claimed Canadian office, fixed offers or guaranteed results. Each engagement would require verified scope, technical ownership and applicable contracting arrangements.</p>',
+    '<p style="font:17px/1.8 system-ui,sans-serif;max-width:1020px">I am open to discussing research-led, professional web development for industrial and commercial organizations, including teams based in Vancouver. These proposed pilot formats provide practical ways to explore a specific technical challenge. Each engagement would require verified scope, technical ownership and applicable contracting arrangements.</p>',
     '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,335px),1fr));gap:15px;margin:23px 0">'
     ]
     for n,(title,fit,deliverable,link) in enumerate(OFFERS,1):
@@ -111,7 +111,7 @@ def detail_section(rows):
         out.append(("{% if" if i==0 else "{% elif")+' item.slug == "'+r["slug"]+'" %}')
         out.append('<aside '+DETAIL_MARK+' aria-label="Discuss a professional collaboration" style="clear:both;background:#211e1a;border:2px solid #c19c63;border-radius:12px;margin:30px auto;max-width:1100px;padding:24px;color:#f7e6ce">'
                    '<h2 style="color:#efd09f;font:600 25px/1.4 Georgia,serif">Discuss a related enterprise website pilot</h2>'
-                   '<p style="font:16px/1.8 system-ui,sans-serif">Interested in exploring the ideas in this article for an industrial, commercial or research website? An introductory discussion can identify a specific problem, the responsible technical team and a limited pilot. This is an invitation, not an existing Vancouver project or guaranteed service.</p>'
+                   '<p style="font:16px/1.8 system-ui,sans-serif">Interested in exploring the ideas in this article for an industrial, commercial or research website? An introductory discussion can identify a specific problem, the responsible technical team and a limited pilot. A useful introductory discussion begins with a business problem, the responsible team and a realistic pilot.</p>'
                    '<a href="'+CONTACT+'" style="display:inline-block;background:#dbb57b;color:#21190e;padding:12px 19px;border-radius:8px;font:700 16px system-ui,sans-serif;text-decoration:none">Open the existing contact form →</a>'
                    '</aside>')
     out.extend(['{% endif %}','{% endif %}'])
