@@ -161,6 +161,35 @@ jobs:
                       if found>=20:break
           PY
           REMOTE
+      - name: Classify exact latest recursive Django setup traceback without log content
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          p=Path.home()/"Saeit"/"stderr.log"
+          if not p.is_file():
+              print("ZM_LAST_TRACEBACK_LOG=not_found")
+              raise SystemExit(0)
+          with p.open("rb") as fh:
+              fh.seek(max(0,p.stat().st_size-110000))
+              text=fh.read().decode("utf-8","replace")
+          chunks=text.split("Traceback (most recent call last):")
+          print("ZM_LAST_TRACEBACK_COUNT_IN_TAIL="+str(len(chunks)-1))
+          if len(chunks)<2:raise SystemExit(0)
+          block=chunks[-1].split("\n\n",1)[0]
+          frames=re.findall(r'\s*File "([^"]+)", line (\d+), in ([^\n]+)',block)
+          print("ZM_LAST_TRACEBACK_FRAMES="+str(len(frames)))
+          for i,(filename,line,func) in enumerate(frames[-25:],start=1):
+              print("ZM_LAST_FRAME="+str(i)+" module="+Path(filename).name+" line="+line+" function="+re.sub(r"[^a-zA-Z0-9_]", "", func)[:70])
+          types=re.findall(r"(?m)^([A-Za-z_][A-Za-z0-9_.]*(?:Error|Exception)):",block)
+          print("ZM_LAST_TRACEBACK_ERROR_CLASS="+(types[-1] if types else "unresolved"))
+          PY
+          REMOTE
       - name: Clean temporary runner SSH keys
         if: always()
         run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
