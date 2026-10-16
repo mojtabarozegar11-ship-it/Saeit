@@ -46,7 +46,6 @@ jobs:
           print("MOJPLAYWIN_SOURCE_CHECK=passed")
           PY
       - name: Configure pinned VPS and cPanel relay
-        if: ${{ !contains(github.event.head_commit.message, 'MOJPLAYWIN_DIAG_20261016') }}
         shell: bash
         env:
           VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
@@ -129,6 +128,37 @@ jobs:
               print(f"PUBLIC_DIAG_HEADINGS {[re.sub(r'<[^>]+>', ' ', h).strip()[:100] for h in headings[:8]]}")
               print(f"PUBLIC_DIAG_TEXT {plain[:500]}")
           PY
+      - name: Read recent MojPlayWin application errors
+        if: contains(github.event.head_commit.message, 'MOJPLAYWIN_DIAG_20261016')
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-main-ssh"
+          ssh -F "$d/config" saeit-cpanel 'python3 - <<'"'PY'"'
+          from pathlib import Path
+          import re
+          roots = [Path("/home/zomorod2/logs"), Path("/home/zomorod2/mojplaywin.com"), Path("/home/zomorod2/Saeit-staging")]
+          names = {"error_log", "passenger.log", "stderr.log", "application.log"}
+          seen = 0
+          for root in roots:
+              if not root.is_dir():
+                  continue
+              for path in root.rglob("*"):
+                  if seen >= 8:
+                      break
+                  if path.is_file() and path.name in names and not path.is_symlink():
+                      try:
+                          lines = path.read_text(encoding="utf-8", errors="replace").splitlines()[-160:]
+                      except OSError:
+                          continue
+                      relevant = [line[:500] for line in lines if re.search(r"Traceback|Exception|Error|error|Internal Server|TemplateDoesNotExist|SyntaxError|ImportError|mojplaywin", line, re.I)]
+                      print(f"SERVER_LOG path={path} matching_lines={len(relevant)}")
+                      for line in relevant[-60:]:
+                          print(line)
+                      seen += 1
+          if not seen:
+              print("SERVER_LOG no matching known log files")
+          PY'
       - name: Package application changes with merge baselines
         if: ${{ !contains(github.event.head_commit.message, 'MOJPLAYWIN_ROLLBACK_38827723099') && !contains(github.event.head_commit.message, 'MOJPLAYWIN_DIAG_20261016') }}
         shell: bash
