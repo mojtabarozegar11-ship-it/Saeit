@@ -64,6 +64,17 @@ class PrimaryProfilePhotoSafety(unittest.TestCase):
         self.assertNotIn("Payment.objects",script)
         self.assertNotIn("payments/",script)
         self.assertNotIn("payment.html",script)
+    def test_public_verifier_accepts_django_fingerprinted_static_file(self):
+        workflow=(ROOT/".github/workflows/mojtaba-primary-profile-photo-publish.yml").read_text()
+        self.assertIn('startswith(name[:-5]+".")',workflow)
+        self.assertIn('endswith(".webp")',workflow)
+        self.assertIn('hashlib.sha256(asset).hexdigest()!=digest',workflow)
+        for name in ("portrait.webp","avatar.webp"):
+            samples=(name,name[:-5]+".b0a1c2d3e4f5.webp")
+            for sample in samples:
+                self.assertTrue(sample==name or (sample.startswith(name[:-5]+".") and sample.endswith(".webp")))
+            self.assertFalse("unrelated.123456789abc.webp"==name or ("unrelated.123456789abc.webp".startswith(name[:-5]+".") and "unrelated.123456789abc.webp".endswith(".webp")))
+
     def test_missing_original_context_fails_closed(self):
         with self.assertRaises(ValueError):m.patch("home",home().replace("mpw-new-originals-20261015-b","removed"))
         with self.assertRaises(ValueError):m.patch("about",about().replace("mpw-academic-profile-20261016","removed"))

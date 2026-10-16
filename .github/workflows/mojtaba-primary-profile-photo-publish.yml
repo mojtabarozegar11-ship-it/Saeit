@@ -185,7 +185,7 @@ jobs:
               def check(body,name=name):
                   p=Pictures();p.feed(body)
                   if p.figure!=1:raise ValueError("Primary owner portrait missing from "+route)
-                  matches=[u for u in p.src if "official_profile_20261016/" in u and name in u]
+                  matches=[u for u in p.src if "official_profile_20261016/" in u and (u.split("?")[0].rsplit("/",1)[-1]==name or (u.split("?")[0].rsplit("/",1)[-1].startswith(name[:-5]+".") and u.split("?")[0].rsplit("/",1)[-1].endswith(".webp")))]
                   if len(matches)!=1:raise ValueError("Incorrect profile photo "+name)
                   if "/mojtaba.roozegar/contact/" not in body:raise ValueError("Contact information missing")
                   if route=="" and ('id="mpw-new-originals-20261015-b"' not in body or 'id="mpw-mojtaba-twenty-image-essays-20261016"' not in body):
