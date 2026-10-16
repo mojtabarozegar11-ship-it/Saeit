@@ -146,6 +146,26 @@ jobs:
             title="$(grep -oim1 '<title>[^<]*</title>' "$file" | cut -c1-120 || true)"
             echo "PAGE_IDENTITY=/$route HASH=$digest SIZE=$(wc -c < "$file") TITLE=$title"
           done
+      - name: Match served document hashes to safe document root files
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/zomorod-root"
+          ssh -F "$d/config" saeit-cpanel 'python3 -' <<'PY'
+          from pathlib import Path
+          import hashlib
+          root=Path.home()/"public_html"
+          fingerprints={"industry":"6906e16c81e40e64","research":"45998edee4c9b1df","knowledge":"ba15e20397e6eab2","company":"c8a1a2689cf3aacb","blog":"72bc5a23d7b0c960","store":"7462edc1d3391a18","agriculture":"271bb8ff1aa59443","amozeshgah":"87f5aedc6bf858b6"}
+          visited=0
+          for p in root.rglob("*.html"):
+              if p.is_symlink() or not p.is_file(): continue
+              if len(p.relative_to(root).parts)>7: continue
+              if p.stat().st_size>1000000: continue
+              visited+=1
+              digest=hashlib.sha256(p.read_bytes()).hexdigest()[:16]
+              found=[k for k,v in fingerprints.items() if digest==v]
+              if found: print("FINGERPRINT_MATCH="+",".join(found)+" FILE="+str(p.relative_to(root)))
+          print("HTML_FILES_SCANNED="+str(visited))
+          PY
       - name: Clean temporary access materials
         if: always()
         run: rm -rf "$RUNNER_TEMP/zomorod-root"
