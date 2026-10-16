@@ -1,0 +1,28 @@
+name: Mojtaba Vancouver enterprise web 20 tests
+on:
+  push:
+    branches: ['feat/mojtaba-vancouver-enterprise-intelligent-web-20-20261016']
+    paths:
+      - 'content/mojtaba_vancouver_enterprise_web_part_*.json'
+      - 'scripts/mojtaba_vancouver_enterprise_web20_publish.py'
+      - 'tests/test_mojtaba_vancouver_enterprise_web20.py'
+      - '.github/workflows/mojtaba-vancouver-enterprise-web20-*.yml'
+  pull_request:
+    paths:
+      - 'content/mojtaba_vancouver_enterprise_web_part_*.json'
+      - 'scripts/mojtaba_vancouver_enterprise_web20_publish.py'
+      - 'tests/test_mojtaba_vancouver_enterprise_web20.py'
+      - '.github/workflows/mojtaba-vancouver-enterprise-web20-*.yml'
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate twenty Vancouver industrial and commercial web proposals
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mojtaba_vancouver_enterprise_web20_publish.py
+          python3 -m unittest discover -s tests -p 'test_mojtaba_vancouver_enterprise_web20.py' -v
