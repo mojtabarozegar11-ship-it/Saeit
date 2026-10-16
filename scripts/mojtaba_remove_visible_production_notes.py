@@ -11,6 +11,9 @@ from pathlib import Path
 
 APP=Path("/home/zomorod2/mojtaba_personal/mojtaba_roozegar_personal_v17")
 BLOCKS=(
+    "This personal site is a public introduction to my education, professional interests and working philosophy. The About page places the disciplines in context; the Resume page groups expertise and leadership areas; Work & Activities explains how different fields meet in practical projects; and the Journal presents structured educational writing rather than unsupported claims about academic discoveries.",
+    "The photographs in this personal collection are provided by the owner and appear as editorial images. Where an image has a composed setting or several views in one frame, it remains presented as supplied rather than split into new scenes. The purpose of the gallery is to show visual identity without making unsupported factual claims.",
+    "On this website, descriptions of proposed work are intentionally framed as directions, prototypes, or goals unless independent evidence supports stronger wording. This distinction protects the reader and the value of the work itself. Good professional communication makes uncertainty visible instead of hiding it in promotional language.",
     "The views and concepts here are educational or editorial, not claims of completed projects, regulated advice, or independently validated results.",
     "Editorial material and self-reported biography. Educational scenarios are illustrative, not professional or financial advice; academic credentials and specific accomplishments are not independently verified here.",
     "Biography supplied by the site owner; academic credentials are not independently verified on this page.",
@@ -41,6 +44,11 @@ BLOCKS=(
 )
 # These are visual metadata, not the actual image, alt text or attribution.
 FRAGMENTS=(
+    "For this collection, editorial composites are left intact, and the published files are checked against known SHA-256 hashes.",
+    " · EDITORIAL SAMPLE",
+    "This is an invented story, not a memory or a claim about a real person.",
+    "This story is fictional.",
+    "This is an original fictional vignette, not an account of a real café.",
     " · Owner-supplied editorial photograph",
     " · Owner-supplied branded editorial image",
     " · Original digital portrait illustration",

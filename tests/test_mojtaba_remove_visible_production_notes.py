@@ -56,6 +56,18 @@ class CleanupTests(unittest.TestCase):
         a,_=m.clean_template(text);b,c=m.clean_template(a)
         self.assertEqual(a,b)
         self.assertEqual(c,{})
+    def test_final_page_map_paragraph_hidden(self):
+        original="<p>"+next(x for x in m.BLOCKS if x.startswith("This personal site is a public introduction"))+"</p><h2>Research stays</h2>"
+        new,_=m.clean_template(original)
+        self.assertNotIn("The About page places",new)
+        self.assertIn("<h2>Research stays</h2>",new)
+    def test_fiction_text_retained_editorial_footnote_removed(self):
+        old="<p>The mapmaker opened a new chapter. This story is fictional.</p><span>FICTIONAL VIGNETTE · EDITORIAL SAMPLE</span>"
+        new,_=m.clean_template(old)
+        self.assertIn("The mapmaker opened a new chapter.",new)
+        self.assertNotIn("This story is fictional",new)
+        self.assertNotIn("EDITORIAL SAMPLE",new)
+        self.assertIn("FICTIONAL VIGNETTE",new)
     def test_protected_root_and_minimums(self):
         self.assertEqual(m.MIN_POSTS,93)
         self.assertGreaterEqual(m.MIN_IMAGES,300)
