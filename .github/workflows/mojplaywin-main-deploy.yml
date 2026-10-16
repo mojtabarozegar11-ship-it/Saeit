@@ -133,7 +133,7 @@ jobs:
                   raise SystemExit(f"Restored site check failed: {url}")
           PY
       - name: Read the restored legacy MojPlayWin source
-        if: contains(github.event.head_commit.message, 'MOJPLAYWIN_READ_LEGACY_20261016')
+        if: contains(github.event.head_commit.message, 'MOJPLAYWIN_READ_LEGACY_CONTENT_20261016')
         shell: bash
         run: |
           set -euo pipefail
@@ -141,28 +141,22 @@ jobs:
           ssh -F "$d/config" saeit-cpanel /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - <<'PY'
           from pathlib import Path
           root = Path("/home/zomorod2/Saeit-staging")
-          phrases = ("Play. Build. Own the next move.", "Original games for a USA-first audience", "One Factory. Multiple ways to create value.", "MojPlayWin | Virtual Products, Games & Digital Innovation")
-          found = 0
-          for base in (root / "core" / "templates", root / "templates", root / "sitecore" / "templates"):
-              if not base.is_dir() or base.is_symlink():
+          base = root / "core" / "templates" / "brands" / "mojplaywin"
+          paths = sorted(p for p in base.rglob("*") if p.is_file() and not p.is_symlink()) if base.is_dir() and not base.is_symlink() else []
+          print("LEGACY_TEMPLATE_PATHS=" + repr([str(p.relative_to(root)) for p in paths]))
+          for path in paths:
+              if path.suffix.lower() != ".html":
                   continue
-              for path in base.rglob("*"):
-                  if not path.is_file() or path.is_symlink() or path.suffix.lower() not in {".html", ".css", ".js"}:
-                      continue
-                  try:
-                      source = path.read_text(encoding="utf-8", errors="replace")
-                  except OSError:
-                      continue
-                  if any(phrase.lower() in source.lower() for phrase in phrases):
-                      print(f"LEGACY_TEMPLATE_BEGIN {path.relative_to(root)} chars={len(source)}")
-                      print(source[:40000])
-                      print(f"LEGACY_TEMPLATE_END {path.relative_to(root)}")
-                      found += 1
-                      if found >= 12:
-                          break
-              if found >= 12:
-                  break
-          print(f"LEGACY_TEMPLATE_MATCH_COUNT={found}")
+              source = path.read_text(encoding="utf-8", errors="replace")
+              print(f"LEGACY_TEMPLATE_BEGIN {path.relative_to(root)} chars={len(source)}")
+              print(source[:25000])
+              print(f"LEGACY_TEMPLATE_END {path.relative_to(root)}")
+          css = root / "core" / "static" / "site" / "mojplaywin.css"
+          if css.is_file() and not css.is_symlink():
+              source = css.read_text(encoding="utf-8", errors="replace")
+              print(f"LEGACY_CSS_BEGIN chars={len(source)}")
+              print(source[:30000])
+              print("LEGACY_CSS_END")
           PY
       - name: Diagnose MojPlayWin public routes
         if: contains(github.event.head_commit.message, 'MOJPLAYWIN_DIAG_20261016')
@@ -268,7 +262,7 @@ jobs:
                       print(f"LIVE_URLS_LINE {number}: {line[:300]}")
           PY
       - name: Package application changes with merge baselines
-        if: ${{ !contains(github.event.head_commit.message, 'MOJPLAYWIN_ROLLBACK_38827723099') && !contains(github.event.head_commit.message, 'MOJPLAYWIN_DIAG_20261016') && !contains(github.event.head_commit.message, 'MOJPLAYWIN_ROLLBACK_38831290396') && !contains(github.event.head_commit.message, 'MOJPLAYWIN_READ_LEGACY_20261016') }}
+        if: ${{ !contains(github.event.head_commit.message, 'MOJPLAYWIN_ROLLBACK_38827723099') && !contains(github.event.head_commit.message, 'MOJPLAYWIN_DIAG_20261016') && !contains(github.event.head_commit.message, 'MOJPLAYWIN_ROLLBACK_38831290396') && !contains(github.event.head_commit.message, 'MOJPLAYWIN_READ_LEGACY_20261016') && !contains(github.event.head_commit.message, 'MOJPLAYWIN_READ_LEGACY_CONTENT_20261016') }}
         shell: bash
         run: |
           set -euo pipefail
@@ -305,7 +299,7 @@ jobs:
           PY
           tar -czf "$RUNNER_TEMP/mojplaywin-main.tar.gz" -C "$source_root" scripts/deploy_mojplaywin_branding.py config/urls.py core/services_views.py core/commerce_views.py core/views.py core/mojplaywin_views.py core/templates/base.html core/templates/mojplaywin/home.html core/templates/mojplaywin/store.html core/templates/mojplaywin/section.html core/templates/mojplaywin/theme.html deploy_baseline
       - name: Stage and install on the verified cPanel app
-        if: ${{ !contains(github.event.head_commit.message, 'MOJPLAYWIN_ROLLBACK_38827723099') && !contains(github.event.head_commit.message, 'MOJPLAYWIN_DIAG_20261016') && !contains(github.event.head_commit.message, 'MOJPLAYWIN_ROLLBACK_38831290396') && !contains(github.event.head_commit.message, 'MOJPLAYWIN_READ_LEGACY_20261016') }}
+        if: ${{ !contains(github.event.head_commit.message, 'MOJPLAYWIN_ROLLBACK_38827723099') && !contains(github.event.head_commit.message, 'MOJPLAYWIN_DIAG_20261016') && !contains(github.event.head_commit.message, 'MOJPLAYWIN_ROLLBACK_38831290396') && !contains(github.event.head_commit.message, 'MOJPLAYWIN_READ_LEGACY_20261016') && !contains(github.event.head_commit.message, 'MOJPLAYWIN_READ_LEGACY_CONTENT_20261016') }}
         id: deploy
         shell: bash
         run: |
@@ -337,7 +331,7 @@ jobs:
           PY
           python3 '$stage/scripts/deploy_mojplaywin_branding.py' deploy '$GITHUB_RUN_ID' '$GITHUB_SHA' '$stage'"
       - name: Smoke-test MojPlayWin pages
-        if: ${{ !contains(github.event.head_commit.message, 'MOJPLAYWIN_ROLLBACK_38827723099') && !contains(github.event.head_commit.message, 'MOJPLAYWIN_DIAG_20261016') && !contains(github.event.head_commit.message, 'MOJPLAYWIN_ROLLBACK_38831290396') && !contains(github.event.head_commit.message, 'MOJPLAYWIN_READ_LEGACY_20261016') }}
+        if: ${{ !contains(github.event.head_commit.message, 'MOJPLAYWIN_ROLLBACK_38827723099') && !contains(github.event.head_commit.message, 'MOJPLAYWIN_DIAG_20261016') && !contains(github.event.head_commit.message, 'MOJPLAYWIN_ROLLBACK_38831290396') && !contains(github.event.head_commit.message, 'MOJPLAYWIN_READ_LEGACY_20261016') && !contains(github.event.head_commit.message, 'MOJPLAYWIN_READ_LEGACY_CONTENT_20261016') }}
         id: smoke
         shell: bash
         run: |
