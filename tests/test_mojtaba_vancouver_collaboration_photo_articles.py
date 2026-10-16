@@ -39,6 +39,8 @@ class TestVancouverCollaborationImages(unittest.TestCase):
         self.assertEqual(block.count('loading="lazy"'),10)
         self.assertEqual(block.count("Photograph:"),10)
         self.assertEqual(block.count("{% static"),10)
+        self.assertEqual(block.count("src=\"{% static \'"),10)
+        self.assertNotIn("&#x27;personal_site/vancouver_collab",block)
         self.assertNotIn("/mojtaba.roozegar/uploads/",block)
         self.assertEqual(block.count('alt="'),10)
         for r in self.rows:
