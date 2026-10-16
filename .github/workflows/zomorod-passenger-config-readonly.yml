@@ -88,6 +88,31 @@ jobs:
               for line in frames[-120:]: print(line[:500])
           PY
           echo "PASSENGER_EXCEPTION_FRAMES_END"
+          for candidate in "$app" "/home/zomorod2/.backups/zomorodmelal-complete/9fcadc9ea749075785829565e57770f5cc173a8b/failed-app-2ed15c52c3f66ef1e50e72f4c2feeaa07dfd0342"; do
+            echo "CANDIDATE_TRACE_BEGIN=$candidate"
+            python3 - "$candidate/stderr.log" <<'PY'
+          import pathlib,sys
+          p=pathlib.Path(sys.argv[1])
+          if p.exists():
+              lines=p.read_text(errors="replace").splitlines()[-3000:]
+              blocks=[]; cur=[]
+              for line in lines:
+                  if "Traceback (most recent call last):" in line:
+                      if cur: blocks.append(cur)
+                      cur=[line]
+                  elif cur:
+                      cur.append(line)
+                      if any(k in line for k in ("RuntimeError:","ModuleNotFoundError:","ImportError:","Error:")):
+                          blocks.append(cur); cur=[]
+              if cur: blocks.append(cur)
+              for block in blocks[-12:]:
+                  print("---")
+                  for line in block:
+                      if any(k in line for k in ("Traceback","File \"","RuntimeError:","ModuleNotFoundError:","ImportError:","Error:")):
+                          print(line.strip()[:400])
+          PY
+            echo "CANDIDATE_TRACE_END=$candidate"
+          done
           python3 - "$app" <<'PY'
           import pathlib,re,sys
           root=pathlib.Path(sys.argv[1])
