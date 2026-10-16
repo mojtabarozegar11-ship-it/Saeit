@@ -10,6 +10,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import sys
@@ -71,6 +72,37 @@ def plan(root: Path):
             candidates.append((rel, before, after))
         elif any(count > 0 for count in counts):
             raise ValueError("Partial or ambiguous Persian contact labels: " + rel)
+    # Model field verbose_names are deliberately left untouched. Override only
+    # contact-page label_tag rendering, without changing form objects or the DB.
+    if not candidates:
+        rel = "templates/personal_site/core/contact.html"
+        path = root / rel
+        if path.exists():
+            path = safe_file(root, rel)
+            before = path.read_text(encoding="utf-8")
+            replacements = (
+                ("name", "Your Name"),
+                ("email", "Email Address"),
+                ("subject", "Subject"),
+                ("message", "Your Message"),
+            )
+            matched = {}
+            for field, label in replacements:
+                pattern = r"\{\{\s*form\." + field + r"\.label_tag\s*\}\}"
+                found = list(re.finditer(pattern, before))
+                if len(found) != 1:
+                    break
+                matched[field] = (pattern, label)
+            if len(matched) == 4:
+                after = before
+                for field, (pattern, label) in matched.items():
+                    replacement = '<label for="{{ form.' + field + '.id_for_label }}">' + label + '</label>'
+                    after, count = re.subn(pattern, lambda m: replacement, after)
+                    if count != 1:
+                        raise ValueError("Unexpected template replacement count")
+                if after == before:
+                    raise ValueError("No visible label change")
+                candidates.append((rel, before, after))
     if len(candidates) != 1:
         print("READ_ONLY_PERSONAL_LABEL_SOURCE_DIAGNOSTIC_BEGIN", flush=True)
         reported = 0
