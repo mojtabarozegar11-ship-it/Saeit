@@ -102,6 +102,14 @@ def install(run_id: str, commit: str, stage: Path) -> None:
         shutil.copytree(package, app_dir, dirs_exist_ok=True)
         subprocess.run([str(PYTHON), str(APP / "manage.py"), "check"], cwd=APP, check=True, timeout=90)
         subprocess.run([str(PYTHON), str(APP / "manage.py"), "migrate", "farnaz", "--noinput"], cwd=APP, check=True, timeout=180)
+        route_check = (
+            "from django.test import Client; "
+            "response = Client(HTTP_HOST='mojplaywin.com').get('/farnaz/'); "
+            "print('FARNAZ_DJANGO_CLIENT_STATUS=' + str(response.status_code)); "
+            "assert response.status_code == 200"
+        )
+        subprocess.run([str(PYTHON), str(APP / "manage.py"), "shell", "-c", route_check],
+                       cwd=APP, check=True, timeout=90)
         restart_passenger()
         print(f"FARNAZ_INSTALL_OK run={run_id} commit={commit}")
     except Exception:
