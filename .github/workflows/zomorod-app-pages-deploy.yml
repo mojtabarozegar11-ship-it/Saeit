@@ -379,6 +379,11 @@ jobs:
           mkdir -p "$(dirname "$page_target")"
           cp -p "$page_source" "$page_target.new"
           mv -f "$page_target.new" "$page_target"
+          if test -f "$app/stderr.log"; then
+            stat -c %s "$app/stderr.log" > "$backup/passenger-log-offset.txt"
+          else
+            printf '0\n' > "$backup/passenger-log-offset.txt"
+          fi
           echo "PASSENGER_STARTUP_ENTRYPOINT_BEGIN"
           sed -n '1,20p' "$app/passenger_wsgi.py"
           echo "PASSENGER_STARTUP_ENTRYPOINT_END"
@@ -530,16 +535,23 @@ jobs:
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/zomorod-app"
-          ssh -F "$d/config" saeit-cpanel bash -se <<'DIAGNOSTIC'
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'DIAGNOSTIC'
           set -euo pipefail
-          python3 - <<'PY'
+          sha="$1"
+          python3 - "$sha" <<'PY'
           from pathlib import Path
-          import re
+          import re,sys
           path=Path.home()/"Saeit"/"stderr.log"
           if not path.is_file():
               print("PASSENGER_ERROR_LOG=missing")
               raise SystemExit(0)
-          lines=path.read_text(encoding="utf-8",errors="replace").splitlines()[-500:]
+          offset_path=Path.home()/".backups"/"zomorodmelal-app"/sys.argv[1]/"passenger-log-offset.txt"
+          try: offset=int(offset_path.read_text(encoding="utf-8").strip())
+          except (OSError,ValueError): offset=0
+          raw=path.read_bytes()
+          if offset>len(raw): offset=0
+          lines=raw[offset:].decode("utf-8","replace").splitlines()
+          print("PASSENGER_FRESH_LOG_LINES="+str(len(lines)))
           secret=re.compile(r"(?i)(password|passwd|secret|token|api[_-]?key|authorization|cookie)(\s*[:=]\s*)[^\s,;]+")
           uri=re.compile(r"(://[^/\s:@]+:)[^/@\s]+@")
           for trace_index in [i for i,line in enumerate(lines) if "populate() isn't reentrant" in line][-2:]:
