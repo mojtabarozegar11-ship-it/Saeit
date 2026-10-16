@@ -1,9 +1,15 @@
 from django.db import models
 
-from .models import T
+
+class TimestampedModel(models.Model):
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        abstract = True
 
 
-class FarnazService(T):
+class FarnazService(TimestampedModel):
     title = models.CharField(max_length=180)
     slug = models.SlugField(unique=True)
     summary = models.CharField(max_length=360)
@@ -23,7 +29,7 @@ class FarnazService(T):
         return self.title
 
 
-class FarnazProject(T):
+class FarnazProject(TimestampedModel):
     title = models.CharField(max_length=180)
     discipline = models.CharField(max_length=100)
     summary = models.TextField()
@@ -41,7 +47,7 @@ class FarnazProject(T):
         return self.title
 
 
-class FarnazOffer(T):
+class FarnazOffer(TimestampedModel):
     class Kind(models.TextChoices):
         CONSULTATION = "consultation", "Consultation"
         DIGITAL = "digital", "Digital product"
@@ -67,7 +73,7 @@ class FarnazOffer(T):
         return self.title
 
 
-class FarnazInquiry(T):
+class FarnazInquiry(TimestampedModel):
     class Category(models.TextChoices):
         DRAWING = "drawing", "Drafting and documentation"
         CAD = "cad", "CAD review and cleanup"

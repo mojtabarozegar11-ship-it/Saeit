@@ -8,10 +8,10 @@ SERVICES = [
     ("project-consultation", "Project consultation and estimate", "Review the brief, available files and scope, then propose a timeline and estimate before work begins.", 40),
 ]
 OFFERS = [
-    ("project-drawing", "service", "Project service", "Agree scope, provide milestone files and coordinate review before final delivery.", 10),
-    ("cad-starter-kit", "digital", "CAD template pack", "Downloadable drawing sheets and templates; details and pricing can be set in the admin.", 20),
-    ("drafting-workshop", "training", "Drafting workshop", "Practical learning sessions covering drafting, layer organization and file preparation.", 30),
-    ("design-consultation", "consultation", "Project consultation", "A scheduled conversation to clarify a project question and the right next step.", 40),
+    ("Custom drafting package", "service", "Agree scope, provide milestone files and coordinate review before final delivery.", 10),
+    ("CAD template pack", "digital", "Downloadable drawing sheets and templates; details and pricing can be set in the admin.", 20),
+    ("Drafting workshop", "training", "Practical learning sessions covering drafting, layer organization and file preparation.", 30),
+    ("Project consultation", "consultation", "A scheduled conversation to clarify a project question and the right next step.", 40),
 ]
 PROJECTS = [
     ("Concept sample — residential plan set", "Architectural drafting", "Concept sample showing a presentation sheet layout. This is not a completed or approved client project.", 10),
@@ -21,13 +21,11 @@ PROJECTS = [
 
 
 def seed_farnaz_content(apps, schema_editor):
-    Service = apps.get_model("core", "FarnazService")
-    Offer = apps.get_model("core", "FarnazOffer")
-    Project = apps.get_model("core", "FarnazProject")
+    Service = apps.get_model("farnaz", "FarnazService")
+    Offer = apps.get_model("farnaz", "FarnazOffer")
+    Project = apps.get_model("farnaz", "FarnazProject")
     for slug, title, summary, order in SERVICES:
-        Service.objects.get_or_create(slug=slug, defaults={
-            "title": title, "summary": summary, "active": True, "sort_order": order,
-        })
+        Service.objects.get_or_create(slug=slug, defaults={"title": title, "summary": summary, "sort_order": order})
     for title, kind, description, order in OFFERS:
         Offer.objects.get_or_create(title=title, defaults={
             "kind": kind, "description": description, "active": True,
@@ -41,7 +39,8 @@ def seed_farnaz_content(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
-    dependencies = [("core", "0039_educationassessment_educationattempt_and_more")]
+    initial = True
+    dependencies = []
     operations = [
         migrations.CreateModel(
             name="FarnazService",

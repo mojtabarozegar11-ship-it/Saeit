@@ -33,5 +33,5 @@ class FarnazInquiryAdmin(admin.ModelAdmin):
     list_display = ("name", "phone", "category", "status", "created_at")
     list_filter = ("status", "category", "created_at")
     search_fields = ("name", "phone", "email", "message")
-    readonly_fields = ("created_at",)
+    readonly_fields = ("created_at", "updated_at")
     ordering = ("-created_at",)

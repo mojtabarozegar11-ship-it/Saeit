@@ -1,19 +1,16 @@
-# Farnaz under MojPlayWin
+# Farnaz global English subsite
 
-The Farnaz route is an isolated Django page at `/farnaz/`. The existing `/admin/` remains the Django administration entry point. Farnaz-specific content and incoming inquiries are listed there under the labels "Farnaz services", "Farnaz portfolio", "Farnaz offers", and "Farnaz enquiries".
+Farnaz is a Django-powered English-language drafting and design studio at `https://mojplaywin.com/farnaz/`.
 
 ## Scope and safety
+- The integration adds one URL prefix and one Django app. Existing routes, homepage templates, and independent sub-sites are left in place.
+- The deploy workflow sends only the new `farnaz/` app and a scoped installer to the host. The installer patches the live settings and URL files with unique additive entries, records file-hash-verified backups, applies only the Farnaz migration and restarts Passenger.
+- If the new page or existing homepage/admin health checks fail, the workflow restores only the two config files. It keeps the app tables so any enquiry data remains recoverable.
+- Portfolio cards are clearly labelled as concept samples; no client work, professional approvals, testimonials or performance claims are invented.
+- The inquiry form uses Django CSRF middleware, field validation, consent text and a honeypot. Enquiries are visible in Django admin.
 
-- No existing route is removed or renamed.
-- All initial portfolio cards are clearly marked as conceptual examples.
-- New content tables are additive and have a reversible schema migration; seeded examples are left in place on migration rollback.
-- Inquiry submissions require CSRF protection, a privacy consent checkbox, and pass through Django validation. A honeypot field catches basic automated submissions.
-- No payment is recorded as successful and no bank card data is collected by this page.
+## Django admin
+Open `/admin/` using the site's existing staff account. The Farnaz section manages services, portfolio concepts, offers, prices, checkout status and incoming enquiries.
 
-## Bank gateway setup
-
-The checkout switch for each offer is off by default. Before enabling real payments, select the acquiring bank/provider, configure the merchant account and callback URL in the hosting environment, implement and test the provider's signed request and server-to-server verification, and test success, rejection, cancel, retry, and duplicate callbacks in sandbox. Do not enable `checkout_enabled` until all those checks have passed. Never put merchant secrets in GitHub source or in public page fields.
-
-## Admin
-
-Use the existing Django admin at `/admin/`. The owner can edit service descriptions, portfolio cards, digital offer details/prices, and inquiry status. The login continues to use the existing site's staff accounts.
+## Bank gateway
+Checkout is disabled until the owner chooses the payment provider and completes merchant onboarding. The site does not collect card data or record a payment as successful. Before enabling checkout, configure a supported gateway, protect its merchant secrets in hosting environment variables, validate signed server-to-server callbacks, and test success, rejection, cancellation, retry and duplicate callbacks in the provider sandbox.

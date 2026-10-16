@@ -1,0 +1,166 @@
+name: Deploy Farnaz Django subsite
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/mojplaywin-farnaz-deploy.yml"
+      - "config/settings.py"
+      - "config/urls.py"
+      - "farnaz/**"
+      - "scripts/deploy_farnaz_django.py"
+      - "tests/test_farnaz_site.py"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/mojplaywin-farnaz-deploy.yml"
+      - "config/settings.py"
+      - "config/urls.py"
+      - "farnaz/**"
+      - "scripts/deploy_farnaz_django.py"
+      - "tests/test_farnaz_site.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mojplaywin-farnaz-production
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install project requirements
+        run: python -m pip install --upgrade pip && pip install -r requirements.txt
+      - name: Django checks and tests
+        env:
+          SECRET_KEY: ci-secret-key
+          DEBUG: "False"
+          ALLOWED_HOSTS: localhost,127.0.0.1
+        run: |
+          python manage.py check --deploy
+          python manage.py makemigrations --check --dry-run
+          pytest -q tests/test_farnaz_site.py
+          python manage.py migrate --noinput
+      - name: Validate isolated deploy helper
+        run: python -m py_compile scripts/deploy_farnaz_django.py
+
+  deploy:
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure pinned VPS-to-cPanel SSH relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          WORK="$RUNNER_TEMP/mojplaywin-farnaz-ssh"
+          install -d -m 700 "$WORK"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$WORK/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$WORK/host.key"
+          chmod 600 "$WORK/"*.key
+          ssh-keygen -y -P "" -f "$WORK/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$WORK/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$WORK/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$WORK/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$WORK/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $WORK/vps.key
+            UserKnownHostsFile $WORK/vps.known
+          Host saeit-host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $WORK/host.key
+            UserKnownHostsFile $WORK/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$WORK/config"
+          ssh -F "$WORK/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$WORK/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$WORK/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$WORK/host.candidate" "$WORK/host.known"
+      - name: Verify the existing MojPlayWin routes before any write
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$(curl -sS -o /dev/null -w '%{http_code}' https://mojplaywin.com/)" == "200" ]]
+          [[ "$(curl -sS -o /dev/null -w '%{http_code}' https://mojplaywin.com/admin/login/)" == "200" ]]
+          WORK="$RUNNER_TEMP/mojplaywin-farnaz-ssh"
+          ssh -F "$WORK/config" saeit-host 'test -d /home/zomorod2/mojplaywin.com && test ! -L /home/zomorod2/mojplaywin.com && test -f /home/zomorod2/mojplaywin.com/passenger_wsgi.py && test -f /home/zomorod2/mojplaywin.com/.htaccess && test -d /home/zomorod2/Saeit-staging && test ! -L /home/zomorod2/Saeit-staging && grep -Fq "Saeit-staging" /home/zomorod2/mojplaywin.com/passenger_wsgi.py && test -f /home/zomorod2/Saeit-staging/config/urls.py'
+          ssh -F "$WORK/config" saeit-host 'test -x /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python'
+      - name: Package only the Farnaz app and installer
+        shell: bash
+        run: tar -cf "$RUNNER_TEMP/farnaz.tar" farnaz scripts/deploy_farnaz_django.py
+      - name: Upload the isolated package
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORK="$RUNNER_TEMP/mojplaywin-farnaz-ssh"
+          stage="/home/zomorod2/.mojplaywin-farnaz-$GITHUB_RUN_ID"
+          ssh -F "$WORK/config" saeit-host "test ! -e '$stage' && test ! -L '$stage' && install -d -m 700 '$stage'"
+          scp -F "$WORK/config" "$RUNNER_TEMP/farnaz.tar" "saeit-host:$stage/bundle.tar"
+          ssh -F "$WORK/config" saeit-host "mkdir -m 700 '$stage/payload' && tar -xf '$stage/bundle.tar' -C '$stage/payload' && rm -f '$stage/bundle.tar'"
+          scp -F "$WORK/config" scripts/deploy_farnaz_django.py "saeit-host:$stage/deploy.py"
+      - name: Install Farnaz without replacing other site code
+        id: deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORK="$RUNNER_TEMP/mojplaywin-farnaz-ssh"
+          stage="/home/zomorod2/.mojplaywin-farnaz-$GITHUB_RUN_ID"
+          ssh -F "$WORK/config" saeit-host "python3 '$stage/deploy.py' install '$GITHUB_RUN_ID' '$GITHUB_SHA' '$stage'"
+      - name: Verify Farnaz, MojPlayWin home and Django admin
+        id: smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          status=000
+          for attempt in {1..12}; do
+            status="$(curl -sS -H 'Cache-Control: no-cache, no-store' -o "$RUNNER_TEMP/farnaz-live.html" -w '%{http_code}' "https://mojplaywin.com/farnaz/?_release=$GITHUB_RUN_ID" || true)"
+            [[ "$status" == "200" ]] && grep -Fq "Turn ideas into" "$RUNNER_TEMP/farnaz-live.html" && break
+            sleep 3
+          done
+          [[ "$status" == "200" ]]
+          grep -Fq "ARCHITECTURAL DRAFTING" "$RUNNER_TEMP/farnaz-live.html"
+          [[ "$(curl -sS -o /dev/null -w '%{http_code}' https://mojplaywin.com/)" == "200" ]]
+          [[ "$(curl -sS -o /dev/null -w '%{http_code}' https://mojplaywin.com/admin/login/)" == "200" ]]
+          echo "FARNAZ_AND_EXISTING_SITE_SMOKE_OK=yes"
+      - name: Roll back Farnaz route config if smoke testing fails
+        if: failure() && steps.deploy.outcome == 'success' && steps.smoke.outcome == 'failure'
+        shell: bash
+        run: |
+          WORK="$RUNNER_TEMP/mojplaywin-farnaz-ssh"
+          stage="/home/zomorod2/.mojplaywin-farnaz-$GITHUB_RUN_ID"
+          ssh -F "$WORK/config" saeit-host "python3 '$stage/deploy.py' rollback '$GITHUB_RUN_ID' '$GITHUB_SHA'"
+      - name: Remove temporary staging bundle
+        if: always()
+        shell: bash
+        run: |
+          if [[ -f "$RUNNER_TEMP/mojplaywin-farnaz-ssh/config" ]]; then
+            ssh -F "$RUNNER_TEMP/mojplaywin-farnaz-ssh/config" -o ConnectTimeout=10 saeit-host               "rm -rf -- /home/zomorod2/.mojplaywin-farnaz-$GITHUB_RUN_ID" || true
+          fi
+          rm -f "$RUNNER_TEMP/farnaz.tar" "$RUNNER_TEMP/farnaz-live.html"
+          rm -rf -- "$RUNNER_TEMP/mojplaywin-farnaz-ssh"
