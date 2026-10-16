@@ -83,6 +83,20 @@ jobs:
           done
           df -Pk "$HOME" | tail -n 1 | awk '{print "DISK_TOTAL_KB="$2; print "DISK_USED_KB="$3; print "DISK_FREE_KB="$4}'
           if command -v quota >/dev/null 2>&1; then quota -s 2>/dev/null || echo "ACCOUNT_QUOTA=unavailable"; else echo "ACCOUNT_QUOTA=command_unavailable"; fi
+          if command -v cpapi2 >/dev/null 2>&1; then
+            cpapi2 --user=zomorod2 DiskUsage fetchdiskusagewithextras 2>/dev/null | python3 -c 'import sys,json
+          try:
+              j=json.load(sys.stdin)
+              rows=j.get("cpanelresult",{}).get("data",[])
+              row=rows[0] if rows else {}
+              for k,label in (("quotaused","CPANEL_QUOTA_USED_BYTES"),("quotalimit","CPANEL_QUOTA_LIMIT_BYTES"),("mysql","CPANEL_MYSQL_BYTES"),("pgsql","CPANEL_PGSQL_BYTES")):
+                  v=row.get(k)
+                  print(label+"="+(str(v) if isinstance(v,(int,float)) else "unlimited_or_unavailable"))
+              print("CPANEL_DISK_API_RESULT="+str(j.get("cpanelresult",{}).get("event",{}).get("result","unknown")))
+          except Exception: print("CPANEL_DISK_API=unparseable")' || echo "CPANEL_DISK_API=unavailable"
+          else
+            echo "CPANEL_DISK_API=command_unavailable"
+          fi
           if command -v uapi >/dev/null 2>&1; then
             uapi --output=json StatsBar get_stats 2>/dev/null | python3 -c 'import sys,json
           def walk(v):
