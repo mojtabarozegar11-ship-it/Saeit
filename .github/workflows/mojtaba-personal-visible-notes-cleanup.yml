@@ -1,0 +1,210 @@
+name: Personal V17 visible production-note audit and safe cleanup
+on:
+  pull_request:
+    paths:
+      - .github/workflows/mojtaba-personal-visible-notes-cleanup.yml
+      - scripts/mojtaba_remove_visible_production_notes.py
+      - tests/test_mojtaba_remove_visible_production_notes.py
+  issues:
+    types: [opened]
+permissions:
+  contents: read
+concurrency:
+  group: mojtaba-personal-visible-notes-cleanup-only
+  cancel-in-progress: false
+jobs:
+  tests:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      (github.event_name == 'pull_request' ||
+        (github.event_name == 'issues' &&
+        github.event.issue.user.login == 'mojtabarozegar11-ship-it' &&
+        (github.event.issue.title == 'Ops: Personal production notes audit 2026-10-16' ||
+        github.event.issue.title == 'Ops: Personal production notes cleanup release 2026-10-16')))
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mojtaba_remove_visible_production_notes.py
+          python3 -m unittest discover -s tests -p 'test_mojtaba_remove_visible_production_notes.py' -v
+
+  scoped-host:
+    needs: tests
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event_name == 'issues' &&
+      github.event.issue.user.login == 'mojtabarozegar11-ship-it' &&
+      (github.event.issue.title == 'Ops: Personal production notes audit 2026-10-16' ||
+       github.event.issue.title == 'Ops: Personal production notes cleanup release 2026-10-16')
+    runs-on: ubuntu-latest
+    timeout-minutes: 23
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pin SSH relay and validate original host identities
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/personal-notes-ssh"
+          mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          python3 - "$d/host.key" <<'PY'
+          import pathlib,sys
+          p=pathlib.Path(sys.argv[1]);t=p.read_text().replace('\r\n','\n').strip()
+          p.write_text(t.replace('\\n','\n')+'\n')
+          PY
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host saeit-host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+            ConnectionAttempts 1
+          EOF
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          echo "PERSONAL_NOTES_SSH=$d/config" >> "$GITHUB_ENV"
+      - name: Stage single authorized personal-only cleanup script
+        shell: bash
+        run: |
+          set -euo pipefail
+          stage="/home/zomorod2/.personal-notes-stage-$GITHUB_RUN_ID"
+          timeout 30s ssh -F "$PERSONAL_NOTES_SSH" saeit-host "test ! -e '$stage' && install -d -m 700 '$stage'"
+          timeout 70s scp -F "$PERSONAL_NOTES_SSH" scripts/mojtaba_remove_visible_production_notes.py "saeit-host:$stage/installer.py"
+      - name: Audit current personal templates and optionally clean with backup and rollback
+        shell: bash
+        env:
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+        run: |
+          set -euo pipefail
+          timeout 1100s ssh -F "$PERSONAL_NOTES_SSH" saeit-host "bash -s -- '$GITHUB_RUN_ID' '$ISSUE_TITLE'" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          run_id="$1"
+          issue_title="$2"
+          app="/home/zomorod2/mojtaba_personal/mojtaba_roozegar_personal_v17"
+          py="/home/zomorod2/mojtaba_personal/.venv_personal_test/bin/python"
+          stage="/home/zomorod2/.personal-notes-stage-$run_id"
+          script="$stage/installer.py"
+          backup="/home/zomorod2/.backups/mojtaba-personal-visible-notes/$run_id"
+          installed=0
+          verified=0
+          finish() {
+            result=$?
+            trap - EXIT
+            if test "$installed" = 1 && test "$verified" = 0 && test -f "$backup/manifest.json"; then
+              "$py" "$script" rollback --app "$app" --backup "$backup" && echo "PERSONAL_NOTES_AUTO_ROLLBACK=success" || echo "PERSONAL_NOTES_ROLLBACK=manual_review_required"
+            fi
+            rm -rf -- "$stage"
+            exit "$result"
+          }
+          trap finish EXIT
+          test -x "$py" && test -f "$app/manage.py" && test ! -L "$app"
+          test -f "$script" && test ! -L "$script"
+          cd "$app"
+          "$py" "$script" audit --app "$app"
+          if test "$issue_title" = "Ops: Personal production notes audit 2026-10-16"; then
+            echo "PERSONAL_NOTES_MODE=read_only_no_site_mutations"
+            exit 0
+          fi
+          test "$issue_title" = "Ops: Personal production notes cleanup release 2026-10-16"
+          "$py" "$script" install --app "$app" --backup "$backup"
+          installed=1
+          "$py" "$script" verify --app "$app" --backup "$backup"
+          "$py" manage.py check --deploy
+          "$py" - <<'PYTEST'
+          import os
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          import django;django.setup()
+          from django.test import Client
+          from django.urls import reverse
+          from core.models import Post
+          c=Client(HTTP_HOST="mojplaywin.com")
+          routes=("home","about","resume","activities","memories","stories","projects","posts","gallery","contact")
+          for route in routes:
+              u=reverse("personal_site:"+route)
+              r=c.get(u,secure=True)
+              if r.status_code!=200:raise RuntimeError(route+" HTTP "+str(r.status_code))
+              text=r.content.decode("utf-8","replace")
+              for phrase in (
+                "The views and concepts here are educational or editorial",
+                "Selected photographs from the founder’s second original collection",
+                "The personal editorial collection ·",
+                "Composite images are preserved intact",
+                "Owner-supplied editorial photograph",
+                "Owner-supplied branded editorial image",
+              ):
+                if phrase in text:raise RuntimeError(route+" retains production note: "+phrase)
+              print("CLEANUP_DJANGO_PAGE="+route+" HTTP=200",flush=True)
+          all_slugs=list(Post.objects.filter(published=True).values_list("slug",flat=True))
+          if len(all_slugs)<93:raise RuntimeError("Published article loss")
+          for slug in all_slugs:
+              url=reverse("personal_site:post_detail",kwargs={"slug":slug})
+              r=c.get(url,secure=True)
+              if r.status_code!=200:raise RuntimeError("Post "+slug+" HTTP "+str(r.status_code))
+              if b"Editorial note: This original educational article is published on" in r.content:
+                  raise RuntimeError("Article retains publishing-process note: "+slug)
+          print("CLEANUP_ALL_POST_DETAIL_ROUTES_OK="+str(len(all_slugs)),flush=True)
+          PYTEST
+          test -d "$app/tmp" && touch "$app/tmp/restart.txt"
+          "$py" - <<'PYHTTP'
+          from urllib.request import Request,urlopen
+          import time
+          base="https://mojplaywin.com/mojtaba.roozegar/"
+          targets=("","about/","resume/","works-activities/","projects/","blog/","gallery/","contact/","memories/","stories/","sitemap.xml","feed.xml")
+          for sub in targets:
+            success=False
+            for _ in range(4):
+              try:
+                with urlopen(Request(base+sub,headers={"User-Agent":"PersonalCleanupRelease/1"}),timeout=18) as r:
+                  raw=r.read(950000)
+                  if r.status!=200:raise ValueError("HTTP "+str(r.status))
+                  if sub not in ("sitemap.xml","feed.xml") and "The personal editorial collection ·" in raw.decode("utf-8","replace"):
+                    raise ValueError("Old publication counter still live")
+                print("CLEANUP_LIVE_HTTPS="+sub+" HTTP=200",flush=True)
+                success=True
+                break
+              except Exception as exc:
+                print("CLEANUP_PUBLIC_RETRY="+sub+" "+str(exc)[:120],flush=True)
+                time.sleep(3)
+            if not success:raise RuntimeError("Public smoke failed: "+sub)
+          PYHTTP
+          "$py" "$script" verify --app "$app" --backup "$backup"
+          verified=1
+          echo "PERSONAL_NOTES_LIVE_CLEANUP_SUCCESS=yes"
+          echo "PERSONAL_NOTES_BACKUP=$backup"
+          echo "OTHER_SITES_UNCHANGED_BY_THIS_RELEASE=yes"
+          REMOTE
+      - name: Delete private relay credentials from runner
+        if: always()
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/personal-notes-ssh"
+          test ! -d "$d" || rm -rf -- "$d"
