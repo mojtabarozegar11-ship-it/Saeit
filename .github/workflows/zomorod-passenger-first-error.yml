@@ -83,6 +83,7 @@ jobs:
                   if re.match(r"^\s*Passenger(?:Python|AppRoot)\s+",line):
                       key,value=line.strip().split(None,1)
                       print("PASSENGER_CONFIG "+key+"="+("selector_lswsgi" if "lswsgi" in value else "other_python" if key=="PassengerPython" else "correct" if value.strip('"')==str(app) else "unexpected"))
+                      if key=="PassengerPython": print("PASSENGER_PYTHON_PATH="+value.strip('"'))
           import subprocess
           interpreters=[
               ("venv",home/"virtualenv"/"Saeit"/"3.10"/"bin"/"python"),
@@ -187,7 +188,7 @@ jobs:
                   for line in r.stderr.splitlines()[-35:]: print("FIRST_ERROR_PROBE_TRACE="+line[:220])
           except (OSError,subprocess.TimeoutExpired) as error:
               print("FIRST_ERROR_PROBE_ERROR_CLASS="+type(error).__name__)
-          patterns=re.compile(r"django\\.setup|MasterAgentChat|chat_runtime|get_wsgi_application")
+          patterns=re.compile(r"django\\.setup|MasterAgentChat|chat_runtime|get_wsgi_application|from openai|import openai|pydantic_core")
           for rel in ("config/settings.py","config/wsgi.py","config/urls.py","core/admin.py","core/apps.py","core/views.py","core/models.py","core/chat_runtime.py","command_center/apps.py","command_center/__init__.py"):
               source=app/rel
               if not source.is_file(): continue
