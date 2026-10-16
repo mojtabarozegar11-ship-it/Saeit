@@ -21,13 +21,13 @@ MERGED_FILES = (
     Path("core/services_views.py"),
     Path("core/commerce_views.py"),
     Path("core/views.py"),
-    Path("core/templates/base.html"),
 )
 OWNED_FILES = (
     Path("core/mojplaywin_views.py"),
     Path("core/templates/mojplaywin/home.html"),
     Path("core/templates/mojplaywin/store.html"),
     Path("core/templates/mojplaywin/section.html"),
+    Path("core/templates/mojplaywin/theme.html"),
 )
 FILES = MERGED_FILES + OWNED_FILES
 ASSETS = (

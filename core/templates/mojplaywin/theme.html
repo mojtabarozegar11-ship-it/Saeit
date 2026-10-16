@@ -1,0 +1,42 @@
+<style id="mojplaywin-matte-gold-theme">
+:root{color-scheme:dark;--mw-black:#090909;--mw-panel:#121212;--mw-gold:#c9a64b;--mw-cream:#f4efe1;--mw-muted:#c5c0b4}
+html,body{background:var(--mw-black)!important;color:var(--mw-cream)!important}
+body{position:relative;background-image:none!important}
+body:before{content:"";position:fixed;inset:7px;border:5px solid var(--mw-gold);pointer-events:none;z-index:9999}
+.topbar,.site-header,.site-footer{display:none!important}
+main{background:#0a0a0a!important;color:var(--mw-cream)!important;border:5px solid var(--mw-gold)!important;margin:10px!important;padding:clamp(14px,3vw,30px)!important;min-height:75vh}
+main section,main article,main .card,main [class*="card"],main [class*="panel"]{background-color:var(--mw-panel)!important;border-color:var(--mw-gold)!important;color:var(--mw-cream)!important}
+main p,main small,main li{color:var(--mw-muted)!important}
+main h1,main h2,main h3,main strong{color:var(--mw-cream)!important}
+main a{color:var(--mw-gold)!important}
+main img{border:3px solid var(--mw-gold);object-fit:cover}
+.mw-shell{width:min(1180px,100%);margin:auto}
+.mw-kicker{color:var(--mw-gold);letter-spacing:.17em;font-size:.78rem;font-weight:800}
+.mw-hero{display:grid;grid-template-columns:1fr .9fr;gap:32px;align-items:center;padding:clamp(24px,5vw,60px);border:4px solid var(--mw-gold);background:linear-gradient(135deg,#111,#080808)!important}
+.mw-hero h1{font-size:clamp(2.3rem,5vw,4.6rem);line-height:1.08;margin:.6em 0}
+.mw-hero p{font-size:1.12rem;max-width:62ch}
+.mw-hero img{width:100%;height:320px;border:4px solid var(--mw-gold)}
+.mw-actions{display:flex;flex-wrap:wrap;gap:12px;margin-top:24px}
+.mw-button{display:inline-flex;padding:12px 18px;border:3px solid var(--mw-gold);font-weight:800;text-decoration:none!important}
+.mw-button.primary{background:var(--mw-gold);color:#101010!important}
+.mw-section{margin-top:28px;padding:24px;border:3px solid var(--mw-gold);background:#101010!important}
+.mw-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.mw-card{overflow:hidden;border:3px solid var(--mw-gold);background:#111}
+.mw-card img{width:100%;height:190px;border:0;border-bottom:3px solid var(--mw-gold)}
+.mw-card-copy{padding:18px}
+.mw-card h2,.mw-card h3{margin:.2em 0 .45em}
+.mw-card p{margin:.25em 0 1em}
+.mw-card a{font-weight:800}
+.mw-note{padding:16px;border-left:4px solid var(--mw-gold);background:#171717!important}
+.mw-page-hero{padding:clamp(24px,5vw,56px);border:4px solid var(--mw-gold);background:linear-gradient(135deg,#121212,#080808)!important}
+.mw-page-hero img{width:100%;max-height:300px;object-fit:cover}
+.mw-page-hero h1{font-size:clamp(2rem,4.2vw,4rem);line-height:1.15}
+.mw-links{display:flex;flex-wrap:wrap;gap:14px;margin-top:18px}
+.mw-links a{border:2px solid var(--mw-gold);padding:10px 14px;text-decoration:none}
+.mw-site-nav{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:16px 20px;margin-bottom:18px;border:3px solid var(--mw-gold);background:#0b0b0b}
+.mw-site-nav strong{font-size:1.2rem;color:var(--mw-gold)}
+.mw-site-nav nav{display:flex;flex-wrap:wrap;gap:14px}
+.mw-site-nav a{text-decoration:none!important;font-weight:700}
+@media(max-width:760px){body:before{inset:4px;border-width:3px}main{margin:6px!important;padding:12px!important}.mw-hero{grid-template-columns:1fr}.mw-hero img{height:230px}.mw-grid{grid-template-columns:1fr}.mw-site-nav{align-items:flex-start;flex-direction:column}.mw-site-nav nav{gap:9px}}
+</style>
+<header class="mw-site-nav"><strong><a href="/">MojPlayWin</a></strong><nav aria-label="Primary navigation"><a href="/">Home</a><a href="/research/">Research</a><a href="/studio/">Games & Studio</a><a href="/amozeshgah/">Learning</a><a href="/store/">Digital Store</a><a href="/company/">About</a></nav></header>

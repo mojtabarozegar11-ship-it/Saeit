@@ -36,6 +36,7 @@ jobs:
               "core/templates/mojplaywin/home.html": ("Ideas become knowledge", "OUR PORTFOLIO", "CONNECTED VENTURES"),
               "core/templates/mojplaywin/store.html": ("INITIAL COLLECTION", "{{ product.title }}"),
               "core/templates/mojplaywin/section.html": ("{{ section_title }}", "mw-page-hero"),
+              "core/templates/mojplaywin/theme.html": ("mw-site-nav", "mw-gold"),
           }
           for name, markers in required.items():
               source = Path(name).read_text(encoding="utf-8")
@@ -111,7 +112,7 @@ jobs:
               assert apply_three_way(baseline, desired, baseline, relative) == desired, relative
           print("MOJPLAYWIN_SAFE_MERGE_CHECK=passed")
           PY
-          tar -czf "$RUNNER_TEMP/mojplaywin-main.tar.gz" scripts/deploy_mojplaywin_branding.py config/urls.py core/services_views.py core/commerce_views.py core/views.py core/mojplaywin_views.py core/templates/base.html core/templates/mojplaywin/home.html core/templates/mojplaywin/store.html core/templates/mojplaywin/section.html -C "$RUNNER_TEMP/mojplaywin-main" deploy_baseline
+          tar -czf "$RUNNER_TEMP/mojplaywin-main.tar.gz" scripts/deploy_mojplaywin_branding.py config/urls.py core/services_views.py core/commerce_views.py core/views.py core/mojplaywin_views.py core/templates/base.html core/templates/mojplaywin/home.html core/templates/mojplaywin/store.html core/templates/mojplaywin/section.html core/templates/mojplaywin/theme.html -C "$RUNNER_TEMP/mojplaywin-main" deploy_baseline
       - name: Stage and install on the verified cPanel app
         id: deploy
         shell: bash
@@ -130,6 +131,7 @@ jobs:
               'core/commerce_views.py','core/views.py','core/mojplaywin_views.py',
               'core/templates/base.html','core/templates/mojplaywin/home.html',
               'core/templates/mojplaywin/store.html','core/templates/mojplaywin/section.html',
+              'core/templates/mojplaywin/theme.html',
               'deploy_baseline/config/urls.py','deploy_baseline/core/services_views.py',
               'deploy_baseline/core/commerce_views.py','deploy_baseline/core/views.py',
               'deploy_baseline/core/templates/base.html'
