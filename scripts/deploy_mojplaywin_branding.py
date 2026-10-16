@@ -113,6 +113,20 @@ def apply_three_way(base_text, desired_text, live_text, label):
         raise RuntimeError(f"Safe merge conflict in {label}: insertion anchor is not unique")
     return "".join(live)
 
+def route_mojplaywin_brand_home(urlconf):
+    old_route = 'path("", branded_home, name="home"),'
+    new_route = 'path("", branded_home_dispatch, name="home"),'
+    if new_route in urlconf or old_route not in urlconf:
+        return urlconf
+    brand_import = next(
+        (line for line in urlconf.splitlines() if line.startswith("from core.brand_views import ")),
+        None,
+    )
+    if brand_import is None:
+        raise RuntimeError("MojPlayWin brand root exists without its expected view import")
+    updated = urlconf.replace(brand_import, brand_import + "\nfrom core.mojplaywin_views import branded_home_dispatch", 1)
+    return updated.replace(old_route, new_route, 1)
+
 def restart_passenger():
     restart = DOCROOT / "tmp" / "restart.txt"
     restart.parent.mkdir(parents=True, exist_ok=True)
@@ -186,6 +200,8 @@ def deploy(run_id, commit_sha, stage_arg):
             raise RuntimeError(f"Active app file is missing: {relative}")
         live = live_path.read_text(encoding="utf-8")
         outputs[relative] = apply_three_way(baseline, source, live, str(relative))
+        if relative == Path("config/urls.py"):
+            outputs[relative] = route_mojplaywin_brand_home(outputs[relative])
         if relative.suffix == ".py":
             ast.parse(outputs[relative], filename=str(relative))
 

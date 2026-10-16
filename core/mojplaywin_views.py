@@ -45,6 +45,12 @@ def _is_mojplaywin(request):
 def home(request):
  return render(request,"mojplaywin/home.html",{"features":FEATURES,"ventures":VENTURES})
 
+def branded_home_dispatch(request):
+ if _is_mojplaywin(request):
+  return home(request)
+ from .brand_views import branded_home
+ return branded_home(request)
+
 def store(request):
  return render(request,"mojplaywin/store.html",{"products":PRODUCTS})
 

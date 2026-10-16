@@ -180,34 +180,6 @@ jobs:
           if not seen:
               print("SERVER_LOG no matching known log files")
           PY
-      - name: Inspect live Django root resolver
-        if: contains(github.event.head_commit.message, 'MOJPLAYWIN_DIAG_20261016')
-        shell: bash
-        run: |
-          set -euo pipefail
-          d="$RUNNER_TEMP/mojplaywin-main-ssh"
-          ssh -F "$d/config" saeit-cpanel /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - <<'PY'
-          import runpy
-          from pathlib import Path
-          runpy.run_path("/home/zomorod2/mojplaywin.com/passenger_wsgi.py")
-          from django.conf import settings
-          from django.urls import get_resolver, resolve
-          route = resolve("/")
-          print(f"LIVE_ROOT_URLCONF {settings.ROOT_URLCONF}")
-          print(f"LIVE_ROOT_VIEW {route.func.__module__}.{route.func.__name__}")
-          for pattern in get_resolver().url_patterns:
-              callback = getattr(pattern, "callback", None)
-              if callback and str(pattern.pattern) in ("", "^$"):
-                  print(f"LIVE_EMPTY_ROUTE {callback.__module__}.{callback.__name__}")
-          for relative in ("config/urls.py", "core/brand_views.py"):
-              path = Path("/home/zomorod2/Saeit-staging") / relative
-              if path.is_file() and not path.is_symlink():
-                  print(f"LIVE_SOURCE {relative}")
-                  lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
-                  for number, line in enumerate(lines, 1):
-                      if 'path("",' in line or "branded_home" in line or "def branded_home" in line or "mojplaywin.com" in line:
-                          print(f"LIVE_SOURCE_LINE {number}: {line[:240]}")
-          PY
       - name: Package application changes with merge baselines
         if: ${{ !contains(github.event.head_commit.message, 'MOJPLAYWIN_ROLLBACK_38827723099') && !contains(github.event.head_commit.message, 'MOJPLAYWIN_DIAG_20261016') }}
         shell: bash
@@ -221,7 +193,11 @@ jobs:
           merged=(config/urls.py core/services_views.py core/commerce_views.py core/views.py core/templates/base.html)
           for file in "${files[@]}"; do
             mkdir -p "$source_root/$(dirname "$file")"
-            git show "$source_ref:$file" > "$source_root/$file"
+            if [[ "$file" == "scripts/deploy_mojplaywin_branding.py" || "$file" == "core/mojplaywin_views.py" ]]; then
+              git show "$GITHUB_SHA:$file" > "$source_root/$file"
+            else
+              git show "$source_ref:$file" > "$source_root/$file"
+            fi
           done
           for file in "${merged[@]}"; do
             mkdir -p "$source_root/deploy_baseline/$(dirname "$file")"

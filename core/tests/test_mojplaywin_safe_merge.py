@@ -29,3 +29,21 @@ def test_conflicting_replacement_still_fails_closed():
 
     with pytest.raises(RuntimeError, match="Safe merge conflict"):
         DEPLOY.apply_three_way(base, desired, live, "core/views.py")
+
+
+def test_brand_home_route_dispatch_is_scoped_and_idempotent():
+    live = """from core.brand_views import branded_home, branded_page
+from core.mojplaywin_views import venture
+urlpatterns = [
+    path("", branded_home, name="home"),
+    path("store/", branded_page, name="store"),
+]
+"""
+
+    merged = DEPLOY.route_mojplaywin_brand_home(live)
+
+    assert 'path("", branded_home_dispatch, name="home")' in merged
+    assert 'path("", branded_home, name="home")' not in merged
+    assert 'path("store/", branded_page, name="store")' in merged
+    assert "from core.mojplaywin_views import branded_home_dispatch" in merged
+    assert DEPLOY.route_mojplaywin_brand_home(merged) == merged
