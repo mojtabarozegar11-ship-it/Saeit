@@ -71,7 +71,7 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
-          import collections,re
+          import collections,re,os
           home=Path.home()
           app=home/"Saeit"
           for rel in ("passenger_wsgi.py","config/wsgi.py","config/settings.py","core/middleware.py","core/__init__.py"):
