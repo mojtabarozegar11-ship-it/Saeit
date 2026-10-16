@@ -120,7 +120,7 @@ def svg_diagram(row:dict,position:int)->bytes:
 <text x="64" y="585" fill="#a99b80" font-size="18" font-family="sans-serif">Original educational illustration • No claimed Vancouver office or completed contract</text>
 <text x="64" y="617" fill="#e5c98e" font-size="19" font-family="sans-serif">Mojtaba Roozegar • Available to discuss scoped enterprise collaboration</text>
 </svg>'''
-    if "<script" in data or "<foreignObject" in data or 'http:' in data:
+    if "<script" in data or "<foreignObject" in data or "http:" in data.replace("http://www.w3.org/2000/svg",""):
         raise ValueError("SVG safety constraints")
     return data.encode("utf-8")
 
