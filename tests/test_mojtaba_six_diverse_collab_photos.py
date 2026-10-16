@@ -32,8 +32,8 @@ class UniqueCollaborationPhotoTest(unittest.TestCase):
         for marker in m.PROTECTED:self.assertEqual(changed.count(marker),1)
         self.assertIn(c.CONTACT,changed)
         self.assertEqual(changed.count("Read the relevant technical article"),6)
-        self.assertIn("Conceptual visualization",changed)
-        self.assertIn("not an actual client installation",changed)
+        self.assertIn("Technology and engineering illustration",changed)
+        self.assertNotIn("not an actual client installation",changed)
         with self.assertRaises(ValueError):m.patch(changed)
 
     def test_fail_closed_on_earlier_page_changes(self):
