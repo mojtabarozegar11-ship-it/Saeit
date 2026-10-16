@@ -1,0 +1,134 @@
+name: Zomorod staging-template harmless canary
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/zomorod-template-canary.yml"
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-template-canary
+  cancel-in-progress: false
+jobs:
+  canary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare the confirmed pinned VPS to cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-root"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "CONFIRMED_PINNED_RELAY_READY=yes"
+
+
+      - name: Add temporary nonvisual comment to staging template and back it up
+        id: patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-root"
+          ssh -F "$d/config" saeit-cpanel python3 - "$GITHUB_SHA" <<'PY'
+          from pathlib import Path
+          import sys,os
+          sha=sys.argv[1]
+          target=Path.home()/"Saeit-staging/core/templates/core/platform_page.html"
+          backup=Path.home()/".backups"/"zomorod-template-canary"/sha/"platform_page.html"
+          assert target.is_file() and not target.is_symlink()
+          original=target.read_bytes()
+          assert b"{% endblock %}" in original and len(original)>10000
+          assert b"ZOMOROD_CANARY" not in original
+          assert not backup.exists()
+          backup.parent.mkdir(parents=True)
+          backup.write_bytes(original)
+          assert backup.read_bytes()==original
+          probe=("<!-- ZOMOROD_CANARY_"+sha+" -->").encode()
+          updated=original.replace(b"{% endblock %}",probe+b"\n{% endblock %}",1)
+          temp=target.with_suffix(".canary-tmp")
+          temp.write_bytes(updated)
+          os.chmod(temp,target.stat().st_mode & 0o777)
+          os.replace(temp,target)
+          print("CANARY_NONVISUAL_TEMPLATE_COMMENT_INSTALLED=yes")
+          PY
+      - name: Check whether live industry page reads the staging template
+        id: check
+        run: |
+          set -euo pipefail
+          for n in 1 2 3; do
+            html="$RUNNER_TEMP/zomorod-industry-$n.html"
+            status="$(curl -L -sS --max-time 20 -H 'Cache-Control: no-cache' -o "$html" -w '%{http_code}' "https://zomorodmelal.ir/industry/?zm_canary=$GITHUB_SHA&attempt=$n" || true)"
+            echo "CANARY_HTTP=$status"
+            test "$status" = 200
+            if grep -Fq "ZOMOROD_CANARY_$GITHUB_SHA" "$html"; then
+              echo "STAGING_TEMPLATE_IS_LIVE=confirmed"
+              exit 0
+            fi
+          done
+          echo "STAGING_TEMPLATE_IS_LIVE=not_confirmed"
+          exit 2
+      - name: Always restore the exact original staging template
+        if: always() && steps.patch.outcome == 'success'
+        run: |
+          d="$RUNNER_TEMP/zomorod-root"
+          ssh -F "$d/config" saeit-cpanel python3 - "$GITHUB_SHA" <<'PY'
+          from pathlib import Path
+          import sys,os
+          sha=sys.argv[1]
+          target=Path.home()/"Saeit-staging/core/templates/core/platform_page.html"
+          backup=Path.home()/".backups"/"zomorod-template-canary"/sha/"platform_page.html"
+          if not backup.is_file(): raise SystemExit("CANARY_ORIGINAL_BACKUP_MISSING")
+          current=target.read_bytes()
+          if ("ZOMOROD_CANARY_"+sha).encode() not in current: raise SystemExit("CANARY_CHANGED_EXTERNALLY_REFUSING_REPLACE")
+          temp=target.with_suffix(".restore-tmp")
+          temp.write_bytes(backup.read_bytes())
+          os.chmod(temp,target.stat().st_mode & 0o777)
+          os.replace(temp,target)
+          assert target.read_bytes()==backup.read_bytes()
+          print("CANARY_RESTORED_ORIGINAL_TEMPLATE=verified")
+          PY
+      - name: Clean pinned access materials
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/zomorod-root"
