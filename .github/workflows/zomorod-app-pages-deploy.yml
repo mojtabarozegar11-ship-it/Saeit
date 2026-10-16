@@ -433,6 +433,9 @@ jobs:
           os.replace(replacement,path)
           PY
           echo "PASSENGER_PYTHON_DIRECTIVE=direct_virtualenv"
+          mkdir -p "$app/tmp"
+          touch "$app/tmp/restart.txt"
+          echo "PASSENGER_TOUCH_RESTART=done"
           restart_result="$(mktemp "$HOME/.zomorod-passenger-restart-$sha.XXXXXX.json")"
           if ! "$selector" restart --json --interpreter python --user "$USER" --app-root Saeit > "$restart_result"; then
             rm -f -- "$restart_result"
