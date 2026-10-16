@@ -133,3 +133,4 @@ jobs:
           REMOTE
 
 # Operator-requested safe continuity verification on 2026-10-14; VPS-local watchdog remains authoritative.
+# Owner-requested existing-loop activation check: VPS factory, 2026-10-16.
