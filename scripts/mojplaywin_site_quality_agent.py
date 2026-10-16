@@ -63,6 +63,7 @@ class PageAudit(HTMLParser):
                 self.images.append({
                     "src": attrs.get("src", ""),
                     "alt": attrs.get("alt", ""),
+                    "alt_present": "alt" in attrs,
                 })
 
     def handle_endtag(self, tag):
@@ -116,8 +117,8 @@ def inspect_page(path: str, fetch=get_public_html) -> dict:
             result["issues"].append("thin_main_content")
         if len(images) < (3 if path.startswith("/ventures/") or path in ("/agents/", "/research/", "/studio/", "/market/", "/company/") else 1):
             result["issues"].append("insufficient_images")
-        if any(not img["src"] or not img["alt"].strip() for img in images):
-            result["issues"].append("image_missing_src_or_alt")
+        if any(not img["src"] or not img["alt_present"] for img in images):
+            result["issues"].append("image_missing_src_or_alt_attribute")
     except (URLError, HTTPError, ValueError, TimeoutError, OSError) as exc:
         result["issues"].append(type(exc).__name__ + ":" + str(exc)[:100])
     result["ok"] = not result["issues"]
