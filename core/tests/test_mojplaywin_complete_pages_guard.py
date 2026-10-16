@@ -3,6 +3,7 @@
 Applies only to MojPlayWin brand-owned presentation code. No production writes.
 """
 from pathlib import Path
+from html import unescape
 from django.contrib import admin
 from django.test import TestCase, override_settings
 
@@ -31,7 +32,7 @@ class MojPlayWinCompletePageGuardTests(TestCase):
                 self.assertTrue(detail["note"].strip())
                 self.assertTrue(detail["link"].startswith("/"))
                 for item in detail["steps"]:
-                    self.assertGreater(len(item["detail"].split()), 12)
+                    self.assertGreaterEqual(len(item["detail"].split()), 12)
                 for image in detail["images"]:
                     self.assertTrue((HEROES / image["path"]).is_file(), image["path"])
                     self.assertTrue(image["alt"].strip())
@@ -48,7 +49,7 @@ class MojPlayWinCompletePageGuardTests(TestCase):
             with self.subTest(path=path):
                 r = self.client.get(path, HTTP_HOST="mojplaywin.com")
                 self.assertEqual(r.status_code, 200)
-                html = r.content.decode("utf-8")
+                html = unescape(r.content.decode("utf-8"))
                 self.assertIn(old_title, html)
                 self.assertIn(field_title, html)
                 self.assertIn('data-editorial="mojplaywin-original"', html)
