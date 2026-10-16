@@ -158,6 +158,11 @@ jobs:
                       line=urlpass.sub(r"\\1[redacted]@",line)
                       print("ERROR_LOG_CONTEXT="+line[:500])
           PY
+          echo "PASSENGER_STDERR_TAIL_BEGIN"
+          if test -f /home/zomorod2/Saeit/stderr.log; then
+            tail -n 70 /home/zomorod2/Saeit/stderr.log | python3 -c 'import re,sys; s1=re.compile(r"(?i)(secret[_ -]?key|password|token|api[_ -]?key|private[_ -]?key)(\\s*[:=]\\s*)[^\\s,;]+"); s2=re.compile(r"(://[^/\\s:@]+:)[^/@\\s]+@"); [print(s2.sub(r"\\1[redacted]@",s1.sub(r"\\1\\2[redacted]",line.rstrip()))[:500]) for line in sys.stdin]'
+          fi
+          echo "PASSENGER_STDERR_TAIL_END"
           REMOTE
       - name: Remove temporary SSH material
         if: always()
