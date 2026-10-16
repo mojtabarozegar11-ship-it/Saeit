@@ -218,7 +218,7 @@ EDITORIAL = {
       },
       {
         "title": "Study constraints",
-        "detail": "Include capacity, seasonality, buyer concentration, regulation and working-capital needs."
+        "detail": "Include production capacity, seasonal demand, buyer concentration, applicable regulation, financing costs and realistic working-capital needs before comparing options."
       },
       {
         "title": "Turn analysis into action",
@@ -410,7 +410,7 @@ EDITORIAL = {
       },
       {
         "title": "Propose a bounded pilot",
-        "detail": "Specify inputs, sample data, technical dependencies, delivery milestones and acceptance tests."
+        "detail": "Specify approved inputs, representative sample data, technical dependencies, delivery milestones, acceptance tests and documented ownership of results."
       },
       {
         "title": "Protect information",
@@ -459,11 +459,11 @@ EDITORIAL = {
       },
       {
         "title": "Plan resources",
-        "detail": "Estimate labor, working capital, utilities, biosecurity and regulatory requirements."
+        "detail": "Estimate labor, working capital, utilities, biosecurity protocols, seasonal constraints and local regulatory requirements for the selected enterprise."
       },
       {
         "title": "Evaluate economics",
-        "detail": "Model gross output, waste, variable costs, capital needs and downside conditions."
+        "detail": "Model gross output, unsold waste, variable costs, capital needs, cash timing and plausible downside production conditions."
       },
       {
         "title": "Prepare pilot",
@@ -512,7 +512,7 @@ EDITORIAL = {
       },
       {
         "title": "Map guest operations",
-        "detail": "Describe arrival, ordering, kitchen hand-off, payment, service recovery and quality monitoring."
+        "detail": "Describe guest arrival, ordering, kitchen hand-off, payment confirmation, service recovery, staff responsibility and quality monitoring at each step."
       },
       {
         "title": "Test the experience",
@@ -663,7 +663,7 @@ EDITORIAL = {
       },
       {
         "title": "Prepare selling terms",
-        "detail": "Clarify originality evidence, transport, returns, handling, insurance and customer expectations."
+        "detail": "Clarify provenance and originality evidence, transport method, returns, safe handling, shipping insurance and realistic customer expectations before listing."
       }
     ],
     "deliverables": [
@@ -712,7 +712,7 @@ EDITORIAL = {
       },
       {
         "title": "Publish limitations",
-        "detail": "Describe supported networks, gas costs, refund policy and regulatory dependencies accurately."
+        "detail": "Describe supported networks, gas costs, transaction finality, refund procedures, user custody responsibilities and applicable regulatory dependencies accurately."
       }
     ],
     "deliverables": [
@@ -802,7 +802,7 @@ EDITORIAL = {
       },
       {
         "title": "Define service standards",
-        "detail": "Establish response expectations, escalation paths, accessibility needs and privacy-safe information collection."
+        "detail": "Establish response expectations, escalation paths, accessibility needs, privacy-safe information collection, staff ownership and a consistent method for confirming completion."
       },
       {
         "title": "Plan digital tools",
