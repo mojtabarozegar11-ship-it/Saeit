@@ -96,7 +96,7 @@ def image_figure(i):
             '<img src="'+src+'" width="960" height="540" loading="lazy" decoding="async"'
             ' style="display:block;width:100%;height:auto;aspect-ratio:16/9;object-fit:cover"'
             ' alt="'+ALT[i]+'"/>'
-            '<figcaption style="font:12px/1.55 system-ui,sans-serif;color:#d9bd93;padding:9px 6px 0">Conceptual visualization · not an actual client installation</figcaption>'
+            '<figcaption style="font:12px/1.55 system-ui,sans-serif;color:#d9bd93;padding:9px 6px 0">Technology and engineering illustration</figcaption>'
             '</figure>')
 
 def patch(original):
