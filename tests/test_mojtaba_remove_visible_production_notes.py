@@ -46,7 +46,7 @@ class CleanupTests(unittest.TestCase):
         self.assertEqual(new,text)
         self.assertEqual(n,0)
     def test_remove_only_blog_publication_sentence(self):
-        src=m.ARTICLE_PRODUCTION_NOTES[0]+" Numerical scenarios are illustrative. Apply local professional and legal requirements before practical use."
+        src=("A well-designed analysis states its assumptions and the relevant decision criteria. "*35)+m.ARTICLE_PRODUCTION_NOTES[0]+" Numerical scenarios are illustrative. Apply local professional and legal requirements before practical use."
         after,n=m.clean_post_content(src)
         self.assertEqual(n,1)
         self.assertNotIn("Editorial note:",after)
