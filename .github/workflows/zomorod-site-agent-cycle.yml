@@ -89,6 +89,11 @@ jobs:
           if len(matches)!=1:
               raise SystemExit("ZOMOROD_ROOT_APP_MAPPING=not_verified")
           print("ZOMOROD_ROOT_APP_MAPPING=verified")
+          allowed={"domain","base_uri","path","python","python_path","python_version","passenger_python"}
+          for key in sorted(allowed):
+              value=matches[0].get(key)
+              if isinstance(value,(str,int,float,bool)):
+                  print(f"PASSENGER_APP_{key.upper()}={value}")
           PY
           python_path="$(awk '$1 == "PassengerPython" { gsub(/"/, "", $2); print $2; exit }' "$htaccess")"
           printf 'PASSENGER_PYTHON_RESOLVED=%s\n' "${python_path:-missing}"
