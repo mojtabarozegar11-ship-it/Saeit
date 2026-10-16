@@ -142,20 +142,21 @@ jobs:
                           if p.is_file() and (p.name=="error_log" or p.suffix==".log" or "passenger" in p.name.lower()) and p.stat().st_mtime>__import__("time").time()-3600 and p.stat().st_size<20_000_000:
                               files.append(p)
                   except (OSError,PermissionError): pass
-          unique=list(dict.fromkeys(files))
+          unique=sorted(set(files),key=lambda p:p.stat().st_mtime,reverse=True)
           print("RECENT_ERROR_LOGS="+str(len(unique)))
           secret=re.compile(r"(?i)(secret[_ -]?key|password|token|api[_ -]?key|private[_ -]?key)(\\s*[:=]\\s*)[^\\s,;]+")
           urlpass=re.compile(r"(://[^/\\s:@]+:)[^/@\\s]+@")
           marker=re.compile(r"traceback|exception|error|failed|no module|importerror|runtimeerror|operationalerror|disallowedhost|staticfiles manifest|django|passenger",re.I)
-          for p in unique[:25]:
+          for p in unique[:4]:
               print("ERROR_LOG_FILE="+str(p))
-              try: lines=p.read_text(errors="replace").splitlines()[-600:]
+              try: lines=p.read_text(errors="replace").splitlines()[-800:]
               except OSError: continue
-              for line in lines:
-                  if marker.search(line):
+              hits=[i for i,line in enumerate(lines) if marker.search(line)]
+              for i in hits[-8:]:
+                  for line in lines[max(0,i-2):min(len(lines),i+2)]:
                       line=secret.sub(r"\\1\\2[redacted]",line)
                       line=urlpass.sub(r"\\1[redacted]@",line)
-                      print("ERROR_LOG_LINE="+line[:500])
+                      print("ERROR_LOG_CONTEXT="+line[:500])
           PY
           REMOTE
       - name: Remove temporary SSH material
