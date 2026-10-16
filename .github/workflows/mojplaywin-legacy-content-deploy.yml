@@ -127,21 +127,37 @@ jobs:
         run: |
           set -euo pipefail
           python3 - <<'PY'
+          import os
+          import time
           from urllib.request import Request, urlopen
           checks = {
-              "https://mojplaywin.com/": ("200", "80% digital momentum", "20% real-world ventures", "site/mojplaywin.css?v=20261016"),
-              "https://mojplaywin.com/agro-industry/": ("200", "Seven practical fields", "Currency and digital-asset literacy", "Carpets and handwoven textiles"),
-              "https://mojplaywin.com/store/": ("200", "No public products yet", "ASTRA EARLY PREVIEW"),
+              "https://mojplaywin.com/": ("80% digital momentum", "20% real-world ventures", 'id="mpw-insight-title"', 'id="insight-games"'),
+              "https://mojplaywin.com/ai/": ('id="guide-ai"', "A reliable AI assistant needs evaluation"),
+              "https://mojplaywin.com/agro-industry/": ("Seven practical fields", "Currency and digital-asset literacy", 'id="guide-agro-industry"'),
+              "https://mojplaywin.com/store/": ("No public products yet",),
           }
+          run_id = os.environ.get("GITHUB_RUN_ID", "manual")
           for url, markers in checks.items():
-              with urlopen(Request(url, headers={"Cache-Control": "no-cache"}), timeout=25) as response:
-                  body = response.read().decode("utf-8", "replace")
-                  if str(response.status) != markers[0]:
-                      raise SystemExit(f"{url}: unexpected status {response.status}")
-              missing = [m for m in markers[1:] if m not in body]
-              if missing:
-                  raise SystemExit(f"{url}: missing markers {missing}")
-              print(f"MOJPLAYWIN_POSTCHECK {url} status=200 markers=passed")
+              passed = False
+              for attempt in range(1, 13):
+                  check_url = url + f"?__mpw_release={run_id}-{attempt}"
+                  request = Request(check_url, headers={"Cache-Control":"no-cache, no-store", "Pragma":"no-cache"})
+                  try:
+                      with urlopen(request, timeout=20) as response:
+                          body = response.read().decode("utf-8", "replace")
+                          status = response.status
+                      missing = [marker for marker in markers if marker not in body]
+                      passed = status == 200 and not missing
+                      print(f"MOJPLAYWIN_POSTCHECK {url} attempt={attempt} status={status} missing={missing}", flush=True)
+                  except Exception as exc:
+                      print(f"MOJPLAYWIN_POSTCHECK {url} attempt={attempt} error={type(exc).__name__}", flush=True)
+                  if passed:
+                      break
+                  if attempt < 12:
+                      time.sleep(3)
+              if not passed:
+                  raise SystemExit(f"Current content never appeared after restart: {url}")
+          print("MOJPLAYWIN_UPDATED_CONTENT_PUBLICLY_VERIFIED")
           PY
       - name: Roll back if the public smoke check failed
         if: failure() && steps.smoke.outcome == 'failure'
