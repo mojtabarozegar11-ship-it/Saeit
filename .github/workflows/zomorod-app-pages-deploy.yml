@@ -627,7 +627,7 @@ jobs:
             mapfile -t paths < "$backup/deployed-paths.txt"
           fi
           asset_paths=(agriculture/assets/zomorod-olive-v1/platform-home.webp agriculture/assets/zomorod-olive-v1/agriculture.webp agriculture/assets/zomorod-olive-v1/smart-agriculture.webp agriculture/assets/zomorod-olive-v1/industry.webp agriculture/assets/zomorod-olive-v1/economy.webp agriculture/assets/zomorod-olive-v1/research.webp agriculture/assets/zomorod-olive-v1/knowledge.webp agriculture/assets/zomorod-olive-v1/genetics.webp agriculture/assets/zomorod-olive-v1/laboratory.webp)
-          for rel in "${paths[@]}";
+          for rel in "${paths[@]}"; do
             target="$app/$rel"
             if grep -Fxq "$rel" "$backup/existing.txt"; then
               cp -p "$backup/$rel" "$target.rollback"
