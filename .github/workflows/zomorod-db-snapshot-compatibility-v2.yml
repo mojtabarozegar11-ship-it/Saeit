@@ -83,7 +83,7 @@ jobs:
           cd "$stage"
           "$py" - <<'PY'
           import os,sqlite3,subprocess,sys
-          db=os.environ["DATABASE_URL"].split("////",1)[1]
+          db="/"+os.environ["DATABASE_URL"].split("////",1)[1]
           con=sqlite3.connect("file:"+db+"?mode=ro",uri=True)
           quick=con.execute("pragma quick_check").fetchone()[0]
           migration_count=con.execute("select count(*) from django_migrations").fetchone()[0]
