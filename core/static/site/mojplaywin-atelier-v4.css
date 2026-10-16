@@ -166,8 +166,9 @@ body.mpw-atelier-v4{
  .mpw-atelier-v4 .mw-brand-copy strong{font-size:1rem}
  .mpw-atelier-v4 .mw-navigation{justify-content:flex-start;gap:3px;width:100%}
  .mpw-atelier-v4 .mw-navigation>a,.mpw-atelier-v4 .mw-nav-menu>summary{min-height:44px;font-size:.76rem;padding:9px 10px}
- .mpw-atelier-v4 .mw-nav-menu{position:static;flex:1 1 100%}
- .mpw-atelier-v4 .mw-nav-panel{position:static;width:100%;max-height:55vh;overflow-y:auto;grid-template-columns:1fr;gap:9px;padding:9px;margin-top:9px}
+ .mpw-atelier-v4 .mw-navigation>a:not(.mw-nav-cta){display:none}
+ .mpw-atelier-v4 .mw-nav-menu{position:static;flex:0 0 auto}
+ .mpw-atelier-v4 .mw-nav-panel{position:absolute;top:calc(100% + 4px);left:0;right:0;width:100%;max-height:55vh;overflow-y:auto;grid-template-columns:1fr;gap:9px;padding:9px;margin-top:9px}
  .mpw-atelier-v4 .mpw-hero,.mpw-atelier-v4 .mpw-worlds{grid-template-columns:1fr}
  .mpw-atelier-v4 .mpw-hero{border-radius:20px}
  .mpw-atelier-v4 .mpw-hero-copy{padding:29px 23px}
