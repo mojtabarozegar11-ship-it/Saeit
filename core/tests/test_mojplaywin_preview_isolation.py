@@ -10,7 +10,7 @@ from django.test import SimpleTestCase, override_settings
 class MojPlayWinPreviewIsolationTests(SimpleTestCase):
     def test_preview_only_pages_render_original_specialty_content(self):
         for path, title, marker in (
-            ("/ai/", "Artificial Intelligence", "ai-workflow.svg"),
+            ("/ai/", "Artificial Intelligence", "mojplaywin-atelier/ai-workflow."),
             ("/blockchain/", "Blockchain & Web3", "blockchain-network.svg"),
             ("/support/", "MojPlayWin Support", "mpw-support-handbook"),
         ):
