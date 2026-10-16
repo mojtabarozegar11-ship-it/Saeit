@@ -116,6 +116,51 @@ jobs:
             echo "ZM_PASSENGER_LIVE_ROUTE=$path status=$code"
           done
           REMOTE
+      - name: Classify Passenger environment directives and startup errors safely
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          export PYTHONDONTWRITEBYTECODE=1
+          python3 - <<'PY'
+          from pathlib import Path
+          import re,os
+          home=Path.home()
+          rules=(home/"public_html"/".htaccess").read_text(errors="replace").splitlines()
+          for name in ("PYTHONHOME","PYTHONPATH","LS_PYTHONBIN"):
+              matches=[l.strip().split(None,2)[2] for l in rules if len(l.strip().split(None,2))==3 and l.strip().split(None,2)[:2]==["SetEnv",name]]
+              if matches:
+                  val=matches[-1].strip('"').strip("'")
+                  path=Path(val)
+                  print("ZM_PASSENGER_ENV_KEY="+name+" configured=yes"+" path_exists="+str(path.exists())+" points_to_binary="+str(path.is_file())+" points_to_folder="+str(path.is_dir()))
+              else:print("ZM_PASSENGER_ENV_KEY="+name+" configured=no")
+          candidates=(home/"Saeit"/"stderr.log",home/"Saeit"/"passenger.log",
+                     home/"public_html"/"stderr.log",home/"public_html"/"error_log",
+                     home/"logs"/"zomorodmelal.ir-ssl_log",home/"logs"/"zomorodmelal.ir")
+          terms=("populate() isn't reentrant","VIRTUAL_ENV","No module named",
+                 "ModuleNotFoundError","ImportError","Traceback","Passenger","Application startup",
+                 "PythonHome","No such file or directory")
+          for p in candidates:
+              if not p.is_file() or p.is_symlink():continue
+              print("ZM_LOG_CANDIDATE="+p.name+" bytes="+str(p.stat().st_size))
+              try:
+                  with p.open("rb") as stream:
+                      stream.seek(max(p.stat().st_size-32000,0))
+                      raw=stream.read().decode("utf-8","replace")
+              except Exception as exc:
+                  print("ZM_LOG_READ_ERROR="+type(exc).__name__)
+                  continue
+              found=0
+              for line in raw.splitlines():
+                  matched=next((needle for needle in terms if needle.lower() in line.lower()),None)
+                  if matched:
+                      found+=1
+                      print("ZM_LOG_MATCH_FILE="+p.name+" kind="+matched+" count_line="+str(found))
+                      if found>=20:break
+          PY
+          REMOTE
       - name: Clean temporary runner SSH keys
         if: always()
         run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
