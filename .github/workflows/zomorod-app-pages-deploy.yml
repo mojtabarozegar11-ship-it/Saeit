@@ -418,8 +418,21 @@ jobs:
           echo "PASSENGER_STARTUP_ENTRYPOINT_BEGIN"
           sed -n '1,20p' "$app/passenger_wsgi.py"
           echo "PASSENGER_STARTUP_ENTRYPOINT_END"
-          grep -Fq 'PassengerPython "/opt/alt/python310/bin/lswsgi"' "$htaccess"
-          echo "PASSENGER_PYTHON_DIRECTIVE=unchanged"
+          python3 - "$htaccess" "$passenger_python" <<'PY'
+          from pathlib import Path
+          import os,sys
+          path=Path(sys.argv[1])
+          source=path.read_text(encoding="utf-8")
+          old='PassengerPython "/opt/alt/python310/bin/lswsgi"'
+          new=f"PassengerPython {sys.argv[2]}"
+          if source.count(old)!=1:
+              raise SystemExit("EXPECTED_PASSENGER_PYTHON_DIRECTIVE_NOT_UNIQUE")
+          replacement=path.with_name(path.name+".python-switch")
+          replacement.write_text(source.replace(old,new,1),encoding="utf-8")
+          os.chmod(replacement,path.stat().st_mode)
+          os.replace(replacement,path)
+          PY
+          echo "PASSENGER_PYTHON_DIRECTIVE=direct_virtualenv"
           restart_result="$(mktemp "$HOME/.zomorod-passenger-restart-$sha.XXXXXX.json")"
           if ! "$selector" restart --json --interpreter python --user "$USER" --app-root Saeit > "$restart_result"; then
             rm -f -- "$restart_result"
