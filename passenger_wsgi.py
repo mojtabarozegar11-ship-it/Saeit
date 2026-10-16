@@ -22,15 +22,18 @@ if os.path.exists(env_path):
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 
-# cPanel Passenger may launch this script with its system interpreter.
-# Re-exec once with this application's CloudLinux virtualenv before importing Django.
-INTERP = os.path.join(os.path.expanduser("~"), "virtualenv", "Saeit", "3.10", "bin", "python")
-if not os.path.isfile(INTERP) or not os.access(INTERP, os.X_OK):
-    raise RuntimeError("Configured Django virtualenv interpreter is unavailable")
-if os.path.abspath(sys.executable) != os.path.abspath(INTERP):
-    if os.environ.get("ZOMOROD_PASSENGER_REEXEC") == "1":
-        raise RuntimeError("Passenger re-exec did not select the configured virtualenv")
-    os.environ["ZOMOROD_PASSENGER_REEXEC"] = "1"
-    os.execl(INTERP, INTERP, *sys.argv)
+# Keep CloudLinux's managed Passenger/lswsgi interpreter intact. CloudLinux puts
+# pure Python wheels in lib/ and native extension wheels (e.g. pydantic_core) in
+# lib64/. Both locations are required for Django startup under the selector.
+import site
+
+VENV_ROOT = os.path.join(os.path.expanduser("~"), "virtualenv", "Saeit", "3.10")
+for package_dir in (
+    os.path.join(VENV_ROOT, "lib64", "python3.10", "site-packages"),
+    os.path.join(VENV_ROOT, "lib", "python3.10", "site-packages"),
+):
+    if not os.path.isdir(package_dir):
+        raise RuntimeError("CloudLinux virtualenv site-packages directory is unavailable")
+    site.addsitedir(package_dir)
 
 from config.wsgi import application
