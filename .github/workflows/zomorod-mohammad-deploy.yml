@@ -219,12 +219,12 @@ jobs:
         run: |
           set -euo pipefail
           page="$(curl --fail --silent --show-error --retry 4 --retry-delay 2 https://zomorodmelal.ir/mohammad/)"
-          printf '%s' "$page" | grep -Fq 'کلینیک ساختمان محمد'
+          grep -Fq 'کلینیک ساختمان محمد' <<< "$page"
           curl --fail --silent --show-error --retry 4 --retry-delay 2 -o /dev/null https://zomorodmelal.ir/mohammad/styles.css
           curl --fail --silent --show-error --retry 4 --retry-delay 2 -o /dev/null https://zomorodmelal.ir/mohammad/app.js
           curl --fail --silent --show-error --retry 4 --retry-delay 2 -o /dev/null https://zomorodmelal.ir/mohammad/assets/checklist-before-renovation.html
           panel="$(curl --fail --silent --show-error --retry 4 --retry-delay 2 https://zomorodmelal.ir/mohammad/panel/)"
-          printf '%s' "$panel" | grep -Fq 'میز کار مدیریت'
+          grep -Fq 'میز کار مدیریت' <<< "$panel"
           curl --fail --silent --show-error --retry 4 --retry-delay 2 -o /dev/null https://zomorodmelal.ir/
           echo "MOHAMMAD_LIVE=https://zomorodmelal.ir/mohammad/"
           echo "PANEL_LIVE=https://zomorodmelal.ir/mohammad/panel/"
