@@ -114,6 +114,31 @@ jobs:
             printf 'PASSENGER_PATH_REAL=%s\n' "$(readlink -f "$python_path")"
             printf 'PASSENGER_PATH_FILE_TYPE=%s\n' "$(file -b "$python_path")"
           fi
+          # Read only Python startup hooks that may initialize Django before the Passenger WSGI entry point.
+          venv="$HOME/virtualenv/Saeit/3.10"
+          if test -d "$venv"; then
+            find "$venv" -maxdepth 7 -type f \( -name '*.pth' -o -name sitecustomize.py -o -name usercustomize.py \) -print 2>/dev/null | sort | while IFS= read -r startup_file; do
+              rel="${startup_file#"$venv"/}"
+              case "$startup_file" in
+                *.pth)
+                  if awk 'tolower($0) ~ /^[[:space:]]*import[[:space:]]/ { found=1 } END { exit !found }' "$startup_file"; then
+                    echo "PYTHON_STARTUP_HOOK=$rel executable_import_line=yes"
+                  else
+                    echo "PYTHON_STARTUP_HOOK=$rel executable_import_line=no"
+                  fi
+                  ;;
+                *)
+                  if grep -qE '^[[:space:]]*(from|import)[[:space:]]' "$startup_file"; then
+                    echo "PYTHON_CUSTOMIZE_HOOK=$rel imports_present=yes"
+                  else
+                    echo "PYTHON_CUSTOMIZE_HOOK=$rel imports_present=no"
+                  fi
+                  ;;
+              esac
+            done
+          else
+            echo "PYTHON_VENV_STARTUP_HOOKS=venv_missing"
+          fi
           for base in "$HOME/Saeit" "$HOME/virtualenv" "$HOME/.cl.selector"; do
             if test -d "$base"; then
               echo "PYTHON_RUNTIME_PATHS_BEGIN=$base"
