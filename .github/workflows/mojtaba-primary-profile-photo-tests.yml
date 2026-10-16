@@ -1,0 +1,28 @@
+name: Mojtaba owner-selected primary profile photo tests
+on:
+  push:
+    branches: ['feat/mojtaba-primary-profile-photo-20261016']
+    paths:
+      - 'content/mojtaba_primary_profile_source_20261016.b64'
+      - 'scripts/mojtaba_set_primary_profile_photo_20261016.py'
+      - 'tests/test_mojtaba_primary_profile_photo.py'
+      - '.github/workflows/mojtaba-primary-profile-photo-*.yml'
+  pull_request:
+    paths:
+      - 'content/mojtaba_primary_profile_source_20261016.b64'
+      - 'scripts/mojtaba_set_primary_profile_photo_20261016.py'
+      - 'tests/test_mojtaba_primary_profile_photo.py'
+      - '.github/workflows/mojtaba-primary-profile-photo-*.yml'
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify owner image SHA, two valid WebP crops, original page and gallery protection
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mojtaba_set_primary_profile_photo_20261016.py
+          python3 -m unittest discover -s tests -p test_mojtaba_primary_profile_photo.py -v
