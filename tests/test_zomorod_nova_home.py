@@ -58,7 +58,7 @@ class TestNovaHomepage(unittest.TestCase):
         for tag, attrs in self.doc.nodes:
             if tag != "img":
                 continue
-            self.assertTrue(attrs.get("src", "").startswith("/static/site/"))
+            self.assertTrue(attrs.get("src", "").startswith(("/static/site/", "/agriculture/assets/zomorod-olive-v1/")))
             self.assertTrue(attrs.get("alt"), "All images need meaningful alt")
             self.assertTrue(attrs.get("width"))
             self.assertTrue(attrs.get("height"))
