@@ -104,6 +104,30 @@ jobs:
           env=app/".env"
           print("LIVE_DATABASE_URL_PRESENT="+str(any(x.strip().startswith("DATABASE_URL=") for x in env.read_text(errors="replace").splitlines()) if env.is_file() else False).lower())
           PY
+          python3 - <<'PY'
+          import glob,os
+          matched=[]
+          for filename in glob.glob("/proc/[0-9]*/environ"):
+              try:
+                  raw=open(filename,"rb").read().split(b"\\0")
+                  env={}
+                  for item in raw:
+                      if b"=" in item:
+                          k,v=item.split(b"=",1); env[k.decode(errors="ignore")]=v.decode(errors="replace")
+                  cmd=open(filename.replace("environ","cmdline"),"rb").read().replace(b"\\0",b" ").decode(errors="replace").lower()
+                  if "passenger" not in cmd and "lswsgi" not in cmd and "/saeit" not in cmd: continue
+                  setting=env.get("DJANGO_SETTINGS_MODULE","")
+                  db=env.get("DATABASE_URL","")
+                  scheme=db.split(":",1)[0] if ":" in db else ""
+                  path=db.split("/",3)[-1].split("?",1)[0] if db else ""
+                  matched.append((setting,scheme,path.rsplit("/",1)[-1]))
+              except (OSError,PermissionError): pass
+          print("PASSENGER_WORKER_ENV_MATCHES="+str(len(matched)))
+          print("PASSENGER_WORKER_DJANGO_SETTINGS="+",".join(sorted({x[0] for x in matched if x[0]})) or "unset")
+          print("PASSENGER_WORKER_DATABASE_URL_PRESENT="+str(any(x[1] for x in matched)).lower())
+          print("PASSENGER_WORKER_DATABASE_SCHEMES="+(",".join(sorted({x[1] for x in matched if x[1]})) or "unset"))
+          print("PASSENGER_WORKER_DATABASE_BASENAMES="+(",".join(sorted({x[2] for x in matched if x[2]})) or "unset"))
+          PY
           echo "LIVE_TOPLEVEL_DB_FILES_BEGIN"
           find "$app" -maxdepth 2 -type f \( -name '*.sqlite3' -o -name '*.sqlite' -o -name '*.db' \) -printf '%P %s bytes\n' | sort
           echo "LIVE_TOPLEVEL_DB_FILES_END"
