@@ -613,7 +613,7 @@ jobs:
           uri=re.compile(r"(://[^/\s:@]+:)[^/@\s]+@")
           emitted=0
           for marker_index in [i for i,line in enumerate(lines) if "PASSENGER_REENTRANT_CALL_STACK_BEGIN" in line][-2:]:
-              end=next((j for j in range(marker_index+1,len(lines)) if "PASSENGER_REENTRANT_CALL_STACK_END" in lines[j]),min(len(lines),marker_index+35))
+              end=next((j for j in range(marker_index+1,len(lines)) if "PASSENGER_REENTRANT_CALL_STACK_END" in lines[j]),min(len(lines),marker_index+180))
               for line in lines[marker_index:end+1]:
                   safe=secret.sub(r"\1=[redacted]",line)
                   safe=uri.sub(r"\1[redacted]@",safe)
