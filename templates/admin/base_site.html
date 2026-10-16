@@ -1,0 +1,131 @@
+{% extends "admin/base.html" %}
+{% load i18n %}
+{# Branding and styles are restricted to the Zomorod main host, never MojPlayWin. #}
+{% block title %}{% if request.get_host == "zomorodmelal.ir" or request.get_host == "www.zomorodmelal.ir" %}{{ title }} | میز مدیریت زمرد ملل{% else %}{{ block.super }}{% endif %}{% endblock %}
+{% block branding %}
+{% if request.get_host == "zomorodmelal.ir" or request.get_host == "www.zomorodmelal.ir" %}
+<div id="zm-nova-brand" class="zm-nova-brand">
+  <a href="{% url 'admin:index' %}" class="zm-nova-home" aria-label="رفتن به میز مدیریت">
+    <img src="/static/site/company/company-logo.png" width="58" height="58" alt="لوگوی زمرد ملل">
+    <span><strong>میز مدیریت زمرد ملل</strong><small>سامانه Django · محتوا، تولید، داده و ایجنت‌ها</small></span>
+  </a>
+  <span class="zm-nova-edition">NOVA ADMIN · 2026</span>
+</div>
+{% else %}
+<div id="site-name"><a href="{% url 'admin:index' %}">{{ site_header|default:_("Django administration") }}</a></div>
+{% endif %}
+{% endblock %}
+{% block extrastyle %}{{ block.super }}
+{% if request.get_host == "zomorodmelal.ir" or request.get_host == "www.zomorodmelal.ir" %}
+<style>
+/* Independent Zomorod-only Django admin visual system; no third-party dependencies. */
+:root{
+ --zm-admin-ink:#162e23;--zm-admin-green:#143a2a;--zm-admin-forest:#0d2d20;
+ --zm-admin-gold:#d2b475;--zm-admin-cream:#f4f1e9;--zm-admin-panel:#fffef9;
+ --zm-admin-line:#d9e3d8;--zm-admin-muted:#65776b;
+ --primary:#143a2a;--secondary:#1f4d36;--accent:#d2b475;
+ --primary-fg:#faf8f2;--body-fg:#263d2e;--body-bg:#f4f1e9;
+ --link-fg:#23583b;--link-hover-color:#122e22;
+ --header-color:#faf8f2;--header-bg:#102e23;
+ --breadcrumbs-bg:#234b36;--breadcrumbs-fg:#f1eadb;
+ --selected-row:#edf4e9;--button-bg:#194832;--button-hover-bg:#356a4a;
+ --default-button-bg:#b79559;--default-button-hover-bg:#d0ae75;
+ --object-tools-bg:#1b4d37;--object-tools-hover-bg:#397454;
+ --border-color:#d6e1d5;
+}
+html{scroll-behavior:smooth}
+body{background:#f3f1ea;color:var(--zm-admin-ink);font-family:Vazirmatn,Tahoma,"Segoe UI",sans-serif}
+#header{background:linear-gradient(110deg,#09291d,#1f5036);min-height:108px;border-bottom:4px solid #bd9c62;box-shadow:0 10px 35px #0b302017;padding:15px clamp(18px,3vw,48px)}
+#branding{float:none;display:block;max-width:100%}
+.zm-nova-brand{display:flex;justify-content:space-between;align-items:center;gap:28px;flex-wrap:wrap}
+.zm-nova-home{display:inline-flex;align-items:center;gap:14px;min-height:62px;text-decoration:none!important;color:#f8f3e6!important}
+.zm-nova-home>img{height:58px;width:58px;object-fit:contain;background:#fffdf1;border-radius:16px;padding:5px}
+.zm-nova-home strong{display:block;font-size:clamp(19px,2.3vw,28px);line-height:1.5;color:#fff}
+.zm-nova-home small{display:block;font-size:12px;font-weight:400;color:#d4e1d0;line-height:1.6}
+.zm-nova-edition{font:700 11px "Segoe UI",sans-serif;letter-spacing:.16em;color:#d7bb85;border:1px solid #bea271;padding:9px 14px;border-radius:50px}
+#user-tools{float:none!important;position:static!important;margin-top:12px;text-align:right;font-size:12px;color:#dce7dc}
+#user-tools a{border:0;color:#f2e5ca!important}
+#user-tools a:hover{text-decoration:underline}
+div.breadcrumbs{padding:14px clamp(18px,3vw,48px);background:#214c36;border:0;font-size:13px;color:#e4eadc}
+div.breadcrumbs a{color:#e7ce96}
+#container{min-height:100vh}
+#content{padding:clamp(22px,3vw,44px);width:auto;max-width:1560px;margin-inline:auto}
+#content h1{font-size:clamp(24px,2.7vw,37px);color:#143927;line-height:1.4;font-weight:800;padding-block:9px 20px}
+#content h2,.module caption,.module h2,.inline-group h2{color:#173c2b}
+#content-main{max-width:none}
+#content-main .module,#content-related,#nav-sidebar .module,.inline-group{
+ background:#fffdfa;border:1px solid #dbe3da;border-radius:16px;
+ box-shadow:0 12px 32px #14361b0c;overflow:hidden
+}
+.module h2,.module caption,.inline-group h2{
+ background:#e7eee6!important;color:#1e4b33!important;
+ padding:14px 17px!important;font-weight:800!important;font-size:14px!important
+}
+.module table{border-collapse:collapse}
+.module td,.module th{padding:13px 16px;line-height:1.9}
+.module td a{color:#205c3b;font-weight:700}
+.module td a:hover{color:#0e3823}
+#content-related{padding:0!important;background:#fffefb!important}
+#content-related .actionlist li{padding:9px 15px!important}
+#nav-sidebar{background:#fffefa;border-left:1px solid #dbe4d9}
+#nav-sidebar input{padding:13px;border-radius:10px}
+#nav-sidebar .current-app a{background:#e1ecdd!important;color:#194b32}
+.object-tools a,.button,input[type=submit],input[type=button],.submit-row input,.deletelink{
+ min-height:42px;border-radius:10px!important;font-size:13px!important
+}
+.submit-row{background:#eaf0e7;border:1px solid #d5e2d3;border-radius:15px;padding:18px}
+fieldset.module{border:1px solid #dbe4d6;border-radius:14px;overflow:hidden;background:#fffcf7}
+.aligned label{font-weight:700;color:#315242}
+input:not([type=checkbox]):not([type=radio]):not([type=submit]),select,textarea{
+ border:1px solid #becdbd;border-radius:9px;background:#fffefc;color:#1c392b;
+ padding:10px;min-height:40px;max-width:100%
+}
+input:focus,select:focus,textarea:focus{outline:2px solid #a88b56;outline-offset:2px}
+#changelist{background:#fffdf9;border:1px solid #dbe3d8;border-radius:16px;overflow:hidden}
+#changelist .results{overflow-x:auto}
+#changelist table thead th{background:#e8efe7;color:#183e2b;font-size:13px}
+#changelist table tbody tr:nth-child(odd){background:#fffefa}
+#changelist table tbody tr:hover{background:#eef4eb}
+#changelist-filter{background:#f7f9f4;border-right:1px solid #d8e4d8}
+#changelist-filter h2{background:#214c37;color:#fff}
+.paginator{background:#f5f7f3}
+.login #container{width:min(480px,calc(100% - 30px));border:1px solid #d8e2d7;border-radius:22px;overflow:hidden;box-shadow:0 28px 70px #0e362025;margin:9vh auto}
+.login #header{padding:24px}
+.login #content{padding:34px}
+.login .zm-nova-brand{display:block}
+.login .zm-nova-edition{display:none}
+.messagelist li{border-radius:10px;font-size:13px}
+a:focus-visible,button:focus-visible,summary:focus-visible{outline:3px solid #d5ad64;outline-offset:3px}
+@media(max-width:890px){
+ #header{min-height:88px;padding:15px 16px}
+ .zm-nova-edition{display:none}
+ #content{padding:18px 12px}
+ #nav-sidebar{max-width:265px}
+ #changelist-filter{width:210px}
+}
+@media(max-width:620px){
+ .zm-nova-home strong{font-size:19px}
+ .zm-nova-home>img{width:45px;height:45px}
+ #header{padding:12px}
+ #user-tools{font-size:11px;line-height:2}
+ #content h1{font-size:24px}
+ #changelist-filter{position:static;width:auto}
+ #changelist .results{overflow-x:auto}
+ .submit-row{display:flex;flex-direction:column;gap:9px}
+}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+</style>
+{% endif %}
+{% endblock %}
+{% block nav-global %}
+{% if request.get_host == "zomorodmelal.ir" or request.get_host == "www.zomorodmelal.ir" %}
+<div class="zm-nova-admin-navigation" style="background:#102e23;padding:13px clamp(18px,3vw,48px);border-top:1px solid #426248;display:flex;gap:13px;align-items:center;flex-wrap:wrap;color:#e9dfc9;font-size:12px">
+  <a style="color:inherit;text-decoration:none" href="{% url 'admin:index' %}">مدیریت مدل‌ها</a>
+  <a style="color:inherit;text-decoration:none" href="/agents/">صفحه ایجنت‌ها</a>
+  <a style="color:inherit;text-decoration:none" href="/knowledge/">دانشنامه</a>
+  <a style="color:inherit;text-decoration:none" href="/company/">فعالیت‌های شرکت</a>
+  <a style="color:inherit;text-decoration:none" href="/api/health/">آزمون سلامت API</a>
+  <a style="color:#dfc38d;text-decoration:none" href="/">نمایش سایت ↗</a>
+</div>
+{% endif %}
+{% endblock %}
