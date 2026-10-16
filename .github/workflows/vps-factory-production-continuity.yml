@@ -22,9 +22,9 @@ jobs:
           test -n "$VPS_KEY"
           echo VPS_KEY_PRESENT
           d="$RUNNER_TEMP/vps-factory"; mkdir -p "$d"
-          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r", "").replace("\\n", "\n"), end="")' > "$d/key"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
           chmod 600 "$d/key"
-          ssh-keygen -y -f "$d/key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null
           chmod 600 "$d/key"
           ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
           test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
