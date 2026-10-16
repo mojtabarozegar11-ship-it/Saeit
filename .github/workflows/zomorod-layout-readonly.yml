@@ -77,6 +77,43 @@ jobs:
             if grep -q 'PassengerAppRoot' "$HOME/public_html/.htaccess"; then echo "PASSENGER_DIRECTIVES=yes"; else echo "PASSENGER_DIRECTIVES=no"; fi
           fi
           REMOTE
+      - name: Identify content roots and Passenger application paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-root"
+          ssh -F "$d/config" saeit-cpanel 'bash -s' <<'REMOTE'
+          echo "ACTIVE_PASSENGER_MAPPING"
+          uapi --output=json PassengerApps list_applications | python3 -c 'import sys,json; x=json.load(sys.stdin); stack=[x]; seen=set()
+          while stack:
+              y=stack.pop()
+              if isinstance(y,dict):
+                  if y.get("domain") in ("zomorodmelal.ir","www.zomorodmelal.ir"):
+                      k=(y.get("domain"),y.get("base_uri"),y.get("path"),y.get("enabled"))
+                      if k not in seen: seen.add(k); print("APP_MAP="+str(k))
+                  stack.extend(y.values())
+              elif isinstance(y,list): stack.extend(y)'
+          echo "TEMPLATE_INVENTORY"
+          for base in "$HOME/Saeit" "$HOME/Saeit-staging"; do
+            if test -d "$base"; then
+              find "$base" -maxdepth 6 -type f -name 'platform_page.html' -print | head -10
+              find "$base" -maxdepth 6 -type f -name 'services.html' -print | head -10
+              find "$base" -maxdepth 6 -type f -name 'passenger_wsgi.py' -print | head -10
+            fi
+          done
+          for p in "$HOME/public_html/index.html" "$HOME/Saeit-staging/core/templates/core/platform_page.html" "$HOME/Saeit/core/views.py"; do
+            if test -f "$p"; then
+              echo "CONTENT_SHA $(sha256sum "$p" | cut -c1-20) FILE=$p"
+            fi
+          done
+          if test -f "$HOME/public_html/index.html"; then
+            grep -oi -m1 '<title>[^<]*</title>' "$HOME/public_html/index.html" || true
+          fi
+          echo "ROOT_HTACCESS_PASSENGER_APP_ROOT"
+          if test -f "$HOME/public_html/.htaccess"; then
+            grep -E '^Passenger(AppRoot|BaseURI|Python|AppType|StartupFile)' "$HOME/public_html/.htaccess" || true
+          fi
+          REMOTE
       - name: Check public response codes
         shell: bash
         run: |
