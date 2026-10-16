@@ -86,3 +86,39 @@ jobs:
           stage="/home/zomorod2/.mpw-text-cleanup-$GITHUB_RUN_ID"
           timeout 35s ssh -F "$SSH_CONFIG" saeit-host "test ! -e '$stage' && install -d -m 700 '$stage'"
           timeout 120s scp -F "$SSH_CONFIG" "$RUNNER_TEMP/editorial-fix.tar.gz" "saeit-host:$stage/source.tgz"
+      - name: Publish only the approved editorial language changes and verify safety
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 880s ssh -F "$SSH_CONFIG" saeit-host "bash -s -- '$GITHUB_RUN_ID'" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          id="$1"
+          stage="/home/zomorod2/.mpw-text-cleanup-$id"
+          app="/home/zomorod2/mojtaba_personal/mojtaba_roozegar_personal_v17"
+          python="$app/../.venv_personal_test/bin/python"
+          cleaner="$stage/scripts/mojtaba_remove_unwanted_profile_disclaimers.py"
+          backup="$HOME/.backups/mojtaba-photo-disclaimer-correction/$id"
+          installed=0
+          verified=0
+          restore_guard() {
+            status=$?
+            trap - EXIT
+            if test "$installed" = 1 && test "$verified" = 0; then
+              "$python" "$cleaner" rollback --app "$app" --backup "$backup" && echo "EDITORIAL_AUTO_ROLLBACK=success" || echo "EDITORIAL_AUTO_ROLLBACK=manual_review"
+            fi
+            exit "$status"
+          }
+          trap restore_guard EXIT
+          test -f "$app/manage.py" && test -x "$python" && test ! -L "$app"
+          test -f "$stage/source.tgz"
+          tar -tzf "$stage/source.tgz" > "$stage/archive-list.txt"
+          grep -Fxq 'scripts/mojtaba_remove_unwanted_profile_disclaimers.py' "$stage/archive-list.txt"
+          cd "$stage"
+          tar -xzf source.tgz --no-same-owner
+          "$python" "$cleaner" check --app "$app" --content "$stage/content"
+          cd "$app"
+          "$python" "$cleaner" install --app "$app" --content "$stage/content" --backup "$backup"
+          installed=1
+          "$python" manage.py check --deploy
+          test ! -d "$app/tmp" || touch "$app/tmp/restart.txt"
