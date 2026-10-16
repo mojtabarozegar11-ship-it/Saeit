@@ -1,0 +1,233 @@
+name: Publish six advanced journal studies and article SEO
+on:
+  issues:
+    types: [opened]
+permissions:
+  contents: read
+concurrency:
+  group: mojtaba-v17-advanced-journal-seo-20261016
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event.issue.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.issue.title == 'Ops: Publish six advanced Mojtaba journal studies and SEO 2026-10-16'
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test advanced journal articles and additive SEO patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mojtaba_six_advanced_journal_publish.py
+          python3 -m unittest discover -s tests -p test_mojtaba_six_advanced_journal.py -v
+      - name: Prepare pinned SSH relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/photo-relay"
+          mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          python3 - "$d/host.key" <<'PY'
+          import pathlib,sys
+          p=pathlib.Path(sys.argv[1]);t=p.read_text().replace('\r\n','\n').strip()
+          p.write_text(t.replace('\\n','\n')+'\n')
+          PY
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host saeit-host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+            ConnectionAttempts 1
+          EOF
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          echo "SSH_CONFIG=$d/config" >> "$GITHUB_ENV"
+      - name: Transfer standalone content and safe installer to personal V17
+        shell: bash
+        run: |
+          set -euo pipefail
+          stage="/home/zomorod2/.mpw-advanced-journal-$GITHUB_RUN_ID"
+          timeout 25s ssh -F "$SSH_CONFIG" saeit-host "test ! -e '$stage' && install -d -m 700 '$stage'"
+          timeout 75s scp -F "$SSH_CONFIG" scripts/mojtaba_six_advanced_journal_publish.py "saeit-host:$stage/installer.py"
+          timeout 75s scp -F "$SSH_CONFIG" content/mojtaba_six_advanced_journal_articles_20261016.json "saeit-host:$stage/articles.json"
+          timeout 75s scp -F "$SSH_CONFIG" content/mojtaba_seven_full_independent_journal_20261016.json "saeit-host:$stage/older_articles.json"
+      - name: Install six articles and SEO, verify public URLs with rollback on failure
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 690s ssh -F "$SSH_CONFIG" saeit-host "bash -s -- '$GITHUB_RUN_ID'" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          id="$1"
+          app="/home/zomorod2/mojtaba_personal/mojtaba_roozegar_personal_v17"
+          stage="/home/zomorod2/.mpw-advanced-journal-$id"
+          installer="$stage/installer.py"
+          source="$stage/articles.json"
+          old_source="$stage/older_articles.json"
+          backup="$HOME/.backups/mojtaba-advanced-journal-seo/$id"
+          py="$app/../.venv_personal_test/bin/python"
+          installed=0
+          success=0
+          cleanup() {
+            status=$?
+            trap - EXIT
+            if test "$installed" = 1 && test "$success" = 0 && test -f "$backup/manifest.json"; then
+              "$py" "$installer" rollback --app "$app" --backup "$backup" && echo "ADVANCED_JOURNAL_AUTO_ROLLBACK=success" || echo "ADVANCED_JOURNAL_AUTO_ROLLBACK=manual_review_required"
+            fi
+            exit "$status"
+          }
+          trap cleanup EXIT
+          test -f "$app/manage.py" && test -x "$py" && test ! -L "$app"
+          test -f "$installer" && test -f "$source" && test -f "$old_source"
+          "$py" "$installer" check --app "$app" --content "$source"
+          cd "$app"
+          "$py" - "$installer" "$source" "$old_source" <<'PY_PRE'
+          import importlib.util,os,sys,json
+          from pathlib import Path
+          spec=importlib.util.spec_from_file_location("advanced",sys.argv[1])
+          mod=importlib.util.module_from_spec(spec);spec.loader.exec_module(mod)
+          data=mod.load_manifest(Path(sys.argv[2]))
+          older=json.load(open(sys.argv[3],encoding="utf-8"))["articles"]
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          import django;django.setup()
+          from django.urls import reverse
+          from django.template import engines
+          from core.models import Post
+          assert Post.objects.filter(slug__in=[r["slug"] for r in older],published=True).count()==7, "Previous seven posts not preserved"
+          for row in data["articles"]:
+              assert not Post.objects.filter(slug=row["slug"]).exists()
+              assert reverse("personal_site:post_detail",kwargs={"slug":row["slug"]})=="/mojtaba.roozegar/blog/"+row["slug"]+"/"
+          existing=mod.read_templates(mod.APP)
+          engine=engines["django"].engine
+          for name,original in existing.items():
+              prospective=mod.patch_template(original,data,page=name)
+              engine.from_string(prospective)
+              print("ADVANCED_JOURNAL_DJANGO_TEMPLATE_PREFLIGHT_OK="+name,flush=True)
+          print("ADVANCED_JOURNAL_OLD_7_AND_NEW_6_PREFLIGHT_PASS=yes",flush=True)
+          PY_PRE
+          installed=1
+          "$py" "$installer" install --app "$app" --content "$source" --backup "$backup"
+          "$py" manage.py check --deploy
+          if test -d "$app/tmp"; then touch "$app/tmp/restart.txt"; fi
+          "$py" - "$source" "$old_source" <<'PY_LIVE'
+          from html.parser import HTMLParser
+          from urllib.request import Request,urlopen
+          from urllib.parse import urlparse
+          import json,time,sys
+          base="https://mojplaywin.com/mojtaba.roozegar/"
+          new=json.load(open(sys.argv[1],encoding="utf-8"))["articles"]
+          older=json.load(open(sys.argv[2],encoding="utf-8"))["articles"]
+          class Parser(HTMLParser):
+              def __init__(self):super().__init__();self.first=[];self.second=[];self.title=False;self.t=[];self.canonical=[];self.desc=[];self.script=False;self.scripts=[];self.current=[]
+              def handle_starttag(self,tag,attrs):
+                  attrs=dict(attrs)
+                  if tag=="img":
+                      src=attrs.get("src","")
+                      if "owner_gallery_20261015_b/" in src:self.second.append(src)
+                      elif "owner_gallery_20261015/" in src:self.first.append(src)
+                  if tag=="title":self.title=True
+                  if tag=="meta" and attrs.get("name","").lower()=="description":self.desc.append(attrs.get("content",""))
+                  if tag=="link" and "canonical" in attrs.get("rel","").lower():self.canonical.append(attrs.get("href",""))
+                  if tag=="script" and attrs.get("type")=="application/ld+json":self.script=True;self.current=[]
+              def handle_endtag(self,tag):
+                  if tag=="title":self.title=False
+                  if tag=="script" and self.script:self.scripts.append("".join(self.current));self.script=False
+              def handle_data(self,data):
+                  if self.title:self.t.append(data)
+                  if self.script:self.current.append(data)
+          def get(path):
+              url=base+path+("?advanced_check=" if "?" not in path else "&advanced_check=")+str(time.time_ns())
+              with urlopen(Request(url,headers={"User-Agent":"MojtabaAdvancedJournalSafeDeploy/1"}),timeout=22) as response:
+                  if response.status!=200:raise ValueError("HTTP_NON_200 "+path)
+                  return response.read(4500000).decode("utf-8","replace")
+          def check(path,fn,retries=7):
+              err=""
+              for attempt in range(retries):
+                  try:
+                      body=get(path)
+                      fn(body)
+                      return
+                  except Exception as exc:
+                      err=str(exc)
+                      print("ADVANCED_JOURNAL_RETRY="+path+" "+str(attempt+1)+" "+err[:200],flush=True)
+                      time.sleep(3)
+              raise ValueError("ADVANCED_JOURNAL_LIVE_FAILED="+path+" "+err)
+          for route in ("","blog/"):
+              def verify_index(html):
+                  for prior in ('id="mpw-fifty-editorials-20261015"','id="mpw-academic-profile-20261016"','id="mpw-personal-expanded-20261016"','id="mpw-journal-longform-index-20261016"','id="mpw-new-originals-20261015-b"','id="mpw-journal-advanced-index-20261016"'):
+                      if prior not in html:raise ValueError("Missing retained or new index "+prior)
+                  for row in new:
+                      if "/blog/"+row["slug"]+"/" not in html:raise ValueError("Missing new URL")
+              check(route,verify_index)
+              print("ADVANCED_JOURNAL_INDEX_VERIFIED="+(route or "home"),flush=True)
+          for row in new:
+              path="blog/"+row["slug"]+"/"
+              def verify_article(body):
+                  if row["title"] not in body or row["content"].splitlines()[1][:50] not in body:raise ValueError("Article text not displayed")
+                  if 'id="mpw-journal-related-20261016"' not in body:raise ValueError("Related article links missing")
+                  p=Parser();p.feed(body)
+                  if row["title"] not in " ".join(p.t):raise ValueError("Missing unique HTML title")
+                  if not p.desc or row["excerpt"][:50] not in " ".join(p.desc):raise ValueError("Missing unique meta description")
+                  canon="https://mojplaywin.com/mojtaba.roozegar/"+path
+                  if canon not in p.canonical:raise ValueError("Incorrect canonical "+str(p.canonical))
+                  if not any('"@type":"BlogPosting"' in s and row["title"] in s for s in p.scripts):raise ValueError("BlogPosting schema invalid or missing")
+              check(path,verify_article)
+              print("ADVANCED_JOURNAL_FULL_ARTICLE_SEO_VERIFIED="+row["slug"],flush=True)
+          for row in older:
+              check("blog/"+row["slug"]+"/",lambda body,title=row["title"]: (_ for _ in ()).throw(ValueError("Old article missing")) if title not in body else None)
+          print("ADVANCED_JOURNAL_SEVEN_OLD_ARTICLES_UNCHANGED=yes",flush=True)
+          def gallery_check(body):
+              p=Parser();p.feed(body)
+              if len(p.first)!=10 or len(p.second)!=10:raise ValueError("Owner gallery changed")
+          check("gallery/",gallery_check)
+          print("ADVANCED_JOURNAL_GALLERY_20_PHOTOS_PRESERVED=yes",flush=True)
+          print("ADVANCED_JOURNAL_NEW_SIX_ARTICLES_AND_SEO_PASS=yes",flush=True)
+          PY_LIVE
+          success=1
+          trap - EXIT
+          echo "ADVANCED_JOURNAL_NEW_SIX_PUBLISHED=yes"
+          echo "ADVANCED_JOURNAL_BACKUP=$backup"
+          rm -rf "$stage"
+          REMOTE
+      - name: Check two original domains unchanged
+        shell: bash
+        run: |
+          set -euo pipefail
+          for site in "https://mojplaywin.com/" "https://zomorodmelal.ir/"; do
+            code="$(curl -sSL -o /dev/null -w '%{http_code}' --max-time 22 "$site")"
+            test "$code" = "200"
+            echo "ORIGINAL_DOMAIN_HEALTHY=$site HTTP_200"
+          done
+      - name: Remove temporary credentials
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/photo-relay"
