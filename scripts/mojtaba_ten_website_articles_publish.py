@@ -74,7 +74,7 @@ def load_manifest(path: Path) -> dict:
 def index_block(data: dict) -> str:
     esc = lambda s: html.escape(s, quote=True)
     bits = [
-        '<section id="mpw-web-expert-index-20261016" class="mpw-web-expert" aria-label="Long-form research articles">',
+        '<section id="mpw-website-ten-index-20261016" class="mpw-web-expert" aria-label="Long-form research articles">',
         CSS,
         "<h2>Professional Website Engineering: Ten Expert Articles</h2>",
         '<p class="intro">Ten advanced technical studies on website architecture, Django engineering, APIs, SQL, performance, security, accessible design, SEO, deployment and observability. Each chapter has a separate permanent article URL.</p>',
