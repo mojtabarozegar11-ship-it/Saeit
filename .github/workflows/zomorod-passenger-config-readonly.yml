@@ -113,6 +113,11 @@ jobs:
               except (OSError,PermissionError): pass
           PY
           echo "PASSENGER_LOG_PATHS_END"
+          echo "DJANGO_SETUP_CALLS_BEGIN"
+          if [ -d /home/zomorod2/.backups/zomorodmelal-complete/source-preflight-47c38ec3810326790f6f954b515b4f11d59042d1 ]; then
+            rg -n --glob '*.py' --glob '!**/migrations/**' 'django\.setup|setup\(\)|get_wsgi_application|apps\.populate' /home/zomorod2/.backups/zomorodmelal-complete/source-preflight-47c38ec3810326790f6f954b515b4f11d59042d1 | head -100 || true
+          fi
+          echo "DJANGO_SETUP_CALLS_END"
           echo "PASSENGER_EXCEPTION_FRAMES_BEGIN"
           python3 - "$app/stderr.log" <<'PY'
           import pathlib,sys
