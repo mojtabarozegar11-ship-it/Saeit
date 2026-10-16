@@ -50,38 +50,42 @@ def image_bytes(pics:Path):
     return assets
 def profile_section(which):
     if which=="home":
-        file="portrait.webp"
+        name="portrait.webp"
         width,height=850,1131
-        circular="border-radius:18px;max-height:520px;object-fit:cover;object-position:center 20%;"
+        shape="border-radius:18px;max-height:520px;object-fit:cover;object-position:center 20%;"
     elif which=="about":
-        file="avatar.webp"
+        name="avatar.webp"
         width,height=600,600
-        circular="border-radius:50%;max-height:300px;object-fit:cover;object-position:center;"
-    else:raise ValueError("Unknown personal page")
-    return (
-      '<section '+MARK+' aria-label="Mojtaba Roozegar primary professional profile photograph" '
-      'style="max-width:1050px;margin:24px auto 34px;padding:clamp(18px,3vw,30px);background:#181715;'
-      'border:2px solid #c8a36a;border-radius:16px;display:flex;flex-wrap:wrap;align-items:center;'
-      'justify-content:center;gap:clamp(18px,3vw,36px);color:#f4e6d3">'
-      '<figure style="margin:0;flex:0 1 345px;min-width:min(100%,235px);">'
-      '<img src="{% static '+"'"+STATIC_FOLDER+"/"+file+"'"+' %}"'
-      ' alt="Mojtaba Roozegar – primary professional profile portrait, owner-selected photograph"'
-      ' width="'+str(width)+'" height="'+str(height)+'" decoding="async" loading="eager"'
-      ' fetchpriority="high" style="display:block;width:100%;height:auto;'+circular
-      'border:2px solid #d6ae79"/>'
-      '<figcaption style="margin-top:10px;text-align:center;color:#e8d0a7;font:13px/1.5 system-ui,sans-serif">'
-      'Official owner-selected profile photograph</figcaption>'
-      '</figure>'
-      '<div style="flex:1 1 320px;max-width:570px">'
-      '<p style="font:700 13px/1.6 system-ui,sans-serif;color:#dcbb85;letter-spacing:.1em">PROFESSIONAL PROFILE</p>'
-      '<p style="font:700 clamp(26px,3vw,38px)/1.15 Georgia,serif;margin:6px 0 18px;color:#f6d59a">Mojtaba Roozegar</p>'
-      '<p style="font:16px/1.8 system-ui,sans-serif">Research, applied economics, and intelligent industrial and commercial website collaboration.</p>'
-      '<p style="font:14px/1.8 system-ui,sans-serif">This is a personal photograph selected by the profile owner. '
-      'It is not presented as evidence of a Vancouver office or a completed client project.</p>'
-      '<p><a href="/mojtaba.roozegar/contact/" style="color:#f5d39c;text-decoration:underline;'
-      'font:700 16px system-ui,sans-serif">Discuss a professional collaboration →</a></p>'
-      '</div></section>'
-    )
+        shape="border-radius:50%;max-height:300px;object-fit:cover;object-position:center;"
+    else:
+        raise ValueError("Unrecognized personal profile page")
+    src="{% static '"+STATIC_FOLDER+"/"+name+"' %}"
+    return f'''
+<section {MARK} aria-label="Mojtaba Roozegar primary professional profile photograph"
+ style="max-width:1050px;margin:24px auto 34px;padding:clamp(18px,3vw,30px);background:#181715;
+ border:2px solid #c8a36a;border-radius:16px;display:flex;flex-wrap:wrap;align-items:center;
+ justify-content:center;gap:clamp(18px,3vw,36px);color:#f4e6d3">
+ <figure style="margin:0;flex:0 1 345px;min-width:min(100%,235px);">
+  <img src="{src}" alt="Mojtaba Roozegar – primary professional profile portrait, owner-selected photograph"
+   width="{width}" height="{height}" decoding="async" loading="eager" fetchpriority="high"
+   style="display:block;width:100%;height:auto;{shape}border:2px solid #d6ae79"/>
+  <figcaption style="margin-top:10px;text-align:center;color:#e8d0a7;font:13px/1.5 system-ui,sans-serif">
+   Official owner-selected profile photograph
+  </figcaption>
+ </figure>
+ <div style="flex:1 1 320px;max-width:570px">
+  <p style="font:700 13px/1.6 system-ui,sans-serif;color:#dcbb85;letter-spacing:.1em">PROFESSIONAL PROFILE</p>
+  <p style="font:700 clamp(26px,3vw,38px)/1.15 Georgia,serif;margin:6px 0 18px;color:#f6d59a">Mojtaba Roozegar</p>
+  <p style="font:16px/1.8 system-ui,sans-serif">Research, applied economics, and intelligent industrial and commercial website collaboration.</p>
+  <p style="font:14px/1.8 system-ui,sans-serif">
+   This is a personal photograph selected by the profile owner. It is not presented as
+   evidence of a Vancouver office or a completed client project.
+  </p>
+  <p><a href="/mojtaba.roozegar/contact/" style="color:#f5d39c;text-decoration:underline;
+   font:700 16px system-ui,sans-serif">Discuss a professional collaboration →</a></p>
+ </div>
+</section>'''
+
 def patch(which,source):
     token="{% block content %}"
     if source.count(token)!=1:raise ValueError("Personal content block not unique")
