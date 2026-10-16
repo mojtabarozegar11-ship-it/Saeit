@@ -1,4 +1,4 @@
-name: Publish Zomorod Ghanadi subpage safely
+name: Publish Mohammad building clinic subpage safely
 on:
   push:
     branches: [main]
@@ -218,7 +218,9 @@ jobs:
           set -euo pipefail
           page="$(curl --fail --silent --show-error --retry 4 --retry-delay 2 https://zomorodmelal.ir/mohammad/)"
           printf '%s' "$page" | grep -Fq 'کلینیک ساختمان محمد'
-          curl --fail --silent --show-error --retry 4 --retry-delay 2 -o /dev/null https://zomorodmelal.ir/mohammad/assets/hero.webp
+          curl --fail --silent --show-error --retry 4 --retry-delay 2 -o /dev/null https://zomorodmelal.ir/mohammad/styles.css
+          curl --fail --silent --show-error --retry 4 --retry-delay 2 -o /dev/null https://zomorodmelal.ir/mohammad/app.js
+          curl --fail --silent --show-error --retry 4 --retry-delay 2 -o /dev/null https://zomorodmelal.ir/mohammad/assets/checklist-before-renovation.html
           curl --fail --silent --show-error --retry 4 --retry-delay 2 -o /dev/null https://zomorodmelal.ir/
           echo "MOHAMMAD_LIVE=https://zomorodmelal.ir/mohammad/"
           echo "ROOT_ROUTE_HTTP=200"
@@ -232,7 +234,7 @@ jobs:
           set -euo pipefail
           d="$RUNNER_TEMP/zomorod-mohammad"
           root="$DOMAIN_ROOT"; account="$CPANEL_ACCOUNT"
-          case "$root" in "/home/$account/"*) ;; *) echo "Invalid resolved domain root" >&2; exit 1;; esac
+          case "$root" in "/home/$account/"*) ;; *) echo "Invalid resolved document root" >&2; exit 1;; esac
           ssh -o User="$account" -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" "$root" "$account" <<'REMOTE'
           set -euo pipefail
           commit_sha="$1"; root="$2"; account="$3"
@@ -240,15 +242,21 @@ jobs:
           test "$(id -un)" = "$account"
           target="$root/mohammad"
           backup="$HOME/.backups/zomorodmelal-mohammad/$commit_sha"
-          test -d "$target" && test -f "$target/index.html" && grep -Fq '<!-- saeit-zomorod-mohammad-v1 -->' "$target/index.html"
-          test -d "$backup" && test -f "$backup/index.html" && grep -Fq '<!-- saeit-zomorod-mohammad-v1 -->' "$backup/index.html"
-          stage="$root/.zomorod-mohammad-restore-$commit_sha"
-          test ! -e "$stage"
-          mkdir -m 700 "$stage"
-          cp -a -- "$backup/." "$stage/"
-          rm -rf -- "$target"
-          mv -T "$stage" "$target"
-          find "$target" -type d -exec chmod 755 {} +
-          find "$target" -type f -exec chmod 644 {} +
-          echo "PREVIOUS_MOHAMMAD_PAGE_RESTORED=yes"
+          test -d "$target" && test ! -L "$target" && test -f "$target/index.html" && test ! -L "$target/index.html"
+          grep -Fq '<!-- saeit-zomorod-mohammad-v1 -->' "$target/index.html"
+          if test -d "$backup" && test -f "$backup/index.html"; then
+            grep -Fq '<!-- saeit-zomorod-mohammad-v1 -->' "$backup/index.html"
+            stage="$root/.zomorod-mohammad-restore-$commit_sha"
+            test ! -e "$stage"
+            mkdir -m 700 "$stage"
+            cp -a -- "$backup/." "$stage/"
+            rm -rf -- "$target"
+            mv -T "$stage" "$target"
+            find "$target" -type d -exec chmod 755 {} +
+            find "$target" -type f -exec chmod 644 {} +
+            echo "PREVIOUS_MOHAMMAD_PAGE_RESTORED=yes"
+          else
+            rm -rf -- "$target"
+            echo "FAILED_FIRST_INSTALL_REMOVED=yes"
+          fi
           REMOTE
