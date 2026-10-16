@@ -47,3 +47,16 @@ class ZomorodServicesEditorialTests(SimpleTestCase):
         self.assertIn("focus-visible", css)
         self.assertIn("prefers-reduced-motion", css)
         self.assertGreater(len(css), 2000)
+
+    def test_luxury_design_stays_scoped_to_zomorod_and_has_accessibility(self):
+        css = (ROOT / "core/static/site/zomorod-expert-sections-v1.css").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("body.zomorod-olive-site.services-page", css)
+        self.assertNotIn("body.services-page", css)
+        for required in (
+            "@container", "container-type:inline-size", "text-wrap:balance",
+            "color-mix", "prefers-reduced-motion", "min-height:44px",
+        ):
+            with self.subTest(css_feature=required):
+                self.assertIn(required, css)
