@@ -219,8 +219,8 @@ jobs:
           asset_existing="$backup/assets-existing.txt"
           : > "$asset_existing"
           paths=(config/urls.py config/settings.py core/views.py core/company_content_models.py core/zomorod_public_views.py core/services_views.py core/templates/base.html core/templates/core/services.html core/templates/core/platform_page.html core/management/commands/knowledge_agent_generate.py core/tests/test_zomorod_public_pages.py public/agriculture/index.html public/agriculture/livestock/index.html public/agriculture/horticulture/index.html public/agriculture/greenhouse/index.html public/agriculture/poultry/index.html public/agriculture/aquaculture/index.html public/agriculture/inputs/index.html public/agriculture/seeds/index.html public/agriculture/fertilizers/index.html public/agriculture/pesticides/index.html public/agriculture/offices/index.html public/agriculture/water-soil/index.html public/agriculture/machinery/index.html public/agriculture/market/index.html core/static/site/heroes/platform-home.webp core/static/site/heroes/agriculture.webp core/static/site/heroes/smart-agriculture.webp core/static/site/heroes/industry.webp core/static/site/heroes/economy.webp core/static/site/heroes/research.webp core/static/site/heroes/knowledge.webp core/static/site/heroes/academy.webp core/static/site/heroes/education-detail.webp core/static/site/heroes/ai.webp)
-          asset_paths=(agriculture/assets/zomorod-olive-v1/platform-home.webp agriculture/assets/zomorod-olive-v1/agriculture.webp agriculture/assets/zomorod-olive-v1/smart-agriculture.webp agriculture/assets/zomorod-olive-v1/industry.webp agriculture/assets/zomorod-olive-v1/economy.webp agriculture/assets/zomorod-olive-v1/research.webp agriculture/assets/zomorod-olive-v1/knowledge.webp amozeshgah/assets/zomorod-education-v1/academy.webp amozeshgah/assets/zomorod-education-v1/education-detail.webp amozeshgah/assets/zomorod-education-v1/research.webp amozeshgah/assets/zomorod-education-v1/knowledge.webp amozeshgah/assets/zomorod-education-v1/agriculture.webp amozeshgah/assets/zomorod-education-v1/industry.webp amozeshgah/assets/zomorod-education-v1/ai.webp amozeshgah/assets/zomorod-education-v1/economy.webp)
-          asset_sources=(platform-home.webp agriculture.webp smart-agriculture.webp industry.webp economy.webp research.webp knowledge.webp academy.webp education-detail.webp research.webp knowledge.webp agriculture.webp industry.webp ai.webp economy.webp)
+          asset_paths=(agriculture/assets/zomorod-olive-v1/platform-home.webp agriculture/assets/zomorod-olive-v1/agriculture.webp agriculture/assets/zomorod-olive-v1/smart-agriculture.webp agriculture/assets/zomorod-olive-v1/industry.webp agriculture/assets/zomorod-olive-v1/economy.webp agriculture/assets/zomorod-olive-v1/research.webp agriculture/assets/zomorod-olive-v1/knowledge.webp)
+          asset_sources=(platform-home.webp agriculture.webp smart-agriculture.webp industry.webp economy.webp research.webp knowledge.webp)
           for i in "${!asset_paths[@]}"; do
             rel="${asset_paths[$i]}"
             source="$stage/core/static/site/heroes/${asset_sources[$i]}"
@@ -366,13 +366,6 @@ jobs:
             url="https://zomorodmelal.ir/agriculture/assets/zomorod-olive-v1/$image.webp"
             check_webp "$url" "$RUNNER_TEMP/zomorod-agriculture-$image.webp"
           done
-          for image in academy education-detail research knowledge agriculture industry ai economy; do
-            url="https://zomorodmelal.ir/amozeshgah/assets/zomorod-education-v1/$image.webp"
-            check_webp "$url" "$RUNNER_TEMP/zomorod-education-$image.webp"
-          done
-          for route in amozeshgah education ghanadi; do
-            fetch "https://zomorodmelal.ir/$route/" /dev/null
-          done
           rm -f -- "$tmp" "$headers"
           echo "LIVE_AGRICULTURE_PAGES=14"
           echo "LIVE_IMAGE_ROUTES=15"
@@ -396,7 +389,7 @@ jobs:
             exit 0
           fi
           paths=(config/urls.py config/settings.py core/views.py core/company_content_models.py core/zomorod_public_views.py core/services_views.py core/templates/base.html core/templates/core/services.html core/templates/core/platform_page.html core/management/commands/knowledge_agent_generate.py core/tests/test_zomorod_public_pages.py public/agriculture/index.html public/agriculture/livestock/index.html public/agriculture/horticulture/index.html public/agriculture/greenhouse/index.html public/agriculture/poultry/index.html public/agriculture/aquaculture/index.html public/agriculture/inputs/index.html public/agriculture/seeds/index.html public/agriculture/fertilizers/index.html public/agriculture/pesticides/index.html public/agriculture/offices/index.html public/agriculture/water-soil/index.html public/agriculture/machinery/index.html public/agriculture/market/index.html core/static/site/heroes/platform-home.webp core/static/site/heroes/agriculture.webp core/static/site/heroes/smart-agriculture.webp core/static/site/heroes/industry.webp core/static/site/heroes/economy.webp core/static/site/heroes/research.webp core/static/site/heroes/knowledge.webp core/static/site/heroes/academy.webp core/static/site/heroes/education-detail.webp core/static/site/heroes/ai.webp)
-          asset_paths=(agriculture/assets/zomorod-olive-v1/platform-home.webp agriculture/assets/zomorod-olive-v1/agriculture.webp agriculture/assets/zomorod-olive-v1/smart-agriculture.webp agriculture/assets/zomorod-olive-v1/industry.webp agriculture/assets/zomorod-olive-v1/economy.webp agriculture/assets/zomorod-olive-v1/research.webp agriculture/assets/zomorod-olive-v1/knowledge.webp amozeshgah/assets/zomorod-education-v1/academy.webp amozeshgah/assets/zomorod-education-v1/education-detail.webp amozeshgah/assets/zomorod-education-v1/research.webp amozeshgah/assets/zomorod-education-v1/knowledge.webp amozeshgah/assets/zomorod-education-v1/agriculture.webp amozeshgah/assets/zomorod-education-v1/industry.webp amozeshgah/assets/zomorod-education-v1/ai.webp amozeshgah/assets/zomorod-education-v1/economy.webp)
+          asset_paths=(agriculture/assets/zomorod-olive-v1/platform-home.webp agriculture/assets/zomorod-olive-v1/agriculture.webp agriculture/assets/zomorod-olive-v1/smart-agriculture.webp agriculture/assets/zomorod-olive-v1/industry.webp agriculture/assets/zomorod-olive-v1/economy.webp agriculture/assets/zomorod-olive-v1/research.webp agriculture/assets/zomorod-olive-v1/knowledge.webp)
           for rel in "${paths[@]}"; do
             target="$app/$rel"
             if grep -Fxq "$rel" "$backup/existing.txt"; then
