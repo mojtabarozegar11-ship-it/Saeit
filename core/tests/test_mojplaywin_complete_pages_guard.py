@@ -87,6 +87,26 @@ class MojPlayWinCompletePageGuardTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertIn("/admin/login/", response["Location"])
 
+    def test_original_digital_assets_are_valid_safe_svg_and_referenced(self):
+        from xml.etree import ElementTree
+
+        names = ("digital-products.svg", "ai-workflow.svg", "blockchain-network.svg")
+        for name in names:
+            with self.subTest(name=name):
+                path = HEROES / "site" / "mojplaywin-atelier" / name
+                data = path.read_text(encoding="utf-8")
+                root = ElementTree.fromstring(data)
+                self.assertEqual(root.tag, "{http://www.w3.org/2000/svg}svg")
+                self.assertIn("viewBox", root.attrib)
+                self.assertNotIn("<script", data.lower())
+                self.assertNotIn("http://", data.replace("http://www.w3.org/2000/svg", ""))
+                self.assertNotIn("https://", data)
+        store = (ROOT / "core" / "templates" / "mojplaywin" / "store.html").read_text(encoding="utf-8")
+        brand = (ROOT / "core" / "templates" / "brands" / "mojplaywin" / "page.html").read_text(encoding="utf-8")
+        self.assertIn("digital-products.svg", store)
+        self.assertIn("ai-workflow.svg", brand)
+        self.assertIn("blockchain-network.svg", brand)
+
     def test_agent_detail_is_educational_not_false_live_status(self):
         content = editorial_for("section", "agents")
         self.assertIsNotNone(content)
