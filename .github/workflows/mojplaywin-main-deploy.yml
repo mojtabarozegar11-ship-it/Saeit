@@ -33,10 +33,10 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           required = {
-              "core/templates/mojplaywin/home.html": ("Ideas become knowledge", "OUR PORTFOLIO", "CONNECTED VENTURES"),
+              "core/templates/mojplaywin/home.html": ("Ideas become knowledge", "OUR PORTFOLIO", "CONNECTED VENTURES", 'id="site-directory"', "All MojPlayWin pages"),
               "core/templates/mojplaywin/store.html": ("INITIAL COLLECTION", "{{ product.title }}"),
               "core/templates/mojplaywin/section.html": ("{{ section_title }}", "mw-page-hero"),
-              "core/templates/mojplaywin/theme.html": ("mw-site-nav", "mw-gold"),
+              "core/templates/mojplaywin/theme.html": ("mw-site-nav", "mw-gold", 'id="mw-all-pages-menu"'),
           }
           for name, markers in required.items():
               source = Path(name).read_text(encoding="utf-8")
@@ -248,7 +248,7 @@ jobs:
           merged=(config/urls.py core/services_views.py core/commerce_views.py core/views.py core/templates/base.html)
           for file in "${files[@]}"; do
             mkdir -p "$source_root/$(dirname "$file")"
-            if [[ "$file" == "scripts/deploy_mojplaywin_branding.py" || "$file" == "core/mojplaywin_views.py" ]]; then
+            if [[ "$file" == "scripts/deploy_mojplaywin_branding.py" || "$file" == "core/mojplaywin_views.py" || "$file" == core/templates/mojplaywin/* ]]; then
               git show "$GITHUB_SHA:$file" > "$source_root/$file"
             else
               git show "$source_ref:$file" > "$source_root/$file"
@@ -341,11 +341,40 @@ jobs:
             fi
           }
           check https://mojplaywin.com/ "Ideas become knowledge"
+          python3 - <<'PY'
+          import time
+          from urllib.request import Request, urlopen
+          url = "https://mojplaywin.com/?__mojplaywin_directory=" + str(time.time_ns())
+          request = Request(url, headers={"Cache-Control": "no-cache, no-store", "Pragma": "no-cache"})
+          with urlopen(request, timeout=25) as response:
+              body = response.read(2500000).decode("utf-8", "replace")
+              if response.status != 200:
+                  raise SystemExit("MojPlayWin home directory HTTP status is not 200")
+          required = [
+              'id="mw-all-pages-menu"', 'id="site-directory"', "All MojPlayWin pages",
+              'href="/games/"', 'href="/studio/"', 'href="/products/"', 'href="/services/"',
+              'href="/ai/"', 'href="/agents/"', 'href="/blockchain/"', 'href="/crypto-payments/"',
+              'href="/research-lab/"', 'href="/knowledge/"', 'href="/agro-industry/"',
+              'href="/ventures/cafe-restaurant/"', 'href="/ventures/fuel-station/"',
+              'href="/ventures/jewelry-gold/"', 'href="/ventures/carpets/"',
+              'href="/ventures/currency-crypto/"', 'href="/ventures/ecommerce/"',
+              'href="/ventures/hospitality/"', 'href="/about/mojtaba-rozegar/"',
+              'href="/canada-vision/"', 'href="/contact/"', 'href="/support/"',
+              'href="/privacy/"', 'href="/terms/"', 'href="/cookies/"', 'href="/taniya/"',
+              'id="mpw-home-ten-guides"',
+          ]
+          missing = [marker for marker in required if marker not in body]
+          if missing:
+              raise SystemExit("MojPlayWin homepage menu/directory missing: " + repr(missing))
+          print("LIVE_HOME_MENU_AND_ALL_PAGES_OK=yes")
+          PY
           check https://mojplaywin.com/store/ "INITIAL COLLECTION"
           check https://mojplaywin.com/agriculture/ "Agriculture"
           check https://mojplaywin.com/ventures/cafe-restaurant/ "Cafes"
           check https://mojplaywin.com/ventures/currency-crypto/ "Currency"
           check https://mojplaywin.com/ventures/ecommerce/ "E-commerce"
+          check https://mojplaywin.com/games/ "Games built around meaningful choices."
+          check https://mojplaywin.com/studio/ "Digital media produced as commercial assets."
       - name: Inspect installed source before rollback
         if: failure() && steps.deploy.outcome == 'success' && steps.smoke.outcome == 'failure'
         shell: bash
