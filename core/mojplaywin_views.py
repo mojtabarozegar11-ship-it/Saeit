@@ -4,7 +4,7 @@ from django.shortcuts import render
 FEATURES = [
  {"title":"Research & Innovation","text":"Evidence-led research, practical analysis, and ideas shaped into useful digital work.","image":"site/heroes/research.webp","url":"/research/"},
  {"title":"Games & Creative Studio","text":"Original game concepts, playful experiences, and digital entertainment projects.","image":"site/heroes/game-studio.webp","url":"/studio/"},
- {"title":"Learning & Education","text":"Clear learning paths connecting modern technology with practical skills.","image":"site/heroes/education-detail.webp","url":"/amozeshgah/"},
+ {"title":"Learning & Education","text":"Clear learning paths connecting modern technology with practical skills.","image":"site/heroes/education-detail.webp","url":"/knowledge/"},
  {"title":"Digital Store","text":"Books, learning resources, games, and practical digital tools in one catalog.","image":"site/heroes/store.webp","url":"/store/"},
  {"title":"Artificial Intelligence","text":"Thoughtful AI tools and explainers for research, creativity, and everyday work.","image":"site/heroes/ai.webp","url":"/agents/"},
  {"title":"Knowledge Library","text":"Guides and reference material organized to make complex topics easier to explore.","image":"site/heroes/knowledge.webp","url":"/knowledge/"},
@@ -23,7 +23,7 @@ PRODUCTS = [
  {"title":"The Science and Practice of Chess Improvement","text":"A structured chess study resource with lessons, analysis, and exercises.","image":"site/heroes/education-detail.webp","category":"BOOK · LEARNING","url":"/store/"},
  {"title":"Taniya and the Little Baker Worms","text":"A rhythmic illustrated story created for young readers and families.","image":"site/heroes/game-studio.webp","category":"CHILDREN'S BOOK","url":"/taniya/"},
  {"title":"Farm Enterprise Economics Toolkit","text":"A practical digital toolkit for farm planning and enterprise economics.","image":"site/heroes/agriculture.webp","category":"AGRICULTURE · TOOLKIT","url":"/ventures/agriculture/"},
- {"title":"Applied AI Learning Path","text":"A step-by-step route from foundational AI ideas to practical applications.","image":"site/heroes/ai.webp","category":"COURSE · TECHNOLOGY","url":"/amozeshgah/"},
+ {"title":"Applied AI Learning Path","text":"A step-by-step route from foundational AI ideas to practical applications.","image":"site/heroes/ai.webp","category":"COURSE · TECHNOLOGY","url":"/knowledge/"},
  {"title":"Original Browser Games","text":"A growing collection of playful digital game experiences.","image":"site/heroes/game-studio.webp","category":"GAMES · DIGITAL","url":"/studio/"},
  {"title":"Research & Digital Project Services","text":"Research planning, digital product development, and professional web projects.","image":"site/heroes/research.webp","category":"SERVICES","url":"/company/"},
 ]
