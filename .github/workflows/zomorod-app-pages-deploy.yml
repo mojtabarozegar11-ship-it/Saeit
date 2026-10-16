@@ -175,17 +175,17 @@ jobs:
           cd "$app"
           python=""
           candidate_list="$HOME/.zomorod-python-candidates-$sha"
-          if test -n "${VIRTUAL_ENV:-}" && test -x "$VIRTUAL_ENV/bin/python" && "$VIRTUAL_ENV/bin/python" -c 'import django' >/dev/null 2>&1; then
+          if test -n "${VIRTUAL_ENV:-}" && test -x "$VIRTUAL_ENV/bin/python" && "$VIRTUAL_ENV/bin/python" -c 'import django, environ, rest_framework, whitenoise' >/dev/null 2>&1; then
             python="$VIRTUAL_ENV/bin/python"
           else
             find "$HOME/virtualenv" -path '*/Saeit/*/bin/python*' -executable -print 2>/dev/null | sort -u > "$candidate_list"
             while IFS= read -r candidate; do
-              if test -x "$candidate" && "$candidate" -c 'import django' >/dev/null 2>&1; then
+              if test -x "$candidate" && "$candidate" -c 'import django, environ, rest_framework, whitenoise' >/dev/null 2>&1; then
                 python="$candidate"
                 echo "DJANGO_VIRTUALENV_SELECTED=$candidate"
                 break
               else
-                echo "DJANGO_VIRTUALENV_SKIPPED=$candidate (Django unavailable)"
+                echo "DJANGO_VIRTUALENV_SKIPPED=$candidate (required Django packages unavailable)"
               fi
             done < "$candidate_list"
             rm -f -- "$candidate_list"
