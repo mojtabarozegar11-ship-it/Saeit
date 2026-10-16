@@ -131,6 +131,32 @@ jobs:
           echo "LIVE_TOPLEVEL_DB_FILES_BEGIN"
           find "$app" -maxdepth 2 -type f \( -name '*.sqlite3' -o -name '*.sqlite' -o -name '*.db' \) -printf '%P %s bytes\n' | sort
           echo "LIVE_TOPLEVEL_DB_FILES_END"
+          python3 - <<'PY'
+          import pathlib,re,subprocess
+          bases=[pathlib.Path("/home/zomorod2/logs"),pathlib.Path("/home/zomorod2/Saeit"),pathlib.Path("/home/zomorod2/public_html")]
+          files=[]
+          for base in bases:
+              if base.exists():
+                  try:
+                      for p in base.rglob("*"):
+                          if p.is_file() and (p.name=="error_log" or p.suffix==".log" or "passenger" in p.name.lower()) and p.stat().st_mtime>__import__("time").time()-3600 and p.stat().st_size<20_000_000:
+                              files.append(p)
+                  except (OSError,PermissionError): pass
+          unique=list(dict.fromkeys(files))
+          print("RECENT_ERROR_LOGS="+str(len(unique)))
+          secret=re.compile(r"(?i)(secret[_ -]?key|password|token|api[_ -]?key|private[_ -]?key)(\\s*[:=]\\s*)[^\\s,;]+")
+          urlpass=re.compile(r"(://[^/\\s:@]+:)[^/@\\s]+@")
+          marker=re.compile(r"traceback|exception|error|failed|no module|importerror|runtimeerror|operationalerror|disallowedhost|staticfiles manifest|django|passenger",re.I)
+          for p in unique[:25]:
+              print("ERROR_LOG_FILE="+str(p))
+              try: lines=p.read_text(errors="replace").splitlines()[-600:]
+              except OSError: continue
+              for line in lines:
+                  if marker.search(line):
+                      line=secret.sub(r"\\1\\2[redacted]",line)
+                      line=urlpass.sub(r"\\1[redacted]@",line)
+                      print("ERROR_LOG_LINE="+line[:500])
+          PY
           REMOTE
       - name: Remove temporary SSH material
         if: always()
