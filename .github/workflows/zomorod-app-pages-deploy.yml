@@ -453,6 +453,37 @@ jobs:
           rm -f -- "$tmp" "$headers"
           echo "LIVE_AGRICULTURE_PAGES=15"
           echo "LIVE_IMAGE_ROUTES=9"
+      - name: Capture sanitized Passenger exception before rollback
+        if: failure() && steps.install.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-app"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'DIAGNOSTIC'
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          path=Path.home()/"Saeit"/"stderr.log"
+          if not path.is_file():
+              print("PASSENGER_ERROR_LOG=missing")
+              raise SystemExit(0)
+          lines=path.read_text(encoding="utf-8",errors="replace").splitlines()[-500:]
+          pattern=re.compile(r"Traceback|ModuleNotFoundError|ImportError|RuntimeError|TemplateSyntaxError|TemplateDoesNotExist|OperationalError|DatabaseError|Exception|Error:",re.I)
+          secret=re.compile(r"(?i)(password|passwd|secret|token|api[_-]?key|authorization|cookie)(\s*[:=]\s*)[^\s,;]+")
+          uri=re.compile(r"(://[^/\s:@]+:)[^/@\s]+@")
+          emitted=0
+          for line in lines:
+              if pattern.search(line):
+                  safe=secret.sub(r"\1=[redacted]",line)
+                  safe=uri.sub(r"\1[redacted]@",safe)
+                  print("PASSENGER_EXCEPTION="+safe[:280])
+                  emitted+=1
+                  if emitted>=80:
+                      break
+          print("PASSENGER_EXCEPTION_LINES="+str(emitted))
+          PY
+          DIAGNOSTIC
       - name: Roll back if public verification failed
         if: failure() && steps.install.outcome == 'success'
         env:
