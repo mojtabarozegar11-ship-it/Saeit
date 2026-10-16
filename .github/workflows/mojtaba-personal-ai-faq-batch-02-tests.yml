@@ -1,0 +1,22 @@
+name: Mojtaba personal AI FAQ batch 02 regression checks
+on:
+  pull_request:
+    paths:
+      - .github/workflows/mojtaba-personal-ai-faq-batch-02-tests.yml
+      - scripts/mojtaba_personal_ai_questions_batch_02_publish.py
+      - tests/test_mojtaba_personal_ai_questions_batch_02.py
+      - content/mojtaba_personal_ai_questions_batch_02_20261016.json
+permissions:
+  contents: read
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify approved translations, preservation and publisher syntax
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mojtaba_personal_ai_questions_batch_02_publish.py
+          python3 -m unittest discover -s tests -p 'test_mojtaba_personal_ai_questions_batch_02.py' -v
+          python3 scripts/mojtaba_personal_ai_questions_batch_02_publish.py check --source content/mojtaba_personal_ai_questions_batch_02_20261016.json
