@@ -97,6 +97,32 @@ jobs:
           printf '%s\n' "$scan" > "$d/host.candidate"
           test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
           cp "$d/host.candidate" "$d/host.known"
+      - name: Preflight complete Django runtime before staging
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-app"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'PREFLIGHT'
+          set -euo pipefail
+          sha="$1"
+          selected="$HOME/.zomorod-python-selected-$sha"
+          candidate_list="$HOME/.zomorod-python-candidates-$sha"
+          rm -f -- "$selected" "$candidate_list"
+          find "$HOME/virtualenv" -path '*/Saeit/*/bin/python*' -executable -print 2>/dev/null | sort -u > "$candidate_list"
+          while IFS= read -r candidate; do
+            if test -x "$candidate" && "$candidate" -c 'import django, environ, rest_framework, whitenoise' >/dev/null 2>&1; then
+              printf '%s\n' "$candidate" > "$selected.tmp"
+              mv -f "$selected.tmp" "$selected"
+              echo "DJANGO_VIRTUALENV_READY=$candidate"
+              rm -f -- "$candidate_list"
+              exit 0
+            fi
+            echo "DJANGO_VIRTUALENV_INCOMPLETE=$candidate"
+          done < "$candidate_list"
+          rm -f -- "$candidate_list"
+          echo "DJANGO_VIRTUALENV_WITH_REQUIRED_PACKAGES_NOT_FOUND=failed" >&2
+          exit 1
+          PREFLIGHT
       - name: Stage only scoped Django and guide files
         run: |
           set -euo pipefail
@@ -135,6 +161,12 @@ jobs:
           if not matches: raise SystemExit("Expected root Passenger app mapping was not found")
           print("PASSENGER_ROOT_MAPPING=verified")
           PY
+          python_file="$HOME/.zomorod-python-selected-$sha"
+          test -s "$python_file" || { echo "DJANGO_PREFLIGHT_SELECTION_MISSING=failed" >&2; exit 1; }
+          python="$(cat "$python_file")"
+          case "$python" in "$HOME"/virtualenv/*) ;; *) echo "DJANGO_PREFLIGHT_PATH_INVALID=failed" >&2; exit 1 ;; esac
+          test -x "$python" && "$python" -c 'import django, environ, rest_framework, whitenoise' >/dev/null 2>&1 || { echo "DJANGO_PREFLIGHT_ENV_CHANGED=failed" >&2; exit 1; }
+          "$python" --version
           rm -rf -- "$backup"
           mkdir -p "$backup"
           : > "$backup/existing.txt"
@@ -173,28 +205,6 @@ jobs:
             mv -f "$target.new" "$target"
           done
           cd "$app"
-          python=""
-          candidate_list="$HOME/.zomorod-python-candidates-$sha"
-          if test -n "${VIRTUAL_ENV:-}" && test -x "$VIRTUAL_ENV/bin/python" && "$VIRTUAL_ENV/bin/python" -c 'import django, environ, rest_framework, whitenoise' >/dev/null 2>&1; then
-            python="$VIRTUAL_ENV/bin/python"
-          else
-            find "$HOME/virtualenv" -path '*/Saeit/*/bin/python*' -executable -print 2>/dev/null | sort -u > "$candidate_list"
-            while IFS= read -r candidate; do
-              if test -x "$candidate" && "$candidate" -c 'import django, environ, rest_framework, whitenoise' >/dev/null 2>&1; then
-                python="$candidate"
-                echo "DJANGO_VIRTUALENV_SELECTED=$candidate"
-                break
-              else
-                echo "DJANGO_VIRTUALENV_SKIPPED=$candidate (required Django packages unavailable)"
-              fi
-            done < "$candidate_list"
-            rm -f -- "$candidate_list"
-          fi
-          if test -z "$python"; then
-            echo "DJANGO_VIRTUALENV_WITH_DJANGO_NOT_FOUND=failed" >&2
-            exit 1
-          fi
-          "$python" --version
           check_log="$HOME/.zomorod-django-check-$sha.log"
           if "$python" manage.py check --deploy > "$check_log" 2>&1; then
             cat "$check_log"
