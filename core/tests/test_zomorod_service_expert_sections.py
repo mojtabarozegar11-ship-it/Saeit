@@ -37,3 +37,13 @@ class ZomorodServicesEditorialTests(SimpleTestCase):
         self.assertEqual(source.count('alt="'), 10)
         self.assertEqual(source.count('<h2 id="zm-sector-title-'), 10)
         self.assertNotIn("قیمت قطعی", source)
+
+    def test_legacy_emerald_css_is_present_and_scoped_to_main_site(self):
+        from django.contrib.staticfiles.finders import find
+        source_path = find("site/emerald-system.css")
+        self.assertIsNotNone(source_path)
+        css = Path(source_path).read_text(encoding="utf-8")
+        self.assertIn("body.zomorod-olive-site", css)
+        self.assertIn("focus-visible", css)
+        self.assertIn("prefers-reduced-motion", css)
+        self.assertGreater(len(css), 2000)
