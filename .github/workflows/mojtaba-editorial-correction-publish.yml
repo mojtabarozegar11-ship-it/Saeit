@@ -79,3 +79,10 @@ jobs:
         run: |
           set -euo pipefail
           tar -czf "$RUNNER_TEMP/editorial-fix.tar.gz" scripts/mojtaba_remove_unwanted_profile_disclaimers.py scripts/mojtaba_twenty_photo_essays_safe_publish.py content/mojtaba_*.json
+      - name: Transfer temporary archive to independent personal hosting
+        shell: bash
+        run: |
+          set -euo pipefail
+          stage="/home/zomorod2/.mpw-text-cleanup-$GITHUB_RUN_ID"
+          timeout 35s ssh -F "$SSH_CONFIG" saeit-host "test ! -e '$stage' && install -d -m 700 '$stage'"
+          timeout 120s scp -F "$SSH_CONFIG" "$RUNNER_TEMP/editorial-fix.tar.gz" "saeit-host:$stage/source.tgz"
