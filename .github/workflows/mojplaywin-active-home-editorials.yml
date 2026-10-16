@@ -1,0 +1,183 @@
+name: Deploy active MojPlayWin homepage guides only
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "core/templates/mojplaywin/home.html"
+      - "scripts/deploy_mojplaywin_active_home.py"
+      - ".github/workflows/mojplaywin-active-home-editorials.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mojplaywin-legacy-content
+  cancel-in-progress: false
+
+jobs:
+  deploy-active-home:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate additive homepage and limited deployer
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/deploy_mojplaywin_active_home.py
+          python3 - <<'PY'
+          from pathlib import Path
+          src=Path("core/templates/mojplaywin/home.html").read_text()
+          assert src.count('id="mpw-home-ten-guides"')==1
+          assert src.count('id="home-guide-')==10
+          assert src.count("Quality checklist")==10
+          assert src.count("<details>")==10
+          assert src.startswith('{% extends "base.html" %}')
+          assert "mw-home-title" in src and "CONNECTED VENTURES" in src
+          assert src.rstrip().endswith("{% endblock %}")
+          print("ACTIVE_MOJPLAYWIN_HOME_TEN_LOCAL_CHECK=yes")
+          PY
+      - name: Verify currently live active homepage before any changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from urllib.request import urlopen,Request
+          for page,needle in (("https://mojplaywin.com/","Ideas become knowledge."),("https://mojplaywin.com/store/","digital")):
+              req=Request(page,headers={"User-Agent":"SaeitActiveHomepagePreflight/1.0"})
+              with urlopen(req,timeout=18) as response:
+                  data=response.read(2000000).decode("utf-8","replace")
+                  assert response.status==200
+                  assert needle.lower() in data.lower()
+              print("ACTIVE_HOME_PRECHECK_OK="+page)
+          PY
+      - name: Configure the confirmed pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-legacy-content-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "MOJPLAYWIN_CPanel_PINNED_RELAY_READY"
+
+      - name: Stage only the active home template and guarded deployer
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-legacy-content-ssh"
+          stage="/home/zomorod2/.mpw-active-home-$GITHUB_RUN_ID"
+          timeout 25s ssh -F "$d/config" saeit-cpanel "test ! -e '$stage' && install -d -m 700 '$stage'"
+          timeout 70s scp -F "$d/config" core/templates/mojplaywin/home.html "saeit-cpanel:$stage/home.html"
+          timeout 70s scp -F "$d/config" scripts/deploy_mojplaywin_active_home.py "saeit-cpanel:$stage/deploy.py"
+
+      - name: Install additive content; verify live; auto-rollback if invalid
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-legacy-content-ssh"
+          timeout 450s ssh -F "$d/config" saeit-cpanel "bash -s -- '$GITHUB_RUN_ID'" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          run_id="$1"
+          stage="/home/zomorod2/.mpw-active-home-$run_id"
+          script="$stage/deploy.py"
+          backup="/home/zomorod2/.mojplaywin-backups/mpw-active-home-$run_id"
+          success=0
+          guard() {
+            rc=$?
+            trap - EXIT
+            if test "$success" -ne 1 && test -f "$backup/manifest.json"; then
+              echo "ACTIVE_HOME_ROLLBACK_TRIGGERED=yes"
+              python3 "$script" rollback "$run_id" || echo "ACTIVE_HOME_MANUAL_RECOVERY_REQUIRED=yes"
+            fi
+            rm -rf -- "$stage"
+            exit "$rc"
+          }
+          trap guard EXIT
+          python3 "$script" deploy "$run_id"
+          sleep 3
+          python3 - <<'SMOKE'
+          import time
+          from urllib.request import Request,urlopen
+          ids=("vertical-slice","accessible-play","ai-workflow-risk","ai-privacy",
+               "demo-proof","product-readiness","web-discovery","support-library",
+               "vancouver-pilot-plan","agro-scenario-dashboard")
+          main="https://mojplaywin.com/"
+          succeeded=False
+          for attempt in range(1,13):
+              try:
+                  req=Request(main+"?__mpw_active_home_ten="+str(time.time_ns()),headers={"User-Agent":"MojPlayWinActiveTenSmoke/1.0","Cache-Control":"no-cache"})
+                  with urlopen(req,timeout=18) as response:
+                      body=response.read(2500000).decode("utf-8","replace")
+                      if response.status!=200: raise ValueError("Home HTTP not 200")
+                  required=['id="mpw-home-ten-guides"','id="mw-home-title"',"Ideas become knowledge.","CONNECTED VENTURES"]
+                  required.extend('id="home-guide-'+id+'"' for id in ids)
+                  missing=[x for x in required if x not in body]
+                  if missing: raise ValueError("Missing: "+repr(missing[:5]))
+                  print("ACTIVE_HOME_ALL_TEN_LIVE=yes",flush=True)
+                  succeeded=True
+                  break
+              except Exception as exc:
+                  print("ACTIVE_HOME_RETRY="+str(attempt)+" "+str(exc)[:200],flush=True)
+                  if attempt<12: time.sleep(3)
+          if not succeeded: raise SystemExit("New ten original articles did not appear in the active homepage")
+          for route in ("games/","store/","contact/"):
+              req=Request(main+route,headers={"User-Agent":"MojPlayWinActiveTenSmoke/1.0"})
+              with urlopen(req,timeout=18) as response:
+                  if response.status!=200: raise ValueError("Other route damaged: "+route)
+                  response.read(128)
+              print("UNRELATED_ROUTE_OK="+route,flush=True)
+          SMOKE
+          success=1
+          echo "MOJPLAYWIN_ACTIVE_HOME_TEN_PUBLISHED_WITH_EXISTING_CONTENT=yes"
+          REMOTE
+
+      - name: Cleanup guarded SSH relay and temporary stage
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-legacy-content-ssh"
+          stage="/home/zomorod2/.mpw-active-home-$GITHUB_RUN_ID"
+          if test -f "$d/config"; then
+            ssh -F "$d/config" saeit-cpanel "rm -rf -- '$stage'" || true
+          fi
+          rm -rf -- "$d"
