@@ -64,43 +64,44 @@ jobs:
           test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
           cp "$d/host.candidate" "$d/host.known"
           echo "PINNED_CPANEL_RELAY=verified"
-      - name: Install declared requirements, test, and restore packages on failure
+      - name: Install only declared packages, test, and restore package state on failure
         shell: bash
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/zomorod-runtime"
-          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
           set -Eeuo pipefail
+          sha="$1"
           app=/home/zomorod2/Saeit
           py=/home/zomorod2/virtualenv/Saeit/3.10/bin/python
           backup=/home/zomorod2/.backups/zomorodmelal-complete/9fcadc9ea749075785829565e57770f5cc173a8b
-          runtime_backup=/home/zomorod2/.backups/zomorodmelal-runtime-repair/20261016
+          state_dir=/home/zomorod2/.backups/zomorodmelal-runtime-repair
+          baseline="$state_dir/$sha-packages.json"
           test -d "$app" && test -f "$app/manage.py" && test -x "$py"
           test -s "$backup/public_html.tar.gz" && test -s "$backup/application-source.tar.gz"
           test -s "$backup/database-manifest.json"
-          test -s "$app/requirements.txt"
-          mkdir -p "$runtime_backup"
-          chmod 700 "$runtime_backup"
-          baseline="$runtime_backup/python310-packages-before.txt"
-          if test -e "$baseline"; then baseline="$runtime_backup/python310-packages-before-$(date -u +%H%M%S).txt"; fi
-          "$py" -m pip freeze | sort > "$baseline"
+          mkdir -p "$state_dir"
+          chmod 700 "$state_dir"
+          "$py" - "$baseline" <<'PY'
+          import importlib.metadata,json,sys
+          packages={}
+          for dist in importlib.metadata.distributions():
+              name=dist.metadata.get("Name")
+              if name: packages[name.lower().replace("_","-")]=dist.version
+          with open(sys.argv[1],"x",encoding="utf-8") as f:
+              json.dump(packages,f,sort_keys=True)
+          print("RUNTIME_BASELINE_PACKAGE_COUNT="+str(len(packages)))
+          PY
           chmod 600 "$baseline"
           echo "RECOVERY_SNAPSHOT_PRESENT=verified"
-          echo "RUNTIME_BASELINE_CAPTURED=yes"
           changed=no
           rollback() {
             status=$?
             if [ "$status" -ne 0 ] && [ "$changed" = yes ]; then
               echo "SMOKE_FAILED=restoring_original_package_set"
               "$py" - "$baseline" <<'PY'
-          import importlib.metadata
-          import subprocess,sys
-          before={}
-          for line in open(sys.argv[1],encoding="utf-8"):
-              line=line.strip()
-              if not line or line.startswith("#") or line.startswith("-e "): continue
-              name=line.split("==",1)[0].split("@",1)[0].strip()
-              if name: before[name.lower().replace("_","-")]=line
+          import importlib.metadata,json,subprocess,sys
+          before=json.load(open(sys.argv[1],encoding="utf-8"))
           current={}
           for dist in importlib.metadata.distributions():
               name=dist.metadata.get("Name")
@@ -109,12 +110,11 @@ jobs:
           if added:
               subprocess.run([sys.executable,"-m","pip","uninstall","-y",*added],check=False)
           changed=[]
-          for name,line in before.items():
-              version=line.split("==",1)[1] if "==" in line else None
-              if version and current.get(name)!=version:
-                  changed.append(line)
+          for name,version in sorted(before.items()):
+              if current.get(name)!=version:
+                  changed.append(f"{name}=={version}")
           if changed:
-              subprocess.run([sys.executable,"-m","pip","install","--disable-pip-version-check","--no-input","--force-reinstall",*changed],check=False)
+              subprocess.run([sys.executable,"-m","pip","install","--disable-pip-version-check","--no-input","--no-deps","--force-reinstall",*changed],check=False)
           print("PACKAGE_ROLLBACK_ADDED_COUNT="+str(len(added)))
           print("PACKAGE_ROLLBACK_RESTORED_VERSIONS="+str(len(changed)))
           PY
@@ -125,7 +125,12 @@ jobs:
             exit "$status"
           }
           trap rollback EXIT
-          "$py" -m pip install --disable-pip-version-check --no-input -r "$app/requirements.txt"
+          "$py" -m pip install --disable-pip-version-check --no-input \
+            'djangorestframework>=3.16,<4.0' \
+            'django-environ>=0.12,<1.0' \
+            'whitenoise>=6.9,<7.0' \
+            'psycopg[binary]>=3.2,<4.0' \
+            'openai>=1.100,<2.0'
           changed=yes
           "$py" -m pip check
           "$py" -c 'import django,environ,rest_framework,whitenoise,PIL,psycopg,openai; print("ALL_REQUIRED_IMPORTS=passed"); print("DJANGO_VERSION="+django.get_version())'
