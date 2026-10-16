@@ -77,7 +77,7 @@ def main():
         raise RuntimeError("Target transparent asset already exists; no overwrite permitted")
     logo=STAGE/"logo.png"
     png=logo.read_bytes()
-    if not png.startswith(b"\\x89PNG\\r\\n\\x1a\\n") or b"tRNS" not in png or len(png)<4000:
+    if not png.startswith(b"\x89PNG\r\n\x1a\n") or b"tRNS" not in png or len(png)<4000:
         raise RuntimeError("Logo is not a verified indexed alpha PNG")
     checks={str(p):sha256(p) for p in PROTECTED}
     prepared={}
