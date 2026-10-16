@@ -205,6 +205,14 @@ jobs:
                   print("PAGE_ASSETS="+path+" H1="+str(a.h1[:2])+" JS="+str(a.js[:8])+" CSS="+str(a.css[:8]))
               except Exception as exc:print("PAGE_AUDIT_ERROR="+path+" "+type(exc).__name__)
           PY
+      - name: Locate shared modern javascript file
+        run: |
+          d="$RUNNER_TEMP/zomorod-root"
+          ssh -F "$d/config" saeit-cpanel 'bash -s' <<'REMOTE'
+          for f in "$HOME/public_html/static/site/modern.js" "$HOME/Saeit-staging/core/static/site/modern.js" "$HOME/Saeit-staging/staticfiles/site/modern.js"; do
+            if test -f "$f"; then echo "FOUND_MODERN_JS=$f SIZE=$(wc -c < "$f")"; else echo "MISSING_MODERN_JS=$f"; fi
+          done
+          REMOTE
       - name: Clean temporary access materials
         if: always()
         run: rm -rf "$RUNNER_TEMP/zomorod-root"
