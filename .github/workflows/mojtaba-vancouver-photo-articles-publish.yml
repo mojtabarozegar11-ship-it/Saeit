@@ -34,7 +34,8 @@ jobs:
           parts=["content/mojtaba_vancouver_collab_part_a_20261016.json","content/mojtaba_vancouver_collab_part_b_20261016.json"]
           rows=sum((json.loads(Path(p).read_text())["articles"] for p in parts),[])
           assert len(rows)==10
-          Path("/tmp/vancouver-download-urls.tsv").write_text("".join(f'{r["slug"]}\thttps://unsplash.com/photos/{r["photo_id"]}/download?force=true&w=1200&fm=jpg\n' for r in rows).replace("\\t","\t").replace("\\n","\n"))
+          photo=json.loads(Path("content/mojtaba_vancouver_photo_cdn_urls_20261016.json").read_text())
+          Path("/tmp/vancouver-download-urls.tsv").write_text("".join(f'{r["slug"]}\t{photo[r["photo_id"]]}\n' for r in rows).replace("\\t","\t").replace("\\n","\n"))
           PY
           while IFS="$(printf '	')" read -r slug url; do
             test -n "$slug"
