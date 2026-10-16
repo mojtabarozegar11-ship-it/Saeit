@@ -177,8 +177,12 @@ def patch(key: str, source: str) -> str:
                               '{% block og_description %}' + seo_fallback("description") + '{% endblock %}')
         result = replace_once(result, "</head>", CSS + "\n</head>")
         return result
-    if source.count("{% block content %}") != 1 or source.count("{% endblock %}") != 1:
-        raise ValueError("Unrecognized personal page template")
+    if source.count("{% block content %}") != 1:
+        raise ValueError("Unrecognized personal content block")
+    start = source.index("{% block content %}") + len("{% block content %}")
+    end = source.find("{% endblock %}", start)
+    if end < 0:
+        raise ValueError("Missing end of personal content block")
     if key in ("home","posts"):
         for marker in PRESERVE:
             if source.count(marker) != 1:
@@ -186,7 +190,7 @@ def patch(key: str, source: str) -> str:
     if key == "home" and source.count("mpw-primary-personal-profile-20261016") != 1:
         raise ValueError("Owner-selected main profile image marker missing")
     insertion = enterprise_block(key)
-    return source.replace("{% endblock %}", insertion + "\n{% endblock %}", 1)
+    return source[:end] + insertion + "\n" + source[end:]
 
 def db_fingerprint(app: Path) -> tuple[str, int, list]:
     import django
