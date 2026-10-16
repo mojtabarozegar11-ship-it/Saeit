@@ -285,7 +285,7 @@ jobs:
               lines=data.splitlines()
               trace_indices=[i for i,line in enumerate(lines) if "populate() isn't reentrant" in line]
               for trace_index in trace_indices[-2:]:
-                  for context_line in lines[max(0,trace_index-18):trace_index+1]:
+                  for context_line in lines[max(0,trace_index-48):trace_index+1]:
                       safe=redact.sub(r"\1=[redacted]",context_line)
                       safe=uri.sub(r"\1[redacted]@",safe)
                       print("SANITIZED_POPULATE_TRACE "+str(p.relative_to(home))+": "+safe[:240])
