@@ -195,3 +195,21 @@ body.mpw-atelier-v4{
   border-color:#f1d49b!important
  }
 }
+
+/* Detailed help center: usable information, not a placeholder card. */
+.mpw-atelier-v4 .mpw-support-handbook{margin:20px 0;padding:clamp(25px,4vw,52px);border:1px solid var(--mw-line);border-radius:27px;
+ background:radial-gradient(circle at 85% 5%,rgba(207,156,82,.12),transparent 45%),linear-gradient(148deg,#1a1b1e,#111318)}
+.mpw-atelier-v4 .mpw-support-handbook h2{font-size:clamp(2rem,3.6vw,3.6rem);line-height:1.1;letter-spacing:-.055em;margin:17px 0}
+.mpw-atelier-v4 .mpw-support-handbook header>p{max-width:75ch;line-height:1.85}
+.mpw-atelier-v4 .mpw-support-handbook-gallery{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:13px;margin:30px 0}
+.mpw-atelier-v4 .mpw-support-handbook-gallery figure{margin:0;border:1px solid var(--mw-line);border-radius:16px;overflow:hidden;background:#101217}
+.mpw-atelier-v4 .mpw-support-handbook-gallery img{display:block;width:100%;height:210px;object-fit:cover}
+.mpw-atelier-v4 .mpw-support-handbook-gallery figcaption{padding:13px 16px;font-size:.8rem;color:var(--mw-gold-bright)}
+.mpw-atelier-v4 .mpw-support-handbook-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:15px}
+.mpw-atelier-v4 .mpw-support-handbook-grid article{padding:24px;border:1px solid var(--mw-line);border-radius:17px;background:#191b20}
+.mpw-atelier-v4 .mpw-support-handbook-grid h3{font-size:1.25rem;margin:0 0 12px}
+.mpw-atelier-v4 .mpw-support-handbook-grid p{font-size:.93rem;line-height:1.83}
+.mpw-atelier-v4 .mpw-support-handbook .mpw-mix-note{margin:22px 0}
+@media(max-width:760px){.mpw-atelier-v4 .mpw-support-handbook{padding:24px 17px;border-radius:19px}
+.mpw-atelier-v4 .mpw-support-handbook-gallery,.mpw-atelier-v4 .mpw-support-handbook-grid{grid-template-columns:1fr}
+.mpw-atelier-v4 .mpw-support-handbook-gallery img{height:200px}}
