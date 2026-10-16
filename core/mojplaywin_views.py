@@ -6,7 +6,7 @@ FEATURES = [
  {"title":"Research & Innovation","text":"Evidence-led research, practical analysis, and ideas shaped into useful digital work.","image":"site/heroes/research.webp","url":"/research/"},
  {"title":"Games & Creative Studio","text":"Original game concepts, playful experiences, and digital entertainment projects.","image":"site/heroes/game-studio.webp","url":"/studio/"},
  {"title":"Learning & Education","text":"Clear learning paths connecting modern technology with practical skills.","image":"site/heroes/education-detail.webp","url":"/knowledge/"},
- {"title":"Digital Store","text":"Books, learning resources, games, and practical digital tools in one catalog.","image":"site/heroes/store.webp","url":"/store/"},
+ {"title":"Digital Store","text":"Books, learning resources, games, and practical digital tools in one catalog.","image":"site/mojplaywin-atelier/digital-products.svg","url":"/store/"},
  {"title":"Artificial Intelligence","text":"Thoughtful AI tools and explainers for research, creativity, and everyday work.","image":"site/heroes/ai.webp","url":"/agents/"},
  {"title":"Knowledge Library","text":"Guides and reference material organized to make complex topics easier to explore.","image":"site/heroes/knowledge.webp","url":"/knowledge/"},
 ]
