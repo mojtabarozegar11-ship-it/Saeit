@@ -81,7 +81,7 @@ jobs:
               echo "ROOT_APP_CHILD_CONFIG=$webfile absent"
             fi
           done
-          for rel in core/__init__.py core/apps.py config/wsgi.py passenger_wsgi.py; do
+          for rel in core/__init__.py core/apps.py core/admin.py config/wsgi.py passenger_wsgi.py; do
             file="$app/$rel"
             if test -f "$file"; then
               echo "IMPORT_SOURCE_BEGIN=$rel"
@@ -405,7 +405,8 @@ jobs:
               else
                 markers="none"
               fi
-              printf 'PUBLIC_ROUTE_STATUS %s%s %s content_type=%s bytes=%s body_markers=%s\n' "$domain" "$route" "$code" "\${ctype:-unknown}" "$bytes" "$markers"
+              test -n "$ctype" || ctype=unknown
+              printf 'PUBLIC_ROUTE_STATUS %s%s %s content_type=%s bytes=%s body_markers=%s\n' "$domain" "$route" "$code" "$ctype" "$bytes" "$markers"
               rm -f -- "$headers" "$body"
             done
           done
