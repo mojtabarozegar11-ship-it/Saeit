@@ -22,18 +22,15 @@ if os.path.exists(env_path):
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 
-# Temporary startup probe: record who re-enters Django setup in Passenger's own process.
-import traceback
-from django.apps.registry import Apps
-
-_original_apps_populate = Apps.populate
-def _trace_passenger_reentrant_setup(self, installed_apps):
-    if self.loading:
-        print("PASSENGER_REENTRANT_CALL_STACK_BEGIN", file=sys.stderr)
-        traceback.print_stack(file=sys.stderr)
-        print("PASSENGER_REENTRANT_CALL_STACK_END", file=sys.stderr)
-    return _original_apps_populate(self, installed_apps)
-
-Apps.populate = _trace_passenger_reentrant_setup
+# cPanel Passenger may launch this script with its system interpreter.
+# Re-exec once with this application's CloudLinux virtualenv before importing Django.
+INTERP = os.path.join(os.path.expanduser("~"), "virtualenv", "Saeit", "3.10", "bin", "python")
+if not os.path.isfile(INTERP) or not os.access(INTERP, os.X_OK):
+    raise RuntimeError("Configured Django virtualenv interpreter is unavailable")
+if os.path.abspath(sys.executable) != os.path.abspath(INTERP):
+    if os.environ.get("ZOMOROD_PASSENGER_REEXEC") == "1":
+        raise RuntimeError("Passenger re-exec did not select the configured virtualenv")
+    os.environ["ZOMOROD_PASSENGER_REEXEC"] = "1"
+    os.execl(INTERP, INTERP, *sys.argv)
 
 from config.wsgi import application
