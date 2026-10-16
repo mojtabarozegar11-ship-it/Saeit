@@ -1,0 +1,127 @@
+name: Zomorod site-local Django agents factual health (read-only)
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/zomorod-local-agents-status.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-local-agent-readonly
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - name: Inspect actual site-local agent states in Django database, without writing
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          cd "$HOME/Saeit"
+          export PYTHONDONTWRITEBYTECODE=1
+          interpreter="$HOME/virtualenv/Saeit/3.10/bin/python"
+          test -x "$interpreter"
+          "$interpreter" - <<'PY'
+          import os,collections
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          import django
+          django.setup()
+          from django.db import DatabaseError
+          from core.models import Agent,AgentTask,ApprovalRequest
+          from core.knowledge_agent_models import KnowledgeAgentPlan,KnowledgeAgentRun,KnowledgeBook
+          def counts(qs):
+              return ",".join(f"{r['status']}:{r['count']}" for r in qs.values("status").annotate(count=__import__("django.db.models",fromlist=["Count"]).Count("pk")).order_by("status"))
+          try:
+              agents=list(Agent.objects.order_by("code").values("code","active","risk_level"))
+              print("SITE_LOCAL_AGENT_COUNT="+str(len(agents)))
+              for a in agents:
+                  print("SITE_LOCAL_AGENT code="+a["code"]+" enabled="+str(a["active"])+" risk="+str(a["risk_level"]))
+              print("SITE_LOCAL_AGENT_TASKS="+counts(AgentTask.objects.all()))
+              print("SITE_LOCAL_PENDING_APPROVALS="+str(ApprovalRequest.objects.filter(status="pending").count()))
+              plans=list(KnowledgeAgentPlan.objects.order_by("code").values("code","active","cadence_hours","require_owner_approval","last_run_at","next_run_at"))
+              print("SITE_KNOWLEDGE_PLANS="+str(len(plans)))
+              for p in plans:
+                  print("SITE_KNOWLEDGE_PLAN code="+p["code"]+" active="+str(p["active"])+" cadence_hours="+str(p["cadence_hours"])+" approval="+str(p["require_owner_approval"])+" last_run="+str(p["last_run_at"])+" next_run="+str(p["next_run_at"]))
+              print("SITE_KNOWLEDGE_RUNS="+counts(KnowledgeAgentRun.objects.all()))
+              print("SITE_KNOWLEDGE_BOOK_STATUS="+counts(KnowledgeBook.objects.all()))
+              print("SITE_OPENAI_KEY_CONFIGURED="+str(bool(os.environ.get("OPENAI_API_KEY"))))
+              print("SITE_DJANGO_DATABASE_CHECK=passed")
+          except DatabaseError as exc:
+              print("SITE_DJANGO_DATABASE_CHECK=failed error_class="+type(exc).__name__)
+              raise
+          PY
+          if command -v crontab >/dev/null 2>&1; then
+            cron="$(crontab -l 2>/dev/null || true)"
+            if printf '%s\n' "$cron" | grep -Eq 'knowledge_agent_generate|knowledge_agent_schedule|company_activity_agent'; then
+              echo "SITE_AGENT_CRON_CONFIGURED=yes"
+            else
+              echo "SITE_AGENT_CRON_CONFIGURED=no_matching_jobs"
+            fi
+          else
+            echo "SITE_AGENT_CRON_CONFIGURED=crontab_unavailable"
+          fi
+          REMOTE
+      - name: Measure the actual API and independent site health read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          for path in / /company/ /agents/ /api/health/ /api/bridge/health/ /admin/login/ /mohammad/ /ghanadi/ /amozeshgah/; do
+            status="$(curl -sS --max-time 16 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir$path" || true)"
+            echo "SITE_PUBLIC_HEALTH path=$path status=$status"
+          done
+      - name: Remove temporary SSH relay material
+        if: always()
+        shell: bash
+        run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
