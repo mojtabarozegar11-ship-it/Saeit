@@ -103,6 +103,34 @@ def plan(root: Path):
                 if after == before:
                     raise ValueError("No visible label change")
                 candidates.append((rel, before, after))
+            else:
+                # Some Django contact templates iterate across form fields.
+                # Change only the label expression inside this contact-specific
+                # form loop. Never modify model verbose_names or form controls.
+                exprs = list(re.finditer(
+                    r"\{\{\s*([A-Za-z_]\w*)\.(label_tag|label)\s*\}\}", before
+                ))
+                for expr in exprs:
+                    variable, attr = expr.group(1), expr.group(2)
+                    loop = r"\{%\s*for\s+" + re.escape(variable) + r"\s+in\s+form(?:\.[\w]+)?\s*%\}"
+                    if len(re.findall(loop, before)) != 1:
+                        continue
+                    if before.count(expr.group(0)) != 1:
+                        continue
+                    chunks = []
+                    for pos, (field, label) in enumerate(replacements):
+                        branch = "if" if pos == 0 else "elif"
+                        if attr == "label_tag":
+                            value = '<label for="{{ ' + variable + '.id_for_label }}">' + label + "</label>"
+                        else:
+                            value = label
+                        chunks.append("{% " + branch + " " + variable + ".name == '" + field + "' %}" + value)
+                    chunks.append("{% else %}" + expr.group(0) + "{% endif %}")
+                    rewritten = "".join(chunks)
+                    after = before.replace(expr.group(0), rewritten, 1)
+                    if after != before:
+                        candidates.append((rel, before, after))
+                    break
     if len(candidates) != 1:
         print("READ_ONLY_PERSONAL_LABEL_SOURCE_DIAGNOSTIC_BEGIN", flush=True)
         reported = 0
