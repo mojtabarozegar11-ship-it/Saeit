@@ -195,8 +195,22 @@ jobs:
           check() {
             url="$1"; marker="$2"; file="$RUNNER_TEMP/mojplaywin-smoke.html"
             status="$(curl --silent --show-error --location --max-redirs 4 --connect-timeout 10 --max-time 35 -o "$file" -w '%{http_code}' "$url")"
-            test "$status" = 200
-            grep -Fq "$marker" "$file"
+            if test "$status" != 200 || ! grep -Fq "$marker" "$file"; then
+              python3 - "$url" "$status" "$marker" "$file" <<'PY'
+          import re, sys
+          url, status, marker, path = sys.argv[1:]
+          body = open(path, encoding="utf-8", errors="replace").read()
+          title = re.search(r"<title[^>]*>(.*?)</title>", body, re.I | re.S)
+          visible = re.sub(r"<(script|style)\\b[^>]*>.*?</\\1>", " ", body, flags=re.I | re.S)
+          headings = re.findall(r"<h[1-3]\\b[^>]*>(.*?)</h[1-3]>", visible, re.I | re.S)
+          plain = re.sub(r"<[^>]+>", " ", visible)
+          plain = re.sub(r"\\s+", " ", plain).strip()
+          print(f"SMOKE_DIAG url={url} status={status} expected={marker in body} title={title.group(1)[:160] if title else 'none'}")
+          print(f"SMOKE_DIAG_HEADINGS {[re.sub(r'<[^>]+>', ' ', h).strip()[:100] for h in headings[:8]]}")
+          print(f"SMOKE_DIAG_TEXT {plain[:500]}")
+          PY
+              exit 1
+            fi
             echo "LIVE_ROUTE_OK $url"
           }
           check https://mojplaywin.com/ "Ideas become knowledge"
@@ -210,7 +224,7 @@ jobs:
         shell: bash
         run: |
           d="$RUNNER_TEMP/mojplaywin-main-ssh"
-          ssh -F "$d/config" saeit-cpanel "python3 /home/zomorod2/.mojplaywin-main-$GITHUB_RUN_ID/scripts/deploy_mojplaywin_branding.py rollback '$GITHUB_RUN_ID'"
+          ssh -F "$d/config" saeit-cpanel "python3 /home/zomorod2/.mojplaywin-main-$GITHUB_RUN_ID/scripts/deploy_mojplaywin_branding.py rollback '$GITHUB_RUN_ID' restore"
       - name: Remove temporary files and keys
         if: always()
         shell: bash
