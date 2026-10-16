@@ -38,7 +38,12 @@ for package_dir in (
 # Temporary Passenger reentrancy diagnostic.
 import threading
 import traceback
+from django.apps import apps as django_apps
 from django.apps.registry import Apps
+
+print("PASSENGER_REGISTRY_INITIAL_LOADING=" + str(django_apps.loading), file=sys.stderr)
+print("PASSENGER_REGISTRY_INITIAL_READY=" + str(django_apps.ready), file=sys.stderr)
+print("PASSENGER_PRELOADED_CONFIG_WSGI=" + str("config.wsgi" in sys.modules), file=sys.stderr)
 
 _original_populate = Apps.populate
 def _trace_passenger_populate(self, installed_apps):
