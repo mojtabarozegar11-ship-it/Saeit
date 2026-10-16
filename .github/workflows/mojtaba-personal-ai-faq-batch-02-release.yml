@@ -1,0 +1,53 @@
+name: Publish owner-approved personal About FAQ batch 02
+on:
+  pull_request:
+    paths:
+      - .github/workflows/mojtaba-personal-ai-faq-batch-02-release.yml
+      - scripts/mojtaba_personal_ai_faq_batch02_github_release.sh
+      - scripts/mojtaba_personal_ai_faq_batch02_host_release.sh
+      - scripts/mojtaba_personal_ai_questions_batch_02_publish.py
+      - tests/test_mojtaba_personal_ai_questions_batch_02.py
+      - content/mojtaba_personal_ai_questions_batch_02_20261016.json
+  issues:
+    types: [opened]
+permissions:
+  contents: read
+concurrency:
+  group: mojtaba-personal-about-batch02-protected-release
+  cancel-in-progress: false
+jobs:
+  tests:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      (github.event_name == 'pull_request' ||
+       (github.event_name == 'issues' &&
+        github.event.issue.user.login == 'mojtabarozegar11-ship-it' &&
+        github.event.issue.title == 'Ops: Publish Mojtaba personal AI FAQ batch 02 2026-10-16'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate reviewed answers and rollback scripts without touching production
+        run: |
+          set -euo pipefail
+          bash -n scripts/mojtaba_personal_ai_faq_batch02_host_release.sh
+          bash -n scripts/mojtaba_personal_ai_faq_batch02_github_release.sh
+          python3 -m py_compile scripts/mojtaba_personal_ai_questions_batch_02_publish.py
+          python3 -m unittest discover -s tests -p 'test_mojtaba_personal_ai_questions_batch_02.py' -v
+          python3 scripts/mojtaba_personal_ai_questions_batch_02_publish.py check --source content/mojtaba_personal_ai_questions_batch_02_20261016.json
+  publish:
+    needs: tests
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event_name == 'issues' &&
+      github.event.issue.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.issue.title == 'Ops: Publish Mojtaba personal AI FAQ batch 02 2026-10-16'
+    runs-on: ubuntu-latest
+    timeout-minutes: 23
+    steps:
+      - uses: actions/checkout@v4
+      - name: Publish only personal About and verify protected pages
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: bash scripts/mojtaba_personal_ai_faq_batch02_github_release.sh
