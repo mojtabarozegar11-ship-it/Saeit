@@ -1,0 +1,27 @@
+name: Mojtaba six advanced journal SEO tests
+on:
+  push:
+    branches: ['feat/mojtaba-journal-seo-depth-20261016']
+    paths:
+      - 'content/mojtaba_six_advanced_journal_articles_20261016.json'
+      - 'scripts/mojtaba_six_advanced_journal_publish.py'
+      - 'tests/test_mojtaba_six_advanced_journal.py'
+      - '.github/workflows/mojtaba-six-advanced-journal*.yml'
+  pull_request:
+    paths:
+      - 'content/mojtaba_six_advanced_journal_articles_20261016.json'
+      - 'scripts/mojtaba_six_advanced_journal_publish.py'
+      - 'tests/test_mojtaba_six_advanced_journal.py'
+      - '.github/workflows/mojtaba-six-advanced-journal*.yml'
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile bounded publisher
+        run: python3 -m py_compile scripts/mojtaba_six_advanced_journal_publish.py
+      - name: Check six long-form drafts, previous content preservation and targeted SEO
+        run: python3 -m unittest discover -s tests -p 'test_mojtaba_six_advanced_journal.py' -v
