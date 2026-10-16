@@ -66,7 +66,8 @@ def verify_layout() -> None:
 
 
 def restart_passenger() -> None:
-    tmp = APP / "tmp"
+    # .htaccess declares DOMAIN as PassengerAppRoot, even though its WSGI entry imports APP.
+    tmp = DOMAIN / "tmp"
     if tmp.exists() and (tmp.is_symlink() or not tmp.is_dir()):
         raise RuntimeError("Passenger restart directory is not a real directory")
     tmp.mkdir(exist_ok=True)
