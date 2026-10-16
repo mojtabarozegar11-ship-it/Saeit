@@ -146,12 +146,10 @@ jobs:
             exit "$status"
           }
           trap rollback EXIT
-          "$py" -m pip install --disable-pip-version-check --no-input \
-            'djangorestframework>=3.16,<4.0' \
-            'django-environ>=0.12,<1.0' \
-            'whitenoise>=6.9,<7.0' \
-            'psycopg[binary]>=3.2,<4.0' \
-            'openai>=1.100,<2.0'
+          selector="$(command -v cloudlinux-selector || true)"
+          if [ -z "$selector" ] && [ -x /usr/sbin/cloudlinux-selector ]; then selector=/usr/sbin/cloudlinux-selector; fi
+          test -x "$selector"
+          "$selector" install-modules --json --interpreter python --user "$USER" --app-root Saeit --modules django-environ,djangorestframework,whitenoise,psycopg,psycopg-binary,openai
           changed=yes
           "$py" -m pip check
           "$py" -c 'import django,environ,rest_framework,whitenoise,PIL,psycopg,openai; print("REQUIRED_IMPORTS=passed"); print("DJANGO_VERSION="+django.get_version())'
@@ -213,6 +211,18 @@ jobs:
           fi
           active_new=yes
           touch "$app/tmp/restart.txt"
+          selector_check="$home/.zomorod-selector-check-$sha.json"
+          "$selector" run-script --json --interpreter python --user "$USER" --app-root Saeit --script-name manage.py -- check > "$selector_check"
+          "$py" - "$selector_check" <<'PY'
+          import base64,json,sys
+          result=json.load(open(sys.argv[1],encoding="utf-8"))
+          try: output=base64.b64decode(result.get("data","")).decode("utf-8","replace")
+          except Exception: output=""
+          ok=result.get("result")=="success" and "system check identified no issues" in output.lower()
+          print("CLOUDLINUX_SELECTOR_SYSTEM_CHECK="+("passed" if ok else "failed"))
+          if not ok: raise SystemExit(1)
+          PY
+          rm -f -- "$selector_check"
           failures=0
           for path in / /industry/ /agriculture/ /agents/ /api/health/ /api/bridge/health/ /admin/login/ /amozeshgah/ /mohammad/ /ghanadi/ /agriculture/livestock/ /blog/; do
             code="$(curl --silent --show-error --location --retry 2 --retry-all-errors --retry-delay 2 --max-redirs 5 --connect-timeout 10 --max-time 30 -o "$smoke_file" -w '%{http_code}' -H 'Cache-Control: no-cache' "https://zomorodmelal.ir$path?release_check=$sha" || true)"
