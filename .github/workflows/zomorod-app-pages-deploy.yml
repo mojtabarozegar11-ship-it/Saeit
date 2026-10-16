@@ -461,7 +461,7 @@ jobs:
           PY
           rm -f -- "$check_result"
           check_result=""
-          touch passenger_wsgi.py
+          echo "PASSENGER_STARTUP_ALREADY_RESTARTED=yes"
           rm -rf -- "$stage"
           printf 'ready\n' > "$backup/deployed.flag"
           active=0
