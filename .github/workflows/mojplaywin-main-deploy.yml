@@ -164,26 +164,34 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          base="6abd8817b24e6484c880ce4f596027618775487d"
-          mkdir -p "$RUNNER_TEMP/mojplaywin-main/deploy_baseline"
-          files=(config/urls.py core/services_views.py core/commerce_views.py core/views.py core/templates/base.html)
+          source_ref="4087c9be367a443f9252c12348cdd65b624a51c7"
+          baseline_ref="6abd8817b24e6484c880ce4f596027618775487d"
+          source_root="$RUNNER_TEMP/mojplaywin-main"
+          mkdir -p "$source_root/deploy_baseline"
+          files=(scripts/deploy_mojplaywin_branding.py config/urls.py core/services_views.py core/commerce_views.py core/views.py core/mojplaywin_views.py core/templates/base.html core/templates/mojplaywin/home.html core/templates/mojplaywin/store.html core/templates/mojplaywin/section.html core/templates/mojplaywin/theme.html)
+          merged=(config/urls.py core/services_views.py core/commerce_views.py core/views.py core/templates/base.html)
           for file in "${files[@]}"; do
-            mkdir -p "$RUNNER_TEMP/mojplaywin-main/deploy_baseline/$(dirname "$file")"
-            git show "$base:$file" > "$RUNNER_TEMP/mojplaywin-main/deploy_baseline/$file"
+            mkdir -p "$source_root/$(dirname "$file")"
+            git show "$source_ref:$file" > "$source_root/$file"
           done
-          python3 - <<'PY'
+          for file in "${merged[@]}"; do
+            mkdir -p "$source_root/deploy_baseline/$(dirname "$file")"
+            git show "$baseline_ref:$file" > "$source_root/deploy_baseline/$file"
+          done
+          python3 -m py_compile "$source_root/scripts/deploy_mojplaywin_branding.py" "$source_root/config/urls.py" "$source_root/core/services_views.py" "$source_root/core/commerce_views.py" "$source_root/core/views.py" "$source_root/core/mojplaywin_views.py"
+          python3 - "$source_root" <<'PY'
           import sys
           from pathlib import Path
-          sys.path.insert(0, "scripts")
+          root = Path(sys.argv[1])
+          sys.path.insert(0, str(root / "scripts"))
           from deploy_mojplaywin_branding import apply_three_way
-          root = Path(__import__("os").environ["RUNNER_TEMP"]) / "mojplaywin-main"
           for relative in ("config/urls.py", "core/services_views.py", "core/commerce_views.py", "core/views.py", "core/templates/base.html"):
               baseline = (root / "deploy_baseline" / relative).read_text(encoding="utf-8")
-              desired = Path(relative).read_text(encoding="utf-8")
+              desired = (root / relative).read_text(encoding="utf-8")
               assert apply_three_way(baseline, desired, baseline, relative) == desired, relative
           print("MOJPLAYWIN_SAFE_MERGE_CHECK=passed")
           PY
-          tar -czf "$RUNNER_TEMP/mojplaywin-main.tar.gz" scripts/deploy_mojplaywin_branding.py config/urls.py core/services_views.py core/commerce_views.py core/views.py core/mojplaywin_views.py core/templates/base.html core/templates/mojplaywin/home.html core/templates/mojplaywin/store.html core/templates/mojplaywin/section.html core/templates/mojplaywin/theme.html -C "$RUNNER_TEMP/mojplaywin-main" deploy_baseline
+          tar -czf "$RUNNER_TEMP/mojplaywin-main.tar.gz" -C "$source_root" scripts/deploy_mojplaywin_branding.py config/urls.py core/services_views.py core/commerce_views.py core/views.py core/mojplaywin_views.py core/templates/base.html core/templates/mojplaywin/home.html core/templates/mojplaywin/store.html core/templates/mojplaywin/section.html core/templates/mojplaywin/theme.html deploy_baseline
       - name: Stage and install on the verified cPanel app
         if: ${{ !contains(github.event.head_commit.message, 'MOJPLAYWIN_ROLLBACK_38827723099') && !contains(github.event.head_commit.message, 'MOJPLAYWIN_DIAG_20261016') }}
         id: deploy
