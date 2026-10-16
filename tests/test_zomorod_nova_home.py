@@ -38,7 +38,7 @@ class TestNovaHomepage(unittest.TestCase):
         self.assertIn("zm-nova-home-2026-v1", self.html)
         self.assertNotIn("agritech-luxe-v3.css", self.html)
         self.assertIn("/site-heritage/home-before-redesign/", self.html)
-        self.assertIn('/static/site/company/company-logo.png', self.html)
+        self.assertIn('/static/site/company/company-logo-transparent.png', self.html)
         self.assertFalse(self.doc.duplicate_ids)
 
     def test_rich_content_and_original_route_families(self):
