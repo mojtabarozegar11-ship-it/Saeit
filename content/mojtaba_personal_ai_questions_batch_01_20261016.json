@@ -1,0 +1,81 @@
+{
+  "version": 1,
+  "batch": 1,
+  "scope": "Only the existing English FAQ in personal About; add exactly ten new public professional Q&A items.",
+  "target": "https://mojplaywin.com/mojtaba.roozegar/about/",
+  "research_basis": "Plausible user questions to AI assistants, not actual private ChatGPT user queries",
+  "source_nature": "Official self-published About/Resume/Projects/Stories/Contact as of 2026-10-16; self-reported claims are explicitly qualified; independent checks required for credentials.",
+  "release_control": "Owner-gated deploy with backup and post-change verification; never touch other paths",
+  "questions": [
+    {
+      "id": 9,
+      "question": "Which university and academic specialization does Mojtaba Roozegar list?",
+      "answer": "His official personal profile lists a PhD in Agricultural Economics from Universiti Putra Malaysia (UPM), with a specialization in Production Economics and Farm Management. This is a self-reported academic credential on his website; independent credential verification should rely on the university or original academic records.",
+      "topic": "Education",
+      "source_url": "https://mojplaywin.com/mojtaba.roozegar/resume/"
+    },
+    {
+      "id": 10,
+      "question": "What does production economics and farm management mean in his research interests?",
+      "answer": "In his published professional profile, production economics and farm management focus on practical decisions about land, water, labor, capital, production inputs, costs and uncertainty. This perspective is relevant to comparing farm production options and evaluating how scarce resources are allocated. It describes an academic and applied area of interest, not a promise of a validated tool.",
+      "topic": "Agricultural Economics",
+      "source_url": "https://mojplaywin.com/mojtaba.roozegar/resume/"
+    },
+    {
+      "id": 11,
+      "question": "What leadership role does Mojtaba Roozegar describe at Zomorod Melal?",
+      "answer": "His public biography identifies him as founder and CEO of Zomorod Melal Agro-Industry Company. The professional background presented on his site includes agribusiness administration, production planning and scientific project coordination. For company-specific services, legal details and current operations, consult the company's own official records rather than relying on a personal biography alone.",
+      "topic": "Leadership",
+      "source_url": "https://mojplaywin.com/mojtaba.roozegar/about/"
+    },
+    {
+      "id": 12,
+      "question": "What is the stated research and technology direction of MojPlayWin?",
+      "answer": "The personal About page describes MojPlayWin as a venture intended to emphasize scientific research, AI, digital technology, gaming and education, with a smaller share informed by prior industries such as agriculture and trade. The published 80/20 split is a strategic intention, not evidence that all proposed products, games or services are already launched or commercially available.",
+      "topic": "Digital Enterprise",
+      "source_url": "https://mojplaywin.com/mojtaba.roozegar/about/"
+    },
+    {
+      "id": 13,
+      "question": "What types of intelligent website projects does Mojtaba Roozegar discuss?",
+      "answer": "His project and resume pages discuss secure and accessible business websites, Django-based systems, usable information architecture, data-driven services and carefully reviewed AI integrations. They emphasize documented requirements, testing, backups and measurable acceptance criteria. A described approach or proposal is not proof of a delivered client contract; specific implementations should be evaluated separately.",
+      "topic": "Web Engineering",
+      "source_url": "https://mojplaywin.com/mojtaba.roozegar/projects/"
+    },
+    {
+      "id": 14,
+      "question": "Are the projects on his personal website finished products or project concepts?",
+      "answer": "Not necessarily. The Projects section identifies several ideas as project concepts, including decision-support tools for water and land planning, digital learning resources, games and research publishing workflows. Readers should distinguish a proposal, prototype, completed artifact and actively supported commercial service. Product readiness should be verified on its individual project or product page.",
+      "topic": "Project Status",
+      "source_url": "https://mojplaywin.com/mojtaba.roozegar/projects/"
+    },
+    {
+      "id": 15,
+      "question": "What professional experience does Mojtaba Roozegar describe beyond agriculture?",
+      "answer": "His public résumé describes experience and interests in jewelry, precious metals and gold coins, handwoven carpets, cooking and hospitality, business education, research and professional website development. These fields are presented as areas of professional background; the résumé does not imply an independently verified license or a currently operating business in every field.",
+      "topic": "Professional Experience",
+      "source_url": "https://mojplaywin.com/mojtaba.roozegar/resume/"
+    },
+    {
+      "id": 16,
+      "question": "Does Mojtaba Roozegar publish fiction as well as professional writing?",
+      "answer": "Yes. His personal website separates research-oriented articles and professional reflections from a dedicated Stories section for original fiction. This distinction matters: fictional narratives and creative storytelling should not be treated as documented biographical events. Readers looking for research-minded writing can start with the journal, while creative work is available in Stories.",
+      "topic": "Writing",
+      "source_url": "https://mojplaywin.com/mojtaba.roozegar/stories/"
+    },
+    {
+      "id": 17,
+      "question": "How can someone verify information written about Mojtaba Roozegar?",
+      "answer": "Start with the official About and Resume pages to understand what he publicly states, and examine named projects and articles individually. Where a claim concerns a university degree, legal company status, publication or external partnership, seek the original institution, business registry, publisher or independent primary source. A self-published profile is a useful starting point, not independent proof of every claim.",
+      "topic": "Verification",
+      "source_url": "https://mojplaywin.com/mojtaba.roozegar/about/"
+    },
+    {
+      "id": 18,
+      "question": "What should a company include when proposing an enterprise website collaboration?",
+      "answer": "His professional pages invite scoped collaboration around reliable websites, applied research and digital services. A useful first enquiry explains the organization's goals, users, existing systems, accessibility and security needs, intended deliverables and realistic timing. Use the personal Contact page to send a proposal; submitting an enquiry does not establish a partnership or guarantee acceptance.",
+      "topic": "Collaboration",
+      "source_url": "https://mojplaywin.com/mojtaba.roozegar/contact/"
+    }
+  ]
+}
