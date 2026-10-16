@@ -1,0 +1,48 @@
+name: MojPlayWin Atelier V4 visual preview (no deployment)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/mojplaywin-visual-preview.yml"
+      - "scripts/mojplaywin_atelier_visual_preview.py"
+      - "core/templates/mojplaywin/**"
+      - "core/static/site/mojplaywin-atelier-v4.css"
+      - "core/mojplaywin_views.py"
+      - "core/mojplaywin_editorial.py"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: mojplaywin-v4-visual-preview
+  cancel-in-progress: false
+jobs:
+  offline-visual-qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SECRET_KEY: ci-visual-preview-only
+      DEBUG: "False"
+      ALLOWED_HOSTS: mojplaywin.com,localhost,127.0.0.1,testserver
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install preview dependencies
+        run: |
+          python -m pip install -r requirements.txt
+          python -m pip install playwright
+          python -m playwright install --with-deps chromium
+      - name: Build local static manifest
+        run: python manage.py collectstatic --noinput
+      - name: Render and visually check pages without any live server access
+        run: python scripts/mojplaywin_atelier_visual_preview.py
+      - name: Upload reviewable HTML and screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mojplaywin-atelier-v4-desktop-mobile-preview
+          path: mojplaywin-v4-visual-preview/
+          if-no-files-found: warn
+          retention-days: 14
