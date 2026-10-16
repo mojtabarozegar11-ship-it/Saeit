@@ -3,7 +3,7 @@
 <html lang="{% if request.get_host == "mojplaywin.com" or request.get_host == "www.mojplaywin.com" %}en{% else %}fa{% endif %}" dir="{% if request.get_host == "mojplaywin.com" or request.get_host == "www.mojplaywin.com" %}ltr{% else %}rtl{% endif %}">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="theme-color" content="{% if request.get_host == "mojplaywin.com" or request.get_host == "www.mojplaywin.com" %}#090909{% else %}#103b2d{% endif %}">
+<meta name="theme-color" content="{% if request.get_host == "mojplaywin.com" or request.get_host == "www.mojplaywin.com" %}#090909{% else %}#252b19{% endif %}">
 <meta name="description" content="{% if request.get_host == "mojplaywin.com" or request.get_host == "www.mojplaywin.com" %}MojPlayWin brings research, digital products, games, and practical learning together.{% else %}{% block meta_description %}Zomorodmelal؛ پلتفرم خدماتی یکپارچه با خدمات، آموزش، هوش مصنوعی، آب‌وهوا، اقتصاد، استودیو، دانشنامه و شرکت{% endblock %}{% endif %}">
 <title>{% if request.get_host == "mojplaywin.com" or request.get_host == "www.mojplaywin.com" %}MojPlayWin | Research, Games & Learning{% else %}{% block title %}Zomorodmelal — پلتفرم خدماتی یکپارچه{% endblock %}{% endif %}</title>
 <link rel="icon" type="image/png" href="{% static 'site/company/company-logo.png' %}">
