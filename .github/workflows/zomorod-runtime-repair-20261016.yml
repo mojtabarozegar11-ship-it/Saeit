@@ -236,6 +236,11 @@ jobs:
           done
           if [ "$failures" -ne 0 ]; then
             echo "LIVE_RELEASE_FAILURES=$failures"
+            if [ -f "$app/stderr.log" ]; then
+              echo "LIVE_PASSENGER_ERROR_TAIL_BEGIN"
+              tail -n 80 "$app/stderr.log" | python3 -c 'import sys; keys=("Traceback","Error:","Exception","No module named","ImportError","RuntimeError"); [print(line.rstrip()[:500]) for line in sys.stdin if any(k in line for k in keys)]'
+              echo "LIVE_PASSENGER_ERROR_TAIL_END"
+            fi
             exit 1
           fi
           "$py" - "$app/db.sqlite3" <<'PY'
