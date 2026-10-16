@@ -88,23 +88,29 @@ def apply_three_way(base_text, desired_text, live_text, label):
             if not positions and len(subsequence_positions(live, new)) == 1:
                 continue
             raise RuntimeError(f"Safe merge conflict in {label}: expected one matching source hunk, found {len(positions)}")
-        # For an insertion, locate its unique boundary using unchanged neighboring lines.
-        prefix = base[max(0, i1-2):i1]
-        suffix = base[i1:min(len(base), i1+2)]
-        boundaries = []
-        for at in range(len(live)+1):
-            if prefix and live[max(0, at-len(prefix)):at] != prefix:
-                continue
-            if suffix and live[at:at+len(suffix)] != suffix:
-                continue
-            if (prefix or at == 0) and (suffix or at == len(live)):
-                boundaries.append(at)
-        if len(boundaries) == 1:
-            live[boundaries[0]:boundaries[0]] = new
+        # Anchor insertions to the nearest unique context line. Host deployments can
+        # add unrelated lines between the pinned context lines, so exact boundaries
+        # are too strict; the unique anchor still preserves every live-only line.
+        prefix = base[max(0, i1-3):i1]
+        suffix = base[i1:min(len(base), i1+3)]
+        insertion_at = None
+        for width in range(len(prefix), 0, -1):
+            positions = subsequence_positions(live, prefix[-width:])
+            if len(positions) == 1:
+                insertion_at = positions[0] + width
+                break
+        if insertion_at is None:
+            for width in range(len(suffix), 0, -1):
+                positions = subsequence_positions(live, suffix[:width])
+                if len(positions) == 1:
+                    insertion_at = positions[0]
+                    break
+        if insertion_at is not None:
+            live[insertion_at:insertion_at] = new
             continue
         if new and len(subsequence_positions(live, new)) == 1:
             continue
-        raise RuntimeError(f"Safe merge conflict in {label}: insertion boundary is not unique")
+        raise RuntimeError(f"Safe merge conflict in {label}: insertion anchor is not unique")
     return "".join(live)
 
 def restart_passenger():
