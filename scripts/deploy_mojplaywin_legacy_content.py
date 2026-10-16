@@ -96,7 +96,7 @@ def validate_payload(payload):
     home = payload[FILES[1]]
     page = payload[FILES[2]]
     css = payload[FILES[3]]
-    required_base = ("MojPlayWin", "site/mojplaywin.css?v=20261016")
+    required_base = ("MojPlayWin", "site/mojplaywin.css", "?v=20261016")
     required_home = ("mpw-hero", "PORTFOLIO MIX", "80% digital momentum", "20% real-world ventures")
     required_page = ("mpw-page-hero", "Seven practical fields", "page_key == 'agro-industry'")
     required_css = ("--bg:#050505", "--mpw-gold:#d4af37", "border:3px solid var(--mpw-gold)")

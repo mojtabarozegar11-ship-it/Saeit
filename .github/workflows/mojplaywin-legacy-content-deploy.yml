@@ -31,7 +31,7 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           checks = {
-              "core/templates/brands/mojplaywin/base.html": ("site/mojplaywin.css?v=20261016",),
+              "core/templates/brands/mojplaywin/base.html": ("site/mojplaywin.css", "?v=20261016"),
               "core/templates/brands/mojplaywin/home.html": ("PORTFOLIO MIX", "80% digital momentum", "20% real-world ventures"),
               "core/templates/brands/mojplaywin/page.html": ("Seven practical fields", "page_key == 'agro-industry'"),
               "core/static/site/mojplaywin.css": ("--bg:#050505", "--mpw-gold:#d4af37", "border:3px solid var(--mpw-gold)"),
@@ -55,8 +55,8 @@ jobs:
       - name: Configure the confirmed pinned cPanel relay
         shell: bash
         env:
-          VPS_KEY: \${{ secrets.VPS_SSH_PRIVATE_KEY }}
-          HOST_KEY: \${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/mojplaywin-legacy-content-ssh"
