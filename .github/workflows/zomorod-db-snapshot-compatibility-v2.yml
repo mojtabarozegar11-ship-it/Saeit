@@ -117,7 +117,7 @@ jobs:
           client=Client(HTTP_HOST="zomorodmelal.ir")
           for path in ["/","/industry/","/agriculture/","/agents/","/api/health/","/api/bridge/health/","/admin/login/","/amozeshgah/","/blog/"]:
               try:
-                  response=client.get(path)
+                  response=client.get(path,secure=True)
                   print(f"ROUTE_{path.replace('/','_')}_STATUS={response.status_code}")
                   print(f"ROUTE_{path.replace('/','_')}_TYPE={response.get('Content-Type','')}")
               except Exception as exc:
