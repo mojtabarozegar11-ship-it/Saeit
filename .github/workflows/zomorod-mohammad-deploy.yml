@@ -31,6 +31,8 @@ jobs:
           test -s public/mohammad/assets/checklist-before-renovation.html
           test -s public/mohammad/assets/renovation-budget-template.csv
           test -s public/mohammad/assets/seasonal-maintenance.html
+          test -s public/mohammad/panel/index.html
+          grep -Fq 'میز کار مدیریت' public/mohammad/panel/index.html
           echo "MOHAMMAD_SOURCE=valid"
       - name: Prepare pinned VPS to cPanel relay
         shell: bash
@@ -221,8 +223,11 @@ jobs:
           curl --fail --silent --show-error --retry 4 --retry-delay 2 -o /dev/null https://zomorodmelal.ir/mohammad/styles.css
           curl --fail --silent --show-error --retry 4 --retry-delay 2 -o /dev/null https://zomorodmelal.ir/mohammad/app.js
           curl --fail --silent --show-error --retry 4 --retry-delay 2 -o /dev/null https://zomorodmelal.ir/mohammad/assets/checklist-before-renovation.html
+          panel="$(curl --fail --silent --show-error --retry 4 --retry-delay 2 https://zomorodmelal.ir/mohammad/panel/)"
+          printf '%s' "$panel" | grep -Fq 'میز کار مدیریت'
           curl --fail --silent --show-error --retry 4 --retry-delay 2 -o /dev/null https://zomorodmelal.ir/
           echo "MOHAMMAD_LIVE=https://zomorodmelal.ir/mohammad/"
+          echo "PANEL_LIVE=https://zomorodmelal.ir/mohammad/panel/"
           echo "ROOT_ROUTE_HTTP=200"
       - name: Restore the previous subpage if live verification fails
         if: failure() && steps.publish.outcome == 'success'
