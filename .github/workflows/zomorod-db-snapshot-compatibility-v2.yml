@@ -121,7 +121,7 @@ jobs:
                   print(f"ROUTE_{path.replace('/','_')}_STATUS={response.status_code}")
                   print(f"ROUTE_{path.replace('/','_')}_TYPE={response.get('Content-Type','')}")
               except Exception as exc:
-                  print(f"ROUTE_{path.replace('/','_')}_EXCEPTION={type(exc).__name__}")
+                  print(f"ROUTE_{path.replace('/','_')}_EXCEPTION={type(exc).__name__}:{str(exc)[:220]}")
           con=sqlite3.connect("file:"+db+"?mode=ro",uri=True)
           after=con.execute("select count(*) from django_migrations").fetchone()[0]
           print(f"SNAPSHOT_MIGRATION_ROWS_AFTER={after}")
