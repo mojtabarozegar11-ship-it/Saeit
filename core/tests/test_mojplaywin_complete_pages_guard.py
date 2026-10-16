@@ -56,6 +56,18 @@ class MojPlayWinCompletePageGuardTests(TestCase):
                 self.assertIn('href="https://mojplaywin.com' + path + '"', html)
                 self.assertNotIn('href="https://zomorodmelal.ir' + path + '"', html)
 
+    def test_anonymous_agents_page_hides_sensitive_staff_operations(self):
+        response = self.client.get("/agents/", HTTP_HOST="mojplaywin.com")
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn('id="mpx-staff-agent-operations"', response.content.decode("utf-8"))
+        self.assertNotIn('href="/admin/core/agenttask/"', response.content.decode("utf-8"))
+
+    def test_staff_agent_navigation_has_protected_known_paths_in_source(self):
+        source = (ROOT / "core" / "templates" / "mojplaywin" / "section.html").read_text(encoding="utf-8")
+        self.assertIn('request.user.is_staff', source)
+        self.assertIn('href="/staff/command-center/"', source)
+        self.assertIn('href="/admin/core/agent/"', source)
+
     def test_independent_mojplaywin_base_has_correct_seo_and_no_shared_base(self):
         pages = ROOT / "core" / "templates" / "mojplaywin"
         own_base = (pages / "base.html").read_text(encoding="utf-8")
