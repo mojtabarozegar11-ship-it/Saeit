@@ -28,6 +28,7 @@ urlpatterns = [
     path("agriculture/assets/zomorod-olive-v1/<str:filename>.webp", zomorod_hero_image, name="agriculture_hero_asset"),
     path("agriculture/<slug:slug>/", agriculture_guide, name="agriculture_guide"),
     path("amozeshgah/assets/zomorod-education-v1/<str:filename>.webp", zomorod_hero_image, name="education_hero_asset"),
+    path("static/site/heroes/<str:filename>.webp", zomorod_hero_image, name="site_hero_image"),
     path("industry/", lambda request: platform_page(request, "industry"), name="industry"),
     path("ventures/<slug:slug>/", venture, name="mojplaywin_venture"),
     path("research/", lambda request: platform_page(request, "research"), name="research"),
