@@ -399,6 +399,28 @@ jobs:
           mkdir -p "$app/tmp"
           touch "$app/tmp/restart.txt"
           cd "$app"
+          if ! "$passenger_python" - <<'PY'
+          import traceback
+          from django.apps.registry import Apps
+          original_populate = Apps.populate
+          def trace_reentrant(self, installed_apps):
+              if self.loading:
+                  print("PASSENGER_WSGI_REENTRANT_SETUP_CALLER_BEGIN")
+                  traceback.print_stack()
+                  print("PASSENGER_WSGI_REENTRANT_SETUP_CALLER_END")
+              return original_populate(self, installed_apps)
+          Apps.populate = trace_reentrant
+          try:
+              import passenger_wsgi
+              print("PASSENGER_WSGI_IMPORT=passed")
+          except Exception:
+              traceback.print_exc()
+              raise
+          PY
+          then
+            echo "PASSENGER_WSGI_IMPORT=failed" >&2
+            exit 1
+          fi
           check_result="$(mktemp "$HOME/.zomorod-django-check-$sha.XXXXXX.json")"
           if ! "$selector" run-script --json --interpreter python --user "$USER" --app-root Saeit --script-name manage.py -- check --deploy > "$check_result"; then
             echo "DJANGO_APP_CHECK=failed" >&2
