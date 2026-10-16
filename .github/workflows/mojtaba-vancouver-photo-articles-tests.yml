@@ -35,7 +35,8 @@ jobs:
           import json
           from pathlib import Path
           items=sum((json.loads(Path(p).read_text())["articles"] for p in ("content/mojtaba_vancouver_collab_part_a_20261016.json","content/mojtaba_vancouver_collab_part_b_20261016.json")),[])
-          Path("/tmp/vancouver-image-fetch-list.tsv").write_text("".join(f'{x["slug"]}\thttps://unsplash.com/photos/{x["photo_id"]}/download?force=true&w=1200&fm=jpg\n' for x in items))
+          photo=json.loads(Path("content/mojtaba_vancouver_photo_cdn_urls_20261016.json").read_text())
+          Path("/tmp/vancouver-image-fetch-list.tsv").write_text("".join(f'{x["slug"]}\t{photo[x["photo_id"]]}\n' for x in items))
           PY
           while IFS="$(printf '\t')" read -r slug url; do
             test -n "$slug"
