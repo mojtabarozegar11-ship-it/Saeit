@@ -227,6 +227,35 @@ jobs:
           else
             echo "WSGI_IMPORT=interpreter_not_found"
           fi
+          # Read-only comparison against the already-configured staging app.
+          staging_root="$HOME/Saeit-staging"
+          staging_python="$HOME/virtualenv/Saeit-staging/3.11/bin/python"
+          if test -d "$staging_root" && test -x "$staging_python"; then
+            for rel in passenger_wsgi.py config/wsgi.py config/settings.py core/middleware.py config/urls.py; do
+              if test -f "$HOME/Saeit/$rel"; then printf 'APP_FILE_SHA Saeit/%s %s\n' "$rel" "$(sha256sum "$HOME/Saeit/$rel" | awk '{print $1}')"; fi
+              if test -f "$staging_root/$rel"; then printf 'APP_FILE_SHA Saeit-staging/%s %s\n' "$rel" "$(sha256sum "$staging_root/$rel" | awk '{print $1}')"; fi
+            done
+            (cd "$staging_root" && PYTHONDONTWRITEBYTECODE=1 "$staging_python" - <<'PY'
+          import django
+          from django.test import Client
+          print("STAGING_DJANGO_VERSION="+django.get_version())
+          try:
+              import passenger_wsgi
+              print("STAGING_WSGI_IMPORT=success")
+          except Exception as exc:
+              print("STAGING_WSGI_IMPORT=failed:"+type(exc).__name__)
+          client=Client(HTTP_HOST="staging.zomorodmelal.ir")
+          for route in ("/agriculture/","/agents/","/api/health/","/api/bridge/health/"):
+              try:
+                  response=client.get(route,secure=True)
+                  print("STAGING_DJANGO_CLIENT "+route+" "+str(response.status_code))
+              except Exception as exc:
+                  print("STAGING_DJANGO_CLIENT "+route+" failed:"+type(exc).__name__)
+          PY
+          )
+          else
+            echo "STAGING_APP_RUNTIME=not_found"
+          fi
           python3 - "$raw" <<'PY'
           from pathlib import Path
           import json, os, re, sys, time
