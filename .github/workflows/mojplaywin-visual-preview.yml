@@ -20,6 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
+      PYTHONPATH: .
       SECRET_KEY: ci-visual-preview-only
       DEBUG: "False"
       ALLOWED_HOSTS: mojplaywin.com,localhost,127.0.0.1,testserver
