@@ -164,12 +164,13 @@ jobs:
           "$passenger_python" -c 'import django, environ, rest_framework, whitenoise, openai, psycopg, PIL, pydantic_core; print("PASSENGER_RUNTIME_DEPENDENCIES=verified")'
           recovery="$HOME/.backups/zomorodmelal-app/b78498ecccc3b99784a0cb060ea2c59bec65c505"
           if test -f "$recovery/deployed.flag"; then
-            original_htaccess="$recovery/public_html/.htaccess"
+            htaccess_recovery="$HOME/.backups/zomorodmelal-app/2532ea0d2e5c143a2369104dbb0cac36bac6ec26"
+            original_htaccess="$htaccess_recovery/public_html/.htaccess"
             test -f "$original_htaccess" && ! test -L "$original_htaccess"
             grep -Fq 'PassengerAppRoot "/home/zomorod2/Saeit"' "$original_htaccess"
             grep -Fq 'PassengerPython "/opt/alt/python310/bin/lswsgi"' "$original_htaccess"
-            if test -f "$recovery/htaccess.sha256"; then
-              expected_htaccess="$(cat "$recovery/htaccess.sha256")"
+            if test -f "$htaccess_recovery/htaccess.sha256"; then
+              expected_htaccess="$(cat "$htaccess_recovery/htaccess.sha256")"
               actual_htaccess="$(sha256sum "$original_htaccess" | awk '{print $1}')"
               test "$expected_htaccess" = "$actual_htaccess"
             else
