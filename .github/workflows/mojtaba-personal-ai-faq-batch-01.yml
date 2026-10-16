@@ -1,0 +1,228 @@
+name: Mojtaba personal AI FAQ batch 01 protected release
+on:
+  pull_request:
+    paths:
+      - .github/workflows/mojtaba-personal-ai-faq-batch-01.yml
+      - scripts/mojtaba_personal_ai_questions_batch_01_publish.py
+      - tests/test_mojtaba_personal_ai_questions_batch_01.py
+      - content/mojtaba_personal_ai_questions_batch_01_20261016.json
+  issues:
+    types: [opened]
+permissions:
+  contents: read
+concurrency:
+  group: mojtaba-personal-ai-faq-batch01-only
+  cancel-in-progress: false
+jobs:
+  tests:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      (github.event_name == 'pull_request' ||
+       (github.event_name == 'issues' &&
+        github.event.issue.user.login == 'mojtabarozegar11-ship-it' &&
+        github.event.issue.title == 'Ops: Publish Mojtaba personal AI FAQ batch 01 2026-10-16'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run ten-answer editorial and preservation regression tests
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mojtaba_personal_ai_questions_batch_01_publish.py
+          python3 -m unittest discover -s tests -p 'test_mojtaba_personal_ai_questions_batch_01.py' -v
+          python3 scripts/mojtaba_personal_ai_questions_batch_01_publish.py check --source content/mojtaba_personal_ai_questions_batch_01_20261016.json
+  publish:
+    needs: tests
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event_name == 'issues' &&
+      github.event.issue.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.issue.title == 'Ops: Publish Mojtaba personal AI FAQ batch 01 2026-10-16'
+    runs-on: ubuntu-latest
+    timeout-minutes: 23
+    steps:
+      - uses: actions/checkout@v4
+      - name: Authenticate pinned two-hop SSH relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/personal-ai-faq-batch1-relay"
+          mkdir -p "$d"
+          printf '%s\n' "$VPS_KEY" > "$d/vps.key"
+          printf '%s\n' "$HOST_KEY" > "$d/host.key"
+          python3 - "$d/host.key" <<'PY'
+          import pathlib,sys
+          p=pathlib.Path(sys.argv[1]);t=p.read_text().replace('\r\n','\n').strip()
+          p.write_text(t.replace('\\n','\n')+'\n')
+          PY
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+          Host saeit-host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+            StrictHostKeyChecking yes
+          Host *
+            BatchMode yes
+            IdentitiesOnly yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+            ConnectionAttempts 1
+          EOF
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          echo "PERSONAL_AI_BATCH_SSH=$d/config" >> "$GITHUB_ENV"
+      - name: Stage only personal batch publisher and FAQ source
+        shell: bash
+        run: |
+          set -euo pipefail
+          stage="/home/zomorod2/.personal-ai-faq-batch01-stage-$GITHUB_RUN_ID"
+          timeout 25s ssh -F "$PERSONAL_AI_BATCH_SSH" saeit-host "test ! -e '$stage' && install -d -m 700 '$stage'"
+          timeout 70s scp -F "$PERSONAL_AI_BATCH_SSH" scripts/mojtaba_personal_ai_questions_batch_01_publish.py "saeit-host:$stage/installer.py"
+          timeout 70s scp -F "$PERSONAL_AI_BATCH_SSH" scripts/mojtaba_about_english_questions_upgrade.py "saeit-host:$stage/mojtaba_about_english_questions_upgrade.py"
+          timeout 70s scp -F "$PERSONAL_AI_BATCH_SSH" scripts/mojtaba_personal_public_faq_safe_publish.py "saeit-host:$stage/mojtaba_personal_public_faq_safe_publish.py"
+          timeout 70s scp -F "$PERSONAL_AI_BATCH_SSH" content/mojtaba_personal_ai_questions_batch_01_20261016.json "saeit-host:$stage/batch.json"
+      - name: Backup and append exactly ten answers, verify all personal routes
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 1100s ssh -F "$PERSONAL_AI_BATCH_SSH" saeit-host "bash -s -- '$GITHUB_RUN_ID'" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          run_id="$1"
+          app="/home/zomorod2/mojtaba_personal/mojtaba_roozegar_personal_v17"
+          stage="/home/zomorod2/.personal-ai-faq-batch01-stage-$run_id"
+          script="$stage/installer.py"
+          source="$stage/batch.json"
+          backup="/home/zomorod2/.backups/mojtaba-personal-ai-faq-batch01/$run_id"
+          py="/home/zomorod2/mojtaba_personal/.venv_personal_test/bin/python"
+          installed=0
+          verified=0
+          finish() {
+            error=$?
+            trap - EXIT
+            if test "$installed" = 1 && test "$verified" = 0 && test -f "$backup/manifest.json"; then
+              "$py" "$script" rollback --app "$app" --backup "$backup" &&
+              echo "PERSONAL_AI_FAQ_BATCH_01_REMOTE_ROLLBACK=yes" ||
+              echo "PERSONAL_AI_FAQ_BATCH_01_MANUAL_REVIEW_REQUIRED=yes"
+            fi
+            rm -rf -- "$stage"
+            exit "$error"
+          }
+          trap finish EXIT
+          test -x "$py" && test -f "$app/manage.py" && test ! -L "$app"
+          test -f "$script" && test -f "$source"
+          cd "$app"
+          "$py" "$script" check --source "$source"
+          "$py" "$script" install --app "$app" --source "$source" --backup "$backup"
+          installed=1
+          "$py" manage.py check --deploy
+          "$py" "$script" verify --app "$app" --backup "$backup"
+          "$py" - <<'PYTEST'
+          import os
+          import re
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          import django
+          django.setup()
+          from django.test import Client
+          from django.urls import reverse
+          from core.models import Post
+          c=Client(HTTP_HOST="mojplaywin.com")
+          names=("home","about","resume","activities","memories","stories",
+                 "projects","posts","gallery","contact")
+          for name in names:
+              result=c.get(reverse("personal_site:"+name),secure=True)
+              if result.status_code!=200:
+                  raise RuntimeError("Protected personal route failed: "+name)
+              body=result.content.decode("utf-8","replace")
+              marker="mpw-about-ai-questions-batch-01-20261016"
+              if name=="about":
+                  if body.count(marker)!=1:
+                      raise RuntimeError("New question batch missing or duplicate")
+                  section=re.search(r'<section\s+id="mpw-public-personal-faq-20261016"[^>]*>.*?</section>',body,re.S)
+                  if not section:
+                      raise RuntimeError("Personal About FAQ not found")
+                  content=section.group()
+                  if len(re.findall(r'<article\b',content)) !=18:
+                      raise RuntimeError("Expected 8 existing + 10 new English Q&A")
+                  if re.search(r"[\u0600-\u06FF]",content):
+                      raise RuntimeError("Persian text added inside English FAQ")
+                  if 'name="csrfmiddlewaretoken"' not in content:
+                      raise RuntimeError("Existing secure question form missing")
+                  if "mpw-personal-ask-question-v2-20261016" not in content:
+                      raise RuntimeError("Existing About question form changed")
+                  for idx in range(9,19):
+                      if content.count('data-ai-faq-id="'+str(idx)+'"')!=1:
+                          raise RuntimeError("Missing new question "+str(idx))
+              elif marker in body:
+                  raise RuntimeError("Batch leaked outside About: "+name)
+              print("PERSONAL_AI_FAQ_DJANGO_ROUTE="+name+" HTTP=200",flush=True)
+          slugs=list(Post.objects.filter(published=True).values_list("slug",flat=True))
+          if len(slugs)<93:
+              raise RuntimeError("Pre-existing article floor violated")
+          for slug in slugs:
+              url=reverse("personal_site:post_detail",kwargs={"slug":slug})
+              if c.get(url,secure=True).status_code!=200:
+                  raise RuntimeError("Existing article route broken: "+slug)
+          print("PERSONAL_AI_FAQ_ALL_ARTICLE_ROUTES_PASSED="+str(len(slugs)),flush=True)
+          PYTEST
+          test -d "$app/tmp" && touch "$app/tmp/restart.txt" || true
+          "$py" - <<'PYHTTP'
+          import re
+          import time
+          from urllib.request import Request,urlopen
+          url="https://mojplaywin.com/mojtaba.roozegar/about/"
+          for attempt in range(4):
+              try:
+                  with urlopen(Request(url,headers={"User-Agent":"MojtabaPersonalAIQABatch01SafeAudit/1"}),timeout=18) as response:
+                      body=response.read(1600000).decode("utf-8","replace")
+                      if response.status!=200:
+                          raise RuntimeError("Unexpected About HTTP status")
+                  match=re.search(r'<section\s+id="mpw-public-personal-faq-20261016"[^>]*>.*?</section>',body,re.S)
+                  if not match:
+                      raise RuntimeError("Original FAQ missing live")
+                  area=match.group()
+                  if area.count("<article")!=18 or area.count("data-ai-faq-id=")!=10:
+                      raise RuntimeError("New ten-answer batch missing live")
+                  if re.search(r"[\u0600-\u06FF]",area):
+                      raise RuntimeError("Non-English FAQ text")
+                  if "mpw-personal-ask-question-v2-20261016" not in area:
+                      raise RuntimeError("Existing question form not retained live")
+                  print("PERSONAL_AI_FAQ_ABOUT_LIVE_HTTP=200;FAQ_COUNT=18;NEW_COUNT=10",flush=True)
+                  break
+              except Exception as exc:
+                  print("PERSONAL_AI_FAQ_ABOUT_HTTP_RETRY="+str(exc)[:130],flush=True)
+                  if attempt==3:raise
+                  time.sleep(2)
+          PYHTTP
+          "$py" "$script" verify --app "$app" --backup "$backup"
+          verified=1
+          echo "PERSONAL_AI_FAQ_BATCH_01_LIVE_PUBLISH=success"
+          echo "PERSONAL_AI_FAQ_BATCH_01_BACKUP=$backup"
+          echo "MAIN_MOJPLAYWIN_ZOMOROD_OTHER_SITES_UNTOUCHED=yes"
+          REMOTE
+      - name: Erase temporary relay keys
+        if: always()
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/personal-ai-faq-batch1-relay"
+          test ! -d "$d" || rm -rf -- "$d"
