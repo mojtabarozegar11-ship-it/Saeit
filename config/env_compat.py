@@ -49,14 +49,22 @@ class Env:
             os.environ.setdefault(key, value)
 
     def __call__(self, key, default=None):
+        rule = self.schema.get(key)
+        cast = rule[0] if isinstance(rule, tuple) else rule
+        schema_default = rule[1] if isinstance(rule, tuple) and len(rule) > 1 else None
         if key in os.environ:
             value = os.environ[key]
         elif default is not None:
             value = default
+        elif schema_default is not None:
+            value = schema_default
         else:
             raise KeyError(f"Environment variable {key} is not set")
-        rule = self.schema.get(key)
-        cast = rule[0] if isinstance(rule, tuple) else rule
+        if cast is None:
+            if isinstance(default, bool):
+                cast = bool
+            elif isinstance(default, int):
+                cast = int
         if cast is bool:
             return _as_bool(value)
         if cast is not None:
