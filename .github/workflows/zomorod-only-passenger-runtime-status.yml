@@ -1,0 +1,121 @@
+name: Diagnose Zomorod-only Passenger and Django initialization
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/zomorod-only-passenger-runtime-status.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-passenger-observe
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - name: Read-only Passenger application routing, site health and nonsecret runtime details
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          cd "$HOME/Saeit"
+          export PYTHONDONTWRITEBYTECODE=1
+          python3 - <<'PY'
+          from pathlib import Path
+          import os,re,subprocess,datetime
+          home=Path.home()
+          web=home/"public_html"
+          for rel in (".htaccess","agriculture/.htaccess","admin/.htaccess"):
+              p=web/rel
+              print("ZM_PASSENGER_WEB_CONFIG="+rel+" present="+str(p.is_file()))
+              if p.is_file() and not p.is_symlink():
+                  for line in p.read_text(errors="replace").splitlines():
+                      line=line.strip()
+                      if re.match(r"^(?:Passenger|SetEnv|AddHandler|RewriteRule|RewriteCond|ErrorDocument|DirectoryIndex)",line,re.I):
+                          if line.lower().startswith("setenv"):
+                              parts=line.split(None,2)
+                              print("ZM_PASSENGER_CONFIG_SETTING="+parts[0]+" key="+(parts[1] if len(parts)>1 else "unknown")+" value=REDACTED")
+                          elif any(w in line.lower() for w in ("auth","token","secret","password")):
+                              print("ZM_PASSENGER_CONFIG_SETTING=REDACTED")
+                          else:
+                              print("ZM_PASSENGER_CONFIG_SETTING="+line[:230])
+          for rel in (".env","passenger_wsgi.py","config/wsgi.py","db.sqlite3"):
+              p=home/"Saeit"/rel
+              print("ZM_RUNTIME_FILE="+rel+" exists="+str(p.is_file())+" bytes="+str(p.stat().st_size if p.is_file() else 0))
+          keys=("DATABASE_URL","SECRET_KEY","VIRTUAL_ENV","PYTHONPATH","DJANGO_SETTINGS_MODULE")
+          env_path=home/"Saeit"/".env"
+          if env_path.is_file():
+              names=set()
+              for line in env_path.read_text(errors="replace").splitlines():
+                  if "=" in line and not line.lstrip().startswith("#"):
+                      names.add(line.split("=",1)[0].strip())
+              for key in keys:
+                  print("ZM_ENV_FILE_KEY="+key+" exists="+str(key in names))
+          for rel in ("Saeit/tmp/restart.txt","public_html/tmp/restart.txt","public_html/.htaccess","Saeit/passenger_wsgi.py"):
+              p=home/rel
+              if p.exists():
+                  print("ZM_RUNTIME_TIMESTAMP="+rel+" mtime="+datetime.datetime.fromtimestamp(p.stat().st_mtime,datetime.timezone.utc).isoformat(timespec="seconds"))
+          venv=home/"virtualenv"/"Saeit"/"3.10"/"bin"/"python"
+          print("ZM_PYTHON_INTERPRETER="+("available" if venv.is_file() else "missing"))
+          for d in ("Saeit","public_html"):
+              print("ZM_PROTECTED_FOLDER="+d+" exists="+str((home/d).is_dir()))
+          PY
+          for path in /admin/login/ /company/ /agents/ /api/health/ /; do
+            code="$(curl -sS -L --max-time 12 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir$path" || true)"
+            echo "ZM_PASSENGER_LIVE_ROUTE=$path status=$code"
+          done
+          REMOTE
+      - name: Clean temporary runner SSH keys
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
