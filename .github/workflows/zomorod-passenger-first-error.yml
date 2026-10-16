@@ -187,10 +187,14 @@ jobs:
                   for line in r.stderr.splitlines()[-35:]: print("FIRST_ERROR_PROBE_TRACE="+line[:220])
           except (OSError,subprocess.TimeoutExpired) as error:
               print("FIRST_ERROR_PROBE_ERROR_CLASS="+type(error).__name__)
-          import subprocess as _sp
-          scan=_sp.run(["grep","-RInE","django\\.setup|MasterAgentChat|chat_runtime|get_wsgi_application",str(app),"--include=*.py","--exclude-dir=tests","--exclude-dir=migrations"],capture_output=True,text=True,timeout=10,check=False)
-          for line in scan.stdout.splitlines()[:60]:
-              if ".env" not in line: print("STARTUP_IMPORT_REFERENCE="+line[:240])
+          patterns=re.compile(r"django\\.setup|MasterAgentChat|chat_runtime|get_wsgi_application")
+          for rel in ("config/settings.py","config/wsgi.py","config/urls.py","core/admin.py","core/apps.py","core/views.py","core/models.py","core/chat_runtime.py","command_center/apps.py","command_center/__init__.py"):
+              source=app/rel
+              if not source.is_file(): continue
+              try: source_lines=source.read_text(encoding="utf-8",errors="replace").splitlines()
+              except OSError: continue
+              for number,line in enumerate(source_lines,1):
+                  if patterns.search(line): print(f"STARTUP_IMPORT_REFERENCE={rel}:{number}:{line[:180]}")
           # Import the real Django WSGI application with the selector interpreter.
           # This is an isolated child process: no website config changes or GET requests.
           import_probe="""
