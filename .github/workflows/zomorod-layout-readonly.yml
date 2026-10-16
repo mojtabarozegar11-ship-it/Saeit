@@ -114,6 +114,21 @@ jobs:
             grep -E '^Passenger(AppRoot|BaseURI|Python|AppType|StartupFile)' "$HOME/public_html/.htaccess" || true
           fi
           REMOTE
+      - name: Map static route files without modifications
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/zomorod-root"
+          ssh -F "$d/config" saeit-cpanel 'bash -s' <<'REMOTE'
+          for route in industry research knowledge company blog market economy studio agents weather store auctions newsletter agriculture amozeshgah services education academy; do
+            file="$HOME/public_html/$route/index.html"
+            if test -f "$file"; then echo "STATIC_ROUTE $route = yes size=$(wc -c < "$file")"; else echo "STATIC_ROUTE $route = no"; fi
+          done
+          for route in industry research knowledge company blog store; do
+            if test -f "$HOME/public_html/$route/index.html"; then
+              grep -oi -m1 '<title>[^<]*</title>' "$HOME/public_html/$route/index.html" || true
+            fi
+          done
+          REMOTE
       - name: Check public response codes
         shell: bash
         run: |
