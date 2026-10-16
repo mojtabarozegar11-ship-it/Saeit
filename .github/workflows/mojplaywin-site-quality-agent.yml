@@ -1,5 +1,10 @@
 name: MojPlayWin read-only site quality agent
 on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/mojplaywin-site-quality-agent.yml"
+      - "scripts/mojplaywin_site_quality_agent.py"
   schedule:
     - cron: "17 */6 * * *"
   workflow_dispatch:
@@ -16,8 +21,29 @@ jobs:
       - uses: actions/checkout@v4
       - name: Audit only whitelisted public MojPlayWin pages
         run: |
-          python3 scripts/mojplaywin_site_quality_agent.py --output mojplaywin-quality-report.json
+          python3 scripts/mojplaywin_site_quality_agent.py --output mojplaywin-quality-report.json --fail-on-issues
+      - name: Report results in workflow summary
+        if: always()
+        run: |
+          if test -f mojplaywin-quality-report.json; then
+            python3 - <<'PY'
+          import json, os
+          report = json.load(open("mojplaywin-quality-report.json", encoding="utf-8"))
+          issues = [(p["path"], ", ".join(p["issues"])) for p in report["pages"] if p["issues"]]
+          lines = [
+              "## MojPlayWin main-site read-only health",
+              f"- Scope: `{report['scope']}`",
+              f"- Pages checked: {report['pages_checked']}",
+              f"- Pages passing: {report['pages_passed']}",
+              f"- Pages needing review: {len(issues)}",
+          ]
+          lines.extend(f"- `{path}`: {detail}" for path, detail in issues)
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as stream:
+              stream.write("\n".join(lines) + "\n")
+          PY
+          fi
       - name: Upload report
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: mojplaywin-public-site-quality
