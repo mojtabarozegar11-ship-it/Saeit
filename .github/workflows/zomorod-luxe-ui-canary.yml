@@ -1,0 +1,199 @@
+name: Zomorod premium agriculture UI v3 safe live canary
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/zomorod-luxe-ui-canary.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-agriculture-static
+  cancel-in-progress: false
+jobs:
+  canary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate researched design assets and menu content
+        shell: bash
+        run: |
+          set -euo pipefail
+          css="content/zomorod-design/agritech-luxe-v3.css"
+          menu="content/zomorod-design/agritech-mega-menu.html"
+          test "$(stat -c %s "$css")" -gt 6500
+          test "$(grep -c '@container' "$css")" -gt 0
+          grep -Fq 'prefers-reduced-motion' "$css"
+          grep -Fq 'focus-visible' "$css"
+          grep -Fq 'color-mix' "$css"
+          grep -Fq 'text-wrap:balance' "$css"
+          grep -Fq '<details class="zm-mega-menu">' "$menu"
+          grep -Fq '/agriculture/genetics/' "$menu"
+          grep -Fq '/agriculture/gardening-tools/' "$menu"
+          echo "LUXE_DESIGN_SOURCE=verified"
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - name: Save immutable files, scope and staging area on main cPanel only
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1"
+          web="$HOME/public_html"
+          landing="$web/agriculture/index.html"
+          css="$web/agriculture/assets/zm-agritech-luxe-v3.css"
+          backup="$HOME/.backups/zomorod-luxe-ui-canary/$sha"
+          test -s "$landing" && test -f "$web/.htaccess"
+          test ! -L "$landing" && test ! -L "$web/agriculture"
+          test ! -e "$css" && test ! -L "$css"
+          test -f "$web/agriculture/.htaccess" && grep -Fq "PassengerEnabled off" "$web/agriculture/.htaccess"
+          grep -Fq '<!-- saeit-zomorod-agriculture-v1 -->' "$landing"
+          ! grep -Fq 'zm-agri-design-v3' "$landing"
+          for rel in mohammad ghanadi amozeshgah; do test -s "$web/$rel/index.html"; done
+          mkdir -p "$(dirname "$backup")"
+          test ! -e "$backup"
+          mkdir -m 700 "$backup"
+          mkdir -m 700 "$backup/staging"
+          cp -p "$landing" "$backup/agriculture-index.original"
+          cmp -s "$landing" "$backup/agriculture-index.original"
+          sha256sum "$web/index.html" "$web/.htaccess" "$web/agriculture/.htaccess" \
+            "$web/mohammad/index.html" "$web/ghanadi/index.html" "$web/amozeshgah/index.html" > "$backup/protected.sha256"
+          echo "LUXE_CANARY_BACKUP=verified"
+          REMOTE
+      - name: Stage researched CSS and menu source outside document root
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          sha="$GITHUB_SHA"
+          tar -cf - -C content/zomorod-design agritech-luxe-v3.css agritech-mega-menu.html |
+            ssh -F "$d/config" saeit-cpanel "tar -xf - -C /home/zomorod2/.backups/zomorod-luxe-ui-canary/$sha/staging"
+          echo "LUXE_SOURCE_STAGED=verified"
+      - name: Apply CSS and accessible mega menu additively; auto rollback unless all URLs pass
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1"
+          web="$HOME/public_html"
+          landing="$web/agriculture/index.html"
+          css="$web/agriculture/assets/zm-agritech-luxe-v3.css"
+          backup="$HOME/.backups/zomorod-luxe-ui-canary/$sha"
+          source="$backup/staging/agritech-luxe-v3.css"
+          menu="$backup/staging/agritech-mega-menu.html"
+          test -s "$source" && test -s "$menu"
+          test ! -e "$css"
+          rollback() {
+            set +e
+            if test -s "$backup/agriculture-index.original"; then
+              cp -p "$backup/agriculture-index.original" "$landing.rollback"
+              mv -f "$landing.rollback" "$landing"
+            fi
+            if test -f "$css" && cmp -s "$css" "$source"; then
+              rm -f "$css"
+            fi
+            echo "LUXE_CANARY_ROLLBACK=complete"
+          }
+          active=1
+          trap 'rc=$?; trap - EXIT; if test "$active" = 1; then rollback; fi; exit "$rc"' EXIT
+          cp -p "$source" "$css.new.$sha"
+          chmod 644 "$css.new.$sha"
+          mv -n "$css.new.$sha" "$css"
+          cmp -s "$source" "$css"
+          python3 - "$landing" "$menu" "$backup/agriculture-index.original" <<'PY'
+          import os,pathlib,stat,sys
+          target,menu_file,baseline=map(pathlib.Path,sys.argv[1:])
+          original=baseline.read_bytes()
+          assert target.read_bytes()==original,"Existing agriculture homepage changed concurrently"
+          assert original.count(b"</head>")==1 and original.count(b"</nav>")==1
+          assert original.count(b'loading="eager"')==1
+          assert b"zm-agri-design-v3" not in original
+          menu=menu_file.read_bytes()
+          assert menu.count(b'<details class="zm-mega-menu">')==1
+          style=b'<!-- zm-agri-design-v3 --><link rel="stylesheet" href="/agriculture/assets/zm-agritech-luxe-v3.css">\n'
+          addon=b"\n"+menu+b"\n"
+          img=b'loading="eager" fetchpriority="high" width="960" height="720"'
+          new=original.replace(b"</head>",style+b"</head>",1)
+          new=new.replace(b"</nav>",addon+b"</nav>",1)
+          new=new.replace(b'loading="eager"',img,1)
+          assert new.replace(style,b"",1).replace(addon,b"",1).replace(img,b'loading="eager"',1)==original,"Content-preserving insertion failed"
+          temp=target.with_name(target.name+".luxe-new")
+          temp.write_bytes(new)
+          temp.chmod(stat.S_IMODE(target.stat().st_mode))
+          os.replace(temp,target)
+          print("LUXE_CANARY_OLD_CONTENT_PRESERVED=yes")
+          PY
+          landing_code="$(curl -sS -L --max-time 25 -o "$backup/landing.response" -w '%{http_code}' "https://zomorodmelal.ir/agriculture/?__luxe=$sha" || true)"
+          css_code="$(curl -sS -L --max-time 25 -o "$backup/css.response" -w '%{http_code}' "https://zomorodmelal.ir/agriculture/assets/zm-agritech-luxe-v3.css?__luxe=$sha" || true)"
+          echo "LUXE_CANARY_AGRICULTURE_HTTP=$landing_code"
+          echo "LUXE_CANARY_CSS_HTTP=$css_code"
+          test "$landing_code" = 200 && test "$css_code" = 200
+          grep -Fq '<!-- zm-agri-design-v3 -->' "$backup/landing.response"
+          grep -Fq 'zm-mega-menu' "$backup/landing.response"
+          grep -Fq 'prefers-reduced-motion' "$backup/css.response"
+          for route in / /agriculture/genetics/ /agriculture/tools/ /agriculture/gardening-tools/ /mohammad/ /ghanadi/ /amozeshgah/; do
+            code="$(curl -sS -L --max-time 20 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir$route" || true)"
+            echo "LUXE_CANARY_PROTECTED_ROUTE=$route status=$code"
+            test "$code" = 200
+          done
+          sha256sum -c --status "$backup/protected.sha256"
+          echo "LUXE_CANARY_ORIGINAL_SITES_UNCHANGED=yes"
+          active=0
+          trap - EXIT
+          echo "LUXE_CANARY_RELEASE=passed"
+          REMOTE
+      - name: Remove runner SSH credentials
+        if: always()
+        shell: bash
+        run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
