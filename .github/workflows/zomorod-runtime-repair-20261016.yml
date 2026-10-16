@@ -211,6 +211,9 @@ jobs:
           fi
           active_new=yes
           touch "$app/tmp/restart.txt"
+          "$selector" restart --json --interpreter python --user "$USER" --app-root Saeit
+          echo "CLOUDLINUX_SELECTOR_RESTART=issued"
+          sleep 4
           selector_check="$home/.zomorod-selector-check-$sha.json"
           "$selector" run-script --json --interpreter python --user "$USER" --app-root Saeit --script-name manage.py -- check > "$selector_check"
           "$py" - "$selector_check" <<'PY'
