@@ -1,56 +1,70 @@
+{% load static %}
 <style id="mojplaywin-matte-gold-theme">
-:root{color-scheme:dark;--mw-black:#090909;--mw-panel:#121212;--mw-gold:#c9a64b;--mw-cream:#f4efe1;--mw-muted:#c5c0b4}
-html,body{background:var(--mw-black)!important;color:var(--mw-cream)!important}
-body{position:relative;background-image:none!important}
-body:before{content:"";position:fixed;inset:7px;border:5px solid var(--mw-gold);pointer-events:none;z-index:9999}
-.topbar,.site-header,.site-footer{display:none!important}
-main{background:#0a0a0a!important;color:var(--mw-cream)!important;border:5px solid var(--mw-gold)!important;margin:10px!important;padding:clamp(14px,3vw,30px)!important;min-height:75vh}
-main section,main article,main .card,main [class*="card"],main [class*="panel"]{background-color:var(--mw-panel)!important;border-color:var(--mw-gold)!important;color:var(--mw-cream)!important}
-main p,main small,main li{color:var(--mw-muted)!important}
-main h1,main h2,main h3,main strong{color:var(--mw-cream)!important}
-main a{color:var(--mw-gold)!important}
-main img{border:3px solid var(--mw-gold);object-fit:cover}
-.mw-shell{width:min(1180px,100%);margin:auto}
-.mw-kicker{color:var(--mw-gold);letter-spacing:.17em;font-size:.78rem;font-weight:800}
-.mw-hero{display:grid;grid-template-columns:1fr .9fr;gap:32px;align-items:center;padding:clamp(24px,5vw,60px);border:4px solid var(--mw-gold);background:linear-gradient(135deg,#111,#080808)!important}
-.mw-hero h1{font-size:clamp(2.3rem,5vw,4.6rem);line-height:1.08;margin:.6em 0}
-.mw-hero p{font-size:1.12rem;max-width:62ch}
-.mw-hero img{width:100%;height:320px;border:4px solid var(--mw-gold)}
-.mw-actions{display:flex;flex-wrap:wrap;gap:12px;margin-top:24px}
-.mw-button{display:inline-flex;padding:12px 18px;border:3px solid var(--mw-gold);font-weight:800;text-decoration:none!important}
-.mw-button.primary{background:var(--mw-gold);color:#101010!important}
-.mw-section{margin-top:28px;padding:24px;border:3px solid var(--mw-gold);background:#101010!important}
-.mw-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
-.mw-card{overflow:hidden;border:3px solid var(--mw-gold);background:#111}
-.mw-card img{width:100%;height:190px;border:0;border-bottom:3px solid var(--mw-gold)}
-.mw-card-copy{padding:18px}
-.mw-card h2,.mw-card h3{margin:.2em 0 .45em}
-.mw-card p{margin:.25em 0 1em}
-.mw-card a{font-weight:800}
-.mw-note{padding:16px;border-left:4px solid var(--mw-gold);background:#171717!important}
-.mw-page-hero{padding:clamp(24px,5vw,56px);border:4px solid var(--mw-gold);background:linear-gradient(135deg,#121212,#080808)!important}
-.mw-page-hero img{width:100%;max-height:300px;object-fit:cover}
-.mw-page-hero h1{font-size:clamp(2rem,4.2vw,4rem);line-height:1.15}
-.mw-links{display:flex;flex-wrap:wrap;gap:14px;margin-top:18px}
-.mw-links a{border:2px solid var(--mw-gold);padding:10px 14px;text-decoration:none}
-.mw-site-nav{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:16px 20px;margin-bottom:18px;border:3px solid var(--mw-gold);background:#0b0b0b}
-.mw-site-nav strong{font-size:1.2rem;color:var(--mw-gold)}
-.mw-site-nav nav{display:flex;flex-wrap:wrap;gap:14px}
-.mw-site-nav a{text-decoration:none!important;font-weight:700}
-@media(max-width:760px){body:before{inset:4px;border-width:3px}main{margin:6px!important;padding:12px!important}.mw-hero{grid-template-columns:1fr}.mw-hero img{height:230px}.mw-grid{grid-template-columns:1fr}.mw-site-nav{align-items:flex-start;flex-direction:column}.mw-site-nav nav{gap:9px}}
-
-.mw-site-nav{position:relative;z-index:1000}
-.mw-site-nav nav{align-items:center}
+:root{color-scheme:dark;--mw-bg:#080807;--mw-surface:#11110f;--mw-raised:#171611;--mw-line:rgba(217,180,92,.23);--mw-gold:#d6ad55;--mw-gold-bright:#f0cf82;--mw-cream:#f5f0e4;--mw-muted:#b8b1a2;--mw-shadow:0 24px 70px rgba(0,0,0,.38)}
+html{scroll-behavior:smooth;background:var(--mw-bg)}
+body{margin:0!important;background:radial-gradient(ellipse at 50% -15%,rgba(214,173,85,.09),transparent 46%),var(--mw-bg)!important;color:var(--mw-cream)!important}
+body:before{content:none!important}
+body.mojplaywin-home main,body.mojplaywin-section main,body.mojplaywin-store main{display:block;width:min(1440px,100%);min-height:100vh;margin:0 auto!important;padding:22px clamp(16px,4.2vw,64px) 0!important;border:0!important;background:transparent!important;color:var(--mw-cream)!important}
+body.mojplaywin-home .topbar,body.mojplaywin-home .site-header,body.mojplaywin-home .site-footer,body.mojplaywin-section .topbar,body.mojplaywin-section .site-header,body.mojplaywin-section .site-footer,body.mojplaywin-store .topbar,body.mojplaywin-store .site-header,body.mojplaywin-store .site-footer{display:none!important}
+.mw-shell{width:100%;max-width:1240px;margin:0 auto}
+.mw-site-nav{position:relative;z-index:1000;display:flex;align-items:center;justify-content:space-between;gap:26px;max-width:1240px;margin:0 auto 28px;padding:13px 16px 13px 20px;border:1px solid var(--mw-line);border-radius:18px;background:rgba(13,13,11,.88);box-shadow:0 12px 40px rgba(0,0,0,.28);backdrop-filter:blur(18px)}
+.mw-brand{display:inline-flex;align-items:center;gap:12px;min-width:max-content;text-decoration:none!important}
+.mw-brand img{display:block;width:48px;height:48px;object-fit:contain;border:1px solid rgba(214,173,85,.48);border-radius:50%;background:#090806;box-shadow:0 0 24px rgba(214,173,85,.15)}
+.mw-brand-copy{display:grid;gap:3px}
+.mw-brand-copy strong{color:var(--mw-cream);font-size:1.02rem;letter-spacing:.06em}
+.mw-brand-copy small{color:var(--mw-gold);font-size:.62rem;font-weight:700;letter-spacing:.16em}
+.mw-site-nav nav{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:7px}
+.mw-site-nav nav>a,.mw-nav-menu>summary{display:inline-flex;align-items:center;min-height:40px;padding:9px 12px;border:1px solid transparent;border-radius:10px;color:var(--mw-muted)!important;font-size:.84rem;font-weight:650;text-decoration:none!important;transition:background .2s ease,border-color .2s ease,color .2s ease}
+.mw-site-nav nav>a:hover,.mw-nav-menu>summary:hover{border-color:var(--mw-line);background:rgba(214,173,85,.08);color:var(--mw-gold-bright)!important}
 .mw-nav-menu{position:relative}
-.mw-nav-menu>summary{list-style:none;cursor:pointer;border:2px solid var(--mw-gold);padding:9px 13px;font-weight:800;color:var(--mw-gold)}
+.mw-nav-menu>summary{list-style:none;cursor:pointer;border-color:var(--mw-line);color:var(--mw-gold-bright)}
 .mw-nav-menu>summary::-webkit-details-marker{display:none}
-.mw-nav-menu>summary:after{content:" ▾"}
-.mw-nav-menu[open]>summary:after{content:" ▴"}
-.mw-nav-panel{position:absolute;top:calc(100% + 8px);left:0;right:auto;z-index:10001;width:min(960px,92vw);max-height:72vh;overflow:auto;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;padding:16px;border:3px solid var(--mw-gold);background:#090909}
-.mw-nav-panel section{border:2px solid var(--mw-gold);padding:12px;background:#121212}
-.mw-nav-panel h3{margin:0 0 10px;color:var(--mw-gold)}
-.mw-nav-panel a{display:block;padding:7px 5px;border-bottom:1px solid #514324;text-decoration:none!important}
-.mw-nav-menu summary:focus-visible,.mw-site-nav a:focus-visible,.mw-nav-panel a:focus-visible{outline:3px solid var(--mw-cream);outline-offset:3px}
-@media(max-width:760px){.mw-nav-panel{position:static;width:min(92vw,100%);max-height:60vh;grid-template-columns:1fr 1fr;margin-top:8px;padding:10px}.mw-site-nav nav{align-items:stretch}.mw-nav-menu{width:100%}.mw-nav-menu>summary{display:block}}
+.mw-nav-menu>summary:after{content:"⌄";margin-left:9px;font-size:1rem}
+.mw-nav-menu[open]>summary:after{content:"⌃"}
+.mw-nav-panel{position:absolute;top:calc(100% + 12px);right:0;z-index:10001;width:min(940px,92vw);max-height:min(70vh,680px);overflow:auto;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;padding:14px;border:1px solid rgba(214,173,85,.35);border-radius:18px;background:rgba(10,10,9,.98);box-shadow:var(--mw-shadow)}
+.mw-nav-panel section{padding:14px;border:1px solid var(--mw-line);border-radius:13px;background:linear-gradient(155deg,#171611,#0e0e0c)}
+.mw-nav-panel h3{margin:0 0 9px;color:var(--mw-gold-bright);font-size:.88rem}
+.mw-nav-panel a{display:block;padding:8px 6px;border-bottom:1px solid rgba(217,180,92,.11);color:var(--mw-muted)!important;font-size:.82rem;text-decoration:none!important}
+.mw-nav-panel a:hover{color:var(--mw-gold-bright)!important}
+.mw-kicker{color:var(--mw-gold-bright);font-size:.72rem;font-weight:800;letter-spacing:.19em}
+.mw-hero,.mw-page-hero{position:relative;isolation:isolate;overflow:hidden;border:1px solid var(--mw-line);border-radius:26px;background:radial-gradient(ellipse at 82% 10%,rgba(214,173,85,.12),transparent 36%),linear-gradient(145deg,#15140f,#0c0c0a 62%,#11100d);box-shadow:var(--mw-shadow)}
+.mw-hero{display:grid;grid-template-columns:1.08fr .92fr;gap:clamp(26px,5vw,72px);align-items:center;padding:clamp(32px,6vw,86px)}
+.mw-hero h1{max-width:15ch;margin:.7em 0 .55em;color:var(--mw-cream);font-size:clamp(2.4rem,5vw,5.25rem);line-height:1.02;letter-spacing:-.045em}
+.mw-hero p,.mw-page-hero>p{max-width:66ch;color:var(--mw-muted);font-size:1.04rem;line-height:1.85}
+.mw-hero>img{width:100%;height:clamp(240px,34vw,430px);border:1px solid var(--mw-line);border-radius:20px;object-fit:cover;box-shadow:0 18px 48px rgba(0,0,0,.42)}
+.mw-actions,.mw-links{display:flex;flex-wrap:wrap;gap:10px;margin-top:22px}
+.mw-button{display:inline-flex;align-items:center;justify-content:center;min-height:46px;padding:12px 17px;border:1px solid rgba(240,207,130,.5);border-radius:12px;color:var(--mw-gold-bright)!important;font-weight:750;text-decoration:none!important;transition:transform .2s ease,background .2s ease,border-color .2s ease}
+.mw-button:hover{transform:translateY(-2px);border-color:var(--mw-gold-bright)}
+.mw-button.primary{border-color:var(--mw-gold);background:linear-gradient(135deg,#e4c273,#bc9140);color:#17130a!important;box-shadow:0 8px 26px rgba(214,173,85,.18)}
+.mw-section{margin-top:24px;padding:clamp(22px,3.8vw,44px);border:1px solid var(--mw-line);border-radius:22px;background:linear-gradient(150deg,rgba(20,19,15,.96),rgba(13,13,11,.98))}
+.mw-section>h2{margin:.55em 0;font-size:clamp(1.55rem,3vw,2.6rem);letter-spacing:-.025em}
+.mw-section>p,.mw-card p,.mw-note{color:var(--mw-muted);line-height:1.8}
+.mw-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:15px;margin-top:22px}
+.mw-card{min-width:0;overflow:hidden;border:1px solid var(--mw-line);border-radius:17px;background:linear-gradient(155deg,#171611,#10100e);box-shadow:0 10px 30px rgba(0,0,0,.18);transition:transform .22s ease,border-color .22s ease,box-shadow .22s ease}
+.mw-card:hover{transform:translateY(-3px);border-color:rgba(240,207,130,.48);box-shadow:0 18px 38px rgba(0,0,0,.3)}
+.mw-card>img{display:block;width:100%;height:190px;border:0;border-bottom:1px solid var(--mw-line);object-fit:cover}
+.mw-card-copy{padding:20px}
+.mw-card-copy>small{color:var(--mw-gold);font-size:.72rem;letter-spacing:.07em}
+.mw-card h2,.mw-card h3{margin:.45em 0;color:var(--mw-cream);font-size:1.22rem;line-height:1.35}
+.mw-card a{color:var(--mw-gold-bright)!important;font-weight:750;text-decoration:none}
+.mw-card details{margin:12px 0;padding-top:10px;border-top:1px solid var(--mw-line);color:var(--mw-muted);line-height:1.75}
+.mw-card details summary{color:var(--mw-gold-bright)}
+.mw-card details h4{color:var(--mw-cream)}
+.mw-note{padding:16px 18px;border:1px solid var(--mw-line);border-left:3px solid var(--mw-gold);border-radius:12px;background:rgba(214,173,85,.055)}
+.mw-page-hero{padding:clamp(28px,5.5vw,72px)}
+.mw-page-hero h1{max-width:18ch;color:var(--mw-cream);font-size:clamp(2.2rem,4.7vw,4.5rem);line-height:1.08;letter-spacing:-.035em}
+.mw-page-hero img{display:block;width:100%;max-height:330px;margin-top:24px;border:1px solid var(--mw-line);border-radius:17px;object-fit:cover}
+.mw-links a{padding:10px 13px;border:1px solid var(--mw-line);border-radius:10px;color:var(--mw-gold-bright)!important;text-decoration:none}
+.mw-links a:hover{background:rgba(214,173,85,.08)}
+.mw-nav-menu summary:focus-visible,.mw-site-nav a:focus-visible,.mw-nav-panel a:focus-visible,.mw-button:focus-visible,.mw-links a:focus-visible{outline:3px solid var(--mw-gold-bright);outline-offset:3px}
+.mw-site-footer{display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:26px;max-width:1240px;margin:26px auto 0;padding:28px 0 32px;border-top:1px solid var(--mw-line);color:var(--mw-muted)}
+.mw-site-footer strong{color:var(--mw-cream);font-size:1.05rem}
+.mw-site-footer p{max-width:42ch;line-height:1.75}
+.mw-site-footer nav{display:flex;flex-wrap:wrap;align-content:start;gap:10px 16px}
+.mw-site-footer a{color:var(--mw-gold-bright)!important;text-decoration:none}
+.mw-site-footer .mw-legal{display:flex;justify-content:flex-end;align-items:start;gap:12px;flex-wrap:wrap;font-size:.82rem}
+@media(max-width:1000px){.mw-site-nav{align-items:flex-start;flex-direction:column}.mw-site-nav nav{justify-content:flex-start}.mw-nav-panel{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:760px){body.mojplaywin-home main,body.mojplaywin-section main,body.mojplaywin-store main{padding:12px 12px 0!important}.mw-site-nav{gap:12px;margin-bottom:16px;padding:12px;border-radius:15px}.mw-brand img{width:42px;height:42px}.mw-site-nav nav{gap:3px}.mw-site-nav nav>a,.mw-nav-menu>summary{min-height:38px;padding:8px 10px;font-size:.8rem}.mw-nav-panel{position:static;width:100%;max-height:56vh;grid-template-columns:1fr;margin-top:8px;padding:9px}.mw-nav-panel section{padding:11px}.mw-hero{grid-template-columns:1fr;gap:24px;padding:26px 20px;border-radius:20px}.mw-hero h1{font-size:clamp(2.3rem,11vw,3.6rem)}.mw-hero>img{height:230px}.mw-grid{grid-template-columns:1fr}.mw-section{margin-top:15px;padding:21px 17px;border-radius:17px}.mw-page-hero{padding:25px 20px;border-radius:20px}.mw-page-hero h1{font-size:clamp(2rem,10vw,3.2rem)}.mw-card>img{height:210px}.mw-site-footer{grid-template-columns:1fr;gap:14px;padding:22px 4px}.mw-site-footer .mw-legal{justify-content:flex-start}}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.mw-card,.mw-button{transition:none}}
 </style>
-<header class="mw-site-nav"><strong><a href="/">MojPlayWin</a></strong><nav aria-label="Primary navigation"><a href="/">Home</a><a href="/research/">Research</a><a href="/studio/">Games & Studio</a><a href="/knowledge/">Learning</a><a href="/store/">Digital Store</a><a href="/company/">About</a><a href="/#site-directory">All pages</a><details class="mw-nav-menu" id="mw-all-pages-menu"><summary aria-controls="mw-nav-panel">Browse all pages</summary><div class="mw-nav-panel" id="mw-nav-panel"><section><h3>Games & digital technology</h3><a href="/games/">Games</a><a href="/studio/">Games & Studio</a><a href="/products/">Products</a><a href="/market/">Digital Market</a><a href="/ai/">AI & Automation</a><a href="/agents/">AI Agents</a><a href="/blockchain/">Blockchain & Web3</a><a href="/crypto-payments/">Crypto Payments</a><a href="/commerce/">Commerce</a><a href="/global-business/">Global Business</a></section><section><h3>Research & learning</h3><a href="/research/">Research</a><a href="/research-lab/">Research Lab</a><a href="/knowledge/">Knowledge & Learning</a><a href="/economy/">Economy</a><a href="/services/">Services</a><a href="/store/">Digital Store</a></section><section><h3>Industry & ventures</h3><a href="/agriculture/">Agriculture</a><a href="/industry/">Industry</a><a href="/agro-industry/">Agro-Industry</a><a href="/ventures/agriculture/">Agriculture & Agri-Industry</a><a href="/ventures/cafe-restaurant/">Cafes & Restaurants</a><a href="/ventures/fuel-station/">Fuel & Mobility</a><a href="/ventures/jewelry-gold/">Jewelry & Gold</a><a href="/ventures/carpets/">Carpets & Textiles</a><a href="/ventures/currency-crypto/">Currency & Digital Assets</a><a href="/ventures/ecommerce/">E-commerce</a><a href="/ventures/hospitality/">Hospitality</a></section><section><h3>Company & support</h3><a href="/company/">Company</a><a href="/about/">About</a><a href="/about/mojtaba-rozegar/">Founder Profile</a><a href="/canada-vision/">Canada Vision</a><a href="/contact/">Contact</a><a href="/support/">Support</a><a href="/privacy/">Privacy</a><a href="/terms/">Terms</a><a href="/cookies/">Cookies</a><a href="/taniya/">Taniya Studio</a></section></div></details></nav></header>
+<header class="mw-site-nav"><a class="mw-brand" href="/" aria-label="MojPlayWin home"><img src="{% static 'site/mojplaywin-brand.jpg' %}" alt=""><span class="mw-brand-copy"><strong>MojPlayWin</strong><small>PLAY · BUILD · EVOLVE</small></span></a><nav aria-label="Primary navigation"><a href="/">Home</a><a href="/research/">Research</a><a href="/studio/">Games & Studio</a><a href="/knowledge/">Learning</a><a href="/store/">Digital Store</a><a href="/company/">About</a><a href="/#site-directory">All pages</a><details class="mw-nav-menu" id="mw-all-pages-menu"><summary aria-controls="mw-nav-panel">Browse all pages</summary><div class="mw-nav-panel" id="mw-nav-panel"><section><h3>Games & digital technology</h3><a href="/games/">Games</a><a href="/studio/">Games & Studio</a><a href="/products/">Products</a><a href="/market/">Digital Market</a><a href="/ai/">AI & Automation</a><a href="/agents/">AI Agents</a><a href="/blockchain/">Blockchain & Web3</a><a href="/crypto-payments/">Crypto Payments</a><a href="/commerce/">Commerce</a><a href="/global-business/">Global Business</a></section><section><h3>Research & learning</h3><a href="/research/">Research</a><a href="/research-lab/">Research Lab</a><a href="/knowledge/">Knowledge & Learning</a><a href="/economy/">Economy</a><a href="/services/">Services</a><a href="/store/">Digital Store</a></section><section><h3>Industry & ventures</h3><a href="/agriculture/">Agriculture</a><a href="/industry/">Industry</a><a href="/agro-industry/">Agro-Industry</a><a href="/ventures/agriculture/">Agriculture & Agri-Industry</a><a href="/ventures/cafe-restaurant/">Cafes & Restaurants</a><a href="/ventures/fuel-station/">Fuel & Mobility</a><a href="/ventures/jewelry-gold/">Jewelry & Gold</a><a href="/ventures/carpets/">Carpets & Textiles</a><a href="/ventures/currency-crypto/">Currency & Digital Assets</a><a href="/ventures/ecommerce/">E-commerce</a><a href="/ventures/hospitality/">Hospitality</a></section><section><h3>Company & support</h3><a href="/company/">Company</a><a href="/about/">About</a><a href="/about/mojtaba-rozegar/">Founder Profile</a><a href="/canada-vision/">Canada Vision</a><a href="/contact/">Contact</a><a href="/support/">Support</a><a href="/privacy/">Privacy</a><a href="/terms/">Terms</a><a href="/cookies/">Cookies</a><a href="/taniya/">Taniya Studio</a></section></div></details></nav></header>
