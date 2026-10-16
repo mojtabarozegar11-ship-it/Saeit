@@ -1,0 +1,120 @@
+name: Identify Zomorod production database without writes
+on:
+  push:
+    branches:
+      - codex/zomorod-runtime-repair-20261016
+    paths:
+      - ".github/workflows/zomorod-db-target-readonly.yml"
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-db-target-readonly
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-db"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_CPANEL_RELAY=verified"
+      - name: Resolve production database target and snapshot match without writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-db"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          stage=/home/zomorod2/.backups/zomorodmelal-complete/source-preflight-47c38ec3810326790f6f954b515b4f11d59042d1
+          packages=/home/zomorod2/.backups/zomorodmelal-complete/packages-preflight-47c38ec3810326790f6f954b515b4f11d59042d1
+          app=/home/zomorod2/Saeit
+          py=/home/zomorod2/virtualenv/Saeit/3.10/bin/python
+          test -f "$stage/manage.py" && test -d "$packages" && test -x "$py"
+          export PYTHONPATH="$packages:$stage"
+          cd "$stage"
+          "$py" - <<'PY'
+          import json,os,pathlib
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          import django
+          django.setup()
+          from django.conf import settings
+          db=settings.DATABASES["default"]
+          print("DB_BACKEND="+db["ENGINE"].split(".")[-1])
+          if db["ENGINE"].endswith("sqlite3"):
+              path=pathlib.Path(db["NAME"])
+              print("DB_SQLITE_FILE="+path.name)
+              print("DB_SQLITE_PRESENT="+str(path.is_file()).lower())
+              print("DB_SQLITE_BYTES="+str(path.stat().st_size if path.is_file() else 0))
+          else:
+              print("DB_CONNECTION_PARAMETERS_PRESENT=yes")
+          manifest_path=pathlib.Path("/home/zomorod2/.backups/zomorodmelal-complete/9fcadc9ea749075785829565e57770f5cc173a8b/database-manifest.json")
+          manifest=json.loads(manifest_path.read_text(encoding="utf-8"))
+          print("SNAPSHOT_DATABASE_COUNT="+str(manifest.get("count")))
+          active=pathlib.Path(db["NAME"]).resolve() if db["ENGINE"].endswith("sqlite3") else None
+          matched=0
+          for row in manifest.get("databases",[]):
+              snap=pathlib.Path("/home/zomorod2/.backups/zomorodmelal-complete/9fcadc9ea749075785829565e57770f5cc173a8b/database")/row["snapshot"]
+              if active and pathlib.Path("/home/zomorod2/Saeit")/row["path"]==active:
+                  matched+=1
+                  print("ACTIVE_DATABASE_SNAPSHOT_MATCH=exact")
+              elif active and pathlib.Path(row["path"]).name==active.name:
+                  print("POSSIBLE_DATABASE_SNAPSHOT_MATCH="+pathlib.Path(row["path"]).name)
+          print("EXACT_ACTIVE_DATABASE_SNAPSHOT_MATCHES="+str(matched))
+          envfile=pathlib.Path("/home/zomorod2/Saeit/.env")
+          url_lines=[line for line in envfile.read_text(errors="replace").splitlines() if line.strip().startswith("DATABASE_URL=")] if envfile.is_file() else []
+          print("CURRENT_ENV_DATABASE_URL_PRESENT="+str(bool(url_lines)).lower())
+          PY
+          echo "CURRENT_APP_SQLITE_CANDIDATES_BEGIN"
+          find "$app" -maxdepth 5 -type f \( -name '*.sqlite3' -o -name '*.sqlite' -o -name '*.db' \) -printf '%P %s bytes\n' | sort | head -80
+          echo "CURRENT_APP_SQLITE_CANDIDATES_END"
+          REMOTE
+      - name: Remove temporary SSH material
+        if: always()
+        shell: bash
+        run: rm -rf -- "$RUNNER_TEMP/zomorod-db"
