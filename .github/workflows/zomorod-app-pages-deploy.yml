@@ -340,6 +340,9 @@ jobs:
           mkdir -p "$(dirname "$page_target")"
           cp -p "$page_source" "$page_target.new"
           mv -f "$page_target.new" "$page_target"
+          echo "PASSENGER_STARTUP_ENTRYPOINT_BEGIN"
+          sed -n '1,20p' "$app/passenger_wsgi.py"
+          echo "PASSENGER_STARTUP_ENTRYPOINT_END"
           touch "$app/passenger_wsgi.py"
           restart_result="$(mktemp "$HOME/.zomorod-passenger-restart-$sha.XXXXXX.json")"
           if ! "$selector" restart --json --interpreter python --user "$USER" --app-root Saeit > "$restart_result"; then
@@ -469,6 +472,11 @@ jobs:
               print("PASSENGER_ERROR_LOG=missing")
               raise SystemExit(0)
           lines=path.read_text(encoding="utf-8",errors="replace").splitlines()[-500:]
+          for trace_index in [i for i,line in enumerate(lines) if "populate() isn't reentrant" in line][-2:]:
+              for context_line in lines[max(0,trace_index-18):trace_index+1]:
+                  safe=secret.sub(r"\1=[redacted]",context_line)
+                  safe=uri.sub(r"\1[redacted]@",safe)
+                  print("PASSENGER_TRACE_CONTEXT="+safe[:280])
           pattern=re.compile(r"Traceback|ModuleNotFoundError|ImportError|RuntimeError|TemplateSyntaxError|TemplateDoesNotExist|OperationalError|DatabaseError|Exception|Error:",re.I)
           secret=re.compile(r"(?i)(password|passwd|secret|token|api[_-]?key|authorization|cookie)(\s*[:=]\s*)[^\s,;]+")
           uri=re.compile(r"(://[^/\s:@]+:)[^/@\s]+@")
