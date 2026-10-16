@@ -61,6 +61,29 @@ class MojPlayWinAtelierV4Tests(TestCase):
                 self.assertIn("mojplaywin-atelier-v4", html)
                 self.assertIn(marker, html)
 
+    def test_legacy_specialty_pages_get_new_shell_without_losing_seo_head(self):
+        base = (ROOT / "core" / "templates" / "brands" / "mojplaywin" / "base.html").read_text(encoding="utf-8")
+        css = (ROOT / "core" / "static" / "site" / "mojplaywin-atelier-v4.css").read_text(encoding="utf-8")
+        self.assertIn('class="mpw-atelier-v4"', base)
+        self.assertIn('mojplaywin-atelier-v4.css', base)
+        self.assertIn('href="https://mojplaywin.com{{ request.path }}"', base)
+        self.assertIn('{% block meta_description %}', base)
+        self.assertIn('application/ld+json', base)
+        self.assertIn('{% block content %}{% endblock %}', base)
+        self.assertIn('id="mw-all-pages-menu"', base)
+        self.assertIn('prefers-reduced-motion:reduce', css)
+        self.assertIn('.mpw-atelier-v4 .mpw-page-grid', css)
+
+    def test_large_specialty_editorial_pages_are_still_available(self):
+        pages = ROOT / "core" / "templates" / "brands" / "mojplaywin"
+        home = (pages / "home.html").read_text(encoding="utf-8")
+        specialty = (pages / "page.html").read_text(encoding="utf-8")
+        self.assertGreater(len(home), 50000)
+        self.assertGreater(len(specialty), 100000)
+        self.assertIn("mpw-portfolio-mix", home)
+        self.assertIn("{% for title,meta,text in page.cards %}", specialty)
+        self.assertIn("{% extends 'brands/mojplaywin/base.html' %}", specialty)
+
     def test_zomorod_root_does_not_receive_new_theme(self):
         response = self.client.get("/", HTTP_HOST="zomorodmelal.ir")
         self.assertEqual(response.status_code, 200)
