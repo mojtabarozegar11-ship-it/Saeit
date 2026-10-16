@@ -1,0 +1,70 @@
+name: VPS Master Agent Read-only Preflight
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/vps-master-agent-readonly-preflight.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: vps-master-preflight
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - name: Inspect private VPS master agent, existing tasks, evolution code and schedule
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/master-preflight"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 githubops@178.239.147.150 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          base="$HOME/factory-runtime"
+          app="$base/django-app"
+          test -f "$app/manage.py" && test -x "$base/.venv/bin/python"
+          cd "$app"
+          export SAEIT_ENV=production MOJ_FACTORY_LOCAL_MODE=1 DJANGO_SETTINGS_MODULE=config.settings
+          export MOJ_PAID_LLM_ENABLED=0 MOJ_LLM_DAILY_CALL_BUDGET=0 MOJ_LLM_MAX_COST_MINOR=0
+          "$base/.venv/bin/python" - <<'PY'
+          import os,importlib
+          import django
+          django.setup()
+          from django.conf import settings
+          from django.core.management import get_commands
+          from core.models import Agent,AgentTask
+          commands=get_commands()
+          for name in ('seed_online_income_agents','online_income_cycle','autonomous_master_loop','economic_autorun'):
+              print('MASTER_COMMAND_'+name.upper()+'='+str(name in commands))
+          for name in ('core.autonomous_brain','core.master_agent_capability_pack','core.economic_tool_pack'):
+              try: importlib.import_module(name); result=True
+              except Exception: result=False
+              print('MASTER_MODULE_'+name.split('.')[-1].upper()+'='+str(result))
+          agent=Agent.objects.filter(code='economic-master-agent').first()
+          print('MASTER_AGENT_EXISTS='+str(bool(agent)))
+          print('MASTER_AGENT_ACTIVE='+str(bool(agent and agent.active)))
+          if agent:
+              print('MASTER_AGENT_CAPABILITIES='+str(agent.capabilities.filter(active=True).count()))
+              for status in ('queued','running','blocked','failed','completed'):
+                  print('MASTER_TASK_'+status.upper()+'='+str(AgentTask.objects.filter(agent=agent,status=status).count()))
+          db=settings.DATABASES['default']
+          print('MASTER_DATABASE_SQLITE='+str('sqlite3' in db['ENGINE']))
+          print('MASTER_VPS_LOCAL_MODE='+str(os.getenv('MOJ_FACTORY_LOCAL_MODE')=='1'))
+          PY
+          current="$(crontab -l 2>/dev/null || true)"
+          count="$(printf '%s\n' "$current" | grep -c 'SAEIT_MASTER_AGENT_V1' || true)"
+          echo "MASTER_SCHEDULE_ENTRIES=$count"
+          test -x "$base/operations/vps-only-loop.sh" && echo FACTORY_LOOP_SCRIPT_PRESENT
+          REMOTE
