@@ -22,4 +22,18 @@ if os.path.exists(env_path):
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 
+# Temporary startup probe: record who re-enters Django setup in Passenger's own process.
+import traceback
+from django.apps.registry import Apps
+
+_original_apps_populate = Apps.populate
+def _trace_passenger_reentrant_setup(self, installed_apps):
+    if self.loading:
+        print("PASSENGER_REENTRANT_CALL_STACK_BEGIN", file=sys.stderr)
+        traceback.print_stack(file=sys.stderr)
+        print("PASSENGER_REENTRANT_CALL_STACK_END", file=sys.stderr)
+    return _original_apps_populate(self, installed_apps)
+
+Apps.populate = _trace_passenger_reentrant_setup
+
 from config.wsgi import application
