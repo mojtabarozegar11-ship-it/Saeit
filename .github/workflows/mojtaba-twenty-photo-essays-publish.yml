@@ -158,7 +158,8 @@ jobs:
           trap on_exit EXIT
           test -f "$app/manage.py" && test -x "$py" && test ! -L "$app"
           "$py" "$script" check --app "$app" --content "$stage"
-          tar -tzf "$stage/photos.tgz" | grep -q '^mojtaba20pics/manifest.json$'
+          tar -tzf "$stage/photos.tgz" > "$stage/photo-archive-list.txt"
+          grep -Fxq "mojtaba20pics/manifest.json" "$stage/photo-archive-list.txt"
           cd "$stage"
           tar -xzf photos.tgz --no-same-owner
           cd "$app"
