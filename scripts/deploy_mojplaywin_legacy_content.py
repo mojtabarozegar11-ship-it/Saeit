@@ -6,6 +6,7 @@ import pwd
 import re
 import shutil
 import sys
+import time
 import tarfile
 import tempfile
 from pathlib import Path, PurePosixPath
@@ -166,6 +167,7 @@ def deploy(run_id, stage_arg):
             target = APP_ROOT / relative
             atomic_write(target, outputs[relative], manifest[str(relative)]["mode"])
         restart_passenger()
+        time.sleep(3)  # Give Passenger time to replace pre-release worker processes.
     except Exception:
         rollback(run_id)
         raise
