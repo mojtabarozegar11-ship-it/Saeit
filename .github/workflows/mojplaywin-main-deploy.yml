@@ -141,25 +141,28 @@ jobs:
           ssh -F "$d/config" saeit-cpanel /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - <<'PY'
           from pathlib import Path
           root = Path("/home/zomorod2/Saeit-staging")
-          candidates = []
-          for path in root.rglob("*"):
-              if not path.is_file() or path.is_symlink() or path.suffix.lower() not in {".py", ".html", ".css", ".js"}:
+          phrases = ("Play. Build. Own the next move.", "Original games for a USA-first audience", "One Factory. Multiple ways to create value.", "MojPlayWin | Virtual Products, Games & Digital Innovation")
+          found = 0
+          for base in (root / "core" / "templates", root / "templates", root / "sitecore" / "templates"):
+              if not base.is_dir() or base.is_symlink():
                   continue
-              if any(part in {".git", "node_modules", "__pycache__", "venv", ".venv"} for part in path.parts):
-                  continue
-              try:
-                  source = path.read_text(encoding="utf-8", errors="replace")
-              except OSError:
-                  continue
-              if any(token.lower() in source.lower() for token in ("Virtual Products, Games & Digital Innovation", "mojplaywin", "INITIAL COLLECTION")):
-                  candidates.append((path, source))
-          candidates.sort(key=lambda item: (0 if item[0].suffix == ".py" else 1, len(item[1]), str(item[0])))
-          print(f"LEGACY_SOURCE_CANDIDATE_COUNT={len(candidates)}")
-          for path, source in candidates[:24]:
-              relative = path.relative_to(root)
-              print(f"LEGACY_SOURCE_FILE_BEGIN {relative} chars={len(source)}")
-              print(source[:18000])
-              print(f"LEGACY_SOURCE_FILE_END {relative}")
+              for path in base.rglob("*"):
+                  if not path.is_file() or path.is_symlink() or path.suffix.lower() not in {".html", ".css", ".js"}:
+                      continue
+                  try:
+                      source = path.read_text(encoding="utf-8", errors="replace")
+                  except OSError:
+                      continue
+                  if any(phrase.lower() in source.lower() for phrase in phrases):
+                      print(f"LEGACY_TEMPLATE_BEGIN {path.relative_to(root)} chars={len(source)}")
+                      print(source[:40000])
+                      print(f"LEGACY_TEMPLATE_END {path.relative_to(root)}")
+                      found += 1
+                      if found >= 12:
+                          break
+              if found >= 12:
+                  break
+          print(f"LEGACY_TEMPLATE_MATCH_COUNT={found}")
           PY
       - name: Diagnose MojPlayWin public routes
         if: contains(github.event.head_commit.message, 'MOJPLAYWIN_DIAG_20261016')
