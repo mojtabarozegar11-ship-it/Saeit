@@ -25,4 +25,5 @@ function render(list){if(!list.length){result.innerHTML='<div class="weather-err
 function filter(){let q=search.value.trim().toLowerCase(),v=select.value;render(all.filter(p=>(!v||p.province===v)&&(!q||p.province.toLowerCase().includes(q)||p.capital.toLowerCase().includes(q))));}
 (async()=>{try{const r=await fetch('/api/weather/');const j=await r.json();if(!r.ok)throw 0;all=j.provinces||[];all.forEach(p=>{const o=document.createElement('option');o.value=p.province;o.textContent=p.province+' · '+p.capital;select.appendChild(o)});document.getElementById('weather-updated').textContent='آخرین دریافت: '+new Date().toLocaleTimeString('fa-IR',{hour:'2-digit',minute:'2-digit'});render(all);}catch(e){result.innerHTML='<div class="weather-error">داده هواشناسی موقتاً در دسترس نیست؛ لطفاً چند دقیقه بعد دوباره تلاش کنید.</div>';}})();select.addEventListener('change',filter);search.addEventListener('input',filter);
 </script>
+{% include "core/includes/zomorod_editorial_20261016.html" %}
 {% endblock %}

@@ -1,0 +1,187 @@
+name: Publish Zomorod editorial additions only
+on:
+  push:
+    branches: [main]
+    paths:
+      - "core/templates/core/includes/zomorod_editorial_20261016.html"
+      - "core/templates/core/platform_page.html"
+      - "core/templates/core/blog.html"
+      - "core/templates/core/academy.html"
+      - "core/templates/core/weather.html"
+      - "core/templates/core/store.html"
+      - "core/templates/core/auctions.html"
+      - "core/templates/core/newsletter.html"
+      - ".github/workflows/zomorod-editorial-only-deploy.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-editorial-content-only
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate editorial fragments and original templates
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          fragment=Path('core/templates/core/includes/zomorod_editorial_20261016.html').read_text()
+          assert fragment.count('id="zm-editorial-20261016"')>=12
+          assert fragment.count('{% if')==1
+          assert fragment.count('{% elif')>=12
+          assert fragment.count('{% endif %}')==1
+          assert 'ZOMOROD MELAL' in fragment
+          for filename in ('core/templates/core/platform_page.html','core/templates/core/blog.html','core/templates/core/academy.html','core/templates/core/weather.html','core/templates/core/store.html','core/templates/core/auctions.html','core/templates/core/newsletter.html'):
+              text=Path(filename).read_text()
+              assert text.count('{% include "core/includes/zomorod_editorial_20261016.html" %}')==1, filename
+              assert text.count('{% block content %}')>=1, filename
+          print('CONTENT_ADDENDUM_AND_ORIGINAL_TEMPLATES=valid')
+          PY
+      - name: Prepare the confirmed pinned VPS to cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-root"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "CONFIRMED_PINNED_RELAY_READY=yes"
+      - name: Prepare isolated staging and copy only seven site templates plus fragment
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-root"
+          stage="/home/zomorod2/Saeit/.editorial-stage-$GITHUB_SHA"
+          ssh -F "$d/config" saeit-cpanel "test ! -e '$stage' && mkdir -m 700 '$stage'"
+          tar -czf - core/templates/core/includes/zomorod_editorial_20261016.html core/templates/core/platform_page.html core/templates/core/blog.html core/templates/core/academy.html core/templates/core/weather.html core/templates/core/store.html core/templates/core/auctions.html core/templates/core/newsletter.html | ssh -F "$d/config" saeit-cpanel "tar -xzf - -C '$stage'"
+      - name: Back up and install editorial templates without touching source code or databases
+        id: install
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-root"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -Eeuo pipefail
+          sha="$1"
+          app=/home/zomorod2/Saeit
+          stage="$app/.editorial-stage-$sha"
+          backup="$HOME/.backups/zomorod-editorial/$sha"
+          test -d "$stage" && test -d "$app" && test "$(stat -c %U "$app")" = "zomorod2"
+          test ! -e "$backup"
+          install -d -m 700 "$backup"
+          : > "$backup/existed"
+          paths=(core/templates/core/includes/zomorod_editorial_20261016.html core/templates/core/platform_page.html core/templates/core/blog.html core/templates/core/academy.html core/templates/core/weather.html core/templates/core/store.html core/templates/core/auctions.html core/templates/core/newsletter.html)
+          for rel in "${paths[@]}"; do
+            test -f "$stage/$rel" && test ! -L "$app/$rel" && test ! -L "$stage/$rel"
+            mkdir -p "$backup/$(dirname "$rel")"
+            if test -f "$app/$rel"; then
+              cp -p "$app/$rel" "$backup/$rel"
+              printf '%s\n' "$rel" >> "$backup/existed"
+            elif [[ "$rel" != "core/templates/core/includes/zomorod_editorial_20261016.html" ]]; then
+              echo "Original template missing: $rel" >&2
+              exit 1
+            fi
+          done
+          : > "$backup/install-started"
+          for rel in "${paths[@]}"; do
+            target="$app/$rel"
+            mkdir -p "$(dirname "$target")"
+            cp -p "$stage/$rel" "$target.new"
+            mv -f "$target.new" "$target"
+          done
+          test -f "$app/core/templates/core/includes/zomorod_editorial_20261016.html"
+          touch "$app/passenger_wsgi.py"
+          echo "CONTENT_TEMPLATES_INSTALLED=8"
+          echo "BACKUP=$backup"
+          REMOTE
+      - name: Check published pages and preserve root, academy and other services
+        shell: bash
+        run: |
+          set -euo pipefail
+          for route in industry research knowledge economy market studio agents company blog weather store auctions newsletter amozeshgah; do
+            file="$RUNNER_TEMP/zm-${route}.html"
+            result="$(curl -L --silent --show-error --max-time 30 -H 'Cache-Control: no-cache' -o "$file" -w '%{http_code}' "https://zomorodmelal.ir/$route/" || true)"
+            echo "EDITORIAL_ROUTE=$route HTTP=$result"
+            test "$result" = 200
+            grep -Fq 'id="zm-editorial-20261016"' "$file"
+          done
+          root="$RUNNER_TEMP/zm-root.html"
+          result="$(curl -L --silent --show-error --max-time 30 -o "$root" -w '%{http_code}' https://zomorodmelal.ir/ || true)"
+          test "$result" = 200
+          grep -Fq 'saeit-zomorod-root-homepage-v1' "$root"
+          for route in agriculture agriculture/livestock ghanadi; do
+            result="$(curl -L --silent --show-error --max-time 30 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir/$route/" || true)"
+            test "$result" = 200
+          done
+          echo "CONTENT_AND_EXISTING_SITE_SMOKE=passed"
+      - name: Automatic rollback on any failed install or public check
+        if: failure() && steps.install.outcome != 'skipped'
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-root"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'ROLLBACK'
+          set -euo pipefail
+          sha="$1"
+          app=/home/zomorod2/Saeit
+          backup="$HOME/.backups/zomorod-editorial/$sha"
+          test -f "$backup/install-started" || { echo "NOT_INSTALLED_NO_ROLLBACK"; exit 0; }
+          paths=(core/templates/core/includes/zomorod_editorial_20261016.html core/templates/core/platform_page.html core/templates/core/blog.html core/templates/core/academy.html core/templates/core/weather.html core/templates/core/store.html core/templates/core/auctions.html core/templates/core/newsletter.html)
+          for rel in "${paths[@]}"; do
+            target="$app/$rel"
+            if grep -Fxq "$rel" "$backup/existed"; then
+              cp -p "$backup/$rel" "$target.rollback"
+              mv -f "$target.rollback" "$target"
+            else
+              rm -f -- "$target"
+            fi
+          done
+          touch "$app/passenger_wsgi.py"
+          rm -f "$backup/install-started"
+          echo "EDITORIAL_ROLLBACK=complete"
+          ROLLBACK
+      - name: Remove temporary SSH files
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/zomorod-root"
