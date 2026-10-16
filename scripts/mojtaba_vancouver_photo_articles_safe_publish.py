@@ -60,7 +60,7 @@ def index_html(rows,media_url):
     for a in rows:
         slug,title,excerpt=a["slug"],a["title"],a["excerpt"]
         src="{% static '"+expected_path(slug)+"' %}"
-        parts+=['<article><a href="/mojtaba.roozegar/blog/'+esc(slug)+'/"><img loading="lazy" decoding="async" width="1200" height="675" src="'+esc(src)+'" alt="'+esc("Illustrative Vancouver photograph: "+title)+'"><div class="copy"><h3>'+esc(title)+'</h3><p>'+esc(excerpt)+'</p></div></a><div class="copy"><small>Photograph: '+esc(a["photo_credit"])+' / Unsplash. Illustrative scene, not a verified business meeting.</small></div></article>']
+        parts+=['<article><a href="/mojtaba.roozegar/blog/'+esc(slug)+'/"><img loading="lazy" decoding="async" width="1200" height="675" src="'+src+'" alt="'+esc("Illustrative Vancouver photograph: "+title)+'"><div class="copy"><h3>'+esc(title)+'</h3><p>'+esc(excerpt)+'</p></div></a><div class="copy"><small>Photograph: '+esc(a["photo_credit"])+' / Unsplash. Illustrative scene, not a verified business meeting.</small></div></article>']
     parts+=['</div></section>']
     return "\n".join(parts)
 
