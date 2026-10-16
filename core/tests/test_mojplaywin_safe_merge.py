@@ -32,14 +32,13 @@ def test_conflicting_replacement_still_fails_closed():
 
 
 def test_brand_home_route_dispatch_is_scoped_and_idempotent():
-    live = (
-        "from core.brand_views import branded_home, branded_page\\n"
-        "from core.mojplaywin_views import venture\\n"
-        "urlpatterns = [\\n"
-        '    path("", branded_home, name="home"),\\n'
-        '    path("store/", branded_page, name="store"),\\n'
-        "]\\n"
-    )
+    live = """from core.brand_views import branded_home, branded_page
+from core.mojplaywin_views import venture
+urlpatterns = [
+    path("", branded_home, name="home"),
+    path("store/", branded_page, name="store"),
+]
+"""
 
     merged = DEPLOY.route_mojplaywin_brand_home(live)
 
