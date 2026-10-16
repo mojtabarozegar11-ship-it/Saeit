@@ -194,6 +194,57 @@ jobs:
                       print("SITE_DB_BACKUP_SCHEMA_READ_FAILED="+type(exc).__name__)
           PY
           REMOTE
+      - name: Check preserved full database age and original company backups read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          export PYTHONDONTWRITEBYTECODE=1
+          python3 - <<'PY'
+          import pathlib,sqlite3,urllib.parse,zipfile,os,datetime
+          home=pathlib.Path.home()
+          root=home/"Saeit"/"backups"
+          skip=("mohammad","ghanadi","amozeshgah","mojplaywin","picm","roham","zahra")
+          if root.is_dir():
+              entries=sorted(root.iterdir(),key=lambda p:p.name,reverse=True)
+              print("HISTORIC_MAIN_BACKUP_TOP_ENTRIES="+str(len(entries)))
+              for p in entries[:120]:
+                  if any(s in p.name.lower() for s in skip): continue
+                  if any(s in p.name.lower() for s in ("zomorod","20261015","20261016","pre_phase","gallery","company","original")):
+                      try: st=p.stat()
+                      except OSError:continue
+                      print("HISTORIC_MAIN_BACKUP_ENTRY="+p.name+" type="+("folder" if p.is_dir() else "file")+" bytes="+str(st.st_size))
+          historic=home/"Saeit"/"backups"/"pre_phase19_cleanup_20261004-124041"/"db.sqlite3"
+          if historic.is_file():
+              uri="file:"+urllib.parse.quote(str(historic))+"?mode=ro"
+              db=sqlite3.connect(uri,uri=True,timeout=2)
+              try:
+                  tables={r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+                  for table in ("django_migrations","auth_user","core_agent","core_agenttask","core_knowledgeagentrun","core_knowledgeagentrun","core_order","core_paymentintent","core_knowledgearticle"):
+                      if table in tables:
+                          row=db.execute('SELECT COUNT(*) FROM "'+table+'"').fetchone()
+                          print("HISTORIC_MAIN_DB_COUNT="+table+" rows="+str(row[0]))
+                  if "django_migrations" in tables:
+                      print("HISTORIC_MAIN_DB_LATEST_MIGRATIONS="+str(db.execute("SELECT app,name FROM django_migrations ORDER BY id DESC LIMIT 6").fetchall()))
+                  print("HISTORIC_MAIN_DB_INTEGRITY="+str(db.execute("PRAGMA quick_check").fetchone()[0]))
+              finally:db.close()
+          for path in (
+              root/"zomorodmelal-current-original-theme-20261011.zip",
+              root/"zomorodmelal-live-theme-20261011T015315Z.zip",
+          ):
+              if not path.is_file():continue
+              try:
+                  with zipfile.ZipFile(path) as z:
+                      choices=[(x.filename,x.file_size) for x in z.infolist() if x.filename.lower().endswith((".sqlite3",".sqlite",".db",".sql",".sql.gz")) and not any(s in x.filename.lower() for s in skip)]
+                      print("HISTORIC_MAIN_ARCHIVE="+path.name+" db_candidate_count="+str(len(choices)))
+                      for name,size in choices[:12]:
+                          print("HISTORIC_MAIN_ARCHIVE_DB name="+name[:150]+" bytes="+str(size))
+              except Exception as e:
+                  print("HISTORIC_MAIN_ARCHIVE_ERROR="+path.name+" error="+type(e).__name__)
+          PY
+          REMOTE
       - name: Remove runner SSH relay keys
         if: always()
         run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
