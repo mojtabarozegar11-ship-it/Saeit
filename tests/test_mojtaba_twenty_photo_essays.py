@@ -72,7 +72,7 @@ class TestPhotoLedPersonalJournal(unittest.TestCase):
             body=m.patch(page,original_template(),self.rows)
             self.assertEqual(body.count(m.INDEX_MARK),1)
             self.assertEqual(body.count("<article"),20)
-            self.assertEqual(body.count("photo_essays_20_20261016/"),20)
+            self.assertEqual(body.count("mojtaba_personal_image_essays_20261016/"),20)
             self.assertIn("Unrelated prior biography",body)
             for marker in m.PROTECTED:
                 self.assertEqual(body.count(marker),1)
@@ -83,7 +83,7 @@ class TestPhotoLedPersonalJournal(unittest.TestCase):
         body=m.patch("detail",original,self.rows)
         self.assertEqual(body.count(m.DETAIL_MARK),20)
         self.assertEqual(body.count("item.slug =="),20)
-        self.assertEqual(body.count("photo_essays_20_20261016/"),20)
+        self.assertEqual(body.count("mojtaba_personal_image_essays_20261016/"),20)
         self.assertIn("{{ item.content|linebreaks }}",body)
         with self.assertRaises(ValueError):m.patch("detail",body,self.rows)
 
