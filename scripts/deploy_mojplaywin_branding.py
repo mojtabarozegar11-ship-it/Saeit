@@ -36,7 +36,7 @@ ASSETS = (
     "site/heroes/ai.webp", "site/heroes/knowledge.webp",
     "site/heroes/agriculture.webp", "site/heroes/industry.webp",
     "site/heroes/economy.webp", "site/heroes/marketplace.webp",
-    "site/heroes/platform-home.webp", "site/ghanadi/cafe.webp",
+    "site/heroes/platform-home.webp",
 )
 
 def safe_id(value):
