@@ -10,7 +10,7 @@ permissions:
 jobs:
   inspect:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - name: Prepare pinned VPS to cPanel relay
@@ -237,6 +237,65 @@ jobs:
             echo "BACKUP_ROOT_PRESENT=no"
           fi
           if test -f "$app/.git/HEAD"; then git -C "$app" rev-parse HEAD 2>/dev/null | sed 's/^/DEPLOYED_GIT_HEAD=/' || echo "DEPLOYED_GIT_HEAD=unavailable"; else echo "DEPLOYED_GIT_HEAD=not_a_git_checkout"; fi
+          REMOTE
+      - name: Create and verify private cPanel backup
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-backup-preflight"
+          ssh -F "$d/config" saeit-cpanel 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          uapi_bin="$(command -v uapi 2>/dev/null || true)"
+          if test -z "$uapi_bin" && test -x /usr/local/cpanel/bin/uapi; then uapi_bin=/usr/local/cpanel/bin/uapi; fi
+          test -n "$uapi_bin"
+          started="$(date +%s)"
+          response="$("$uapi_bin" --output=json --user=zomorod2 Backup fullbackup_to_homedir homedir=include 2>/dev/null)"
+          printf '%s' "$response" | python3 -c 'import json,sys
+          j=json.load(sys.stdin)
+          r=j.get("result",{})
+          status=r.get("status",0)
+          print("CPANEL_FULL_BACKUP_REQUEST_STATUS="+str(status))
+          sys.exit(0 if str(status)=="1" else 1)'
+          backup=""
+          stable=0
+          prev=0
+          for _ in $(seq 1 240); do
+            candidate="$(find "$HOME" -maxdepth 1 -type f -name 'backup-*.tar.gz' -newermt "@$started" -print -quit 2>/dev/null || true)"
+            if test -n "$candidate"; then
+              size="$(stat -c %s "$candidate" 2>/dev/null || echo 0)"
+              if test "$size" -gt 0 && test "$size" = "$prev"; then stable=$((stable+1)); else stable=0; fi
+              prev="$size"
+              backup="$candidate"
+              if test "$stable" -ge 2; then break; fi
+            fi
+            sleep 15
+          done
+          test -n "$backup" && test -s "$backup"
+          gzip -t "$backup"
+          members="$(tar -tzf "$backup" | wc -l | tr -d ' ')"
+          test "$members" -gt 0
+          python3 - "$backup" <<'PY'
+          import pathlib,sys,tarfile
+          p=pathlib.Path(sys.argv[1])
+          with tarfile.open(p,"r:gz") as tf:
+              names=0
+              for m in tf:
+                  parts=pathlib.PurePosixPath(m.name).parts
+                  if pathlib.PurePosixPath(m.name).is_absolute() or ".." in parts:
+                      raise SystemExit("BACKUP_PATH_VALIDATION=unsafe_member")
+                  names+=1
+              print("BACKUP_MEMBER_PATHS=valid")
+              print("BACKUP_MEMBERS="+str(names))
+          PY
+          archive_bytes="$(stat -c %s "$backup")"
+          archive_sha="$(sha256sum "$backup" | awk '{print $1}')"
+          home_bytes="$(du -sb "$HOME" 2>/dev/null | awk '{print $1}')"
+          printf 'BACKUP_ARCHIVE_NAME=%s\n' "$(basename "$backup")"
+          printf 'BACKUP_ARCHIVE_BYTES=%s\n' "$archive_bytes"
+          printf 'BACKUP_ARCHIVE_SHA256=%s\n' "$archive_sha"
+          printf 'CPANEL_HOME_BYTES_AFTER=%s\n' "$home_bytes"
+          printf 'BACKUP_TAR_MEMBERS=%s\n' "$members"
           REMOTE
       - name: Remove temporary SSH material
         if: always()
