@@ -1,0 +1,26 @@
+name: Mojtaba photo essay reading paths checks
+on:
+  push:
+    branches: ['feat/mojtaba-photo-essays-reading-paths-20261016']
+    paths:
+      - 'scripts/mojtaba_photo_essays_reading_paths.py'
+      - 'tests/test_mojtaba_photo_essays_reading_paths.py'
+      - '.github/workflows/mojtaba-photo-reading-*.yml'
+  pull_request:
+    paths:
+      - 'scripts/mojtaba_photo_essays_reading_paths.py'
+      - 'tests/test_mojtaba_photo_essays_reading_paths.py'
+      - '.github/workflows/mojtaba-photo-reading-*.yml'
+permissions:
+  contents: read
+jobs:
+  navigation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify 20 photo reading paths and strict personal-site safety
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mojtaba_photo_essays_reading_paths.py
+          python3 -m unittest discover -s tests -p test_mojtaba_photo_essays_reading_paths.py -v
