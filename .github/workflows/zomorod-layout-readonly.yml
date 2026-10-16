@@ -166,6 +166,21 @@ jobs:
               if found: print("FINGERPRINT_MATCH="+",".join(found)+" FILE="+str(p.relative_to(root)))
           print("HTML_FILES_SCANNED="+str(visited))
           PY
+      - name: Compare production and staging template inventories
+        run: |
+          d="$RUNNER_TEMP/zomorod-root"
+          ssh -F "$d/config" saeit-cpanel 'bash -s' <<'REMOTE'
+          for rel in Saeit Saeit-staging; do
+            echo "DIRECTORY=$rel"
+            if test -d "$HOME/$rel"; then
+              find "$HOME/$rel" -mindepth 1 -maxdepth 1 -printf '%f\n' | sort | head -60
+              echo "CORE_TEMPLATE_FILES=$rel"
+              if test -d "$HOME/$rel/core/templates/core"; then
+                find "$HOME/$rel/core/templates/core" -mindepth 1 -maxdepth 1 -type f -printf '%f\n' | sort | head -45
+              fi
+            fi
+          done
+          REMOTE
       - name: Clean temporary access materials
         if: always()
         run: rm -rf "$RUNNER_TEMP/zomorod-root"
