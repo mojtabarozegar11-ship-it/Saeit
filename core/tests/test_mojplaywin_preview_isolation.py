@@ -11,7 +11,7 @@ class MojPlayWinPreviewIsolationTests(SimpleTestCase):
     def test_preview_only_pages_render_original_specialty_content(self):
         for path, title, marker in (
             ("/ai/", "Artificial Intelligence", "mojplaywin-atelier/ai-workflow."),
-            ("/blockchain/", "Blockchain & Web3", "blockchain-network.svg"),
+            ("/blockchain/", "Blockchain & Web3", "mojplaywin-atelier/blockchain-network."),
             ("/support/", "MojPlayWin Support", "mpw-support-handbook"),
         ):
             with self.subTest(path=path):
