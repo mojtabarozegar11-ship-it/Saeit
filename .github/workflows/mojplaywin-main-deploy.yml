@@ -252,8 +252,9 @@ jobs:
         run: |
           set -euo pipefail
           check() {
-            url="$1"; marker="$2"; file="$RUNNER_TEMP/mojplaywin-smoke.html"
-            status="$(curl --silent --show-error --location --max-redirs 4 --connect-timeout 10 --max-time 35 -o "$file" -w '%{http_code}' "$url")"
+            url="$1"; marker="$2"; file="$RUNNER_TEMP/mojplaywin-smoke.html"; headers="$RUNNER_TEMP/mojplaywin-smoke.headers"
+            request_url="$url?__mojplaywin_release=$GITHUB_RUN_ID"
+            status="$(curl --silent --show-error --location --max-redirs 4 --connect-timeout 10 --max-time 35 -H 'Cache-Control: no-cache, no-store' -H 'Pragma: no-cache' -D "$headers" -o "$file" -w '%{http_code}' "$request_url")"
             if test "$status" != 200 || ! grep -Fq "$marker" "$file"; then
               python3 - "$url" "$status" "$marker" "$file" <<'PY'
           import re, sys
@@ -268,6 +269,7 @@ jobs:
           print(f"SMOKE_DIAG_HEADINGS {[re.sub(r'<[^>]+>', ' ', h).strip()[:100] for h in headings[:8]]}")
           print(f"SMOKE_DIAG_TEXT {plain[:500]}")
           PY
+              grep -iE '^(HTTP/|age:|cache-control:|cf-cache-status:|x-cache:)' "$headers" | tail -8 || true
               exit 1
             fi
             echo "LIVE_ROUTE_OK $url"
