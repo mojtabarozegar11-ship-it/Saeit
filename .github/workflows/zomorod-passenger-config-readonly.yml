@@ -1,0 +1,100 @@
+name: Inspect Zomorod Passenger settings safely
+on:
+  push:
+    branches:
+      - codex/zomorod-runtime-repair-20261016
+    paths:
+      - ".github/workflows/zomorod-passenger-config-readonly.yml"
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-passenger-config-readonly
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077; test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-passenger"; install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d"/*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null; ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"; printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+      - name: Inspect active Passenger configuration with values redacted
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-passenger"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          app=/home/zomorod2/Saeit
+          pub=/home/zomorod2/public_html
+          echo "HTACCESS_PASSENGER_LINES_BEGIN"
+          if [ -f "$pub/.htaccess" ]; then
+            awk 'tolower($0) ~ /passenger(app|base|python|startup)|lsapi|lswsgi/ {print}' "$pub/.htaccess" | head -40
+          fi
+          echo "HTACCESS_PASSENGER_LINES_END"
+          python3 - "$app" <<'PY'
+          import pathlib,re,sys
+          root=pathlib.Path(sys.argv[1])
+          for rel in ["passenger_wsgi.py","manage.py","config/settings.py","zomorod/settings.py"]:
+              p=root/rel
+              if not p.is_file(): continue
+              print("FILE="+rel)
+              for n,line in enumerate(p.read_text(errors="replace").splitlines(),1):
+                  low=line.lower()
+                  if any(k in low for k in ["django_settings_module","databases","database_url","sqlite","dotenv","environ","os.getenv","os.environ","settings.configure"]):
+                      safe=line
+                      if any(k in low for k in ["secret","password","token","api_key"]): safe=re.sub(r"(=\s*).*$",r"= <redacted>",safe)
+                      print(f"{n}:{safe[:240]}")
+          env=root/".env"
+          if env.is_file():
+              keys=[line.split("=",1)[0].strip() for line in env.read_text(errors="replace").splitlines() if "=" in line and line.strip() and not line.lstrip().startswith("#")]
+              print("DOTENV_KEYS="+",".join(keys))
+          PY
+          echo "CPANEL_PYTHON_APPS"
+          find /home/zomorod2/virtualenv -maxdepth 3 -type f -path '*/bin/python' -printf '%P\n' | sort | head -30
+          REMOTE
+      - name: Remove temporary SSH material
+        if: always()
+        shell: bash
+        run: rm -rf -- "$RUNNER_TEMP/zomorod-passenger"
