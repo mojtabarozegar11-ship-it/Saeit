@@ -280,6 +280,40 @@ jobs:
           check https://mojplaywin.com/ventures/cafe-restaurant/ "Cafes"
           check https://mojplaywin.com/ventures/currency-crypto/ "Currency"
           check https://mojplaywin.com/ventures/ecommerce/ "E-commerce"
+      - name: Inspect installed source before rollback
+        if: failure() && steps.deploy.outcome == 'success' && steps.smoke.outcome == 'failure'
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-main-ssh"
+          python3 - <<'PY' | ssh -F "$d/config" saeit-cpanel '"/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python" -'
+          import hashlib, runpy, sys
+          from pathlib import Path
+          app = Path("/home/zomorod2/Saeit-staging")
+          checks = {
+              "config/urls.py": ("path(\"\", services", "mojplaywin_views"),
+              "core/services_views.py": ("mojplaywin.com", "return home(request)"),
+              "core/mojplaywin_views.py": ("def home(request)", "mojplaywin/home.html"),
+              "core/templates/mojplaywin/home.html": ("Ideas become knowledge", "OUR PORTFOLIO"),
+          }
+          for name, markers in checks.items():
+              path = app / name
+              if not path.is_file() or path.is_symlink():
+                  print(f"INSTALLED_FILE {name} present=False")
+                  continue
+              content = path.read_bytes()
+              text = content.decode("utf-8", "replace")
+              print(f"INSTALLED_FILE {name} sha256={hashlib.sha256(content).hexdigest()} markers={[marker in text for marker in markers]}")
+          try:
+              namespace = runpy.run_path("/home/zomorod2/mojplaywin.com/passenger_wsgi.py")
+              app_obj = namespace.get("application")
+              print(f"PASSENGER_RUNTIME application={getattr(app_obj, '__module__', type(app_obj).__name__)}")
+              for name in ("config.urls", "core.services_views", "core.mojplaywin_views"):
+                  module = sys.modules.get(name)
+                  print(f"PASSENGER_RUNTIME_MODULE {name}={getattr(module, '__file__', 'not-loaded')}")
+          except Exception as exc:
+              print(f"PASSENGER_RUNTIME_IMPORT_ERROR {type(exc).__name__}")
+          PY
       - name: Roll back if smoke checks fail
         if: failure() && steps.deploy.outcome == 'success' && steps.smoke.outcome == 'failure'
         shell: bash
