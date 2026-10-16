@@ -101,15 +101,17 @@ jobs:
           printf '%s\n' "$scan" > "$d/host.candidate"
           test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
           cp "$d/host.candidate" "$d/host.known"
-      - name: Verify root Passenger mapping and selector before staging
+      - name: Verify root mapping and recover prior unverified generation
         shell: bash
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/zomorod-app"
           ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'PREFLIGHT'
           set -euo pipefail
+          sha="$1"
           htaccess="$HOME/public_html/.htaccess"
           app="$HOME/Saeit"
+          root="$HOME/public_html"
           test -f "$htaccess" && test -f "$app/manage.py"
           audit="$(mktemp "$HOME/.zomorod-preflight-app.XXXXXX.json")"
           trap 'rm -f -- "$audit"' EXIT
@@ -141,6 +143,48 @@ jobs:
           print("SELECTOR_ROOT_APP_MAPPING=verified")
           print("SELECTOR_PYTHON_VERSION=3.10")
           PY
+          recovery="$HOME/.backups/zomorodmelal-app/b78498ecccc3b99784a0cb060ea2c59bec65c505"
+          if test -f "$recovery/deployed.flag" && test ! -f "$recovery/recovered.flag"; then
+            echo "RECOVERING_PREVIOUS_UNVERIFIED_GENERATION=b78498ecccc3b99784a0cb060ea2c59bec65c505"
+            paths=(config/urls.py config/settings.py config/env_compat.py config/env_compat.py core/views.py core/company_content_models.py core/zomorod_public_views.py core/services_views.py core/seo_views.py core/templates/base.html core/templates/core/services.html core/templates/core/platform_page.html core/management/commands/knowledge_agent_generate.py core/tests/test_zomorod_public_pages.py core/tests/test_seo_sitemap.py public/agriculture/index.html public/agriculture/livestock/index.html public/agriculture/horticulture/index.html public/agriculture/greenhouse/index.html public/agriculture/poultry/index.html public/agriculture/aquaculture/index.html public/agriculture/inputs/index.html public/agriculture/seeds/index.html public/agriculture/fertilizers/index.html public/agriculture/pesticides/index.html public/agriculture/offices/index.html public/agriculture/water-soil/index.html public/agriculture/machinery/index.html public/agriculture/market/index.html public/agriculture/genetics/index.html core/static/site/heroes/platform-home.webp core/static/site/heroes/agriculture.webp core/static/site/heroes/smart-agriculture.webp core/static/site/heroes/industry.webp core/static/site/heroes/economy.webp core/static/site/heroes/research.webp core/static/site/heroes/knowledge.webp core/static/site/heroes/genetics.webp core/static/site/heroes/laboratory.webp core/static/site/heroes/academy.webp core/static/site/heroes/education-detail.webp core/static/site/heroes/ai.webp)
+            for rel in "${paths[@]}"; do
+              target="$app/$rel"
+              if grep -Fxq "$rel" "$recovery/existing.txt"; then
+                test -f "$recovery/$rel"
+                mkdir -p "$(dirname "$target")"
+                cp -p "$recovery/$rel" "$target.recovery"
+                mv -f "$target.recovery" "$target"
+              else
+                rm -f -- "$target"
+              fi
+            done
+            assets=(agriculture/assets/zomorod-olive-v1/platform-home.webp agriculture/assets/zomorod-olive-v1/agriculture.webp agriculture/assets/zomorod-olive-v1/smart-agriculture.webp agriculture/assets/zomorod-olive-v1/industry.webp agriculture/assets/zomorod-olive-v1/economy.webp agriculture/assets/zomorod-olive-v1/research.webp agriculture/assets/zomorod-olive-v1/knowledge.webp agriculture/assets/zomorod-olive-v1/genetics.webp agriculture/assets/zomorod-olive-v1/laboratory.webp)
+            for rel in "${assets[@]}"; do
+              target="$root/$rel"
+              if grep -Fxq "$rel" "$recovery/assets-existing.txt"; then
+                test -f "$recovery/assets/$rel"
+                mkdir -p "$(dirname "$target")"
+                cp -p "$recovery/assets/$rel" "$target.recovery"
+                mv -f "$target.recovery" "$target"
+              else
+                rm -f -- "$target"
+              fi
+            done
+            page_target="$root/agriculture/index.html"
+            if grep -Fxq yes "$recovery/public-page-existing"; then
+              test -f "$recovery/public_html/agriculture/index.html"
+              mkdir -p "$(dirname "$page_target")"
+              cp -p "$recovery/public_html/agriculture/index.html" "$page_target.recovery"
+              mv -f "$page_target.recovery" "$page_target"
+            else
+              rm -f -- "$page_target"
+            fi
+            touch "$app/passenger_wsgi.py"
+            : > "$recovery/recovered.flag"
+            echo "PREVIOUS_GENERATION_RECOVERY=complete"
+          else
+            echo "PREVIOUS_GENERATION_RECOVERY=not_needed"
+          fi
           PREFLIGHT
       - name: Stage only scoped Django and guide files
         run: |
@@ -198,7 +242,7 @@ jobs:
           : > "$backup/existing.txt"
           asset_existing="$backup/assets-existing.txt"
           : > "$asset_existing"
-          paths=(config/urls.py config/settings.py config/env_compat.py core/views.py core/company_content_models.py core/zomorod_public_views.py core/services_views.py core/seo_views.py core/templates/base.html core/templates/core/services.html core/templates/core/platform_page.html core/management/commands/knowledge_agent_generate.py core/tests/test_zomorod_public_pages.py core/tests/test_seo_sitemap.py public/agriculture/index.html public/agriculture/livestock/index.html public/agriculture/horticulture/index.html public/agriculture/greenhouse/index.html public/agriculture/poultry/index.html public/agriculture/aquaculture/index.html public/agriculture/inputs/index.html public/agriculture/seeds/index.html public/agriculture/fertilizers/index.html public/agriculture/pesticides/index.html public/agriculture/offices/index.html public/agriculture/water-soil/index.html public/agriculture/machinery/index.html public/agriculture/market/index.html public/agriculture/genetics/index.html core/static/site/heroes/platform-home.webp core/static/site/heroes/agriculture.webp core/static/site/heroes/smart-agriculture.webp core/static/site/heroes/industry.webp core/static/site/heroes/economy.webp core/static/site/heroes/research.webp core/static/site/heroes/knowledge.webp core/static/site/heroes/genetics.webp core/static/site/heroes/laboratory.webp core/static/site/heroes/academy.webp core/static/site/heroes/education-detail.webp core/static/site/heroes/ai.webp)
+          paths=(config/urls.py config/settings.py core/views.py core/company_content_models.py core/zomorod_public_views.py core/services_views.py core/seo_views.py core/templates/base.html core/templates/core/services.html core/templates/core/platform_page.html core/management/commands/knowledge_agent_generate.py core/tests/test_zomorod_public_pages.py core/tests/test_seo_sitemap.py public/agriculture/index.html public/agriculture/livestock/index.html public/agriculture/horticulture/index.html public/agriculture/greenhouse/index.html public/agriculture/poultry/index.html public/agriculture/aquaculture/index.html public/agriculture/inputs/index.html public/agriculture/seeds/index.html public/agriculture/fertilizers/index.html public/agriculture/pesticides/index.html public/agriculture/offices/index.html public/agriculture/water-soil/index.html public/agriculture/machinery/index.html public/agriculture/market/index.html public/agriculture/genetics/index.html core/static/site/heroes/platform-home.webp core/static/site/heroes/agriculture.webp core/static/site/heroes/smart-agriculture.webp core/static/site/heroes/industry.webp core/static/site/heroes/economy.webp core/static/site/heroes/research.webp core/static/site/heroes/knowledge.webp core/static/site/heroes/genetics.webp core/static/site/heroes/laboratory.webp core/static/site/heroes/academy.webp core/static/site/heroes/education-detail.webp core/static/site/heroes/ai.webp)
           asset_paths=(agriculture/assets/zomorod-olive-v1/platform-home.webp agriculture/assets/zomorod-olive-v1/agriculture.webp agriculture/assets/zomorod-olive-v1/smart-agriculture.webp agriculture/assets/zomorod-olive-v1/industry.webp agriculture/assets/zomorod-olive-v1/economy.webp agriculture/assets/zomorod-olive-v1/research.webp agriculture/assets/zomorod-olive-v1/knowledge.webp agriculture/assets/zomorod-olive-v1/genetics.webp agriculture/assets/zomorod-olive-v1/laboratory.webp)
           asset_sources=(platform-home.webp agriculture.webp smart-agriculture.webp industry.webp economy.webp research.webp knowledge.webp genetics.webp laboratory.webp)
           page_rel=agriculture/index.html
@@ -410,3 +454,34 @@ jobs:
           fi
           paths=(config/urls.py config/settings.py core/views.py core/company_content_models.py core/zomorod_public_views.py core/services_views.py core/seo_views.py core/templates/base.html core/templates/core/services.html core/templates/core/platform_page.html core/management/commands/knowledge_agent_generate.py core/tests/test_zomorod_public_pages.py core/tests/test_seo_sitemap.py public/agriculture/index.html public/agriculture/livestock/index.html public/agriculture/horticulture/index.html public/agriculture/greenhouse/index.html public/agriculture/poultry/index.html public/agriculture/aquaculture/index.html public/agriculture/inputs/index.html public/agriculture/seeds/index.html public/agriculture/fertilizers/index.html public/agriculture/pesticides/index.html public/agriculture/offices/index.html public/agriculture/water-soil/index.html public/agriculture/machinery/index.html public/agriculture/market/index.html public/agriculture/genetics/index.html core/static/site/heroes/platform-home.webp core/static/site/heroes/agriculture.webp core/static/site/heroes/smart-agriculture.webp core/static/site/heroes/industry.webp core/static/site/heroes/economy.webp core/static/site/heroes/research.webp core/static/site/heroes/knowledge.webp core/static/site/heroes/genetics.webp core/static/site/heroes/laboratory.webp core/static/site/heroes/academy.webp core/static/site/heroes/education-detail.webp core/static/site/heroes/ai.webp)
           asset_paths=(agriculture/assets/zomorod-olive-v1/platform-home.webp agriculture/assets/zomorod-olive-v1/agriculture.webp agriculture/assets/zomorod-olive-v1/smart-agriculture.webp agriculture/assets/zomorod-olive-v1/industry.webp agriculture/assets/zomorod-olive-v1/economy.webp agriculture/assets/zomorod-olive-v1/research.webp agriculture/assets/zomorod-olive-v1/knowledge.webp)
+          for rel in "${paths[@]}"; do
+            target="$app/$rel"
+            if grep -Fxq "$rel" "$backup/existing.txt"; then
+              cp -p "$backup/$rel" "$target.rollback"
+              mv -f "$target.rollback" "$target"
+            else
+              rm -f -- "$target"
+            fi
+          done
+          for rel in "${asset_paths[@]}"; do
+            target="$root/$rel"
+            if grep -Fxq "$rel" "$backup/assets-existing.txt"; then
+              mkdir -p "$(dirname "$target")"
+              cp -p "$backup/assets/$rel" "$target.rollback"
+              mv -f "$target.rollback" "$target"
+            else
+              rm -f -- "$target"
+            fi
+          done
+          page_target="$root/agriculture/index.html"
+          if grep -Fxq yes "$backup/public-page-existing"; then
+            mkdir -p "$(dirname "$page_target")"
+            cp -p "$backup/public_html/agriculture/index.html" "$page_target.rollback"
+            mv -f "$page_target.rollback" "$page_target"
+          else
+            rm -f -- "$page_target"
+          fi
+          touch "$app/passenger_wsgi.py"
+          rm -f "$backup/deployed.flag"
+          echo "PUBLIC_VERIFICATION_ROLLBACK=complete"
+          ROLLBACK
