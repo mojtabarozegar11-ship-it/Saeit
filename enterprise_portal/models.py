@@ -63,6 +63,20 @@ class LedgerAccount(Stamp):
     def __str__(self):
         return f"{self.unit.code}/{self.code} — {self.name}"
 
+    def save(self, *args, **kwargs):
+        if self.pk:
+            previous = type(self).objects.get(pk=self.pk)
+            used_in_posted_journal = JournalLine.objects.filter(
+                account_id=self.pk, entry__status="posted"
+            ).exists()
+            if used_in_posted_journal and (self.unit_id, self.code, self.category) != (
+                previous.unit_id, previous.code, previous.category
+            ):
+                raise ValidationError(
+                    "کد و طبقه‌بندی حساب دارای سند قطعی قابل تغییر نیست."
+                )
+        return super().save(*args, **kwargs)
+
 
 class JournalEntry(Stamp):
     unit = models.ForeignKey(BusinessUnit, on_delete=models.PROTECT, related_name="journals")
