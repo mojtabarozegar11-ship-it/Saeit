@@ -89,9 +89,9 @@ jobs:
           trap 'ssh-agent -k >/dev/null 2>&1 || true' EXIT
           ssh-add -t 6900 "$d/host.key" 2>/dev/null
           echo "DIRECT_ONEPASS backup mysql/files: cPanel to VPS, no GitHub payload transit"
-          timeout 5550s ssh -A -T -F "$d/config" saeit-vps "python3 -c '$call' '$direct64' backup '$src64' '$dst64' '$rest64' '$runstem'"
+          timeout 5550s ssh -A -T -o ServerAliveInterval=15 -o ServerAliveCountMax=16 -o TCPKeepAlive=yes -F "$d/config" saeit-vps "python3 -c '$call' '$direct64' backup '$src64' '$dst64' '$rest64' '$runstem'"
           echo "DIRECT_ONEPASS isolated sandbox file restoration, no production writes"
-          timeout 1100s ssh -T -F "$d/config" saeit-vps "python3 -c '$call' '$direct64' restore-files '$rest64' '$recovery64' '$runstem'"
+          timeout 1100s ssh -T -o ServerAliveInterval=15 -o ServerAliveCountMax=16 -o TCPKeepAlive=yes -F "$d/config" saeit-vps "python3 -c '$call' '$direct64' restore-files '$rest64' '$recovery64' '$runstem'"
           echo "Both GPG backups and isolated VPS file extraction verified"
       - name: Isolated no-network MariaDB SQL restore with checksum-validated GPG stream
         shell: bash
@@ -115,7 +115,7 @@ jobs:
             sleep 2
           done
           test "$ready" = 1 || { echo "NO-GO: isolated MariaDB unavailable"; exit 1; }
-          timeout 1350s ssh -T -F "$d/config" saeit-vps "python3 -c '$call' '$direct64' recover-mysql '$recovery64' '$runstem'" |
+          timeout 1350s ssh -T -o ServerAliveInterval=15 -o ServerAliveCountMax=16 -o TCPKeepAlive=yes -F "$d/config" saeit-vps "python3 -c '$call' '$direct64' recover-mysql '$recovery64' '$runstem'" |
             timeout 1350s docker exec -i "$label" mariadb --no-defaults -uroot --binary-mode
           tables="$(docker exec "$label" mariadb --no-defaults -uroot --batch --skip-column-names -e "SELECT COUNT(*) FROM information_schema.tables WHERE TABLE_SCHEMA NOT IN ('mysql','performance_schema','information_schema','sys') AND TABLE_TYPE='BASE TABLE'")"
           schemas="$(docker exec "$label" mariadb --no-defaults -uroot --batch --skip-column-names -e "SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name NOT IN ('mysql','performance_schema','information_schema','sys')")"
