@@ -1,0 +1,109 @@
+name: Moj Play Win production SEO exact-source inspection
+on:
+  push:
+    branches: ["audit/mojplaywin-backup-transport-20261017"]
+    paths: [".github/workflows/mojplaywin-seo-live-inventory.yml"]
+permissions:
+  contents: read
+jobs:
+  inspect-main-seo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Inspect only current public production-home HTML metadata and release state
+        shell: bash
+        timeout-minutes: 2
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 65s ssh -T -F "$d/config" saeit-cpanel 'python3 -' <<'PY'
+          from pathlib import Path
+          import re,json,hashlib,html
+          root=Path("/home/zomorod2/mojplaywin.com")
+          p=root/"design-preview-20261017/production-home-20261017.html"
+          state=Path("/home/zomorod2/.mpw-main-root-route-release-20261017/state.json")
+          if p.is_symlink() or not p.is_file() or state.is_symlink():raise SystemExit("UNSAFE_SOURCE")
+          s=p.read_text(encoding="utf-8")
+          st=json.loads(state.read_text())
+          def meta(key,val):
+              tags=re.findall(r"<meta[^>]+>",s,re.I)
+              a=[t for t in tags if re.search(r'\b'+key+r'=["\']'+val+r'["\']',t)]
+              if not a:return ""
+              m=re.search(r'content=["\']([^"\']+)["\']',a[0])
+              return html.unescape(m.group(1)) if m else ""
+          title=re.search(r'<title[^>]*>([^<]*)</title>',s,re.I)
+          h1=re.search(r'<h1[^>]*id="mw-home-title"[^>]*>(.*?)</h1>',s,re.I|re.S)
+          canonical=re.search(r'<link rel="canonical" href="([^"]+)"',s,re.I)
+          tests={
+            "root_release_committed":st.get("status")=="verified_committed",
+            "expected_file_marker":"MJWP_ROOT_CANDIDATE_ONLY_20261017" in s,
+            "single_main_title":len(re.findall(r'<title',s,re.I))==1,
+            "single_main_h1":len(re.findall(r'<h1',s,re.I))==1,
+            "expected_eighteen_cards":s.count('class="mpo-orbit-card"')==18,
+            "expected_ten_guides":s.count('id="home-guide-')==10,
+            "canonical_stable":bool(canonical and canonical.group(1)=="https://mojplaywin.com/"),
+            "not_noindex":"noindex,nofollow,noarchive" not in s,
+            "organization_schema_existing":'"@type":"Organization"' in s,
+          }
+          data={
+           "classification":"MAIN_MOJ_PLAY_WIN_LIVE_SEO_BASELINE",
+           "candidate_sha256":hashlib.sha256(p.read_bytes()).hexdigest(),
+           "candidate_bytes":p.stat().st_size,
+           "title":html.unescape(title.group(1)) if title else "",
+           "h1_plain":html.unescape(re.sub(r'<[^>]+>',"",h1.group(1))) if h1 else "",
+           "meta_description":meta("name","description"),
+           "og_site_name":meta("property","og:site_name"),
+           "og_title":meta("property","og:title"),
+           "twitter_title":meta("name","twitter:title"),
+           "canonical":canonical.group(1) if canonical else "",
+           "tests":tests,
+           "production_modified":False
+          }
+          print(json.dumps(data,sort_keys=True,ensure_ascii=False))
+          if not all(v for k,v in tests.items() if k!="organization_schema_existing"):
+              raise SystemExit("BASELINE_UNSAFE_TO_PATCH")
+          PY
