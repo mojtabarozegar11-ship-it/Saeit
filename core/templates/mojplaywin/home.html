@@ -2,14 +2,16 @@
 {% load static %}
 {% block title %}MojPlayWin | Research, Games & Learning{% endblock %}
 {% block meta_description %}MojPlayWin connects scientific research, modern technology, games, and practical education with a curated digital catalog.{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{% static 'site/mojplaywin-atelier/orbits.css' %}">{% endblock %}
 {% block body_class %}mojplaywin-home{% endblock %}
 {% block content %}
 {% include "mojplaywin/theme.html" %}
+{% include "mojplaywin/orbital_experience.html" %}
 <div class="mw-shell" data-design="mojplaywin-atelier-v4">
-  <section class="mpx-hero" aria-labelledby="mw-home-title">
+  <section class="mpx-hero" aria-labelledby="mw-home-legacy-title">
     <div class="mpx-hero-copy">
       <span class="mpx-kicker">MOJPLAYWIN · RESEARCH · TECHNOLOGY · PLAY</span>
-      <h1 id="mw-home-title">Ideas become knowledge. <em>Knowledge becomes possibility.</em></h1>
+      <h2 id="mw-home-legacy-title">Ideas become knowledge. <em>Knowledge becomes possibility.</em></h2>
       <p>MojPlayWin brings scientific research, modern digital technology, gaming, and education together. Explore original projects, useful learning, and a growing collection of digital products.</p>
       <div class="mpx-actions">
         <a class="mw-button primary" href="/store/">Explore the digital store <span aria-hidden="true">↗</span></a>
@@ -17,7 +19,7 @@
       </div>
     </div>
     <div class="mpx-hero-visual">
-      <img src="{% static 'site/heroes/game-studio.webp' %}" alt="Creative digital studio and game development" width="900" height="680" fetchpriority="high" loading="eager" decoding="async">
+      <img src="{% static 'site/heroes/game-studio.webp' %}" alt="Creative digital studio and game development" width="900" height="680" fetchpriority="low" loading="lazy" decoding="async">
       <div class="mpx-floating-label"><b>Play. Build. Evolve.</b><small>GLOBAL DIGITAL EXPERIENCE</small></div>
     </div>
   </section>
@@ -109,4 +111,5 @@
 
 </div>
 {% include "mojplaywin/footer.html" %}
+<script src="{% static 'site/mojplaywin-atelier/orbits.js' %}" defer></script>
 {% endblock %}
