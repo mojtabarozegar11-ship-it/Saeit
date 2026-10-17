@@ -3,7 +3,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from django.http import Http404
-from django.test import RequestFactory, SimpleTestCase
+from django.test import RequestFactory, SimpleTestCase, override_settings
 
 from core.mojplaywin_page_content import EDITORIAL_PAGES
 from core.mojplaywin_views import SECTIONS, VENTURES, platform_section, venture
@@ -11,6 +11,7 @@ from core.mojplaywin_views import SECTIONS, VENTURES, platform_section, venture
 ROOT = Path(__file__).resolve().parents[2]
 
 
+@override_settings(ALLOWED_HOSTS=["testserver", "mojplaywin.com", "www.mojplaywin.com", "zomorodmelal.ir"])
 class MojPlayWinCompleteSectionsTests(SimpleTestCase):
     @classmethod
     def setUpClass(cls):
