@@ -40,7 +40,7 @@ class ArchiveProbeTests(unittest.TestCase):
           ("mojplaywin.com/escape","symlink","../../private-token-never-log"),
         ]))
         self.assertIn("link_absolute",r["issue_counts"])
-        self.assertIn("link_outside_fixed_roots",r["issue_counts"])
+        self.assertIn("link_traversal",r["issue_counts"])
         self.assertNotIn("private-token",str(r))
         self.assertFalse(r["isolated_restore_completed"])
 
