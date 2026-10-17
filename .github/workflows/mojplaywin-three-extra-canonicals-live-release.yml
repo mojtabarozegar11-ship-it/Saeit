@@ -1,0 +1,178 @@
+name: Moj Play Win publish three extra market industry economy canonicals
+on:
+  push:
+    branches: ["audit/mojplaywin-backup-transport-20261017"]
+    paths: [".github/workflows/mojplaywin-three-extra-canonicals-live-release.yml"]
+permissions:
+  contents: read
+concurrency:
+  group: mojplaywin-main-only-root-deploy
+  cancel-in-progress: false
+jobs:
+  add-exact-three-pages-with-six-protected:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check approved three-target code and existing six-rule SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mojplaywin_three_extra_canonical_rewrite.py
+          grep -Fq 'fbfa01e3d0f694b3b65782fe957d6d943302c6dea2374803ad6a91976164128a' scripts/mojplaywin_three_extra_canonical_rewrite.py
+          grep -Fq 'previous six-route release state unavailable' scripts/mojplaywin_three_extra_canonical_rewrite.py
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Capture three old wrong canonicals, six already fixed and all protected URL statuses
+        shell: bash
+        timeout-minutes: 2
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from urllib.request import Request,urlopen
+          import hashlib,json,re,os
+          url="https://mojplaywin.com"
+          target=("/market/","/industry/","/economy/")
+          old6=("/store/","/research/","/company/","/knowledge/","/ventures/agriculture/","/ventures/jewelry-gold/")
+          protected=("/","/saman/","/picm/login/","/farnaz/","/studio.Roham/","/mojtaba.roozegar/","/zahra%24%24/")
+          record={}
+          for p in target+old6+protected:
+              with urlopen(Request(url+p,headers={"Cache-Control":"no-store","User-Agent":"MojPlayWin-three-expansion-baseline"}),timeout=20) as resp:
+                  body=resp.read(750000).decode("utf-8",errors="replace")
+                  if resp.status!=200:raise RuntimeError("non-200 "+p)
+              canon=re.findall(r'<link\b[^>]*rel="canonical"\s+href="([^"]+)"',body,re.I)
+              if p in target and canon!=["https://zomorodmelal.ir"+p]:
+                  raise RuntimeError("unexpected target canonical before publication "+p)
+              if p in old6 and canon!=[url+p]:
+                  raise RuntimeError("one of the six prior fixes regressed "+p)
+              title=(re.findall(r'<title>(.*?)</title>',body,re.I|re.S)or[""])[0]
+              normalized=body.replace("https://zomorodmelal.ir"+p,"__ONLY_CANONICAL__",1) if p in target else body
+              record[p]={"code":200,"canonical":canon,"sha":hashlib.sha256(normalized.encode()).hexdigest(),
+                    "title":title,"img_count":body.count("<img "),"form_count":body.count("<form ")}
+          with open(os.environ["RUNNER_TEMP"]+"/three-extra-before.json","w") as dst:json.dump(record,dst)
+          print("THREE_WRONG_AND_SIX_PREVIOUSLY_FIXED_CANONICALS_PLUS_SEVEN_PROTECTED_PATHS_SNAPSHOTTED")
+          PY
+      - name: Append three exact GET rewrites, compare public pages and commit or restore on any failure
+        shell: bash
+        timeout-minutes: 4
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          phpsha=$(sha256sum scripts/mojplaywin_canonical_php_three_extra.php|cut -d' ' -f1)
+          armed=no
+          rollback(){
+            if test "$armed" = yes;then
+              echo "RESTORING_PREVIOUS_SIX_RULE_CANONICAL_CONFIGURATION"
+              timeout 40s ssh -T -F "$d/config" saeit-cpanel 'python3 - rollback' < scripts/mojplaywin_three_extra_canonical_rewrite.py ||
+                echo "INDEPENDENT_180_SECOND_ROLLBACK_WATCHDOG_ACTIVE"
+            fi
+          }
+          trap rollback EXIT
+          timeout 43s ssh -T -F "$d/config" saeit-cpanel "python3 - production '$phpsha'" < scripts/mojplaywin_three_extra_canonical_rewrite.py
+          armed=yes
+          python3 - <<'PY'
+          from urllib.request import Request,urlopen
+          import json,re,hashlib,time,os
+          base="https://mojplaywin.com"
+          before=json.load(open(os.environ["RUNNER_TEMP"]+"/three-extra-before.json"))
+          targets=("/market/","/industry/","/economy/")
+          old6=("/store/","/research/","/company/","/knowledge/","/ventures/agriculture/","/ventures/jewelry-gold/")
+          others=tuple(x for x in before if x not in targets and x not in old6)
+          def read(path):
+              req=Request(base+path,headers={"Cache-Control":"no-store,no-cache","User-Agent":"MojPlayWin-3-extra-live-acceptance"})
+              with urlopen(req,timeout=20) as resp:
+                  if resp.status!=200:raise RuntimeError("HTTP regression "+path)
+                  return resp.read(750000).decode("utf-8",errors="replace"),resp.headers.get("X-MPW-Canonical-Edge","")
+          # Prevent staging delays/stale LiteSpeed worker state from causing false acceptance.
+          consecutive=0
+          for roundno in range(18):
+              html,edge=read("/market/")
+              valid=edge=="main-only" and 'href="https://mojplaywin.com/market/"' in html
+              consecutive=(consecutive+1) if valid else 0
+              if consecutive>=4:break
+              time.sleep(1.0)
+          if consecutive<4:raise RuntimeError("new market rule did not stabilize")
+          total_checks=0
+          for passno in range(1,6):
+              for path in targets+old6:
+                  html,edge=read(path)
+                  canon=re.findall(r'<link\b[^>]*rel="canonical"\s+href="([^"]+)"',html,re.I)
+                  if canon!=[base+path] or edge!="main-only":
+                      raise RuntimeError("failed stable canonical "+path+" pass "+str(passno))
+                  if passno==1:
+                      expected_before=before[path]
+                      title=(re.findall(r'<title>(.*?)</title>',html,re.I|re.S)or[""])[0]
+                      if title!=expected_before["title"] or html.count("<img ")!=expected_before["img_count"] or html.count("<form ")!=expected_before["form_count"]:
+                          raise RuntimeError("content was modified beyond SEO "+path)
+                      if path in targets:
+                          normalized=html.replace("https://mojplaywin.com"+path,"__ONLY_CANONICAL__",1)
+                          if hashlib.sha256(normalized.encode()).hexdigest()!=expected_before["sha"]:
+                              raise RuntimeError("HTML bytes outside canonical changed "+path)
+                  total_checks+=1
+          for path in others:
+              page,edge=read(path)
+              if edge=="main-only" or re.findall(r'<link\b[^>]*rel="canonical"\s+href="([^"]+)"',page,re.I)!=before[path]["canonical"]:
+                  raise RuntimeError("protected main or child site changed "+path)
+          for p in targets:
+              raw,edge=read(p+"?__mpw_canon_passthru=1")
+              if edge=="main-only" or "https://zomorodmelal.ir"+p not in raw:
+                  raise RuntimeError("backend bypass loop risk "+p)
+          print(json.dumps({"classification":"MOJ_PLAY_WIN_THREE_MORE_CANONICALS_LIVE_ACCEPTED",
+               "newly_fixed":len(targets),"existing_fixed_verified":len(old6),
+               "public_samples":total_checks,"protected_unmodified":len(others),
+               "source_dynamic_content_preserved":True,"shared_passenger_restarted":False},sort_keys=True),flush=True)
+          PY
+          timeout 40s ssh -T -F "$d/config" saeit-cpanel "python3 - commit '$phpsha'" < scripts/mojplaywin_three_extra_canonical_rewrite.py
+          armed=no
+          echo "NINE_MOJ_PLAY_WIN_CANONICAL_URLS_LIVE_CORRECT_THREE_NEW_PLUS_SIX_EXISTING"
+          {
+            echo "## Moj Play Win market, industry and economy canonical fixes published"
+            echo "- Three additional canonical URLs now point to https://mojplaywin.com/ pages."
+            echo "- All six earlier fixes were tested five times and remain intact."
+            echo "- Content of each of the three new pages unchanged byte-for-byte except canonical."
+            echo "- Protected child sites and Passenger unchanged. Previous exact six-rule configuration backed up."
+          } >> "$GITHUB_STEP_SUMMARY"
