@@ -261,6 +261,84 @@ jobs:
                           print("ROUTING_DIRECTIVE_NAME="+key)
           PY
           REMOTE
+      - name: Check 01AM snapshot fingerprints and Django startup without changing live routes
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-readonly"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          export PYTHONDONTWRITEBYTECODE=1
+          python3 - <<'PY'
+          import os, pathlib, datetime, shlex, subprocess
+          home=pathlib.Path.home()
+          utc=datetime.timezone.utc
+          start=datetime.datetime(2026,10,14,19,0,tzinfo=utc)
+          end=datetime.datetime(2026,10,15,1,0,tzinfo=utc)
+          roots=[home/'.backups',home/'Saeit'/'backups',home/'Saeit'/'var'/'backups']
+          found=[]
+          for root in roots:
+              if not root.is_dir():continue
+              for directory,dirs,files in os.walk(root):
+                  depth=len(pathlib.Path(directory).relative_to(root).parts)
+                  dirs[:]=[x for x in dirs if not x.startswith('.') and not any(k in x.lower() for k in ('mojtaba','mohammad','ghanadi','amozeshgah','secret','ssh','credentials','token'))] if depth<5 else []
+                  for filename in files:
+                      f=pathlib.Path(directory)/filename
+                      if f.is_symlink():continue
+                      name=filename.lower()
+                      if not (name in ('index.html','company.html','about.html','passenger_wsgi.py','manifest.json','urls.py','views.py') or any(k in name for k in ('20261015','20261014','snapshot','restor','backup'))):continue
+                      try:
+                          st=f.stat()
+                          dt=datetime.datetime.fromtimestamp(st.st_mtime,utc)
+                      except OSError:continue
+                      if start<=dt<=end and st.st_size<=300_000_000:
+                          found.append((dt, str(f.relative_to(home)),st.st_size))
+          print('NEAR_1AM_CANDIDATES='+str(len(found)))
+          for dt,rel,sz in sorted(found)[:90]:
+              print('NEAR_1AM_FILE='+dt.isoformat(timespec='minutes')+' size='+str(sz)+' path='+rel)
+          rootcfg=home/'public_html'/'.htaccess'
+          if rootcfg.is_file():
+              for raw in rootcfg.read_text(errors='replace').splitlines():
+                  text=raw.strip()
+                  if not text or text.startswith('#'):continue
+                  try:tokens=shlex.split(text)
+                  except ValueError:continue
+                  if not tokens:continue
+                  key=tokens[0].lower()
+                  if key in ('passengerpython','passengerapproot','passengerstartupfile','passengerbaseuri'):
+                      val=tokens[1] if len(tokens)>1 else ''
+                      if key in ('passengerpython','passengerapproot'):
+                          target=pathlib.Path(val)
+                          print('PASSENGER_CONFIG='+key+' configured=yes path_exists='+str(target.exists())+' is_file='+str(target.is_file()))
+                      else:print('PASSENGER_CONFIG='+key+' configured=yes')
+          for n in ('virtualenv/Saeit/3.10/bin/python','Saeit/passenger_wsgi.py','Saeit/.env','Saeit/db.sqlite3'):
+              f=home/n
+              print('RUNTIME_ASSET='+n+' present='+str(f.is_file())+' bytes='+(str(f.stat().st_size) if f.is_file() else '0'))
+          exe=home/'virtualenv'/'Saeit'/'3.10'/'bin'/'python'
+          app=home/'Saeit'
+          if exe.is_file() and app.is_dir():
+              code='import os;os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings");from passenger_wsgi import application;print("DJANGO_WSGI_IMPORT=PASS")'
+              try:
+                  proc=subprocess.run([str(exe),'-B','-c',code],cwd=app,text=True,capture_output=True,timeout=25,env=dict(os.environ,PYTHONDONTWRITEBYTECODE='1'))
+                  print('DJANGO_WSGI_EXIT='+str(proc.returncode))
+                  if 'DJANGO_WSGI_IMPORT=PASS' in proc.stdout:print('DJANGO_WSGI_IMPORT=PASS')
+                  else:
+                      out=proc.stderr or proc.stdout
+                      kinds=['ModuleNotFoundError','ImportError','RuntimeError','django.core.exceptions','sqlite3.OperationalError','OperationalError','No module named','RecursionError','pydantic_core','segmentation fault','PermissionError','FileNotFoundError']
+                      print('DJANGO_WSGI_KNOWN_ERRORS='+','.join(k for k in kinds if k in out))
+                      print('DJANGO_WSGI_LAST_EXCEPTION_CLASS='+next((x.split(':',1)[0].split('.')[-1] for x in out.splitlines()[::-1] if 'Error:' in x or 'Exception:' in x),'none'))
+              except subprocess.TimeoutExpired:
+                  print('DJANGO_WSGI_IMPORT=TIMEOUT')
+          logs=[home/'Saeit'/'stderr.log',home/'Saeit'/'passenger.log',home/'public_html'/'error_log',home/'public_html'/'stderr.log']
+          for file in logs:
+              if not file.is_file():continue
+              with file.open('rb') as stream:
+                  stream.seek(max(0,file.stat().st_size-48000))
+                  text=stream.read(48000).decode('utf-8','replace')
+              tokens=['set_env_vars.py','VIRTUAL_ENV','Passenger','Traceback','ModuleNotFoundError','RecursionError','PythonHome','pydantic_core']
+              print('RUNTIME_LOG_CATEGORY='+file.name+' bytes='+str(file.stat().st_size)+' markers='+','.join(t for t in tokens if t.lower() in text.lower()))
+          PY
+          REMOTE
       - name: Erase runner-only relay credentials
         if: always()
         run: rm -rf "$RUNNER_TEMP/zomorod-readonly"
