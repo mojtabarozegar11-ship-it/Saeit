@@ -38,9 +38,24 @@ PREFIX_ALLOWED = (
 TEST_PREFIXES = (
     "core/tests/test_mojplaywin_",
     "tests/test_mojplaywin_",
-    "scripts/mojplaywin_",
-    ".github/workflows/mojplaywin-",
 )
+SAFE_SCRIPTS = frozenset({
+    "scripts/mojplaywin_atelier_visual_preview.py",
+    "scripts/mojplaywin_commerce_freeze_guard.py",
+    "scripts/mojplaywin_lighthouse_gate.py",
+    "scripts/mojplaywin_product_preservation_snapshot.py",
+    "scripts/mojplaywin_release_100_gate.py",
+    "scripts/mojplaywin_site_quality_agent.py",
+    "scripts/mojplaywin_subsite_scope_guard.py",
+})
+SAFE_WORKFLOWS = frozenset({
+    ".github/workflows/mojplaywin-lighthouse-100-gate.yml",
+    ".github/workflows/mojplaywin-payment-products-freeze.yml",
+    ".github/workflows/mojplaywin-release-100-hard-stop.yml",
+    ".github/workflows/mojplaywin-site-quality-agent.yml",
+    ".github/workflows/mojplaywin-visual-preview.yml",
+    ".github/workflows/mojplaywin-subsite-scope-guard.yml",
+})
 # These names resemble allowed prefixes but can restart a shared application.
 ABSOLUTE_DENY = frozenset({
     "scripts/deploy_mojplaywin_branding.py",
@@ -67,12 +82,9 @@ def permitted(path: str) -> bool:
         return False
     if path in EXACT_ALLOWED or any(path.startswith(prefix) for prefix in PREFIX_ALLOWED):
         return True
+    if path in SAFE_SCRIPTS or path in SAFE_WORKFLOWS:
+        return True
     if any(path.startswith(prefix) for prefix in TEST_PREFIXES):
-        # Explicitly prevent production deployment tools even with matching name.
-        if path in ABSOLUTE_DENY:
-            return False
-        if path.startswith(".github/workflows/"):
-            return path.endswith((".yml", ".yaml"))
         return path.endswith(".py")
     return False
 
