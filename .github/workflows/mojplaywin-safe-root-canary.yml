@@ -1,0 +1,158 @@
+name: MojPlayWin safe static-root canary with mandatory rollback
+on:
+  push:
+    branches: ["audit/mojplaywin-backup-transport-20261017"]
+    paths:
+      - ".github/workflows/mojplaywin-safe-root-canary.yml"
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: mojplaywin-main-only-root-deploy
+  cancel-in-progress: false
+jobs:
+  canary-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: mojplaywin-atelier-v4-desktop-mobile-preview
+          run-id: 39034323161
+          repository: mojtabarozegar11-ship-it/Saeit
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/certified
+      - name: Build production candidate from certified original HTML (no preview banners or noindex)
+        shell: bash
+        timeout-minutes: 2
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          from html.parser import HTMLParser
+          import json,os
+          source=Path(os.environ["RUNNER_TEMP"])/"certified"
+          manifest=json.loads((source/"manifest.json").read_text())
+          if manifest.get("host")!="mojplaywin.com" or manifest.get("routes",{}).get("home",{}).get("path")!="/":
+              raise RuntimeError("unrecognized CI source")
+          html=(source/"home.html").read_text()
+          if len(html)<80000 or "data-globe-orbit" not in html or html.count('class="mpo-orbit-card"')!=18:
+              raise RuntimeError("certified main template incomplete")
+          if "noindex" in html.lower():
+              raise RuntimeError("preview-only noindex found in production source")
+          if html.count("/static/")<10:raise RuntimeError("unrecognized source asset structure")
+          html=html.replace("/static/","/design-preview-20261017/static/")
+          html="<!-- MJWP_ROOT_CANDIDATE_ONLY_20261017 -->\n"+html
+          if 'href="store.html"' in html or 'src="static/' in html:
+              raise RuntimeError("preview relative URLs not allowed in live root")
+          out=Path(os.environ["RUNNER_TEMP"])/"production-home-20261017.html"
+          out.write_text(html)
+          print("MAIN_ROOT_CANDIDATE_BUILT_WITH_ORIGINAL_DEEP_ROUTES bytes="+str(len(html)))
+          PY
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Upload only new reviewed candidate file (do not touch root or any existing page)
+        shell: bash
+        timeout-minutes: 2
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          file="$RUNNER_TEMP/production-home-20261017.html"
+          path=/home/zomorod2/mojplaywin.com/design-preview-20261017/production-home-20261017.html
+          timeout 30s ssh -T -F "$d/config" saeit-cpanel "test ! -e '$path' && test ! -L '$path' && test \"\$(cat /home/zomorod2/mojplaywin.com/design-preview-20261017/_mpw_release_marker.txt)\" = mpw-approved-artifact-39034323161"
+          timeout 40s scp -q -F "$d/config" "$file" "saeit-cpanel:$path"
+          local_sha=$(sha256sum "$file" | cut -d' ' -f1)
+          remote_sha=$(timeout 30s ssh -T -F "$d/config" saeit-cpanel "chmod 644 '$path' && sha256sum '$path' | cut -d' ' -f1")
+          test "$local_sha" = "$remote_sha" || { echo "NO_GO_CANDIDATE_CONTENT_MISMATCH"; exit 1; }
+          echo "NEW_IMMUTABLE_ROOT_CANDIDATE_VERIFIED"
+      - name: Capture exact baseline HTTP response codes of main and protected routes
+        shell: bash
+        timeout-minutes: 2
+        run: |
+          set -euo pipefail
+          paths=("/" "/saman/" "/picm/login/" "/farnaz/" "/studio.Roham/" "/mojtaba.roozegar/" "/zahra%24%24/" "/store/" "/games/" "/ai/" "/blockchain/" "/research/")
+          : > "$RUNNER_TEMP/protected-before.txt"
+          for path in "${paths[@]}"; do
+            status=$(curl -sSL -o /dev/null -w '%{http_code}' --max-time 15 "https://mojplaywin.com$path")
+            printf '%s %s\n' "$path" "$status" >> "$RUNNER_TEMP/protected-before.txt"
+            if test "$path" = "/" && test "$status" != 200;then exit 51;fi
+          done
+          echo "BASELINE_CAPTURED count=${#paths[@]}"
+      - name: Test exact-path Apache rewrite and reverse it immediately
+        shell: bash
+        timeout-minutes: 3
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          cleanup() {
+            timeout 40s ssh -T -F "$d/config" saeit-cpanel 'python3 - rollback' < scripts/mojplaywin_safe_root_rewrite.py || echo "WATCHDOG_RESTORE_ARMED"
+          }
+          trap cleanup EXIT
+          timeout 35s ssh -T -F "$d/config" saeit-cpanel 'python3 - canary' < scripts/mojplaywin_safe_root_rewrite.py
+          response=$(curl -fsSL --max-time 25 "https://mojplaywin.com/__mpw_root_canary_20261017__")
+          test "$response" = mpw-approved-artifact-39034323161 || {
+            echo "NO_GO_APACHE_ROOT_ONLY_REWRITE_UNSUPPORTED"
+            exit 61
+          }
+          echo "EXACT_MATCH_APACHE_REWRITE_CANARY_PASSED"
+      - name: Verify original htaccess restored, original root and all independent routes unaffected
+        shell: bash
+        timeout-minutes: 3
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          remote_sha=$(timeout 30s ssh -T -F "$d/config" saeit-cpanel 'sha256sum /home/zomorod2/mojplaywin.com/.htaccess' | cut -d' ' -f1)
+          test "$remote_sha" = 4f261f4563494f7ba8e9947e3ebcaa915815b5ffc451ad7348f3620300a695fd
+          : > "$RUNNER_TEMP/protected-after.txt"
+          paths=("/" "/saman/" "/picm/login/" "/farnaz/" "/studio.Roham/" "/mojtaba.roozegar/" "/zahra%24%24/" "/store/" "/games/" "/ai/" "/blockchain/" "/research/")
+          for path in "${paths[@]}"; do
+            status=$(curl -sSL -o /dev/null -w '%{http_code}' --max-time 15 "https://mojplaywin.com$path")
+            printf '%s %s\n' "$path" "$status" >> "$RUNNER_TEMP/protected-after.txt"
+          done
+          cmp "$RUNNER_TEMP/protected-before.txt" "$RUNNER_TEMP/protected-after.txt"
+          echo "SAFE_ROOT_CANARY_FULL_ROLLBACK_SUCCESS_ROOT_UNCHANGED"
