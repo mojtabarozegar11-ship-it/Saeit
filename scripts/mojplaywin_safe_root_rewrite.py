@@ -102,6 +102,11 @@ def candidate(original, mode):
         rule = "RewriteCond %{HTTPS} on\nRewriteRule ^" + CANARY + "$ /design-preview-20261017/_mpw_release_marker.txt [END]"
     elif mode == "root":
         rule = "RewriteCond %{HTTPS} on\nRewriteRule ^$ /design-preview-20261017/"+PROD_NAME+" [END]"
+    elif mode == "probe-root":
+        # Probe ONLY an exact root query, never ordinary traffic.
+        rule = ("RewriteCond %{REQUEST_URI} ^/$\n"
+                "RewriteCond %{QUERY_STRING} ^__mpw_root_probe_20261017=exact$\n"
+                "RewriteRule ^.*$ /design-preview-20261017/_mpw_release_marker.txt [END,QSD]")
     else:raise RuntimeError("bad mode")
     source=original.decode("utf-8")
     rows=source.splitlines(keepends=True)
@@ -187,7 +192,7 @@ def commit_release():
 def main():
     if len(sys.argv)!=2:raise SystemExit(2)
     mode=sys.argv[1]
-    if mode in ("canary","root"):arm(mode)
+    if mode in ("canary","root","probe-root"):arm(mode)
     elif mode=="rollback":rollback()
     elif mode=="commit":commit_release()
     else:raise RuntimeError("invalid operation")
