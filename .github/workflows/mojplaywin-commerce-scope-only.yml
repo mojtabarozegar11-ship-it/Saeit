@@ -152,7 +152,7 @@ jobs:
                   status = exc.code
               except (urllib.error.URLError, OSError, TimeoutError, ValueError, UnsafeRedirect):
                   pass
-              footer = re.search(r'<footer\\b[^>]*>(.*?)</footer>', html, re.I | re.S)
+              footer = re.search(r'<footer\b[^>]*>(.*?)</footer>', html, re.I | re.S)
               signed = bool(footer and 'Mojtaba Roozegar' in footer.group(1))
               statuses[path] = status
               if signed: signatures.append(path)
