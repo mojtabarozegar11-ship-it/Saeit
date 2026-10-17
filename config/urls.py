@@ -81,6 +81,7 @@ urlpatterns = [
     path("services/", services, name="services"),
     path("staff/command-center/", include("command_center.urls")),
     path("staff/", staff_dashboard, name="staff_management"),
+    path("farnaz/", include("farnaz.urls")),
     path("admin/", admin.site.urls),
     path("api/", include("core.urls")),
 ]

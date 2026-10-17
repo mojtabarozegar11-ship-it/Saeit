@@ -1,0 +1,61 @@
+name: Validate Zomorod Tala subsite
+on:
+  pull_request:
+    paths:
+      - "public/tala/**"
+      - ".github/workflows/zomorod-tala-validate.yml"
+      - ".github/workflows/zomorod-tala-static-deploy.yml"
+  push:
+    branches: [main]
+    paths:
+      - "public/tala/**"
+      - ".github/workflows/zomorod-tala-validate.yml"
+      - ".github/workflows/zomorod-tala-static-deploy.yml"
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate markup, anchors, assets, scope, and JavaScript
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from html.parser import HTMLParser
+          from pathlib import Path
+          import re
+          root=Path('public/tala')
+          source=(root/'index.html').read_text(encoding='utf-8')
+          class Check(HTMLParser):
+              def __init__(self):
+                  super().__init__(); self.ids=[]; self.anchors=[]; self.title=False; self.h1=0; self.rtl=False; self.tag=''
+              def handle_starttag(self, tag, attrs):
+                  self.tag=tag; a=dict(attrs)
+                  if tag=='html': self.rtl=(a.get('lang'),a.get('dir'))==('fa','rtl')
+                  if tag=='h1': self.h1+=1
+                  if 'id' in a: self.ids.append(a['id'])
+                  if tag=='a' and a.get('href','').startswith('#'): self.anchors.append(a['href'][1:])
+              def handle_data(self, data):
+                  if self.tag=='title' and data.strip(): self.title=True
+              def handle_endtag(self, tag): self.tag=''
+          c=Check(); c.feed(source)
+          if not all((c.rtl,c.title,c.h1==1)): raise SystemExit('TALA_DOCUMENT_STRUCTURE=failed')
+          if len(c.ids)!=len(set(c.ids)): raise SystemExit('TALA_DUPLICATE_ID=found')
+          if set(c.anchors)-set(c.ids): raise SystemExit('TALA_BROKEN_ANCHOR='+','.join(sorted(set(c.anchors)-set(c.ids))))
+          if '<!-- tala-isolated-site-v1 -->' not in source: raise SystemExit('TALA_SCOPE_MARKER=missing')
+          if 'در انتظار اتصال منبع' not in source or 'قیمت زنده هنوز متصل نشده' not in source: raise SystemExit('TALA_UNVERIFIED_PRICE_DISCLOSURE=missing')
+          for rel in ('.htaccess','manifest.webmanifest','sw.js','assets/tala-mark.svg'):
+              if not (root/rel).is_file(): raise SystemExit('TALA_ASSET_MISSING='+rel)
+          rules=(root/'.htaccess').read_text(encoding='utf-8')
+          if 'PassengerEnabled off' not in rules or 'DirectoryIndex index.html' not in rules: raise SystemExit('TALA_STATIC_DIRECTORY_CONFIG=unsafe')
+          sw=(root/'sw.js').read_text(encoding='utf-8')
+          if "startsWith('/tala/')" not in sw: raise SystemExit('TALA_SERVICE_WORKER_SCOPE=unsafe')
+          match=re.search(r'<script>([\s\S]*?)</script>',source)
+          if not match: raise SystemExit('TALA_INLINE_SCRIPT=missing')
+          Path('/tmp/tala-inline.js').write_text(match.group(1),encoding='utf-8')
+          print('TALA_DOCUMENT=validated')
+          print('TALA_SCOPE=isolated')
+          PY
+          node --check /tmp/tala-inline.js

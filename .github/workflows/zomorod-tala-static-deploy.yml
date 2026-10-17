@@ -1,0 +1,203 @@
+name: Publish Zomorod Tala subsite only
+on:
+  push:
+    branches: [main]
+    paths:
+      - "public/tala/**"
+      - ".github/workflows/zomorod-tala-static-deploy.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-tala-static
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate isolated Tala package
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from html.parser import HTMLParser
+          from pathlib import Path
+          root=Path('public/tala')
+          page=root/'index.html'
+          source=page.read_text(encoding='utf-8')
+          class Check(HTMLParser):
+              def __init__(self):
+                  super().__init__(); self.title=False; self.h1=False; self.rtl=False; self.forms=0
+              def handle_starttag(self, tag, attrs):
+                  a=dict(attrs)
+                  if tag=='html': self.rtl=a.get('lang')=='fa' and a.get('dir')=='rtl'
+                  if tag=='title': self.title=True
+                  if tag=='h1': self.h1=True
+                  if tag=='form': self.forms+=1
+          check=Check(); check.feed(source)
+          if not all((check.title,check.h1,check.rtl)) or len(source.encode())<10000:
+              raise SystemExit('TALA_PAGE_VALIDATION=failed')
+          if '<!-- tala-isolated-site-v1 -->' not in source:
+              raise SystemExit('TALA_SCOPE_MARKER=missing')
+          for rel in ('manifest.webmanifest','sw.js','assets/tala-mark.svg'):
+              if not (root/rel).is_file(): raise SystemExit(f'TALA_ASSET_MISSING={rel}')
+          if 'در انتظار اتصال منبع' not in source or 'قیمت زنده هنوز متصل نشده' not in source:
+              raise SystemExit('TALA_UNVERIFIED_PRICE_DISCLOSURE=missing')
+          for p in root.rglob('*'):
+              if p.is_file() and (p.is_symlink() or '..' in p.parts):
+                  raise SystemExit(f'TALA_UNSAFE_PATH={p}')
+          print('TALA_SCOPE=isolated')
+          print('TALA_STATIC_PACKAGE=validated')
+          PY
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          source=Path('public/tala/index.html').read_text(encoding='utf-8')
+          match=re.search(r'<script>([\s\S]*?)</script>',source)
+          if not match: raise SystemExit('TALA_INLINE_SCRIPT=missing')
+          Path('/tmp/tala-inline.js').write_text(match.group(1),encoding='utf-8')
+          PY
+          node --check /tmp/tala-inline.js
+          tar -czf "$RUNNER_TEMP/tala-site.tgz" -C public/tala .
+      - name: Prepare pinned VPS relay and cPanel SSH
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/tala-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF2
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF2
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+      - name: Back up and atomically replace Tala directory only
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/tala-ssh"
+          sha="$GITHUB_SHA"
+          scp -F "$d/config" "$RUNNER_TEMP/tala-site.tgz" "saeit-cpanel:.tala-site-$sha.tgz"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$sha" <<'REMOTE'
+          set -euo pipefail
+          sha="$1"
+          root="$HOME/public_html"
+          target="$root/tala"
+          backup_root="$HOME/.backups/zomorodmelal-tala"
+          backup="$backup_root/$sha"
+          stage="$root/.tala-stage-$sha"
+          test -d "$root" && test ! -L "$root"
+          test ! -e "$backup"
+          test ! -L "$target"
+          install -d -m 700 "$backup_root"
+          mkdir "$backup"
+          if test -d "$target"; then
+            cp -a "$target" "$backup/prior"
+            printf 'yes\n' > "$backup/prior-existed"
+          else
+            printf 'no\n' > "$backup/prior-existed"
+          fi
+          active=0
+          rollback_local() {
+            rc=$?
+            if test "$active" = 1; then
+              rm -rf -- "$target"
+              if test "$(cat "$backup/prior-existed")" = yes; then mv "$backup/prior" "$target"; fi
+              rm -f "$backup/deployed.flag"
+            fi
+            exit "$rc"
+          }
+          trap rollback_local EXIT
+          rm -rf -- "$stage"
+          mkdir "$stage"
+          tar -xzf "$HOME/.tala-site-$sha.tgz" -C "$stage"
+          test -f "$stage/index.html"
+          grep -Fq '<!-- tala-isolated-site-v1 -->' "$stage/index.html"
+          if test -e "$target"; then mv "$target" "$backup/live-before"; fi
+          active=1
+          mv "$stage" "$target"
+          printf 'yes\n' > "$backup/deployed.flag"
+          active=0
+          trap - EXIT
+          rm -f -- "$HOME/.tala-site-$sha.tgz"
+          echo 'TALA_TARGET=/home/zomorod2/public_html/tala'
+          echo 'TALA_ROOT_SITE_FILES=untouched'
+          echo "TALA_BACKUP=$backup"
+          REMOTE
+      - name: Verify public Tala route and PWA assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          base=https://zomorodmelal.ir/tala
+          for path in / /manifest.webmanifest /sw.js /assets/tala-mark.svg; do
+            code="$(curl -sS --max-time 20 -o "$RUNNER_TEMP/tala-response" -w '%{http_code}' -H 'Cache-Control: no-cache' "$base$path?__tala_verify=$GITHUB_SHA")"
+            test "$code" = 200 || { echo "TALA_HTTP_FAILED path=$path code=$code" >&2; exit 1; }
+            case "$path" in
+              /) grep -Fq 'تَلا | طلا، جواهر و گوهرسنگ' "$RUNNER_TEMP/tala-response"; grep -Fq 'قیمت زنده هنوز متصل نشده' "$RUNNER_TEMP/tala-response" ;;
+              /manifest.webmanifest) grep -Fq '"scope":"/tala/"' "$RUNNER_TEMP/tala-response" ;;
+              /sw.js) grep -Fq "const CACHE='tala-shell-v1'" "$RUNNER_TEMP/tala-response" ;;
+              /assets/tala-mark.svg) grep -Fq '<svg' "$RUNNER_TEMP/tala-response" ;;
+            esac
+            echo "TALA_PUBLIC_CHECK=$path passed"
+          done
+      - name: Restore prior Tala directory if verification failed
+        if: failure()
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/tala-ssh"
+          test -f "$d/config" || exit 0
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'ROLLBACK'
+          set -euo pipefail
+          sha="$1"
+          root="$HOME/public_html"
+          target="$root/tala"
+          backup="$HOME/.backups/zomorodmelal-tala/$sha"
+          if test ! -f "$backup/deployed.flag"; then
+            echo 'TALA_ROLLBACK=not_needed'
+            exit 0
+          fi
+          rm -rf -- "$target"
+          if test "$(cat "$backup/prior-existed")" = yes; then
+            mv "$backup/prior" "$target"
+          fi
+          rm -f "$backup/deployed.flag"
+          echo 'TALA_ROLLBACK=complete'
+          ROLLBACK

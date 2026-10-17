@@ -32,6 +32,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "rest_framework",
     "core",
+    "farnaz.apps.FarnazConfig",
     "command_center",
 ]
 
