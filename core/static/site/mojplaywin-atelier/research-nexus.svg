@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="720" viewBox="0 0 1200 720" role="img" aria-labelledby="title description">
+<title id="title">Scientific research and applied analysis</title>
+<desc id="description">Original research-themed visual showing an illuminated atom, experimental graphs, verified data nodes and elegant gold connections on a dark field.</desc>
+<defs>
+ <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#161a23"/><stop offset=".63" stop-color="#080d14"/><stop offset="1" stop-color="#1c1920"/></linearGradient>
+ <radialGradient id="halo"><stop stop-color="#a47b46" stop-opacity=".28"/><stop offset="1" stop-color="#a47b46" stop-opacity="0"/></radialGradient>
+ <linearGradient id="gold" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#fff2c6"/><stop offset=".5" stop-color="#d9ad67"/><stop offset="1" stop-color="#8f6538"/></linearGradient>
+ <linearGradient id="violet" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#d2bff0"/><stop offset="1" stop-color="#6663a6"/></linearGradient>
+</defs>
+<rect width="1200" height="720" fill="url(#bg)"/>
+<ellipse cx="640" cy="340" rx="470" ry="340" fill="url(#halo)"/>
+<g><path d="M80 0 V720" stroke="#d2ac71" stroke-opacity=".06" stroke-width="2"/><path d="M174 0 V720" stroke="#d2ac71" stroke-opacity=".06" stroke-width="2"/><path d="M268 0 V720" stroke="#d2ac71" stroke-opacity=".06" stroke-width="2"/><path d="M362 0 V720" stroke="#d2ac71" stroke-opacity=".06" stroke-width="2"/><path d="M456 0 V720" stroke="#d2ac71" stroke-opacity=".06" stroke-width="2"/><path d="M550 0 V720" stroke="#d2ac71" stroke-opacity=".06" stroke-width="2"/><path d="M644 0 V720" stroke="#d2ac71" stroke-opacity=".06" stroke-width="2"/><path d="M738 0 V720" stroke="#d2ac71" stroke-opacity=".06" stroke-width="2"/><path d="M832 0 V720" stroke="#d2ac71" stroke-opacity=".06" stroke-width="2"/><path d="M926 0 V720" stroke="#d2ac71" stroke-opacity=".06" stroke-width="2"/><path d="M1020 0 V720" stroke="#d2ac71" stroke-opacity=".06" stroke-width="2"/><path d="M1114 0 V720" stroke="#d2ac71" stroke-opacity=".06" stroke-width="2"/><path d="M0 0 H1200" stroke="#d2ac71" stroke-opacity=".06" stroke-width="2"/><path d="M0 103 H1200" stroke="#d2ac71" stroke-opacity=".06" stroke-width="2"/><path d="M0 206 H1200" stroke="#d2ac71" stroke-opacity=".06" stroke-width="2"/><path d="M0 309 H1200" stroke="#d2ac71" stroke-opacity=".06" stroke-width="2"/><path d="M0 412 H1200" stroke="#d2ac71" stroke-opacity=".06" stroke-width="2"/><path d="M0 515 H1200" stroke="#d2ac71" stroke-opacity=".06" stroke-width="2"/><path d="M0 618 H1200" stroke="#d2ac71" stroke-opacity=".06" stroke-width="2"/><path d="M0 721 H1200" stroke="#d2ac71" stroke-opacity=".06" stroke-width="2"/><circle cx="100" cy="65" r="4" fill="#f9db99" opacity="0.18"/><circle cx="231" cy="244" r="2" fill="#f9db99" opacity="0.26"/><circle cx="362" cy="423" r="2" fill="#f9db99" opacity="0.33999999999999997"/><circle cx="493" cy="602" r="2" fill="#f9db99" opacity="0.42"/><circle cx="624" cy="171" r="4" fill="#f9db99" opacity="0.5"/><circle cx="755" cy="350" r="2" fill="#f9db99" opacity="0.18"/><circle cx="886" cy="529" r="2" fill="#f9db99" opacity="0.26"/><circle cx="1017" cy="98" r="2" fill="#f9db99" opacity="0.33999999999999997"/><circle cx="1148" cy="277" r="4" fill="#f9db99" opacity="0.42"/><circle cx="209" cy="456" r="2" fill="#f9db99" opacity="0.5"/><circle cx="340" cy="635" r="2" fill="#f9db99" opacity="0.18"/><circle cx="471" cy="204" r="2" fill="#f9db99" opacity="0.26"/><circle cx="602" cy="383" r="4" fill="#f9db99" opacity="0.33999999999999997"/><circle cx="733" cy="562" r="2" fill="#f9db99" opacity="0.42"/><circle cx="864" cy="131" r="2" fill="#f9db99" opacity="0.5"/><circle cx="995" cy="310" r="2" fill="#f9db99" opacity="0.18"/><circle cx="1126" cy="489" r="4" fill="#f9db99" opacity="0.26"/><circle cx="187" cy="668" r="2" fill="#f9db99" opacity="0.33999999999999997"/><circle cx="318" cy="237" r="2" fill="#f9db99" opacity="0.42"/><circle cx="449" cy="416" r="2" fill="#f9db99" opacity="0.5"/><circle cx="580" cy="595" r="4" fill="#f9db99" opacity="0.18"/><circle cx="711" cy="164" r="2" fill="#f9db99" opacity="0.26"/></g>
+<g transform="translate(610 354)" fill="none">
+ <circle r="178" stroke="url(#gold)" stroke-opacity=".17" stroke-width="2" stroke-dasharray="14 16"/>
+ <circle r="124" stroke="#e9c67d" stroke-opacity=".26" stroke-width="2"/>
+ <ellipse rx="258" ry="91" transform="rotate(-27)" stroke="url(#gold)" stroke-width="7"/>
+ <ellipse rx="258" ry="91" transform="rotate(35)" stroke="#c1b2e4" stroke-width="6" stroke-opacity=".78"/>
+ <ellipse rx="245" ry="94" transform="rotate(91)" stroke="#e9c486" stroke-width="5" stroke-opacity=".79"/>
+ <circle r="37" fill="#d4b178" fill-opacity=".26" stroke="#ffebb9" stroke-width="7"/>
+ <circle r="13" fill="#ffe5a4"/>
+ <circle cx="-167" cy="-131" r="14" fill="#ffe7b3" stroke="#786042" stroke-width="3"/>
+ <circle cx="187" cy="-55" r="15" fill="#bcb2ed" stroke="#544c89" stroke-width="3"/>
+ <circle cx="41" cy="244" r="13" fill="#ffe0a2" stroke="#7e5a39" stroke-width="3"/>
+</g>
+<g transform="translate(70 92)">
+ <rect width="276" height="204" rx="23" fill="#141a24" stroke="#e9c784" stroke-opacity=".6" stroke-width="3"/>
+ <circle cx="38" cy="33" r="7" fill="#d2ba91"/><circle cx="62" cy="33" r="7" fill="#817b99"/>
+ <path d="M35 144 L85 93 L140 117 L187 72 L241 104" fill="none" stroke="url(#gold)" stroke-width="7" stroke-linecap="round"/>
+ <circle cx="140" cy="117" r="8" fill="#fbe5bc"/>
+ <path d="M36 169 H240" stroke="#81796b" stroke-opacity=".6" stroke-width="4"/>
+</g>
+<g transform="translate(847 422)">
+ <rect width="292" height="207" rx="24" fill="#131a22" stroke="#d2b3e8" stroke-opacity=".65" stroke-width="3"/>
+ <rect x="34" y="35" width="135" height="12" rx="6" fill="#e6c390"/>
+ <rect x="34" y="66" width="220" height="8" rx="4" fill="#716f7c"/>
+ <rect x="34" y="93" width="192" height="8" rx="4" fill="#626977"/>
+ <path d="M45 152 l30 18 48 -55 36 22 43 -39 39 22" fill="none" stroke="url(#violet)" stroke-width="6" stroke-linecap="round"/>
+ <circle cx="75" cy="170" r="6" fill="#d8ccfb"/>
+</g>
+<path d="M346 210 C418 230 425 296 445 314 M840 523 C798 488 770 485 735 492" fill="none" stroke="#dcc38e" stroke-width="2" stroke-dasharray="8 10" opacity=".68"/>
+</svg>
