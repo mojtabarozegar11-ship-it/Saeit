@@ -568,6 +568,7 @@ jobs:
                   "import os,traceback",
                   "from pathlib import Path",
                   "os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')",
+                  "from config.wsgi import application",
                   "from django.test import Client",
                   "c=Client(HTTP_HOST='zomorodmelal.ir')",
                   "print('CLIENT_TEST_STARTED=yes')",
