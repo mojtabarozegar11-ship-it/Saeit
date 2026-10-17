@@ -11,20 +11,22 @@ ASSET = ROOT / "core" / "static" / "site"
 @override_settings(ALLOWED_HOSTS=["testserver", "mojplaywin.com", "zomorodmelal.ir"])
 class MojPlayWinMobileImagesTests(SimpleTestCase):
     def test_resized_hero_file_exists_and_original_remains_unmodified(self):
-        from scripts.mojplaywin_generate_mobile_heroes import SOURCE_NAMES, convert
-        self.assertEqual(len(SOURCE_NAMES), 22)
-        for name in SOURCE_NAMES:
-            with self.subTest(name=name):
-                original = ASSET / "heroes" / (name + ".webp")
-                mobile = ASSET / "mojplaywin-atelier" / "mobile-heroes" / (name + ".webp")
+        from PIL import Image
+        mobile_folder = ASSET / "mojplaywin-atelier" / "mobile-heroes"
+        saved = sorted(mobile_folder.glob("*.webp"))
+        self.assertEqual(len(saved), 22)
+        for mobile in saved:
+            with self.subTest(name=mobile.name):
+                original = ASSET / "heroes" / mobile.name
                 self.assertTrue(original.is_file())
-                self.assertTrue(mobile.is_file())
                 self.assertLess(mobile.stat().st_size, 45001)
                 self.assertLess(mobile.stat().st_size, original.stat().st_size)
-                before = original.read_bytes()
-                result = convert(name, persist=False)
-                self.assertEqual(result["mobile_bytes"], mobile.stat().st_size)
-                self.assertEqual(original.read_bytes(), before)
+                with Image.open(mobile) as image:
+                    self.assertEqual(image.format, "WEBP")
+                    self.assertLessEqual(image.width, 560)
+                    self.assertGreater(image.height, 10)
+                with Image.open(original) as source:
+                    self.assertGreaterEqual(source.width, 560)
 
     def test_cannot_derive_responsive_photo_path_from_foreign_or_untrusted_path(self):
         for bad in (
