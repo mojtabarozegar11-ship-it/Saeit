@@ -156,3 +156,14 @@ jobs:
           n=$(head -c 8388608 /dev/zero | timeout 90s ssh -T -F "$d/config" saeit-vps 'wc -c')
           test "$n" -eq 8388608
           echo "RUNNER_TO_VPS_8MIB_PASS elapsed_seconds=$((SECONDS-start))"
+      - name: Confirm direct VPS to cPanel relay via short-lived SSH agent (synthetic only)
+        shell: bash
+        timeout-minutes: 3
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          eval "$(ssh-agent -s)" >/dev/null
+          trap 'ssh-agent -k >/dev/null 2>&1 || true' EXIT
+          ssh-add -t 180 "$d/host.key" 2>/dev/null
+          timeout 130s ssh -A -T -F "$d/config" saeit-vps 'set -e; umask 077; test -S "$SSH_AUTH_SOCK"; d=$(mktemp -d); trap '\''rm -rf -- "$d"'\'' EXIT; ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net > "$d/known" 2>/dev/null; test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '\''{print $2}'\'' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"; n=$(ssh -T -o UserKnownHostsFile="$d/known" -o StrictHostKeyChecking=yes -o BatchMode=yes -o ConnectTimeout=10 -p 1396 zomorod2@zohal.pws-dns.net "head -c 8388608 /dev/zero" | wc -c); test "$n" -eq 8388608; echo "DIRECT_VPS_CPANEL_8MIB_PASS"; if command -v docker >/dev/null 2>&1; then echo "VPS_DOCKER_PRESENT"; else echo "VPS_DOCKER_ABSENT"; fi'
