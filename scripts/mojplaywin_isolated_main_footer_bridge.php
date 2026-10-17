@@ -35,9 +35,13 @@ foreach(array_keys($params) as $param){
  if(!is_string($param)||strlen($param)>90||!preg_match('/^[a-zA-Z0-9_\.\[\]-]+$/',$param))unset($params[$param]);
 }
 $params['__mpw_footer_passthru']='1';
+function fallbackToOriginal(string $path,array $params): never {
+ header('Location: '.$path.'?'.http_build_query($params,'','&',PHP_QUERY_RFC3986),true,307);
+ exit;
+}
 $url='https://mojplaywin.com'.$path.'?'.http_build_query($params,'','&',PHP_QUERY_RFC3986);
 $curl=curl_init($url);
-if($curl===false){http_response_code(503);exit;}
+if($curl===false)fallbackToOriginal($path,$params);
 $headers=['Accept: text/html','Accept-Encoding: identity','Cache-Control: no-cache'];
 $cookie=$_SERVER['HTTP_COOKIE']??'';
 if(is_string($cookie)&&strlen($cookie)<=8192&&$cookie!==''&&!preg_match('/[\r\n]/',$cookie))
@@ -60,7 +64,7 @@ $mime=(string)curl_getinfo($curl,CURLINFO_CONTENT_TYPE);
 $sz=(int)curl_getinfo($curl,CURLINFO_HEADER_SIZE);
 curl_close($curl);
 if(!is_string($response)||$err!==0||$status!==200||$sz<=0||stripos($mime,'text/html')!==0){
- http_response_code(503);header('Content-Type: text/plain; charset=utf-8');exit('Source unavailable');
+ fallbackToOriginal($path,$params);
 }
 $head=substr($response,0,$sz);
 $body=substr($response,$sz);
@@ -71,7 +75,7 @@ if(strlen($body)<500||strlen($body)>1250000||
  preg_match_all('/<\/head\s*>/i',$body)!==1||
  strpos($body,'data-mpw-main-founder-edge')!==false||
  strpos($body,'Mojtaba Roozegar')!==false) {
- http_response_code(503);header('Content-Type: text/plain; charset=utf-8');exit('Unsupported original markup');
+ fallbackToOriginal($path,$params);
 }
 $target_class=($mw_count===1)?'mw-site-footer':'mpw-footer';
 $style='<style id="mpw-main-footer-edge-css">'
@@ -89,7 +93,7 @@ $body=preg_replace('/<\/head\s*>/i',$style.'</head>',$body,1,$countHead);
 $rx='/(<footer\b[^>]*class="'.preg_quote($target_class,'/').'"[^>]*>.*?)<\/footer\s*>/is';
 $body=preg_replace($rx,'$1'.$plaque.'</footer>',$body,1,$countFooter);
 if(!is_string($body)||$countHead!==1||$countFooter!==1){
- http_response_code(503);exit;
+ fallbackToOriginal($path,$params);
 }
 // Forward only security and cookie-refresh headers from the same-site source.
 foreach(preg_split('/\r?\n/',$head) as $line){
