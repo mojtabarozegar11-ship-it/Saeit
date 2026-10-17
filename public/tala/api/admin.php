@@ -9,7 +9,7 @@ header('X-Frame-Options: DENY');
 header('Referrer-Policy: no-referrer');
 
 const TALA_BOOTSTRAP_TOKEN_SHA256 = '2546ea174f615e02a3b8e3159503b6ea77d7c322e90ffa27f1bb8aae5000c90d';
-const TALA_DB_FILE = __DIR__ . '/.private/tala.sqlite3';
+const TALA_DB_FILE = __DIR__ . '/../../../.tala-secure/tala.sqlite3';
 
 function respond(array $payload, int $status = 200): void {
     http_response_code($status);
@@ -20,7 +20,7 @@ function fail(int $status, string $message): void {
     respond(['ok' => false, 'error' => $message], $status);
 }
 function db(): PDO {
-    if (!is_dir(__DIR__ . '/.private') || !is_writable(__DIR__ . '/.private')) {
+    if (!is_dir(dirname(TALA_DB_FILE)) || is_link(dirname(TALA_DB_FILE)) || !is_writable(dirname(TALA_DB_FILE)) || is_link(TALA_DB_FILE)) {
         fail(503, 'فضای امن ثبت اطلاعات آماده نیست.');
     }
     umask(0077);
@@ -174,7 +174,7 @@ function entry_rows(PDO $pdo, int $limit = 200): array {
     return $q->fetchAll();
 }
 
-if (is_file(__DIR__ . '/.tala-maintenance')) fail(503, 'میزکار برای چند لحظه در حال به‌روزرسانی است؛ دوباره تلاش کنید.');
+if (is_file(__DIR__ . '/.tala-maintenance') && !(($_GET['action'] ?? '') === 'status' && ($_SERVER['REQUEST_METHOD'] ?? '') === 'GET')) fail(503, 'میزکار برای چند لحظه در حال به‌روزرسانی است؛ دوباره تلاش کنید.');
 $action = (string)($_GET['action'] ?? '');
 $method = (string)($_SERVER['REQUEST_METHOD'] ?? 'GET');
 

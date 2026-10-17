@@ -5,12 +5,14 @@ on:
       - "public/tala/**"
       - ".github/workflows/zomorod-tala-validate.yml"
       - ".github/workflows/zomorod-tala-static-deploy.yml"
+      - ".github/scripts/tala_storage.py"
   push:
     branches: [main]
     paths:
       - "public/tala/**"
       - ".github/workflows/zomorod-tala-validate.yml"
       - ".github/workflows/zomorod-tala-static-deploy.yml"
+      - ".github/scripts/tala_storage.py"
 permissions:
   contents: read
 jobs:
@@ -66,9 +68,12 @@ jobs:
           Path('/tmp/tala-admin.js').write_text(match.group(1),encoding='utf-8')
           if '/tala/admin/' not in source: raise SystemExit('TALA_ADMIN_LINK=missing')
           backend=(root/'api/admin.php').read_text(encoding='utf-8')
-          for item in ('password_hash(', 'hash_equals(', 'HTTP_X_TALA_REQUEST', 'audit_log', "/.private/tala.sqlite3", 'BEGIN IMMEDIATE'):
+          for item in ('password_hash(', 'hash_equals(', 'HTTP_X_TALA_REQUEST', 'audit_log', "/../../../.tala-secure/tala.sqlite3", 'BEGIN IMMEDIATE'):
               if item not in backend: raise SystemExit('TALA_BACKEND_CONTROL_MISSING='+item)
           if 'TALA_BOOTSTRAP_TOKEN_SHA256' not in backend: raise SystemExit('TALA_BOOTSTRAP_GATE=missing')
+          health=(root/'api/health.php').read_text(encoding='utf-8')
+          if '/../../../.tala-secure' not in health: raise SystemExit('TALA_HEALTH_EXTERNAL_DB_CHECK=missing')
+          if "/.private/tala.sqlite3" in backend: raise SystemExit('TALA_LEGACY_PUBLIC_DB_PATH=unsafe')
           for guard in ("فقط مدیر اصلی می‌تواند سند اصلاحی ثبت کند.", "فقط مدیر اصلی به خروجی کامل حسابداری دسترسی دارد."):
               if guard not in backend: raise SystemExit('TALA_ACCOUNTING_ROLE_GUARD=missing')
           admin_page=(root/'admin/index.html').read_text(encoding='utf-8')
@@ -80,3 +85,4 @@ jobs:
           node --check /tmp/tala-inline.js
           node --check /tmp/tala-admin.js
           node --check public/tala/sw.js
+          python3 .github/scripts/tala_storage.py selftest
