@@ -1,0 +1,48 @@
+name: Moj Play Win market cross-domain canonical ownership check
+on:
+  push:
+    branches: ["audit/mojplaywin-backup-transport-20261017"]
+    paths: [".github/workflows/mojplaywin-market-canonical-ownership.yml"]
+permissions:
+  contents: read
+jobs:
+  read-public-market:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Identify whether non-sitemap market page belongs to Moj Play Win or Zomorod Melal
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import urllib.request,urllib.error,json,re
+          from xml.etree import ElementTree
+          from urllib.parse import urlsplit
+          base="https://mojplaywin.com"
+          def fetch(path):
+              req=urllib.request.Request(base+path,headers={"User-Agent":"MojPlayWin-market-brand-origin-readonly"})
+              try:
+                  with urllib.request.urlopen(req,timeout=18) as r:
+                      return r.status,r.read(300000).decode("utf-8",errors="replace"),r.headers.get("Content-Type","")
+              except urllib.error.HTTPError as exc:
+                  return exc.code,exc.read(3000).decode("utf-8",errors="replace"),""
+          _,raw,_=fetch("/sitemap.xml")
+          urls=[x.text for x in ElementTree.fromstring(raw).iter() if x.tag.endswith("loc")]
+          sitemap_paths={urlsplit(v).path for v in urls if v and urlsplit(v).hostname=="mojplaywin.com"}
+          out=[]
+          for path in ("/market/","/store/","/company/","/knowledge/","/industry/","/economy/"):
+              status,html,typ=fetch(path)
+              title=(re.findall(r'<title[^>]*>(.*?)</title>',html,re.S|re.I)or[""])[0][:125]
+              h1=(re.findall(r'<h1[^>]*>(.*?)</h1>',html,re.S|re.I)or[""])[0]
+              h1=re.sub(r'<[^>]*>',"",h1)[:100]
+              canon=re.findall(r'<link[^>]*rel=["\']canonical["\'][^>]*>',html,re.I)
+              is_zomorod="zomorodmelal.ir" in html.lower()
+              # Counts are not page content or personal information.
+              out.append({"path":path,"status":status,"title":title,"h1":h1,
+               "sitemap_included":path in sitemap_paths,
+               "canonical_tags":canon[:2],
+               "mojplaywin_mentions":len(re.findall(r'mojplaywin|moj play win',html,re.I)),
+               "zomorod_melal_mentions":len(re.findall(r'zomorodmelal|زمرد ملل',html,re.I)),
+               "noindex":"noindex" in html.lower(),"html_bytes":len(html)})
+          print(json.dumps({"classification":"MOJ_PLAY_WIN_MARKET_CANONICAL_OWNERSHIP",
+                             "public_page_inventory":out,"production_changed":False},ensure_ascii=False,sort_keys=True))
+          PY
