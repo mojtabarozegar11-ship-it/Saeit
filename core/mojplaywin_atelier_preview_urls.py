@@ -10,6 +10,7 @@ from django.shortcuts import render
 from django.urls import path
 from config.urls import urlpatterns as shared_urlpatterns
 from core.mojplaywin_web_views import web_engineering
+from core.services_views import services as shared_services
 
 BRAND_HOSTS = {"mojplaywin.com", "www.mojplaywin.com"}
 BRAND_PREVIEW_ROUTES = {
@@ -58,7 +59,16 @@ def preview_page(request, page_key):
     return render(request, "brands/mojplaywin/page.html", {"page": data, "page_key": page_key})
 
 
-urlpatterns = list(shared_urlpatterns) + [
+def main_services_preview(request):
+    """Future main-host services destination; other brands keep original views."""
+    if request.get_host().split(":")[0].lower() in BRAND_HOSTS:
+        return web_engineering(request)
+    return shared_services(request)
+
+
+urlpatterns = [
+    path("services/", main_services_preview, name="mojplaywin_preview_services"),
+] + list(shared_urlpatterns) + [
     path("web-engineering/", web_engineering, name="mojplaywin_preview_web_engineering"),
     path(f"{page_key}/", preview_page, {"page_key": page_key}, name=f"mojplaywin_preview_{page_key}")
     for page_key in BRAND_PREVIEW_ROUTES
