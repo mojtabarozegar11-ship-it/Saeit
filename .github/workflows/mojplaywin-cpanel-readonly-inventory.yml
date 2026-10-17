@@ -10,6 +10,8 @@ on:
       - "tests/test_mojplaywin_rewrite_backup_readonly.py"
       - "scripts/mojplaywin_cpanel_domains_backups_readonly.py"
       - "tests/test_mojplaywin_cpanel_domains_backups_readonly.py"
+      - "scripts/mojplaywin_backup_restore_readiness_readonly.py"
+      - "tests/test_mojplaywin_backup_restore_readiness_readonly.py"
   workflow_dispatch:
 permissions:
   contents: read
@@ -104,3 +106,12 @@ jobs:
           d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
           timeout 35s ssh -T -F "$d/config" saeit-cpanel 'uapi --output=json DomainInfo list_domains' | python3 scripts/mojplaywin_cpanel_domains_backups_readonly.py --kind domains
           timeout 35s ssh -T -F "$d/config" saeit-cpanel 'uapi --output=json Backup list_backups' | python3 scripts/mojplaywin_cpanel_domains_backups_readonly.py --kind backups
+
+      - name: Inventory backup prerequisites from file metadata only (NO backup created)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p 'test_mojplaywin_backup_restore_readiness_readonly.py'
+          python3 -m py_compile scripts/mojplaywin_backup_restore_readiness_readonly.py
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 35s ssh -T -F "$d/config" saeit-cpanel python3 - < scripts/mojplaywin_backup_restore_readiness_readonly.py
