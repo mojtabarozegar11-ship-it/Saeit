@@ -1,22 +1,22 @@
 # زمرد ملل — بسته آماده‌سازی انتشار ERP جامع
 
 **مرحله:** آماده‌سازی؛ بدون ادغام، انتشار، مهاجرت یا تغییر سرویس زنده.  
-**دامنه مالکیت:** فقط هسته شرکت زمرد ملل در \`zomorodmelal.ir/company/office/\` و \`.../ecosystem/\`.  
+**دامنه مالکیت:** فقط هسته شرکت زمرد ملل در `zomorodmelal.ir/company/office/` و `.../ecosystem/`.  
 **دامنه حفاظت:** همه صفحات عمومی و بدون استثنا همه زیرسایت‌های مستقل از جمله
-\`/mohammad/\`، \`/ghanadi/\`، \`/amozeshgah/\` و هر زیرسایت ثبت‌نشده.
+`/mohammad/`، `/ghanadi/`، `/amozeshgah/` و هر زیرسایت ثبت‌نشده.
 
 ## زنجیره نسخه‌ها و منشأ محتوا
 
-1. \`main\` — سایت‌های موجود؛ **دست‌نخورده**.
+1. `main` — سایت‌های موجود؛ **دست‌نخورده**.
 2. [PR #402](https://github.com/mojtabarozegar11-ship-it/Saeit/pull/402) —
-   هسته خصوصی \`enterprise_portal\`: لاگین، حسابداری، اسناد مالی، انبار،
+   هسته خصوصی `enterprise_portal`: لاگین، حسابداری، اسناد مالی، انبار،
    مکاتبات، وظایف و نقش‌ها. هنوز draft است.
 3. [PR #408](https://github.com/mojtabarozegar11-ship-it/Saeit/pull/408) —
-   \`ecosystem_hub\` بر مبنای شاخه PR #402: واحدهای شرکت، تولید، منابع،
+   `ecosystem_hub` بر مبنای شاخه PR #402: واحدهای شرکت، تولید، منابع،
    ریسک، گزارش مدیریتی، دستیاری‌ها، MRP، سناریوهای بهای ساخت و گزارش‌های
    درآمد/هزینه. هنوز draft است.
 4. PR آماده‌سازی — فقط بازبینی، دروازه‌های انتشار و مستندات؛ این شاخه به
-   PR #408 وابسته است و هیچ‌گاه مستقل از آن به \`main\` منتقل نمی‌شود.
+   PR #408 وابسته است و هیچ‌گاه مستقل از آن به `main` منتقل نمی‌شود.
 
 **ادغام نسخه‌ها فقط پس از اثبات سلامت همه مراحل و بازبینی تغییرات مجاز است.**
 
@@ -25,18 +25,18 @@
 - آزمایش‌های کد هر دو سامانه ERP و اکوسیستم در CI اخیر موفق‌اند؛
   **۱۱۳ آزمون موفق** در اجرای GitHub Actions #39023707952.
   این فقط اعتبارسنجیِ محیط ایزوله است، نه اثبات وضعیت سرور زنده.
-- در بررسی read-only مستقیم ۱۷ اکتبر ۲۰۲۶، صفحه اصلی \`/\` کد 200 داشت؛
-  \`/admin/login/\`، \`/api/health/\` و \`/company/office/login/\`
+- در بررسی read-only مستقیم ۱۷ اکتبر ۲۰۲۶، صفحه اصلی `/` کد 200 داشت؛
+  `/admin/login/`، `/api/health/` و `/company/office/login/`
   همگی کد 503 داشتند.
-- ابزار جدید \`scripts/zomorod_erp_preflight.py\` این مسیرها را **فقط
+- ابزار جدید `scripts/zomorod_erp_preflight.py` این مسیرها را **فقط
   با درخواست GET عمومی بدون نام کاربری یا رمز** بررسی می‌کند؛ هیچ عملی
   روی سرور یا دیتابیس انجام نمی‌دهد.
-- \`docs/zomorod-erp-release-checklist.json\` دارای ۹ شرط مجزاست؛
-  تمام مدارک تأییدنشده تا زمان ارائه شواهد معتبر در حالت \`pending\`
-  هستند. نتیجه \`BLOCKED\` به معنی «سیستم خراب نشده» نیست؛ یعنی **مجوز
+- `docs/zomorod-erp-release-checklist.json` دارای ۹ شرط مجزاست؛
+  تمام مدارک تأییدنشده تا زمان ارائه شواهد معتبر در حالت `pending`
+  هستند. نتیجه `BLOCKED` به معنی «سیستم خراب نشده» نیست؛ یعنی **مجوز
   انتشار وجود ندارد**.
 - همه ۴ فایل مهاجرت افزایشیِ هسته خصوصی و اکوسیستم موجودند، اما وجود
-  آن‌ها مجوز \`migrate\` روی داده واقعی شرکت نیست.
+  آن‌ها مجوز `migrate` روی داده واقعی شرکت نیست.
 
 ## مرحله اول — ریشه‌یابی 503 بدون تغییر سایت
 
@@ -44,9 +44,9 @@
 
 - اعتبار PHP، Django، LiteSpeed/Passenger/LSAPI و پیکربندی CloudLinux
   Python Selector را فقط روی **اپلیکیشن اصلی** بررسی کند. هنگام تشخیص،
-  استقرار مجدد \`passenger_wsgi.py\`، دست‌کاری کل سرویس و تعویض Python
+  استقرار مجدد `passenger_wsgi.py`، دست‌کاری کل سرویس و تعویض Python
   main با staging ممنوع است.
-- مسیرهای \`/admin/login/\` و \`/api/health/\` باید از 503 به 200 برسند؛
+- مسیرهای `/admin/login/` و `/api/health/` باید از 503 به 200 برسند؛
   وضعیت واقعی و تاریخچه HTTP پیش/پس از اصلاح به‌صورت شاهد ثبت شود.
 - اگر دسترسی root نداریم، عملیات اصلاح ماژول‌های LiteSpeed یا تنظیمات
   سروری نباید از دسترسی محدود cPanel شبیه‌سازی یا با انتشار قالب دور زده شود.
@@ -66,24 +66,24 @@
 4. برای هر URL اصلی و تمام زیرسایت‌ها فایل کنترل شامل status، صفحه،
    محتوا، تصویر، لینک، فرم و مالکیت بسازید.
 5. تنها پس از آزمون مستقل واقعی RESTORE و آزمون بازگشت، شرط
-   \`verified_restorable_backup\` را همراه با شناسه شواهد تأیید کنید.
+   `verified_restorable_backup` را همراه با شناسه شواهد تأیید کنید.
    صرف تهیه ZIP یا دیدن فایل بکاپ کافی نیست.
 
 ## مرحله سوم — پایگاه‌داده ایزوله و صحت اطلاعات مالی
 
 روی دیتابیس کپی آزمایشی، نه اصلی:
 
-\`\`\`bash
+```bash
 python manage.py check --deploy
 python manage.py makemigrations --check --dry-run
 python manage.py migrate --plan
 python manage.py test enterprise_portal ecosystem_hub --verbosity 2
-\`\`\`
+```
 
-پس از بازبینی طرح مهاجرت، فقط در **staging** دستور \`migrate\`
+پس از بازبینی طرح مهاجرت، فقط در **staging** دستور `migrate`
 اجرا شود. پیش و پس از آن جداول، سطرها، کلیدهای یکتا، روابط،
 اسناد قطعی و سوابق حسابرسی کنترل شوند. هیچ جدول قدیمی حذف نشود و
-هیچ \`flush\`، پاک‌سازی DB یا \`reset\` استفاده نشود.
+هیچ `flush`، پاک‌سازی DB یا `reset` استفاده نشود.
 
 کنترل حقوقی/حسابداری: سال مالی، تفکیک شخصیت حقوقی، افتتاحیه، کدینگ
 واحدها، ارز، دوره بستن حساب‌ها، مالیات و استاندارد ثبت سند، اسناد
@@ -95,8 +95,8 @@ python manage.py test enterprise_portal ecosystem_hub --verbosity 2
 
 - دامنه‌های معتبر و Host Header، گواهی TLS و سیاست reverse-proxy با
   مشخص‌بودن منبع قابل اعتماد تأیید شوند.
-- \`DEBUG=False\`؛ \`SESSION_COOKIE_SECURE=True\` و
-  \`CSRF_COOKIE_SECURE=True\`؛ \`SESSION_COOKIE_HTTPONLY=True\` و
+- `DEBUG=False`؛ `SESSION_COOKIE_SECURE=True` و
+  `CSRF_COOKIE_SECURE=True`؛ `SESSION_COOKIE_HTTPONLY=True` و
   ممنوعیت کش صفحات مالی بررسی شوند.
 - MFA برای مدیران، محدودیت حملات در لبه (علاوه بر قفل موقت داخل
   اپلیکیشن)، ورود/خروج امن، انقضای نشست، هشدار امنیتی و نسخه
@@ -107,7 +107,7 @@ python manage.py test enterprise_portal ecosystem_hub --verbosity 2
   کارخانه فقط داده همان واحد؛ دبیرخانه و نامه محرمانه جدا؛
   اپراتور دستیار فاقد مجوز پرداخت/حذف/انتشار.
 - تأیید گزارش دستیار **فقط تصمیم ثبت‌شده** است، نه اجرای پرداخت یا
-  عملیات واقعی. زمان‌بند \`ECOSYSTEM_SCHEDULED_ANALYSIS_ENABLED\`
+  عملیات واقعی. زمان‌بند `ECOSYSTEM_SCHEDULED_ANALYSIS_ENABLED`
   تا تکمیل ایمنی خاموش بماند.
 
 ## مرحله پنجم — سلامت و پذیرش
@@ -115,7 +115,7 @@ python manage.py test enterprise_portal ecosystem_hub --verbosity 2
 قبل و بعد از استقرار کنترل‌شده، URLهای زیر و همه URLهای موجود در
 نقشه سایت بررسی شوند:
 
-\`\`\`text
+```text
 https://zomorodmelal.ir/
 https://zomorodmelal.ir/about/
 https://zomorodmelal.ir/company/
@@ -125,7 +125,7 @@ https://zomorodmelal.ir/api/health/
 https://zomorodmelal.ir/company/office/login/
 https://zomorodmelal.ir/company/office/
 https://zomorodmelal.ir/company/office/ecosystem/
-\`\`\`
+```
 
 ورود به بخش خصوصی باید 200 برای صفحه ورود و redirect کنترل‌شده
 برای مهمان در داشبورد داشته باشد؛ **نباید** امکان دیدن اطلاعات داخلی
@@ -140,16 +140,16 @@ https://zomorodmelal.ir/company/office/ecosystem/
 ## ابزار گزارش‌گیری بدون اثر جانبی
 
 در GitHub Actions:
-\`Zomorod ERP deployment preparation (read only)\`
+`Zomorod ERP deployment preparation (read only)`
 
-\`\`\`bash
+```bash
 python scripts/zomorod_erp_preflight.py --offline \
     --output readiness-reports/offline.json
 python scripts/zomorod_erp_preflight.py --live \
     --output readiness-reports/live.json
-\`\`\`
+```
 
-کد خروج \`2\` یعنی **BLOCKED**؛ نه مجوز دورزدن گیت یا خطای خودکار
+کد خروج `2` یعنی **BLOCKED**؛ نه مجوز دورزدن گیت یا خطای خودکار
 قالب. خروجی JSON شناسه حساب، متن پاسخ صفحات یا اسرار سرور را ذخیره
 نمی‌کند و صرفاً status و موانع را نگه می‌دارد.
 
