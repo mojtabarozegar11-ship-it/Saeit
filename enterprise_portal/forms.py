@@ -2,7 +2,7 @@ from django import forms
 from django.contrib.auth.forms import AuthenticationForm
 from django.core.exceptions import ValidationError
 from django.contrib.auth import get_user_model
-from .models import WorkTask, OfficeLetter
+from .models import WorkTask, OfficeLetter, BusinessUnit
 from .security import login_is_blocked, register_failed_login, clear_login_failures
 
 
@@ -83,7 +83,7 @@ class TaskForm(forms.ModelForm):
         self.user = user
         self.fields["assigned_to"].queryset = colleagues(user)
         if not (user and user.is_authenticated and user.is_superuser):
-            self.fields["unit"].queryset = user_units(user) if user else WorkTask.objects.none()
+            self.fields["unit"].queryset = user_units(user) if user else BusinessUnit.objects.none()
             self.fields["unit"].required = True
 
     def clean(self):
