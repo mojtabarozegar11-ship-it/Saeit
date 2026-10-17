@@ -21,7 +21,7 @@ class MojPlayWinPreviewIsolationTests(SimpleTestCase):
                 self.assertIn(title, html)
                 self.assertIn(marker, html)
                 self.assertIn('href="https://mojplaywin.com' + path + '"', html)
-                self.assertIn('class="mpw-atelier-v4"', html)
+                self.assertIn('class="mpw-atelier-v4 mp5-inner-page"', html)
 
     def test_legacy_preview_pages_never_render_on_zomorod_host(self):
         for path in ("/ai/", "/blockchain/", "/support/"):
