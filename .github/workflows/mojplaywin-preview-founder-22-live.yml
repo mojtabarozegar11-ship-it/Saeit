@@ -1,0 +1,141 @@
+name: MojPlayWin preview-only 22-page founder footer publication
+on:
+  push:
+    branches: ["audit/mojplaywin-backup-transport-20261017"]
+    paths: [".github/workflows/mojplaywin-preview-founder-22-live.yml"]
+permissions:
+  contents: read
+concurrency:
+  group: mojplaywin-preview-only-founder-20261018
+  cancel-in-progress: false
+jobs:
+  main-site-preview-only:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate narrow preview-only script and verify original public pages
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mojplaywin_preview_founder_isolated.py
+          for path in / /store/ /saman/ /farnaz/ /studio.Roham/ /mojtaba.roozegar/ /taniya/ /picm/login/; do
+            status="$(curl -sSL -o /dev/null -w '%{http_code}' --max-time 15 "https://mojplaywin.com$path")"
+            test "$status" = 200 || { echo "NO_GO_SITE_UNHEALTHY path=$path"; exit 1; }
+          done
+          code="$(curl -sSL -o /dev/null -w '%{http_code}' --max-time 15 'https://mojplaywin.com/design-preview-20261017/index.html')"
+          test "$code" = 200
+          echo "PREVIEW_ALREADY_PUBLIC=true"
+          echo "ROOT_AND_SEVEN_PROTECTED_STATUS_OK=true"
+      - name: Establish host-pinned secure read-only relay before preview-only writes
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-preview-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            BatchMode yes
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            ConnectTimeout 10
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Add exactly one golden founder footer to each existing preview page
+        id: deploy
+        shell: bash
+        timeout-minutes: 3
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-preview-ssh"
+          encoded="$(base64 -w0 scripts/mojplaywin_preview_founder_isolated.py)"
+          loader='import base64,sys;src=base64.b64decode(sys.argv[1]);sys.argv=[sys.argv[0]]+sys.argv[2:];exec(compile(src,"<scoped-preview-footer-only>","exec"))'
+          timeout 100s ssh -T -F "$d/config" saeit-cpanel "python3 -c '$loader' '$encoded' deploy '$GITHUB_RUN_ID'"
+      - name: Verify public preview signature, exact 22 private HTML files, and protected live routes
+        id: smoke
+        shell: bash
+        timeout-minutes: 4
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-preview-ssh"
+          python3 - <<'PY'
+          import re,urllib.request
+          for path in ("/design-preview-20261017/index.html","/design-preview-20261017/store.html"):
+              req=urllib.request.Request("https://mojplaywin.com"+path,headers={"Cache-Control":"no-cache","User-Agent":"MPW-preview-founder-validation"})
+              with urllib.request.urlopen(req,timeout=25) as resp:
+                  assert resp.status == 200
+                  html=resp.read(900000).decode("utf-8")
+              m=re.search(r'<footer\b[^>]*>(.*?)</footer>',html,re.I|re.S)
+              assert m and m.group(1).count("Mojtaba Roozegar")==1 and "data-mpw-preview-founder-20261018" in m.group(1)
+              assert "noindex" in html.lower()
+              print("PREVIEW_ONLY_PUBLIC_FOOTER_OK "+path)
+          PY
+          timeout 50s ssh -T -F "$d/config" saeit-cpanel 'python3 -' <<'PY'
+          from pathlib import Path
+          import re
+          p=Path("/home/zomorod2/mojplaywin.com/design-preview-20261017")
+          pages=sorted(x for x in p.iterdir() if x.name.endswith(".html"))
+          assert len(pages)==22
+          for path in pages:
+              txt=path.read_text("utf-8")
+              m=re.search(r'<footer\b[^>]*>(.*?)</footer>',txt,re.S|re.I)
+              assert m and m.group(1).count("Mojtaba Roozegar")==1
+              assert txt.count("data-mpw-preview-founder-20261018")==1
+          print("ALL_22_PREVIEW_FOOTERS_PUBLISHED=true")
+          print("ORIGINAL_MAIN_SITE_CHANGED=false")
+          print("PROTECTED_CHILD_SITE_CHANGED=false")
+          print("PASSENGER_RESTART=false")
+          PY
+          for path in / /store/ /saman/ /farnaz/ /studio.Roham/ /mojtaba.roozegar/ /taniya/ /picm/login/; do
+            status="$(curl -sSL -o /dev/null -w '%{http_code}' --max-time 15 "https://mojplaywin.com$path")"
+            test "$status" = 200 || { echo "NO_GO_POST_STATUS path=$path"; exit 1; }
+          done
+          echo "PUBLIC_PREVIEW_AND_PROTECTED_ROUTES_HEALTHY=true"
+      - name: Roll back only isolated preview files on error
+        if: failure()
+        shell: bash
+        timeout-minutes: 2
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-preview-ssh"
+          if test -f "$d/config"; then
+            code="$(base64 -w0 scripts/mojplaywin_preview_founder_isolated.py)"
+            loader='import base64,sys;src=base64.b64decode(sys.argv[1]);sys.argv=[sys.argv[0]]+sys.argv[2:];exec(compile(src,"<scoped-preview-footer-only>","exec"))'
+            if timeout 15s ssh -T -F "$d/config" saeit-cpanel "test -f '/home/zomorod2/.mpw-preview-founder-backups/run-$GITHUB_RUN_ID/manifest.json'"; then
+              timeout 80s ssh -T -F "$d/config" saeit-cpanel "python3 -c '$loader' '$code' rollback '$GITHUB_RUN_ID'"
+            fi
+          fi
+      - name: Remove temporary credentials from GitHub runner
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/mpw-preview-ssh"
