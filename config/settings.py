@@ -96,6 +96,12 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 APP_VERSION = env("APP_VERSION", default="0.1.0")
 PAYMENT_WEBHOOK_SECRET = env("PAYMENT_WEBHOOK_SECRET", default="")
 
+# Global kill-switch: no private agent jobs execute until explicitly enabled
+# after live security, database backup, deployment and cron health checks.
+ECOSYSTEM_SCHEDULED_ANALYSIS_ENABLED = env.bool(
+    "ECOSYSTEM_SCHEDULED_ANALYSIS_ENABLED", default=False,
+)
+
 # Company international trade mailbox. Credentials remain in environment/.env only.
 COMPANY_TRADE_EMAIL = env("COMPANY_TRADE_EMAIL", default="")
 TRADE_EMAIL_ENABLED = env.bool("TRADE_EMAIL_ENABLED", default=False)
