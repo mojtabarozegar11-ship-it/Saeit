@@ -1,6 +1,6 @@
 """Regression gates for restoring historical Zomorod Melal corporate copy.
 
-These tests are local/read-only; they do not prove the exact 2026-10-15 01:00
+These tests are local/read-only; they do not prove the exact 2026-10-14 01:00
 hosting backup matches, or that public routes/images and Lighthouse are healthy.
 Those checks remain mandatory before any production publishing.
 """
@@ -57,6 +57,23 @@ def legacy_company_data():
                 return candidate
     raise AssertionError("Original static corporate data not found in core/views.py")
 
+def legacy_about_data():
+    tree = ast.parse((ROOT / "core" / "views.py").read_text(encoding="utf-8"))
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Dict):
+            continue
+        for key, value in zip(node.keys, node.values):
+            if not isinstance(key, ast.Constant) or key.value != "about":
+                continue
+            try:
+                candidate = ast.literal_eval(value)
+            except (ValueError, TypeError, SyntaxError, RecursionError):
+                continue
+            if isinstance(candidate, dict) and "items" in candidate and "cta_title" in candidate:
+                return candidate
+    raise AssertionError("Original About archive not found in core/views.py")
+
+
 class CorporateContentPreservationTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -68,6 +85,7 @@ class CorporateContentPreservationTests(unittest.TestCase):
             parser.feed(document)
             cls.parsed[name] = parser
         cls.legacy = legacy_company_data()
+        cls.archived_about = legacy_about_data()
 
     def test_safe_document_structure_and_mobile_rtl(self):
         for name, parser in self.parsed.items():
@@ -183,6 +201,38 @@ class CorporateContentPreservationTests(unittest.TestCase):
                 if record.get("role"):
                     with self.subTest(section=key, role=title):
                         self.assertIn(record["role"], rendered)
+
+    def test_complete_historical_about_portal_copied(self):
+        original = self.archived_about
+        about = unescape(self.raw["about"])
+        for key in ("lead", "heading", "body", "cta_title", "cta_text"):
+            with self.subTest(section="about", field=key):
+                self.assertIn(original[key], about)
+        for item in original["items"]:
+            with self.subTest(section="about", record=item["title"]):
+                self.assertIn(item["title"], about)
+                self.assertIn(item["text"], about)
+        for original_link in original["links"]:
+            with self.subTest(section="about", url=original_link["url"]):
+                self.assertIn(original_link["url"], self.parsed["about"].links)
+        self.assertIn("historic-executive-duties", self.parsed["about"].ids)
+        for archived_manager_duty in (
+            "راهبری و هدایت ساختار سازمانی و مسیرهای توسعه شرکت.",
+            "تکیه بر مطالعه، شواهد، تحلیل فنی و اقتصادی و کنترل ریسک.",
+            "توجه به انطباق قانونی، مستندسازی، کنترل کیفیت و تصمیم‌گیری انسانی.",
+        ):
+            self.assertIn(archived_manager_duty, about)
+
+    def test_historical_company_context_status_and_cta(self):
+        page = unescape(self.raw["company"])
+        for key in ("lead", "heading", "cta_title", "cta_text"):
+            with self.subTest(field=key):
+                self.assertIn(self.legacy[key], page)
+        for planned_chain in self.legacy.get("future_chains", []):
+            with self.subTest(plan=planned_chain["title"]):
+                self.assertIn(planned_chain["title"], page)
+                self.assertIn(planned_chain["status"], page)
+        self.assertIn("historic-company-collaboration", self.parsed["company"].ids)
 
     def test_about_company_profile_and_active_anchor(self):
         about = unescape(self.raw["about"])
