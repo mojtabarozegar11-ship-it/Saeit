@@ -46,7 +46,9 @@
       </div></article>
       {% endfor %}
     </div>
-    {% if section_note %}<p class="mw-note">{{ section_note }}</p>{% endif %}
+    {% if active_venture == "currency-crypto" %}
+    <p class="mw-note">Educational information only. No cryptocurrency exchange, custody, brokerage or investment advice is provided here.</p>
+    {% endif %}
     <div class="mw-links"><a href="/research/">Research</a><a href="/knowledge/">Learning</a>
       <a href="/studio/">Games & Studio</a><a href="/store/">Digital Store</a></div>
   </section>
