@@ -66,3 +66,49 @@ jobs:
           if failures:
               raise SystemExit(f"Protected public route NO-GO count={len(failures)}")
           PY
+
+      - name: Read-only baseline for 17 current main-site category and venture routes
+        run: |
+          python3 - <<'PY'
+          import urllib.error
+          import urllib.request
+          from scripts.mojplaywin_public_subsite_smoke_baseline import StrictRedirect, UnsafeRedirect
+
+          # Fixed exact public routes only; no discovery, payment, account, or form URLs.
+          pages = (
+              "/agriculture/", "/industry/", "/research/", "/knowledge/",
+              "/economy/", "/studio/", "/market/", "/agents/", "/company/",
+              "/ventures/agriculture/", "/ventures/cafe-restaurant/",
+              "/ventures/fuel-station/", "/ventures/jewelry-gold/",
+              "/ventures/carpets/", "/ventures/currency-crypto/",
+              "/ventures/ecommerce/", "/ventures/hospitality/",
+          )
+          assert len(set(pages)) == 17
+          opener = urllib.request.build_opener(StrictRedirect())
+          failures = []
+          for path in pages:
+              request = urllib.request.Request(
+                  "https://mojplaywin.com" + path,
+                  headers={"User-Agent": "MojPlayWin-ReadOnly-PageHealth/1.0", "Accept": "text/html",
+                           "Cache-Control": "no-cache"},
+                  method="GET",
+              )
+              status = None
+              try:
+                  with opener.open(request, timeout=10) as response:
+                      status = response.status
+                      response.read(256)
+              except urllib.error.HTTPError as exc:
+                  status = exc.code
+              except (urllib.error.URLError, OSError, TimeoutError, ValueError, UnsafeRedirect):
+                  pass
+              print(f"PUBLIC_MAIN_PAGE path={path} status={status} state={'OK' if status == 200 else 'NO_GO'}")
+              if status != 200:
+                  failures.append(path)
+          print("CONTENT_PARITY_VERIFIED=false")
+          print("CHECKOUT_TESTED=false")
+          print("UNKNOWN_CHILD_SITES_VERIFIED=false")
+          print("PRODUCTION_RELEASE_AUTHORIZED=false")
+          if failures:
+              raise SystemExit(f"NO-GO: {len(failures)} of 17 main-site routes failed anonymous GET")
+          PY
