@@ -56,10 +56,10 @@ class MojPlayWinOrbitalExperienceTests(TestCase):
         for path in ("orbits.css", "orbits.js", "global-technology-orbit.svg"):
             self.assertTrue((STATIC / path).is_file())
 
-    def test_web_engineering_uses_two_distinct_original_nonrepeating_lightweight_illustrations(self):
+    def test_key_orbits_use_distinct_original_lightweight_illustrations(self):
         from xml.etree import ElementTree
         markup = (PAGES / "orbital_experience.html").read_text(encoding="utf-8")
-        names = ("web-engineering.svg", "django-architecture.svg")
+        names = ("web-engineering.svg", "django-architecture.svg", "sustainable-agriculture.svg", "cafe-hospitality.svg")
         for name in names:
             with self.subTest(name=name):
                 self.assertIn("site/mojplaywin-atelier/" + name, markup)
@@ -71,6 +71,8 @@ class MojPlayWinOrbitalExperienceTests(TestCase):
                 self.assertNotIn("<script", src.read_text(encoding="utf-8").lower())
         self.assertEqual(markup.count("site/mojplaywin-atelier/web-engineering.svg"), 1)
         self.assertEqual(markup.count("site/mojplaywin-atelier/django-architecture.svg"), 1)
+        self.assertEqual(markup.count("site/mojplaywin-atelier/sustainable-agriculture.svg"), 1)
+        self.assertEqual(markup.count("site/mojplaywin-atelier/cafe-hospitality.svg"), 1)
 
     def test_mobile_keyboard_accessibility_and_reduced_motion_are_mandatory(self):
         css = (STATIC / "orbits.css").read_text(encoding="utf-8")
