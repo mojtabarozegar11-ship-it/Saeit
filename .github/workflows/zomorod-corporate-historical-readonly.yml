@@ -482,6 +482,60 @@ jobs:
                           print('PYTHON_CUSTOMIZER='+name+' PRESENT=true REFERENCES_DJANGO='+str('django' in t.lower()))
           PY
           REMOTE
+      - name: Compare working staging and failing production Django runtimes without changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-readonly"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          export PYTHONDONTWRITEBYTECODE=1
+          python3 - <<'PY'
+          from pathlib import Path
+          import subprocess,os,re
+          h=Path.home()
+          for label,p in (
+             ('production',h/'public_html'/'.htaccess'),
+             ('staging-webroot',h/'staging.zomorodmelal.ir'/'.htaccess'),
+             ('staging-project',h/'Saeit-staging'/'.htaccess'),
+             ('staging-public',h/'Saeit-staging'/'public_html'/'.htaccess'),
+          ):
+              if not p.is_file():continue
+              print('CONFIG_TARGET='+label+' exists=true bytes='+str(p.stat().st_size))
+              for raw in p.read_text(errors='replace').splitlines():
+                  line=raw.strip()
+                  if not line or line.startswith('#'):continue
+                  toks=line.split()
+                  if not toks:continue
+                  name=toks[0]
+                  if name.lower().startswith('passenger'):
+                      val=' '.join(toks[1:]).strip('"')
+                      if name in ('PassengerPython','PassengerAppRoot'):
+                          target=Path(val)
+                          print('PASSENGER_DIFFERENCE='+label+' name='+name+' exists='+str(target.exists())+' filename='+target.name)
+                      else:print('PASSENGER_DIFFERENCE='+label+' name='+name+' short='+str(len(val)<48))
+          for p in (h/'Saeit'/'config'/'settings.py',h/'Saeit-staging'/'config'/'settings.py'):
+              print('APP_SETTINGS='+p.parent.parent.name+' exists='+str(p.is_file())+' bytes='+str(p.stat().st_size) if p.is_file() else 'APP_SETTINGS='+p.parent.parent.name+' exists=false')
+          python_candidates=[
+             ('production310',h/'virtualenv'/'Saeit'/'3.10'/'bin'/'python',h/'Saeit'),
+             ('staging311',h/'virtualenv'/'Saeit-staging'/'3.11'/'bin'/'python',h/'Saeit'),
+          ]
+          code="""import os;os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings');from config.wsgi import application;from django.test import Client;c=Client(HTTP_HOST='zomorodmelal.ir');print('WSGI_BOOT=PASS');paths=('/api/health/','/admin/login/','/agents/');[(lambda r:print('OFFLINE_HTTP='+p+':'+str(r.status_code)))(c.get(p,secure=True)) for p in paths]"""
+          for label,interpreter,root in python_candidates:
+              print('INTERPRETER='+label+' exists='+str(interpreter.is_file())+' app_root_exists='+str(root.is_dir()))
+              if not interpreter.is_file() or not root.is_dir():continue
+              try:
+                  result=subprocess.run([str(interpreter),'-B','-c',code],cwd=root,text=True,capture_output=True,timeout=30,env=dict(os.environ,PYTHONDONTWRITEBYTECODE='1'))
+                  print('OFFLINE_INTERPRETER='+label+' exit='+str(result.returncode))
+                  if result.returncode==0:
+                      for line in result.stdout.splitlines():
+                          if line.startswith(('WSGI_BOOT=','OFFLINE_HTTP=')):print('TEST_'+label+'_'+line)
+                  else:
+                      errors=re.findall(r'(?m)^([A-Za-z_][\w.]*(?:Error|Exception)):',result.stderr)
+                      print('OFFLINE_FAILURE_CLASS='+label+':'+(errors[-1] if errors else 'unknown'))
+              except subprocess.TimeoutExpired:print('OFFLINE_INTERPRETER_TIMEOUT='+label)
+          PY
+          REMOTE
       - name: Erase runner-only relay credentials
         if: always()
         run: rm -rf "$RUNNER_TEMP/zomorod-readonly"
