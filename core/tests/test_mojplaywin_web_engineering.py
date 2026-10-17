@@ -40,6 +40,16 @@ class MojPlayWinWebEngineeringTests(SimpleTestCase):
                 self.assertIn('href="https://mojplaywin.com/web-engineering/"', text)
                 self.assertEqual(text.count("<h1"), 1)
 
+    def test_preview_future_service_path_preserves_other_domains(self):
+        main = self.client.get("/services/", HTTP_HOST="mojplaywin.com")
+        self.assertEqual(main.status_code, 200)
+        html = main.content.decode("utf-8")
+        self.assertIn("Web experiences that demonstrate", html)
+        self.assertIn('href="https://mojplaywin.com/services/"', html)
+        other = self.client.get("/services/", HTTP_HOST="zomorodmelal.ir")
+        self.assertEqual(other.status_code, 200)
+        self.assertNotIn("Web experiences that demonstrate", other.content.decode("utf-8"))
+
     def test_protected_zomorod_site_cannot_render_mojplaywin_business_page(self):
         response = self.client.get("/web-engineering/", HTTP_HOST="zomorodmelal.ir")
         self.assertEqual(response.status_code, 404)
