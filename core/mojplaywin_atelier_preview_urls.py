@@ -9,6 +9,7 @@ from django.http import Http404
 from django.shortcuts import render
 from django.urls import path
 from config.urls import urlpatterns as shared_urlpatterns
+from core.mojplaywin_web_views import web_engineering
 
 BRAND_HOSTS = {"mojplaywin.com", "www.mojplaywin.com"}
 BRAND_PREVIEW_ROUTES = {
@@ -58,6 +59,7 @@ def preview_page(request, page_key):
 
 
 urlpatterns = list(shared_urlpatterns) + [
+    path("web-engineering/", web_engineering, name="mojplaywin_preview_web_engineering"),
     path(f"{page_key}/", preview_page, {"page_key": page_key}, name=f"mojplaywin_preview_{page_key}")
     for page_key in BRAND_PREVIEW_ROUTES
 ]
