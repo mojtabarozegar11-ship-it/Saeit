@@ -43,8 +43,10 @@ jobs:
               raise RuntimeError("certified main template incomplete")
           if "noindex" in html.lower():
               raise RuntimeError("preview-only noindex found in production source")
-          if html.count("/static/")<10:raise RuntimeError("unrecognized source asset structure")
+          import re
+          if html.count("static/")<10:raise RuntimeError("unrecognized source asset structure")
           html=html.replace("/static/","/design-preview-20261017/static/")
+          html=re.sub(r"(?<![A-Za-z0-9_/])static/", "/design-preview-20261017/static/",html)
           html="<!-- MJWP_ROOT_CANDIDATE_ONLY_20261017 -->\n"+html
           if 'href="store.html"' in html or 'src="static/' in html:
               raise RuntimeError("preview relative URLs not allowed in live root")
