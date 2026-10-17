@@ -300,6 +300,87 @@ class FinanceIntegrityTests(TestCase):
         self.assertContains(response, "اسناد قطعی")
         self.assertEqual(len(response.context["records"]), 2)
 
+    @override_settings(DEBUG=False, ALLOWED_HOSTS=["testserver"])
+    def test_trial_balance_separates_unit_currency_and_excludes_drafts(self):
+        for curr in ("IRR", "USD"):
+            doc = self.journal(currency=curr)
+            self.line(doc, self.cash, debit=250)
+            self.line(doc, self.sales, credit=250)
+            post_journal(doc.pk, self.owner)
+        pending = JournalEntry.objects.create(
+            unit=self.other_unit, reference="DRAFT-1", description="ثبت نشده",
+            created_by=self.owner,
+        )
+        self.line(pending, self.foreign, debit=800)
+        self.client.force_login(self.owner)
+        response = self.client.get("/company/office/finance/trial-balance/", secure=True)
+        self.assertEqual(response.status_code, 200)
+        accounts = response.context["records"]
+        self.assertEqual(len(accounts), 4)
+        self.assertEqual({x["currency"] for x in accounts}, {"IRR", "USD"})
+        self.assertNotContains(response, "DRAFT-1")
+        totals = response.context["totals"]
+        self.assertEqual(len(totals), 2)
+        for item in totals:
+            self.assertEqual(item["debit"], item["credit"])
+            self.assertEqual(item["closing_debit"], item["closing_credit"])
+            self.assertEqual(item["debit"], D("250"))
+
+        filtered = self.client.get(
+            "/company/office/finance/trial-balance/?unit=industry&currency=USD",
+            secure=True,
+        )
+        self.assertEqual(filtered.status_code, 200)
+        self.assertEqual(len(filtered.context["records"]), 2)
+        self.assertEqual(len(filtered.context["totals"]), 1)
+        self.assertEqual(filtered.context["totals"][0]["currency"], "USD")
+
+    @override_settings(DEBUG=False, ALLOWED_HOSTS=["testserver"])
+    def test_trial_balance_csv_is_private_no_cache_and_formula_safe(self):
+        doc = self.journal()
+        self.cash.name = "=CMD("escape")"
+        self.cash.save()
+        self.line(doc, self.cash, debit=500)
+        self.line(doc, self.sales, credit=500)
+        post_journal(doc.pk, self.owner)
+        self.client.force_login(self.owner)
+        response = self.client.get("/company/office/finance/trial-balance.csv", secure=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("text/csv", response["Content-Type"])
+        self.assertIn("no-store", response["Cache-Control"])
+        self.assertIn("attachment", response["Content-Disposition"])
+        data = response.content.decode("utf-8-sig")
+        self.assertIn("'=CMD", data)
+        self.assertIn("IRR", data)
+        self.assertIn("جمع تفکیکی", data)
+
+    @override_settings(DEBUG=False, ALLOWED_HOSTS=["testserver"])
+    def test_trial_balance_denies_staff_without_account_view_permission(self):
+        staff = User.objects.create_user(
+            username="journal-reader", password="test-only", is_staff=True
+        )
+        perms = Permission.objects.filter(
+            content_type__app_label="enterprise_portal",
+            codename__in=("view_businessunit", "view_journalentry"),
+        )
+        staff.user_permissions.add(*list(perms))
+        self.client.force_login(staff)
+        for route in (
+            "/company/office/finance/trial-balance/",
+            "/company/office/finance/trial-balance.csv",
+        ):
+            with self.subTest(route=route):
+                self.assertEqual(self.client.get(route, secure=True).status_code, 403)
+
+    @override_settings(DEBUG=False, ALLOWED_HOSTS=["testserver"])
+    def test_trial_balance_rejects_invalid_filters(self):
+        self.client.force_login(self.owner)
+        for query in ("?currency=XXX", "?unit=not-found", "?unexpected=123"):
+            self.assertEqual(
+                self.client.get("/company/office/finance/trial-balance/" + query, secure=True).status_code,
+                400,
+            )
+
     def test_trade_document_partner_must_match_unit(self):
         partner = Partner.objects.create(unit=self.other_unit, name="تأمین کننده")
         doc = CommercialDocument(
