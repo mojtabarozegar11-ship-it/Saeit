@@ -15,6 +15,31 @@ jobs:
     timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Fail on page/file deletion or unexpected modification
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin main
+          git diff --name-status "$(git merge-base HEAD origin/main)" HEAD > /tmp/zomorod-changed-files.txt
+          cat /tmp/zomorod-changed-files.txt
+          python3 - <<'PY'
+          from pathlib import Path
+          allowed = {
+              'content/zomorod-nova-pages/about.html',
+              'content/zomorod-nova-pages/company.html',
+              'tests/test_zomorod_corporate_content_restoration.py',
+              '.github/workflows/zomorod-corporate-historical-readonly.yml',
+          }
+          changed = [line.split('\t', 1) for line in Path('/tmp/zomorod-changed-files.txt').read_text().splitlines()]
+          assert changed, 'Nothing to verify'
+          for status, path in changed:
+              assert status in ('A','M'), f'Deletion, rename or other destructive change forbidden: {status} {path}'
+              assert path in allowed, f'Out-of-scope site file changed: {path}'
+          print('NO_REMOVED_PAGES=true')
+          print('CHANGED_FILES_SCOPED=true')
+          PY
       - name: Offline content checks
         run: python -m unittest discover -s tests -p test_zomorod_corporate_content_restoration.py -v
       - name: Prepare fingerprint-pinned cPanel relay
@@ -123,6 +148,15 @@ jobs:
           echo "NEARBY_BACKUP_DIRECTORIES"
           find "$HOME/.backups" -maxdepth 2 -type d -newermt '2026-10-14 20:00' ! -newermt '2026-10-15 06:00' -printf '%TY-%Tm-%TdT%TH:%TM %f\n' | sort | sed -n '1,60p'
           REMOTE
+      - name: Verify unique image paths exist on live host before release
+        shell: bash
+        run: |
+          set -euo pipefail
+          for asset in /static/site/heroes/about.webp /static/site/heroes/genetics.webp /static/site/heroes/smart-agriculture.webp; do
+            code="$(curl -sSL --connect-timeout 5 --max-time 15 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir$asset" || true)"
+            echo "NEW_PAGE_ASSET=$asset STATUS=$code"
+            test "$code" = 200
+          done
       - name: Erase runner-only relay credentials
         if: always()
         run: rm -rf "$RUNNER_TEMP/zomorod-readonly"
