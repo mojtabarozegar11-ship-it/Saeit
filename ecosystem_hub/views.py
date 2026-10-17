@@ -20,7 +20,7 @@ from .procurement import material_shortages, prepare_purchase_drafts
 from .catalog import CATALOG, DEPARTMENTS
 from .models import (
     AssistantRun, ManagementRisk, ManagedSite, ProductionOrder, ProcurementNeed,
-    Organization,
+    Organization, AssistantFollowUp,
     QualityInspection, MaintenanceTicket, ReviewApproval, UnitMembership,
     PerformanceIndicator, ProposedAutomation, ProductionCostScenario,
 )
@@ -183,14 +183,100 @@ def report(request, pk):
         permission(request.user, "add_reviewapproval") and
         (request.user.is_superuser or report.requested_by_id == request.user.pk)
     )
+    try:
+        require_unit(request.user, report.unit, write=True)
+        can_create_followup = (
+            permission(request.user, "add_assistantfollowup")
+            and request.user.has_perm("enterprise_portal.add_worktask")
+        )
+    except PermissionDenied:
+        can_create_followup = False
+    assignees = user_model.objects.filter(
+        Q(is_superuser=True) |
+        Q(ecosystem_memberships__unit=report.unit, ecosystem_memberships__active=True),
+        is_active=True, is_staff=True,
+    ).distinct().order_by("username")[:50] if can_create_followup else []
+    followed_indices = list(AssistantFollowUp.objects.filter(
+        report=report).values_list("finding_index", flat=True))
     return page(request, "report", {
         "approvers": approvers,
         "can_request_approval": can_request_approval,
+        "assignees": assignees,
+        "can_create_followup": can_create_followup,
+        "followed_indices": followed_indices,
         "report": report,
         "definition": definition,
         "selected_unit": report.unit,
         "section": "assistants",
     })
+
+
+
+
+@never_cache
+@office_access
+@require_POST
+@transaction.atomic
+def create_followup(request, pk):
+    """Create a delegated human task, never a payment or autonomous command."""
+    require_hub(request)
+    if not (permission(request.user, "add_assistantfollowup")
+            and request.user.has_perm("enterprise_portal.add_worktask")):
+        raise PermissionDenied("مجوز ثبت پیگیری و وظیفه سازمانی لازم است.")
+    report = get_object_or_404(
+        AssistantRun.objects.select_for_update().select_related("unit")
+        .filter(unit__in=user_units(request.user)),
+        pk=pk,
+    )
+    require_unit(request.user, report.unit, write=True)
+    try:
+        index = int(request.POST.get("finding_index", ""))
+        assignee_id = int(request.POST.get("assignee_id", ""))
+    except (ValueError, TypeError):
+        raise Http404("یافته یا مسئول انتخاب‌شده معتبر نیست.")
+    if index < 0 or not isinstance(report.findings, list) or index >= len(report.findings):
+        raise Http404("یافته گزارش وجود ندارد.")
+    existing = AssistantFollowUp.objects.filter(report=report, finding_index=index).first()
+    if existing:
+        return no_cache(redirect("enterprise_portal:ecosystem_hub:report", pk=report.pk))
+    assignee = get_object_or_404(
+        get_user_model().objects.filter(
+            Q(is_superuser=True) |
+            Q(ecosystem_memberships__unit=report.unit, ecosystem_memberships__active=True),
+            is_active=True, is_staff=True).distinct(),
+        pk=assignee_id,
+    )
+    finding = report.findings[index]
+    if not isinstance(finding, dict):
+        raise Http404("فرمت یافته قابل ارجاع نیست.")
+    title = str(finding.get("title") or "یافته دستیار").strip()[:200]
+    detail = str(finding.get("detail") or "").strip()[:700]
+    source = str(finding.get("source") or "گزارش داخلی")[:180]
+    task = WorkTask.objects.create(
+        title="پیگیری: " + (title or "یافته دستیار"),
+        description=(
+            f"گزارش دستیار {report.pk} / یافته {index + 1}\n"
+            f"شاهد: {source}\n{detail}\n"
+            "این فقط وظیفه داخلی است؛ هیچ اقدام مالی یا تولیدی اجرا نشده است."
+        ),
+        unit=report.unit,
+        assigned_to=assignee,
+        created_by=request.user,
+        priority="high" if finding.get("severity") == "warning" else "normal",
+        status="todo",
+    )
+    record = AssistantFollowUp.objects.create(
+        unit=report.unit, report=report, finding_index=index,
+        task=task, created_by=request.user,
+    )
+    AuditEvent.objects.create(
+        actor=request.user, action="assistant_followup_created",
+        target=f"WorkTask:{task.pk}",
+        detail={"unit_id": report.unit_id, "report_id": report.pk,
+                "finding_index": index, "followup_id": record.pk,
+                "no_external_side_effects": True},
+    )
+    return no_cache(redirect("enterprise_portal:ecosystem_hub:report", pk=report.pk))
 
 
 

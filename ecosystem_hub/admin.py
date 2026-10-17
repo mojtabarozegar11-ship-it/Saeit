@@ -12,7 +12,7 @@ from .models import (
     MaterialRequirement, ProductionOrder, ProcurementNeed, QualityInspection,
     MaintenanceTicket, StaffAssignment, Timesheet, ManagementRisk,
     PerformanceIndicator, ReviewApproval, ReferenceEvidence, AssistantRun,
-    ProposedAutomation, MaterialPriceReference, ProductionCostScenario,
+    ProposedAutomation, MaterialPriceReference, ProductionCostScenario, AssistantFollowUp,
 )
 
 
@@ -304,3 +304,19 @@ class ProposedAutomationAdmin(ScopedAdmin):
                 raise PermissionDenied("زمان آخرین بررسی فقط توسط اجرای واقعی سامانه تنظیم می‌شود.")
         obj.requires_human_review = True
         super().save_model(request, obj, form, change)
+
+
+@admin.register(AssistantFollowUp)
+class AssistantFollowUpAdmin(ScopedAdmin):
+    list_display = ("report", "finding_index", "unit", "task", "created_by", "created_at")
+    list_select_related = ("unit", "report", "task", "created_by")
+    readonly_fields = ("unit", "report", "finding_index", "task", "created_by", "created_at", "updated_at")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
