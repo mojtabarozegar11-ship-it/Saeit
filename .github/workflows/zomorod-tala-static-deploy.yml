@@ -165,8 +165,14 @@ jobs:
           trap rollback_local EXIT
           test ! -L "$stage"
           rm -rf -- "$stage"
-          mkdir "$stage"
+          # Files served by LiteSpeed require traversable directories.
+          # Temporarily use public-only modes for the isolated static package.
+          umask 022
+          mkdir -m 755 "$stage"
           tar -xzf "$HOME/.tala-site-$sha.tgz" -C "$stage"
+          chmod 755 "$stage"
+          umask 077
+          test "$(stat -c '%a' "$stage")" = 755 || { echo 'TALA_PUBLIC_DIRECTORY_MODE=unsafe'; exit 1; }
           test -f "$stage/index.html"
           grep -Fq '<!-- tala-isolated-site-v1 -->' "$stage/index.html"
           test -d "$stage/api/.private" && test ! -L "$stage/api/.private"
