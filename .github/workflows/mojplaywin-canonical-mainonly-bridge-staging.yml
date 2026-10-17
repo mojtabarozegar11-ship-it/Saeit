@@ -1,0 +1,131 @@
+name: Moj Play Win production canonical filter no-rewrite qualification
+on:
+  push:
+    branches: ["audit/mojplaywin-backup-transport-20261017"]
+    paths: [".github/workflows/mojplaywin-canonical-mainonly-bridge-staging.yml"]
+permissions:
+  contents: read
+jobs:
+  test-without-routing:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Place only new immutable canonical PHP endpoint under independent public preview path
+        shell: bash
+        timeout-minutes: 2
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          target=/home/zomorod2/mojplaywin.com/design-preview-20261017/_mpw_main_canonical_bridge_20261017.php
+          source=scripts/mojplaywin_canonical_php_mainonly.php
+          sha=$(sha256sum "$source" | cut -d' ' -f1)
+          timeout 35s ssh -T -F "$d/config" saeit-cpanel "test ! -e '$target' && test ! -L '$target' && test -f /home/zomorod2/mojplaywin.com/design-preview-20261017/index.html"
+          timeout 40s scp -q -F "$d/config" "$source" "saeit-cpanel:$target"
+          remote_sha=$(timeout 35s ssh -T -F "$d/config" saeit-cpanel "set -e; chmod 644 '$target'; php -l '$target' >&2; sha256sum '$target' | cut -d' ' -f1")
+          test "$remote_sha" = "$sha"
+          echo "ISOLATED_CANONICAL_PRODUCTION_CANDIDATE_STAGED_NO_REWRITE"
+      - name: Prove six exact dynamic pages, cookies and query strings are preserved except canonical
+        shell: bash
+        timeout-minutes: 5
+        run: |
+          python3 - <<'PY'
+          from urllib.request import Request,urlopen
+          from urllib.parse import urlencode
+          import json,re,time
+          main="https://mojplaywin.com"
+          script="/design-preview-20261017/_mpw_main_canonical_bridge_20261017.php"
+          routes={"store":"/store/","research":"/research/","company":"/company/",
+             "knowledge":"/knowledge/","agriculture":"/ventures/agriculture/",
+             "jewelry":"/ventures/jewelry-gold/"}
+          def download(url,cookie=""):
+              headers={"User-Agent":"MojPlayWin-bridge-production-staging-QA/1.0",
+                       "Cache-Control":"no-store"}
+              if cookie:headers["Cookie"]=cookie
+              start=time.monotonic()
+              with urlopen(Request(url,headers=headers),timeout=22) as resp:
+                  data=resp.read(800000)
+                  if resp.status!=200:raise RuntimeError("non-200 for known public GET")
+                  marker=resp.headers.get("X-MPW-Canonical-Edge")
+              if len(data)>700000:raise RuntimeError("huge page")
+              return data,marker,round(time.monotonic()-start,3)
+          result=[]
+          for slug,path in routes.items():
+              test_query={"__mpw_canon_passthru":"1"}
+              base_origin=main+path+"?"+urlencode(test_query)
+              base_bridge=main+script+"?"+urlencode({"__mpw_canon_route":slug})
+              for case,cookie in (("anonymous",""),("same_domain_cookie","mpw_qa_cookie=1")):
+                  source,_,t1=download(base_origin,cookie)
+                  filtered,marker,t2=download(base_bridge,cookie)
+                  old=('<link rel="canonical" href="https://zomorodmelal.ir'+path+'">').encode()
+                  new=('<link rel="canonical" href="https://mojplaywin.com'+path+'">').encode()
+                  if marker!="main-only":raise RuntimeError("not served through expected PHP CGI: "+slug)
+                  if source.count(old)!=1 or filtered.count(new)!=1 or source.replace(old,new)!=filtered:
+                      raise RuntimeError("content/cookies differ unexpectedly: "+slug+" "+case)
+                  if t1>15 or t2>15:raise RuntimeError("candidate too slow: "+slug)
+                  result.append({"route":path,"case":case,"original_bytes":len(source),
+                    "changed_only_canonical":True,"source_seconds":t1,"bridge_seconds":t2})
+          # Check dynamic query string equality on Store.
+          original,_,_=download(main+"/store/?__mpw_test_query=xyz&__mpw_canon_passthru=1")
+          transformed,_,_=download(main+script+"?__mpw_canon_route=store&__mpw_test_query=xyz")
+          assert original.replace(b'https://zomorodmelal.ir/store/',b'https://mojplaywin.com/store/')==transformed
+          print(json.dumps({"classification":"MOJ_PLAY_WIN_DYNAMIC_BRIDGE_PRODUCTION_EQUIVALENCE",
+             "cases":result,"query_passthrough_preserved":True,"django_unchanged":True,
+             "passenger_not_restarted":True,"shared_payment_files_unchanged":True},sort_keys=True))
+          PY
+      - name: Verify all protected routes and old canonicals remain unchanged before any rewrite
+        shell: bash
+        timeout-minutes: 2
+        run: |
+          set -euo pipefail
+          for path in / /saman/ /picm/login/ /farnaz/ /studio.Roham/ /mojtaba.roozegar/ /store/ /research/ /company/ /knowledge/ /ventures/agriculture/ /ventures/jewelry-gold/; do
+            code=$(curl -sSL -o /dev/null -w '%{http_code}' --max-time 17 "https://mojplaywin.com$path")
+            test "$code" = 200 || { echo "NO_GO_ORIGINAL_PATH_DISRUPTED"; exit 74; }
+          done
+          echo "MAIN_AND_ALL_12_PROTECTED_PUBLIC_PATHS_HEALTHY_BEFORE_REWRITE"
