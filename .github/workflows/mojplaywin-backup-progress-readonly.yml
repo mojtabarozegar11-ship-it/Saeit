@@ -66,7 +66,7 @@ jobs:
           import json,os,time
           root=Path.home()/".private-mojplaywin-offhost-backups"
           for kind in ("mysql","files"):
-              pref="mojplaywin_20261017_direct_39028306081_"+kind+"_gpgv2"
+              pref="mojplaywin_20261017_direct_39028678930_"+kind+"_gpgv2"
               complete=root/(pref+".gpg")
               partial=root/(pref+".gpg.partial")
               manifest=root/(pref+".manifest.json")
