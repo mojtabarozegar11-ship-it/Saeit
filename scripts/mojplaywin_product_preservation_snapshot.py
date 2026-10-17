@@ -45,9 +45,11 @@ def owner_for(metadata: object) -> str:
     if not values:
         return "unverified"
     domains = set(values)
+    if domains.issubset(MAIN_HOSTS):
+        return "mojplaywin"
     if len(domains) > 1:
         return "ambiguous"
-    return "mojplaywin" if domains.issubset(MAIN_HOSTS) else "other_explicit_domain"
+    return "other_explicit_domain"
 
 
 def canonical(value):
