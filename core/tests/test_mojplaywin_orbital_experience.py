@@ -141,7 +141,7 @@ class MojPlayWinOrbitalExperienceTests(TestCase):
         self.assertEqual(response.status_code, 200)
         html = response.content.decode("utf-8")
         self.assertEqual(len(re.findall(r"<h1\b", html)), 1)
-        self.assertIn("Website engineering that", html)
+        self.assertIn("Research, creativity and digital engineering", html)
         self.assertEqual(html.count('class="mpo-ring"'), 3)
         self.assertEqual(html.count('class="mpo-orbit-card"'), 18)
         self.assertIn("© 2022 MojPlayWin", html)
