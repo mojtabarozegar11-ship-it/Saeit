@@ -67,7 +67,7 @@ def directives(mode):
         ]
         if mode=="canary":
             tests.append("RewriteCond %{QUERY_STRING} (^|&)__mpw_canon_probe=20261017(&|$)")
-        tests.append("RewriteRule ^.*$ "+TARGET+"?__mpw_canon_route="+slug+" [END,QSA]")
+        tests.append("RewriteRule ^.*$ "+TARGET+"?__mpw_canon_route="+slug+" [END,QSA,E=cache-control:no-cache]")
         blocks.append("\n".join(tests))
     return "# "+MARKER+" "+mode+"\n"+"\n".join(blocks)+"\n"
 
