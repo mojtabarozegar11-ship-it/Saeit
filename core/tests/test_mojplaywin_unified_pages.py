@@ -16,20 +16,21 @@ STORE = TEMPLATES / "mojplaywin" / "store.html"
 
 
 class MojPlayWinUnifiedPagesTests(SimpleTestCase):
-    def test_both_main_only_template_families_use_identical_design_tokens(self):
+    def test_only_main_site_template_family_uses_unified_design_tokens(self):
         snippet = '{% include "mojplaywin/unified_visual_tokens.html" %}'
-        for template in (MAIN_SHELL, BRAND_SHELL):
-            with self.subTest(template=template.name):
-                self.assertEqual(template.read_text(encoding="utf-8").count(snippet), 1)
+        self.assertEqual(MAIN_SHELL.read_text(encoding="utf-8").count(snippet), 1)
+        self.assertNotIn(snippet, BRAND_SHELL.read_text(encoding="utf-8"))
         css = UNIFIED.read_text(encoding="utf-8")
         for required in (
             "--mpw-unified-black", "--mpw-unified-gold",
-            ".mpw-header,.mw-site-nav", ".mpw-page-card,.mw-card",
-            ".mpw-footer,.mw-site-footer", "prefers-reduced-motion",
+            ".mw-site-nav{", ".mw-card{",
+            ".mw-site-footer{", "prefers-reduced-motion",
             ".mw-page-hero.mw-unified-hero", "mw-unified-crumbs",
         ):
             self.assertIn(required, css)
         self.assertNotIn("body:has(", css)
+        self.assertNotIn("mojplaywin-brand-pages", css)
+        self.assertNotIn(".mpw-", css)
 
     def test_main_home_store_and_all_sections_keep_main_menus_and_footers(self):
         for template in (HOME, SECTION, STORE):
@@ -76,7 +77,9 @@ class MojPlayWinUnifiedPagesTests(SimpleTestCase):
 
     def test_brand_shell_does_not_replace_old_page_content(self):
         shell = BRAND_SHELL.read_text(encoding="utf-8")
-        self.assertIn('class="mojplaywin-brand-pages"', shell)
+        self.assertNotIn('class="mojplaywin-brand-pages"', shell)
+        self.assertNotIn('mojplaywin/unified_visual_tokens.html', shell)
+        self.assertNotIn('mojplaywin/founder_signature.html', shell)
         self.assertIn("{% block content %}{% endblock %}", shell)
         self.assertIn('class="mpw-nav"', shell)
         self.assertIn('class="mpw-footer"', shell)
