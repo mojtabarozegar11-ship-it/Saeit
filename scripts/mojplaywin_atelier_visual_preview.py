@@ -31,6 +31,7 @@ ROUTES = {
     "ai": "/ai/",
     "blockchain": "/blockchain/",
     "support": "/support/",
+    "web_engineering": "/web-engineering/",
 }
 MAIN_HOST = "mojplaywin.com"
 OUTPUT = Path("mojplaywin-v4-visual-preview")
