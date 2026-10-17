@@ -580,6 +580,9 @@ jobs:
                   "        fs=traceback.extract_tb(exc.__traceback__)[-7:]",
                   "        detail=','.join(Path(frame.filename).name+':'+frame.name+':'+str(frame.lineno) for frame in fs)",
                   "        print('CLIENT_ROUTE='+p+' exception='+type(exc).__name__+' last_frames='+detail)",
+                  "        message=str(exc)",
+                  "        missing=message.split(chr(39))[1] if 'Missing staticfiles manifest entry for' in message and chr(39) in message else 'unclassified'",
+                  "        print('STATIC_ASSET_MISSING='+missing)",
               ])
               r=subprocess.run([str(interp),'-B','-c',code],cwd=root,capture_output=True,text=True,timeout=38,env=dict(os.environ,PYTHONDONTWRITEBYTECODE='1'))
               print('CLIENT_TEST_EXIT='+str(r.returncode))
