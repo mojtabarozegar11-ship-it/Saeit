@@ -1,0 +1,219 @@
+/* Moj Play Win · Inner Pages Gold System 2026
+   Restricted to main-host MojPlayWin templates: section, store, web engineering
+   and existing independent MojPlayWin brand editorial pages.
+   Keeps all existing forms, commerce, checkout, links, content and subsite CSS.
+*/
+body:is(.mojplaywin-section,.mojplaywin-store,.mpw-atelier-v4.mp5-inner-page){
+  --mp5-bg:#040609;--mp5-surface:#0b0e15;--mp5-gold:#f6c867;
+  --mp5-gold-hi:#ffe1a2;--mp5-muted:#d1c6b5;--mp5-line:rgba(245,188,87,.46);
+  background:#040609!important;color:#f8f2e6;overflow-x:clip;color-scheme:dark;
+}
+body:is(.mojplaywin-section,.mojplaywin-store,.mpw-atelier-v4.mp5-inner-page) :is(a,button,summary):focus-visible{
+ outline:3px solid #ffe0a0!important;outline-offset:3px!important;
+}
+body:is(.mojplaywin-section,.mojplaywin-store,.mpw-atelier-v4.mp5-inner-page) .mw-site-nav{
+ width:min(1500px,calc(100% - 24px));min-height:66px;margin:8px auto 13px;
+ padding:8px 12px;gap:11px;border-radius:14px;border:1px solid #a77c39;
+ background:linear-gradient(180deg,#11131b,#050609)!important;
+ box-shadow:0 0 0 1px #050609,0 12px 30px #0009,0 0 23px #b98b2930;
+}
+body:is(.mojplaywin-section,.mojplaywin-store,.mpw-atelier-v4.mp5-inner-page) .mw-brand{
+ display:flex;align-items:center;gap:9px;min-width:0;
+}
+body:is(.mojplaywin-section,.mojplaywin-store,.mpw-atelier-v4.mp5-inner-page) .mw-brand img{
+ width:46px;height:46px;border-radius:50%;border:1px solid #e8b85a;
+}
+body:is(.mojplaywin-section,.mojplaywin-store,.mpw-atelier-v4.mp5-inner-page) .mw-brand-copy strong{
+ font:700 clamp(1.12rem,2.1vw,1.7rem)/1.1 Georgia,"Times New Roman",serif;
+ color:#ffdf95!important;
+}
+body:is(.mojplaywin-section,.mojplaywin-store,.mpw-atelier-v4.mp5-inner-page) .mw-brand-copy small{
+ color:#edc783!important;letter-spacing:.035em;font-size:.63rem;
+}
+body:is(.mojplaywin-section,.mojplaywin-store,.mpw-atelier-v4.mp5-inner-page) .mw-navigation{
+ display:flex;align-items:center;gap:1px;flex-wrap:wrap;
+}
+body:is(.mojplaywin-section,.mojplaywin-store,.mpw-atelier-v4.mp5-inner-page)
+:is(.mw-navigation>a,.mw-nav-menu>summary){
+ min-height:43px;display:inline-flex;align-items:center;padding:9px 12px;
+ border-radius:9px;font-size:.75rem;font-weight:700;text-decoration:none;
+}
+body:is(.mojplaywin-section,.mojplaywin-store,.mpw-atelier-v4.mp5-inner-page)
+ .mw-navigation>a[href="/"]{
+ background:linear-gradient(155deg,#ffe89c,#e6ac43)!important;
+ color:#100d09!important;border:1px solid #ffdf91;box-shadow:0 0 14px #dfa7403b;
+}
+body:is(.mojplaywin-section,.mojplaywin-store,.mpw-atelier-v4.mp5-inner-page)
+ .mw-navigation>a[href="/"]:before{content:"⌂";margin-right:6px;font-size:1.1em}
+body:is(.mojplaywin-section,.mojplaywin-store,.mpw-atelier-v4.mp5-inner-page)
+ .mw-navigation>a[href="/games/"]:before{content:"♧";margin-right:6px;color:#edc27d}
+body:is(.mojplaywin-section,.mojplaywin-store,.mpw-atelier-v4.mp5-inner-page)
+ .mw-navigation>a[href="/ai/"]:before{content:"✧";margin-right:6px;color:#edc27d}
+body:is(.mojplaywin-section,.mojplaywin-store,.mpw-atelier-v4.mp5-inner-page)
+ .mw-navigation>a.mw-nav-cta{
+ border:1px solid #a87b3c;background:#12141a!important;color:#f3cf89!important;
+}
+/* Lightweight, consistent inner-page navigation; no fake links or controls. */
+.mp5-page-trail{
+ width:min(1400px,calc(100% - 36px));margin:0 auto 18px;
+ display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;
+ gap:12px;padding:12px 17px;border:1px solid #ad854c58;border-radius:13px;
+ background:linear-gradient(90deg,#11131b,#0b0e15);color:#c9bea8;font-size:.77rem;
+}
+.mp5-page-trail .mp5-trail-brand{
+ color:#ffe0a0;text-decoration:none;font:700 1.05rem/1.1 Georgia,serif;
+}
+.mp5-page-trail .mp5-trail-links{display:flex;gap:9px;flex-wrap:wrap;align-items:center}
+.mp5-page-trail a:not(.mp5-trail-brand){
+ color:#f2d59c;text-decoration:none;padding:8px 10px;min-height:40px;
+ display:inline-flex;align-items:center;border:1px solid #c89d4940;border-radius:9px;
+}
+.mp5-page-trail a:hover{border-color:#f4c777;background:#201b17}
+/* Premium inner hero; radial orbits are CSS accents, never substitute content. */
+body:is(.mojplaywin-section,.mojplaywin-store) .mpx-page-hero,
+body.mojplaywin-section .mw-page-hero,
+body.mpw-atelier-v4.mp5-inner-page .mpw-page-hero,
+body.mojplaywin-section .mpw-web-hero{
+ position:relative;isolation:isolate;overflow:hidden;
+ border:1px solid #c3964d;border-radius:24px;
+ background:radial-gradient(ellipse 45% 80% at 78% 48%,#14477a45,transparent 80%),
+ radial-gradient(ellipse 60% 55% at 52% 65%,#a97b3422,transparent 80%),#070b11;
+ box-shadow:inset 0 1px 0 #ffdf9045,0 20px 50px #0009;
+}
+body:is(.mojplaywin-section,.mojplaywin-store) .mpx-page-hero-copy h1,
+body.mpw-atelier-v4.mp5-inner-page .mpw-page-hero h1,
+body.mojplaywin-section .mpw-web-hero h1{
+ font-family:Georgia,"Times New Roman",serif;letter-spacing:-.045em;
+ font-size:clamp(2.3rem,4.9vw,5.1rem);line-height:1.12;
+ color:#fff5e8!important;text-wrap:balance;
+}
+body:is(.mojplaywin-section,.mojplaywin-store) .mpx-page-hero :is(p,.mpx-kicker),
+body.mpw-atelier-v4.mp5-inner-page .mpw-page-hero :is(p,.eyebrow){
+ color:#e3d5bd!important;
+}
+body:is(.mojplaywin-section,.mojplaywin-store) .mpx-page-hero-art{
+ position:relative;min-height:300px;isolation:isolate;overflow:hidden;border:1px solid #c3944c85;
+ border-radius:20px;background:radial-gradient(ellipse at center,#1a2740,#080a10 72%);
+}
+body:is(.mojplaywin-section,.mojplaywin-store) .mpx-page-hero-art:before,
+body.mpw-atelier-v4.mp5-inner-page .mp5-editorial-visual:before{
+ content:"";position:absolute;inset:18% 1%;border:2px solid #d4a05099;
+ border-radius:50%;transform:perspective(530px) rotateX(64deg);
+ box-shadow:0 0 22px #ffce6f35;pointer-events:none;z-index:1;
+ animation:mp5-orbit-revolve 22s linear infinite;
+}
+body:is(.mojplaywin-section,.mojplaywin-store) .mpx-page-hero-art img{
+ display:block;width:100%;height:100%;min-height:295px;max-height:425px;
+ object-fit:contain;position:relative;z-index:2;
+ filter:drop-shadow(0 12px 19px #0009);
+}
+body:is(.mojplaywin-section,.mojplaywin-store) .mpx-page-hero-art>span{
+ position:absolute;bottom:15px;left:15px;z-index:3;letter-spacing:.13em;
+ padding:8px 10px;color:#f8d69b;background:#080a10d9;border:1px solid #ae804e;
+ border-radius:8px;font-size:.64rem;
+}
+body:is(.mojplaywin-section,.mojplaywin-store) .mpx-section-head h2,
+body.mpw-atelier-v4.mp5-inner-page :is(.mpw-page-grid h2,.mpw-page-cta h2){
+ color:#ffe0a0!important;font-family:Georgia,serif;
+}
+body:is(.mojplaywin-section,.mojplaywin-store) :is(.mw-card,.mpx-venture-card,.mpx-product,.mpx-editorial-panel),
+body.mpw-atelier-v4.mp5-inner-page :is(.mpw-page-card,.mpw-venture-card,.mpw-page-cta,.mpw-support-handbook){
+ background:linear-gradient(160deg,#121722,#080b10)!important;
+ border:1px solid #c5964a80!important;border-radius:17px!important;
+ box-shadow:inset 0 1px 0 #f6c66e1c,0 12px 31px #0004;
+ transition:transform .26s ease,border-color .26s ease,box-shadow .26s ease;
+}
+body:is(.mojplaywin-section,.mojplaywin-store) :is(.mpx-inner-grid,.mpx-catalog,.mpx-venture-grid){
+ gap:clamp(12px,2vw,22px);
+}
+body:is(.mojplaywin-section,.mojplaywin-store) :is(.mw-card,.mpx-venture-card,.mpx-product):hover,
+body.mpw-atelier-v4.mp5-inner-page :is(.mpw-page-card,.mpw-venture-card):hover{
+ transform:translateY(-3px);border-color:#f3c56c!important;
+ box-shadow:0 0 18px #dcad4330,0 14px 28px #0006;
+}
+body:is(.mojplaywin-section,.mojplaywin-store) :is(.mw-card,.mpx-venture-card,.mpx-product) :is(h3,a),
+body.mpw-atelier-v4.mp5-inner-page .mpw-page-card :is(h2,a){
+ color:#f7d79d!important;
+}
+body:is(.mojplaywin-section,.mojplaywin-store) :is(.mw-card,.mpx-product) p,
+body.mpw-atelier-v4.mp5-inner-page :is(.mpw-page-card,.mpw-page-cta) p{
+ color:#ded3c1!important;line-height:1.75;
+}
+body:is(.mojplaywin-section,.mojplaywin-store) :is(.mw-button.primary),
+body.mpw-atelier-v4.mp5-inner-page a.primary{
+ background:linear-gradient(145deg,#ffe8a0,#e6ae49)!important;
+ border:1px solid #ffe6a0!important;color:#14100a!important;
+}
+body:is(.mojplaywin-section,.mojplaywin-store,.mpw-atelier-v4.mp5-inner-page)
+ .mw-site-footer{border-top:1px solid #dbaa6188}
+body:is(.mojplaywin-section,.mojplaywin-store,.mpw-atelier-v4.mp5-inner-page)
+ .mpx-bottom-bar{border-top:1px solid #9c753744;color:#d1c7b4}
+body.mpw-atelier-v4.mp5-inner-page .mpx-brand-main{
+ width:min(1400px,calc(100% - 38px));margin:12px auto 45px;
+}
+body.mpw-atelier-v4.mp5-inner-page .mpw-page-hero.mp5-editorial-hero{
+ display:grid;grid-template-columns:minmax(0,1.05fr) minmax(290px,.95fr);
+ align-items:center;gap:clamp(14px,3vw,46px);padding:clamp(25px,5vw,61px);
+ min-height:350px;
+}
+.mp5-editorial-copy{min-width:0;position:relative;z-index:2}
+.mp5-editorial-copy .eyebrow{display:inline-block;color:#eec27d!important}
+.mp5-editorial-visual{
+ position:relative;overflow:hidden;min-height:260px;aspect-ratio:1.3;
+ border:1px solid #e2b15f9c;border-radius:20px;
+ display:grid;place-items:center;background:radial-gradient(ellipse at center,#1a3559,#090b11 80%);
+ isolation:isolate;
+}
+.mp5-editorial-visual img{
+ width:100%;height:100%;object-fit:contain;position:relative;z-index:2;
+ filter:drop-shadow(0 12px 20px #000c);
+}
+.mp5-editorial-visual figcaption{
+ position:absolute;bottom:10px;left:10px;z-index:3;
+ padding:8px 12px;border:1px solid #ba8c4e;border-radius:9px;
+ background:#0a0d14e8;color:#f5d8a3;font-size:.65rem;letter-spacing:.11em;
+ text-transform:uppercase;
+}
+.mp5-editorial-copy .mp5-page-trail{width:auto;margin:18px 0 0;padding:7px 9px;border-color:#edba7360}
+.mp5-editorial-copy .mp5-trail-links{gap:5px}
+.mp5-editorial-copy .mp5-trail-links a{font-size:.72rem}
+body.mpw-atelier-v4.mp5-inner-page .mpw-page-grid{gap:clamp(12px,1.9vw,22px)}
+body.mpw-atelier-v4.mp5-inner-page .mpw-page-card{min-width:0;overflow-wrap:anywhere}
+body.mpw-atelier-v4.mp5-inner-page .mpw-page-cta{padding:clamp(19px,3.5vw,38px)}
+/* Motion is ornamental: text, navigation and all links remain usable when off. */
+@keyframes mp5-orbit-revolve{
+ from{transform:perspective(530px) rotateX(64deg) rotateZ(0)}
+ to{transform:perspective(530px) rotateX(64deg) rotateZ(360deg)}
+}
+@media(hover:hover) and (prefers-reduced-motion:no-preference){
+ body.mpw-atelier-v4.mp5-inner-page .mp5-editorial-visual:hover img{transform:scale(1.025)}
+}
+@media(max-width:1050px){
+ body.mpw-atelier-v4.mp5-inner-page .mpw-page-hero.mp5-editorial-hero{
+   grid-template-columns:minmax(0,1fr) minmax(240px,.8fr)}
+ body:is(.mojplaywin-section,.mojplaywin-store,.mpw-atelier-v4.mp5-inner-page) .mw-site-nav{
+   flex-wrap:wrap}
+ body:is(.mojplaywin-section,.mojplaywin-store,.mpw-atelier-v4.mp5-inner-page) .mw-navigation{
+   width:100%;justify-content:flex-start}
+}
+@media(max-width:760px){
+ body.mpw-atelier-v4.mp5-inner-page .mpw-page-hero.mp5-editorial-hero{
+   grid-template-columns:1fr;padding:27px 19px;gap:18px}
+ body.mpw-atelier-v4.mp5-inner-page .mp5-editorial-visual{
+   aspect-ratio:1.7;min-height:180px;max-height:300px}
+ body:is(.mojplaywin-section,.mojplaywin-store) .mpx-page-hero-art{min-height:200px}
+ body:is(.mojplaywin-section,.mojplaywin-store) .mpx-page-hero-art img{
+   min-height:205px;max-height:285px}
+ .mp5-page-trail{width:calc(100% - 24px);padding:10px;gap:10px}
+ .mp5-page-trail .mp5-trail-links{gap:5px}
+ .mp5-page-trail a:not(.mp5-trail-brand){font-size:.72rem;min-height:44px}
+ body.mpw-atelier-v4.mp5-inner-page .mpx-brand-main{width:calc(100% - 24px)}
+ body:is(.mojplaywin-section,.mojplaywin-store,.mpw-atelier-v4.mp5-inner-page)
+ .mw-site-nav{width:calc(100% - 18px);padding:9px;gap:8px}
+}
+@media(prefers-reduced-motion:reduce){
+ body:is(.mojplaywin-section,.mojplaywin-store) .mpx-page-hero-art:before,
+ body.mpw-atelier-v4.mp5-inner-page .mp5-editorial-visual:before{animation:none}
+ body:is(.mojplaywin-section,.mojplaywin-store) :is(.mw-card,.mpx-product,.mpx-venture-card),
+ body.mpw-atelier-v4.mp5-inner-page :is(.mpw-page-card,.mpw-venture-card){transition:none}
+}
