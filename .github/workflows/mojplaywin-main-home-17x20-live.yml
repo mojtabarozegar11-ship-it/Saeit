@@ -1,0 +1,190 @@
+name: MojPlayWin LIVE homepage 17 rotating rows x 20 original-quality cards
+on:
+  push:
+    branches: ["audit/mojplaywin-backup-transport-20261017"]
+    paths: [".github/workflows/mojplaywin-main-home-17x20-live.yml"]
+permissions:
+  contents: read
+concurrency:
+  group: mojplaywin-main-only-root-deploy
+  cancel-in-progress: false
+jobs:
+  publish-only-current-main-home:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Pin validated 17x20 source and run fail-closed synthetic tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p test_mojplaywin_main_home_17x20_atomic.py -v
+          python3 -m py_compile scripts/mojplaywin_main_home_17x20_atomic.py
+          grep -Fq 'EXPECTED_SHA="dc027fa3d96644d26d4c1d0ee7b77d9d54b8a3e79c430c1d8ed47a08e1e2ae00"' scripts/mojplaywin_main_home_17x20_atomic.py
+          echo "MAIN_ONLY_GITHUB_TESTS_PASSED=true"
+      - name: Configure pinned GitHub to VPS to cPanel private read-only relay
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-17x20"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            BatchMode yes
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            ConnectTimeout 10
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Verify root, store, main sections and all protected independent subsite routes
+        shell: bash
+        timeout-minutes: 5
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,os,time,urllib.request
+          paths=("/", "/store/", "/services/", "/research/", "/company/",
+            "/studio/", "/ai/", "/knowledge/", "/blockchain/", "/economy/",
+            "/ventures/ecommerce/", "/ventures/agriculture/",
+            "/ventures/jewelry-gold/", "/ventures/carpets/", "/ventures/hospitality/",
+            "/mojtaba.roozegar/", "/mojtaba.roozegar/about/", "/picm/login/",
+            "/studio.Roham/", "/saman/", "/farnaz/", "/zahra%24%24/", "/taniya/")
+          states={}
+          for path in paths:
+              req=urllib.request.Request("https://mojplaywin.com"+path,
+                  headers={"User-Agent":"MojPlayWin-17x20-scope-protection","Cache-Control":"no-cache"})
+              for attempt in range(3):
+                  try:
+                      with urllib.request.urlopen(req,timeout=18) as res:
+                          states[path]=res.status
+                          assert res.status==200,path
+                      break
+                  except (OSError,TimeoutError):
+                      if attempt==2:raise
+                      time.sleep(4)
+              print("BEFORE_PROTECTED_HTTP_200 "+path)
+          with open(os.path.join(os.environ["RUNNER_TEMP"],"mpw-17x20-route-baseline.json"),"w") as f:
+              json.dump(states,f,sort_keys=True)
+          PY
+      - name: Install ONLY pinned main homepage HTML; keep original 18 photo cards and founder footer
+        id: install
+        shell: bash
+        timeout-minutes: 3
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-17x20"
+          timeout 130s ssh -T -F "$d/config" saeit-cpanel "python3 - install '$GITHUB_RUN_ID'" < scripts/mojplaywin_main_home_17x20_atomic.py
+          echo "ONLY_MAIN_ROOT_ONE_FILE_INSTALLED=true"
+      - name: Public smoke proves 17 interactive rows, 20 per row, 340 total and 18 old images
+        id: accept
+        shell: bash
+        timeout-minutes: 6
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,os,re,time,urllib.request
+          request=urllib.request.Request("https://mojplaywin.com/?__mpw_live_cards=17x20",
+              headers={"User-Agent":"MojPlayWin-final-17x20-public-verifier","Cache-Control":"no-cache"})
+          page=None
+          for attempt in range(3):
+              try:
+                  with urllib.request.urlopen(request,timeout=22) as response:
+                      assert response.status==200
+                      page=response.read(600000).decode("utf-8")
+                  break
+              except (OSError,TimeoutError):
+                  if attempt==2:raise
+                  time.sleep(3)
+          parts=re.findall(r'<section class="mpo-ring" data-orbit="[^"]+"[^>]*>.*?</section>',page,re.S)
+          assert len(parts)==17,("row_count",len(parts))
+          counts=[len(re.findall(r'<li class="mpo-orbit-item"',part)) for part in parts]
+          assert counts==[20]*17,("row_card_counts",counts)
+          assert sum(counts)==340
+          assert page.count('class="mpo-orbit-card"')==18, "original photo cards altered"
+          assert page.count('class="mpo-orbit-card mpo-topic-card"')==322, "new topic cards missing"
+          assert page.count('class="mpo-topic-visual"')==322, "topic visuals missing"
+          assert page.count('id="mpw-17x20-mainonly-style"')==1
+          assert page.count('id="mpw-17x20-mainonly-autostart"')==1
+          assert page.count('class="mpo-ring-arrow"')==34
+          assert page.count('data-mpw-copyright-founder="true"')==1
+          assert 'aria-label="Seventeen interactive project and service rows"' in page
+          assert page.count('class="mpo-orbit-card"')==18
+          assert page.count('class="mpo-orbit-card mpo-topic-card"')==322
+          new_targets=re.findall(r'class="mpo-orbit-card mpo-topic-card" href="([^"]+)"',page)
+          assert len(new_targets)==322
+          assert all(x.startswith("/") and not x.startswith(("/mojtaba.roozegar/","/saman/","/studio.Roham/","/farnaz/","/taniya/","/zahra","/picm/")) for x in new_targets)
+          assert len(set(re.findall(r'--mpo-hue:(\d+)',page)))==322
+          print("LIVE_17_ROWS_X_20_CARDS_CONFIRMED=true")
+          print("ORIGINAL_18_CARDS_AND_IMAGES_PRESERVED=true")
+          print("322_UNIQUE_NO_REPEAT_PHOTO_TOPIC_VISUALS=true")
+          previous=json.load(open(os.path.join(os.environ["RUNNER_TEMP"],"mpw-17x20-route-baseline.json")))
+          for path,previous_status in previous.items():
+              req=urllib.request.Request("https://mojplaywin.com"+path,
+                    headers={"User-Agent":"MojPlayWin-post-17x20-protected-health","Cache-Control":"no-cache"})
+              for attempt in range(3):
+                  try:
+                      with urllib.request.urlopen(req,timeout=20) as res:
+                          assert res.status==previous_status==200
+                      break
+                  except (OSError,TimeoutError):
+                      if attempt==2:raise
+                      time.sleep(4)
+              print("AFTER_PROTECTED_HTTP_200 "+path)
+          print("PROTECTED_PAYMENT_SHOP_AND_CHILD_ROUTES_HEALTHY=true")
+          print("PASSENGER_NOT_RESTARTED=true")
+          PY
+      - name: Commit one-file main-home only after all HTTP 17x20 and child tests pass
+        id: commit
+        shell: bash
+        timeout-minutes: 2
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-17x20"
+          timeout 70s ssh -T -F "$d/config" saeit-cpanel "python3 - commit '$GITHUB_RUN_ID'" < scripts/mojplaywin_main_home_17x20_atomic.py
+          echo "LIVE_MAIN_ONLY_340_CARDS_PUBLISHED=true"
+      - name: Restore old 3x6 homepage automatically if any live check fails
+        if: failure()
+        shell: bash
+        timeout-minutes: 3
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-17x20"
+          if test -f "$d/config"; then
+            if timeout 18s ssh -T -F "$d/config" saeit-cpanel "test -f '/home/zomorod2/.mpw-17x20-mainonly-backups/run-$GITHUB_RUN_ID/state.json'"; then
+              timeout 110s ssh -T -F "$d/config" saeit-cpanel "python3 - rollback '$GITHUB_RUN_ID'" < scripts/mojplaywin_main_home_17x20_atomic.py
+              echo "MAIN_ROOT_3x6_BASELINE_ROLLBACK_VERIFIED=true"
+            fi
+          fi
+      - name: Scrub private SSH keys and baseline from runner
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/mpw-17x20" "$RUNNER_TEMP/mpw-17x20-route-baseline.json"
