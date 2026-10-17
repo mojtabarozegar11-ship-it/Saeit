@@ -77,7 +77,7 @@ class MojPlayWinAtelierV4Tests(TestCase):
     def test_legacy_specialty_pages_get_new_shell_without_losing_seo_head(self):
         base = (ROOT / "core" / "templates" / "brands" / "mojplaywin" / "base.html").read_text(encoding="utf-8")
         css = (ROOT / "core" / "static" / "site" / "mojplaywin-atelier-v4.css").read_text(encoding="utf-8")
-        self.assertIn('class="mpw-atelier-v4"', base)
+        self.assertIn('class="mpw-atelier-v4 mp5-inner-page"', base)
         self.assertIn('brands/mojplaywin/atelier_critical.css', base)
         self.assertNotIn("'site/mojplaywin.css'", base)
         self.assertIn('href="https://mojplaywin.com{{ request.path }}"', base)
