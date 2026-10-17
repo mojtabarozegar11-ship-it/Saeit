@@ -69,7 +69,13 @@ def prepare(home: Path, sha: str):
     assert_regular(legacy)
     assert_regular(external)
     if legacy.exists() and external.exists():
-        raise RuntimeError("TALA_DUAL_DATABASE_AUTHORITY: manual reconciliation required")
+        # The deployed legacy PHP remains authoritative after any failed attempt.
+        # Preserve the previous external copy before refreshing it from legacy.
+        previous = backup / "tala-external-preserved.sqlite3"
+        if previous.exists():
+            raise RuntimeError("TALA_RECONCILIATION_BACKUP_ALREADY_EXISTS")
+        snapshot(external, previous)
+        print("TALA_PREVIOUS_EXTERNAL=preserved")
     if legacy.exists():
         counts = verify(legacy)
         migrated = snapshot(legacy, external)
@@ -139,6 +145,17 @@ def selftest():
         assert verify(ext) == {"users": 1, "entries": 1, "audit_log": 0}
         assert verify(backup / "tala-consistent.sqlite3") == verify(ext)
         assert legacy.exists()  # Migration never erases the original.
+        # Simulate a failed first release followed by a retry from legacy.
+        with sqlite3.connect(legacy) as db:
+            db.execute("INSERT INTO entries VALUES (2, 456)")
+            db.commit()
+        retry_sha = "b" * 40
+        retry_backup = home / ".backups/zomorodmelal-tala" / retry_sha
+        retry_backup.mkdir(parents=True)
+        prepare(home, retry_sha)
+        assert verify(ext)["entries"] == 2
+        assert verify(retry_backup / "tala-external-preserved.sqlite3")["entries"] == 1
+        assert verify(retry_backup / "tala-consistent.sqlite3")["entries"] == 2
         prior = backup / "prior/api/.private"
         prior.mkdir(parents=True)
         (backup / "prior/api/admin.php").write_text(
