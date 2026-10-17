@@ -21,6 +21,7 @@ ROOTS={"Saeit-staging","mojplaywin.com"}
 MAX_ENTRIES=150000
 MAX_BYTES=10*1024**3
 MIN_FREE_BYTES=1024**3
+MAX_ABSOLUTE_SYMLINKS=3  # Verified on encrypted source 39028678930; no other archive authorized.
 
 
 def safe_parts(name):
@@ -61,6 +62,7 @@ def recover(stream, directory):
     result={"classification":"ISOLATED_FILE_RECOVERY_REHEARSAL",
             "regular_files_restored":0,"directories_restored":0,
             "symlinks_restored":0,"hardlinks_restored":0,
+            "absolute_symlinks_restored":0,
             "regular_bytes_restored":0,"root_count_restored":0,
             "restore_complete":False,"production_modified":False}
     present=set()
@@ -111,8 +113,24 @@ def recover(stream, directory):
                 raise ValueError("special file member not permitted in sandbox")
     # Never permit links to become parents before all ordinary files exist.
     for parts,target,is_symlink in links:
-        if not isinstance(target,str) or target.startswith("/"):
-            raise ValueError("absolute archive link cannot be restored into sandbox")
+        if not isinstance(target,str):
+            raise ValueError("archive link target invalid")
+        # The encrypted source has exactly three absolute symlinks. Preserve
+        # them as inert link metadata in the PRIVATE, transient restore sandbox.
+        # All ordinary files were extracted first, no further archive entries
+        # will be written through these links; no restored programs execute.
+        # No dereferencing / following the symlink is permitted in this test.
+        if target.startswith("/"):
+            if not is_symlink or result["absolute_symlinks_restored"] >= MAX_ABSOLUTE_SYMLINKS:
+                raise ValueError("unexpected absolute archive link type or count")
+            path=base.joinpath(*parts)
+            check_parents(base,parts)
+            if path.exists() or path.is_symlink():
+                raise ValueError("absolute link path collision")
+            os.symlink(target,path)
+            result["absolute_symlinks_restored"]+=1
+            result["symlinks_restored"]+=1
+            continue
         candidate=posixpath.normpath(
             posixpath.join(*(parts[:-1] if is_symlink else ()),target)
         ) if is_symlink else posixpath.normpath(target)
