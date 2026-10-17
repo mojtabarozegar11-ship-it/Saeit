@@ -59,6 +59,28 @@ class MojPlayWinMobileImagesTests(SimpleTestCase):
         self.assertIn("{% static item.image %}", source)
         self.assertIn("max-width: 700px", source)
 
+    def test_every_editorial_gallery_keeps_originals_and_has_local_mobile_copies(self):
+        from core.mojplaywin_editorial import EDITORIAL, editorial_for
+        for key, specification in EDITORIAL.items():
+            family, slug = key.split(":", 1)
+            responsive = editorial_for(family, slug)
+            self.assertIsNot(responsive, specification)
+            self.assertEqual(responsive["headline"], specification["headline"])
+            self.assertEqual(len(responsive["images"]), len(specification["images"]))
+            for original, display in zip(specification["images"], responsive["images"]):
+                with self.subTest(key=key, photo=original["path"]):
+                    self.assertEqual(original["path"], display["path"])
+                    self.assertEqual(original["alt"], display["alt"])
+                    self.assertEqual(original["caption"], display["caption"])
+                    if original["path"].startswith("site/heroes/"):
+                        self.assertNotIn("mobile_path", original)
+                        self.assertTrue(
+                            (ROOT / "core" / "static" / display["mobile_path"]).is_file()
+                        )
+                    else:
+                        self.assertNotIn("mobile_path", display)
+        self.assertIsNone(editorial_for("missing", "not-found"))
+
     def test_main_domain_section_renders_original_and_mobile_sources(self):
         response = self.client.get("/ventures/agriculture/", HTTP_HOST="mojplaywin.com")
         self.assertEqual(response.status_code, 200)
