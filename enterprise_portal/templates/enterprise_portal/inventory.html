@@ -1,0 +1,11 @@
+{% extends 'enterprise_portal/shell.html' %}
+{% block title %}انبار و تولید{% endblock %}{% block crumb %}انبار{% endblock %}
+{% block content %}
+<div class="page-head"><div class="eyebrow">PRODUCTION & INVENTORY</div><h1>مدیریت انبار و تولید</h1><p>موجودی واقعی ثبت‌شده با گردش قطعی؛ خروج بیش از موجودی هنگام تأیید مسدود می‌شود.</p></div>
+<div class="toolbar">{% if perms.enterprise_portal.add_inventoryitem %}<a href="{% url 'admin:enterprise_portal_inventoryitem_add' %}" class="primary-link">معرفی کالا +</a>{% endif %}{% if perms.enterprise_portal.add_stockmovement %}<a href="{% url 'admin:enterprise_portal_stockmovement_add' %}">گردش جدید</a>{% endif %}<a href="{% url 'admin:enterprise_portal_stockmovement_changelist' %}">کنترل ورود/خروج</a></div>
+<div class="table-frame"><table><thead><tr><th>شناسه کالا</th><th>کالا/مواد اولیه</th><th>واحد</th><th>موجودی قطعی</th><th>حد سفارش</th><th>وضعیت</th></tr></thead><tbody>
+{% for row in records %}<tr><td>{{ row.item.sku }}</td><td>{{ row.item.title }}</td><td>{{ row.item.measure }}</td><td class="number">{{ row.balance|floatformat:3 }}</td><td class="number">{{ row.item.reorder_point|floatformat:3 }}</td><td>{% if row.needs_reorder %}<span class="status status-warning">نیازمند بررسی</span>{% else %}<span class="status">عادی</span>{% endif %}</td></tr>
+{% empty %}<tr><td colspan="6">هنوز کالایی در انبار تعریف نشده است.</td></tr>{% endfor %}
+</tbody></table></div>
+<p class="hint">سفارش مجدد صرفاً یک هشدار مدیریتی است. تأیید خرید یا تأمین خودکار صورت نمی‌گیرد.</p>
+{% endblock %}

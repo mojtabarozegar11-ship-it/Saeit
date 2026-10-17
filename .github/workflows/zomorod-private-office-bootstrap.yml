@@ -1,0 +1,75 @@
+name: Zomorod private ERP generate migration and test (PR only)
+on:
+  push:
+    branches: ["feature/zomorod-private-erp-20261017"]
+    paths:
+      - ".github/workflows/zomorod-private-office-bootstrap.yml"
+      - "enterprise_portal/models.py"
+      - "enterprise_portal/tests.py"
+      - "enterprise_portal/views.py"
+      - "enterprise_portal/forms.py"
+      - "enterprise_portal/admin.py"
+permissions:
+  contents: write
+concurrency:
+  group: zomorod-private-erp-bootstrap
+  cancel-in-progress: false
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    env:
+      SECRET_KEY: "isolated-nonproduction-secret-only-used-for-ci"
+      ALLOWED_HOSTS: "testserver,localhost,zomorodmelal.ir"
+      DATABASE_URL: "sqlite:///test_only_enterprise_db.sqlite3"
+      DEBUG: "False"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install isolated test dependencies
+        run: python -m pip install --disable-pip-version-check -r requirements.txt
+      - name: Generate additive initial migration and test in isolated DB
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF_NAME" = "feature/zomorod-private-erp-20261017"
+          python manage.py makemigrations enterprise_portal --noinput
+          python manage.py check
+          python manage.py migrate --noinput
+          python manage.py test enterprise_portal --verbosity 2
+          python manage.py makemigrations --check --dry-run enterprise_portal
+      - name: Commit only generated migration on feature branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add -- enterprise_portal/migrations/
+          if git diff --cached --quiet; then
+            echo "MIGRATION_ALREADY_COMMITTED=YES"
+            exit 0
+          fi
+          python - <<'PY'
+          import subprocess
+          paths=subprocess.check_output(["git","diff","--cached","--name-only"],text=True).splitlines()
+          assert paths and all(p.startswith("enterprise_portal/migrations/") and p.endswith(".py") for p in paths),paths
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Add private-company ERP schema with additive initial migration"
+          # CI and assistant edits may move the draft branch while migrations generate.
+          # Rebase only on the latest remote head; never force-push.
+          for attempt in 1 2 3; do
+            git fetch origin "$GITHUB_REF_NAME"
+            git rebase "origin/$GITHUB_REF_NAME" || exit 1
+            if git push origin "HEAD:$GITHUB_REF_NAME"; then
+              echo "ADDITIVE_SCHEMA_MIGRATION_PUSH=confirmed"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::Concurrent draft changes prevented safe migration push"
+          exit 1

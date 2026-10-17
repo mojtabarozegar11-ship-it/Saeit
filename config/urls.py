@@ -49,6 +49,8 @@ urlpatterns = [
     path("company-gallery/", company_gallery, name="company_gallery"),
     path("company-content/<slug:slug>/", company_content_feed, name="company_content_feed"),
     path("company/", lambda request: company_portal_home(request) if request.method == "POST" else platform_page(request, "company"), name="company"),
+    # Confidential accounting + company management. Before the generic company slug route.
+    path("company/office/", include("enterprise_portal.urls")),
     path("company/<slug:slug>/", lambda request, slug: platform_page(request, "company"), name="company_detail"),
     path("about/", RedirectView.as_view(pattern_name="company", permanent=True), name="about"),
     path("contact/", RedirectView.as_view(pattern_name="company", permanent=True), name="contact"),

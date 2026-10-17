@@ -1,0 +1,35 @@
+{% extends 'enterprise_portal/shell.html' %}
+{% block title %}میزکار مدیرعامل و شرکت{% endblock %}
+{% block crumb %}میزکار{% endblock %}
+{% block content %}
+<section class="hero">
+ <div><div class="eyebrow">ENTERPRISE OPERATIONS CENTER · ZOMOROD MELAL</div>
+ <h1>مدیریت همه بخش‌های شرکت <em>در یک میزکار</em></h1>
+ <p>از ثبت سند مالی تا عملیات تجاری و صنعتی، نامه‌های اداری، پروژه‌ها و تصمیم‌های مدیریت. بخش‌های قابل مشاهده به مجوز حساب شما وابسته‌اند.</p>
+ </div><div class="hero-symbol" aria-hidden="true">◆<span class="ring"></span></div>
+</section>
+{% if summary %}
+<section class="stats-grid" aria-label="شاخص‌های ثبت‌شده">
+{% for label, amount in summary %}<div class="stat"><span>{{ label }}</span><strong>{{ amount }}</strong><small>از داده‌های ثبت‌شده در پایگاه شرکت</small></div>{% endfor %}
+</section>
+{% endif %}
+<section class="section-heading"><div><span class="eyebrow">MODULES / نرم‌افزارهای مدیریتی</span><h2>سامانه‌های قابل دسترس</h2></div><p>نمایش فقط ماژول‌های دارای مجوز</p></section>
+<div class="module-grid">
+{% for item in modules %}
+  <article class="module">
+    <div class="module-icon" aria-hidden="true">{{ item.icon }}</div>
+    <h3>{{ item.title }}</h3><p>{{ item.text }}</p>
+    {% if item.url %}<a href="{% url item.url %}" class="module-action">ورود به بخش <span aria-hidden="true">←</span></a>
+    {% elif item.admin %}<a href="{% url item.admin %}" class="module-action">مدیریت اطلاعات <span aria-hidden="true">←</span></a>{% endif %}
+  </article>
+{% empty %}
+  <div class="empty-state">هنوز مجوز دسترسی به ماژول‌های عملیاتی برای این حساب تعیین نشده است.</div>
+{% endfor %}
+</div>
+<section class="section-heading"><div><span class="eyebrow">CONTROL & COMPLIANCE</span><h2>قواعد ثبت و کنترل اطلاعات</h2></div></section>
+<div class="info-grid">
+ <div class="info-panel"><b>اسناد قطعی</b><p>سند حسابداری فقط پس از کنترل برابری بدهکار و بستانکار قطعی می‌شود؛ سند قطعی و گردش قطعی انبار از مسیر معمول قابل ویرایش نیست.</p></div>
+ <div class="info-panel"><b>چندارزی</b><p>مبالغ ریال و ارزهای خارجی جدا گزارش می‌شوند. تبدیل ارزی، محاسبه مالیات قانونی و اتصال بانکی صرفاً پس از تعریف سیاست و آزمون اجرا خواهد شد.</p></div>
+ <div class="info-panel"><b>امنیت سازمانی</b><p>دسترسی نقش‌محور است؛ دفتر شرکت از فروشگاه و زیرسایت‌های عمومی جداست. سوابق اقدامات کلیدی قابل پیگیری‌اند.</p></div>
+</div>
+{% endblock %}

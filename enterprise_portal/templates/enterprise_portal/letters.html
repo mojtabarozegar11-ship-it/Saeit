@@ -1,0 +1,10 @@
+{% extends 'enterprise_portal/shell.html' %}
+{% block title %}دبیرخانه و مکاتبات{% endblock %}{% block crumb %}اتوماسیون / نامه‌ها{% endblock %}
+{% block content %}
+<div class="page-head"><div class="eyebrow">CORRESPONDENCE DESK</div><h1>دبیرخانه و مکاتبات شرکت</h1><p>ثبت نامه‌های وارده، صادره و داخلی با تعیین مسئول پیگیری و سطح محرمانگی.</p></div>
+<div class="toolbar">{% if can_add %}<a class="primary-link" href="{% url 'enterprise_portal:new_letter' %}">ثبت نامه جدید +</a>{% endif %}{% if perms.enterprise_portal.view_officeletter %}<a href="{% url 'admin:enterprise_portal_officeletter_changelist' %}">بایگانی و مدیریت مکاتبات</a>{% endif %}</div>
+<div class="table-frame"><table><thead><tr><th>شماره نامه</th><th>موضوع</th><th>نوع</th><th>طبقه‌بندی</th><th>گیرنده/مسئول</th><th>تاریخ</th></tr></thead><tbody>
+{% for item in letters %}<tr><td>{{ item.number }}</td><td>{{ item.subject }}</td><td>{{ item.get_direction_display }}</td><td>{% if item.classification == "confidential" %}<span class="status status-warning">محرمانه</span>{% else %}عادی{% endif %}</td><td>{{ item.assigned_to.get_username|default:item.recipient|default:"—" }}</td><td>{{ item.sent_on }}</td></tr>
+{% empty %}<tr><td colspan="6">نامه‌ای برای نمایش ثبت نشده است.</td></tr>{% endfor %}
+</tbody></table></div>
+{% endblock %}

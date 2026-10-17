@@ -1,0 +1,51 @@
+name: Zomorod private ERP safety and unit tests (no deployment)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "enterprise_portal/**"
+      - "config/settings.py"
+      - "config/urls.py"
+      - ".github/workflows/zomorod-private-office-quality.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    env:
+      SECRET_KEY: "isolated-nonproduction-secret-only-used-for-ci"
+      ALLOWED_HOSTS: "testserver,localhost,zomorodmelal.ir"
+      DATABASE_URL: "sqlite:///test_only_enterprise_db.sqlite3"
+      DEBUG: "False"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install --disable-pip-version-check -r requirements.txt
+      - name: Schema and Django checks
+        run: |
+          test -s enterprise_portal/migrations/0001_initial.py
+          python manage.py makemigrations --check --dry-run enterprise_portal
+          python manage.py check
+      - name: Isolated database tests
+        run: |
+          python manage.py migrate --noinput
+          python manage.py test enterprise_portal --verbosity 2
+      - name: Verify existing public routes still declared
+        run: |
+          python - <<'PY'
+          import subprocess
+          from pathlib import Path
+          old=subprocess.check_output(["git","show","origin/main:config/urls.py"],text=True)
+          new=Path("config/urls.py").read_text()
+          for line in old.splitlines():
+              if line.strip().startswith("path("):
+                  assert line in new,"Existing route disappeared: "+line
+          assert 'path("company/office/", include("enterprise_portal.urls"))' in new
+          print("ORIGINAL_PUBLIC_URL_PATTERNS_PRESERVED=true")
+          PY
