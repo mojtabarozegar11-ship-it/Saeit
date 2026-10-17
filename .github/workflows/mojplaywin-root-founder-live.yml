@@ -1,0 +1,147 @@
+name: MojPlayWin current main-root founder footer EXACT live
+on:
+  push:
+    branches: ["audit/mojplaywin-backup-transport-20261017"]
+    paths: [".github/workflows/mojplaywin-root-founder-live.yml"]
+permissions:
+  contents: read
+concurrency:
+  group: mojplaywin-main-only-root-deploy
+  cancel-in-progress: false
+jobs:
+  main-root-static-only:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify bounded fixed-path script and all original public routes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mojplaywin_root_founder_live_atomic.py
+          grep -Fq 'production-home-20261017.html' scripts/mojplaywin_root_founder_live_atomic.py
+          grep -Fq 'HT_SHA = "5886985a2bb92578c26c05b74568a34a99d128eb505827a799773876a5e17a30"' scripts/mojplaywin_root_founder_live_atomic.py
+          grep -Fq 'ORIGINAL_SHA = "a0053ae2940cf7e6ac1f6e2a1b6e61655127971cdd4d3caf5f83af5c6614794a"' scripts/mojplaywin_root_founder_live_atomic.py
+          python3 - <<'PY'
+          import urllib.request,json
+          paths=["/","/store/","/research/","/company/","/games/",
+                 "/mojtaba.roozegar/","/mojtaba.roozegar/about/","/picm/login/",
+                 "/studio.Roham/","/saman/","/farnaz/","/zahra%24%24/","/taniya/"]
+          for path in paths:
+              req=urllib.request.Request("https://mojplaywin.com"+path,headers={"User-Agent":"MojPlayWin-root-founder-safe-deploy","Cache-Control":"no-cache"})
+              with urllib.request.urlopen(req,timeout=15) as resp:
+                  if resp.status!=200:raise RuntimeError("predeploy response unacceptable")
+              print("BEFORE_LIVE_ROUTE_OK "+path)
+          PY
+      - name: Configure pinned GitHub to VPS to cPanel private read-only relay
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-root-founder"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            BatchMode yes
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            ConnectTimeout 10
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Install golden founder only into the already-routed main-root HTML
+        id: install
+        shell: bash
+        timeout-minutes: 2
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-root-founder"
+          code="$(base64 -w0 scripts/mojplaywin_root_founder_live_atomic.py)"
+          loader='import base64,sys;s=base64.b64decode(sys.argv[1]);sys.argv=[sys.argv[0]]+sys.argv[2:];exec(compile(s,"<exact-root-static-patch>","exec"))'
+          timeout 55s ssh -T -F "$d/config" saeit-cpanel "python3 -c '$loader' '$code' deploy '$GITHUB_RUN_ID'"
+      - name: Verify root-only HTML contains founder inside footer, and independent routes unchanged
+        id: verify
+        shell: bash
+        timeout-minutes: 3
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import re,urllib.request
+          req=urllib.request.Request("https://mojplaywin.com/?__mpw_footer_check=20261018",headers={
+              "User-Agent":"MojPlayWin-root-founder-after-acceptance","Cache-Control":"no-cache"})
+          with urllib.request.urlopen(req,timeout=20) as r:
+              assert r.status==200
+              html=r.read(950000).decode("utf-8")
+          footer=re.search(r'<footer\b[^>]*>(.*?)</footer>',html,re.S|re.I)
+          assert footer and footer.group(1).count('<strong>Mojtaba Roozegar</strong>')==1
+          assert 'data-mpw-root-founder-20261018' in footer.group(1)
+          assert html.count('class="mpo-orbit-card"')==18
+          assert 'MJWP_ROOT_CANDIDATE_ONLY_20261017' in html
+          assert 'noindex,nofollow,noarchive' not in html
+          print("CURRENT_MAIN_ROOT_FOUNDERS_GOLD_FOOTER_LIVE=true")
+          paths=["/store/","/research/","/company/","/games/",
+                 "/mojtaba.roozegar/","/mojtaba.roozegar/about/","/picm/login/",
+                 "/studio.Roham/","/saman/","/farnaz/","/zahra%24%24/","/taniya/"]
+          for path in paths:
+              req=urllib.request.Request("https://mojplaywin.com"+path,headers={"User-Agent":"MojPlayWin-root-founder-after-check"})
+              with urllib.request.urlopen(req,timeout=15) as resp:
+                  assert resp.status==200
+              print("AFTER_LIVE_ROUTE_UNCHANGED_HEALTHY "+path)
+          print("CURRENT_MAIN_SITE_FOUNDER_ROOT_ONLY=true")
+          print("PASSENGER_RESTARTED=false")
+          print("PAYMENT_PRODUCTS_ORDERS_UNCHANGED=true")
+          PY
+      - name: Commit unchanged .htaccess and exact-root file after successful live verification
+        id: commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-root-founder"
+          code="$(base64 -w0 scripts/mojplaywin_root_founder_live_atomic.py)"
+          loader='import base64,sys;s=base64.b64decode(sys.argv[1]);sys.argv=[sys.argv[0]]+sys.argv[2:];exec(compile(s,"<exact-root-static-patch>","exec"))'
+          timeout 50s ssh -T -F "$d/config" saeit-cpanel "python3 -c '$loader' '$code' commit '$GITHUB_RUN_ID'"
+          echo "MAIN_ROOT_GOLD_FOUNDER_PUBLISHED_WITHOUT_DJANGO_RESTART=true"
+      - name: Restore original main-root static HTML if any release verification failed
+        if: failure()
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-root-founder"
+          if test -f "$d/config"; then
+            code="$(base64 -w0 scripts/mojplaywin_root_founder_live_atomic.py)"
+            loader='import base64,sys;s=base64.b64decode(sys.argv[1]);sys.argv=[sys.argv[0]]+sys.argv[2:];exec(compile(s,"<exact-root-static-patch>","exec"))'
+            if timeout 18s ssh -T -F "$d/config" saeit-cpanel "test -f '/home/zomorod2/.mpw-root-founder-20261018/run-$GITHUB_RUN_ID/state.json'"; then
+              timeout 60s ssh -T -F "$d/config" saeit-cpanel "python3 -c '$loader' '$code' rollback '$GITHUB_RUN_ID'"
+            fi
+          fi
+      - name: Scrub ephemeral SSH credentials
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/mpw-root-founder"
