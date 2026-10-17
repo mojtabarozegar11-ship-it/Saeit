@@ -100,6 +100,55 @@ jobs:
                   print('DUPLICATE_IMAGE_BYTES='+digest+' urls='+','.join(urls))
           PY
           REMOTE
+      - name: Find further site-owned editorial photos beyond hero folders
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-readonly"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          export PYTHONDONTWRITEBYTECODE=1
+          python3 - <<'PY'
+          from pathlib import Path
+          from collections import Counter
+          import os,hashlib
+          h=Path.home()
+          roots=[
+              h/'public_html/media',
+              h/'public_html/images',
+              h/'public_html/uploads',
+              h/'public_html/assets',
+              h/'Saeit/staticfiles/site/heroes',
+              h/'Saeit/staticfiles/site/company',
+          ]
+          prohibited=('mohammad','ghanadi','amozeshgah','picm','private','password','secret','token','user','profile','avatar')
+          for root in roots:
+              print('EXTRA_IMAGE_ROOT='+str(root.relative_to(h))+' exists='+str(root.is_dir()))
+              if not root.is_dir():continue
+              found=[]
+              scanned=0
+              for directory,dirs,files in os.walk(root):
+                  depth=len(Path(directory).relative_to(root).parts)
+                  dirs[:]=[x for x in dirs if not any(z in x.lower() for z in prohibited) and not x.startswith('.')] if depth<4 else []
+                  for filename in sorted(files):
+                      scanned+=1
+                      if scanned>15000:break
+                      p=Path(directory)/filename
+                      if p.suffix.lower() not in ('.webp','.jpg','.jpeg','.png') or p.is_symlink():continue
+                      if any(z in str(p).lower() for z in prohibited):continue
+                      try:
+                          size=p.stat().st_size
+                          if 1000<size<25000000:
+                              url='/'+str(p.relative_to(h/'public_html')) if root.is_relative_to(h/'public_html') else 'STATIC_SOURCE/'+str(p.relative_to(h/'Saeit/staticfiles'))
+                              found.append((url,size,hashlib.sha256(p.read_bytes()).hexdigest()))
+                      except OSError:pass
+                  if scanned>15000:break
+              print('EXTRA_IMAGE_COUNT='+str(root.relative_to(h))+':'+str(len(found)))
+              print('EXTRA_IMAGE_UNIQUE_HASHES='+str(root.relative_to(h))+':'+str(len(set(x[2] for x in found))))
+              for url,size,hashval in found[:90]:
+                  print('EXTRA_EDITORIAL_CANDIDATE='+url+' bytes='+str(size)+' sha256='+hashval)
+          PY
+          REMOTE
       - name: Clean runner SSH keys
         if: always()
         run: rm -rf "$RUNNER_TEMP/zomorod-readonly"
