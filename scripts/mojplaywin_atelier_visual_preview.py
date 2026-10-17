@@ -111,7 +111,8 @@ def capture_viewports(manifest):
                     # Lighthouse separately audits the UNMODIFIED optimized HTML.
                     if key == "home":
                         page.add_style_tag(content="""
-                            .mojplaywin-home .mw-shell[data-deferred-legacy="true"] > * {
+                            .mojplaywin-home .mw-shell[data-deferred-legacy="true"] > *,
+                            .mojplaywin-home .mpo-orbits > .mpo-ring {
                                 content-visibility: visible !important;
                             }
                         """)
