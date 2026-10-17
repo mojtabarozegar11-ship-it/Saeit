@@ -120,3 +120,14 @@
    contain-intrinsic-size:auto 420px;
  }
 }
+
+/* Small-screen GPU budget: the SVG already contains the premium gold lighting.
+ * Do not request a second expensive per-pixel SVG drop-shadow/filter pass.
+ * Keep full text, globe, image, all three rings and every interactive card. */
+@media(max-width:540px){
+ .mojplaywin-home .mpo-hero-visual>img{filter:none}
+ .mojplaywin-home .mpo-experience{box-shadow:none}
+ .mojplaywin-home .mpo-ring-ellipse{box-shadow:none}
+ .mojplaywin-home .mpo-hero-insignia{box-shadow:none}
+ .mojplaywin-home .mpo-orbit-card{box-shadow:inset 0 1px 0 rgba(255,224,159,.09)}
+}
