@@ -43,8 +43,10 @@
   function startRotation() {
     if (reduceMotion.matches || timer !== null) return;
     timer = window.setInterval(() => {
-      if (!visible || document.hidden || root.matches(":hover") ||
-          root.contains(document.activeElement)) return;
+      if (!visible || document.hidden || rings.some(ring => {
+        const rail = ring.querySelector(".mpo-orbit-track");
+        return rail.matches(":hover") || rail.contains(document.activeElement);
+      })) return;
       rings.forEach(ring => turn(ring, 1, false));
     }, 5000);
     if (toggle) {
