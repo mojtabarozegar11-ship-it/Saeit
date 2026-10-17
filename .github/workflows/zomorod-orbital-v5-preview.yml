@@ -1,10 +1,5 @@
 name: Zomorod Orbital V5 safe isolated preview
 on:
-  push:
-    branches: [zomorod/orbital-v5-safe-release-20261018]
-    paths:
-      - ".github/workflows/zomorod-orbital-v5-preview.yml"
-      - "content/zomorod-orbital-v5/index.html"
   workflow_dispatch:
 permissions:
   contents: read
