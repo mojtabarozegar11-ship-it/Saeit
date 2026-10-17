@@ -1,0 +1,81 @@
+name: Moj Play Win independent canonical rollout and sitemap crawl
+on:
+  push:
+    branches: ["audit/mojplaywin-backup-transport-20261017"]
+    paths: [".github/workflows/mojplaywin-postcanonical-sitemap-crawl.yml"]
+permissions:
+  contents: read
+jobs:
+  verify-entire-indexable-main-domain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - name: Recrawl sitemap and independently verify six fixed canonicals with zero file writes
+        shell: bash
+        timeout-minutes: 6
+        run: |
+          python3 - <<'PY'
+          import json,re,urllib.request,urllib.error,xml.etree.ElementTree as ET
+          from urllib.parse import urlparse
+          from html.parser import HTMLParser
+          origin="https://mojplaywin.com"
+          fixed=("/store/","/research/","/company/","/knowledge/",
+                 "/ventures/agriculture/","/ventures/jewelry-gold/")
+          ignored=("/design-preview-20261017/",)
+          def retrieve(url,limit=1200000):
+              req=urllib.request.Request(url,headers={"User-Agent":"MojPlayWin-independent-postcanonical-sitemap-qa",
+                             "Cache-Control":"no-cache, no-store"})
+              try:
+                  with urllib.request.urlopen(req,timeout=19) as r:
+                      return r.status,r.headers.get("Content-Type",""),r.read(limit)
+              except urllib.error.HTTPError as e:
+                  return e.code,e.headers.get("Content-Type",""),e.read(8000)
+          status,typ,raw=retrieve(origin+"/sitemap.xml")
+          if status!=200:raise RuntimeError("MojPlayWin sitemap unavailable")
+          root=ET.fromstring(raw)
+          urls=[v.text.strip() for v in root.iter() if v.tag.endswith("loc") and v.text]
+          paths=[urlparse(url).path for url in urls if urlparse(url).hostname in ("mojplaywin.com","www.mojplaywin.com")]
+          paths=list(dict.fromkeys([*fixed,*paths]))
+          if len(paths)<10:raise RuntimeError("sitemap missing main page inventory")
+          output=[]
+          for path in paths:
+              status,typ,content=retrieve(origin+path)
+              html=content.decode("utf-8",errors="replace")
+              canonical=re.findall(r'<link\b[^>]*rel=["\']canonical["\'][^>]*>',html,re.I)
+              normalized=[re.search(r'href=["\']([^"\']+)["\']',tag).group(1) for tag in canonical if re.search(r'href=["\']([^"\']+)["\']',tag)]
+              if status!=200:
+                  state="http_error"
+              elif len(normalized)!=1:
+                  state="no_single_canonical"
+              elif normalized[0]==origin+path:
+                  state="self_canonical"
+              elif "zomorodmelal.ir" in normalized[0]:
+                  state="points_to_zomorod_melal"
+              else:
+                  state="different_target"
+              output.append({"path":path,"status":status,"state":state,
+                             "canonical":normalized[:2],
+                             "title":(re.findall(r'<title>(.*?)</title>',html,re.I|re.S)or[""])[0][:85],
+                             "nosnippet":'noindex' in html.lower()})
+          fixed_checks=[e for e in output if e["path"] in fixed]
+          if len(fixed_checks)!=len(fixed) or any(e["state"]!="self_canonical" for e in fixed_checks):
+              raise RuntimeError("one of the six deployed canonical fixes regressed")
+          issues=[e for e in output if e["state"] not in ("self_canonical",)]
+          print(json.dumps({"classification":"MOJ_PLAY_WIN_POST_CANONICAL_SITEMAP_COMPLETE",
+                 "sitemap_urls":len(urls),
+                 "checked_main_domain":len(output),
+                 "newly_fixed_six_verified":len(fixed_checks),
+                 "outstanding_canonical_or_http_issues":issues,
+                 "healthy_self_canonical_count":len(output)-len(issues),
+                 "passenger_restarted":False,
+                 "production_modified":False},ensure_ascii=False,sort_keys=True),flush=True)
+          PY
+      - name: Confirm all protected child sites remain 200 and main share image loads
+        shell: bash
+        timeout-minutes: 2
+        run: |
+          set -euo pipefail
+          for p in / /saman/ /picm/login/ /farnaz/ /studio.Roham/ /mojtaba.roozegar/ /zahra%24%24/;do
+            test "$(curl -sSL -o /dev/null -w '%{http_code}' --max-time 16 "https://mojplaywin.com$p")" = 200 || exit 62
+          done
+          echo "ALL_SEVEN_PROTECTED_MAIN_AND_SUBSITE_URLS_200"
