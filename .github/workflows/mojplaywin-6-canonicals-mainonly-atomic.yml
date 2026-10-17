@@ -1,0 +1,174 @@
+name: Moj Play Win exact canonical fix — main-only templates
+on:
+  push:
+    branches: ["audit/mojplaywin-backup-transport-20261017"]
+    paths:
+      - ".github/workflows/mojplaywin-6-canonicals-mainonly-atomic.yml"
+permissions:
+  contents: read
+concurrency:
+  group: mojplaywin-main-only-root-deploy
+  cancel-in-progress: false
+jobs:
+  canonical-six-main-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Syntax-check main-only template patch, no settings or Passenger writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mojplaywin_exact_canonical_template_fix.py
+          grep -Fq 'canonical_base.html' scripts/mojplaywin_exact_canonical_template_fix.py
+          grep -Fq 'shared_base_changed' scripts/mojplaywin_exact_canonical_template_fix.py
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Record live old HTML content fingerprints and protected subsite status
+        shell: bash
+        timeout-minutes: 3
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from urllib.request import Request,urlopen
+          import hashlib,json,re,os
+          url="https://mojplaywin.com"
+          paths=("/store/","/research/","/company/","/knowledge/",
+             "/ventures/agriculture/","/ventures/jewelry-gold/")
+          protected=("/","/saman/","/picm/login/","/farnaz/",
+              "/studio.Roham/","/mojtaba.roozegar/","/zahra%24%24/",
+              "/games/","/ai/","/blockchain/","/services/","/studio/")
+          record={}
+          for path in paths+protected:
+              with urlopen(Request(url+path,headers={"User-Agent":"MojPlayWin-mainonly-canonical-safety"}),timeout=16) as resp:
+                  body=resp.read(800000)
+                  code=resp.status
+              if code!=200:raise RuntimeError("prior route non-200: "+path)
+              html=body.decode("utf-8",errors="replace")
+              found=re.findall(r'<link\b[^>]*rel="canonical"[^>]*>',html,re.I)
+              if len(found)!=1:raise RuntimeError("ambiguous prior canonical for "+path)
+              if path in paths and 'href="https://zomorodmelal.ir'+path+'"' not in found[0]:
+                  raise RuntimeError("wrong expected old canonical for "+path)
+              normalized=html.replace(found[0],"__CANONICAL_CAN_BE_CHANGED__",1)
+              record[path]={
+                "code":code,"fingerprint":hashlib.sha256(normalized.encode("utf-8")).hexdigest(),
+                "images":html.count("<img "),"forms":html.count("<form "),
+                "h1":html.count("<h1"),"hrefs":html.count('href="'),
+                "title":(re.findall(r'<title>(.*?)</title>',html,re.I|re.S)or[""])[0],
+                "canonical_before":found[0]
+              }
+          with open(os.environ["RUNNER_TEMP"]+"/mpw-canonical-fingerprints.json","w") as f:json.dump(record,f)
+          print("SIX_WRONG_CANONICALS_AND_TWELVE_PROTECTED_ROUTES_SNAPSHOTTED",flush=True)
+          PY
+      - name: Install an isolated page-only canonical base with independent rollback
+        shell: bash
+        timeout-minutes: 4
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          armed=no
+          rollback(){
+            if test "$armed" = yes;then
+              timeout 37s ssh -T -F "$d/config" saeit-cpanel 'python3 - rollback' < scripts/mojplaywin_exact_canonical_template_fix.py ||
+                echo "INDEPENDENT_180_SECOND_WATCHDOG_STILL_ACTIVE"
+            fi
+          }
+          trap rollback EXIT
+          timeout 42s ssh -T -F "$d/config" saeit-cpanel 'python3 - deploy' < scripts/mojplaywin_exact_canonical_template_fix.py
+          armed=yes
+          python3 - <<'PY'
+          import urllib.request,re,hashlib,json,os
+          before=json.load(open(os.environ["RUNNER_TEMP"]+"/mpw-canonical-fingerprints.json"))
+          url="https://mojplaywin.com"
+          targets=("/store/","/research/","/company/","/knowledge/",
+             "/ventures/agriculture/","/ventures/jewelry-gold/")
+          protected=tuple(p for p in before if p not in targets)
+          outcome={}
+          for path in targets+protected:
+              req=urllib.request.Request(url+path,
+                  headers={"Cache-Control":"no-cache,no-store",
+                    "User-Agent":"MojPlayWin-canonical-upgrade-acceptance"})
+              with urllib.request.urlopen(req,timeout=17) as resp:
+                  body=resp.read(800000)
+                  if resp.status!=before[path]["code"]:
+                      raise RuntimeError("HTTP status changed for "+path)
+              html=body.decode("utf-8",errors="replace")
+              found=re.findall(r'<link\b[^>]*rel="canonical"[^>]*>',html,re.I)
+              if len(found)!=1:raise RuntimeError("ambiguous canonical after rewrite: "+path)
+              normalized=html.replace(found[0],"__CANONICAL_CAN_BE_CHANGED__",1)
+              fingerprint=hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+              expected=("https://mojplaywin.com" if path in targets else None)
+              if expected and 'href="'+expected+path+'"' not in found[0]:
+                  raise RuntimeError("canonical not yet switched without Passenger restart: "+path)
+              if not expected and found[0]!=before[path]["canonical_before"]:
+                  raise RuntimeError("protected/deep URL canonical changed unexpectedly: "+path)
+              checks={"fingerprint":fingerprint==before[path]["fingerprint"],
+                  "images":html.count("<img ")==before[path]["images"],
+                  "forms":html.count("<form ")==before[path]["forms"],
+                  "h1":html.count("<h1")==before[path]["h1"],
+                  "links":html.count('href="')==before[path]["hrefs"],
+                  "title":(re.findall(r'<title>(.*?)</title>',html,re.I|re.S)or[""])[0]==before[path]["title"],
+              }
+              if not all(checks.values()):
+                  print(json.dumps({"NOT_PRESERVED":path,"checks":checks},sort_keys=True))
+                  raise RuntimeError("no unrelated visible changes permitted: "+path)
+              outcome[path]={"canonical":found[0],"page_identical_except_canonical":True}
+          print(json.dumps({"classification":"MAIN_CANONICAL_6_SAFELY_PUBLISHED",
+                "pages":outcome,"six_target_canonicals_fixed":True,
+                "shared_Django_base_unchanged":True,
+                "Passenger_not_restarted":True},sort_keys=True))
+          PY
+          timeout 35s ssh -T -F "$d/config" saeit-cpanel 'python3 - commit' < scripts/mojplaywin_exact_canonical_template_fix.py
+          armed=no
+          echo "MAIN_SITE_SIX_CANONICALS_LIVE_FIXED_NO_CHILD_SITE_OR_CHECKOUT_CHANGES"
+          {
+            echo "## Moj Play Win six main-domain canonicals corrected"
+            echo "- Corrected only two main-brand templates using a new independent base file."
+            echo "- Six public target pages canonical to the original Moj Play Win URLs."
+            echo "- Shared base, Passenger, products, checkout and 12 protected/deep pages unchanged."
+            echo "- Exact original template bytes backed up privately for rollback."
+          } >> "$GITHUB_STEP_SUMMARY"
