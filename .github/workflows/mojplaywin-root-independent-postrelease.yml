@@ -73,7 +73,7 @@ jobs:
             "commit_verified":state.get("status")=="verified_committed",
             "only_root_mode":state.get("mode")=="root",
             "htaccess_matches_committed":hashlib.sha256(current).hexdigest()==state.get("candidate_sha"),
-            "original_backup_intact":hashlib.sha256(original).hexdigest()=="4f261f4563494f7ba8e9947e3ebcaa915b5ffc451ad7348f3620300a695fd",
+            "original_backup_intact":hashlib.sha256(original).hexdigest()==state.get("original_sha"),
             "passenger_wsgi_exists":(root/"passenger_wsgi.py").is_file(),
             "exact_root_rule_guarded":b"RewriteCond %{REQUEST_URI} ^/$" in current,
             "new_html_candidate_intact":p.is_file() and b"MJWP_ROOT_CANDIDATE_ONLY_20261017" in p.read_bytes(),
