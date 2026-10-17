@@ -90,16 +90,17 @@ jobs:
               if code!=200:raise RuntimeError("prior route non-200: "+path)
               html=body.decode("utf-8",errors="replace")
               found=re.findall(r'<link\b[^>]*rel="canonical"[^>]*>',html,re.I)
-              if len(found)!=1:raise RuntimeError("ambiguous prior canonical for "+path)
+              if path in paths and len(found)!=1:
+                  raise RuntimeError("ambiguous prior canonical for "+path)
               if path in paths and 'href="https://zomorodmelal.ir'+path+'"' not in found[0]:
                   raise RuntimeError("wrong expected old canonical for "+path)
-              normalized=html.replace(found[0],"__CANONICAL_CAN_BE_CHANGED__",1)
+              normalized=html.replace(found[0],"__CANONICAL_CAN_BE_CHANGED__",1) if found else html
               record[path]={
                 "code":code,"fingerprint":hashlib.sha256(normalized.encode("utf-8")).hexdigest(),
                 "images":html.count("<img "),"forms":html.count("<form "),
                 "h1":html.count("<h1"),"hrefs":html.count('href="'),
                 "title":(re.findall(r'<title>(.*?)</title>',html,re.I|re.S)or[""])[0],
-                "canonical_before":found[0]
+                "canonical_before":found
               }
           with open(os.environ["RUNNER_TEMP"]+"/mpw-canonical-fingerprints.json","w") as f:json.dump(record,f)
           print("SIX_WRONG_CANONICALS_AND_TWELVE_PROTECTED_ROUTES_SNAPSHOTTED",flush=True)
@@ -138,13 +139,14 @@ jobs:
                       raise RuntimeError("HTTP status changed for "+path)
               html=body.decode("utf-8",errors="replace")
               found=re.findall(r'<link\b[^>]*rel="canonical"[^>]*>',html,re.I)
-              if len(found)!=1:raise RuntimeError("ambiguous canonical after rewrite: "+path)
-              normalized=html.replace(found[0],"__CANONICAL_CAN_BE_CHANGED__",1)
+              if path in targets and len(found)!=1:
+                  raise RuntimeError("ambiguous canonical after rewrite: "+path)
+              normalized=html.replace(found[0],"__CANONICAL_CAN_BE_CHANGED__",1) if found else html
               fingerprint=hashlib.sha256(normalized.encode("utf-8")).hexdigest()
               expected=("https://mojplaywin.com" if path in targets else None)
               if expected and 'href="'+expected+path+'"' not in found[0]:
                   raise RuntimeError("canonical not yet switched without Passenger restart: "+path)
-              if not expected and found[0]!=before[path]["canonical_before"]:
+              if not expected and found!=before[path]["canonical_before"]:
                   raise RuntimeError("protected/deep URL canonical changed unexpectedly: "+path)
               checks={"fingerprint":fingerprint==before[path]["fingerprint"],
                   "images":html.count("<img ")==before[path]["images"],
