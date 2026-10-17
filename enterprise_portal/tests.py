@@ -338,7 +338,7 @@ class FinanceIntegrityTests(TestCase):
     @override_settings(DEBUG=False, ALLOWED_HOSTS=["testserver"])
     def test_trial_balance_csv_is_private_no_cache_and_formula_safe(self):
         doc = self.journal()
-        self.cash.name = "=CMD("escape")"
+        self.cash.name = '=CMD("escape")'
         self.cash.save()
         self.line(doc, self.cash, debit=500)
         self.line(doc, self.sales, credit=500)
