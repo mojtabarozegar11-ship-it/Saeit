@@ -412,11 +412,11 @@ class HubSuite(TestCase):
 
     def test_group_finance_keeps_legal_units_and_currencies_distinct(self):
         for unit, currency in ((self.farm, "IRR"), (self.farm, "USD"), (self.factory, "IRR")):
-            a = LedgerAccount.objects.create(
-                unit=unit, code="101", name="نقد", category="asset"
+            a, _ = LedgerAccount.objects.get_or_create(
+                unit=unit, code="101", defaults={"name": "نقد", "category": "asset"},
             )
-            b = LedgerAccount.objects.create(
-                unit=unit, code="401", name="فروش", category="income"
+            b, _ = LedgerAccount.objects.get_or_create(
+                unit=unit, code="401", defaults={"name": "فروش", "category": "income"},
             )
             entry = JournalEntry.objects.create(
                 unit=unit, reference=currency + "-" + unit.code,
