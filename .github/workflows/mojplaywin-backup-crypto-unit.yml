@@ -7,6 +7,9 @@ on:
       - "scripts/mojplaywin_backup_stream_cpanel.py"
       - "scripts/mojplaywin_backup_encrypt_vps.py"
       - "tests/test_mojplaywin_backup_stream_and_encryption.py"
+      - "scripts/mojplaywin_backup_encrypt_vps_gpg.py"
+      - "tests/test_mojplaywin_backup_gpg_v2.py"
+      - ".github/workflows/mojplaywin-encrypted-backup-gpg-v2-20261017.yml"
 permissions:
   contents: read
 jobs:
@@ -27,3 +30,8 @@ jobs:
         run: |
           python3 -m unittest discover -s tests -p 'test_mojplaywin_backup_stream_and_encryption.py'
           python3 -m py_compile scripts/mojplaywin_backup_stream_cpanel.py scripts/mojplaywin_backup_encrypt_vps.py
+      - name: Validate GPG fallback with real AES256 fixture roundtrip and tamper detection
+        run: |
+          command -v gpg
+          python3 -m unittest discover -s tests -p 'test_mojplaywin_backup_gpg_v2.py'
+          python3 -m py_compile scripts/mojplaywin_backup_encrypt_vps_gpg.py
