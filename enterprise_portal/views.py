@@ -21,7 +21,7 @@ from .models import (
     OfficeLetter, Partner, StockMovement, WorkTask,
 )
 from .services import stock_balance
-from ecosystem_hub.access import user_units
+from ecosystem_hub.access import user_units, require_unit
 
 
 def no_cache(response):
@@ -221,6 +221,8 @@ def new_task(request):
     if request.method == "POST" and form.is_valid():
         item = form.save(commit=False)
         item.created_by = request.user
+        if item.unit_id:
+            require_unit(request.user, item.unit, write=True)
         with transaction.atomic():
             item.save()
             AuditEvent.objects.create(actor=request.user, action="office_task_created",
