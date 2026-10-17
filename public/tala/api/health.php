@@ -4,7 +4,7 @@ header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
 
 $drivers = class_exists('PDO') ? PDO::getAvailableDrivers() : [];
-$privateStore = __DIR__ . '/.private';
+$privateStore = __DIR__ . '/../../../.tala-secure';
 $privateStoreWritable = $privateStore !== '' && is_dir($privateStore) && is_writable($privateStore);
 $privateProbe = $privateStoreWritable ? @tempnam($privateStore, '.probe-') : false;
 if ($privateProbe !== false) {
