@@ -1,0 +1,8 @@
+{% extends 'enterprise_portal/shell.html' %}
+{% block title %}وظایف و پیگیری{% endblock %}{% block crumb %}اتوماسیون / کارها{% endblock %}
+{% block content %}
+<div class="page-head"><div class="eyebrow">OFFICE WORKFLOW</div><h1>ارجاع و پیگیری کارها</h1><p>کارهای سازمانی با مسئول مشخص، اولویت و تاریخ سررسید.</p></div>
+<div class="toolbar">{% if can_add %}<a class="primary-link" href="{% url 'enterprise_portal:new_task' %}">ارجاع وظیفه جدید +</a>{% endif %}
+{% if perms.enterprise_portal.change_worktask %}<a href="{% url 'admin:enterprise_portal_worktask_changelist' %}">مدیریت و تغییر وضعیت کارها</a>{% endif %}</div>
+<div class="table-frame"><table><thead><tr><th>عنوان کار</th><th>مسئول</th><th>اولویت</th><th>وضعیت</th><th>مهلت</th></tr></thead><tbody>{% for item in tasks %}<tr><td><strong>{{ item.title }}</strong></td><td>{{ item.assigned_to.get_username }}</td><td>{{ item.get_priority_display }}</td><td><span class="status">{{ item.get_status_display }}</span></td><td>{{ item.due_on|default:"—" }}</td></tr>{% empty %}<tr><td colspan="5">فعلاً وظیفه‌ای برای نمایش وجود ندارد.</td></tr>{% endfor %}</tbody></table></div>
+{% endblock %}
