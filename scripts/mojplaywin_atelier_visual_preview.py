@@ -122,6 +122,39 @@ def capture_viewports(manifest):
                         scrollWidth: document.documentElement.scrollWidth
                     })""")
                     if key == "home":
+                        if page.locator("[data-mojplaywin-orbital='v1']").count() != 1:
+                            raise RuntimeError(f"{key}-{mode}: approved orbital experience absent")
+                        if page.locator(".mpo-ring").count() != 3:
+                            raise RuntimeError(f"{key}-{mode}: expected exactly three independent orbits")
+                        if page.locator(".mpo-orbit-card").count() != 18:
+                            raise RuntimeError(f"{key}-{mode}: all eighteen service cards required")
+                        first = page.locator("[data-orbit='web'] .mpo-orbit-track")
+                        page.locator("[data-orbit='web'] [data-orbit-next]").click()
+                        page.wait_for_function(
+                            "() => document.querySelector('[data-orbit=web] .mpo-orbit-track').scrollLeft > 2",
+                            timeout=3000,
+                        )
+                        first.focus()
+                        # Accessible keyboard navigation should scroll within the ring.
+                        page.locator("[data-orbit='web'] [data-orbit-prev]").click()
+                        page.wait_for_function(
+                            "() => document.querySelector('[data-orbit=web] .mpo-orbit-track').scrollLeft < 2",
+                            timeout=3000,
+                        )
+                        first.focus()
+                        page.keyboard.press("ArrowRight")
+                        page.wait_for_function(
+                            "() => document.querySelector('[data-orbit=web] .mpo-orbit-track').scrollLeft > 2",
+                            timeout=3000,
+                        )
+                        toggle = page.locator("[data-orbit-toggle]")
+                        if toggle.is_enabled():
+                            toggle.click()
+                            if toggle.get_attribute("aria-pressed") != "true":
+                                raise RuntimeError(f"{key}-{mode}: motion control failed to start")
+                            toggle.click()
+                            if toggle.get_attribute("aria-pressed") != "false":
+                                raise RuntimeError(f"{key}-{mode}: motion control failed to pause")
                         nav = page.locator("#mw-all-pages-menu")
                         nav.locator("summary").click()
                         if not nav.locator(".mw-nav-panel").is_visible():
