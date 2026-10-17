@@ -122,3 +122,29 @@ jobs:
             timeout 40s ssh -T -F "$d/config" saeit-vps "python3 -c 'import sys;d=sys.stdin.buffer.read();ok=(len(d)==1048576 and d==b\"A\"*1048576);print(\"SYNTHETIC_STREAM_PASS\" if ok else \"SYNTHETIC_STREAM_FAIL\",flush=True);sys.exit(0 if ok else 1)'"
           echo "Read-only synthetic channel check passed. NO real database, tar, archive, or restore attempted."
           echo "RELEASE_NO_GO: backup + isolated restore still required" >> "$GITHUB_STEP_SUMMARY"
+      - name: Read-only partial sizes and ages (no private filenames)
+        shell: bash
+        timeout-minutes: 1
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 40s ssh -T -F "$d/config" saeit-vps 'python3 -' <<'PY'
+          from pathlib import Path
+          from time import time
+          p=Path.home()/".private-mojplaywin-offhost-backups"
+          for i,f in enumerate(sorted(p.glob("mojplaywin_*.partial")),1):
+              kind="mysql" if "_mysql_" in f.name else ("files" if "_files_" in f.name else "unknown")
+              print("STALE_PARTIAL_%s_KIND=%s_SIZE_MIB=%s_AGE_MIN=%s"%(i,kind,f.stat().st_size//(1024*1024),int((time()-f.stat().st_mtime)/60)),flush=True)
+          PY
+      - name: Measure synthetic 64MiB private-link transfer (no site data)
+        shell: bash
+        timeout-minutes: 3
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          start=$SECONDS
+          n=$(timeout 110s ssh -T -F "$d/config" saeit-cpanel 'head -c 67108864 /dev/zero' |
+            timeout 110s ssh -T -F "$d/config" saeit-vps 'wc -c')
+          test "$n" -eq 67108864
+          elapsed=$((SECONDS-start))
+          echo "SYNTHETIC_64MIB_LINK_PASS elapsed_seconds=$elapsed"
