@@ -105,3 +105,5 @@ jobs:
         if: always()
         run: |
           rm -rf -- "$RUNNER_TEMP/mainonly-preflight"
+
+# Post-rollback read-only verification: release run 39062704173 reverted six templates.
