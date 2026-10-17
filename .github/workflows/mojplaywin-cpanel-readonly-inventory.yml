@@ -16,6 +16,8 @@ on:
       - "tests/test_mojplaywin_db_backend_config_hints_readonly.py"
       - "scripts/mojplaywin_backup_vps_destination_readonly.py"
       - "tests/test_mojplaywin_backup_vps_destination_readonly.py"
+      - "scripts/mojplaywin_mysql_quota_sanitize_readonly.py"
+      - "tests/test_mojplaywin_mysql_quota_sanitize_readonly.py"
   workflow_dispatch:
 permissions:
   contents: read
@@ -138,3 +140,13 @@ jobs:
           d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
           timeout 35s ssh -T -F "$d/config" saeit-vps python3 - vps < scripts/mojplaywin_backup_vps_destination_readonly.py
           timeout 35s ssh -T -F "$d/config" saeit-cpanel python3 - cpanel < scripts/mojplaywin_backup_vps_destination_readonly.py
+
+      - name: Read-only UAPI MySQL database sizes and cPanel quota (redact identifiers)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p 'test_mojplaywin_mysql_quota_sanitize_readonly.py'
+          python3 -m py_compile scripts/mojplaywin_mysql_quota_sanitize_readonly.py
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 35s ssh -T -F "$d/config" saeit-cpanel 'uapi --output=json Mysql list_databases' | python3 scripts/mojplaywin_mysql_quota_sanitize_readonly.py mysql
+          timeout 35s ssh -T -F "$d/config" saeit-cpanel 'uapi --output=json Quota get_local_quota_info' | python3 scripts/mojplaywin_mysql_quota_sanitize_readonly.py quota
