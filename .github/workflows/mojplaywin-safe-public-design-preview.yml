@@ -1,0 +1,184 @@
+name: MojPlayWin additive public design preview (no live-route replacement)
+on:
+  push:
+    branches: ["audit/mojplaywin-backup-transport-20261017"]
+    paths:
+      - ".github/workflows/mojplaywin-safe-public-design-preview.yml"
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: mojplaywin-safe-public-design-preview-20261017
+  cancel-in-progress: false
+jobs:
+  safely-publish-only-new-preview-path:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/audit/mojplaywin-backup-transport-20261017'
+    runs-on: ubuntu-latest
+    timeout-minutes: 21
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: mojplaywin-atelier-v4-desktop-mobile-preview
+          run-id: 39034323161
+          repository: mojtabarozegar11-ship-it/Saeit
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/verified-snapshot
+      - name: Prepare static non-indexed complete-page review from approved CI artifact
+        shell: bash
+        timeout-minutes: 3
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          from urllib.parse import urlsplit
+          import json,os,shutil
+          raw=Path(os.environ["RUNNER_TEMP"])/"verified-snapshot"
+          out=Path(os.environ["RUNNER_TEMP"])/"main-design-release"
+          manifest=json.loads((raw/"manifest.json").read_text())
+          if manifest.get("host")!="mojplaywin.com" or manifest.get("preview_only") is not True:
+              raise RuntimeError("not an approved preview artifact")
+          routes=manifest.get("routes",{})
+          if len(routes)!=22 or routes.get("home",{}).get("path")!="/":
+              raise RuntimeError("expected exactly 22 prepared main-host pages")
+          if out.exists():raise RuntimeError("unexpected existing staging output")
+          out.mkdir(mode=0o700)
+          srcstatic=raw/"static"
+          if not srcstatic.is_dir():raise RuntimeError("static assets missing")
+          for p in srcstatic.rglob("*"):
+              if p.is_symlink():raise RuntimeError("symlink in preview assets")
+          shutil.copytree(srcstatic,out/"static",symlinks=False)
+          # Keep the UI interactive and self-contained inside the preview path.
+          translations={entry["path"]:("index.html" if name=="home" else name+".html")
+                        for name,entry in routes.items()}
+          for name,entry in routes.items():
+              p=raw/entry["filename"]
+              if p.is_symlink() or not p.is_file():raise RuntimeError("missing certified HTML")
+              data=p.read_text(encoding="utf-8")
+              if "mojplaywin-atelier-v4" not in data or "<html" not in data:
+                  raise RuntimeError("unexpected snapshot markup")
+              data=data.replace("<head>","<head>\n<meta name=\"robots\" content=\"noindex,nofollow,noarchive\">",1)
+              # Rewrite exact internal navigation links to the preview's local HTML.
+              for route,filename in sorted(translations.items(),key=lambda p:-len(p[0])):
+                  data=data.replace('href="'+route+'"','href="'+filename+'"')
+              data=data.replace('href="/#','href="index.html#')
+              (out/("index.html" if name=="home" else name+".html")).write_text(data,encoding="utf-8")
+          files=[p for p in out.rglob("*") if p.is_file()]
+          if len(files)<50 or len(files)>700:
+              raise RuntimeError("unexpected preview file count")
+          total=sum(p.stat().st_size for p in files)
+          if total>180*1024*1024:raise RuntimeError("preview media exceeds permitted size cap")
+          if any(p.is_symlink() for p in out.rglob("*")):raise RuntimeError("symlinks forbidden")
+          print("OFFLINE_PUBLIC_PREVIEW_BUNDLE_PASS pages=22 files="+str(len(files))+" MiB="+str(total//1048576))
+          PY
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Capture baseline status of main and independent routes
+        shell: bash
+        timeout-minutes: 2
+        run: |
+          set -euo pipefail
+          paths=("/" "/saman/" "/picm/login/" "/farnaz/" "/studio.Roham/" "/mojtaba.roozegar/" "/zahra%24%24/")
+          : > "$RUNNER_TEMP/untouched-before.txt"
+          for path in "${paths[@]}"; do
+            status=$(curl -sS -L -o /dev/null -w '%{http_code}' --max-time 20 "https://mojplaywin.com$path") || exit 31
+            test "$status" -ge 100 && test "$status" -le 599
+            printf '%s %s\n' "$path" "$status" >> "$RUNNER_TEMP/untouched-before.txt"
+          done
+          echo "BASELINE_PROTECTED_URL_STATUS_CAPTURED count=${#paths[@]}"
+      - name: Create a new isolated preview path and test actual public static serving
+        shell: bash
+        timeout-minutes: 3
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          target=/home/zomorod2/mojplaywin.com/design-preview-20261017
+          test "$(basename "$target")" = design-preview-20261017
+          marker="mpw-approved-artifact-39034323161"
+          timeout 45s ssh -T -F "$d/config" saeit-cpanel "set -eu; target='$target'; if test -e \"\$target\" || test -L \"\$target\"; then echo NO_GO_EXISTING_PREVIEW_PATH; exit 51; fi; install -d -m 0755 \"\$target\"; printf '%s' '$marker' > \"\$target/_mpw_release_marker.txt\"; chmod 0644 \"\$target/_mpw_release_marker.txt\""
+          response=$(curl -sS -f -L --max-time 25 "https://mojplaywin.com/design-preview-20261017/_mpw_release_marker.txt") || {
+            echo "NO_GO_PREVIEW_PATH_NOT_DIRECTLY_SERVED"
+            timeout 35s ssh -T -F "$d/config" saeit-cpanel "set -eu; target='$target'; test \"\$(cat \"\$target/_mpw_release_marker.txt\")\" = '$marker' && rm -rf -- \"\$target\""
+            exit 52
+          }
+          test "$response" = "$marker" || exit 53
+          echo "DIRECT_STATIC_PREVIEW_PATH_CONFIRMED"
+      - name: Add only the immutable approved preview pages and images to the isolated path
+        shell: bash
+        timeout-minutes: 8
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          source="$RUNNER_TEMP/main-design-release"
+          dest=/home/zomorod2/mojplaywin.com/design-preview-20261017
+          marker="mpw-approved-artifact-39034323161"
+          tar -C "$source" --format=posix -cf - . |
+             timeout 340s ssh -T -o ServerAliveInterval=15 -o ServerAliveCountMax=12 -F "$d/config" saeit-cpanel "set -eu; dest='$dest'; test ! -L \"\$dest\"; test \"\$(cat \"\$dest/_mpw_release_marker.txt\")\" = '$marker'; tar --no-same-owner --no-same-permissions -x -C \"\$dest\" -f -; test -s \"\$dest/index.html\" && test -s \"\$dest/store.html\"; find \"\$dest\" -type d -exec chmod 755 {} +; find \"\$dest\" -type f -exec chmod 644 {} +"
+          echo "PREVIEW_ARTIFACT_UPLOADED_IN_NEW_PATH_ONLY"
+      - name: Validate public preview and untouched main/protected URL status
+        shell: bash
+        timeout-minutes: 3
+        run: |
+          set -euo pipefail
+          curl -fsSL --max-time 40 "https://mojplaywin.com/design-preview-20261017/index.html" | grep -q 'MojPlay'
+          curl -fsSL --max-time 40 "https://mojplaywin.com/design-preview-20261017/store.html" | grep -q 'CURATED COLLECTION'
+          curl -fsSL --max-time 40 "https://mojplaywin.com/design-preview-20261017/static/site/mojplaywin-atelier/global-technology-orbit."
+          paths=("/" "/saman/" "/picm/login/" "/farnaz/" "/studio.Roham/" "/mojtaba.roozegar/" "/zahra%24%24/")
+          : > "$RUNNER_TEMP/untouched-after.txt"
+          for path in "${paths[@]}"; do
+            status=$(curl -sS -L -o /dev/null -w '%{http_code}' --max-time 20 "https://mojplaywin.com$path") || exit 71
+            printf '%s %s\n' "$path" "$status" >> "$RUNNER_TEMP/untouched-after.txt"
+          done
+          cmp -s "$RUNNER_TEMP/untouched-before.txt" "$RUNNER_TEMP/untouched-after.txt" || {
+            echo "NO_GO_PROTECTED_ROUTE_STATUS_DRIFT"
+            exit 72
+          }
+          echo "PUBLIC_DESIGN_PREVIEW_PASS https://mojplaywin.com/design-preview-20261017/index.html"
+          {
+            echo "## MojPlayWin public design preview published safely"
+            echo "- URL: https://mojplaywin.com/design-preview-20261017/index.html"
+            echo "- 22 HTML snapshots and their own copied static media, noindex"
+            echo "- Root route /, database, Passenger/WSGI, existing pages, payment systems and protected child sites unchanged."
+            echo "- This is a public PREVIEW, not a replacement of the production root."
+          } >> "$GITHUB_STEP_SUMMARY"
