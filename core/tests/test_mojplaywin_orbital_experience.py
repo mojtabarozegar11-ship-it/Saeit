@@ -85,6 +85,22 @@ class MojPlayWinOrbitalExperienceTests(TestCase):
                 self.assertEqual(response.status_code, 200, f"Broken orbital link: {url}")
                 self.assertGreater(len(response.content), 200)
 
+    def test_official_gold_logo_has_tiny_non_destructive_asset(self):
+        logo = STATIC / "official-coin-80.webp"
+        self.assertTrue(logo.is_file(), "Official coin must be a local immutable asset")
+        self.assertLess(logo.stat().st_size, 12000, "Small logo should not load 150KB hero image")
+        original = ROOT / "core" / "static" / "site" / "mojplaywin-brand.jpg"
+        self.assertTrue(original.exists(), "Previous full-resolution branding must remain")
+        sources = [
+            PAGES / "theme.html",
+            PAGES / "orbital_experience.html",
+            PAGES / "base.html",
+            ROOT / "core" / "templates" / "brands" / "mojplaywin" / "base.html",
+        ]
+        for file in sources:
+            with self.subTest(file=file.name):
+                self.assertIn("official-coin-80.webp", file.read_text(encoding="utf-8"))
+
     def test_rendered_home_has_only_one_h1_and_three_real_orbits(self):
         response = self.client.get("/", HTTP_HOST="mojplaywin.com")
         self.assertEqual(response.status_code, 200)
