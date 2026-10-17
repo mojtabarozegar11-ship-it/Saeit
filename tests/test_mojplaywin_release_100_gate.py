@@ -59,7 +59,7 @@ class MojPlayWinRelease100Tests(unittest.TestCase):
     def test_missing_or_self_attested_proof_is_insufficient(self):
         for kind, url in (("automated", "http://example.com"),
                           ("manual_owner", "https://example.com/test"),
-                          ("automated", "https://example.com/user:secret@other"),
+                          ("automated", "https://user:secret@example.com/other"),
                           ("automated", "")):
             fixture = self.fully_verified_fixture()
             item = next(v for v in fixture["gates"] if v["id"] == "products_inventory")
