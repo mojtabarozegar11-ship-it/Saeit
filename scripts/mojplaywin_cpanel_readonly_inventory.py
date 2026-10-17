@@ -21,7 +21,7 @@ SHARED_MARKER = "saeit-staging"
 
 def walk_apps(node):
     if isinstance(node, dict):
-        if any(k in node for k in ("app_root", "app_path", "base_uri", "app_uri")):
+        if any(k in node for k in ("app_root", "app_path", "application_root", "base_uri", "app_uri", "application_uri")):
             yield node
         for value in node.values():
             yield from walk_apps(value)
@@ -40,8 +40,8 @@ def sanitize(raw):
     seen = set()
     for entry in walk_apps(raw.get("result", raw)):
         domain = str(entry.get("domain") or "").lower().strip()
-        uri = str(entry.get("base_uri") or entry.get("app_uri") or "/").strip()
-        app_root = str(entry.get("app_root") or entry.get("app_path") or entry.get("path") or "")
+        uri = str(entry.get("base_uri") or entry.get("app_uri") or entry.get("application_uri") or "/").strip()
+        app_root = str(entry.get("app_root") or entry.get("app_path") or entry.get("application_root") or entry.get("path") or "")
         if not domain or not app_root:
             continue
         key = (domain, uri, app_root)
@@ -55,7 +55,7 @@ def sanitize(raw):
         root_hash = hashlib.sha256(x["root"].encode("utf-8")).hexdigest()[:16]
         mappings.append({
             "domain": x["domain"],
-            "base_uri": x["uri"] if x["uri"].startswith("/") else "(invalid)",
+            "base_uri": (x["uri"] if x["uri"].rstrip("/") + "/" in ("/", *KNOWN_PROTECTED_PREFIXES) else "(unlisted-path-" + hashlib.sha256(x["uri"].encode("utf-8")).hexdigest()[:12] + ")") if x["uri"].startswith("/") else "(invalid)",
             "app_root_fingerprint": root_hash,
             "references_shared_saeit_staging": SHARED_MARKER in x["root"].lower(),
         })
