@@ -64,8 +64,20 @@ def audit(stream):
             visited.add(normalized)
             if member.issym() or member.islnk():
                 target=member.linkname
-                if not target or target.startswith("/"):
-                    problems["absolute_or_empty_link"]+=1
+                if not target:
+                    problems["empty_link"]+=1
+                elif target.startswith("/"):
+                    problems["absolute_link"]+=1
+                    if target.startswith("/home/zomorod2/Saeit-staging/") or target=="/home/zomorod2/Saeit-staging":
+                        counts["absolute_link_points_to_backed_app"]+=1
+                    elif target.startswith("/home/zomorod2/mojplaywin.com/") or target=="/home/zomorod2/mojplaywin.com":
+                        counts["absolute_link_points_to_backed_docroot"]+=1
+                    elif target.startswith("/home/zomorod2/"):
+                        counts["absolute_link_points_to_other_account_root"]+=1
+                    elif target.startswith(("/usr/","/bin/","/lib/","/etc/")):
+                        counts["absolute_link_points_to_os"]+=1
+                    else:
+                        counts["absolute_link_points_to_other"]+=1
                 else:
                     candidate=posixpath.normpath(
                         posixpath.join(*(parts[:-1] if member.issym() else ()),target)
