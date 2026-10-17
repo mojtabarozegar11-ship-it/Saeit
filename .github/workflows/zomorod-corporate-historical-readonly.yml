@@ -34,6 +34,7 @@ jobs:
               'core/static/site/emerald-system.css',
               'docs/zomorod-litespeed-503-recovery-20261017.md',
               '.github/workflows/zomorod-complete-backup-catalog-readonly.yml',
+              '.github/workflows/zomorod-final-live-acceptance.yml',
               '.github/workflows/zomorod-selector-uri-canary.yml',
               '.github/workflows/zomorod-selector-uri-rollback.yml',
               '.github/workflows/zomorod-emerald-css-recovery.yml',
