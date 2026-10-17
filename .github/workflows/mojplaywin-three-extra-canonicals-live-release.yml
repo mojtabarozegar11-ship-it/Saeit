@@ -23,6 +23,7 @@ jobs:
           python3 -m py_compile scripts/mojplaywin_three_extra_canonical_rewrite.py
           grep -Fq 'fbfa01e3d0f694b3b65782fe957d6d943302c6dea2374803ad6a91976164128a' scripts/mojplaywin_three_extra_canonical_rewrite.py
           grep -Fq 'previous six-route release state unavailable' scripts/mojplaywin_three_extra_canonical_rewrite.py
+          grep -Fq 'E=cache-control:no-cache' scripts/mojplaywin_three_extra_canonical_rewrite.py
       - name: Establish host-pinned private relay without disclosing keys
         env:
           VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
@@ -137,7 +138,7 @@ jobs:
               time.sleep(1.0)
           if consecutive<4:raise RuntimeError("new market rule did not stabilize")
           total_checks=0
-          for passno in range(1,6):
+          for passno in range(1,10):
               for path in targets+old6:
                   html,edge=read(path)
                   canon=re.findall(r'<link\b[^>]*rel="canonical"\s+href="([^"]+)"',html,re.I)
@@ -172,7 +173,7 @@ jobs:
           {
             echo "## Moj Play Win market, industry and economy canonical fixes published"
             echo "- Three additional canonical URLs now point to https://mojplaywin.com/ pages."
-            echo "- All six earlier fixes were tested five times and remain intact."
+            echo "- All nine canonical routes passed nine repeated production checks; the original six were preserved."
             echo "- Content of each of the three new pages unchanged byte-for-byte except canonical."
             echo "- Protected child sites and Passenger unchanged. Previous exact six-rule configuration backed up."
           } >> "$GITHUB_STEP_SUMMARY"
