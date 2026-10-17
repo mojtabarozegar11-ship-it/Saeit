@@ -14,6 +14,8 @@ on:
       - "tests/test_mojplaywin_backup_restore_readiness_readonly.py"
       - "scripts/mojplaywin_db_backend_config_hints_readonly.py"
       - "tests/test_mojplaywin_db_backend_config_hints_readonly.py"
+      - "scripts/mojplaywin_backup_vps_destination_readonly.py"
+      - "tests/test_mojplaywin_backup_vps_destination_readonly.py"
   workflow_dispatch:
 permissions:
   contents: read
@@ -126,3 +128,13 @@ jobs:
           python3 -m py_compile scripts/mojplaywin_db_backend_config_hints_readonly.py
           d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
           timeout 35s ssh -T -F "$d/config" saeit-cpanel python3 - < scripts/mojplaywin_db_backend_config_hints_readonly.py
+
+      - name: Read-only off-host VPS storage and shared host backup tool prerequisites
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p 'test_mojplaywin_backup_vps_destination_readonly.py'
+          python3 -m py_compile scripts/mojplaywin_backup_vps_destination_readonly.py
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 35s ssh -T -F "$d/config" saeit-vps python3 - vps < scripts/mojplaywin_backup_vps_destination_readonly.py
+          timeout 35s ssh -T -F "$d/config" saeit-cpanel python3 - cpanel < scripts/mojplaywin_backup_vps_destination_readonly.py
