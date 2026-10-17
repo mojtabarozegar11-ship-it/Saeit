@@ -1,0 +1,134 @@
+name: Moj Play Win six canonical intercept fail-closed diagnosis
+on:
+  push:
+    branches: ["audit/mojplaywin-backup-transport-20261017"]
+    paths: [".github/workflows/mojplaywin-six-rewrite-limited-diagnostic.yml"]
+permissions:
+  contents: read
+concurrency:
+  group: mojplaywin-main-only-root-deploy
+  cancel-in-progress: false
+jobs:
+  temporary-six-rewrite-internal-comparison:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Apply six exact target rules only for short diagnostic, automatically revert
+        shell: bash
+        timeout-minutes: 3
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          source_sha=$(sha256sum scripts/mojplaywin_canonical_php_mainonly.php|cut -d' ' -f1)
+          armed=no
+          cleanup(){
+            if test "$armed" = yes;then
+              timeout 38s ssh -T -F "$d/config" saeit-cpanel 'python3 - rollback' < scripts/mojplaywin_six_canonical_rewrite.py ||
+                echo "CANONICAL_DIAGNOSTIC_INDEPENDENT_WATCHDOG_ARMED"
+            fi
+          }
+          trap cleanup EXIT
+          timeout 37s ssh -T -F "$d/config" saeit-cpanel "python3 - production '$source_sha'" < scripts/mojplaywin_six_canonical_rewrite.py
+          armed=yes
+          python3 - <<'PY'
+          from urllib.request import Request,build_opener,HTTPRedirectHandler,HTTPSHandler
+          from urllib.error import HTTPError
+          import json,re
+          class NoRedirect(HTTPRedirectHandler):
+              def redirect_request(self,req,fp,code,msg,headers,newurl):
+                  return None
+          client=build_opener(NoRedirect(),HTTPSHandler())
+          base="https://mojplaywin.com"
+          paths=(
+            ("ordinary_store","/store/"),
+            ("passthrough_store","/store/?__mpw_canon_passthru=1"),
+            ("direct_php_store","/design-preview-20261017/_mpw_main_canonical_bridge_20261017.php?__mpw_canon_route=store"),
+            ("ordinary_research","/research/"),
+            ("passthrough_research","/research/?__mpw_canon_passthru=1"),
+            ("ordinary_company","/company/"),
+            ("protected_root","/"),
+            ("protected_saman","/saman/"),
+          )
+          reports={}
+          for key,path in paths:
+              try:
+                  r=client.open(Request(base+path,headers={
+                     "Cache-Control":"no-store","User-Agent":"MojPlayWin-failclosed-six-rule-diagnostic"}),timeout=18)
+              except HTTPError as error:
+                  r=error
+              with r:
+                  body=r.read(700000).decode("utf-8",errors="replace")
+                  code=r.status
+                  edge=r.headers.get("X-MPW-Canonical-Edge","")
+                  redirect=r.headers.get("Location","")
+              tags=re.findall(r'<link\s+rel="canonical"\s+href="([^"]+)"',body,re.I)
+              reports[key]={"status":code,"edge":edge,
+                 "legacy_melal_canonical":any("zomorodmelal.ir" in t for t in tags),
+                 "correct_mpw_canonical":any("mojplaywin.com" in t for t in tags),
+                 "redirects_to_origin_bypass":("__mpw_canon_passthru=1" in redirect),
+                 "rendered_html_size":len(body),
+                 "body_is_php_error":("Not found" in body[:25] or "temporarily unavailable" in body[:100])}
+          print(json.dumps({"classification":"MOJ_PLAY_WIN_SIX_RULE_ORIGIN_DIAGNOSTIC",
+                  "routes":reports,"tests_only":True,"no_rewrite_left_after_job":True},sort_keys=True),flush=True)
+          PY
+          cleanup
+          armed=no
+      - name: Verify exact original root config was restored and unrelated sites return 200
+        shell: bash
+        timeout-minutes: 2
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          actual=$(timeout 35s ssh -T -F "$d/config" saeit-cpanel 'sha256sum /home/zomorod2/mojplaywin.com/.htaccess' | cut -d' ' -f1)
+          test "$actual" = 8096fd64e4a0dfa9c84aa609eb9e650a79d03b38f54c40624e0f53764187d24d
+          for p in / /saman/ /picm/login/ /farnaz/ /mojtaba.roozegar/ /store/ /research/; do
+            test "$(curl -sSL -o /dev/null -w '%{http_code}' --max-time 15 "https://mojplaywin.com$p")" = 200 || exit 49
+          done
+          echo "SIX_RULES_DIAG_REMOVED_ALL_ORIGINAL_ROUTES_HEALTHY"
