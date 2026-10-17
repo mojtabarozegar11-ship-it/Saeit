@@ -211,7 +211,7 @@ jobs:
             case "$path" in
               /) grep -Fq 'تَلا | طلا، جواهر و گوهرسنگ' "$RUNNER_TEMP/tala-response"; grep -Fq 'قیمت زنده هنوز متصل نشده' "$RUNNER_TEMP/tala-response" ;;
               /manifest.webmanifest) grep -Fq '"scope":"/tala/"' "$RUNNER_TEMP/tala-response" ;;
-              /sw.js) grep -Fq "const CACHE='tala-shell-v2'" "$RUNNER_TEMP/tala-response" ;;
+              /sw.js) grep -Fq "const CACHE='tala-shell-v3'" "$RUNNER_TEMP/tala-response" ;;
               /assets/tala-mark.svg) grep -Fq '<svg' "$RUNNER_TEMP/tala-response" ;;
               /admin/) grep -Fq 'میزکار کسب‌وکار' "$RUNNER_TEMP/tala-response" ;;
               /api/health.php) grep -iqE '^content-type:[[:space:]]*application/json(;|[[:space:]]*$)' "$RUNNER_TEMP/tala-headers"; grep -Fq '"scope":"tala"' "$RUNNER_TEMP/tala-response"; grep -Fq '"runtime":"php"' "$RUNNER_TEMP/tala-response"; grep -Fq '"pdo_sqlite":true' "$RUNNER_TEMP/tala-response"; grep -Fq '"private_store_writable":true' "$RUNNER_TEMP/tala-response" ;;
