@@ -124,3 +124,22 @@ ProcurementNeed rows. Their reference is stable for each production-order /
 material pair and the first creation appends an AuditEvent. Cancelled and closed
 orders are blocked. Repeated POSTs do not multiply requests. No supplier,
 bank, external site or confirmed inventory is mutated.
+
+
+## Opt-in read-only report runner (not yet a deployed 24/7 worker)
+The command \`python manage.py run_ecosystem_assistants\` has safe *preview-only*
+behavior by default. It lists due internal-report runs using local calendar
+daily/7-day/week/month rules and cannot mutate real financial or company data.
+To authorize creation of draft-only internal reports, the server operator must
+set \`ECOSYSTEM_SCHEDULED_ANALYSIS_ENABLED=True\` and explicitly execute
+\`python manage.py run_ecosystem_assistants --commit\`. A real cron/scheduler
+must separately invoke this command; the existence of source code or an
+"active" ProposedAutomation row is not evidence of scheduled 24/7 execution.
+A limited batch, owner identity, active unit membership, module permissions,
+source-read permissions and an atomic due-date compare-and-update are all
+validated per rule. All successful actions create draft AssistantRun + AuditEvent,
+without sending messages, calling any LLM/API, changing existing journals/stock,
+publishing content or paying suppliers. Specialists without implemented
+read-only handlers are excluded from the command rather than misrepresented.
+The enable flag defaults to **False**. Test backups, security and scheduler
+health before enabling it on a separate environment.
