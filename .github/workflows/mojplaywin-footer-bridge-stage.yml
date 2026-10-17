@@ -1,0 +1,134 @@
+name: MojPlayWin exact main-section PHP footer STAGE no live route rewrites
+on:
+  push:
+    branches: ["audit/mojplaywin-backup-transport-20261017"]
+    paths: [".github/workflows/mojplaywin-footer-bridge-stage.yml"]
+permissions:
+  contents: read
+concurrency:
+  group: mojplaywin-main-footer-bridge-staging
+  cancel-in-progress: false
+jobs:
+  stage-only-no-routing:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: PHP source only, no deployment or URL rewrite
+        run: |
+          set -euo pipefail
+          grep -Fq 'CURLOPT_SSL_VERIFYPEER=>true' scripts/mojplaywin_isolated_main_footer_bridge.php
+          grep -Fq '17' scripts/mojplaywin_isolated_main_footer_bridge.php || true
+          grep -Fq 'data-mpw-main-founder-edge' scripts/mojplaywin_isolated_main_footer_bridge.php
+          echo "LIVE_MAIN_ROUTES_UNCHANGED=true"
+      - name: Configure pinned GitHub to VPS to cPanel private read-only relay
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-footer-stage"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            BatchMode yes
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            ConnectTimeout 10
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Install only one previously absent PHP staging file
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-footer-stage"
+          target="/home/zomorod2/mojplaywin.com/design-preview-20261017/_mpw_main_footer_bridge_20261018.php"
+          source="scripts/mojplaywin_isolated_main_footer_bridge.php"
+          expected="$(sha256sum "$source" | cut -d' ' -f1)"
+          timeout 25s ssh -T -F "$d/config" saeit-cpanel "test ! -e '$target' && test ! -L '$target' && test -f /home/zomorod2/mojplaywin.com/design-preview-20261017/index.html"
+          timeout 45s scp -q -F "$d/config" "$source" "saeit-cpanel:$target"
+          actual="$(timeout 30s ssh -T -F "$d/config" saeit-cpanel "set -e; chmod 644 '$target'; php -l '$target' >/dev/null; sha256sum '$target' | cut -d' ' -f1")"
+          test "$actual" = "$expected"
+          echo "ONE_NEW_STAGING_PHP_FILE_SHA_VERIFIED=true"
+          echo "HTACCESS_UNCHANGED=true"
+          echo "PASSENGER_NOT_RESTARTED=true"
+      - name: Verify each of 17 main-site public source page preserves exact original HTML except added footer
+        shell: bash
+        timeout-minutes: 5
+        run: |
+          python3 - <<'PY'
+          import re,urllib.request,urllib.parse
+          base="https://mojplaywin.com"
+          mapping={
+             "agriculture":"/agriculture/","industry":"/industry/","research":"/research/",
+             "knowledge":"/knowledge/","economy":"/economy/","studio":"/studio/",
+             "market":"/market/","agents":"/agents/","company":"/company/",
+             "venture_agriculture":"/ventures/agriculture/",
+             "venture_cafe":"/ventures/cafe-restaurant/",
+             "venture_fuel":"/ventures/fuel-station/",
+             "venture_jewelry":"/ventures/jewelry-gold/",
+             "venture_carpets":"/ventures/carpets/",
+             "venture_crypto":"/ventures/currency-crypto/",
+             "venture_ecommerce":"/ventures/ecommerce/",
+             "venture_hospitality":"/ventures/hospitality/"
+          }
+          assert len(mapping)==17
+          def read(url):
+              req=urllib.request.Request(url,headers={"Accept":"text/html","Accept-Encoding":"identity",
+                  "User-Agent":"MojPlayWin-ExactFooterBridge-Staging/1.0","Cache-Control":"no-cache"})
+              with urllib.request.urlopen(req,timeout=15) as res:
+                  if res.status!=200:raise RuntimeError("HTTP non-200")
+                  return res.read(1400000)
+          for key,path in mapping.items():
+              original=read(base+path+"?__mpw_footer_passthru=1")
+              stage=read(base+"/design-preview-20261017/_mpw_main_footer_bridge_20261018.php?__mpw_footer_section="+key)
+              assert stage.count(b'data-mpw-main-founder-edge="true"')==1
+              assert stage.count(b'<strong>Mojtaba Roozegar</strong>')==1
+              clean,n1=re.subn(rb'<style id="mpw-main-footer-edge-css">.*?</style>',b'',stage,count=1,flags=re.S)
+              clean,n2=re.subn(rb'<div class="mpw-main-founder-edge" data-mpw-main-founder-edge="true".*?</div>',b'',clean,count=1,flags=re.S)
+              assert n1==1 and n2==1
+              assert clean==original,"main original content drift: "+key
+              print("STAGED_MAIN_FOOTER_BYTE_PARITY_OK "+key)
+          print("ALL_17_MAIN_ONLY_PAGES_IDENTICAL_EXCEPT_GOLD_FOOTER=true")
+          print("LIVE_ROUTE_REWRITES_PERFORMED=false")
+          print("PRODUCT_PAYMENT_SYSTEM_UNCHANGED=true")
+          PY
+      - name: Verify protected child sites still healthy
+        run: |
+          set -euo pipefail
+          for path in /studio.Roham/ /saman/ /farnaz/ /zahra%24%24/ /taniya/ /mojtaba.roozegar/ /picm/login/; do
+            status="$(curl -sSL -o /dev/null -w '%{http_code}' --max-time 15 "https://mojplaywin.com$path")"
+            test "$status" = "200" || exit 1
+          done
+          echo "SEVEN_INDEPENDENT_CHILD_ROUTES_OK=true"
+      - name: Scrub staging SSH credentials
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/mpw-footer-stage"
