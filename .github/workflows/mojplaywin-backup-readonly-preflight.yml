@@ -136,15 +136,23 @@ jobs:
               kind="mysql" if "_mysql_" in f.name else ("files" if "_files_" in f.name else "unknown")
               print("STALE_PARTIAL_%s_KIND=%s_SIZE_MIB=%s_AGE_MIN=%s"%(i,kind,f.stat().st_size//(1024*1024),int((time()-f.stat().st_mtime)/60)),flush=True)
           PY
-      - name: Measure synthetic 64MiB private-link transfer (no site data)
+      - name: Measure source cPanel to runner independently with synthetic 8MiB
         shell: bash
-        timeout-minutes: 3
+        timeout-minutes: 2
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
           start=$SECONDS
-          n=$(timeout 110s ssh -T -F "$d/config" saeit-cpanel 'head -c 67108864 /dev/zero' |
-            timeout 110s ssh -T -F "$d/config" saeit-vps 'wc -c')
-          test "$n" -eq 67108864
-          elapsed=$((SECONDS-start))
-          echo "SYNTHETIC_64MIB_LINK_PASS elapsed_seconds=$elapsed"
+          n=$(timeout 90s ssh -T -F "$d/config" saeit-cpanel 'head -c 8388608 /dev/zero' | wc -c)
+          test "$n" -eq 8388608
+          echo "CPANEL_TO_RUNNER_8MIB_PASS elapsed_seconds=$((SECONDS-start))"
+      - name: Measure runner to VPS independently with synthetic 8MiB
+        shell: bash
+        timeout-minutes: 2
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          start=$SECONDS
+          n=$(head -c 8388608 /dev/zero | timeout 90s ssh -T -F "$d/config" saeit-vps 'wc -c')
+          test "$n" -eq 8388608
+          echo "RUNNER_TO_VPS_8MIB_PASS elapsed_seconds=$((SECONDS-start))"
