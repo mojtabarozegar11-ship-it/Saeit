@@ -165,44 +165,6 @@ def finance(request):
 @never_cache
 @office_access
 @require_GET
-def trial_balance(request):
-    """Account-level working trial balance: posted entries only, never mix currencies."""
-    required_permission(request, "view_journalentry")
-    required_permission(request, "view_ledgeraccount")
-    grouped = (
-        JournalLine.objects.filter(entry__status="posted")
-        .values(
-            "entry__unit__code", "entry__unit__name", "entry__currency",
-            "account__code", "account__name", "account__category",
-        )
-        .annotate(debit=Sum("debit"), credit=Sum("credit"))
-        .order_by("entry__unit__code", "entry__currency", "account__code")
-    )
-    records = []
-    for row in grouped:
-        debit = row["debit"] or Decimal("0")
-        credit = row["credit"] or Decimal("0")
-        net = debit - credit
-        records.append({
-            "unit": row["entry__unit__name"],
-            "unit_code": row["entry__unit__code"],
-            "currency": row["entry__currency"],
-            "account_code": row["account__code"],
-            "account_name": row["account__name"],
-            "category": row["account__category"],
-            "debit_turnover": debit,
-            "credit_turnover": credit,
-            "debit_balance": max(net, Decimal("0")),
-            "credit_balance": max(-net, Decimal("0")),
-        })
-    return page(request, "trial_balance", {
-        "section": "finance", "records": records,
-    })
-
-
-@never_cache
-@office_access
-@require_GET
 def inventory(request):
     required_permission(request, "view_inventoryitem")
     required_permission(request, "view_stockmovement")
