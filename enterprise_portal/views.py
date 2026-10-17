@@ -75,6 +75,12 @@ class CompanyLogin(LoginView):
     def get_success_url(self):
         return self.get_redirect_url() or reverse("enterprise_portal:dashboard")
 
+    def form_valid(self, form):
+        response = super().form_valid(form)
+        # Financial office sessions expire after thirty minutes.
+        self.request.session.set_expiry(30 * 60)
+        return no_cache(response)
+
 
 class CompanyLogout(LogoutView):
     next_page = "enterprise_portal:login"
