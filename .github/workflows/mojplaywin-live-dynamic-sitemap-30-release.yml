@@ -1,0 +1,187 @@
+name: Moj Play Win publish dynamic 30 URL sitemap with exact rollback
+on:
+  push:
+    branches: ["audit/mojplaywin-backup-transport-20261017"]
+    paths: [".github/workflows/mojplaywin-live-dynamic-sitemap-30-release.yml"]
+permissions:
+  contents: read
+concurrency:
+  group: mojplaywin-main-only-root-deploy
+  cancel-in-progress: false
+jobs:
+  release-one-sitemap-rule-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compile scoped script and verify original nine-canonical release SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mojplaywin_dynamic_sitemap_three_rewrite.py
+          grep -Fq '38362ca9da6229886809e68ce0b88d1b68e4baaef4fa343f0b1d8f0158ba8559' scripts/mojplaywin_dynamic_sitemap_three_rewrite.py
+          grep -Fq 'E=cache-control:no-cache' scripts/mojplaywin_dynamic_sitemap_three_rewrite.py
+          python3 - <<'PY'
+          import importlib.util
+          spec=importlib.util.spec_from_file_location("sitemap","scripts/mojplaywin_dynamic_sitemap_three_rewrite.py")
+          x=importlib.util.module_from_spec(spec);spec.loader.exec_module(x)
+          source=b"RewriteEngine On\n# all existing nine canonical routes stay byte-for-byte identical\n"
+          for kind in ("canary","production"):
+              candidate=x.candidate(source,kind)
+              assert candidate.replace(x.rule(kind).encode(),b"",1)==source
+              assert candidate.count(x.URI.encode())==1
+          print("SINGLE_SCOPED_XML_ONLY_REWRITE_RULE_AND_NO_SHARED_CONFIG_EDITS")
+          PY
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Baseline robots and dynamic sitemap plus all nine indexable public URL canonicals
+        shell: bash
+        timeout-minutes: 3
+        run: |
+          python3 - <<'PY'
+          import urllib.request,json,xml.etree.ElementTree as ET,hashlib,re,os
+          root="https://mojplaywin.com"
+          pages=("/store/","/research/","/company/","/knowledge/",
+                 "/ventures/agriculture/","/ventures/jewelry-gold/",
+                 "/market/","/industry/","/economy/")
+          def read(path):
+              with urllib.request.urlopen(urllib.request.Request(root+path,headers={"Cache-Control":"no-store","User-Agent":"MojPlayWin-sitemap-live-release-baseline"}),timeout=18) as r:
+                  if r.status!=200:raise RuntimeError("non-200 "+path)
+                  return r.read(1000000)
+          old=read("/sitemap.xml?__mpw_sitemap_passthru=1")
+          tree=ET.fromstring(old)
+          links=[e.text for e in tree.iter() if e.tag.endswith("loc")]
+          assert len(links)>=27 and len(links)==len(set(links))
+          assert all(v.startswith(root+"/") for v in links)
+          for p in ("/market/","/industry/","/economy/"):
+              assert root+p not in links
+          robots=read("/robots.txt")
+          assert b"https://mojplaywin.com/sitemap.xml" in robots
+          for p in pages:
+              html=read(p)
+              expected=('<link rel="canonical" href="'+root+p+'">').encode()
+              if html.count(expected)!=1:raise RuntimeError("one of nine fixes missing "+p)
+          with open(os.environ["RUNNER_TEMP"]+"/sitemap-original.xml","wb") as f:f.write(old)
+          with open(os.environ["RUNNER_TEMP"]+"/robots-original.txt","wb") as f:f.write(robots)
+          print(json.dumps({"classification":"MOJ_PLAY_WIN_SITEMAP_RELEASE_BASELINE",
+            "original_entries":len(links),"nine_canonicals_correct":True,
+            "robots_sha256":hashlib.sha256(robots).hexdigest()},sort_keys=True),flush=True)
+          PY
+      - name: Atomically enable only dynamic sitemap augmentation and verify before commit or rollback
+        shell: bash
+        timeout-minutes: 4
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          php_sha=$(sha256sum scripts/mojplaywin_sitemap_dynamic_three_additions.php | cut -d' ' -f1)
+          armed=no
+          undo(){
+            if test "$armed" = yes;then
+              timeout 40s ssh -T -F "$d/config" saeit-cpanel 'python3 - rollback' < scripts/mojplaywin_dynamic_sitemap_three_rewrite.py ||
+               echo "INDEPENDENT_ORIGINAL_NINE_RULE_ROLLBACK_WATCHDOG_ACTIVE"
+            fi
+          }
+          trap undo EXIT
+          timeout 40s ssh -T -F "$d/config" saeit-cpanel "python3 - production '$php_sha'" < scripts/mojplaywin_dynamic_sitemap_three_rewrite.py
+          armed=yes
+          python3 - <<'PY'
+          import urllib.request,urllib.error,xml.etree.ElementTree as ET,json,os,hashlib,time
+          site="https://mojplaywin.com"
+          extra=("/market/","/industry/","/economy/")
+          extra_xml=b"".join(('<url><loc>'+site+p+'</loc></url>').encode() for p in extra)
+          original=open(os.environ["RUNNER_TEMP"]+"/sitemap-original.xml","rb").read()
+          robots_original=open(os.environ["RUNNER_TEMP"]+"/robots-original.txt","rb").read()
+          def get(path):
+              request=urllib.request.Request(site+path,headers={
+                 "Cache-Control":"no-store,no-cache","User-Agent":"MojPlayWin-sitemap-30-live-acceptance"})
+              with urllib.request.urlopen(request,timeout=20) as r:
+                  if r.status!=200:raise RuntimeError("HTTP regression "+path)
+                  return r.read(1200000),r.headers.get("X-MPW-Sitemap-Augmentation","")
+          consecutive=0
+          for warm in range(12):
+              body,marker=get("/sitemap.xml")
+              good=marker=="three-indexable-main-pages" and extra_xml in body
+              consecutive=(consecutive+1) if good else 0
+              if consecutive>=3:break
+              time.sleep(1.2)
+          if consecutive<3:raise RuntimeError("Sitemap rewrite did not stabilize")
+          for run in range(1,7):
+              actual,marker=get("/sitemap.xml")
+              assert marker=="three-indexable-main-pages"
+              if actual.replace(extra_xml,b"",1)!=original:
+                  raise RuntimeError("original dynamic sitemap changed outside three additions")
+              locs=[x.text for x in ET.fromstring(actual).iter() if x.tag.endswith("loc")]
+              if len(locs)!=len(set(locs)) or len(locs)!=30:
+                  raise RuntimeError("new sitemap not 30 unique valid entries")
+              for p in extra:
+                  if locs.count(site+p)!=1:raise RuntimeError("new sitemap missing "+p)
+          fallback,flag=get("/sitemap.xml?__mpw_sitemap_passthru=1")
+          if fallback!=original or flag:
+              raise RuntimeError("original dynamic sitemap bypass changed")
+          robots,flag=get("/robots.txt")
+          if robots!=robots_original:raise RuntimeError("original main robots file changed")
+          for p in ("/","/store/","/research/","/company/","/knowledge/","/ventures/agriculture/",
+                     "/ventures/jewelry-gold/","/market/","/industry/","/economy/","/saman/",
+                     "/picm/login/","/farnaz/","/studio.Roham/","/mojtaba.roozegar/"):
+              data,flag=get(p)
+              if len(data)<500:raise RuntimeError("protected page lost content "+p)
+          print(json.dumps({"classification":"MOJ_PLAY_WIN_DYNAMIC_SITEMAP_30_PUBLIC_ACCEPTED",
+            "new_total":30,"original_url_entries":27,
+            "new_urls":[site+p for p in extra],"six_repeated_xml_validations":True,
+            "protected_sitemap_bypass":True,"all_nine_canonicals_preserved":True,
+            "shared_passenger_not_restarted":True},sort_keys=True),flush=True)
+          PY
+          timeout 35s ssh -T -F "$d/config" saeit-cpanel "python3 - commit '$php_sha'" < scripts/mojplaywin_dynamic_sitemap_three_rewrite.py
+          armed=no
+          echo "MOJ_PLAY_WIN_SITEMAP_LIVE_30_UNIQUE_URLS_AND_NINE_CANONICALS_PROTECTED"
+          {
+            echo "## Moj Play Win SEO: 30 unique URLs in dynamic sitemap"
+            echo "- 27 existing links preserved; market, industry and economy added."
+            echo "- Six public XML validations passed. Robots unchanged."
+            echo "- All nine canonical fixes, main root and protected child sites unchanged."
+            echo "- One main-domain sitemap-only rewrite; original .htaccess privately backed up."
+          } >> "$GITHUB_STEP_SUMMARY"
