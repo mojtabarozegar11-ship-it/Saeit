@@ -35,7 +35,7 @@ DEPLOY_MARKERS = (
 
 
 def event_block(header: str, event: str) -> str | None:
-    match = re.search(r"(?m)^  " + re.escape(event) + r":\s*(.*)$", header)
+    match = re.search(r"(?m)^  " + re.escape(event) + r":[ \t]*(.*)$", header)
     if not match:
         return None
     if match.group(1).strip():
@@ -46,7 +46,7 @@ def event_block(header: str, event: str) -> str | None:
 
 
 def contains_main(text: str) -> bool:
-    match = re.search(r"(?m)^    branches:\s*(.*)$", text)
+    match = re.search(r"(?m)^    branches:[ \t]*(.*)$", text)
     if not match:
         return True  # no branch restriction means main is included
     tail = match.group(1)
@@ -62,7 +62,7 @@ def contains_main(text: str) -> bool:
 
 
 def paths_filter(text: str) -> list[str] | None:
-    match = re.search(r"(?m)^    paths:\s*(.*)$", text)
+    match = re.search(r"(?m)^    paths:[ \t]*(.*)$", text)
     if not match:
         return None
     inline = match.group(1).strip()
