@@ -1,0 +1,858 @@
+name: Zomorod Corporate 1AM Backup Readonly Audit
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "content/zomorod-nova-pages/about.html"
+      - "content/zomorod-nova-pages/company.html"
+      - ".github/workflows/zomorod-corporate-historical-readonly.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Fail on page/file deletion or unexpected modification
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin main
+          git diff --name-status "$(git merge-base HEAD origin/main)" HEAD > /tmp/zomorod-changed-files.txt
+          cat /tmp/zomorod-changed-files.txt
+          python3 - <<'PY'
+          from pathlib import Path
+          allowed = {
+              'content/zomorod-nova-pages/about.html',
+              'content/zomorod-nova-pages/company.html',
+              'content/zomorod-nova-pages/services.html',
+              'content/zomorod-nova-pages/industry.html',
+              'content/zomorod-nova-pages/research.html',
+              'content/zomorod-nova-pages/knowledge.html',
+              'content/zomorod-new-home/index.html',
+              'docs/zomorod-cc0-editorial-photographs.json',
+              'scripts/zomorod_cc0_photography.py',
+              '.github/workflows/zomorod-cc0-photo-feasibility.yml',
+              '.github/workflows/zomorod-cc0-photo-preview.yml',
+              '.github/workflows/zomorod-cc0-photo-apply.yml',
+              'core/static/site/editorial/01-farm-machinery.webp',
+              'core/static/site/editorial/02-crop-economics.webp',
+              'core/static/site/editorial/03-water-soil.webp',
+              'core/static/site/editorial/04-plant-genetics.webp',
+              'core/static/site/editorial/05-smart-systems.webp',
+              'core/static/site/editorial/06-livestock.webp',
+              'core/static/site/editorial/07-food-processing.webp',
+              'core/static/site/editorial/08-digital-research.webp',
+              'core/static/site/editorial/09-economic-analysis.webp',
+              'core/static/site/editorial/10-company-landscape.webp',
+              'core/static/site/editorial/11-protected-cultivation.webp',
+              'core/static/site/editorial/12-professional-services.webp',
+              'core/static/site/editorial/13-field-consulting.webp',
+              'core/static/site/editorial/14-industrial-technology.webp',
+              'core/static/site/editorial/15-scientific-research.webp',
+              'core/static/site/editorial/16-microbiology.webp',
+              'core/static/site/editorial/17-learning-resources.webp',
+              'tests/test_zomorod_corporate_content_restoration.py',
+              '.github/workflows/zomorod-corporate-historical-readonly.yml',
+              'core/static/site/emerald-system.css',
+              'docs/zomorod-litespeed-503-recovery-20261017.md',
+              '.github/workflows/zomorod-complete-backup-catalog-readonly.yml',
+              '.github/workflows/zomorod-final-live-acceptance.yml',
+              '.github/workflows/zomorod-image-library-readonly.yml',
+              '.github/workflows/zomorod-selector-uri-canary.yml',
+              '.github/workflows/zomorod-selector-uri-rollback.yml',
+              '.github/workflows/zomorod-emerald-css-recovery.yml',
+              '.github/workflows/zomorod-emerald-css-export.yml',
+          }
+          changed = [line.split('\t', 1) for line in Path('/tmp/zomorod-changed-files.txt').read_text().splitlines()]
+          assert changed, 'Nothing to verify'
+          for status, path in changed:
+              assert status in ('A','M'), f'Deletion, rename or other destructive change forbidden: {status} {path}'
+              assert path in allowed, f'Out-of-scope site file changed: {path}'
+          print('NO_REMOVED_PAGES=true')
+          print('CHANGED_FILES_SCOPED=true')
+          PY
+      - name: Verify all existing visible content remains on both pages
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from collections import Counter
+          from html.parser import HTMLParser
+          from pathlib import Path
+          import subprocess
+
+          class MainText(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.in_main = False
+                  self.depth = 0
+                  self.text = []
+              def handle_starttag(self, tag, attrs):
+                  if tag == 'main':
+                      self.in_main = True
+                  if self.in_main:
+                      self.depth += 1
+              def handle_endtag(self, tag):
+                  if self.in_main:
+                      self.depth -= 1
+                      if self.depth == 0:
+                          self.in_main = False
+              def handle_data(self, text):
+                  if self.in_main and text.strip():
+                      self.text.append(' '.join(text.split()))
+
+          paths = [
+              'content/zomorod-new-home/index.html',
+              *(f'content/zomorod-nova-pages/{slug}.html' for slug in
+                ('about', 'company', 'services', 'industry', 'research', 'knowledge')),
+          ]
+          for path in paths:
+              slug = path.rsplit('/', 1)[-1].removesuffix('.html')
+              before = subprocess.check_output(['git', 'show', 'origin/main:'+path], text=True)
+              after = Path(path).read_text(encoding='utf-8')
+              p, q = MainText(), MainText()
+              p.feed(before)
+              q.feed(after)
+              older, newer = Counter(p.text), Counter(q.text)
+              lost = [text for text, count in older.items() if newer[text] < count]
+              assert not lost, f'{slug}: original visible content removed or shortened: {lost[:8]}'
+              assert len(q.text) >= len(p.text), f'{slug}: unexpected content loss'
+              print(f'ORIGINAL_CONTENT_PRESERVED={slug}:true; fragments={len(p.text)}')
+          PY
+      - name: Offline content checks
+        run: python -m unittest discover -s tests -p test_zomorod_corporate_content_restoration.py -v
+      - name: Prepare fingerprint-pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-readonly"; install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" > /dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" > /dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.known"
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          echo "RELAY_PINNED=verified"
+      - name: Inspect only original host snapshots and live file fingerprints
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-readonly"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          web="$HOME/public_html"
+          echo "READ_ONLY=true"
+          echo "HOST_CLOCK=$(date -Is)"
+          echo "REQUESTED_BACKUP_LOCAL=2026-10-14T01:00:00+03:30"
+          for slug in about company; do
+            p="$web/$slug/index.html"
+            if [ -f "$p" ]; then
+              echo "PAGE=$slug BYTES=$(stat -c '%s' "$p") SHA256=$(sha256sum "$p" | cut -d' ' -f1)"
+            else
+              echo "MISSING_PAGE=$slug"
+            fi
+          done
+          for name in index.html site-heritage/home-before-redesign/index.html mohammad/index.html ghanadi/index.html amozeshgah/index.html; do
+            p="$web/$name"
+            if [ -f "$p" ]; then
+              echo "PROTECTED=$name BYTES=$(stat -c '%s' "$p") SHA256=$(sha256sum "$p" | cut -d' ' -f1)"
+            else
+              echo "MISSING_PROTECTED=$name"
+            fi
+          done
+          for n in zomorodmelal-root-homepage zomorodmelal-app zomorod-nova-publish; do
+            dir="$HOME/.backups/$n"
+            if [ -d "$dir" ]; then
+              echo "BACKUP_DIR=$n"
+              find "$dir" -maxdepth 4 -type f \( -iname '*.html' -o -iname '*.manifest' -o -iname '*company*' -o -iname '*about*' -o -iname '*backup*' \) -printf '%TY-%Tm-%TdT%TH:%TM %s %f\n' | sort | head -n 75
+            else
+              echo "BACKUP_DIR_ABSENT=$n"
+            fi
+          done
+          for path in / /about/ /company/ /site-heritage/home-before-redesign/ /mohammad/ /ghanadi/ /amozeshgah/ /company/executive/ /contact/ /economy/ /market/; do
+            code="$(curl -sSL --max-time 15 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir$path" || true)"
+            echo "HTTP=$path:$code"
+          done
+          REMOTE
+      - name: Discover candidate 14 Oct 1AM host backups by timestamp only
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-readonly"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          echo "BACKUP_TIME_WINDOW=2026-10-13T20:00_to_2026-10-14T06:00_HOST_LOCAL"
+          for name in zomorodmelal-root-homepage zomorodmelal-app zomorod-nova-publish; do
+            dir="$HOME/.backups/$name"
+            test -d "$dir" || continue
+            echo "BACKUP_CANDIDATE_SOURCE=$name"
+            find "$dir" -maxdepth 2 -mindepth 1 -printf '%y %TY-%Tm-%TdT%TH:%TM %s %P\n' | sort | sed -n '1,45p'
+            echo "EARLY_14_OCT_CANDIDATES=$name"
+            find "$dir" -maxdepth 5 -type f -newermt '2026-10-13 20:00' ! -newermt '2026-10-14 06:00' -printf '%TY-%Tm-%TdT%TH:%TM %s %f\n' | sort | sed -n '1,55p'
+          done
+          echo "NEARBY_BACKUP_DIRECTORIES"
+          find "$HOME/.backups" -maxdepth 2 -type d -newermt '2026-10-13 20:00' ! -newermt '2026-10-14 06:00' -printf '%TY-%Tm-%TdT%TH:%TM %f\n' | sort | sed -n '1,60p'
+          REMOTE
+      - name: Verify unique image paths exist on live host before release
+        shell: bash
+        run: |
+          set -euo pipefail
+          for asset in /static/site/heroes/ai.webp /static/site/heroes/economy.webp /static/site/heroes/smart-agriculture.webp; do
+            code="$(curl -sSL --connect-timeout 5 --max-time 15 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir$asset" || true)"
+            echo "NEW_PAGE_ASSET=$asset STATUS=$code"
+            test "$code" = 200
+          done
+      - name: Identify original 01AM historic restoration sources and broken route handlers read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-readonly"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          export PYTHONDONTWRITEBYTECODE=1
+          python3 - <<'PY'
+          import pathlib,os,datetime,hashlib
+          home=pathlib.Path.home()
+          paths=[home/'.backups',home/'Saeit'/'backups',home/'Saeit'/'var'/'backups',home/'backups',home/'backup']
+          print("RESTORE_PROBE=read_only")
+          print("RESTORE_CLOCK="+datetime.datetime.now(datetime.timezone.utc).isoformat())
+          hits=[]
+          for root in paths:
+              print("SOURCE_DIR="+str(root.relative_to(home))+" is_dir="+str(root.is_dir()))
+              if not root.is_dir():continue
+              for folder,dirs,files in os.walk(root):
+                  depth=len(pathlib.Path(folder).relative_to(root).parts)
+                  dirs[:]=sorted(d for d in dirs if not d.startswith('.') and not any(z in d.lower() for z in ('mohammad','ghanadi','amozeshgah','secrets','token','ssh','credentials','venv'))) if depth<5 else []
+                  if depth>5:continue
+                  for filename in files:
+                      name=filename.lower()
+                      if not (name in ('index.html','company.html','about.html','original-home.html','.htaccess','passenger_wsgi.py','manifest.json') or any(z in name for z in ('20261015','20261014','2026-10-15','2026-10-14','backup','restore','snapshot','root-home','site-full'))):
+                          continue
+                      f=pathlib.Path(folder)/filename
+                      if f.is_symlink():continue
+                      try:stat=f.stat()
+                      except OSError:continue
+                      if stat.st_size>500_000_000:continue
+                      m=datetime.datetime.fromtimestamp(stat.st_mtime,datetime.timezone.utc).isoformat(timespec='minutes')
+                      if any(z in str(f).lower() for z in ('secret','token','passwd','credential')):continue
+                      hits.append((str(f.relative_to(home)),stat.st_size,m))
+          print("HISTORICAL_CANDIDATE_COUNT="+str(len(hits)))
+          for rel,size,mtime in sorted(hits,key=lambda x:x[2])[:110]:
+              print("HISTORICAL_FILE="+rel+" bytes="+str(size)+" modified_utc="+mtime)
+          web=home/'public_html'
+          for slug in ('contact','economy','market','company','agents','admin','newsletter','store','blog','auctions'):
+              p=web/slug
+              q=p/'index.html'
+              route='/' + slug + '/'
+              print("ROUTE_FILES="+route+" folder="+str(p.is_dir())+" static_index="+str(q.is_file())+" local_htaccess="+str((p/'.htaccess').is_file()))
+              if q.is_file() and not q.is_symlink():
+                  print("ROUTE_STATIC_SHA256="+route+" "+hashlib.sha256(q.read_bytes()).hexdigest()[:24])
+          for app in (home/'Saeit'/'passenger_wsgi.py',home/'public_html'/'passenger_wsgi.py',home/'Saeit'/'config'/'wsgi.py'):
+              print("APP_RUNTIME_FILE="+str(app.relative_to(home))+" present="+str(app.is_file()))
+          for cfg in (home/'public_html'/'.htaccess',home/'Saeit'/'.htaccess'):
+              print("ROOT_ROUTING_FILE="+str(cfg.relative_to(home))+" present="+str(cfg.is_file()))
+              if not cfg.is_file():continue
+              for line in cfg.read_text(errors='replace').splitlines():
+                  item=line.strip()
+                  if item.startswith('#') or not item:continue
+                  key=item.split()[0]
+                  if key.lower().startswith(('passenger','rewrite','directoryindex','addhandler','options')):
+                      if key.lower().startswith('passenger') and any(t in key.lower() for t in ('path','root','python','app','startup')):
+                          print("ROUTING_DIRECTIVE="+key+" VALUE=REDACTED")
+                      else:
+                          print("ROUTING_DIRECTIVE_NAME="+key)
+          PY
+          REMOTE
+      - name: Check 01AM snapshot fingerprints and Django startup without changing live routes
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-readonly"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          export PYTHONDONTWRITEBYTECODE=1
+          python3 - <<'PY'
+          import os, pathlib, datetime, shlex, subprocess
+          home=pathlib.Path.home()
+          utc=datetime.timezone.utc
+          start=datetime.datetime(2026,10,13,17,30,tzinfo=utc)
+          end=datetime.datetime(2026,10,14,1,30,tzinfo=utc)
+          roots=[home/'.backups',home/'Saeit'/'backups',home/'Saeit'/'var'/'backups']
+          found=[]
+          for root in roots:
+              if not root.is_dir():continue
+              for directory,dirs,files in os.walk(root):
+                  depth=len(pathlib.Path(directory).relative_to(root).parts)
+                  dirs[:]=[x for x in dirs if not x.startswith('.') and not any(k in x.lower() for k in ('mojtaba','mohammad','ghanadi','amozeshgah','secret','ssh','credentials','token'))] if depth<5 else []
+                  for filename in files:
+                      f=pathlib.Path(directory)/filename
+                      if f.is_symlink():continue
+                      name=filename.lower()
+                      if not (name in ('index.html','company.html','about.html','passenger_wsgi.py','manifest.json','urls.py','views.py') or any(k in name for k in ('20261015','20261014','snapshot','restor','backup'))):continue
+                      try:
+                          st=f.stat()
+                          dt=datetime.datetime.fromtimestamp(st.st_mtime,utc)
+                      except OSError:continue
+                      if start<=dt<=end and st.st_size<=300_000_000:
+                          found.append((dt, str(f.relative_to(home)),st.st_size))
+          print('NEAR_1AM_CANDIDATES='+str(len(found)))
+          for dt,rel,sz in sorted(found)[:90]:
+              print('NEAR_1AM_FILE='+dt.isoformat(timespec='minutes')+' size='+str(sz)+' path='+rel)
+          rootcfg=home/'public_html'/'.htaccess'
+          if rootcfg.is_file():
+              for raw in rootcfg.read_text(errors='replace').splitlines():
+                  text=raw.strip()
+                  if not text or text.startswith('#'):continue
+                  try:tokens=shlex.split(text)
+                  except ValueError:continue
+                  if not tokens:continue
+                  key=tokens[0].lower()
+                  if key in ('passengerpython','passengerapproot','passengerstartupfile','passengerbaseuri'):
+                      val=tokens[1] if len(tokens)>1 else ''
+                      if key in ('passengerpython','passengerapproot'):
+                          target=pathlib.Path(val)
+                          print('PASSENGER_CONFIG='+key+' configured=yes path_exists='+str(target.exists())+' is_file='+str(target.is_file()))
+                      else:print('PASSENGER_CONFIG='+key+' configured=yes')
+          for n in ('virtualenv/Saeit/3.10/bin/python','Saeit/passenger_wsgi.py','Saeit/.env','Saeit/db.sqlite3'):
+              f=home/n
+              print('RUNTIME_ASSET='+n+' present='+str(f.is_file())+' bytes='+(str(f.stat().st_size) if f.is_file() else '0'))
+          exe=home/'virtualenv'/'Saeit'/'3.10'/'bin'/'python'
+          app=home/'Saeit'
+          if exe.is_file() and app.is_dir():
+              code='import os;os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings");from passenger_wsgi import application;print("DJANGO_WSGI_IMPORT=PASS")'
+              try:
+                  proc=subprocess.run([str(exe),'-B','-c',code],cwd=app,text=True,capture_output=True,timeout=25,env=dict(os.environ,PYTHONDONTWRITEBYTECODE='1'))
+                  print('DJANGO_WSGI_EXIT='+str(proc.returncode))
+                  if 'DJANGO_WSGI_IMPORT=PASS' in proc.stdout:print('DJANGO_WSGI_IMPORT=PASS')
+                  else:
+                      out=proc.stderr or proc.stdout
+                      kinds=['ModuleNotFoundError','ImportError','RuntimeError','django.core.exceptions','sqlite3.OperationalError','OperationalError','No module named','RecursionError','pydantic_core','segmentation fault','PermissionError','FileNotFoundError']
+                      print('DJANGO_WSGI_KNOWN_ERRORS='+','.join(k for k in kinds if k in out))
+                      print('DJANGO_WSGI_LAST_EXCEPTION_CLASS='+next((x.split(':',1)[0].split('.')[-1] for x in out.splitlines()[::-1] if 'Error:' in x or 'Exception:' in x),'none'))
+              except subprocess.TimeoutExpired:
+                  print('DJANGO_WSGI_IMPORT=TIMEOUT')
+          logs=[home/'Saeit'/'stderr.log',home/'Saeit'/'passenger.log',home/'public_html'/'error_log',home/'public_html'/'stderr.log']
+          for file in logs:
+              if not file.is_file():continue
+              with file.open('rb') as stream:
+                  stream.seek(max(0,file.stat().st_size-48000))
+                  text=stream.read(48000).decode('utf-8','replace')
+              tokens=['set_env_vars.py','VIRTUAL_ENV','Passenger','Traceback','ModuleNotFoundError','RecursionError','PythonHome','pydantic_core']
+              print('RUNTIME_LOG_CATEGORY='+file.name+' bytes='+str(file.stat().st_size)+' markers='+','.join(t for t in tokens if t.lower() in text.lower()))
+          PY
+          REMOTE
+      - name: Classify Passenger failure traceback without exposing private error text
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-readonly"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          export PYTHONDONTWRITEBYTECODE=1
+          python3 - <<'PY'
+          import pathlib,re,collections
+          home=pathlib.Path.home()
+          p=home/'Saeit'/'stderr.log'
+          if not p.is_file():
+              print('PASSENGER_LOG=missing');raise SystemExit
+          with p.open('rb') as fh:
+              fh.seek(max(0,p.stat().st_size-350000))
+              s=fh.read(350000).decode('utf8','replace')
+          errors=re.findall(r'(?m)^([a-zA-Z_][a-zA-Z0-9_.]*(?:Error|Exception)):\s*[^\n]*',s)
+          print('PASSENGER_ERRORS_IN_TAIL='+repr(dict(collections.Counter(errors).most_common(12))))
+          chunks=s.split('Traceback (most recent call last):')
+          print('PASSENGER_TRACEBACKS_IN_TAIL='+str(len(chunks)-1))
+          for block in chunks[-4:]:
+              if not block.strip():continue
+              frames=re.findall(r'File "([^"]+)", line (\d+), in ([^\n]+)',block)
+              print('TRACEBACK_FRAMES='+str(len(frames))+' frame_tails='+','.join(pathlib.Path(f).name+':'+n+':'+re.sub('[^a-zA-Z0-9_]', '', fun)[:30] for f,n,fun in frames[-6:]))
+              types=re.findall(r'(?m)^([A-Za-z_][A-Za-z0-9_.]*(?:Error|Exception)):',block)
+              print('TRACEBACK_EXCEPTION='+(types[-1] if types else 'unresolved'))
+          for term in ('set_env_vars.py','VIRTUAL_ENV','populate() isn\'t reentrant','max children','Resource temporarily unavailable','pydantic_core'):
+              print('PASSENGER_ERROR_MARKER='+term+' count='+str(s.lower().count(term.lower())))
+          PY
+          REMOTE
+      - name: Correlate 14 Oct 01AM backup and cloud selector live status
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-readonly"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          export PYTHONDONTWRITEBYTECODE=1
+          python3 - <<'PY'
+          from pathlib import Path
+          from datetime import datetime,timezone
+          import os,subprocess,json,collections,re
+          home=Path.home()
+          target=datetime.fromisoformat('2026-10-13T21:30:00+00:00')
+          starts=target.timestamp()-3600
+          ends=target.timestamp()+3600
+          roots=[home/'.backups',home/'Saeit'/'backups',home/'Saeit'/'var'/'backups']
+          hits=[]
+          for root in roots:
+              if not root.is_dir():continue
+              for folder,dirs,files in os.walk(root):
+                  depth=len(Path(folder).relative_to(root).parts)
+                  dirs[:]=[d for d in dirs if not d.startswith('.') and not any(x in d.lower() for x in ('mojtaba','mohammad','ghanadi','amozeshgah','secrets','ssh','token','credential','venv'))] if depth<6 else []
+                  if depth>6:continue
+                  for name in files:
+                      if not (name.endswith(('.html','.sqlite3','.db','.tar','.tar.gz','.zip','.json','.py')) or 'backup' in name or 'snapshot' in name):continue
+                      path=Path(folder)/name
+                      try:
+                          if path.is_symlink():continue
+                          st=path.stat()
+                          if starts<=st.st_mtime<=ends:
+                              hits.append((str(path.relative_to(home)),int(st.st_size),datetime.fromtimestamp(st.st_mtime,timezone.utc).isoformat(timespec='minutes')))
+                      except (OSError,ValueError):pass
+          print('TARGET_BACKUP_TIME=2026-10-14_01:00_Asia-Tehran')
+          print('EXACT_TIME_WINDOW_CANDIDATE_COUNT='+str(len(hits)))
+          for rel,size,dt in sorted(hits,key=lambda z:z[2])[:80]:
+              print('EXACT_TIME_WINDOW_FILE='+dt+' '+str(size)+' '+rel)
+          for path in (home/'Saeit'/'core'/'middleware.py',home/'Saeit'/'core'/'middleware',home/'Saeit'/'config'/'wsgi.py',home/'Saeit'/'passenger_wsgi.py',home/'Saeit'/'tmp'/'restart.txt'):
+              print('LIVE_MODULE='+str(path.relative_to(home))+' exists='+str(path.exists())+' bytes='+(str(path.stat().st_size) if path.is_file() else 'notfile'))
+          selector=Path('/usr/sbin/cloudlinux-selector')
+          if selector.is_file() and os.access(selector,os.X_OK):
+              try:
+                  run=subprocess.run([str(selector),'get','--json','--interpreter','python','--user',os.environ.get('USER','zomorod2')],stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,text=True,timeout=18)
+                  print('SELECTOR_GET_RETURN_CODE='+str(run.returncode))
+                  if run.returncode==0:
+                      js=json.loads(run.stdout)
+                      records=[]
+                      def walk(obj):
+                          if isinstance(obj,dict):
+                              if 'domain' in obj and ('app_uri' in obj or 'app-root' in obj or 'app_root' in obj):records.append(obj)
+                              for val in obj.values():walk(val)
+                          elif isinstance(obj,list):
+                              for val in obj:walk(val)
+                      walk(js)
+                      print('SELECTOR_APP_RECORD_COUNT='+str(len(records)))
+                      for idx,obj in enumerate(records[:10],1):
+                          if obj.get('domain') not in ('zomorodmelal.ir','staging.zomorodmelal.ir'):continue
+                          print('SELECTOR_APP='+str(idx)+' domain='+str(obj.get('domain'))+' app_uri='+repr(obj.get('app_uri'))+' status='+str(obj.get('app_status'))+' version='+str(obj.get('python_version') or obj.get('app_version'))+' startup='+str(obj.get('startup_file')))
+              except Exception as exc:print('SELECTOR_GET_EXCEPTION='+type(exc).__name__)
+          log=home/'Saeit'/'stderr.log'
+          if log.is_file():
+              with log.open('rb') as stream:
+                  stream.seek(max(0,log.stat().st_size-500000))
+                  data=stream.read(500000).decode('utf8','replace')
+              chunks=data.split('Traceback (most recent call last):')
+              print('TRACEBACK_COUNT='+str(len(chunks)-1))
+              for chunk in chunks[-5:]:
+                  if 'RuntimeError' in chunk or 'ModuleNotFoundError' in chunk:
+                      marks=[]
+                      for k in ('populate() isn','core.middleware','set_env_vars.py','pydantic_core'):
+                          if k in chunk:marks.append(k)
+                      print('TRACEBACK_MARKERS='+','.join(marks)+' exception='+('RuntimeError' if 'RuntimeError:' in chunk else 'ModuleNotFoundError' if 'ModuleNotFoundError:' in chunk else 'unknown'))
+          PY
+          REMOTE
+      - name: Compare live and staging Passenger response and recent startup hooks
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-readonly"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          echo "PUBLIC_ROUTE_COMPARISON=read_only"
+          for host in zomorodmelal.ir staging.zomorodmelal.ir; do
+            for route in /api/health/ /admin/login/ /agents/; do
+              status="$(curl -sSL --connect-timeout 6 --max-time 14 -o /dev/null -w '%{http_code}' "https://$host$route" || true)"
+              echo "ROUTE_TEST_HOST=$host PATH=$route HTTP=$status"
+            done
+          done
+          python3 - <<'PY'
+          from pathlib import Path
+          from datetime import datetime,timezone
+          import os
+          home=Path.home()
+          paths=[home/'Saeit'/'stderr.log',home/'Saeit'/'passenger.log',home/'public_html'/'error_log']
+          for p in paths:
+              if p.is_file() and not p.is_symlink():
+                  st=p.stat()
+                  print('STARTUP_LOG='+p.name+' BYTES='+str(st.st_size)+' MTIME_UTC='+datetime.fromtimestamp(st.st_mtime,timezone.utc).isoformat(timespec='seconds'))
+          roots=[home/'virtualenv'/'Saeit'/'3.10'/'lib'/'python3.10'/'site-packages',home/'virtualenv'/'Saeit'/'3.10'/'lib64'/'python3.10'/'site-packages']
+          for root in roots:
+              if root.is_dir():
+                  for p in sorted(root.glob('*.pth')):
+                      if p.is_file():
+                          t=p.read_text(errors='replace')
+                          print('PTH_STARTUP_HOOK='+p.name+' EXECUTABLE_IMPORT='+str(any(x.lstrip().startswith('import ') for x in t.splitlines()))+' REFERENCES_DJANGO='+str('django' in t.lower()))
+                  for name in ('sitecustomize.py','usercustomize.py'):
+                      p=root/name
+                      if p.is_file():
+                          t=p.read_text(errors='replace')
+                          print('PYTHON_CUSTOMIZER='+name+' PRESENT=true REFERENCES_DJANGO='+str('django' in t.lower()))
+          PY
+          REMOTE
+      - name: Compare working staging and failing production Django runtimes without changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-readonly"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          export PYTHONDONTWRITEBYTECODE=1
+          python3 - <<'PY'
+          from pathlib import Path
+          import subprocess,os,re
+          h=Path.home()
+          for label,p in (
+             ('production',h/'public_html'/'.htaccess'),
+             ('staging-webroot',h/'staging.zomorodmelal.ir'/'.htaccess'),
+             ('staging-project',h/'Saeit-staging'/'.htaccess'),
+             ('staging-public',h/'Saeit-staging'/'public_html'/'.htaccess'),
+          ):
+              if not p.is_file():continue
+              print('CONFIG_TARGET='+label+' exists=true bytes='+str(p.stat().st_size))
+              for raw in p.read_text(errors='replace').splitlines():
+                  line=raw.strip()
+                  if not line or line.startswith('#'):continue
+                  toks=line.split()
+                  if not toks:continue
+                  name=toks[0]
+                  if name.lower().startswith('passenger'):
+                      val=' '.join(toks[1:]).strip('"')
+                      if name in ('PassengerPython','PassengerAppRoot'):
+                          target=Path(val)
+                          print('PASSENGER_DIFFERENCE='+label+' name='+name+' exists='+str(target.exists())+' filename='+target.name)
+                      else:print('PASSENGER_DIFFERENCE='+label+' name='+name+' short='+str(len(val)<48))
+          for p in (h/'Saeit'/'config'/'settings.py',h/'Saeit-staging'/'config'/'settings.py'):
+              print('APP_SETTINGS='+p.parent.parent.name+' exists='+str(p.is_file())+' bytes='+str(p.stat().st_size) if p.is_file() else 'APP_SETTINGS='+p.parent.parent.name+' exists=false')
+          python_candidates=[
+             ('production310',h/'virtualenv'/'Saeit'/'3.10'/'bin'/'python',h/'Saeit'),
+             ('staging311',h/'virtualenv'/'Saeit-staging'/'3.11'/'bin'/'python',h/'Saeit'),
+          ]
+          code="""import os;os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings');from config.wsgi import application;from django.test import Client;c=Client(HTTP_HOST='zomorodmelal.ir');print('WSGI_BOOT=PASS');paths=('/api/health/','/admin/login/','/agents/');[(lambda r:print('OFFLINE_HTTP='+p+':'+str(r.status_code)))(c.get(p,secure=True)) for p in paths]"""
+          for label,interpreter,root in python_candidates:
+              print('INTERPRETER='+label+' exists='+str(interpreter.is_file())+' app_root_exists='+str(root.is_dir()))
+              if not interpreter.is_file() or not root.is_dir():continue
+              try:
+                  result=subprocess.run([str(interpreter),'-B','-c',code],cwd=root,text=True,capture_output=True,timeout=30,env=dict(os.environ,PYTHONDONTWRITEBYTECODE='1'))
+                  print('OFFLINE_INTERPRETER='+label+' exit='+str(result.returncode))
+                  if result.returncode==0:
+                      for line in result.stdout.splitlines():
+                          if line.startswith(('WSGI_BOOT=','OFFLINE_HTTP=')):print('TEST_'+label+'_'+line)
+                  else:
+                      errors=re.findall(r'(?m)^([A-Za-z_][\w.]*(?:Error|Exception)):',result.stderr)
+                      print('OFFLINE_FAILURE_CLASS='+label+':'+(errors[-1] if errors else 'unknown'))
+              except subprocess.TimeoutExpired:print('OFFLINE_INTERPRETER_TIMEOUT='+label)
+          PY
+          REMOTE
+      - name: Inspect production PassengerPython drift and Django offline exception frames
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-readonly"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          export PYTHONDONTWRITEBYTECODE=1
+          python3 - <<'PY'
+          from pathlib import Path
+          import os,subprocess,re,datetime
+          h=Path.home()
+          candidates=[
+              h/'public_html'/'.htaccess',
+              h/'.backups'/'zomorodmelal-amozeshgah'/'htaccess.20261014T235252Z',
+              h/'.backups'/'zomorodmelal-root-homepage'/'htaccess-before-directory-index',
+          ]
+          for path in candidates:
+              if not path.is_file():continue
+              data=path.read_text(errors='replace')
+              values=[]
+              for m in re.finditer(r'(?im)^\s*PassengerPython\s+([^\n]+)',data):
+                  p=m.group(1).strip().strip('"').strip("'")
+                  values.append('venv' if '/virtualenv/' in p else 'lswsgi' if p.endswith('/lswsgi') else 'other')
+              print('PASSENGER_HISTORY='+path.name+' category='+','.join(values)+' modified_utc='+datetime.datetime.fromtimestamp(path.stat().st_mtime,datetime.timezone.utc).isoformat(timespec='minutes'))
+          root=h/'Saeit'
+          interp=h/'virtualenv'/'Saeit'/'3.10'/'bin'/'python'
+          if interp.is_file():
+              code = "\n".join([
+                  "import os,traceback",
+                  "from pathlib import Path",
+                  "os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')",
+                  "from config.wsgi import application",
+                  "from django.test import Client",
+                  "c=Client(HTTP_HOST='zomorodmelal.ir')",
+                  "print('CLIENT_TEST_STARTED=yes')",
+                  "for p in ('/api/health/','/admin/login/','/agents/'):",
+                  "    try:",
+                  "        result=c.get(p,secure=True)",
+                  "        print('CLIENT_ROUTE='+p+' status='+str(result.status_code))",
+                  "    except Exception as exc:",
+                  "        fs=traceback.extract_tb(exc.__traceback__)[-7:]",
+                  "        detail=','.join(Path(frame.filename).name+':'+frame.name+':'+str(frame.lineno) for frame in fs)",
+                  "        print('CLIENT_ROUTE='+p+' exception='+type(exc).__name__+' last_frames='+detail)",
+                  "        message=str(exc)",
+                  "        missing=message.split(chr(39))[1] if 'Missing staticfiles manifest entry for' in message and chr(39) in message else 'unclassified'",
+                  "        print('STATIC_ASSET_MISSING='+missing)",
+              ])
+              r=subprocess.run([str(interp),'-B','-c',code],cwd=root,capture_output=True,text=True,timeout=38,env=dict(os.environ,PYTHONDONTWRITEBYTECODE='1'))
+              print('CLIENT_TEST_EXIT='+str(r.returncode))
+              for line in r.stdout.splitlines():
+                  if line.startswith(('CLIENT_TEST_STARTED=','CLIENT_ROUTE=')):print(line)
+              if r.returncode!=0:
+                  err=re.findall(r'(?m)^([A-Za-z_][A-Za-z0-9_.]*(?:Error|Exception)):',r.stderr)
+                  print('CLIENT_INITIALIZATION_ERROR='+(err[-1] if err else 'unknown'))
+          PY
+          REMOTE
+      - name: Classify newly produced public 503 without stale log bias
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-readonly"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          export PYTHONDONTWRITEBYTECODE=1
+          python3 - <<'PY'
+          import pathlib,subprocess,re,datetime,os
+          h=pathlib.Path.home()
+          logs=[h/'Saeit'/'stderr.log',h/'public_html'/'error_log',h/'Saeit'/'passenger.log',h/'logs'/'zomorodmelal.ir-ssl_log']
+          before={}
+          for p in logs:
+              if p.is_file() and not p.is_symlink():before[str(p)]=p.stat().st_size
+          for route in ('/api/health/','/admin/login/','/agents/'):
+              cmd=['curl','-sS','-L','--max-time','12','-o','/dev/null','-w','%{http_code}','https://zomorodmelal.ir'+route+'?source_diag=17oct']
+              r=subprocess.run(cmd,capture_output=True,text=True,timeout=18)
+              print('LIVE_TRIGGER_ROUTE='+route+' HTTP='+r.stdout.strip())
+          print('LOG_FILE_COUNT='+str(len(before)))
+          for fn,start in before.items():
+              p=pathlib.Path(fn); now=p.stat().st_size
+              print('LOG_NEW_BYTES='+p.name+':'+str(max(0,now-start)))
+              if now<=start:continue
+              with p.open('rb') as stream:
+                  stream.seek(start); raw=stream.read(min(now-start,65536)).decode('utf8','replace')
+              types=re.findall(r'(?m)^([A-Za-z_][\w.]*(?:Error|Exception)):',raw)
+              print('LIVE_NEW_ERROR_CLASSES='+p.name+':'+','.join(types[-6:]))
+              for needle in ("populate() isn't reentrant","set_env_vars.py","ImportError","ModuleNotFoundError","Application startup","Passenger","503","No module named"):
+                  print('LIVE_NEW_MARKER='+p.name+':'+needle+':'+str(raw.lower().count(needle.lower())))
+          p=h/'public_html'/'.htaccess'
+          if p.is_file():
+              for name in ('PYTHONHOME','PYTHONPATH','VIRTUAL_ENV','LS_PYTHONBIN'):
+                  matches=re.findall(r'(?im)^\s*SetEnv\s+'+name+r'\s+([^\n]+)',p.read_text(errors='replace'))
+                  print('PASSENGER_ENV='+name+' set='+str(bool(matches))+' values_redacted=true')
+          PY
+          REMOTE
+      - name: Detect exact agents static manifest mismatch read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-readonly"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          cd "$HOME/Saeit"
+          PYTHONDONTWRITEBYTECODE=1 "$HOME/virtualenv/Saeit/3.10/bin/python" -B - <<'PY'
+          import traceback,os
+          os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          from config.wsgi import application
+          from django.test import Client
+          from django.conf import settings
+          from pathlib import Path
+          from django.contrib.staticfiles.storage import staticfiles_storage
+          s=staticfiles_storage
+          print('STATIC_ROOT_EXISTS='+str(Path(settings.STATIC_ROOT).is_dir()))
+          print('STATIC_MANIFEST_EXISTS='+str((Path(settings.STATIC_ROOT)/'staticfiles.json').is_file()))
+          print('STATIC_STORAGE_CLASS='+type(s).__name__)
+          try:
+              c=Client(HTTP_HOST='zomorodmelal.ir')
+              response=c.get('/agents/',secure=True)
+              print('AGENTS_TEST_HTTP='+str(response.status_code))
+          except Exception as exc:
+              print('AGENTS_EXCEPTION_CLASS='+type(exc).__name__)
+              message=str(exc)
+              import re
+              m=re.search(r"['\"]([^'\"]+)['\"]",message)
+              value=m.group(1) if m else 'not_identified'
+              if len(value)>200 or '/' not in value or '..' in value:value='not_identified'
+              print('AGENTS_MISSING_ASSET='+value)
+              if value!='not_identified':
+                  print('AGENTS_ASSET_IN_SOURCE='+str((Path.home()/'Saeit'/'core'/'static'/value).is_file()))
+                  print('AGENTS_ASSET_IN_STATIC_ROOT='+str((Path(settings.STATIC_ROOT)/value).is_file()))
+          PY
+          REMOTE
+      - name: Locate original emerald CSS and identify selector loader errors
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-readonly"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          export PYTHONDONTWRITEBYTECODE=1
+          python3 - <<'PY'
+          from pathlib import Path
+          import os,re,hashlib
+          h=Path.home()
+          candidates=[h/'Saeit'/'core'/'static'/'site'/'emerald-system.css',h/'Saeit'/'staticfiles'/'site'/'emerald-system.css',h/'public_html'/'static'/'site'/'emerald-system.css',h/'Saeit-staging'/'core'/'static'/'site'/'emerald-system.css']
+          for p in candidates:
+              print('CSS_PROBE='+str(p.relative_to(h))+' exists='+str(p.is_file()))
+          roots=[h/'Saeit'/'core'/'templates',h/'Saeit'/'templates',h/'Saeit-staging'/'templates',h/'.backups'/'zomorodmelal-root-homepage',h/'.backups'/'zomorodmelal-app']
+          original=[]
+          references=[]
+          for root in roots:
+              if not root.is_dir():continue
+              for folder,dirs,files in os.walk(root):
+                  depth=len(Path(folder).relative_to(root).parts)
+                  dirs[:]=[x for x in dirs if x not in ('venv','node_modules','.git','__pycache__','mohammad','ghanadi','amozeshgah') and not x.startswith('.')] if depth<5 else []
+                  for filename in files:
+                      p=Path(folder)/filename
+                      if p.is_symlink():continue
+                      try:st=p.stat()
+                      except OSError:continue
+                      if filename=='emerald-system.css' and st.st_size<2000000:
+                          original.append((str(p.relative_to(h)),st.st_size,hashlib.sha256(p.read_bytes()).hexdigest()[:14]))
+                      if filename.endswith(('.html','.py','.css')) and st.st_size<300000:
+                          try:
+                              if 'emerald-system.css' in p.read_text(errors='replace'):references.append(str(p.relative_to(h)))
+                          except OSError:pass
+          print('EMERALD_ORIGINAL_COUNT='+str(len(original)))
+          for name,size,digest in original[:30]:print('EMERALD_ORIGINAL='+name+' bytes='+str(size)+' sha14='+digest)
+          print('EMERALD_REFERENCE_COUNT='+str(len(references)))
+          for name in references[:25]:print('EMERALD_REFERENCE='+name)
+          log=h/'Saeit'/'stderr.log'
+          if log.is_file():
+              with log.open('rb') as fh:
+                  fh.seek(max(0,log.stat().st_size-1600))
+                  lines=fh.read(1600).decode('utf8','replace').splitlines()
+              for line in lines[-25:]:
+                  if 'set_env_vars.py' not in line:continue
+                  sanitized=re.sub(r'/home/[^/\s]+','/home/USER',line)
+                  sanitized=re.sub(r'[A-Za-z0-9+/]{36,}={0,2}','[REDACTED]',sanitized)
+                  print('RECENT_SELECTOR_LOG='+sanitized[:230])
+          config=h/'public_html'/'.htaccess'
+          if config.is_file():
+              for name in ('PassengerPython','PassengerAppRoot','PYTHONHOME','PYTHONPATH','LS_PYTHONBIN','VIRTUAL_ENV'):
+                  for line in config.read_text(errors='replace').splitlines():
+                      parts=line.strip().split(None,2)
+                      if parts and (parts[0].lower()==name.lower() or (len(parts)>1 and parts[0].lower()=='setenv' and parts[1].lower()==name.lower())):
+                          val=parts[-1].strip().strip('"').strip("'")
+                          print('SELECTOR_CONFIG='+name+' exists='+str(Path(val).exists())+' basename='+Path(val).name+' is_virtualenv='+str('/virtualenv/' in val))
+          PY
+          REMOTE
+      - name: Inspect LiteSpeed wrapper and CloudLinux Selector options without mutation
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-readonly"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          export PYTHONDONTWRITEBYTECODE=1
+          python3 - <<'PY'
+          from pathlib import Path
+          import subprocess,json,os,re,hashlib
+          wrapper=Path('/usr/local/lsws/fcgi-bin/lswsgi_wrapper')
+          print('LSWS_WRAPPER_READABLE='+str(wrapper.is_file() and os.access(wrapper,os.R_OK)))
+          if wrapper.is_file() and os.access(wrapper,os.R_OK):
+              for number,line in enumerate(wrapper.read_text(errors='replace').splitlines()[:35],start=1):
+                  if number<14 or any(term in line for term in ('VIRTUAL_ENV','set_env_vars.py','PYTHON','LS_PYTHON')):
+                      if len(line)<320:print('WRAPPER_LINE='+str(number)+' '+line)
+          cmd=Path('/usr/sbin/cloudlinux-selector')
+          print('CLOUDLINUX_SELECTOR_EXISTS='+str(cmd.is_file()))
+          if cmd.is_file():
+              for argset in [['--help'],['change','--help']]:
+                  try:
+                      r=subprocess.run([str(cmd),*argset],capture_output=True,text=True,timeout=12)
+                      lines=(r.stdout+'\n'+r.stderr).splitlines()
+                      print('SELECTOR_HELP_CMD='+':'.join(argset)+' exit='+str(r.returncode))
+                      for line in lines[:36]:
+                          if len(line)<180 and (line.strip().startswith('-') or 'change' in line or 'app-uri' in line or 'app-root' in line):
+                              print('SELECTOR_HELP_LINE='+line.strip())
+                  except Exception as exc:print('SELECTOR_HELP_EXCEPTION='+type(exc).__name__)
+          h=Path.home()
+          css=h/'public_html'/'static'/'site'/'emerald-system.css'
+          if css.is_file():
+              print('RECOVERABLE_CSS_BYTES='+str(css.stat().st_size))
+              print('RECOVERABLE_CSS_SHA256='+hashlib.sha256(css.read_bytes()).hexdigest())
+          manifest=h/'Saeit'/'staticfiles'/'staticfiles.json'
+          if manifest.is_file():
+              try:
+                  data=json.loads(manifest.read_text())
+                  paths=data.get('paths',{})
+                  print('STATIC_MANIFEST_ENTRIES='+str(len(paths)))
+                  print('EMERALD_IN_MANIFEST='+str('site/emerald-system.css' in paths))
+              except Exception as exc:print('STATIC_MANIFEST_PARSE='+type(exc).__name__)
+          PY
+          REMOTE
+      - name: Diagnose root-only Python 3.10 LSAPI versus working staging runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-readonly"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          export PYTHONDONTWRITEBYTECODE=1
+          python3 - <<'PY'
+          from pathlib import Path
+          import json,os,subprocess
+          home=Path.home()
+          paths={
+            "python310_lswsgi":Path("/opt/alt/python310/bin/lswsgi"),
+            "python311_lswsgi":Path("/opt/alt/python311/bin/lswsgi"),
+            "python310_binary":Path("/opt/alt/python310/bin/python3"),
+            "python311_binary":Path("/opt/alt/python311/bin/python3"),
+            "main_venv310":home/"virtualenv/Saeit/3.10/bin/python",
+            "main_venv311":home/"virtualenv/Saeit/3.11/bin/python",
+            "main_venv310_env":home/"virtualenv/Saeit/3.10/bin/set_env_vars.py",
+            "staging_venv311":home/"virtualenv/Saeit-staging/3.11/bin/python",
+            "litespeed_wrapper":Path("/usr/local/lsws/fcgi-bin/lswsgi_wrapper"),
+            "litespeed_selector_script":Path("/usr/local/lsws/admin/misc/enable_ruby_python_selector.sh"),
+          }
+          for name,path in paths.items():
+            print("LSWS_PYTHON_CANDIDATE="+name+" exists="+str(path.exists())+" executable="+str(os.access(path,os.X_OK))+" read="+str(os.access(path,os.R_OK)))
+          root=home/"virtualenv/Saeit"
+          print("MAIN_VENV_PYTHON_VERSIONS="+",".join(sorted(f.name for f in root.iterdir() if f.is_dir())) if root.is_dir() else "MAIN_VENV_PYTHON_VERSIONS=missing")
+          cmd="/usr/sbin/cloudlinux-selector"
+          r=subprocess.run([cmd,"get","--json","--interpreter","python","--user",os.environ.get("USER","zomorod2")],stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,text=True,timeout=25)
+          print("SELECTOR_READ_ONLY_EXIT="+str(r.returncode))
+          if r.returncode==0:
+            data=json.loads(r.stdout)
+            def walk(item):
+              if isinstance(item,dict):
+                if item.get("domain") in ("zomorodmelal.ir","staging.zomorodmelal.ir") and "app_uri" in item:
+                    print("SELECTOR_APPLICATION="+item.get("domain")+" version="+str(item.get("python_version") or item.get("version"))+" status="+str(item.get("app_status"))+" uri="+repr(item.get("app_uri")))
+                for value in item.values():walk(value)
+              elif isinstance(item,list):
+                for value in item:walk(value)
+            walk(data)
+          PY
+          REMOTE
+      - name: Erase runner-only relay credentials
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/zomorod-readonly"

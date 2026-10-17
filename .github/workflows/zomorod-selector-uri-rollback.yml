@@ -1,0 +1,115 @@
+name: Restore original selector URI after failed canary
+on:
+  push:
+    branches: ["restore-zomorod-corporate-content-20261017"]
+    paths: [".github/workflows/zomorod-selector-uri-rollback.yml"]
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-main-app-startup-canary
+  cancel-in-progress: false
+jobs:
+  rollback:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Prepare fingerprint-pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-readonly"; install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" > /dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" > /dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.known"
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          echo "RELAY_PINNED=verified"
+      - name: Restore recorded pre-canary selector configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-readonly"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          backup="$HOME/.backups/zomorod-selector-uri-canary/69618c26941f660dd93ff4753bbc9e7ff91a4247"
+          web="$HOME/public_html"
+          selector=/usr/sbin/cloudlinux-selector
+          test -s "$backup/root.htaccess"
+          test -s "$backup/selector.json"
+          test -s "$backup/immutable.sha256"
+          sha256sum -c --status "$backup/immutable.sha256"
+          "$selector" get --json --interpreter python --user "$USER" > "$backup/selector-pre-revert.json"
+          echo "ROLLBACK_PRECHECK=hashes_verified"
+          if "$selector" set --json --interpreter python --user "$USER" --app-root Saeit --new-app-uri "" > "$backup/selector-revert.json" 2>/dev/null; then
+            echo "ROLLBACK_SELECTOR_COMMAND=accepted"
+          else
+            echo "ROLLBACK_SELECTOR_COMMAND=rejected"
+          fi
+          cp -p "$backup/root.htaccess" "$web/.htaccess"
+          if python3 - "$HOME/.cl.selector/python-selector.json" "$backup/selector.json" <<'PY'
+          import json,sys,pathlib
+          a=json.loads(pathlib.Path(sys.argv[1]).read_text())
+          b=json.loads(pathlib.Path(sys.argv[2]).read_text())
+          x=a.get('Saeit',{})
+          y=b.get('Saeit',{})
+          assert isinstance(x,dict) and isinstance(y,dict)
+          assert x.get('app_uri')==y.get('app_uri')
+          print('SELECTOR_APP_URI_RESTORED=true')
+          PY
+          then
+            echo "ROLLBACK_SELECTOR_MATCH=true"
+          else
+            cp -p "$backup/selector.json" "$HOME/.cl.selector/python-selector.json"
+            echo "ROLLBACK_SELECTOR_MATCH=restored_original_metadata_backup"
+          fi
+          "$selector" restart --json --interpreter python --user "$USER" --app-root Saeit > "$backup/post-rollback-restart.json" 2>/dev/null || true
+          touch "$HOME/Saeit/tmp/restart.txt"
+          sha256sum -c --status "$backup/immutable.sha256"
+          cmp -s "$backup/root.htaccess" "$web/.htaccess"
+          echo "rolled_back_after_failed_public_503" > "$backup/state"
+          for route in / /company/ /about/ /mohammad/ /ghanadi/ /amozeshgah/; do
+            code="$(curl -sSL --max-time 15 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir$route" || true)"
+            echo "RESTORE_PROTECTED=$route:$code"
+            if [ "$code" != 200 ]; then exit 5; fi
+          done
+          echo "SELECTOR_URI_REVERT=original_restored"
+          REMOTE
+      - name: Erase temporary runner credentials
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/zomorod-readonly"

@@ -1,0 +1,190 @@
+name: Zomorod reversible selector URI canary
+on:
+  push:
+    branches: ["restore-zomorod-corporate-content-20261017"]
+    paths: [".github/workflows/zomorod-selector-uri-canary.yml"]
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-main-app-startup-canary
+  cancel-in-progress: false
+jobs:
+  canary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Prepare fingerprint-pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-readonly"; install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" > /dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" > /dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.known"
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          echo "RELAY_PINNED=verified"
+      - name: Verify immutable pages and backup current selector configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-readonly"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          sha="$1"; h="$HOME"; web="$h/public_html"; app="$h/Saeit"
+          backup="$h/.backups/zomorod-selector-uri-canary/$sha"
+          test -d "$app" && test -s "$app/passenger_wsgi.py"
+          test -s "$web/.htaccess" && test ! -L "$web/.htaccess"
+          test -s "$h/.cl.selector/python-selector.json"
+          for f in index.html company/index.html about/index.html mohammad/index.html ghanadi/index.html amozeshgah/index.html; do
+            test -s "$web/$f" && test ! -L "$web/$f"
+          done
+          test ! -e "$backup"
+          mkdir -p "$(dirname "$backup")"; mkdir -m 700 "$backup"
+          cp -p "$web/.htaccess" "$backup/root.htaccess"
+          cp -p "$h/.cl.selector/python-selector.json" "$backup/selector.json"
+          cp -p "$app/passenger_wsgi.py" "$backup/passenger_wsgi.py"
+          sha256sum "$web/index.html" "$web/company/index.html" "$web/about/index.html" \
+            "$web/mohammad/index.html" "$web/ghanadi/index.html" "$web/amozeshgah/index.html" \
+            "$app/passenger_wsgi.py" > "$backup/immutable.sha256"
+          /usr/sbin/cloudlinux-selector get --json --interpreter python --user "$USER" > "$backup/selector-before.json"
+          python3 - "$backup/selector-before.json" <<'PY'
+          import json,sys
+          data=json.load(open(sys.argv[1]))
+          records=[]
+          def walk(x):
+              if isinstance(x,dict):
+                  if x.get('domain')=='zomorodmelal.ir' and ('app_uri' in x):records.append(x)
+                  for v in x.values():walk(v)
+              elif isinstance(x,list):
+                  for v in x:walk(v)
+          walk(data)
+          assert len(records)==1,f"Unexpected production selector app count: {len(records)}"
+          uri=records[0].get('app_uri')
+          assert uri in ('','/'),"Unexpected app URI, refuse change"
+          print('ORIGINAL_PRIMARY_URI='+repr(uri))
+          print('PRIMARY_APP_ROOT_VERIFIED=true')
+          PY
+          echo "SELECTOR_URI_PREBACKUP=success"
+          REMOTE
+      - name: Correct only primary app URI with rollback unless dynamic routes return 200
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-readonly"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1"; backup="$HOME/.backups/zomorod-selector-uri-canary/$sha"
+          selector=/usr/sbin/cloudlinux-selector
+          web="$HOME/public_html"; app="$HOME/Saeit"
+          test -s "$backup/selector.json" && test -s "$backup/root.htaccess"
+          cmp -s "$web/.htaccess" "$backup/root.htaccess"
+          cmp -s "$HOME/.cl.selector/python-selector.json" "$backup/selector.json"
+          rollback() {
+            set +e
+            echo "SELECTOR_URI_CANARY_ROLLBACK=initiated"
+            "$selector" set --json --interpreter python --user "$USER" --app-root Saeit --new-app-uri "" > "$backup/selector-restore-result.json" 2>/dev/null
+            if test $? -ne 0; then
+              cp -p "$backup/selector.json" "$HOME/.cl.selector/python-selector.json"
+            fi
+            cp -p "$backup/root.htaccess" "$web/.htaccess"
+            touch "$app/tmp/restart.txt"
+            "$selector" restart --json --interpreter python --user "$USER" --app-root Saeit > "$backup/restart-rollback.json" 2>/dev/null
+            sha256sum -c --status "$backup/immutable.sha256"
+            echo "SELECTOR_URI_CANARY_ROLLBACK=completed"
+          }
+          applied=0
+          trap 'rc=$?; trap - EXIT; if test "$applied" = 1; then rollback; fi; exit "$rc"' EXIT
+          "$selector" set --json --interpreter python --user "$USER" --app-root Saeit --new-app-uri "/" > "$backup/selector-change.json"
+          applied=1
+          python3 - "$backup/selector-change.json" <<'PY'
+          import json,sys
+          data=json.load(open(sys.argv[1]))
+          assert data.get("result")=="success", "Selector did not accept URI update"
+          print("SELECTOR_URI_SET=success")
+          PY
+          "$selector" restart --json --interpreter python --user "$USER" --app-root Saeit > "$backup/selector-restart.json"
+          sleep 5
+          for i in 1 2 3; do
+            admin="$(curl -sSL --max-time 16 -o /dev/null -w '%{http_code}' https://zomorodmelal.ir/admin/login/ || true)"
+            health="$(curl -sSL --max-time 16 -o /dev/null -w '%{http_code}' https://zomorodmelal.ir/api/health/ || true)"
+            echo "SELECTOR_URI_CANARY_CHECK=$i ADMIN=$admin HEALTH=$health"
+            if [ "$admin" = 200 ] && [ "$health" = 200 ]; then break; fi
+            sleep 4
+          done
+          test "$admin" = 200 && test "$health" = 200
+          for path in / /company/ /about/ /mohammad/ /ghanadi/ /amozeshgah/; do
+            code="$(curl -sSL --max-time 16 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir$path" || true)"
+            echo "PROTECTED_PAGE=$path CODE=$code"
+            test "$code" = 200
+          done
+          sha256sum -c --status "$backup/immutable.sha256"
+          echo "verified_live" > "$backup/state"
+          applied=0
+          trap - EXIT
+          echo "SELECTOR_URI_CANARY=healthy_live_retained"
+          REMOTE
+      - name: Restore selector if canary was interrupted
+        if: always()
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/zomorod-readonly"
+          if test ! -f "$d/config"; then exit 0; fi
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -eu
+          backup="$HOME/.backups/zomorod-selector-uri-canary/$1"
+          if test ! -s "$backup/root.htaccess"; then exit 0; fi
+          state=unverified
+          if test -s "$backup/state"; then state="$(cat "$backup/state")"; fi
+          if test "$state" = verified_live; then
+            echo "SELECTOR_URI_FINAL=verified_retained"
+            exit 0
+          fi
+          cp -p "$backup/root.htaccess" "$HOME/public_html/.htaccess"
+          if test -s "$backup/selector.json"; then
+            cp -p "$backup/selector.json" "$HOME/.cl.selector/python-selector.json"
+          fi
+          touch "$HOME/Saeit/tmp/restart.txt"
+          /usr/sbin/cloudlinux-selector restart --json --interpreter python --user "$USER" --app-root Saeit >/dev/null || true
+          sha256sum -c --status "$backup/immutable.sha256"
+          echo "SELECTOR_URI_FINAL=original_restored"
+          REMOTE
+      - name: Erase temporary runner credentials
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/zomorod-readonly"

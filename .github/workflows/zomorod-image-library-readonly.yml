@@ -1,0 +1,154 @@
+name: Zomorod editorial image library inventory
+on:
+  push:
+    branches: ["restore-zomorod-corporate-content-20261017"]
+    paths: [".github/workflows/zomorod-image-library-readonly.yml"]
+permissions:
+  contents: read
+jobs:
+  library:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - name: Prepare fingerprint-pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-readonly"; install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" > /dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" > /dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.known"
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          echo "RELAY_PINNED=verified"
+      - name: Inventory site-owned agriculture and research image URLs without modification
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-readonly"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          export PYTHONDONTWRITEBYTECODE=1
+          python3 - <<'PY'
+          from pathlib import Path
+          from collections import defaultdict
+          import hashlib
+          web=Path.home()/'public_html'
+          roots=[
+              web/'agriculture/assets',
+              web/'static/site/heroes',
+              web/'static/site/company',
+              web/'static/agriculture',
+          ]
+          records=[]
+          for root in roots:
+              if not root.is_dir():
+                  print('IMAGE_ROOT_MISSING='+str(root.relative_to(web)))
+                  continue
+              print('IMAGE_ROOT='+str(root.relative_to(web)))
+              for p in sorted(root.rglob('*')):
+                  if not p.is_file() or p.is_symlink() or p.suffix.lower() not in ('.webp','.jpg','.jpeg','.png'):
+                      continue
+                  stat=p.stat()
+                  if stat.st_size>25000000 or stat.st_size<500:continue
+                  url='/'+str(p.relative_to(web))
+                  if any(t in url.lower() for t in ('mohammad','ghanadi','amozeshgah','private','staff','password')):continue
+                  digest=hashlib.sha256(p.read_bytes()).hexdigest()
+                  records.append((url,stat.st_size,digest))
+          print('TOTAL_PUBLIC_IMAGES='+str(len(records)))
+          by_hash=defaultdict(list)
+          for url,size,digest in records:
+              print('OWNED_IMAGE='+url+' bytes='+str(size)+' sha256='+digest)
+              by_hash[digest].append(url)
+          for digest,urls in by_hash.items():
+              if len(urls)>1:
+                  print('DUPLICATE_IMAGE_BYTES='+digest+' urls='+','.join(urls))
+          PY
+          REMOTE
+      - name: Find further site-owned editorial photos beyond hero folders
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-readonly"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          export PYTHONDONTWRITEBYTECODE=1
+          python3 - <<'PY'
+          from pathlib import Path
+          from collections import Counter
+          import os,hashlib
+          h=Path.home()
+          roots=[
+              h/'public_html/media',
+              h/'public_html/images',
+              h/'public_html/uploads',
+              h/'public_html/assets',
+              h/'Saeit/staticfiles/site/heroes',
+              h/'Saeit/staticfiles/site/company',
+          ]
+          prohibited=('mohammad','ghanadi','amozeshgah','picm','private','password','secret','token','user','profile','avatar')
+          for root in roots:
+              print('EXTRA_IMAGE_ROOT='+str(root.relative_to(h))+' exists='+str(root.is_dir()))
+              if not root.is_dir():continue
+              found=[]
+              scanned=0
+              for directory,dirs,files in os.walk(root):
+                  depth=len(Path(directory).relative_to(root).parts)
+                  dirs[:]=[x for x in dirs if not any(z in x.lower() for z in prohibited) and not x.startswith('.')] if depth<4 else []
+                  for filename in sorted(files):
+                      scanned+=1
+                      if scanned>15000:break
+                      p=Path(directory)/filename
+                      if p.suffix.lower() not in ('.webp','.jpg','.jpeg','.png') or p.is_symlink():continue
+                      if any(z in str(p).lower() for z in prohibited):continue
+                      try:
+                          size=p.stat().st_size
+                          if 1000<size<25000000:
+                              url='/'+str(p.relative_to(h/'public_html')) if root.is_relative_to(h/'public_html') else 'STATIC_SOURCE/'+str(p.relative_to(h/'Saeit/staticfiles'))
+                              found.append((url,size,hashlib.sha256(p.read_bytes()).hexdigest()))
+                      except OSError:pass
+                  if scanned>15000:break
+              print('EXTRA_IMAGE_COUNT='+str(root.relative_to(h))+':'+str(len(found)))
+              print('EXTRA_IMAGE_UNIQUE_HASHES='+str(root.relative_to(h))+':'+str(len(set(x[2] for x in found))))
+              for url,size,hashval in found[:90]:
+                  print('EXTRA_EDITORIAL_CANDIDATE='+url+' bytes='+str(size)+' sha256='+hashval)
+          PY
+          REMOTE
+      - name: Clean runner SSH keys
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/zomorod-readonly"
