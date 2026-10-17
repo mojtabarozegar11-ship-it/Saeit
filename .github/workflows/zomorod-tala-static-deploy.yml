@@ -41,7 +41,7 @@ jobs:
               raise SystemExit('TALA_PAGE_VALIDATION=failed')
           if '<!-- tala-isolated-site-v1 -->' not in source:
               raise SystemExit('TALA_SCOPE_MARKER=missing')
-          for rel in ('manifest.webmanifest','sw.js','assets/tala-mark.svg','api/health.php','api/.htaccess'):
+          for rel in ('manifest.webmanifest','sw.js','assets/tala-mark.svg','api/health.php','api/.htaccess','api/.private/.htaccess'):
               if not (root/rel).is_file(): raise SystemExit(f'TALA_ASSET_MISSING={rel}')
           if 'در انتظار اتصال منبع' not in source or 'قیمت زنده هنوز متصل نشده' not in source:
               raise SystemExit('TALA_UNVERIFIED_PRICE_DISCLOSURE=missing')
@@ -120,11 +120,6 @@ jobs:
           sha="$1"
           root="$HOME/public_html"
           target="$root/tala"
-          private_store="$HOME/.tala-private"
-          test ! -L "$private_store"
-          if test -e "$private_store"; then test -d "$private_store"; fi
-          install -d -m 700 "$private_store"
-          chmod 700 "$private_store"
           backup_root="$HOME/.backups/zomorodmelal-tala"
           backup="$backup_root/$sha"
           stage="$root/.tala-stage-$sha"
@@ -133,8 +128,8 @@ jobs:
           test ! -L "$target"
           install -d -m 700 "$backup_root"
           mkdir "$backup"
+          test ! -L "$target"
           if test -d "$target"; then
-            cp -a "$target" "$backup/prior"
             printf 'yes\n' > "$backup/prior-existed"
           else
             printf 'no\n' > "$backup/prior-existed"
@@ -144,8 +139,13 @@ jobs:
             rc=$?
             if test "$active" = 1; then
               rm -rf -- "$target"
-              if test "$(cat "$backup/prior-existed")" = yes; then mv "$backup/prior" "$target"; fi
+              if test "$(cat "$backup/prior-existed")" = yes; then
+                mv "$backup/prior" "$target"
+                rm -f "$target/api/.tala-maintenance"
+              fi
               rm -f "$backup/deployed.flag"
+            elif test -f "$target/api/.tala-maintenance"; then
+              rm -f "$target/api/.tala-maintenance"
             fi
             exit "$rc"
           }
@@ -155,6 +155,28 @@ jobs:
           tar -xzf "$HOME/.tala-site-$sha.tgz" -C "$stage"
           test -f "$stage/index.html"
           grep -Fq '<!-- tala-isolated-site-v1 -->' "$stage/index.html"
+          test -d "$stage/api/.private" && test ! -L "$stage/api/.private"
+          chmod 700 "$stage/api/.private"
+          if test -f "$target/api/.private/tala.sqlite3"; then
+            test ! -L "$target/api/.private/tala.sqlite3"
+            printf 'maintenance\n' > "$target/api/.tala-maintenance"
+            sleep 3
+          fi
+          if test -d "$target"; then
+            cp -a "$target" "$backup/prior"
+            rm -f "$backup/prior/api/.tala-maintenance"
+            if test -f "$target/api/.private/tala.sqlite3"; then
+              for suffix in '' '-journal' '-wal' '-shm'; do
+                source="$target/api/.private/tala.sqlite3$suffix"
+                destination="$stage/api/.private/tala.sqlite3$suffix"
+                if test -e "$source"; then
+                  test -f "$source" && test ! -L "$source"
+                  cp -p "$source" "$destination"
+                  chmod 600 "$destination"
+                fi
+              done
+            fi
+          fi
           if test -e "$target"; then mv "$target" "$backup/live-before"; fi
           active=1
           mv "$stage" "$target"
@@ -179,7 +201,7 @@ jobs:
               /manifest.webmanifest) grep -Fq '"scope":"/tala/"' "$RUNNER_TEMP/tala-response" ;;
               /sw.js) grep -Fq "const CACHE='tala-shell-v2'" "$RUNNER_TEMP/tala-response" ;;
               /assets/tala-mark.svg) grep -Fq '<svg' "$RUNNER_TEMP/tala-response" ;;
-              /api/health.php) grep -iqE '^content-type:[[:space:]]*application/json(;|[[:space:]]*$)' "$RUNNER_TEMP/tala-headers"; grep -Fq '"scope":"tala"' "$RUNNER_TEMP/tala-response"; grep -Fq '"runtime":"php"' "$RUNNER_TEMP/tala-response" ;;
+              /api/health.php) grep -iqE '^content-type:[[:space:]]*application/json(;|[[:space:]]*$)' "$RUNNER_TEMP/tala-headers"; grep -Fq '"scope":"tala"' "$RUNNER_TEMP/tala-response"; grep -Fq '"runtime":"php"' "$RUNNER_TEMP/tala-response"; grep -Fq '"pdo_sqlite":true' "$RUNNER_TEMP/tala-response"; grep -Fq '"private_store_writable":true' "$RUNNER_TEMP/tala-response" ;;
             esac
             echo "TALA_PUBLIC_CHECK=$path passed"
           done
