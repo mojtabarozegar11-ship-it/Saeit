@@ -111,8 +111,9 @@ def rewrite(raw,isprod):
         raise RuntimeError("copyright two original spans changed")
     if "© 2022 MojPlayWin. All rights reserved." not in copyright:
         raise RuntimeError("copyright original text changed")
-    if "Built for research, creativity and responsible commerce." not in copyright:
-        raise RuntimeError("copyright mission line changed")
+    # Other main pages have their own approved second copyright span;
+    # retain every original character from BOTH spans without requiring
+    # homepage-specific prose on other sections.
     if not OLD_SIGNOFF.fullmatch(m.group("sign")):
         raise RuntimeError("old founder signoff not unique")
     # The bar belongs to the footer, not one line underneath it.
