@@ -1,0 +1,143 @@
+name: Moj Play Win six canonical PHP read-only HTML equivalence proof
+on:
+  push:
+    branches: ["audit/mojplaywin-backup-transport-20261017"]
+    paths: [".github/workflows/mojplaywin-canonical-php-equivalence-qa.yml"]
+permissions:
+  contents: read
+jobs:
+  isolated-script-proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Create only a disposable, allowlisted PHP read-only test path and validate syntax
+        shell: bash
+        timeout-minutes: 2
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          target=/home/zomorod2/mojplaywin.com/design-preview-20261017/_mpw_canonical_html_equivalence_probe_20261017.php
+          local_file=scripts/mojplaywin_canonical_php_readonly_probe.php
+          expected=$(sha256sum "$local_file" | cut -d' ' -f1)
+          timeout 35s ssh -T -F "$d/config" saeit-cpanel "test ! -e '$target' && test ! -L '$target' && test -f /home/zomorod2/mojplaywin.com/design-preview-20261017/index.html"
+          timeout 40s scp -q -F "$d/config" "$local_file" "saeit-cpanel:$target"
+          actual=$(timeout 35s ssh -T -F "$d/config" saeit-cpanel "chmod 644 '$target'; php -l '$target' >&2; sha256sum '$target' | cut -d' ' -f1")
+          test "$actual" = "$expected" || { echo "CANONICAL_PHP_STAGING_NOT_IDENTICAL"; exit 31; }
+          echo "DISPOSABLE_MAIN_ONLY_CANONICAL_PHP_CANDIDATE_STAGED"
+      - name: Check six original and transformed responses are byte-identical after only canonical substitution
+        shell: bash
+        timeout-minutes: 5
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from urllib.request import Request,urlopen
+          from urllib.parse import quote
+          import time,json,hashlib,re
+          base="https://mojplaywin.com"
+          target="/design-preview-20261017/_mpw_canonical_html_equivalence_probe_20261017.php"
+          names={
+            "store":"/store/",
+            "research":"/research/",
+            "company":"/company/",
+            "knowledge":"/knowledge/",
+            "agriculture":"/ventures/agriculture/",
+            "jewelry":"/ventures/jewelry-gold/"
+          }
+          def request(url):
+              start=time.monotonic()
+              with urlopen(Request(url,headers={"Cache-Control":"no-store","User-Agent":"MojPlayWin-canonical-bridge-equivalence/1.0"}),timeout=17) as response:
+                  if response.status!=200:raise RuntimeError("not 200: "+url)
+                  data=response.read(700001)
+                  status=response.status
+                  mime=response.headers.get("Content-Type","")
+                  canary=response.headers.get("X-MPW-Canary","")
+              if len(data)>700000:raise RuntimeError("body unexpectedly large")
+              return data,round(time.monotonic()-start,3),mime,canary
+          findings=[]
+          for slug,path in names.items():
+              original,orig_time,_,_=request(base+path+"?__mpw_canon_passthru=1")
+              probe,probe_time,mime,canary=request(base+target+
+                "?__mpw_probe=mpw-canonical-bridge-20261017-verification&__mpw_canon_route="+quote(slug))
+              old=b'<link rel="canonical" href="https://zomorodmelal.ir'+path.encode()+b'">'
+              new=b'<link rel="canonical" href="https://mojplaywin.com'+path.encode()+b'">'
+              if original.count(old)!=1 or probe.count(new)!=1:raise RuntimeError("missing exact canonical: "+slug)
+              if original.replace(old,new,1)!=probe:raise RuntimeError("OTHER_HTML_CHANGED: "+slug)
+              if canary!="canonical-only" or "text/html" not in mime:raise RuntimeError("proxy response not actually PHP: "+slug)
+              if orig_time>12 or probe_time>12:raise RuntimeError("backend too slow: "+slug)
+              findings.append({"route":path,"original_bytes":len(original),"transformed_bytes":len(probe),
+                   "changed_only_canonical":True,"original_response_seconds":orig_time,
+                   "bridge_response_seconds":probe_time})
+          print(json.dumps({"classification":"MOJ_PLAY_WIN_PHP_CANONICAL_TRANSFORM_EQUIVALENCE",
+            "pages":findings,"read_only_passthrough":True,"production_rewrite_modified":False},sort_keys=True))
+          PY
+      - name: Remove exactly the temporary canary and verify protected routes, even if earlier proof fails
+        if: always()
+        shell: bash
+        timeout-minutes: 2
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          target=/home/zomorod2/mojplaywin.com/design-preview-20261017/_mpw_canonical_html_equivalence_probe_20261017.php
+          expected=$(sha256sum scripts/mojplaywin_canonical_php_readonly_probe.php | cut -d' ' -f1)
+          timeout 38s ssh -T -F "$d/config" saeit-cpanel "python3 - '$target' '$expected'" <<'PY'
+          from pathlib import Path
+          import hashlib,sys
+          p=Path(sys.argv[1]);expected=sys.argv[2]
+          if p.is_symlink():raise SystemExit("DANGER_CANARY_SYMLINK")
+          if p.is_file():
+              if hashlib.sha256(p.read_bytes()).hexdigest()!=expected:raise SystemExit("DANGER_CANARY_CHANGED")
+              p.unlink()
+          print("TEMPORARY_PHP_CANONICAL_PROBE_REMOVED",flush=True)
+          PY
+          for path in / /saman/ /picm/login/ /farnaz/ /studio.Roham/ /mojtaba.roozegar/ /store/ /research/ /company/ /knowledge/ /ventures/agriculture/ /ventures/jewelry-gold/; do
+            code=$(curl -sSL -o /dev/null -w '%{http_code}' --max-time 16 "https://mojplaywin.com$path")
+            test "$code" = 200 || { echo "SITE_HEALTH_FAILED_AFTER_CANARY"; exit 82; }
+          done
+          echo "ALL_TWELVE_ORIGINAL_MAIN_AND_CHILD_ROUTES_STILL_HEALTHY"
