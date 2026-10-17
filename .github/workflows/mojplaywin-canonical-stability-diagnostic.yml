@@ -1,0 +1,76 @@
+name: Moj Play Win PHP canonical bridge stability read-only audit
+on:
+  push:
+    branches: ["audit/mojplaywin-backup-transport-20261017"]
+    paths: [".github/workflows/mojplaywin-canonical-stability-diagnostic.yml"]
+permissions:
+  contents: read
+jobs:
+  sample-existing-independent-bridge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - name: Probe existing PHP bridge and Django origin repeatedly without changing live routing
+        shell: bash
+        timeout-minutes: 6
+        run: |
+          python3 - <<'PY'
+          from urllib.request import Request,build_opener,HTTPSHandler,HTTPRedirectHandler
+          from urllib.error import HTTPError,URLError
+          import re,json,time,statistics
+          class NoRedirect(HTTPRedirectHandler):
+              def redirect_request(self,request,fp,code,message,headers,target):
+                  return None
+          browser=build_opener(HTTPSHandler(),NoRedirect())
+          origin="https://mojplaywin.com"
+          file="/design-preview-20261017/_mpw_main_canonical_bridge_20261017.php"
+          routes={"store":"/store/","research":"/research/","company":"/company/",
+             "knowledge":"/knowledge/","agriculture":"/ventures/agriculture/",
+             "jewelry":"/ventures/jewelry-gold/"}
+          reports=[]
+          for roundno in range(1,8):
+              for slug,path in routes.items():
+                  url=origin+file+"?__mpw_canon_route="+slug
+                  start=time.monotonic()
+                  headers={"Cache-Control":"no-store","User-Agent":"MojPlayWin-readonly-canonical-stability-qa"}
+                  req=Request(url,headers=headers)
+                  try:
+                      try:resp=browser.open(req,timeout=20)
+                      except HTTPError as e:resp=e
+                      with resp:
+                          body=resp.read(720000)
+                          code=resp.status
+                          edge=resp.headers.get("X-MPW-Canonical-Edge","")
+                          location=resp.headers.get("Location","")
+                      match=b'<link rel="canonical" href="https://mojplaywin.com'+path.encode()+b'">'
+                      present=body.count(match)==1
+                      report={"route":slug,"round":roundno,"code":code,
+                              "edge":edge=="main-only","correct_canonical":present,
+                              "redirect":bool(location),"body_bytes":len(body),
+                              "duration_s":round(time.monotonic()-start,3)}
+                  except (TimeoutError,URLError) as error:
+                      report={"route":slug,"round":roundno,"code":0,"edge":False,
+                              "correct_canonical":False,"redirect":False,
+                              "body_bytes":0,"duration_s":round(time.monotonic()-start,3),
+                              "error_type":type(error).__name__}
+                  reports.append(report)
+                  print("CANONICAL_BRIDGE_STABILITY_SAMPLE "+json.dumps(report,sort_keys=True),flush=True)
+          failures=[r for r in reports if r["code"]!=200 or not r["correct_canonical"] or not r["edge"]]
+          stats={"classification":"MOJ_PLAY_WIN_EXISTING_PHP_CANONICAL_BRIDGE_STABILITY",
+            "samples":len(reports),"success":len(reports)-len(failures),
+            "failed":len(failures),"failures":failures[:15],
+            "max_duration_s":max(r["duration_s"] for r in reports),
+            "route_successes":{k:sum(r["route"]==k and r["correct_canonical"] and r["edge"]
+                                 for r in reports) for k in routes},
+            "production_routes_modified":False}
+          print(json.dumps(stats,sort_keys=True),flush=True)
+          PY
+      - name: Confirm original main and protected subsite HTTP health
+        shell: bash
+        timeout-minutes: 1
+        run: |
+          set -euo pipefail
+          for p in / /store/ /saman/ /picm/login/ /farnaz/ /mojtaba.roozegar/;do
+            test "$(curl -sSL -o /dev/null -w '%{http_code}' --max-time 16 "https://mojplaywin.com$p")" = 200
+          done
+          echo "MAIN_AND_SUBSITES_UNCHANGED_READ_ONLY_DIAGNOSTIC_FINISHED"
