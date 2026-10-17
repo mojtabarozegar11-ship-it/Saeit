@@ -16,7 +16,14 @@
   <div class="mpx-editorial-media" aria-label="Related illustrated topic gallery">
     {% for image in editorial.images %}
       <figure class="mpx-editorial-figure">
+        {% if image.mobile_path %}
+        <picture class="mpx-responsive-picture">
+          <source media="(max-width: 700px)" srcset="{% static image.mobile_path %}" type="image/webp">
+          <img src="{% static image.path %}" alt="{{ image.alt }}" loading="lazy" decoding="async" width="640" height="430">
+        </picture>
+        {% else %}
         <img src="{% static image.path %}" alt="{{ image.alt }}" loading="lazy" decoding="async" width="640" height="430">
+        {% endif %}
         <figcaption>{{ image.caption }}</figcaption>
       </figure>
     {% endfor %}
