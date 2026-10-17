@@ -5,6 +5,7 @@ hosting backup matches, or that public routes/images and Lighthouse are healthy.
 Those checks remain mandatory before any production publishing.
 """
 import ast
+import hashlib
 from html import unescape
 from html.parser import HTMLParser
 from pathlib import Path
@@ -95,6 +96,41 @@ class CorporateContentPreservationTests(unittest.TestCase):
                 self.assertGreaterEqual(len(parser.images), 3)
                 for image in parser.images:
                     self.assertTrue(image.get("alt"), f"{name}: image missing alt")
+
+    def test_no_repeated_content_photographs_in_six_corporate_pages(self):
+        # Logo is a recurring brand mark, NOT a photograph or article image.
+        source_owners = {}
+        byte_owners = {}
+        for name in ("about", "company", "services", "industry", "research", "knowledge"):
+            doc = (PAGES / (name + ".html")).read_text(encoding="utf-8")
+            parser = PageParser()
+            parser.feed(doc)
+            photographs = [image["src"] for image in parser.images
+                           if image.get("src")
+                           and "company-logo" not in image["src"]]
+            self.assertGreaterEqual(len(photographs), 2, name)
+            for src in photographs:
+                with self.subTest(page=name, image=src):
+                    self.assertNotIn(src, source_owners,
+                                     f"Repeated photograph: {src} in {name} and {source_owners.get(src)}")
+                    source_owners[src] = name
+                    if src.startswith("/static/site/"):
+                        file = ROOT / "core" / "static" / "site" / src.removeprefix("/static/site/")
+                        self.assertTrue(file.is_file(), f"Missing photograph in source: {src}")
+                        digest = hashlib.sha256(file.read_bytes()).hexdigest()
+                        self.assertNotIn(digest, byte_owners,
+                                         f"Same photograph bytes under different filenames: {src} and {byte_owners.get(digest)}")
+                        byte_owners[digest] = src
+
+    def test_page_images_are_not_removed(self):
+        # Every original image inside the proposed About/Company page must
+        # be either kept or replaced with a distinct, relevant image.
+        for name, parser in self.parsed.items():
+            with self.subTest(page=name):
+                self.assertGreaterEqual(len(parser.images), 3)
+                photos = [img for img in parser.images if "company-logo" not in img.get("src", "")]
+                self.assertEqual(len(photos), 2)
+                self.assertEqual(len({img["src"] for img in photos}), 2)
 
     def test_in_document_navigation_targets(self):
         for name, parser in self.parsed.items():
