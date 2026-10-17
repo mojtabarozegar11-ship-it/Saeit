@@ -667,6 +667,67 @@ jobs:
                   print('AGENTS_ASSET_IN_STATIC_ROOT='+str((Path(settings.STATIC_ROOT)/value).is_file()))
           PY
           REMOTE
+      - name: Identify missing emerald CSS in the old original and classify loader path
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-readonly"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          export PYTHONDONTWRITEBYTECODE=1
+          python3 - <<'PY'
+          from pathlib import Path
+          import os,re,hashlib
+          h=Path.home()
+          candidates=(h/'Saeit'/'core'/'static'/'site'/'emerald-system.css',h/'Saeit'/'static'/'site'/'emerald-system.css',h/'Saeit'/'staticfiles'/'site'/'emerald-system.css',h/'public_html'/'static'/'site'/'emerald-system.css',h/'Saeit-staging'/'core'/'static'/'site'/'emerald-system.css')
+          for p in candidates:
+              print('CSS_SOURCE_PROBE='+str(p.relative_to(h))+' exists='+str(p.is_file())+' bytes='+(str(p.stat().st_size) if p.is_file() else '0'))
+          roots=[h/'Saeit'/'core'/'templates',h/'Saeit'/'templates',h/'Saeit-staging'/'templates',h/'Saeit-staging'/'core'/'templates',h/'.backups'/'zomorodmelal-root-homepage',h/'.backups'/'zomorodmelal-app']
+          refs=[]
+          originals=[]
+          for root in roots:
+              if not root.is_dir():continue
+              for folder,dirs,files in os.walk(root):
+                  depth=len(Path(folder).relative_to(root).parts)
+                  dirs[:]=[x for x in dirs if x not in ('venv','node_modules','.git','__pycache__','mohammad','ghanadi','amozeshgah') and not x.startswith('.')] if depth<5 else []
+                  if depth>5:continue
+                  for filename in files:
+                      p=Path(folder)/filename
+                      if p.is_symlink():continue
+                      if filename=='emerald-system.css':
+                          if p.stat().st_size<2_000_000:originals.append((str(p.relative_to(h)),p.stat().st_size,hashlib.sha256(p.read_bytes()).hexdigest()[:14]))
+                      if not filename.endswith(('.html','.py','.css')) or p.stat().st_size>300000:continue
+                      try:
+                          if 'emerald-system.css' in p.read_text(errors='replace'):refs.append(str(p.relative_to(h)))
+                      except OSError:pass
+          print('EMERALD_ORIGINAL_COUNT='+str(len(originals)))
+          for path,size,digest in originals[:35]:print('EMERALD_ORIGINAL='+path+' bytes='+str(size)+' SHA14='+digest)
+          print('EMERALD_REFERENCE_COUNT='+str(len(refs)))
+          for p in refs[:35]:print('EMERALD_REFERENCE='+p)
+          log=h/'Saeit'/'stderr.log'
+          if log.is_file():
+              with log.open('rb') as fh:
+                  fh.seek(max(0,log.stat().st_size-2200))
+                  lines=fh.read(2200).decode('utf8','replace').splitlines()
+              for line in lines[-35:]:
+                  if 'set_env_vars.py' not in line:continue
+                  normalized=re.sub(r'/home/[^/\s]+','/home/USER',line)
+                  normalized=re.sub(r'[A-Za-z0-9+/]{36,}={0,2}','[REDACTED]',normalized)
+                  print('RECENT_SELECTOR_LOG='+normalized[:260])
+          config=h/'public_html'/'.htaccess'
+          if config.is_file():
+              source=config.read_text(errors='replace')
+              for name in ('PassengerPython','PassengerAppRoot','PYTHONHOME','PYTHONPATH','LS_PYTHONBIN','VIRTUAL_ENV'):
+                  rx=r'(?im)^\s*(?:SetEnv\s+)?'+name+r'\s+(.+)
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/zomorod-readonly"
+
+                  values=re.findall(rx,source)
+                  for val in values[-1:]:
+                      clean=val.strip().strip('"').strip("'")
+                      print('SELECTOR_CONFIG_PROBE='+name+' path_exists='+str(Path(clean).exists())+' basename='+Path(clean).name+' starts_virtualenv='+str('/virtualenv/' in clean))
+          PY
+          REMOTE
       - name: Erase runner-only relay credentials
         if: always()
         run: rm -rf "$RUNNER_TEMP/zomorod-readonly"
