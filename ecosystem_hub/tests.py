@@ -28,7 +28,7 @@ from .models import (
     MaterialRequirement, ProductionOrder, ProcurementNeed, QualityInspection,
     MaintenanceTicket, StaffAssignment, Timesheet, ManagementRisk,
     PerformanceIndicator, ReviewApproval, ReferenceEvidence,
-    AssistantRun, ProposedAutomation, MaterialPriceReference, ProductionCostScenario,
+    AssistantRun, ProposedAutomation, MaterialPriceReference, ProductionCostScenario, AssistantFollowUp,
 )
 
 U = get_user_model()
@@ -903,6 +903,111 @@ class HubSuite(TestCase):
         )
         self.assertEqual(ProcurementNeed.objects.get().quantity, D("4.000"))
         self.assertEqual(StockMovement.objects.count(), 1)
+
+    def _enable_task_followup_for_viewer(self):
+        perms = Permission.objects.filter(
+            content_type__app_label__in=("enterprise_portal", "ecosystem_hub"),
+            codename__in=("add_worktask", "add_assistantfollowup"),
+        )
+        self.viewer.user_permissions.add(*list(perms))
+        membership = UnitMembership.objects.get(user=self.viewer, unit=self.farm)
+        membership.role = "operations"
+        membership.save()
+
+    def test_human_delegation_creates_only_audited_task_in_own_unit(self):
+        self._enable_task_followup_for_viewer()
+        report = generate_report(self.owner, self.farm, "inventory-alerts")
+        url = f"/company/office/ecosystem/reports/{report.pk}/create-followup/"
+        self.client.force_login(self.viewer)
+        self.assertEqual(self.client.get(url, secure=True).status_code, 405)
+        response = self.client.post(url, {
+            "finding_index": "0", "assignee_id": self.viewer.pk,
+        }, secure=True)
+        self.assertEqual(response.status_code, 302)
+        link = AssistantFollowUp.objects.get()
+        self.assertEqual(link.unit, self.farm)
+        self.assertEqual(link.task.unit, self.farm)
+        self.assertEqual(link.task.assigned_to, self.viewer)
+        self.assertIn(str(report.pk), link.task.description)
+        self.assertEqual(link.task.status, "todo")
+        self.assertEqual(AuditEvent.objects.filter(action="assistant_followup_created").count(), 1)
+        self.assertFalse(StockMovement.objects.exists())
+        self.assertFalse(JournalEntry.objects.exists())
+
+    def test_task_followup_is_idempotent_on_repeated_submissions(self):
+        self._enable_task_followup_for_viewer()
+        report = generate_report(self.owner, self.farm, "inventory-alerts")
+        self.client.force_login(self.viewer)
+        url = f"/company/office/ecosystem/reports/{report.pk}/create-followup/"
+        for _ in range(3):
+            self.assertEqual(self.client.post(url, {
+                "finding_index": "0", "assignee_id": self.viewer.pk,
+            }, secure=True).status_code, 302)
+        self.assertEqual(AssistantFollowUp.objects.count(), 1)
+        self.assertEqual(WorkTask.objects.count(), 1)
+        self.assertEqual(AuditEvent.objects.filter(action="assistant_followup_created").count(), 1)
+
+    def test_followup_requires_manager_role_even_with_model_permissions(self):
+        report = generate_report(self.owner, self.farm, "inventory-alerts")
+        perms = Permission.objects.filter(
+            content_type__app_label__in=("enterprise_portal", "ecosystem_hub"),
+            codename__in=("add_worktask", "add_assistantfollowup"),
+        )
+        self.viewer.user_permissions.add(*list(perms))
+        self.client.force_login(self.viewer)
+        self.assertEqual(self.client.post(
+            f"/company/office/ecosystem/reports/{report.pk}/create-followup/",
+            {"finding_index": "0", "assignee_id": self.viewer.pk}, secure=True,
+        ).status_code, 403)
+        self.assertFalse(WorkTask.objects.exists())
+
+    def test_followup_rejects_cross_unit_report_and_assignee(self):
+        self._enable_task_followup_for_viewer()
+        foreign = generate_report(self.owner, self.factory, "executive-brief")
+        own = generate_report(self.owner, self.farm, "inventory-alerts")
+        self.client.force_login(self.viewer)
+        self.assertEqual(self.client.post(
+            f"/company/office/ecosystem/reports/{foreign.pk}/create-followup/",
+            {"finding_index": "0", "assignee_id": self.viewer.pk}, secure=True,
+        ).status_code, 404)
+        outsider = U.objects.create_user(username="factory-staff", is_staff=True, password="test-only")
+        UnitMembership.objects.create(user=outsider, unit=self.factory, role="operations")
+        self.assertEqual(self.client.post(
+            f"/company/office/ecosystem/reports/{own.pk}/create-followup/",
+            {"finding_index": "0", "assignee_id": outsider.pk}, secure=True,
+        ).status_code, 404)
+        self.assertFalse(WorkTask.objects.exists())
+
+    def test_followup_invalid_index_cannot_mutate_records(self):
+        self._enable_task_followup_for_viewer()
+        report = generate_report(self.owner, self.farm, "inventory-alerts")
+        self.client.force_login(self.viewer)
+        url = f"/company/office/ecosystem/reports/{report.pk}/create-followup/"
+        for index in ("-1", "9000", "invalid", ""):
+            with self.subTest(index=index):
+                self.assertEqual(self.client.post(url, {
+                    "finding_index": index, "assignee_id": self.viewer.pk,
+                }, secure=True).status_code, 404)
+        self.assertFalse(AssistantFollowUp.objects.exists())
+        self.assertFalse(WorkTask.objects.exists())
+
+    def test_followup_endpoint_needs_csrf_token(self):
+        report = generate_report(self.owner, self.farm, "inventory-alerts")
+        web = Client(enforce_csrf_checks=True)
+        web.force_login(self.owner)
+        self.assertEqual(web.post(
+            f"/company/office/ecosystem/reports/{report.pk}/create-followup/",
+            {"finding_index": "0", "assignee_id": self.owner.pk}, secure=True,
+        ).status_code, 403)
+        self.assertFalse(WorkTask.objects.exists())
+
+    def test_existing_assistant_findings_cannot_be_rewritten(self):
+        report = generate_report(self.owner, self.farm, "inventory-alerts")
+        report.findings = [{"title": "اطلاعات جعلی"}]
+        with self.assertRaises(ValidationError):
+            report.save()
+        report.refresh_from_db()
+        self.assertNotEqual(report.findings[0]["title"], "اطلاعات جعلی")
 
     def test_assistant_access_is_csrf_protected(self):
         web = Client(enforce_csrf_checks=True)

@@ -10,7 +10,7 @@ from django.core.validators import MinValueValidator, MaxValueValidator
 from django.db import models
 from django.utils import timezone
 from enterprise_portal.models import (
-    BusinessUnit, InventoryItem, ManagementProject, CompanyAsset,
+    BusinessUnit, InventoryItem, ManagementProject, CompanyAsset, WorkTask,
 )
 
 
@@ -434,7 +434,37 @@ class AssistantRun(Timeline):
             before = type(self).objects.get(pk=self.pk)
             if self.assistant_code != before.assistant_code or self.unit_id != before.unit_id:
                 raise ValidationError("دامنه و نوع گزارش دستیار قابل جابه‌جایی نیست.")
+            if self.findings != before.findings or self.evidence != before.evidence:
+                raise ValidationError("یافته‌ها و شواهد گزارش پس از تولید قابل ویرایش نیستند.")
         super().save(*args, **kwargs)
+
+
+class AssistantFollowUp(Timeline):
+    """Human-created task for a specific assistant finding, not an automated action."""
+    unit = models.ForeignKey(BusinessUnit, on_delete=models.PROTECT)
+    report = models.ForeignKey(AssistantRun, on_delete=models.PROTECT, related_name="followups")
+    finding_index = models.PositiveIntegerField()
+    task = models.OneToOneField(WorkTask, on_delete=models.PROTECT, related_name="assistant_followup")
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(
+            fields=("report", "finding_index"), name="zm_eco_unique_followup_finding")]
+        verbose_name = "پیگیری یافته دستیار"
+        verbose_name_plural = "پیگیری‌های انسانی دستیارها"
+
+    def clean(self):
+        errors = {}
+        if self.report_id and self.unit_id and self.report.unit_id != self.unit_id:
+            errors["unit"] = "گزارش و وظیفه باید متعلق به همان واحد باشند."
+        if self.task_id and self.unit_id and self.task.unit_id != self.unit_id:
+            errors["task"] = "وظیفه در واحد دیگری ثبت شده است."
+        if self.report_id and self.finding_index is not None:
+            items = self.report.findings if isinstance(self.report.findings, list) else []
+            if self.finding_index >= len(items):
+                errors["finding_index"] = "یافته انتخاب‌شده در گزارش وجود ندارد."
+        if errors:
+            raise ValidationError(errors)
 
 
 class ProposedAutomation(Timeline):

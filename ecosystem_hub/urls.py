@@ -19,4 +19,5 @@ urlpatterns = [
     path("assistants/<slug:code>/run/", views.run_assistant, name="run_assistant"),
     path("reports/<int:pk>/", views.report, name="report"),
     path("reports/<int:pk>/request-review/", views.request_review, name="request_review"),
+    path("reports/<int:pk>/create-followup/", views.create_followup, name="create_followup"),
 ]
