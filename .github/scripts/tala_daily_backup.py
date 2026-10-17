@@ -58,7 +58,7 @@ def copy_online(source: Path, destination: Path) -> None:
             db.backup(dest, pages=128, sleep=0.1)
     os.chmod(destination, 0o600)
 
-def verified_backup(home: Path, runid: str, now: dt.datetime | None = None) -> Path:
+def verified_backup(home: Path, runid: str, now=None) -> Path:
     if not re.fullmatch(r"[0-9]{1,20}", runid):
         raise RuntimeError("TALA_INVALID_BACKUP_RUN_ID")
     home = home.resolve(strict=True)
