@@ -841,5 +841,22 @@ EDITORIAL = {
 }
 
 def editorial_for(family, key):
-    """Select a full editorial specification for an existing page."""
-    return EDITORIAL.get(f"{family}:{key}")
+    """Return a read-only presentation copy with original and mobile photo paths.
+
+    EDITORIAL originals (text, ordering, alt text, captions and photos) are
+    immutable source content. Every smaller WebP is a derived copy under the
+    main MojPlayWin asset namespace. No product or database data is involved.
+    """
+    item = EDITORIAL.get(f"{family}:{key}")
+    if item is None:
+        return None
+    image_specifications = []
+    for image in item["images"]:
+        presentation = dict(image)
+        path = image["path"]
+        if path.startswith("site/heroes/") and path.endswith(".webp"):
+            presentation["mobile_path"] = (
+                "site/mojplaywin-atelier/mobile-heroes/" + path[len("site/heroes/"):]
+            )
+        image_specifications.append(presentation)
+    return {**item, "images": image_specifications}
