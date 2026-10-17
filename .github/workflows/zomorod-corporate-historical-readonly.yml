@@ -141,7 +141,7 @@ jobs:
           web="$HOME/public_html"
           echo "READ_ONLY=true"
           echo "HOST_CLOCK=$(date -Is)"
-          echo "REQUESTED_BACKUP_LOCAL=2026-10-15T01:00:00+03:30"
+          echo "REQUESTED_BACKUP_LOCAL=2026-10-14T01:00:00+03:30"
           for slug in about company; do
             p="$web/$slug/index.html"
             if [ -f "$p" ]; then
@@ -172,24 +172,24 @@ jobs:
             echo "HTTP=$path:$code"
           done
           REMOTE
-      - name: Discover candidate 15 Oct 1AM host backups by timestamp only
+      - name: Discover candidate 14 Oct 1AM host backups by timestamp only
         shell: bash
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/zomorod-readonly"
           ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
           set -euo pipefail
-          echo "BACKUP_TIME_WINDOW=2026-10-14T20:00_to_2026-10-15T06:00_HOST_LOCAL"
+          echo "BACKUP_TIME_WINDOW=2026-10-13T20:00_to_2026-10-14T06:00_HOST_LOCAL"
           for name in zomorodmelal-root-homepage zomorodmelal-app zomorod-nova-publish; do
             dir="$HOME/.backups/$name"
             test -d "$dir" || continue
             echo "BACKUP_CANDIDATE_SOURCE=$name"
             find "$dir" -maxdepth 2 -mindepth 1 -printf '%y %TY-%Tm-%TdT%TH:%TM %s %P\n' | sort | sed -n '1,45p'
-            echo "EARLY_15_OCT_CANDIDATES=$name"
-            find "$dir" -maxdepth 5 -type f -newermt '2026-10-14 20:00' ! -newermt '2026-10-15 06:00' -printf '%TY-%Tm-%TdT%TH:%TM %s %f\n' | sort | sed -n '1,55p'
+            echo "EARLY_14_OCT_CANDIDATES=$name"
+            find "$dir" -maxdepth 5 -type f -newermt '2026-10-13 20:00' ! -newermt '2026-10-14 06:00' -printf '%TY-%Tm-%TdT%TH:%TM %s %f\n' | sort | sed -n '1,55p'
           done
           echo "NEARBY_BACKUP_DIRECTORIES"
-          find "$HOME/.backups" -maxdepth 2 -type d -newermt '2026-10-14 20:00' ! -newermt '2026-10-15 06:00' -printf '%TY-%Tm-%TdT%TH:%TM %f\n' | sort | sed -n '1,60p'
+          find "$HOME/.backups" -maxdepth 2 -type d -newermt '2026-10-13 20:00' ! -newermt '2026-10-14 06:00' -printf '%TY-%Tm-%TdT%TH:%TM %f\n' | sort | sed -n '1,60p'
           REMOTE
       - name: Verify unique image paths exist on live host before release
         shell: bash
@@ -273,8 +273,8 @@ jobs:
           import os, pathlib, datetime, shlex, subprocess
           home=pathlib.Path.home()
           utc=datetime.timezone.utc
-          start=datetime.datetime(2026,10,14,19,0,tzinfo=utc)
-          end=datetime.datetime(2026,10,15,1,0,tzinfo=utc)
+          start=datetime.datetime(2026,10,13,17,30,tzinfo=utc)
+          end=datetime.datetime(2026,10,14,1,30,tzinfo=utc)
           roots=[home/'.backups',home/'Saeit'/'backups',home/'Saeit'/'var'/'backups']
           found=[]
           for root in roots:
