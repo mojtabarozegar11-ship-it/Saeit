@@ -177,3 +177,5 @@ jobs:
         run: rm -rf -- "$RUNNER_TEMP/mpw-footer-lastline"
 
 # Fail-closed diagnosed retry with safe error-code only
+
+# Read-only source parity retained with per-page copyright wording
