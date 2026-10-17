@@ -77,11 +77,8 @@ def rewrite(raw,is_prod):
     if brand is None:raise RuntimeError("brand footer first column absent")
     point=brand.start(2)
     doc=doc[:point]+NEW_LINE+"\n"+doc[point:]
-    if doc.count(MARKER)!=1 or doc.count("Mojtaba Roozegar")!=4:
-        # one data-text, one visible string, one aria label, one marker CSS pseudo content? 
-        # the marker itself has no name: expect THREE instances in inserted HTML.
-        if doc.count("Mojtaba Roozegar")!=3:
-            raise RuntimeError("duplicate or missing founder name")
+    if doc.count(MARKER)!=1 or doc.count(NEW_LINE)!=1:
+        raise RuntimeError("new founder markup missing or repeated")
     footer_at=doc.find('<footer')
     first_div_end=doc.find('</div>',footer_at)
     if footer_at < 0 or first_div_end < footer_at:
