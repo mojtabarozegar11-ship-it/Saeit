@@ -101,7 +101,11 @@ def candidate(original, mode):
     if mode == "canary":
         rule = "RewriteCond %{HTTPS} on\nRewriteRule ^" + CANARY + "$ /design-preview-20261017/_mpw_release_marker.txt [END]"
     elif mode == "root":
-        rule = "RewriteCond %{HTTPS} on\nRewriteRule ^$ /design-preview-20261017/"+PROD_NAME+" [END]"
+        # Match the main-domain root by REQUEST_URI, never a child site.
+        # Passenger intercepts ^$; the server-tested ^.*$ pattern succeeds.
+        rule = ("RewriteCond %{HTTPS} on\n"
+                "RewriteCond %{REQUEST_URI} ^/$\n"
+                "RewriteRule ^.*$ /design-preview-20261017/"+PROD_NAME+" [END,QSD]")
     elif mode == "probe-root":
         # Probe ONLY an exact root query, never ordinary traffic.
         rule = ("RewriteCond %{REQUEST_URI} ^/$\n"
