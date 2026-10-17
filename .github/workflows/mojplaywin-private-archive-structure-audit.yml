@@ -4,6 +4,9 @@ on:
     branches: ["audit/mojplaywin-backup-transport-20261017"]
     paths:
       - ".github/workflows/mojplaywin-private-archive-structure-audit.yml"
+      - "scripts/mojplaywin_restore_archive_probe.py"
+      - "scripts/mojplaywin_restore_archive_private_check.py"
+      - "tests/test_mojplaywin_restore_archive_probe.py"
 permissions:
   contents: read
 concurrency:
