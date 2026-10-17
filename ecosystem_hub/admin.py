@@ -12,7 +12,7 @@ from .models import (
     MaterialRequirement, ProductionOrder, ProcurementNeed, QualityInspection,
     MaintenanceTicket, StaffAssignment, Timesheet, ManagementRisk,
     PerformanceIndicator, ReviewApproval, ReferenceEvidence, AssistantRun,
-    ProposedAutomation,
+    ProposedAutomation, MaterialPriceReference, ProductionCostScenario,
 )
 
 
@@ -149,6 +149,32 @@ class ProductionOrderAdmin(ScopedAdmin):
     list_display = ("code", "unit", "formula", "quantity", "work_center", "due_date", "state")
     list_filter = ("unit", "state")
     search_fields = ("code",)
+
+
+@admin.register(MaterialPriceReference)
+class MaterialPriceReferenceAdmin(ScopedAdmin):
+    list_display = ("item", "unit", "currency", "amount", "as_of", "status", "evidence_ref")
+    list_filter = ("unit", "currency", "status")
+    search_fields = ("item__sku", "item__title", "evidence_ref")
+    readonly_fields = ("recorded_by", "created_at", "updated_at")
+
+    def save_model(self, request, obj, form, change):
+        if not change:
+            obj.recorded_by = request.user
+        super().save_model(request, obj, form, change)
+
+
+@admin.register(ProductionCostScenario)
+class ProductionCostScenarioAdmin(ScopedAdmin):
+    list_display = ("label", "unit", "order", "currency", "labor_estimate", "overhead_estimate")
+    list_filter = ("unit", "currency")
+    search_fields = ("label", "order__code")
+    readonly_fields = ("prepared_by", "created_at", "updated_at")
+
+    def save_model(self, request, obj, form, change):
+        if not change:
+            obj.prepared_by = request.user
+        super().save_model(request, obj, form, change)
 
 
 @admin.register(ProcurementNeed)

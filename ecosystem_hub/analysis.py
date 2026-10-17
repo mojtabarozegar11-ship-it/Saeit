@@ -16,10 +16,12 @@ from enterprise_portal.models import (
 from enterprise_portal.services import stock_balance
 from .access import require_unit
 from .catalog import CATALOG
+from .costing import estimate_manufacturing_cost
 from .models import (
     AssistantRun, BillOfMaterials, MaintenanceTicket, ManagementRisk,
     PerformanceIndicator, ProductionOrder, ProposedAutomation, ProcurementNeed,
     QualityInspection, StaffAssignment, Timesheet, ManagedSite,
+    ProductionCostScenario,
 )
 
 
@@ -66,6 +68,28 @@ def scan(unit, code):
                         f"نیاز برآوردی {needed}، موجودی قطعی {available} {line.item.measure}. "
                         "این فقط برنامه است، هیچ خروج انباری ثبت نشده.",
                         severity="warning", source=f"MaterialRequirement:{line.pk}"))
+    elif mode == "cost":
+        scenarios = ProductionCostScenario.objects.filter(
+            unit=unit,
+        ).select_related("order__formula__product").order_by("-created_at")[:15]
+        for scenario in scenarios:
+            estimate = estimate_manufacturing_cost(scenario)
+            if estimate["complete"]:
+                findings.append(issue(
+                    "سناریوی هزینه: " + estimate["order_code"],
+                    f"برآورد مستند {estimate['total']} {estimate['currency']}؛ "
+                    f"بهای واحد {estimate['unit_cost']}؛ فقط برای برنامه‌ریزی، "
+                    "نه سند قطعی حسابداری.",
+                    source=f"ProductionCostScenario:{scenario.pk}",
+                ))
+            else:
+                findings.append(issue(
+                    "نرخ‌های ناکامل سفارش " + estimate["order_code"],
+                    "نرخ مستند کافی برای " + (
+                        ", ".join(estimate["missing_skus"]) or "مواد اولیه تعریف نشده"
+                    ) + " وجود ندارد؛ جمع هزینه محاسبه نمی‌شود.",
+                    severity="warning", source=f"ProductionCostScenario:{scenario.pk}",
+                ))
     elif mode in ("receivables", "payables"):
         kind = "purchase" if mode == "payables" else "sales"
         q = CommercialDocument.objects.filter(

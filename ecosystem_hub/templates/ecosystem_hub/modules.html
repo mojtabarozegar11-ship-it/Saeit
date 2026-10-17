@@ -18,6 +18,8 @@
 {% if perms.ecosystem_hub.view_workcenter %}<a href="{% url 'admin:ecosystem_hub_workcenter_changelist' %}">مراکز تولید</a>{% endif %}
 {% if perms.ecosystem_hub.view_billofmaterials %}<a href="{% url 'admin:ecosystem_hub_billofmaterials_changelist' %}">فرمول ساخت</a>{% endif %}
 {% if perms.ecosystem_hub.view_productionorder %}<a href="{% url 'admin:ecosystem_hub_productionorder_changelist' %}">سفارش تولید</a>{% endif %}
+{% if perms.ecosystem_hub.view_materialpricereference %}<a href="{% url 'admin:ecosystem_hub_materialpricereference_changelist' %}">نرخ‌های مستند مواد</a>{% endif %}
+{% if perms.ecosystem_hub.view_productioncostscenario %}<a href="{% url 'admin:ecosystem_hub_productioncostscenario_changelist' %}">سناریوهای بهای تولید</a>{% endif %}
 {% if perms.ecosystem_hub.view_procurementneed %}<a href="{% url 'admin:ecosystem_hub_procurementneed_changelist' %}">درخواست خرید</a>{% endif %}
 {% if perms.ecosystem_hub.view_qualityinspection %}<a href="{% url 'admin:ecosystem_hub_qualityinspection_changelist' %}">کیفیت محصول</a>{% endif %}
 {% if perms.ecosystem_hub.view_maintenanceticket %}<a href="{% url 'admin:ecosystem_hub_maintenanceticket_changelist' %}">سرویس تجهیزات</a>{% endif %}

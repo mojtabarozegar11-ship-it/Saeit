@@ -7,6 +7,9 @@ on:
       - "ecosystem_hub/tests.py"
       - "ecosystem_hub/views.py"
       - "ecosystem_hub/analysis.py"
+      - "ecosystem_hub/models.py"
+      - "ecosystem_hub/costing.py"
+      - "ecosystem_hub/admin.py"
 permissions:
   contents: write
 concurrency:

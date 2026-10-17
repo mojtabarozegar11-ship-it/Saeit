@@ -93,3 +93,14 @@ unit membership. Company superusers retain a verified organization-wide view.
 Non-unit-scoped legacy office letters/meeting records still require separate
 entity-level isolation before general cross-company delegation: avoid granting
 these permissions to unrelated staff until this is resolved.
+
+
+## Documented manufacturing-cost scenarios
+The extension adds manual, documentary MaterialPriceReference in exactly one
+currency, with source evidence and review status, plus ProductionCostScenario
+covering labor and overhead for a specific unit/order. The read-only costing
+engine computes all BOM quantities and scrap, then requires a verified
+same-currency rate for every component; missing rates produce incomplete state
+and NO total. It never silently translates FX or posts inventory/accounting
+transactions. An authorized user can view each scenario inside the production
+module. An implemented cost-accountant assistant reads the same evidence.

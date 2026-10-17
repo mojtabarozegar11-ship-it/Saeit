@@ -8,6 +8,7 @@ urlpatterns = [
     path("modules/", views.modules, name="modules"),
     path("group/", views.group_overview, name="group_overview"),
     path("production/", views.production, name="production"),
+    path("production/cost/<int:pk>/", views.production_cost, name="production_cost"),
     path("oversight/", views.oversight, name="oversight"),
     path("assistants/", views.assistants, name="assistants"),
     path("assistants/<slug:code>/run/", views.run_assistant, name="run_assistant"),

@@ -15,12 +15,13 @@ from enterprise_portal.models import BusinessUnit, InventoryItem, JournalEntry, 
 from enterprise_portal.views import office_access, no_cache
 from .access import user_units, require_unit
 from .analysis import generate_report
+from .costing import estimate_manufacturing_cost
 from .catalog import CATALOG, DEPARTMENTS
 from .models import (
     AssistantRun, ManagementRisk, ManagedSite, ProductionOrder, ProcurementNeed,
     Organization,
     QualityInspection, MaintenanceTicket, ReviewApproval, UnitMembership,
-    PerformanceIndicator, ProposedAutomation,
+    PerformanceIndicator, ProposedAutomation, ProductionCostScenario,
 )
 
 
@@ -257,10 +258,36 @@ def production(request):
         orders = ProductionOrder.objects.filter(unit=unit).select_related(
             "formula", "formula__product", "work_center",
         ).order_by("due_date", "-pk")[:60]
+    scenarios = ProductionCostScenario.objects.filter(unit=unit).select_related(
+        "order", "order__formula__product"
+    ).order_by("-created_at")[:50] if unit and permission(request.user, "view_productioncostscenario") else []
     return page(request, "production", {
         "selected_unit": unit, "units": units, "orders": orders,
+        "scenarios": scenarios, "section": "production",
+    })
+
+
+
+@never_cache
+@office_access
+@require_GET
+def production_cost(request, pk):
+    require_hub(request)
+    if not permission(request.user, "view_productioncostscenario") or not permission(
+        request.user, "view_materialpricereference"
+    ):
+        raise PermissionDenied("مشاهده برآورد قیمت مواد مستلزم مجوز مالی و تولید است.")
+    scenario = get_object_or_404(
+        ProductionCostScenario.objects.filter(unit__in=user_units(request.user))
+        .select_related("unit", "order__formula__product"),
+        pk=pk,
+    )
+    result = estimate_manufacturing_cost(scenario)
+    return page(request, "cost", {
+        "scenario": scenario, "cost": result, "selected_unit": scenario.unit,
         "section": "production",
     })
+
 
 
 @never_cache
