@@ -1,0 +1,148 @@
+name: Moj Play Win classify six-route LiteSpeed rewrite instability
+on:
+  push:
+    branches: ["audit/mojplaywin-backup-transport-20261017"]
+    paths: [".github/workflows/mojplaywin-six-rule-redirect-classification.yml"]
+permissions:
+  contents: read
+concurrency:
+  group: mojplaywin-main-only-root-deploy
+  cancel-in-progress: false
+jobs:
+  strict-rollback-diagnostic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Temporarily activate exact six routes; classify 200 from CGI vs 307 fallback vs stale Django
+        shell: bash
+        timeout-minutes: 5
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          source_sha=$(sha256sum scripts/mojplaywin_canonical_php_mainonly.php | cut -d' ' -f1)
+          armed=no
+          restore(){
+            if test "$armed" = yes;then
+              timeout 42s ssh -T -F "$d/config" saeit-cpanel 'python3 - rollback' < scripts/mojplaywin_six_canonical_rewrite.py ||
+                 echo "INDEPENDENT_180_SECOND_ORIGINAL_HTACCESS_WATCHDOG_ACTIVE"
+            fi
+          }
+          trap restore EXIT
+          timeout 42s ssh -T -F "$d/config" saeit-cpanel "python3 - production '$source_sha'" < scripts/mojplaywin_six_canonical_rewrite.py
+          armed=yes
+          python3 - <<'PY'
+          import urllib.request,urllib.error,json,time,collections
+          base="https://mojplaywin.com"
+          routes={"store":"/store/","research":"/research/","company":"/company/",
+            "knowledge":"/knowledge/","agriculture":"/ventures/agriculture/",
+            "jewelry":"/ventures/jewelry-gold/"}
+          class NoRedirect(urllib.request.HTTPRedirectHandler):
+              def redirect_request(self,request,fp,code,msg,headers,newurl):return None
+          client=urllib.request.build_opener(NoRedirect())
+          reports=[]
+          for number in range(1,10):
+              for key,path in routes.items():
+                  request=urllib.request.Request(base+path,headers={
+                   "Cache-Control":"no-store, no-cache",
+                   "Pragma":"no-cache",
+                   "User-Agent":"MojPlayWin-six-rule-routing-diagnosis"})
+                  start=time.monotonic()
+                  try:
+                      try:r=client.open(request,timeout=18)
+                      except urllib.error.HTTPError as e:r=e
+                      with r:
+                          status=r.status
+                          body=r.read(800000)
+                          edge=r.headers.get("X-MPW-Canonical-Edge","")
+                          location=r.headers.get("Location","")
+                          vary=r.headers.get("Vary","")
+                          cache=r.headers.get("X-LiteSpeed-Cache","")
+                  except (urllib.error.URLError,TimeoutError) as e:
+                      status=0;body=b"";edge="";location="";vary="";cache=""
+                  expected=('href="https://mojplaywin.com'+path+'"').encode()
+                  old=('href="https://zomorodmelal.ir'+path+'"').encode()
+                  if status==200 and edge=="main-only" and body.count(expected)==1:
+                      klass="php_correct"
+                  elif status==307 and "__mpw_canon_passthru=1" in location:
+                      klass="php_origin_fallback"
+                  elif status==200 and old in body and edge!="main-only":
+                      klass="unrewritten_django"
+                  else:
+                      klass="other_response"
+                  item={"round":number,"route":key,"class":klass,"http":status,
+                        "body_bytes":len(body),"edge":edge=="main-only",
+                        "vary_cookie":"Cookie" in vary,"cache_hit":bool(cache),
+                        "duration":round(time.monotonic()-start,3)}
+                  reports.append(item)
+                  if klass!="php_correct":
+                      print("CANONICAL_SIX_REWRITE_NONCONFORMING "+json.dumps(item,sort_keys=True),flush=True)
+          classes=dict(collections.Counter(x["class"] for x in reports))
+          perroute={route:dict(collections.Counter(x["class"] for x in reports
+               if x["route"]==route)) for route in routes}
+          output={"classification":"MOJ_PLAY_WIN_SIX_REWRITE_LITESPEED_CLASSIFICATION",
+               "total":len(reports),"route_counts":perroute,"class_counts":classes,
+               "writes":"exact .htaccess temporary; restored after sampling",
+               "passenger_changed":False}
+          print(json.dumps(output,sort_keys=True),flush=True)
+          PY
+          restore
+          armed=no
+      - name: Authenticate original release config checksum and main/subsite status after rollback
+        shell: bash
+        timeout-minutes: 2
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          current=$(timeout 32s ssh -T -F "$d/config" saeit-cpanel 'sha256sum /home/zomorod2/mojplaywin.com/.htaccess'|cut -d' ' -f1)
+          test "$current" = 8096fd64e4a0dfa9c84aa609eb9e650a79d03b38f54c40624e0f53764187d24d
+          for path in / /store/ /knowledge/ /saman/ /picm/login/ /farnaz/ /mojtaba.roozegar/;do
+            test "$(curl -sSL -o /dev/null -w '%{http_code}' --max-time 15 "https://mojplaywin.com$path")" = 200 || exit 62
+          done
+          echo "SIX_REWRITE_ROOT_CONFIG_VERIFIED_EXACTLY_RESTORED"
