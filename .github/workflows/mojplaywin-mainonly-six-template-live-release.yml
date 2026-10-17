@@ -11,7 +11,8 @@ concurrency:
   cancel-in-progress: false
 jobs:
   scoped-main-templates:
-    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/audit/mojplaywin-backup-transport-20261017'
+    # Paused after live smoke failure and verified rollback. Requires revised read-only proof.
+    if: ${{ false }}
     runs-on: ubuntu-latest
     timeout-minutes: 22
     steps:
