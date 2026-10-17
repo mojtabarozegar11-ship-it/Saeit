@@ -99,8 +99,8 @@ jobs:
           umask 077
           sha="$1"
           web="$HOME/public_html"
-          backup="$HOME/.backups/zomorod-orbital-v8/$sha"
-          preview="$web/__zm_orbital_v8_preview_20261018"
+          backup="$HOME/.backups/zomorod-orbital-v8-sphere/$sha"
+          preview="$web/__zm_orbital_v8_sphere_20261018"
           test -s "$web/index.html" && test ! -L "$web/index.html"
           test -s "$web/.htaccess" && test ! -L "$web/.htaccess"
           test ! -e "$preview" && test ! -L "$preview"
@@ -120,11 +120,11 @@ jobs:
           set -euo pipefail
           d="$RUNNER_TEMP/zomorod-baseline-inventory"
           src="content/zomorod-orbital-v7"
-          preview="/home/zomorod2/public_html/__zm_orbital_v8_preview_20261018"
+          preview="/home/zomorod2/public_html/__zm_orbital_v8_sphere_20261018"
           (cd "$src"; sha256sum data.js app.js images-??.json) > "$RUNNER_TEMP/v8.sha"
           (cd content/zomorod-orbital-v8; sha256sum index.html) >> "$RUNNER_TEMP/v8.sha"
           ssh -F "$d/config" saeit-cpanel "set -eu; test ! -e '$preview'; mkdir -m 755 '$preview'"
-          tar -C "$src" -cf - data.js app.js images-??.json | ssh -F "$d/config" saeit-cpanel "tar -xf - -C '$preview'"
+          (cd "$src"; tar -cf - data.js app.js images-??.json) | ssh -F "$d/config" saeit-cpanel "tar -xf - -C '$preview'"
           ssh -F "$d/config" saeit-cpanel "cat > '$preview/index.html'" < content/zomorod-orbital-v8/index.html
           ssh -F "$d/config" saeit-cpanel "cat > '$preview/.htaccess'" <<'HT'
           PassengerEnabled off
@@ -142,13 +142,13 @@ jobs:
           ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
           set -euo pipefail
           sha="$1";web="$HOME/public_html"
-          preview="$web/__zm_orbital_v8_preview_20261018"
-          backup="$HOME/.backups/zomorod-orbital-v8/$sha"
+          preview="$web/__zm_orbital_v8_sphere_20261018"
+          backup="$HOME/.backups/zomorod-orbital-v8-sphere/$sha"
           cmp -s "$web/index.html" "$backup/index.original.html"
           sha256sum -c --status "$backup/protected.sha256"
           test "$(find "$preview" -maxdepth 1 -type f | wc -l)" -eq 21
           for item in index.html data.js app.js images-01.json images-08.json images-17.json; do
-            code="$(curl -sS -L --max-time 26 -o "$backup/$item.http" -w '%{http_code}' "https://zomorodmelal.ir/__zm_orbital_v8_preview_20261018/$item?audit=$sha" || true)"
+            code="$(curl -sS -L --max-time 26 -o "$backup/$item.http" -w '%{http_code}' "https://zomorodmelal.ir/__zm_orbital_v8_sphere_20261018/$item?audit=$sha" || true)"
             echo "V8_HTTP_$item=$code"
             test "$code" = 200
           done
