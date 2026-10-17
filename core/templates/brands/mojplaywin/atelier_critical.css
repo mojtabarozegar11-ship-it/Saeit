@@ -239,3 +239,9 @@ body.mpw-atelier-v4{
 .mpw-atelier-v4 img{max-width:100%}
 .mpw-atelier-v4 :is(.mpw-page-hero,.mpw-hero,.mpw-games,.mpw-support-handbook){box-shadow:inset 0 1px 0 rgba(246,220,166,.05),0 20px 65px rgba(0,0,0,.22)}
 .mpw-atelier-v4 :is(.mpw-page-card,.mpw-venture-card){min-width:0;overflow-wrap:anywhere}
+
+
+/* Main-domain responsive source sets keep all original editorial photography. */
+.mpw-atelier-v4 .mpx-responsive-picture{display:block;width:100%;height:100%;overflow:hidden}
+.mpw-atelier-v4 .mpx-page-hero-art .mpx-responsive-picture img{display:block;width:100%;height:100%;object-fit:cover}
+.mpw-atelier-v4 .mpx-venture-card .mpx-responsive-picture img{display:block;width:100%;height:auto;aspect-ratio:470/290;object-fit:cover}
