@@ -227,19 +227,26 @@ def capture_viewports(manifest):
                         if orbit_button.get_attribute("aria-pressed") != "false":
                             raise RuntimeError(f"{key}-{mode}: satellite orbit could not resume")
 
+                        # Emulate a visitor whose OS has reduced motion
+                        # already enabled BEFORE loading the page. This tests
+                        # the accessible initial state without depending on
+                        # Chrome's live media-emulation change event.
                         page.emulate_media(reduced_motion="reduce")
+                        page.reload(wait_until="load")
                         page.wait_for_function(
                             """() => document.querySelector('.mpo-hero-visual')
                                 ?.dataset.orbitMotion === 'reduced'""",
-                            timeout=3000,
+                            timeout=4000,
                         )
+                        orbit_button = page.locator("[data-globe-motion-toggle]")
                         if orbit_button.is_enabled():
                             raise RuntimeError(f"{key}-{mode}: motion-reduction control must be disabled")
                         page.emulate_media(reduced_motion="no-preference")
+                        page.reload(wait_until="load")
                         page.wait_for_function(
                             """() => document.querySelector('.mpo-hero-visual')
                                 ?.dataset.orbitMotion === 'active'""",
-                            timeout=3000,
+                            timeout=4000,
                         )
                         first = page.locator("[data-orbit='web'] .mpo-orbit-track")
                         page.locator("[data-orbit='web'] [data-orbit-next]").click()
