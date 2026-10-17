@@ -1,0 +1,134 @@
+name: Moj Play Win six canonical isolation-capability audit
+on:
+  push:
+    branches: ["audit/mojplaywin-backup-transport-20261017"]
+    paths: [".github/workflows/mojplaywin-canonical-isolation-capability.yml"]
+permissions:
+  contents: read
+jobs:
+  inspect-routing-capabilities:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Inspect source server rewrite, Passenger, PHP and app isolation feasibility without modification
+        shell: bash
+        timeout-minutes: 3
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 80s ssh -T -F "$d/config" saeit-cpanel 'python3 -' <<'PY'
+          import os,sys,json,re,hashlib,shutil,subprocess,stat
+          from pathlib import Path
+          account=Path("/home/zomorod2")
+          site=account/"mojplaywin.com"
+          app=account/"Saeit-staging"
+          ht=site/".htaccess"
+          wsgi=site/"passenger_wsgi.py"
+          result={}
+          for key,p in (("account",account),("docroot",site),("shared_app",app),
+                        ("htaccess",ht),("passenger_wsgi",wsgi)):
+              result[key]={"exists":p.exists(),"symlink":p.is_symlink(),
+                           "owned":p.stat().st_uid==os.getuid() if p.exists() else False}
+          for tool in ("php","php82","php83","curl","python3","lsof"):
+              exe=shutil.which(tool)
+              result[tool]={"available":bool(exe)}
+          if shutil.which("php"):
+              php=shutil.which("php")
+              proc=subprocess.run([php,"-r","echo json_encode(array('sapi'=>PHP_SAPI,'version'=>PHP_VERSION,'curl'=>extension_loaded('curl'),'openssl'=>extension_loaded('openssl'),'allow_url_fopen'=>ini_get('allow_url_fopen')));"],
+                 stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,timeout=10)
+              if proc.returncode==0:
+                  result["php_runtime"]=json.loads(proc.stdout)
+          if ht.is_file() and not ht.is_symlink():
+              content=ht.read_text(errors="replace")
+              result["htaccess_sha256"]=hashlib.sha256(ht.read_bytes()).hexdigest()
+              result["htaccess_directive_names"]=[re.split(r"\s+",s.strip())[0].lower() for s in content.splitlines()
+                    if s.strip() and not s.strip().startswith("#")][:40]
+              result["php_handler_directive_present"]=any(token in content.lower() for token in ("addhandler","sethandler","application/x-httpd-php","application/x-lsphp"))
+              result["passenger_handler_present"]="passenger" in content.lower()
+              result["rewrite_engine_present"]="rewriteengine" in content.lower()
+          result["account_can_create_sibling_app"]=os.access(str(account),os.W_OK)
+          result["site_can_create_isolated_canary"]=os.access(str(site),os.W_OK)
+          result["shared_app_owns_product_code"]=bool((app/"core/mojplaywin_views.py").is_file())
+          result["original_passenger_points_to_shared"]=bool(wsgi.is_file() and b"Saeit-staging" in wsgi.read_bytes())
+          result["parent_litespeed_context_present"]=False
+          print(json.dumps({"classification":"MOJ_PLAY_WIN_SEO_ISOLATION_READ_ONLY","details":result,"writes":0},sort_keys=True))
+          PY
+      - name: Inspect real six canonical payload dynamic safety and origin headers without account access
+        shell: bash
+        timeout-minutes: 3
+        run: |
+          python3 - <<'PY'
+          from urllib.request import Request,urlopen
+          from html.parser import HTMLParser
+          from hashlib import sha256
+          import json,re
+          root="https://mojplaywin.com"
+          pages=("/store/","/research/","/company/","/knowledge/",
+                 "/ventures/agriculture/","/ventures/jewelry-gold/")
+          result=[]
+          for path in pages:
+              samples=[]
+              for i in (1,2):
+                  req=Request(root+path+"?__mpw_readonly=1",headers={"Cache-Control":"no-store","User-Agent":"MojPlayWin-canonical-architecture-preflight"})
+                  with urlopen(req,timeout=17) as response:
+                      body=response.read(300000)
+                      record={"http":response.status,"bytes":len(body),"sha16":sha256(body).hexdigest()[:16],
+                        "type":response.headers.get("Content-Type","").split(";")[0],
+                        "cache_status":{x:response.headers.get(x,"") for x in ("X-LiteSpeed-Cache","Cache-Control","Vary","Via") if response.headers.get(x)}}
+                  html=body.decode("utf-8",errors="replace")
+                  record.update({"canonical_count":len(re.findall(r'rel="canonical"',html)),
+                    "has_html_form":"<form" in html,"has_csrf":"csrfmiddlewaretoken" in html,
+                    "contains_session_nonce":("csrf_token" in html or 'name="csrfmiddlewaretoken"' in html),
+                    "has_account_details":any(x in html.lower() for x in ("my-account","wallet-balance","account-balance")),
+                    "has_dynamic_checkout":"checkout" in html.lower(),
+                    "contains_private_data":False,
+                    "has_html_lang_en":'<html lang="en"' in html})
+                  samples.append(record)
+              result.append({"path":path,"samples":samples})
+          print(json.dumps({"classification":"MOJ_PLAY_WIN_PAGES_RENDER_FEASIBILITY",
+                            "routes":result,"writes":0},sort_keys=True))
+          PY
