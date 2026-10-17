@@ -21,6 +21,11 @@
         <source media="(max-width: 700px)" srcset="{% static 'site/mojplaywin-atelier/research-nexus.svg' %}" type="image/svg+xml">
         <img src="{% static section_image %}" alt="{{ section_title }}" width="900" height="640" fetchpriority="high" loading="eager" decoding="async">
       </picture>
+      {% elif section_mobile_image %}
+      <picture class="mpx-responsive-picture">
+        <source media="(max-width: 700px)" srcset="{% static section_mobile_image %}" type="image/webp">
+        <img src="{% static section_image %}" alt="{{ section_title }}" width="900" height="640" fetchpriority="high" loading="eager" decoding="async">
+      </picture>
       {% else %}
       <img src="{% static section_image %}" alt="{{ section_title }}" width="900" height="640" fetchpriority="high" loading="eager" decoding="async">
       {% endif %}
@@ -54,7 +59,14 @@
     <div class="mpx-venture-grid">
       {% for item in ventures %}{% if item.slug != active_venture %}
       <article class="mpx-venture-card">
+        {% if item.mobile_image %}
+        <picture class="mpx-responsive-picture">
+          <source media="(max-width: 700px)" srcset="{% static item.mobile_image %}" type="image/webp">
+          <img src="{% static item.image %}" alt="{{ item.title }}" width="470" height="290" loading="lazy" decoding="async">
+        </picture>
+        {% else %}
         <img src="{% static item.image %}" alt="{{ item.title }}" width="470" height="290" loading="lazy" decoding="async">
+        {% endif %}
         <div class="mpx-card-copy"><h3>{{ item.title }}</h3><p>{{ item.text }}</p>
           <a href="{{ item.url }}">View page <span aria-hidden="true">↗</span></a></div>
       </article>
