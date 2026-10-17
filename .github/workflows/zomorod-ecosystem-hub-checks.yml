@@ -74,15 +74,12 @@ jobs:
           assert old==new,'Public route changes are forbidden in this ecosystem extension'
           # Finance template may only add the permission-gated internal income report link.
           oldfinance=subprocess.check_output(
-              ['git','show',base+':enterprise_portal/templates/enterprise_portal/finance.html'],text=True).splitlines()
-          newfinance=Path('enterprise_portal/templates/enterprise_portal/finance.html').read_text().splitlines()
-          extra=[line for line in newfinance if line not in oldfinance]
-          assert len(extra)==1, ('Unexpected finance template additions',extra)
-          assert "enterprise_portal:ecosystem_hub:income_report" in extra[0]
-          assert "perms.enterprise_portal.view_journalentry" in extra[0]
-          assert "perms.enterprise_portal.view_ledgeraccount" in extra[0]
-          assert "perms.ecosystem_hub.view_organization" in extra[0]
-          assert [line for line in newfinance if line not in extra]==oldfinance, 'Original finance template changed'
+              ['git','show',base+':enterprise_portal/templates/enterprise_portal/finance.html'],text=True)
+          newfinance=Path('enterprise_portal/templates/enterprise_portal/finance.html').read_text()
+          # This exact, permission-gated link is the only accepted change.
+          added='\n{% if perms.enterprise_portal.view_journalentry and perms.enterprise_portal.view_ledgeraccount and perms.ecosystem_hub.view_organization %}<a href="{% url \'enterprise_portal:ecosystem_hub:income_report\' %}">گزارش درآمد و هزینه دوره‌ای ←</a>{% endif %}'
+          assert newfinance.count(added)==1, 'Expected one exact private report link'
+          assert newfinance.replace(added,'',1)==oldfinance, 'Original finance HTML content was altered'
           print('PRIVATE_FINANCE_VIEW_PRESERVED_WITH_AUTHORIZED_REPORT_LINK=yes')
           oldurl=subprocess.check_output(['git','show',base+':enterprise_portal/urls.py'],text=True)
           now=Path('enterprise_portal/urls.py').read_text()
