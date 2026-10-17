@@ -4,6 +4,15 @@ on:
     branches: ["restore-zomorod-corporate-content-20261017"]
     paths:
       - ".github/workflows/zomorod-final-live-acceptance.yml"
+      - "content/zomorod-nova-pages/**"
+      - "core/static/site/emerald-system.css"
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/zomorod-final-live-acceptance.yml"
+      - "content/zomorod-nova-pages/**"
+      - "core/static/site/emerald-system.css"
+      - "tests/test_zomorod_corporate_content_restoration.py"
   workflow_dispatch:
 permissions:
   contents: read
