@@ -55,3 +55,47 @@ CI and Django tests cover only source/runtime test-environment behavior. Currenc
 9. On authorized release, run complete post-deploy regression; rollback at once if any protected file, product, order, payment flow or site differs.
 
 **Do not claim 100/100 or live deployment before those steps succeed.** This is a quality policy for the draft main-site redesign, not evidence that the site is already perfect.
+
+## Absolute red line: every independent MojPlayWin child site
+
+The main-site redesign owns ONLY `mojplaywin.com/` and the site's verified
+main-owned pages. **Every independent application below the same hostname is
+excluded and must remain unchanged**. Known examples include:
+
+- `/mojtaba.roozegar/` (especially all personal articles, images, About/Q&A,
+  SEO, forms and user accounts);
+- `/picm/`, `/studio.Roham/`, `/saman/`, `/zahra$$/`,
+  `/farnaz/`, `/taniya/`, and every other independent path;
+- any unknown, future or undocumented child subsite. This list is *not exhaustive*.
+
+GitHub path restrictions alone cannot guarantee production safety: the existing
+`scripts/deploy_mojplaywin_branding.py` targets `/home/zomorod2/Saeit-staging`,
+merges files shared by brands and calls Passenger restart. **Do not invoke it
+for the V4 redesign.** No restart, deployment, rewrite, migration, cross-brand
+asset replacement, global setting or shared WSGI edit is authorized.
+
+The release must be blocked until all the following are proven:
+
+1. Authoritatively inventory **all** independent child sites from cPanel
+   application mapping, web-server routes and filesystem app roots (do not
+   pretend the known list is exhaustive).
+2. Establish complete backups of each site's pages/assets, shared DB records,
+   files, URLs, content and SEO metadata, plus demonstrate recovery.
+3. Establish a publishing route that cannot restart, overwrite, mask, redirect
+   or otherwise affect any independent child site, including unlisted ones.
+4. Capture per-site live pre-release URL, authentication, media and SEO
+   baselines without accessing private user data unnecessarily.
+5. Prove isolation in staging, obtain approval, then compare all protected
+   sites immediately after release and roll back if any regression is detected.
+
+Source checks:
+- `scripts/mojplaywin_subsite_scope_guard.py` rejects **all non-allowlisted**
+  files by default, including files of independent sites never previously
+  identified; it refuses deletions, type changes and shared deploy scripts.
+- `core/tests/test_mojplaywin_independent_subsites.py` checks that the offline
+  main-site preview does not take over child-site Django route resolution.
+- `.github/workflows/mojplaywin-subsite-scope-guard.yml` executes the
+  default-deny check on design PRs without deployment privileges or secrets.
+
+**Passing these source checks is a prerequisite, never permission to deploy.
+The separate 19-gate NO-GO release check remains active.**
