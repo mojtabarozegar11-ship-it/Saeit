@@ -168,7 +168,7 @@ class CorporateContentPreservationTests(unittest.TestCase):
                 with self.subTest(page=slug, src=img["src"]):
                     self.assertTrue(img.get("alt"), "Required meaningful alt")
                     photographs.append(img["src"])
-        self.assertEqual(len(photographs), 30)
+        self.assertEqual(len(photographs), 45)  # 30 original photos + 15 unique orbital cards
         repeats = {path: count for path, count in Counter(photographs).items()
                    if count > 1}
         self.assertEqual(repeats, {}, "Editorial images must never repeat across pages")
