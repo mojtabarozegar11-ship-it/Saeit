@@ -75,6 +75,15 @@ jobs:
             "sha256":hashlib.sha256(s.encode()).hexdigest(),
             "bytes":len(s),"orbit_count":s.count('class="mpo-orbit-card"'),
             "matches":matches},sort_keys=True))
+          for label,a,b in [("SECTION_TOP",60000,62200),("FIRST_TO_SECOND",64000,65800),
+                            ("SECOND_TO_THIRD",67500,69300),("THIRD_END",70800,73800),
+                            ("ORBIT_JS",99000,len(s))]:
+              print("PUBLIC_MAIN_FRAGMENT_"+label+"="+json.dumps(s[a:b]))
+          print("ORBIT_INIT_SELECTORS="+json.dumps({
+             "tracks":len(re.findall(r'<ul class="mpo-orbit-track"',s)),
+             "arrow_controls":len(re.findall(r'data-orbit-(?:next|prev)',s)),
+             "expr":list(set(re.findall(r'(?:querySelectorAll|querySelector)\([^)]{0,110}\)',s)))[:30]
+          }))
           print("NO_SOURCE_MODIFICATIONS=true")
           PY
       - name: Clear SSH credentials
