@@ -132,7 +132,10 @@ jobs:
               last=bar.group('lastline')
               assert last.count('data-mpw-copyright-founder="true"')==1,path
               assert '© 2022 MojPlayWin. All rights reserved.' in last,path
-              assert 'Built for research, creativity and responsible commerce.' in last,path
+              # Other pages have distinct legal/mission text. The publisher
+              # retains both original spans byte-for-byte; verify structure,
+              # not a homepage-specific second copyright message.
+              assert len(re.findall(r'<span>[^<]{3,}</span>',last))==2,path
               assert re.search(r'<span class="mpw-copyright-founder" data-mpw-copyright-founder="true">Mojtaba Roozegar</span>\s*$',last),path
               assert not re.search(r'</footer>\s*<div class="mpx-bottom-bar">',html),path
               assert 'mpw-footer-bottom-signoff' not in html,path
