@@ -6,6 +6,7 @@ from django.contrib.auth.views import LoginView, LogoutView
 from django.contrib.auth.views import redirect_to_login
 from django.core.exceptions import PermissionDenied
 from django.db.models import Q, Sum
+from django.db import transaction
 from django.http import HttpResponseForbidden
 from django.shortcuts import redirect, render
 from django.urls import reverse
@@ -161,11 +162,11 @@ def inventory(request):
     required_permission(request, "view_inventoryitem")
     required_permission(request, "view_stockmovement")
     products = InventoryItem.objects.select_related("unit").filter(active=True).order_by("unit__code", "sku")[:150]
-    records = [
-        {"item": item, "balance": stock_balance(item.pk),
-         "needs_reorder": stock_balance(item.pk) <= item.reorder_point}
-        for item in products
-    ]
+    records = []
+    for item in products:
+        balance = stock_balance(item.pk)
+        records.append({"item": item, "balance": balance,
+                        "needs_reorder": balance <= item.reorder_point})
     return page(request, "inventory", {
         "section": "inventory", "records": records,
     })
@@ -206,9 +207,10 @@ def new_task(request):
     if request.method == "POST" and form.is_valid():
         item = form.save(commit=False)
         item.created_by = request.user
-        item.save()
-        AuditEvent.objects.create(actor=request.user, action="office_task_created",
-                                  target=f"WorkTask:{item.pk}", detail={"title": item.title})
+        with transaction.atomic():
+            item.save()
+            AuditEvent.objects.create(actor=request.user, action="office_task_created",
+                                      target=f"WorkTask:{item.pk}", detail={"title": item.title})
         return no_cache(redirect("enterprise_portal:tasks"))
     return page(request, "form", {
         "section": "tasks", "form": form, "heading": "ثبت و ارجاع کار جدید",
@@ -225,10 +227,11 @@ def new_letter(request):
     if request.method == "POST" and form.is_valid():
         item = form.save(commit=False)
         item.created_by = request.user
-        item.save()
-        AuditEvent.objects.create(actor=request.user, action="office_letter_created",
-                                  target=f"OfficeLetter:{item.pk}",
-                                  detail={"number": item.number, "classification": item.classification})
+        with transaction.atomic():
+            item.save()
+            AuditEvent.objects.create(actor=request.user, action="office_letter_created",
+                                      target=f"OfficeLetter:{item.pk}",
+                                      detail={"number": item.number, "classification": item.classification})
         return no_cache(redirect("enterprise_portal:letters"))
     return page(request, "form", {
         "section": "office", "form": form, "heading": "ثبت نامه در دبیرخانه",
