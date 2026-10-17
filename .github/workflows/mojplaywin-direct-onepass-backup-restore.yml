@@ -1,0 +1,132 @@
+name: MojPlayWin direct production backup and isolated restore (never deploy)
+on:
+  push:
+    branches: ["audit/mojplaywin-backup-transport-20261017"]
+    paths:
+      - ".github/workflows/mojplaywin-direct-onepass-backup-restore.yml"
+permissions:
+  contents: read
+concurrency:
+  group: mojplaywin-direct-onepass-backup-restore-20261017
+  cancel-in-progress: false
+jobs:
+  direct-backup-and-isolated-rehearsal:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/audit/mojplaywin-backup-transport-20261017'
+    runs-on: ubuntu-latest
+    timeout-minutes: 125
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Unit validation and prepare isolated MariaDB image
+        shell: bash
+        timeout-minutes: 7
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mojplaywin_backup_direct_onepass_vps.py scripts/mojplaywin_backup_stream_cpanel.py scripts/mojplaywin_backup_encrypt_vps_gpg.py scripts/mojplaywin_restore_files_isolated_runner.py scripts/mojplaywin_recovery_stream_vps.py
+          python3 -m unittest discover -s tests -p 'test_mojplaywin_backup_gpg_v2.py'
+          python3 -m unittest discover -s tests -p 'test_mojplaywin_recovery_isolated_once.py'
+          docker pull mariadb:11.4 >/dev/null
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Private direct source to VPS authenticated GPG backup and isolated file restoration
+        shell: bash
+        timeout-minutes: 95
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          runstem="mojplaywin_20261017_direct_${GITHUB_RUN_ID}"
+          src64="$(base64 -w0 scripts/mojplaywin_backup_stream_cpanel.py)"
+          dst64="$(base64 -w0 scripts/mojplaywin_backup_encrypt_vps_gpg.py)"
+          rest64="$(base64 -w0 scripts/mojplaywin_restore_files_isolated_runner.py)"
+          recovery64="$(base64 -w0 scripts/mojplaywin_recovery_stream_vps.py)"
+          direct64="$(base64 -w0 scripts/mojplaywin_backup_direct_onepass_vps.py)"
+          call="import base64,sys;code=sys.argv[1];sys.argv=[sys.argv[0]]+sys.argv[2:];exec(base64.b64decode(code))"
+          eval "$(ssh-agent -s)" >/dev/null
+          trap 'ssh-agent -k >/dev/null 2>&1 || true' EXIT
+          ssh-add -t 6900 "$d/host.key" 2>/dev/null
+          echo "DIRECT_ONEPASS backup mysql/files: cPanel to VPS, no GitHub payload transit"
+          timeout 5550s ssh -A -T -F "$d/config" saeit-vps "python3 -c '$call' '$direct64' backup '$src64' '$dst64' '$rest64' '$runstem'"
+          echo "DIRECT_ONEPASS isolated sandbox file restoration, no production writes"
+          timeout 1100s ssh -T -F "$d/config" saeit-vps "python3 -c '$call' '$direct64' restore-files '$rest64' '$recovery64' '$runstem'"
+          echo "Both GPG backups and isolated VPS file extraction verified"
+      - name: Isolated no-network MariaDB SQL restore with checksum-validated GPG stream
+        shell: bash
+        timeout-minutes: 27
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          runstem="mojplaywin_20261017_direct_${GITHUB_RUN_ID}"
+          direct64="$(base64 -w0 scripts/mojplaywin_backup_direct_onepass_vps.py)"
+          recovery64="$(base64 -w0 scripts/mojplaywin_recovery_stream_vps.py)"
+          call="import base64,sys;code=sys.argv[1];sys.argv=[sys.argv[0]]+sys.argv[2:];exec(base64.b64decode(code))"
+          label="mjwp-sandbox-${GITHUB_RUN_ID}"
+          trap 'docker rm -f "$label" >/dev/null 2>&1 || true' EXIT
+          free="$(df -PB1 "$RUNNER_TEMP" | awk 'NR == 2 {print $4}')"
+          test "$free" -ge 7000000000 || { echo "NO-GO: insufficient isolated runner space"; exit 1; }
+          docker run -d --rm --name "$label" --network none --memory 2g --cpus 2 --pids-limit 200 --security-opt no-new-privileges -e MARIADB_ALLOW_EMPTY_ROOT_PASSWORD=1 mariadb:11.4 >/dev/null
+          ready=0
+          for i in $(seq 1 90); do
+            if docker exec "$label" mariadb-admin --no-defaults -uroot ping --silent >/dev/null 2>&1; then ready=1;break;fi
+            sleep 2
+          done
+          test "$ready" = 1 || { echo "NO-GO: isolated MariaDB unavailable"; exit 1; }
+          timeout 1350s ssh -T -F "$d/config" saeit-vps "python3 -c '$call' '$direct64' recover-mysql '$recovery64' '$runstem'" |
+            timeout 1350s docker exec -i "$label" mariadb --no-defaults -uroot --binary-mode
+          tables="$(docker exec "$label" mariadb --no-defaults -uroot --batch --skip-column-names -e "SELECT COUNT(*) FROM information_schema.tables WHERE TABLE_SCHEMA NOT IN ('mysql','performance_schema','information_schema','sys') AND TABLE_TYPE='BASE TABLE'")"
+          schemas="$(docker exec "$label" mariadb --no-defaults -uroot --batch --skip-column-names -e "SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name NOT IN ('mysql','performance_schema','information_schema','sys')")"
+          test "$tables" -gt 0 && test "$schemas" -gt 0
+          echo "DIRECT_ONEPASS_ISOLATED_DB_RESTORE_VERIFIED schemas=$schemas tables=$tables"
+          echo "DIRECT_ONEPASS_PASS: two GPG archives, file sandbox restore and no-network SQL restore; no production writes."
+          {
+            echo "## MojPlayWin DIRECT BACKUP + REAL ISOLATED RESTORE PASS"
+            echo "- Two matched source streams independently GPG AES256 encrypted and roundtrip verified on VPS."
+            echo "- Two filesystem roots actually extracted and verified in temporary private VPS sandbox."
+            echo "- SQL actually loaded and queried in temporary no-network MariaDB on GitHub runner: $tables application tables."
+            echo "- No site deploy, Passenger restart, gateway writes or independent-site changes."
+            echo "- No production release permitted until independent tenant isolation and out-of-VPS recovery-key escrow are separately verified."
+          } >> "$GITHUB_STEP_SUMMARY"
