@@ -60,4 +60,16 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -m "Add private-company ERP schema with additive initial migration"
-          git push origin "HEAD:$GITHUB_REF_NAME"
+          # CI and assistant edits may move the draft branch while migrations generate.
+          # Rebase only on the latest remote head; never force-push.
+          for attempt in 1 2 3; do
+            git fetch origin "$GITHUB_REF_NAME"
+            git rebase "origin/$GITHUB_REF_NAME" || exit 1
+            if git push origin "HEAD:$GITHUB_REF_NAME"; then
+              echo "ADDITIVE_SCHEMA_MIGRATION_PUSH=confirmed"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::Concurrent draft changes prevented safe migration push"
+          exit 1
