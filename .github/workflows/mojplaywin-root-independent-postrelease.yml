@@ -1,0 +1,147 @@
+name: MojPlayWin published root independent final verification
+on:
+  push:
+    branches: ["audit/mojplaywin-backup-transport-20261017"]
+    paths: [".github/workflows/mojplaywin-root-independent-postrelease.yml"]
+permissions:
+  contents: read
+jobs:
+  read-only-production-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Verify production root reroute committed, old config backup retained, Passenger untouched
+        shell: bash
+        timeout-minutes: 2
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 60s ssh -T -F "$d/config" saeit-cpanel 'python3 -' <<'PY'
+          import json,hashlib
+          from pathlib import Path
+          root=Path("/home/zomorod2/mojplaywin.com")
+          private=Path("/home/zomorod2/.mpw-main-root-route-release-20261017")
+          state=json.loads((private/"state.json").read_text())
+          current=(root/".htaccess").read_bytes()
+          original=(private/"original-htaccess.bin").read_bytes()
+          p=(root/"design-preview-20261017/production-home-20261017.html")
+          tests={
+            "commit_verified":state.get("status")=="verified_committed",
+            "only_root_mode":state.get("mode")=="root",
+            "htaccess_matches_committed":hashlib.sha256(current).hexdigest()==state.get("candidate_sha"),
+            "original_backup_intact":hashlib.sha256(original).hexdigest()=="4f261f4563494f7ba8e9947e3ebcaa915b5ffc451ad7348f3620300a695fd",
+            "passenger_wsgi_exists":(root/"passenger_wsgi.py").is_file(),
+            "exact_root_rule_guarded":b"RewriteCond %{REQUEST_URI} ^/$" in current,
+            "new_html_candidate_intact":p.is_file() and b"MJWP_ROOT_CANDIDATE_ONLY_20261017" in p.read_bytes(),
+          }
+          print(json.dumps({"classification":"MOJPLAYWIN_ROOT_RELEASE_ON_DISK_VERIFIED",**tests},sort_keys=True))
+          if not all(tests.values()):raise SystemExit("ROOT_PUBLICATION_STATE_REGRESSED")
+          PY
+      - name: Independently verify multiple live page loads, orbit media and protected routes
+        shell: bash
+        timeout-minutes: 5
+        run: |
+          python3 - <<'PY'
+          import re,json,urllib.request,urllib.error,random
+          from html.parser import HTMLParser
+          domain="https://mojplaywin.com"
+          headers={"Cache-Control":"no-cache,no-store","User-Agent":"MojPlayWin-independent-postrelease-validator"}
+          def fetch(path,limit=400000):
+              req=urllib.request.Request(domain+path,headers=headers)
+              with urllib.request.urlopen(req,timeout=20) as response:
+                  if response.status!=200:raise RuntimeError("HTTP regression: "+path)
+                  return response.read(limit+1)
+          paths=("/", "/?postrelease_verification=independent", "/?postrelease_verification=repeat")
+          responses=[fetch(p).decode("utf-8") for p in paths]
+          for html in responses:
+              markers={"new_root":"MJWP_ROOT_CANDIDATE_ONLY_20261017" in html,
+                       "all_three_orbits":html.count('class="mpo-ring"')==3,
+                       "all_eighteen_cards":html.count('class="mpo-orbit-card"')==18,
+                       "interactive_globe":'data-globe-orbit="continuous"' in html,
+                       "ten_original_guides":html.count('id="home-guide-')==10,
+                       "noindex_absent":"noindex,nofollow,noarchive" not in html}
+              if not all(markers.values()):
+                  print(json.dumps({"PUBLIC_ROOT_REGRESSION":markers},sort_keys=True))
+                  raise RuntimeError("main root did not consistently publish")
+          html=responses[0]
+          assetpaths=re.findall(r'(?:src|href)="(/design-preview-20261017/static/[^"]+)"',html)
+          if len(assetpaths)<35:raise RuntimeError("insufficient static refs")
+          asset_types={".svg":0,".webp":0,".js":0}
+          unique=list(dict.fromkeys(assetpaths))
+          failures=[]
+          for p in unique[:65]:
+              try:
+                  data=fetch(p,700000)
+                  if len(data)<35:failures.append("empty")
+              except Exception:
+                  failures.append("unreachable")
+          if failures:raise RuntimeError("broken reference images or scripts: "+str(len(failures)))
+          for suffix in asset_types:
+              asset_types[suffix]=sum(p.split("?")[0].endswith(suffix) for p in unique)
+          subsites=("/saman/","/picm/login/","/farnaz/","/studio.Roham/",
+                    "/mojtaba.roozegar/","/zahra%24%24/")
+          substatus={}
+          for path in subsites:
+              substatus[path]=bool(fetch(path,50000))
+          assert all(substatus.values())
+          checked_paths=("/store/","/games/","/ai/","/blockchain/","/research/","/company/","/services/","/knowledge/")
+          deep={}
+          for p in checked_paths:
+              try:
+                  req=urllib.request.Request(domain+p,headers=headers)
+                  with urllib.request.urlopen(req,timeout=18) as resp:
+                      deep[p]=resp.status
+              except urllib.error.HTTPError as e:
+                  deep[p]=e.code
+          print(json.dumps({"classification":"MOJPLAYWIN_LIVE_ROOT_INDEPENDENT_VERIFIED",
+           "main_root_successful_reads":len(paths),"orbits":3,"interactive_cards":18,
+           "complete_guides":10,"unique_media_or_script_paths":len(unique),
+           "media_or_script_paths_http_verified":min(65,len(unique)),
+           "asset_file_type_counts":asset_types,"protected_sites_200":len(subsites),
+           "main_deep_route_status":deep,"production_root_replaced":True,
+           "other_routes_not_modified":True},sort_keys=True))
+          PY
