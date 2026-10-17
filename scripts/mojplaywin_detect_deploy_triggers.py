@@ -27,6 +27,10 @@ CANDIDATE_MAIN_FILES = (
 )
 CANDIDATE_SAFETY_FILES = tuple(
     ".github/workflows/" + file for file in LEGACY_LOCKS
+) + (
+    ".github/workflows/mojplaywin-deploy-trigger-readonly-audit.yml",
+    "scripts/mojplaywin_detect_deploy_triggers.py",
+    "tests/test_mojplaywin_shared_deploy_hard_stop.py",
 )
 DEPLOY_MARKERS = (
     "secrets.", "ssh ", "scp ", "rsync ", "passenger", "restart.txt",
