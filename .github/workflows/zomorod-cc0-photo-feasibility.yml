@@ -17,15 +17,12 @@ jobs:
           python3 - <<'PY'
           import json,urllib.parse,urllib.request
           subjects=[
-             'precision agriculture farm drone',
-             'greenhouse lettuce hydroponic',
-             'agriculture scientific laboratory',
-             'industrial food production packaging',
-             'irrigation water soil',
-             'cattle dairy farm',
+             'farm', 'greenhouse', 'laboratory', 'factory', 'irrigation',
+             'cattle', 'tractor', 'orchard', 'research', 'plant',
+             'warehouse', 'agriculture', 'technology', 'solar panels'
           ]
           for subject in subjects:
-              params=urllib.parse.urlencode(dict(q=subject,license='cc0',category='photograph',page_size=10))
+              params=urllib.parse.urlencode(dict(q=subject,license='cc0',category='photograph',page_size=12))
               url='https://api.openverse.org/v1/images/?'+params
               req=urllib.request.Request(url,headers={'User-Agent':'ZomorodMelalEditorialResearch/1.0 (original company website visual licensing audit)','Accept':'application/json'})
               try:
