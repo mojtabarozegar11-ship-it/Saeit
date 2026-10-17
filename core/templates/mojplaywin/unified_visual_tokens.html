@@ -1,0 +1,94 @@
+{# Shared presentation tokens for MojPlayWin's two MAIN-site template families only. #}
+<style id="mpw-main-unified-design">
+:root{
+  --mpw-unified-black:#080807;
+  --mpw-unified-surface:#15130e;
+  --mpw-unified-gold:#d6ad55;
+  --mpw-unified-cream:#f5f0e4;
+  --mpw-unified-muted:#c4baaa;
+  --mpw-unified-line:rgba(214,173,85,.38);
+}
+body.mojplaywin-home,body.mojplaywin-store,body.mojplaywin-section,
+body:has(> .mpw-header){
+  background:var(--mpw-unified-black);
+  color:var(--mpw-unified-cream);
+}
+.mpw-header,.mw-site-nav{
+  border:1px solid var(--mpw-unified-line)!important;
+  border-radius:18px!important;
+  background:rgba(13,12,10,.96)!important;
+}
+.mpw-header{margin:0 12px;box-shadow:0 14px 40px rgba(0,0,0,.27)}
+.mpw-header .mpw-brand,.mpw-header .mpw-nav a,.mw-site-nav .mw-brand-copy strong{
+  color:var(--mpw-unified-cream)!important;
+}
+.mpw-mark{border-color:var(--mpw-unified-line)!important}
+.mpw-page-hero,.mw-page-hero,.mw-hero,
+.mpw-page-cta{
+  border:1px solid var(--mpw-unified-line)!important;
+  border-radius:24px!important;
+  background:radial-gradient(ellipse at 90% 0%,rgba(214,173,85,.1),transparent 40%),linear-gradient(145deg,#16140f,#0b0b09)!important;
+  box-shadow:0 22px 60px rgba(0,0,0,.32);
+}
+.mpw-page-card,.mw-card,.mpw-venture-card{
+  border:1px solid var(--mpw-unified-line)!important;
+  border-radius:17px!important;
+  background:linear-gradient(145deg,#17150f,#0e0e0b)!important;
+  color:var(--mpw-unified-cream);
+}
+.mpw-page-card h2,.mpw-venture-card h3,.mw-card h3{
+  color:var(--mpw-unified-cream);
+}
+.mpw-page-card p,.mpw-page-hero>p,.mw-card p{
+  color:var(--mpw-unified-muted);
+  line-height:1.8;
+}
+.mpw-page-card small,.mpw-page-card a,.mpw-section-label,
+.mpw-page-hero .eyebrow,.mw-kicker{
+  color:var(--mpw-unified-gold)!important;
+}
+.mpw-page-grid,.mw-grid{gap:clamp(12px,1.6vw,18px)}
+.mpw-footer,.mw-site-footer{
+  border-top:1px solid var(--mpw-unified-line)!important;
+  color:var(--mpw-unified-muted);
+}
+.mpw-footer a,.mw-site-footer a{color:var(--mpw-unified-cream)}
+.mpw-page-card a:focus-visible,.mpw-nav a:focus-visible,
+.mpw-menu:focus-visible,.mpw-page-cta a:focus-visible,
+.mw-unified-crumbs a:focus-visible,.mw-unified-hero a:focus-visible{
+  outline:3px solid #f0cf82;
+  outline-offset:4px;
+}
+.mw-unified-crumbs{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:18px;font-size:.79rem;color:var(--mpw-unified-muted)}
+.mw-unified-crumbs a{color:#f0cf82;text-decoration:underline;text-underline-offset:4px}
+.mw-unified-crumbs .mw-separator{color:var(--mpw-unified-gold)}
+.mw-page-hero.mw-unified-hero{
+  display:grid;grid-template-columns:minmax(0,1fr) minmax(0,.78fr);
+  gap:clamp(18px,4vw,48px);align-items:center;
+  padding:clamp(28px,5vw,70px);
+}
+.mw-page-hero.mw-unified-hero>div{min-width:0}
+.mw-page-hero.mw-unified-hero h1{max-width:16ch;margin:.48em 0;font-size:clamp(2.2rem,4.8vw,4.8rem)}
+.mw-page-hero.mw-unified-hero img{
+  width:100%;height:clamp(210px,31vw,400px);max-height:none;margin:0;
+  object-fit:cover;aspect-ratio:8/5;
+}
+.mw-page-hero.mw-unified-hero .mw-actions a{min-height:44px}
+.mw-section:has(.mw-page-contents){scroll-margin-top:24px}
+.mw-page-contents{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.mw-page-contents a{color:#f0cf82;text-decoration:none}
+.mw-page-contents a:hover{text-decoration:underline}
+.mw-section ol{padding-inline-start:1.5rem}
+.mw-section li{color:var(--mpw-unified-muted);line-height:1.75;margin-block:7px}
+.mw-section details summary{cursor:pointer;color:#f0cf82}
+@media(max-width:760px){
+  .mw-page-hero.mw-unified-hero{grid-template-columns:1fr;padding:26px 20px}
+  .mw-page-hero.mw-unified-hero h1{font-size:clamp(2.05rem,10vw,3.35rem)}
+  .mw-page-hero.mw-unified-hero img{height:auto;max-height:265px}
+  .mpw-header{margin:0 8px;border-radius:14px!important}
+  .mpw-page-hero{border-radius:17px!important}
+}
+@media(prefers-reduced-motion:reduce){
+  .mpw-page-card,.mw-card{transition:none!important;transform:none!important}
+}
+</style>
