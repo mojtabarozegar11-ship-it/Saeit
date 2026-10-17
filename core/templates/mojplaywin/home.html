@@ -2,7 +2,7 @@
 {% load static %}
 {% block title %}MojPlayWin | Research, Games & Learning{% endblock %}
 {% block meta_description %}MojPlayWin connects scientific research, modern technology, games, and practical education with a curated digital catalog.{% endblock %}
-{% block extra_head %}<style id="mojplaywin-orbital-inline">{% include "mojplaywin/orbital_critical.css" %}</style>{% endblock %}
+{% block extra_head %}<style id="mojplaywin-orbital-inline">{% include "mojplaywin/orbital_critical.css" %}</style><style id="mojplaywin-reference-gold-inline">{% include "mojplaywin/reference_gold.css" %}</style>{% endblock %}
 {% block body_class %}mojplaywin-home{% endblock %}
 {% block content %}
 {% include "mojplaywin/theme.html" %}
@@ -112,4 +112,5 @@
 </div>
 {% include "mojplaywin/footer.html" %}
 <script src="{% static 'site/mojplaywin-atelier/orbits.js' %}" defer></script>
+<script src="{% static 'site/mojplaywin-atelier/reference-gold-controls.js' %}" defer></script>
 {% endblock %}
