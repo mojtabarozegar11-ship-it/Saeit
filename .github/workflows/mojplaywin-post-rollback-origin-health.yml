@@ -1,0 +1,122 @@
+name: MojPlayWin post-rollback production and origin health
+on:
+  push:
+    branches: ["audit/mojplaywin-backup-transport-20261017"]
+    paths: [".github/workflows/mojplaywin-post-rollback-origin-health.yml"]
+permissions:
+  contents: read
+jobs:
+  verify-restored-live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Verify server configuration and index were restored after both fail-closed attempts
+        shell: bash
+        timeout-minutes: 2
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 40s ssh -T -F "$d/config" saeit-cpanel 'python3 -' <<'PY'
+          from pathlib import Path
+          import hashlib,json
+          root=Path("/home/zomorod2/mojplaywin.com")
+          ht=root/".htaccess"
+          original="4f261f4563494f7ba8e9947e3ebcaa915815b5ffc451ad7348f3620300a695fd"
+          status={
+            "root_htaccess_unchanged":hashlib.sha256(ht.read_bytes()).hexdigest()==original,
+            "new_root_index_removed":not (root/"index.html").exists() and not (root/"index.html").is_symlink(),
+            "approved_preview_preserved":(root/"design-preview-20261017/index.html").is_file(),
+            "root_passenger_wsgi_unchanged":(root/"passenger_wsgi.py").is_file(),
+            "no_live_deployment":True
+          }
+          print(json.dumps({"classification":"POST_FAILED_ROOT_RELEASE_ROLLBACK",**status},sort_keys=True))
+          if not all(status.values()):raise SystemExit("ROLLBACK_INCOMPLETE")
+          PY
+      - name: Validate dynamic homepage and six separate subsite URLs remain healthy
+        shell: bash
+        timeout-minutes: 3
+        run: |
+          python3 - <<'PY'
+          import urllib.request,urllib.error,hashlib,json
+          base="https://mojplaywin.com"
+          paths=("/", "/saman/", "/picm/login/","/farnaz/","/studio.Roham/",
+                 "/mojtaba.roozegar/","/zahra%24%24/","/design-preview-20261017/index.html")
+          result={}
+          header_fields=("server","cache-control","age","x-litespeed-cache","cf-cache-status","via","x-cache")
+          for path in paths:
+              req=urllib.request.Request(base+path,headers={"Cache-Control":"no-cache",
+                    "User-Agent":"MojPlayWin-post-rollback-health"})
+              with urllib.request.urlopen(req,timeout=20) as resp:
+                  raw=resp.read(250000)
+                  result[path]={"status":resp.status,"has_brand":b"mojplay" in raw.lower(),
+                       "response_bytes_sample":len(raw)}
+                  if path=="/":
+                      result[path]["static_candidate_live"]=b"MJWP_ROOT_CANDIDATE_ONLY_20261017" in raw
+                      result[path]["response_headers"]={k:resp.headers.get(k) for k in header_fields if resp.headers.get(k)}
+          print(json.dumps({"classification":"POST_ROOT_CUTOVER_SITE_HEALTH","routes":result},sort_keys=True))
+          if any(x["status"]!=200 for x in result.values()) or result["/"]["static_candidate_live"]:
+              raise RuntimeError("site not safely reverted")
+          PY
+      - name: Diagnostic of direct origin frontend without touching traffic
+        shell: bash
+        timeout-minutes: 2
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 45s ssh -T -F "$d/config" saeit-cpanel 'python3 -' <<'PY'
+          import subprocess,hashlib,json
+          tests={}
+          for hostport in ("127.0.0.1:443","127.0.0.1:80"):
+              scheme="https" if hostport.endswith("443") else "http"
+              url=scheme+"://mojplaywin.com/?origin-healthprobe=1"
+              command=["curl","-skS","--max-time","8","--resolve","mojplaywin.com:"+hostport[-3:]+":127.0.0.1",url]
+              result=subprocess.run(command,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,timeout=10)
+              tests[hostport]={"reachable":result.returncode==0,"matches_old_brand":b"MojPlay" in result.stdout,
+                               "reports_static_root":b"MJWP_ROOT_CANDIDATE_ONLY_20261017" in result.stdout}
+          print(json.dumps({"classification":"LOCAL_ORIGIN_READ_ONLY_DIAGNOSTIC","probes":tests,
+                 "production_modified":False},sort_keys=True))
+          PY
