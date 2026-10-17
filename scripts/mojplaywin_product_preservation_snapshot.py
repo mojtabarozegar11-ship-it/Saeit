@@ -41,7 +41,7 @@ def owner_for(metadata: object) -> str:
             # Only explicit exact host declarations count; never trust a path,
             # loose substring, URL parameters, ports or arbitrary brand text.
             if ("/" in cleaned or ":" in cleaned or "@" in cleaned or "?" in cleaned
-                    or not re.fullmatch(r"[a-z0-9][a-z0-9.-]*\\.[a-z]{2,63}", cleaned)
+                    or not re.fullmatch(r"[a-z0-9][a-z0-9.-]*\.[a-z]{2,63}", cleaned)
                     or ".." in cleaned):
                 return "ambiguous"
             values.append(cleaned)
