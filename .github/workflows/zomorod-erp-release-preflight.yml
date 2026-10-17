@@ -1,0 +1,90 @@
+name: Zomorod ERP deployment preparation (read only)
+on:
+  push:
+    branches: ["feature/zomorod-erp-release-preflight-20261017"]
+    paths:
+      - "scripts/zomorod_erp_preflight.py"
+      - "tests/test_zomorod_erp_preflight.py"
+      - "docs/zomorod-erp-release-checklist.json"
+      - ".github/workflows/zomorod-erp-release-preflight.yml"
+  pull_request:
+    branches: ["feature/zomorod-ecosystem-hub-v2-20261017"]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspector_unit_tests:
+    name: Inspector source & safety tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Validate inspector without touching production
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest discover -s tests -p test_zomorod_erp_preflight.py -v
+          python -m py_compile scripts/zomorod_erp_preflight.py
+          python - <<'PY'
+          from pathlib import Path
+          required = (
+              "enterprise_portal/migrations/0001_initial.py",
+              "enterprise_portal/migrations/0002_officeloginfailure.py",
+              "ecosystem_hub/migrations/0001_initial.py",
+              "ecosystem_hub/migrations/0002_materialpricereference_productioncostscenario.py",
+          )
+          assert all(Path(x).is_file() for x in required)
+          print("FOUR_ADDITIVE_SCHEMA_FILES_EXIST=yes")
+          PY
+  production_readiness:
+    name: Live route and recovery evidence gate (blocks unsafe release)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Collect offline evidence; blocked means not deployable
+        shell: bash
+        run: |
+          mkdir -p readiness-reports
+          set +e
+          python scripts/zomorod_erp_preflight.py --offline --output readiness-reports/offline.json
+          rc=$?
+          echo "OFFLINE_PREFLIGHT_EXIT=$rc"
+          if [ "$rc" -ne 0 ] && [ "$rc" -ne 2 ]; then exit "$rc"; fi
+      - name: Fetch only public HTTPS health; no auth or changes
+        shell: bash
+        run: |
+          set +e
+          python scripts/zomorod_erp_preflight.py --live --output readiness-reports/live.json
+          rc=$?
+          echo "LIVE_PREFLIGHT_EXIT=$rc"
+          if [ "$rc" -ne 0 ] && [ "$rc" -ne 2 ]; then exit "$rc"; fi
+      - name: Always save sanitized readiness report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zomorod-erp-release-readiness-json
+          path: readiness-reports/*.json
+          retention-days: 14
+      - name: Fail closed until restore, MFA and live routes verified
+        shell: bash
+        run: |
+          python - readiness-reports/live.json <<'PY'
+          import json,sys
+          from pathlib import Path
+          report=json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          print("READINESS_STATUS="+report["status"])
+          print("PRODUCTION_AUTODEPLOY_ALLOWED=no")
+          for item in report["live_probes"]:
+              print("ROUTE="+item["path"]+" HTTP="+str(item["http_status"] or "unknown"))
+          print("UNVERIFIED_CHECKS="+str(len(report["outstanding"])))
+          if not report["production_ready"]:
+              raise SystemExit("BLOCKED: do not merge or deploy private ERP until all required evidence is verified")
+          print("READY_FOR_HUMAN_RELEASE_REVIEW_ONLY=yes")
+          PY
