@@ -904,6 +904,60 @@ class HubSuite(TestCase):
         self.assertEqual(ProcurementNeed.objects.get().quantity, D("4.000"))
         self.assertEqual(StockMovement.objects.count(), 1)
 
+    def test_archived_finance_assistant_denies_reader_without_source_permissions(self):
+        report = generate_report(self.owner, self.farm, "receivables")
+        url = f"/company/office/ecosystem/reports/{report.pk}/"
+        self.client.force_login(self.viewer)
+        self.assertEqual(self.client.get(url, secure=True).status_code, 403)
+        from django.contrib.auth.models import Permission
+        permission = Permission.objects.get(
+            content_type__app_label="enterprise_portal",
+            codename="view_commercialdocument",
+        )
+        self.viewer.user_permissions.add(permission)
+        self.assertEqual(self.client.get(url, secure=True).status_code, 200)
+        self.viewer.user_permissions.remove(permission)
+        self.assertEqual(self.client.get(url, secure=True).status_code, 403)
+
+    def test_private_admin_rechecks_sensitive_report_source_permissions(self):
+        report = generate_report(self.owner, self.farm, "receivables")
+        admin_panel = admin.site._registry[AssistantRun]
+        req = RequestFactory().get("/admin/ecosystem_hub/assistantrun/")
+        req.user = self.viewer
+        self.assertNotIn(report, list(admin_panel.get_queryset(req)))
+        self.assertFalse(admin_panel.has_view_permission(req, report))
+        permission = Permission.objects.get(
+            content_type__app_label="enterprise_portal",
+            codename="view_commercialdocument",
+        )
+        self.viewer.user_permissions.add(permission)
+        req.user = U.objects.get(pk=self.viewer.pk)
+        self.assertIn(report, list(admin_panel.get_queryset(req)))
+        self.assertTrue(admin_panel.has_view_permission(req, report))
+
+    def test_revoked_source_permission_blocks_report_review_request(self):
+        permission = Permission.objects.get(
+            content_type__app_label="enterprise_portal",
+            codename="view_commercialdocument",
+        )
+        approve = Permission.objects.get(
+            content_type__app_label="ecosystem_hub",
+            codename="add_reviewapproval",
+        )
+        self.viewer.user_permissions.add(permission, approve)
+        report = generate_report(self.viewer, self.farm, "receivables")
+        self.viewer.user_permissions.remove(permission)
+        self.client.force_login(self.viewer)
+        url = f"/company/office/ecosystem/reports/{report.pk}/request-review/"
+        self.assertEqual(self.client.post(
+            url, {"approver_id": self.owner.pk}, secure=True,
+        ).status_code, 403)
+        self.assertFalse(ReviewApproval.objects.filter(
+            target_type="assistant_report", target_reference=str(report.pk),
+        ).exists())
+        report.refresh_from_db()
+        self.assertEqual(report.state, "draft")
+
     def test_assistant_access_is_csrf_protected(self):
         web = Client(enforce_csrf_checks=True)
         web.force_login(self.viewer)
