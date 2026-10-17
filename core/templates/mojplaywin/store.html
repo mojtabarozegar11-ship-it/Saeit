@@ -11,7 +11,7 @@
       <div class="mpx-breadcrumb"><a href="/">Home</a><span aria-hidden="true">/</span> Digital Store</div>
       <span class="mpx-kicker" style="margin-top:32px">MOJPLAYWIN · DIGITAL STORE</span>
       <h1 id="mpx-store-title">Useful ideas, <em>made to explore.</em></h1>
-      <p>A curated starting catalog of books, courses, games, research tools, and professional services. Product pages and checkout options are shown only when available.</p>
+      <p>Explore books, original games, creative resources and practical digital tools, with details for each collection.</p>
       <div class="mpx-actions"><a class="mw-button primary" href="#catalog">Browse the catalog <span aria-hidden="true">↗</span></a>
         <a class="mw-button" href="/services/">Explore services <span aria-hidden="true">→</span></a></div>
     </div>
@@ -22,9 +22,9 @@
   </section>
   <div class="mpx-signal" aria-label="Catalog categories"><span>BOOKS & GUIDES</span><span>ORIGINAL GAMES</span><span>DIGITAL TOOLS</span><span>EDUCATION</span></div>
   <section class="mpx-section" id="catalog" aria-labelledby="mpx-catalog-title">
-    <div class="mpx-section-head"><div><span class="mpx-kicker">INITIAL COLLECTION · {{ products|length }} PICKS</span>
+    <div class="mpx-section-head"><div><span class="mpx-kicker">CURATED COLLECTION · {{ products|length }} PICKS</span>
       <h2 id="mpx-catalog-title">Books, learning, games & tools</h2>
-      <p>Browse the existing MojPlayWin catalog without changing product data, prices, orders or checkout.</p>
+      <p>Find useful learning materials, digital ideas and creative resources in one place.</p>
     </div></div>
     <div class="mpx-catalog">
       {% for product in products %}
@@ -38,7 +38,6 @@
       </article>
       {% endfor %}
     </div>
-    <p class="mw-note">Catalog links lead to the relevant MojPlayWin section. A purchase button appears only for an item with a verified active checkout.</p>
   </section>
 </div>
 {% include "mojplaywin/footer.html" %}
