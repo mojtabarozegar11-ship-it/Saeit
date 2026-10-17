@@ -3,6 +3,7 @@ from django.contrib.auth.forms import AuthenticationForm
 from django.core.exceptions import ValidationError
 from django.contrib.auth import get_user_model
 from .models import WorkTask, OfficeLetter
+from .security import login_is_blocked, register_failed_login, clear_login_failures
 
 
 def has_office_access(user):
@@ -27,6 +28,22 @@ class CompanyAuthenticationForm(AuthenticationForm):
             "autocomplete": "current-password", "placeholder": "رمز عبور",
         }),
     )
+
+    def clean(self):
+        identifier = self.cleaned_data.get("username", "").strip()
+        # Identical error wording for wrong passwords, unauthorized accounts
+        # and rate-limited combinations avoids user-account enumeration.
+        if identifier and login_is_blocked(self.request, identifier):
+            raise self.get_invalid_login_error()
+        try:
+            result = super().clean()
+        except ValidationError:
+            if identifier:
+                register_failed_login(self.request, identifier)
+            raise
+        if identifier:
+            clear_login_failures(self.request, identifier)
+        return result
 
     def confirm_login_allowed(self, user):
         super().confirm_login_allowed(user)
