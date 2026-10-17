@@ -112,3 +112,57 @@ jobs:
           if failures:
               raise SystemExit(f"NO-GO: {len(failures)} of 17 main-site routes failed anonymous GET")
           PY
+
+      - name: Read-only main-site footer coverage inventory
+        run: |
+          python3 - <<'PY'
+          import re
+          import urllib.error
+          import urllib.request
+          from scripts.mojplaywin_public_subsite_smoke_baseline import StrictRedirect, UnsafeRedirect
+
+          # Explicit known main-site editorial/service pages, never child sites.
+          main_paths = (
+              '/', '/store/', '/agriculture/', '/industry/', '/research/',
+              '/knowledge/', '/economy/', '/studio/', '/market/', '/agents/', '/company/',
+              '/games/', '/products/', '/services/', '/ai/', '/blockchain/',
+              '/crypto-payments/', '/commerce/', '/global-business/', '/research-lab/',
+              '/agro-industry/', '/canada-vision/', '/support/', '/privacy/',
+              '/terms/', '/cookies/', '/about/', '/contact/',
+          )
+          forbidden = ('/mojtaba.roozegar/', '/studio.Roham/', '/saman/',
+                       '/farnaz/', '/zahra$$/', '/taniya/', '/picm/')
+          assert len(set(main_paths)) == 28
+          assert all(not any(x.startswith(prefix) for prefix in forbidden) for x in main_paths)
+          opener = urllib.request.build_opener(StrictRedirect())
+          statuses = {}; signatures = []; unknown = []
+          for path in main_paths:
+              req = urllib.request.Request(
+                  'https://mojplaywin.com' + path,
+                  headers={'User-Agent': 'MojPlayWin-MainOnlyFooterInventory/1.0',
+                           'Accept': 'text/html', 'Cache-Control': 'no-cache'},
+                  method='GET',
+              )
+              status = None; html = ''
+              try:
+                  with opener.open(req, timeout=8) as res:
+                      status = res.status
+                      html = res.read(250000).decode('utf-8', 'replace')
+              except urllib.error.HTTPError as exc:
+                  status = exc.code
+              except (urllib.error.URLError, OSError, TimeoutError, ValueError, UnsafeRedirect):
+                  pass
+              footer = re.search(r'<footer\\b[^>]*>(.*?)</footer>', html, re.I | re.S)
+              signed = bool(footer and 'Mojtaba Roozegar' in footer.group(1))
+              statuses[path] = status
+              if signed: signatures.append(path)
+              if status != 200: unknown.append(path)
+              print(f'MAIN_ONLY_FOOTER_AUDIT path={path} http={status} signature_inside_footer={signed}')
+          print(f'MAIN_ONLY_FOOTER_TOTAL={len(main_paths)}')
+          print(f'MAIN_ONLY_FOOTER_SIGNED={len(signatures)}')
+          print(f'MAIN_ONLY_FOOTER_UNREACHABLE={len(unknown)}')
+          print('SUBSITE_CONTENT_READ_OR_WRITTEN=false')
+          print('DEPLOY_AUTHORIZED_BY_AUDIT=false')
+          # Existing production state is only being inventoried: unsigned
+          # pages are a publishing gap, not a CI source-code failure.
+          PY
