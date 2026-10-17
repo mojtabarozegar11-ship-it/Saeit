@@ -85,7 +85,7 @@ class PublicCopyMustNotShowInternalImplementationNotes(SimpleTestCase):
         editorial_template = (OWN / "editorial_experience.html").read_text(encoding="utf-8")
         self.assertNotIn("{{ section_note }}", section)
         self.assertNotIn("{{ editorial.note }}", editorial_template)
-        self.assertIn("{{ editorial.overview", editorial_template)
+        self.assertIn("in editorial.overview", editorial_template)
         self.assertIn("{{ editorial.headline }}", editorial_template)
 
     def test_original_informative_content_remains_present_in_brand_templates(self):
