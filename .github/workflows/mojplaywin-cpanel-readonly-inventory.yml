@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   inspect-no-server-writes:
-    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 6
     steps:
@@ -75,3 +75,11 @@ jobs:
           set -euo pipefail
           d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
           timeout 40s ssh -T -F "$d/config" saeit-cpanel 'uapi --output=json PassengerApps list_applications' | python3 scripts/mojplaywin_cpanel_readonly_inventory.py
+      - name: Inspect WSGI htaccess and static Django route evidence without server writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p 'test_mojplaywin_live_routing_fingerprint.py'
+          python3 -m py_compile scripts/mojplaywin_live_routing_fingerprint.py
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 35s ssh -T -F "$d/config" saeit-cpanel python3 - < scripts/mojplaywin_live_routing_fingerprint.py
