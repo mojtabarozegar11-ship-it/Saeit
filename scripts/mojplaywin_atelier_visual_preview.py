@@ -189,6 +189,58 @@ def capture_viewports(manifest):
                             raise RuntimeError(f"{key}-{mode}: expected exactly three independent orbits")
                         if page.locator(".mpo-orbit-card").count() != 18:
                             raise RuntimeError(f"{key}-{mode}: all eighteen service cards required")
+                        # Both form factors must animate the globe-linked
+                        # satellites automatically, pause on demand, and
+                        # honor OS reduced-motion settings. Browser checks
+                        # run exclusively against LOCAL offline preview files.
+                        globe = page.locator(".mpo-hero-visual[data-globe-orbit]")
+                        globe.scroll_into_view_if_needed()
+                        page.wait_for_function(
+                            """() => document.querySelector('.mpo-hero-visual')
+                                ?.dataset.orbitMotion === 'active'""",
+                            timeout=4000,
+                        )
+                        before = globe.locator(".mpo-satellite").evaluate_all(
+                            "(cards) => cards.map(c => c.style.transform)"
+                        )
+                        page.wait_for_timeout(260)
+                        after = globe.locator(".mpo-satellite").evaluate_all(
+                            "(cards) => cards.map(c => c.style.transform)"
+                        )
+                        if len(before) != 4 or before == after or any(not x for x in after):
+                            raise RuntimeError(f"{key}-{mode}: globe panels did not rotate automatically")
+
+                        orbit_button = page.locator("[data-globe-motion-toggle]")
+                        orbit_button.click()
+                        if orbit_button.get_attribute("aria-pressed") != "true":
+                            raise RuntimeError(f"{key}-{mode}: satellite orbit could not be paused")
+                        stopped = globe.locator(".mpo-satellite").evaluate_all(
+                            "(cards) => cards.map(c => c.style.transform)"
+                        )
+                        page.wait_for_timeout(200)
+                        stopped_again = globe.locator(".mpo-satellite").evaluate_all(
+                            "(cards) => cards.map(c => c.style.transform)"
+                        )
+                        if stopped != stopped_again:
+                            raise RuntimeError(f"{key}-{mode}: paused orbit still moved")
+                        orbit_button.click()
+                        if orbit_button.get_attribute("aria-pressed") != "false":
+                            raise RuntimeError(f"{key}-{mode}: satellite orbit could not resume")
+
+                        page.emulate_media(reduced_motion="reduce")
+                        page.wait_for_function(
+                            """() => document.querySelector('.mpo-hero-visual')
+                                ?.dataset.orbitMotion === 'reduced'""",
+                            timeout=3000,
+                        )
+                        if orbit_button.is_enabled():
+                            raise RuntimeError(f"{key}-{mode}: motion-reduction control must be disabled")
+                        page.emulate_media(reduced_motion="no-preference")
+                        page.wait_for_function(
+                            """() => document.querySelector('.mpo-hero-visual')
+                                ?.dataset.orbitMotion === 'active'""",
+                            timeout=3000,
+                        )
                         first = page.locator("[data-orbit='web'] .mpo-orbit-track")
                         page.locator("[data-orbit='web'] [data-orbit-next]").click()
                         page.wait_for_function(
