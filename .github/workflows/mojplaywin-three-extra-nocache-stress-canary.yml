@@ -1,0 +1,154 @@
+name: Moj Play Win safe extra three rewrite cache bypass stress canary
+on:
+  push:
+    branches: ["audit/mojplaywin-backup-transport-20261017"]
+    paths: [".github/workflows/mojplaywin-three-extra-nocache-stress-canary.yml"]
+permissions:
+  contents: read
+concurrency:
+  group: mojplaywin-main-only-root-deploy
+  cancel-in-progress: false
+jobs:
+  classify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify production code is exact and the new three-rule cache disable is scoped
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mojplaywin_three_extra_canonical_rewrite.py
+          python3 - <<'PY'
+          import importlib.util
+          spec=importlib.util.spec_from_file_location("rules","scripts/mojplaywin_three_extra_canonical_rewrite.py")
+          r=importlib.util.module_from_spec(spec);spec.loader.exec_module(r)
+          assert set(r.ROUTES.values())=={"/market/","/industry/","/economy/"}
+          assert r.directives("production").count("E=cache-control:no-cache")==3
+          assert "END,QSA" in r.directives("production")
+          print("SCOPED_CACHE_BYPASS_FOR_ONLY_THREE_ADDITIONAL_PUBLIC_GETS")
+          PY
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Arm three additional rules temporarily, classify 72 full HTTPS responses, restore previous six-route release
+        shell: bash
+        timeout-minutes: 5
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          phpsha=$(sha256sum scripts/mojplaywin_canonical_php_three_extra.php | cut -d' ' -f1)
+          armed=no
+          undo(){
+            if test "$armed" = yes;then
+              timeout 40s ssh -T -F "$d/config" saeit-cpanel 'python3 - rollback' < scripts/mojplaywin_three_extra_canonical_rewrite.py ||
+                echo "GUARDED_ORIGINAL_SIX_ROUTE_CONFIG_ROLLBACK_WATCHDOG_ACTIVE"
+            fi
+          }
+          trap undo EXIT
+          timeout 42s ssh -T -F "$d/config" saeit-cpanel "python3 - production '$phpsha'" < scripts/mojplaywin_three_extra_canonical_rewrite.py
+          armed=yes
+          python3 - <<'PY'
+          import urllib.request,urllib.error,json,collections,time,hashlib
+          base="https://mojplaywin.com"
+          paths=("/market/","/industry/","/economy/")
+          original_six=("/store/","/research/","/company/","/knowledge/","/ventures/agriculture/","/ventures/jewelry-gold/")
+          class NoRedirect(urllib.request.HTTPRedirectHandler):
+              def redirect_request(self,request,fp,code,message,headers,newurl):return None
+          opener=urllib.request.build_opener(NoRedirect())
+          results=[]
+          for i in range(1,13):
+              for path in paths+original_six:
+                  req=urllib.request.Request(base+path,headers={"Cache-Control":"no-cache,no-store,max-age=0","Pragma":"no-cache","User-Agent":"MojPlayWin-LiteSpeed-nocache-rewrite-canary"})
+                  start=time.monotonic()
+                  try:
+                      try:r=opener.open(req,timeout=17)
+                      except urllib.error.HTTPError as e:r=e
+                      with r:
+                          status=r.status
+                          head=r.headers
+                          data=r.read(720000)
+                      marker=head.get("X-MPW-Canonical-Edge","")
+                      location=head.get("Location","")
+                      cache=head.get("X-LiteSpeed-Cache","")
+                      typ=head.get("Content-Type","")
+                  except Exception as exc:
+                      status=0;marker="";location="";cache="";typ="";data=b""
+                  expected=('<link rel="canonical" href="'+base+path+'">').encode()
+                  old=('href="https://zomorodmelal.ir'+path+'"').encode()
+                  if status==200 and marker=="main-only" and data.count(expected)==1:
+                      outcome="correct"
+                  elif status==307 and "__mpw_canon_passthru" in location:
+                      outcome="cgi_fallback"
+                  elif status==200 and old in data:
+                      outcome="origin_django_canonical"
+                  else:
+                      outcome="other"
+                  result={"path":path,"round":i,"status":status,"class":outcome,"cached_header":cache[:25],
+                          "is_html":"html" in typ.lower(),"duration_ms":round((time.monotonic()-start)*1000)}
+                  results.append(result)
+                  if outcome!="correct":
+                      print("CANONICAL_NOCACHE_MISMATCH "+json.dumps(result,sort_keys=True),flush=True)
+          count=dict(collections.Counter(x["class"] for x in results))
+          per_route={p:dict(collections.Counter(x["class"] for x in results if x["path"]==p)) for p in paths+original_six}
+          print(json.dumps({"classification":"MOJ_PLAY_WIN_THREE_EXTRA_NOCACHE_STRESS",
+             "total":len(results),"outcomes":count,"per_route":per_route,
+             "all_correct":count=={"correct":len(results)},"main_sites_modified":False,
+             "original_six_routes_preserved":True},sort_keys=True),flush=True)
+          PY
+          undo
+          armed=no
+      - name: Compare reverted htaccess with six-rule release SHA and confirm protected live routes are OK
+        shell: bash
+        timeout-minutes: 2
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          actual=$(timeout 35s ssh -T -F "$d/config" saeit-cpanel 'sha256sum /home/zomorod2/mojplaywin.com/.htaccess' | cut -d' ' -f1)
+          test "$actual" = fbfa01e3d0f694b3b65782fe957d6d943302c6dea2374803ad6a91976164128a
+          for path in / /market/ /industry/ /economy/ /store/ /knowledge/ /saman/ /picm/login/ /farnaz/ /mojtaba.roozegar/;do
+            test "$(curl -sSL -o /dev/null -w '%{http_code}' --max-time 15 "https://mojplaywin.com$path")" = 200 || exit 66
+          done
+          echo "CANARY_ONLY_ORIGINAL_SIX_RULES_EXACTLY_RESTORED"
