@@ -7,12 +7,17 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from scripts.mojplaywin_backup_encrypt_vps import (
-    MARKER, BASENAME, store, verification,
-)
+try:
+    from scripts.mojplaywin_backup_encrypt_vps import (
+        MARKER, BASENAME, store, verification,
+    )
+    CRYPTO_AVAILABLE = True
+except ImportError:
+    CRYPTO_AVAILABLE = False
 from scripts.mojplaywin_backup_stream_cpanel import load_connection
 
 
+@unittest.skipUnless(CRYPTO_AVAILABLE, "cryptography optional except in backup job")
 class ApprovedPrimaryEncryptedBackupTests(unittest.TestCase):
     def test_authenticated_encrypted_backup_and_idempotent_filename(self):
         with tempfile.TemporaryDirectory() as td:
