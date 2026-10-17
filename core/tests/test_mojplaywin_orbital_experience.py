@@ -44,7 +44,7 @@ class MojPlayWinOrbitalExperienceTests(TestCase):
         self.assertIn('{% for item in ventures %}', home)
         self.assertIn('{% include "mojplaywin/footer.html" %}', home)
         self.assertIn("orbits.js", home)
-        self.assertIn("orbits.css", home)
+        self.assertIn("mojplaywin/orbital_critical.css", home)
 
     def test_all_media_and_orbital_assets_exist_locally(self):
         markup = (PAGES / "orbital_experience.html").read_text(encoding="utf-8")
