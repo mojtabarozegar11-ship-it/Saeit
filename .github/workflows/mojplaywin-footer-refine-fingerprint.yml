@@ -70,10 +70,10 @@ jobs:
           record={}
           for p in [prod]+pages:
               s=p.read_bytes()
-              assert b'data-mpw-inline-gold-3d="true"' in s
-              assert b'<style id="mpw-footer-gold-3d-inline-v2">' in s
-              assert b'mpw-footer-founder-inline' in s
-              record[p.name]={"sha":hashlib.sha256(s).hexdigest(),"bytes":len(s),"old_signature_markup":s.count(b'data-mpw-inline-gold-3d="true"')}
+              assert b'data-mpw-bottom-signoff="true"' in s
+              assert b'<style id="mpw-footer-refined-gold-v3">' in s
+              assert b'mpw-footer-bottom-signoff' in s
+              record[p.name]={"sha":hashlib.sha256(s).hexdigest(),"bytes":len(s),"old_signature_markup":s.count(b'data-mpw-bottom-signoff="true"')}
           assert len(record)==23
           print("LIVE_MAIN_ONLY_FOUNDER_FINGERPRINT="+json.dumps(record,sort_keys=True,separators=(",",":")))
           print("SERVER_WRITES=0")
