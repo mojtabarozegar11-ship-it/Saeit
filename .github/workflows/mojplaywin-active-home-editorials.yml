@@ -17,7 +17,9 @@ concurrency:
 
 jobs:
   deploy-active-home:
-    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    # Emergency safety lock: main site and all child sites share unverified runtime.
+    # Absolutely no SSH deploy or shared Passenger modification until isolation proven.
+    if: ${{ false }}
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
