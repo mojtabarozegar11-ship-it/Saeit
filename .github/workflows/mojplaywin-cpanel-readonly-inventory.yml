@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   inspect-no-server-writes:
-    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 6
     steps:
