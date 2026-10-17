@@ -85,6 +85,20 @@ class MojPlayWinOrbitalExperienceTests(TestCase):
                 self.assertEqual(response.status_code, 200, f"Broken orbital link: {url}")
                 self.assertGreater(len(response.content), 200)
 
+    def test_mobile_gpu_cost_reduction_preserves_three_original_rings(self):
+        home = (PAGES / "home.html").read_text(encoding="utf-8")
+        markup = (PAGES / "orbital_experience.html").read_text(encoding="utf-8")
+        inline = (PAGES / "orbital_critical.css").read_text(encoding="utf-8")
+        css = (STATIC / "orbits.css").read_text(encoding="utf-8")
+        self.assertIn('id="mojplaywin-orbital-inline"', home)
+        self.assertEqual(markup.count('class="mpo-ring"'), 3)
+        self.assertEqual(markup.count('class="mpo-orbit-card"'), 18)
+        for sheet in (inline, css):
+            self.assertIn("Small-screen GPU budget", sheet)
+            self.assertIn(".mojplaywin-home .mpo-hero-visual>img{filter:none}", sheet)
+            self.assertIn("@media(max-width:540px)", sheet)
+            self.assertIn("prefers-reduced-motion", sheet)
+
     def test_official_gold_logo_has_tiny_non_destructive_asset(self):
         logo = STATIC / "official-coin-80.webp"
         self.assertTrue(logo.is_file(), "Official coin must be a local immutable asset")
