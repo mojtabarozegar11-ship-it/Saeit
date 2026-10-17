@@ -1,1 +1,41 @@
-const CACHE='tala-shell-v1';const CORE=['/tala/','/tala/manifest.webmanifest','/tala/assets/tala-mark.svg'];self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(CORE))));self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k))))));self.addEventListener('fetch',e=>{const u=new URL(e.request.url);if(e.request.method!=='GET'||u.origin!==location.origin||!u.pathname.startsWith('/tala/'))return;e.respondWith(fetch(e.request).then(r=>{if(r.ok){const copy=r.clone();caches.open(CACHE).then(c=>c.put(e.request,copy))}return r}).catch(()=>caches.match(e.request).then(r=>r||caches.match('/tala/'))))});
+// Tala-only offline shell. Never cache business, admin, or API responses.
+const CACHE='tala-shell-v3';
+const CORE=['/tala/','/tala/manifest.webmanifest','/tala/assets/tala-mark.svg'];
+const SAFE_PATHS=new Set(CORE);
+self.addEventListener('install',event=>{
+  event.waitUntil((async()=>{
+    const cache=await caches.open(CACHE);
+    await cache.addAll(CORE);
+    await self.skipWaiting();
+  })());
+});
+self.addEventListener('activate',event=>{
+  event.waitUntil((async()=>{
+    const keys=await caches.keys();
+    // Older Tala cache versions might contain private API responses.
+    // Purge only Tala-owned caches: never delete caches from other sites.
+    await Promise.all(keys.filter(key=>key.startsWith('tala-shell-')&&key!==CACHE).map(key=>caches.delete(key)));
+    await self.clients.claim();
+  })());
+});
+self.addEventListener('fetch',event=>{
+  const request=event.request;
+  if(request.method!=='GET')return;
+  const url=new URL(request.url);
+  if(url.origin!==self.location.origin || url.search || !SAFE_PATHS.has(url.pathname))return;
+  if(request.headers.has('Authorization')||request.headers.has('X-Tala-Request'))return;
+  event.respondWith((async()=>{
+    try{
+      const response=await fetch(request);
+      if(response.ok && response.type==='basic'){
+        const cache=await caches.open(CACHE);
+        await cache.put(request,response.clone());
+      }
+      return response;
+    }catch(error){
+      const cached=await caches.match(request);
+      if(cached)return cached;
+      throw error;
+    }
+  })());
+});

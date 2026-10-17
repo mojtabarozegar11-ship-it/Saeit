@@ -1,0 +1,37 @@
+name: MojPlayWin primary encrypted backup synthetic security tests
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/mojplaywin-backup-crypto-unit.yml"
+      - ".github/workflows/mojplaywin-encrypted-backup-once-20261017.yml"
+      - "scripts/mojplaywin_backup_stream_cpanel.py"
+      - "scripts/mojplaywin_backup_encrypt_vps.py"
+      - "tests/test_mojplaywin_backup_stream_and_encryption.py"
+      - "scripts/mojplaywin_backup_encrypt_vps_gpg.py"
+      - "tests/test_mojplaywin_backup_gpg_v2.py"
+      - ".github/workflows/mojplaywin-encrypted-backup-gpg-v2-20261017.yml"
+permissions:
+  contents: read
+jobs:
+  test-encryption-on-fixtures-only:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install test-only encryption dependency
+        run: python3 -m pip install --disable-pip-version-check --no-input 'cryptography>=41,<47'
+      - name: Validate tamper detection and no-overwrite backup behavior
+        run: |
+          python3 -m unittest discover -s tests -p 'test_mojplaywin_backup_stream_and_encryption.py'
+          python3 -m py_compile scripts/mojplaywin_backup_stream_cpanel.py scripts/mojplaywin_backup_encrypt_vps.py
+      - name: Validate GPG fallback with real AES256 fixture roundtrip and tamper detection
+        run: |
+          command -v gpg
+          python3 -m unittest discover -s tests -p 'test_mojplaywin_backup_gpg_v2.py'
+          python3 -m py_compile scripts/mojplaywin_backup_encrypt_vps_gpg.py

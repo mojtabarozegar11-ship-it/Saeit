@@ -5,6 +5,7 @@ on:
     paths:
       - "public/tala/**"
       - ".github/workflows/zomorod-tala-static-deploy.yml"
+      - ".github/scripts/tala_storage.py"
   workflow_dispatch:
 permissions:
   contents: read
@@ -41,7 +42,7 @@ jobs:
               raise SystemExit('TALA_PAGE_VALIDATION=failed')
           if '<!-- tala-isolated-site-v1 -->' not in source:
               raise SystemExit('TALA_SCOPE_MARKER=missing')
-          for rel in ('manifest.webmanifest','sw.js','assets/tala-mark.svg'):
+          for rel in ('manifest.webmanifest','sw.js','assets/tala-mark.svg','admin/index.html','api/health.php','api/admin.php','api/.htaccess','api/.private/.htaccess'):
               if not (root/rel).is_file(): raise SystemExit(f'TALA_ASSET_MISSING={rel}')
           if 'در انتظار اتصال منبع' not in source or 'قیمت زنده هنوز متصل نشده' not in source:
               raise SystemExit('TALA_UNVERIFIED_PRICE_DISCLOSURE=missing')
@@ -58,8 +59,14 @@ jobs:
           match=re.search(r'<script>([\s\S]*?)</script>',source)
           if not match: raise SystemExit('TALA_INLINE_SCRIPT=missing')
           Path('/tmp/tala-inline.js').write_text(match.group(1),encoding='utf-8')
+          admin=Path('public/tala/admin/index.html').read_text(encoding='utf-8')
+          match=re.search(r'<script>([\s\S]*?)</script>',admin)
+          if not match: raise SystemExit('TALA_ADMIN_SCRIPT=missing')
+          Path('/tmp/tala-admin.js').write_text(match.group(1),encoding='utf-8')
           PY
           node --check /tmp/tala-inline.js
+          node --check /tmp/tala-admin.js
+          python3 .github/scripts/tala_storage.py selftest
           tar -czf "$RUNNER_TEMP/tala-site.tgz" -C public/tala .
       - name: Prepare pinned VPS relay and cPanel SSH
         env:
@@ -108,48 +115,78 @@ jobs:
           printf '%s\n' "$scan" > "$d/host.candidate"
           test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
           cp "$d/host.candidate" "$d/host.known"
-      - name: Back up and atomically replace Tala directory only
+      - name: Transactional Tala SQLite backup, private migration and atomic directory deployment
         shell: bash
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/tala-ssh"
           sha="$GITHUB_SHA"
           scp -F "$d/config" "$RUNNER_TEMP/tala-site.tgz" "saeit-cpanel:.tala-site-$sha.tgz"
+          scp -F "$d/config" ".github/scripts/tala_storage.py" "saeit-cpanel:.tala-migrate-$sha.py"
           ssh -F "$d/config" saeit-cpanel bash -se -- "$sha" <<'REMOTE'
           set -euo pipefail
+          umask 077
           sha="$1"
           root="$HOME/public_html"
           target="$root/tala"
           backup_root="$HOME/.backups/zomorodmelal-tala"
           backup="$backup_root/$sha"
           stage="$root/.tala-stage-$sha"
+          helper="$HOME/.tala-migrate-$sha.py"
           test -d "$root" && test ! -L "$root"
+          test ! -L "$target" && test ! -L "$backup_root"
           test ! -e "$backup"
-          test ! -L "$target"
+          test -f "$helper" && test ! -L "$helper"
+          command -v python3 >/dev/null
+          python3 -c 'import sqlite3; assert sqlite3.sqlite_version_info >= (3,7,0)'
           install -d -m 700 "$backup_root"
-          mkdir "$backup"
-          if test -d "$target"; then
-            cp -a "$target" "$backup/prior"
-            printf 'yes\n' > "$backup/prior-existed"
-          else
-            printf 'no\n' > "$backup/prior-existed"
-          fi
+          mkdir -m 700 "$backup"
+          if test -d "$target"; then printf 'yes\n' > "$backup/prior-existed"; else printf 'no\n' > "$backup/prior-existed"; fi
           active=0
           rollback_local() {
             rc=$?
+            trap - EXIT
             if test "$active" = 1; then
+              if test -d "$target/api"; then printf 'maintenance\n' > "$target/api/.tala-maintenance"; fi
+              if test "$(cat "$backup/prior-existed")" = yes; then
+                python3 "$helper" restore "$sha" || exit 2
+              fi
               rm -rf -- "$target"
-              if test "$(cat "$backup/prior-existed")" = yes; then mv "$backup/prior" "$target"; fi
+              if test "$(cat "$backup/prior-existed")" = yes; then
+                mv "$backup/prior" "$target"
+                rm -f "$target/api/.tala-maintenance"
+              fi
               rm -f "$backup/deployed.flag"
+            elif test -f "$target/api/.tala-maintenance"; then
+              rm -f "$target/api/.tala-maintenance"
             fi
             exit "$rc"
           }
           trap rollback_local EXIT
+          test ! -L "$stage"
           rm -rf -- "$stage"
-          mkdir "$stage"
+          # Files served by LiteSpeed require traversable directories.
+          # Temporarily use public-only modes for the isolated static package.
+          umask 022
+          mkdir -m 755 "$stage"
           tar -xzf "$HOME/.tala-site-$sha.tgz" -C "$stage"
+          chmod 755 "$stage"
+          umask 077
+          test "$(stat -c '%a' "$stage")" = 755 || { echo 'TALA_PUBLIC_DIRECTORY_MODE=unsafe'; exit 1; }
           test -f "$stage/index.html"
           grep -Fq '<!-- tala-isolated-site-v1 -->' "$stage/index.html"
+          test -d "$stage/api/.private" && test ! -L "$stage/api/.private"
+          chmod 700 "$stage/api/.private"
+          if test -f "$target/api/admin.php"; then
+            printf 'maintenance\n' > "$target/api/.tala-maintenance"
+            sleep 3
+          fi
+          if test -d "$target"; then
+            cp -a "$target" "$backup/prior"
+            rm -f "$backup/prior/api/.tala-maintenance"
+          fi
+          python3 "$helper" prepare "$sha"
+          printf 'maintenance\n' > "$stage/api/.tala-maintenance"
           if test -e "$target"; then mv "$target" "$backup/live-before"; fi
           active=1
           mv "$stage" "$target"
@@ -157,27 +194,76 @@ jobs:
           active=0
           trap - EXIT
           rm -f -- "$HOME/.tala-site-$sha.tgz"
-          echo 'TALA_TARGET=/home/zomorod2/public_html/tala'
+          echo 'TALA_SCOPE=only_tala'
           echo 'TALA_ROOT_SITE_FILES=untouched'
-          echo "TALA_BACKUP=$backup"
+          echo 'TALA_PRIVATE_DATABASE=outside_public_html'
+          echo 'TALA_MAINTENANCE=locked_for_smoke_test'
           REMOTE
       - name: Verify public Tala route and PWA assets
         shell: bash
         run: |
           set -euo pipefail
           base=https://zomorodmelal.ir/tala
-          for path in / /manifest.webmanifest /sw.js /assets/tala-mark.svg; do
-            code="$(curl -sS --max-time 20 -o "$RUNNER_TEMP/tala-response" -w '%{http_code}' -H 'Cache-Control: no-cache' "$base$path?__tala_verify=$GITHUB_SHA")"
+          for path in / /admin/ /manifest.webmanifest /sw.js /assets/tala-mark.svg /api/health.php '/api/admin.php?action=status'; do
+            if [[ "$path" == *\?* ]]; then
+              route="${path%%\?*}"
+              query="${path#*\?}"
+              url="$base$route?$query&__tala_verify=$GITHUB_SHA"
+            else
+              url="$base$path?__tala_verify=$GITHUB_SHA"
+            fi
+            code=""
+            for attempt in 1 2 3 4 5 6; do
+              code="$(curl -sS --max-time 20 -D "$RUNNER_TEMP/tala-headers" -o "$RUNNER_TEMP/tala-response" -w '%{http_code}' -H 'Cache-Control: no-cache' "$url&__readiness_attempt=$attempt")"
+              if test "$code" = 200; then break; fi
+              echo "TALA_READINESS_RETRY path=$path attempt=$attempt code=$code"
+              sleep 3
+            done
             test "$code" = 200 || { echo "TALA_HTTP_FAILED path=$path code=$code" >&2; exit 1; }
             case "$path" in
               /) grep -Fq 'تَلا | طلا، جواهر و گوهرسنگ' "$RUNNER_TEMP/tala-response"; grep -Fq 'قیمت زنده هنوز متصل نشده' "$RUNNER_TEMP/tala-response" ;;
               /manifest.webmanifest) grep -Fq '"scope":"/tala/"' "$RUNNER_TEMP/tala-response" ;;
-              /sw.js) grep -Fq "const CACHE='tala-shell-v1'" "$RUNNER_TEMP/tala-response" ;;
+              /sw.js) grep -Fq "const CACHE='tala-shell-v3'" "$RUNNER_TEMP/tala-response" ;;
               /assets/tala-mark.svg) grep -Fq '<svg' "$RUNNER_TEMP/tala-response" ;;
+              /admin/) grep -Fq 'میزکار کسب‌وکار' "$RUNNER_TEMP/tala-response" ;;
+              /api/health.php) grep -iqE '^content-type:[[:space:]]*application/json(;|[[:space:]]*$)' "$RUNNER_TEMP/tala-headers"; grep -Fq '"scope":"tala"' "$RUNNER_TEMP/tala-response"; grep -Fq '"runtime":"php"' "$RUNNER_TEMP/tala-response"; grep -Fq '"pdo_sqlite":true' "$RUNNER_TEMP/tala-response"; grep -Fq '"private_store_writable":true' "$RUNNER_TEMP/tala-response" ;;
+              /api/admin.php\?action=status) grep -iqE '^content-type:[[:space:]]*application/json(;|[[:space:]]*$)' "$RUNNER_TEMP/tala-headers"; grep -Fq '"scope":"tala"' "$RUNNER_TEMP/tala-response"; grep -Eq '"setup_required":(true|false)' "$RUNNER_TEMP/tala-response" ;;
             esac
             echo "TALA_PUBLIC_CHECK=$path passed"
           done
-      - name: Restore prior Tala directory if verification failed
+          hidden_code="$(curl -sS --max-time 20 -o "$RUNNER_TEMP/tala-private-response" -w '%{http_code}' -H 'Cache-Control: no-cache' "$base/api/.private/tala.sqlite3?__tala_verify=$GITHUB_SHA")"
+          [[ ! "$hidden_code" =~ ^2[0-9][0-9]$ ]] || { echo "TALA_PRIVATE_DATABASE_EXPOSED code=$hidden_code" >&2; exit 1; }
+          echo "TALA_PRIVATE_DATABASE=blocked code=$hidden_code"
+          setup_code="$(curl -sS --max-time 20 -o "$RUNNER_TEMP/tala-setup-response" -w '%{http_code}' -X POST -H 'Origin: https://zomorodmelal.ir' -H 'X-Tala-Request: 1' -H 'Content-Type: application/json' --data '{"setup_token":"invalid-test-token","username":"invalidtest","password":"invalid-test-password-000"}' "$base/api/admin.php?action=setup")"
+          test "$setup_code" = 503 || { echo "TALA_MAINTENANCE_WRITE_GATE_FAILED code=$setup_code" >&2; exit 1; }
+          echo 'TALA_BOOTSTRAP_GATE=protected'
+      - name: Unlock Tala writes only after public smoke tests pass
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/tala-ssh"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'UNLOCK'
+          set -euo pipefail
+          sha="$1"
+          target="$HOME/public_html/tala"
+          backup="$HOME/.backups/zomorodmelal-tala/$sha"
+          test -f "$backup/deployed.flag"
+          test -f "$target/api/.tala-maintenance"
+          grep -Fq "/../../../.tala-secure/tala.sqlite3" "$target/api/admin.php"
+          rm -f "$target/api/.tala-maintenance"
+          echo "TALA_WRITE_GATE=unlocked"
+          UNLOCK
+      - name: Verify protected API after release
+        shell: bash
+        run: |
+          set -euo pipefail
+          base=https://zomorodmelal.ir/tala
+          code="$(curl -sS --max-time 20 -o /dev/null -w '%{http_code}' -H 'Cache-Control: no-cache' "$base/api/admin.php?action=entries")"
+          test "$code" = 401 || { echo "TALA_ENTRY_AUTH_GUARD_FAILED=$code" >&2; exit 1; }
+          code="$(curl -sS --max-time 20 -o /dev/null -w '%{http_code}' -X POST -H 'Origin: https://zomorodmelal.ir' -H 'X-Tala-Request: 1' -H 'Content-Type: application/json' --data '{"setup_token":"invalid-test-token","username":"invalidtest","password":"invalid-test-password-000"}' "$base/api/admin.php?action=setup")"
+          test "$code" = 403 || { echo "TALA_BOOTSTRAP_GATE_FAILED=$code" >&2; exit 1; }
+          echo "TALA_POST_RELEASE=protected"
+      - name: Restore prior Tala directory and reconcile the SQLite authority if verification failed
         if: failure()
         shell: bash
         run: |
@@ -190,13 +276,20 @@ jobs:
           root="$HOME/public_html"
           target="$root/tala"
           backup="$HOME/.backups/zomorodmelal-tala/$sha"
+          helper="$HOME/.tala-migrate-$sha.py"
           if test ! -f "$backup/deployed.flag"; then
             echo 'TALA_ROLLBACK=not_needed'
             exit 0
           fi
+          if test -d "$target/api"; then printf 'maintenance\n' > "$target/api/.tala-maintenance"; fi
+          if test "$(cat "$backup/prior-existed")" = yes; then
+            test -f "$helper"
+            python3 "$helper" restore "$sha"
+          fi
           rm -rf -- "$target"
           if test "$(cat "$backup/prior-existed")" = yes; then
             mv "$backup/prior" "$target"
+            rm -f "$target/api/.tala-maintenance"
           fi
           rm -f "$backup/deployed.flag"
           echo 'TALA_ROLLBACK=complete'

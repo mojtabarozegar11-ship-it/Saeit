@@ -19,6 +19,10 @@ concurrency:
   cancel-in-progress: false
 jobs:
   deploy-main:
+    # Emergency hard stop: shared Django/Passenger serves protected child sites.
+    # No production SSH, template writes, rollback or Passenger restart allowed.
+    # Maintain until complete subsite inventory and isolated deployment proof.
+    if: ${{ false }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

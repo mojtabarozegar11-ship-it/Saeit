@@ -1,0 +1,25 @@
+name: MojPlayWin deployment trigger audit (source only)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/mojplaywin-main-deploy.yml"
+      - ".github/workflows/mojplaywin-active-home-editorials.yml"
+      - ".github/workflows/mojplaywin-legacy-content-deploy.yml"
+      - ".github/workflows/mojplaywin-deploy-trigger-readonly-audit.yml"
+      - "scripts/mojplaywin_detect_deploy_triggers.py"
+      - "tests/test_mojplaywin_shared_deploy_hard_stop.py"
+permissions:
+  contents: read
+jobs:
+  inspect-source-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Assert all legacy jobs are unconditionally locked
+        run: python3 -m unittest discover -s tests -p 'test_mojplaywin_shared_deploy_hard_stop.py'
+      - name: Inventory workflow push triggers without access to production
+        run: python3 scripts/mojplaywin_detect_deploy_triggers.py

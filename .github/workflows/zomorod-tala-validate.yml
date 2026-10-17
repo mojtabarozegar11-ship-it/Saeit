@@ -5,12 +5,14 @@ on:
       - "public/tala/**"
       - ".github/workflows/zomorod-tala-validate.yml"
       - ".github/workflows/zomorod-tala-static-deploy.yml"
+      - ".github/scripts/tala_storage.py"
   push:
     branches: [main]
     paths:
       - "public/tala/**"
       - ".github/workflows/zomorod-tala-validate.yml"
       - ".github/workflows/zomorod-tala-static-deploy.yml"
+      - ".github/scripts/tala_storage.py"
 permissions:
   contents: read
 jobs:
@@ -46,16 +48,41 @@ jobs:
           if set(c.anchors)-set(c.ids): raise SystemExit('TALA_BROKEN_ANCHOR='+','.join(sorted(set(c.anchors)-set(c.ids))))
           if '<!-- tala-isolated-site-v1 -->' not in source: raise SystemExit('TALA_SCOPE_MARKER=missing')
           if 'در انتظار اتصال منبع' not in source or 'قیمت زنده هنوز متصل نشده' not in source: raise SystemExit('TALA_UNVERIFIED_PRICE_DISCLOSURE=missing')
-          for rel in ('.htaccess','manifest.webmanifest','sw.js','assets/tala-mark.svg'):
+          if any(x not in source for x in ('function openSearch()', 'function openProduct(i)', 'function openLessons()', 'function openInsight(i)', 'function addInquiry(i)', 'localStorage')): raise SystemExit('TALA_INTERACTIONS=missing')
+          if '/contact/' in source or '/company/' in source: raise SystemExit('TALA_OUT_OF_SCOPE_LINK=found')
+          for rel in ('.htaccess','manifest.webmanifest','sw.js','assets/tala-mark.svg','admin/index.html','api/health.php','api/admin.php','api/.htaccess','api/.private/.htaccess'):
               if not (root/rel).is_file(): raise SystemExit('TALA_ASSET_MISSING='+rel)
           rules=(root/'.htaccess').read_text(encoding='utf-8')
           if 'PassengerEnabled off' not in rules or 'DirectoryIndex index.html' not in rules: raise SystemExit('TALA_STATIC_DIRECTORY_CONFIG=unsafe')
           sw=(root/'sw.js').read_text(encoding='utf-8')
-          if "startsWith('/tala/')" not in sw: raise SystemExit('TALA_SERVICE_WORKER_SCOPE=unsafe')
+          if "const CACHE='tala-shell-v3'" not in sw: raise SystemExit('TALA_CACHE_VERSION=outdated')
+          for marker in ("const SAFE_PATHS=new Set(CORE)", "SAFE_PATHS.has(url.pathname)", "key.startsWith('tala-shell-')", "key!==CACHE", "await self.clients.claim()", "request.headers.has('X-Tala-Request')"):
+              if marker not in sw: raise SystemExit('TALA_SERVICE_WORKER_PRIVATE_RESPONSE_GUARD=missing:'+marker)
+          if "startsWith('/tala/')" in sw: raise SystemExit('TALA_SERVICE_WORKER_BROAD_CACHE=unsafe')
           match=re.search(r'<script>([\s\S]*?)</script>',source)
           if not match: raise SystemExit('TALA_INLINE_SCRIPT=missing')
           Path('/tmp/tala-inline.js').write_text(match.group(1),encoding='utf-8')
+          admin=(root/'admin/index.html').read_text(encoding='utf-8')
+          match=re.search(r'<script>([\s\S]*?)</script>',admin)
+          if not match: raise SystemExit('TALA_ADMIN_SCRIPT=missing')
+          Path('/tmp/tala-admin.js').write_text(match.group(1),encoding='utf-8')
+          if '/tala/admin/' not in source: raise SystemExit('TALA_ADMIN_LINK=missing')
+          backend=(root/'api/admin.php').read_text(encoding='utf-8')
+          for item in ('password_hash(', 'hash_equals(', 'HTTP_X_TALA_REQUEST', 'audit_log', "/../../../.tala-secure/tala.sqlite3", 'BEGIN IMMEDIATE'):
+              if item not in backend: raise SystemExit('TALA_BACKEND_CONTROL_MISSING='+item)
+          if 'TALA_BOOTSTRAP_TOKEN_SHA256' not in backend: raise SystemExit('TALA_BOOTSTRAP_GATE=missing')
+          health=(root/'api/health.php').read_text(encoding='utf-8')
+          if '/../../../.tala-secure' not in health: raise SystemExit('TALA_HEALTH_EXTERNAL_DB_CHECK=missing')
+          if "/.private/tala.sqlite3" in backend: raise SystemExit('TALA_LEGACY_PUBLIC_DB_PATH=unsafe')
+          for guard in ("فقط مدیر اصلی می‌تواند سند اصلاحی ثبت کند.", "فقط مدیر اصلی به خروجی کامل حسابداری دسترسی دارد."):
+              if guard not in backend: raise SystemExit('TALA_ACCOUNTING_ROLE_GUARD=missing')
+          admin_page=(root/'admin/index.html').read_text(encoding='utf-8')
+          if "byId('export').hidden=!admin" not in admin_page or "activeUser?.role==='admin'&&!row.reversal_of" not in admin_page: raise SystemExit('TALA_ADMIN_UI_RBAC=missing')
+          if 'Require all denied' not in (root/'api/.private/.htaccess').read_text(encoding='utf-8'): raise SystemExit('TALA_DATABASE_HTTP_BLOCK=missing')
           print('TALA_DOCUMENT=validated')
           print('TALA_SCOPE=isolated')
           PY
           node --check /tmp/tala-inline.js
+          node --check /tmp/tala-admin.js
+          node --check public/tala/sw.js
+          python3 .github/scripts/tala_storage.py selftest
