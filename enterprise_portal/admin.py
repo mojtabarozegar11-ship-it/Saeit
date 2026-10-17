@@ -211,38 +211,52 @@ class StockMovementAdmin(OwnedByAdmin):
 
 
 @admin.register(OfficeLetter)
-class OfficeLetterAdmin(OwnedByAdmin):
+class OfficeLetterAdmin(admin.ModelAdmin):
+    """Legacy letters do not have a unit column: strict participant-only scope."""
     list_display = ("number", "subject", "direction", "classification", "assigned_to", "sent_on")
     list_filter = ("direction", "classification", "sent_on")
     search_fields = ("number", "subject")
     readonly_fields = ("created_by", "created_at", "updated_at")
 
-    def _may_read_secret(self, user, obj):
-        return bool(user.is_superuser or
-                    user.has_perm("enterprise_portal.view_confidential_letters") or
-                    (obj and (obj.created_by_id == user.pk or obj.assigned_to_id == user.pk)))
-
     def get_queryset(self, request):
         qs = super().get_queryset(request)
-        if request.user.is_superuser or request.user.has_perm("enterprise_portal.view_confidential_letters"):
+        if request.user.is_superuser:
             return qs
-        return qs.filter(Q(classification="normal") | Q(created_by=request.user) |
-                         Q(assigned_to=request.user))
+        return qs.filter(Q(created_by=request.user) | Q(assigned_to=request.user))
 
     def has_view_permission(self, request, obj=None):
-        if obj and obj.classification == "confidential" and not self._may_read_secret(request.user, obj):
+        if obj and not request.user.is_superuser and (
+            obj.created_by_id != request.user.pk and obj.assigned_to_id != request.user.pk
+        ):
             return False
         return super().has_view_permission(request, obj)
 
     def has_change_permission(self, request, obj=None):
-        if obj and obj.classification == "confidential" and not self._may_read_secret(request.user, obj):
+        if obj and not request.user.is_superuser and obj.created_by_id != request.user.pk:
             return False
         return super().has_change_permission(request, obj)
 
     def has_delete_permission(self, request, obj=None):
-        if obj and obj.classification == "confidential" and not self._may_read_secret(request.user, obj):
-            return False
-        return super().has_delete_permission(request, obj)
+        return False
+
+    def get_actions(self, request):
+        actions = super().get_actions(request)
+        actions.pop("delete_selected", None)
+        return actions
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "assigned_to":
+            from .forms import colleagues
+            kwargs["queryset"] = colleagues(request.user)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+    def save_model(self, request, obj, form, change):
+        if not change:
+            obj.created_by = request.user
+        elif not request.user.is_superuser and obj.created_by_id != request.user.pk:
+            raise PermissionDenied("ویرایش نامه دیگری مجاز نیست.")
+        obj.full_clean()
+        return super().save_model(request, obj, form, change)
 
 
 @admin.register(WorkTask)
@@ -258,6 +272,22 @@ class WorkTaskAdmin(OwnedByAdmin):
             return qs
         return qs.filter(Q(assigned_to=request.user) | Q(created_by=request.user))
 
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "assigned_to":
+            from .forms import colleagues
+            kwargs["queryset"] = colleagues(request.user)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+    def save_model(self, request, obj, form, change):
+        if not request.user.is_superuser:
+            if not obj.unit_id:
+                raise ValidationError("وظیفه باید به یک واحد سازمانی تعیین‌شده تعلق داشته باشد.")
+            person = obj.assigned_to
+            if not (person.is_superuser or person.pk == request.user.pk or
+                    person.ecosystem_memberships.filter(unit=obj.unit, active=True).exists()):
+                raise ValidationError("ارجاع وظیفه به فرد خارج از این واحد مجاز نیست.")
+        return super().save_model(request, obj, form, change)
+
 
 @admin.register(Meeting)
 class MeetingAdmin(admin.ModelAdmin):
@@ -265,9 +295,43 @@ class MeetingAdmin(admin.ModelAdmin):
     search_fields = ("title", "location", "agenda")
     filter_horizontal = ("attendees",)
 
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        if request.user.is_superuser:
+            return qs
+        return qs.filter(Q(organizer=request.user) | Q(attendees=request.user)).distinct()
+
+    def has_view_permission(self, request, obj=None):
+        if obj and not request.user.is_superuser and (
+            obj.organizer_id != request.user.pk and not obj.attendees.filter(pk=request.user.pk).exists()
+        ):
+            return False
+        return super().has_view_permission(request, obj)
+
+    def has_change_permission(self, request, obj=None):
+        if obj and not request.user.is_superuser and obj.organizer_id != request.user.pk:
+            return False
+        return super().has_change_permission(request, obj)
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def has_add_permission(self, request):
+        return super().has_add_permission(request) and (
+            request.user.is_superuser or user_units(request.user).exists()
+        )
+
+    def formfield_for_manytomany(self, db_field, request, **kwargs):
+        if db_field.name == "attendees":
+            from .forms import colleagues
+            kwargs["queryset"] = colleagues(request.user)
+        return super().formfield_for_manytomany(db_field, request, **kwargs)
+
     def save_model(self, request, obj, form, change):
-        if not change and not obj.organizer_id:
+        if not change:
             obj.organizer = request.user
+        elif not request.user.is_superuser and obj.organizer_id != request.user.pk:
+            raise PermissionDenied("ویرایش جلسه شخص دیگری مجاز نیست.")
         obj.full_clean()
         super().save_model(request, obj, form, change)
 
@@ -309,6 +373,17 @@ class AuditEventAdmin(admin.ModelAdmin):
     list_filter = ("action", "occurred_at")
     search_fields = ("target", "actor__username")
     readonly_fields = ("occurred_at", "actor", "action", "target", "detail")
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        if request.user.is_superuser:
+            return qs
+        return qs.filter(actor=request.user)
+
+    def has_view_permission(self, request, obj=None):
+        if obj and not request.user.is_superuser and obj.actor_id != request.user.pk:
+            return False
+        return super().has_view_permission(request, obj)
 
     def has_add_permission(self, request):
         return False

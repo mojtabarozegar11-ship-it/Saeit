@@ -116,8 +116,10 @@ def dashboard(request):
         summary.append(("واحدهای شرکت", user_units(user).filter(active=True).count()))
     if user.is_superuser or user.has_perm("enterprise_portal.view_worktask"):
         tasks = WorkTask.objects.exclude(status="done")
-        if not user.is_superuser and not user.has_perm("enterprise_portal.change_worktask"):
-            tasks = tasks.filter(Q(assigned_to=user) | Q(created_by=user))
+        if not user.is_superuser:
+            tasks = tasks.filter(unit__in=user_units(user))
+            if not user.has_perm("enterprise_portal.change_worktask"):
+                tasks = tasks.filter(Q(assigned_to=user) | Q(created_by=user))
         summary.append(("کارهای باز", tasks.count()))
     if user.is_superuser or user.has_perm("enterprise_portal.view_officeletter"):
         qs = _visible_letters(user)
@@ -131,8 +133,10 @@ def dashboard(request):
 
 def _visible_letters(user):
     qs = OfficeLetter.objects.all()
-    if not user.is_superuser and not user.has_perm("enterprise_portal.view_confidential_letters"):
-        qs = qs.filter(Q(classification="normal") | Q(assigned_to=user) | Q(created_by=user))
+    # Unscoped legacy letters must never be visible to unrelated staff.
+    # The global confidential-letter permission does NOT bypass ownership.
+    if not user.is_superuser:
+        qs = qs.filter(Q(assigned_to=user) | Q(created_by=user))
     return qs
 
 
@@ -186,8 +190,10 @@ def inventory(request):
 def tasks(request):
     required_permission(request, "view_worktask")
     qs = WorkTask.objects.select_related("assigned_to", "unit").order_by("due_on", "-created_at")
-    if not request.user.is_superuser and not request.user.has_perm("enterprise_portal.change_worktask"):
-        qs = qs.filter(Q(assigned_to=request.user) | Q(created_by=request.user))
+    if not request.user.is_superuser:
+        qs = qs.filter(unit__in=user_units(request.user))
+        if not request.user.has_perm("enterprise_portal.change_worktask"):
+            qs = qs.filter(Q(assigned_to=request.user) | Q(created_by=request.user))
     return page(request, "tasks", {
         "section": "tasks", "tasks": qs[:100],
         "can_add": request.user.has_perm("enterprise_portal.add_worktask"),
@@ -211,7 +217,7 @@ def letters(request):
 @require_http_methods(["GET", "POST"])
 def new_task(request):
     required_permission(request, "add_worktask")
-    form = TaskForm(request.POST or None)
+    form = TaskForm(request.POST or None, user=request.user)
     if request.method == "POST" and form.is_valid():
         item = form.save(commit=False)
         item.created_by = request.user
@@ -231,7 +237,7 @@ def new_task(request):
 @require_http_methods(["GET", "POST"])
 def new_letter(request):
     required_permission(request, "add_officeletter")
-    form = LetterForm(request.POST or None)
+    form = LetterForm(request.POST or None, user=request.user)
     if request.method == "POST" and form.is_valid():
         item = form.save(commit=False)
         item.created_by = request.user

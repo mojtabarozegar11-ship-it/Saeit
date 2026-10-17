@@ -51,20 +51,52 @@ class CompanyAuthenticationForm(AuthenticationForm):
             raise self.get_invalid_login_error()
 
 
+from django.db.models import Q
+from ecosystem_hub.access import user_units
+
+
+def colleagues(user):
+    """Only active colleagues in a shared business unit, plus the organization owner."""
+    users = get_user_model().objects.filter(is_active=True, is_staff=True)
+    if user is None or not user.is_authenticated:
+        return users.none()
+    if user.is_superuser:
+        return users
+    return users.filter(
+        Q(pk=user.pk) | Q(is_superuser=True) |
+        Q(ecosystem_memberships__unit__in=user_units(user),
+          ecosystem_memberships__active=True)
+    ).distinct()
+
+
 class TaskForm(forms.ModelForm):
     class Meta:
         model = WorkTask
-        fields = ("title", "description", "unit", "assigned_to",
-                  "priority", "due_on")
+        fields = ("title", "description", "unit", "assigned_to", "priority", "due_on")
         widgets = {
             "due_on": forms.DateInput(attrs={"type": "date"}),
             "description": forms.Textarea(attrs={"rows": 4}),
         }
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
-        model = get_user_model()
-        self.fields["assigned_to"].queryset = model.objects.filter(is_active=True, is_staff=True)
+        self.user = user
+        self.fields["assigned_to"].queryset = colleagues(user)
+        if not (user and user.is_authenticated and user.is_superuser):
+            self.fields["unit"].queryset = user_units(user) if user else WorkTask.objects.none()
+            self.fields["unit"].required = True
+
+    def clean(self):
+        cleaned = super().clean()
+        unit, assignee = cleaned.get("unit"), cleaned.get("assigned_to")
+        if self.user and self.user.is_authenticated and self.user.is_superuser:
+            return cleaned
+        if not unit:
+            self.add_error("unit", "ثبت وظیفه بدون تعیین واحد سازمانی مجاز نیست.")
+        elif assignee and not (assignee.is_superuser or assignee.pk == self.user.pk or
+                              assignee.ecosystem_memberships.filter(unit=unit, active=True).exists()):
+            self.add_error("assigned_to", "مسئول کار باید عضو فعال همین واحد تجاری باشد.")
+        return cleaned
 
 
 class LetterForm(forms.ModelForm):
@@ -77,8 +109,6 @@ class LetterForm(forms.ModelForm):
             "sent_on": forms.DateInput(attrs={"type": "date"}),
         }
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["assigned_to"].queryset = get_user_model().objects.filter(
-            is_active=True, is_staff=True,
-        )
+        self.fields["assigned_to"].queryset = colleagues(user)
