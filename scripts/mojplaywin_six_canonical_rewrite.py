@@ -80,10 +80,9 @@ def build(original,mode):
         raise RuntimeError("rewrite prefix unexpected")
     if new.count(MARKER.encode())!=1 or new.count(TARGET.encode())!=(1 if mode=="canary" else 6):
         raise RuntimeError("exact route count mismatch")
-    if original.replace(b"RewriteEngine On",b"") not in new.replace(directives(mode).encode(),b""):
-        # Strict single-block insertion: remove new block and compare original bytes.
-        if new.replace(directives(mode).encode(),b"")!=original:
-            raise RuntimeError("unrelated server rewrite would be modified")
+    # Removing only the inserted block must recover the original byte-for-byte.
+    if new.replace(directives(mode).encode(),b"",1)!=original:
+        raise RuntimeError("unrelated server rewrite would be modified")
     return new
 
 def atomic(data):
