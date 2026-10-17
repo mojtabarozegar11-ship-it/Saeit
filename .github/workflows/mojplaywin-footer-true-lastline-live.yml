@@ -1,0 +1,177 @@
+name: MojPlayWin ACTUAL final footer copyright line founder MAIN 23 files
+on:
+  push:
+    branches: ["audit/mojplaywin-backup-transport-20261017"]
+    paths: [".github/workflows/mojplaywin-footer-true-lastline-live.yml"]
+permissions:
+  contents: read
+concurrency:
+  group: mojplaywin-main-only-root-deploy
+  cancel-in-progress: false
+jobs:
+  fix-visible-footer-position:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify actual bottom copyright line DOM and exact preimage hashes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p test_mojplaywin_footer_true_lastline.py -v
+          python3 -m py_compile scripts/mojplaywin_footer_true_lastline.py
+          grep -Fq '8e2aaf8d383ab059a21db0be4ba7cb529081e0734c271f6ece42df3f0a1f56da' scripts/mojplaywin_footer_true_lastline.py
+          grep -Fq 'mpx-bottom-bar' scripts/mojplaywin_footer_true_lastline.py
+          grep -Fq 'data-mpw-copyright-founder' scripts/mojplaywin_footer_true_lastline.py
+      - name: Configure pinned GitHub to VPS to cPanel private read-only relay
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-footer-lastline"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            BatchMode yes
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            ConnectTimeout 10
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Record main and protected-site public baseline before any change
+        shell: bash
+        timeout-minutes: 4
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,os,urllib.request
+          paths=("/", "/store/", "/research/", "/company/", "/games/",
+                 "/mojtaba.roozegar/", "/mojtaba.roozegar/about/", "/picm/login/",
+                 "/studio.Roham/", "/saman/", "/farnaz/", "/zahra%24%24/", "/taniya/")
+          states={}
+          for path in paths:
+              req=urllib.request.Request("https://mojplaywin.com"+path,
+                   headers={"User-Agent":"MojPlayWin-inline-gold-before/1.0","Cache-Control":"no-cache"})
+              with urllib.request.urlopen(req,timeout=15) as res:
+                  states[path]=res.status
+                  assert res.status==200
+              print("BEFORE_PROTECTED_HEALTH_OK "+path)
+          filename=os.path.join(os.environ["RUNNER_TEMP"],"mpw-footer-before.json")
+          with open(filename,"w") as f:json.dump(states,f,sort_keys=True)
+          PY
+      - name: Move existing copyright strip inside footer and put founder in final line on main-only 23 pages
+        id: install
+        shell: bash
+        timeout-minutes: 3
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-footer-lastline"
+          timeout 150s ssh -T -F "$d/config" saeit-cpanel "python3 - install '$GITHUB_RUN_ID'" < scripts/mojplaywin_footer_true_lastline.py
+      - name: Verify founder is the LAST SPAN of actual bottom copyright bar INSIDE footer for all 23 pages
+        id: acceptance
+        shell: bash
+        timeout-minutes: 5
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,os,re,urllib.request
+          root="https://mojplaywin.com"
+          names=("agents","ai","blockchain","company","economy","index","industry",
+            "knowledge","market","research","restaurant","store","studio","support",
+            "venture_agriculture","venture_carpets","venture_crypto","venture_ecommerce",
+            "venture_fuel_station","venture_hospitality","venture_jewelry_gold","web_engineering")
+          pages=["/"]+["/design-preview-20261017/"+name+".html" for name in names]
+          assert len(pages)==23
+          for path in pages:
+              req=urllib.request.Request(root+path+"?__finalfooter=20261018v4",
+                headers={"User-Agent":"MojPlayWin-Last-Line-Verify","Cache-Control":"no-cache"})
+              with urllib.request.urlopen(req,timeout=20) as response:
+                  assert response.status==200
+                  html=response.read(960000).decode("utf-8")
+              foot=re.search(r'<footer\b[^>]*class="mw-site-footer"[^>]*>(.*?)</footer>',html,re.S|re.I)
+              assert foot,path
+              footer=foot.group(1)
+              assert footer.count('class="mpx-bottom-bar"')==1,path
+              bar=re.search(r'<div class="mpx-bottom-bar">(?P<lastline>.*?)</div>\s*$',footer,re.S)
+              assert bar,path
+              last=bar.group('lastline')
+              assert last.count('data-mpw-copyright-founder="true"')==1,path
+              assert '© 2022 MojPlayWin. All rights reserved.' in last,path
+              assert 'Built for research, creativity and responsible commerce.' in last,path
+              assert re.search(r'<span class="mpw-copyright-founder" data-mpw-copyright-founder="true">Mojtaba Roozegar</span>\s*$',last),path
+              assert not re.search(r'</footer>\s*<div class="mpx-bottom-bar">',html),path
+              assert 'mpw-footer-bottom-signoff' not in html,path
+              assert 'mpw-signoff-gold' not in html,path
+              assert html.count('id="mpw-copyright-final-gold-v4"')==1,path
+              if path=="/":
+                  assert "MJWP_ROOT_CANDIDATE_ONLY_20261017" in html
+                  assert "noindex,nofollow,noarchive" not in html
+                  assert html.count('class="mpo-orbit-card"')==18
+              else:
+                  assert "noindex,nofollow,noarchive" in html
+              print("TRUE_FINAL_FOOTER_LINE_PUBLISHED "+path)
+          states=json.load(open(os.environ["RUNNER_TEMP"]+"/mpw-footer-before.json"))
+          for path,status in states.items():
+              req=urllib.request.Request(root+path,headers={
+                 "User-Agent":"MojPlayWin-protected-after-lastline","Cache-Control":"no-cache"})
+              with urllib.request.urlopen(req,timeout=20) as resp:
+                  assert resp.status==status==200
+              print("PROTECTED_SITE_HEALTH_UNCHANGED "+path)
+          print("FOUNDER_IS_FINAL_COPYRIGHT_LINE_WITHIN_FOOTER_ALL_23=true")
+          print("NO_EXTRA_FOUNDER_ROW=true")
+          print("PAYMENT_DATABASE_OR_PASSENGER_NOT_MODIFIED=true")
+          PY
+      - name: Commit only after public 23-page bottom-footer and protected-site checks
+        id: commit
+        shell: bash
+        timeout-minutes: 2
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-footer-lastline"
+          timeout 65s ssh -T -F "$d/config" saeit-cpanel "python3 - commit '$GITHUB_RUN_ID'" < scripts/mojplaywin_footer_true_lastline.py
+          echo "MAIN_ONLY_TRUE_COPYRIGHT_FOOTER_FINAL_LINE_COMMITTED=true"
+      - name: Rollback only the exact 23 static main-owned files on any failure
+        if: failure()
+        shell: bash
+        timeout-minutes: 3
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-footer-lastline"
+          if test -f "$d/config"; then
+            if timeout 18s ssh -T -F "$d/config" saeit-cpanel "test -f '/home/zomorod2/.mpw-founder-copyright-final-backups/run-$GITHUB_RUN_ID/state.json'"; then
+              timeout 110s ssh -T -F "$d/config" saeit-cpanel "python3 - rollback '$GITHUB_RUN_ID'" < scripts/mojplaywin_footer_true_lastline.py
+              echo "MAIN_STATIC_23_ROLLBACK_SUCCESS=true"
+            fi
+          fi
+      - name: Scrub SSH credentials from runner
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/mpw-footer-lastline"
