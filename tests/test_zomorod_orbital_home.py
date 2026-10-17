@@ -149,7 +149,7 @@ class OrbitalHomepageTests(unittest.TestCase):
         current = current[:begin] + current[end:]
         begin = current.index('\n<section class="orbital-scene"')
         end = current.index('<section class="hero">', begin)
-        current = current[:begin] + current[end:]
+        current = current[:begin] + "\n" + current[end:]
         current = current.replace(
             '<h2>ریشه در <em>زمین.</em><br>نگاه به <em>آینده.</em></h2>',
             '<h1>ریشه در <em>زمین.</em><br>نگاه به <em>آینده.</em></h1>',
