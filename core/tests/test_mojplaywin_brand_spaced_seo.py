@@ -20,7 +20,7 @@ class MojPlayWinSpacedNameSEOTests(SimpleTestCase):
         self.assertEqual(r.status_code, 200)
         html = r.content.decode("utf-8")
         self.assertEqual(html.count("<h1"), 1)
-        self.assertIn("<title>Moj Play Win | Games, AI, Research &amp; Digital Products</title>", html)
+        self.assertIn("<title>Moj Play Win | Games, AI, Research & Digital Products</title>", html)
         self.assertIn('<h1 id="mw-home-title">Moj <em>Play</em> Win</h1>', html)
         self.assertIn('Moj Play Win (MojPlayWin) brings together', html)
         self.assertIn('property="og:site_name" content="Moj Play Win"', html)
