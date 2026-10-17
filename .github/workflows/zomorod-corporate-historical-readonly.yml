@@ -593,6 +593,80 @@ jobs:
                   print('CLIENT_INITIALIZATION_ERROR='+(err[-1] if err else 'unknown'))
           PY
           REMOTE
+      - name: Classify newly produced public 503 without stale log bias
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-readonly"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          export PYTHONDONTWRITEBYTECODE=1
+          python3 - <<'PY'
+          import pathlib,subprocess,re,datetime,os
+          h=pathlib.Path.home()
+          logs=[h/'Saeit'/'stderr.log',h/'public_html'/'error_log',h/'Saeit'/'passenger.log',h/'logs'/'zomorodmelal.ir-ssl_log']
+          before={}
+          for p in logs:
+              if p.is_file() and not p.is_symlink():before[str(p)]=p.stat().st_size
+          for route in ('/api/health/','/admin/login/','/agents/'):
+              cmd=['curl','-sS','-L','--max-time','12','-o','/dev/null','-w','%{http_code}','https://zomorodmelal.ir'+route+'?source_diag=17oct']
+              r=subprocess.run(cmd,capture_output=True,text=True,timeout=18)
+              print('LIVE_TRIGGER_ROUTE='+route+' HTTP='+r.stdout.strip())
+          print('LOG_FILE_COUNT='+str(len(before)))
+          for fn,start in before.items():
+              p=pathlib.Path(fn); now=p.stat().st_size
+              print('LOG_NEW_BYTES='+p.name+':'+str(max(0,now-start)))
+              if now<=start:continue
+              with p.open('rb') as stream:
+                  stream.seek(start); raw=stream.read(min(now-start,65536)).decode('utf8','replace')
+              types=re.findall(r'(?m)^([A-Za-z_][\w.]*(?:Error|Exception)):',raw)
+              print('LIVE_NEW_ERROR_CLASSES='+p.name+':'+','.join(types[-6:]))
+              for needle in ("populate() isn't reentrant","set_env_vars.py","ImportError","ModuleNotFoundError","Application startup","Passenger","503","No module named"):
+                  print('LIVE_NEW_MARKER='+p.name+':'+needle+':'+str(raw.lower().count(needle.lower())))
+          p=h/'public_html'/'.htaccess'
+          if p.is_file():
+              for name in ('PYTHONHOME','PYTHONPATH','VIRTUAL_ENV','LS_PYTHONBIN'):
+                  matches=re.findall(r'(?im)^\s*SetEnv\s+'+name+r'\s+([^\n]+)',p.read_text(errors='replace'))
+                  print('PASSENGER_ENV='+name+' set='+str(bool(matches))+' values_redacted=true')
+          PY
+          REMOTE
+      - name: Detect exact agents static manifest mismatch read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-readonly"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          cd "$HOME/Saeit"
+          PYTHONDONTWRITEBYTECODE=1 "$HOME/virtualenv/Saeit/3.10/bin/python" -B - <<'PY'
+          import traceback,os
+          os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          from config.wsgi import application
+          from django.test import Client
+          from django.conf import settings
+          from pathlib import Path
+          from django.contrib.staticfiles.storage import staticfiles_storage
+          s=staticfiles_storage
+          print('STATIC_ROOT_EXISTS='+str(Path(settings.STATIC_ROOT).is_dir()))
+          print('STATIC_MANIFEST_EXISTS='+str((Path(settings.STATIC_ROOT)/'staticfiles.json').is_file()))
+          print('STATIC_STORAGE_CLASS='+type(s).__name__)
+          try:
+              c=Client(HTTP_HOST='zomorodmelal.ir')
+              response=c.get('/agents/',secure=True)
+              print('AGENTS_TEST_HTTP='+str(response.status_code))
+          except Exception as exc:
+              print('AGENTS_EXCEPTION_CLASS='+type(exc).__name__)
+              message=str(exc)
+              import re
+              m=re.search(r"['\"]([^'\"]+)['\"]",message)
+              value=m.group(1) if m else 'not_identified'
+              if len(value)>200 or '/' not in value or '..' in value:value='not_identified'
+              print('AGENTS_MISSING_ASSET='+value)
+              if value!='not_identified':
+                  print('AGENTS_ASSET_IN_SOURCE='+str((Path.home()/'Saeit'/'core'/'static'/value).is_file()))
+                  print('AGENTS_ASSET_IN_STATIC_ROOT='+str((Path(settings.STATIC_ROOT)/value).is_file()))
+          PY
+          REMOTE
       - name: Erase runner-only relay credentials
         if: always()
         run: rm -rf "$RUNNER_TEMP/zomorod-readonly"
