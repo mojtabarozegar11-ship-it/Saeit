@@ -71,9 +71,17 @@ jobs:
                   assert page.locator("[data-orb-motion]").get_attribute("aria-pressed")=="true"
                   overflow=page.evaluate("document.documentElement.scrollWidth-window.innerWidth")
                   print("ORBIT_BROWSER="+label+" scroll_overflow_px="+str(overflow)+" images=15 carousel=interactive")
-                  assert overflow<=3, f"Horizontal overflow in {label}: {overflow}px"
+                  if overflow>3:
+                      offenders=page.evaluate("""() => [...document.querySelectorAll('*')]
+                        .map(el=>({tag:el.tagName,cls:String(el.className||'').slice(0,90),
+                                   right:Math.round(el.getBoundingClientRect().right),
+                                   left:Math.round(el.getBoundingClientRect().left)}))
+                        .filter(x=>x.right>innerWidth+3 || x.left < -3)
+                        .sort((a,b)=>b.right-a.right).slice(0,14)""")
+                      print("ORBIT_MOBILE_OVERFLOW_ELEMENTS="+str(offenders),flush=True)
                   page.screenshot(path=str(target/(label+"-top.png")),full_page=False)
                   page.locator(".orbital-scene").screenshot(path=str(target/(label+"-full-stage.png")))
+                  assert overflow<=3, f"Horizontal overflow in {label}: {overflow}px"
                   page.close()
               browser.close()
           PY
