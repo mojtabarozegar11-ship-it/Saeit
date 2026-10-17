@@ -1,0 +1,99 @@
+name: Moj Play Win live crawling and SEO routes audit
+on:
+  push:
+    branches: ["audit/mojplaywin-backup-transport-20261017"]
+    paths: [".github/workflows/mojplaywin-brand-seo-technical-audit.yml"]
+permissions:
+  contents: read
+jobs:
+  public-crawl-readonly:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - name: Check homepage and dynamic routes SEO without changing server
+        shell: bash
+        timeout-minutes: 6
+        run: |
+          python3 - <<'PY'
+          import urllib.request,urllib.error,re,json
+          from html.parser import HTMLParser
+          from xml.etree import ElementTree
+          from urllib.parse import urlsplit
+          base="https://mojplaywin.com"
+          urls=["/","/store/","/research/","/games/","/ai/","/blockchain/","/company/",
+                "/services/","/knowledge/","/studio/","/ventures/agriculture/","/ventures/jewelry-gold/"]
+          class Tags(HTMLParser):
+              def __init__(self):
+                  super().__init__();self.meta=[];self.links=[];self.images=[];self.h1=[];self.title="";self._title=False;self._h1=False
+              def handle_starttag(self,tag,attrs):
+                  a=dict(attrs)
+                  if tag=="title":self._title=True
+                  if tag=="h1":self._h1=True;self.h1.append("")
+                  if tag=="meta":self.meta.append(a)
+                  if tag=="link":self.links.append(a)
+                  if tag=="img":self.images.append(a)
+              def handle_endtag(self,tag):
+                  if tag=="title":self._title=False
+                  if tag=="h1":self._h1=False
+              def handle_data(self,data):
+                  if self._title:self.title+=data
+                  if self._h1 and self.h1:self.h1[-1]+=data
+          def read(path,limit=2500000):
+              req=urllib.request.Request(base+path,headers={"User-Agent":"MojPlayWin-safe-readonly-search-audit"})
+              try:
+                  with urllib.request.urlopen(req,timeout=16) as resp:
+                      return resp.status,resp.headers.get("Content-Type",""),resp.read(limit)
+              except urllib.error.HTTPError as err:
+                  return err.code,err.headers.get("Content-Type",""),err.read(min(limit,4096))
+          reports=[]
+          for path in urls:
+              status,mime,raw=read(path)
+              parser=Tags()
+              if status==200 and "html" in mime:parser.feed(raw.decode("utf-8",errors="replace"))
+              canonical=next((l.get("href","") for l in parser.links if l.get("rel")=="canonical"),"")
+              meta_desc=next((m.get("content","") for m in parser.meta if m.get("name")=="description"),"")
+              robots=next((m.get("content","") for m in parser.meta if m.get("name")=="robots"),"")
+              report={"path":path,"http":status,"mime":mime.split(";")[0],
+                      "canonical":canonical,"h1_count":len(parser.h1),"h1_head":parser.h1[0][:65] if parser.h1 else "",
+                      "title":parser.title[:100],"description_length":len(meta_desc),
+                      "robots":robots,"missing_img_alt":sum("alt" not in img for img in parser.images),
+                      "image_count":len(parser.images)}
+              reports.append(report)
+          status,mime,robots_raw=read("/robots.txt",200000)
+          robots=robots_raw.decode("utf-8",errors="replace")
+          sitemap_url=re.search(r'(?im)^sitemap:\s*(\S+)',robots)
+          sitemap_status,sitemap_type,sitemap_raw=read("/sitemap.xml",1600000)
+          sitemap_hosts={}
+          sitemap_count=0
+          try:
+              if sitemap_status==200:
+                  root=ElementTree.fromstring(sitemap_raw)
+                  locs=[e.text.strip() for e in root.iter() if e.tag.endswith("loc") and e.text]
+                  for loc in locs:
+                      host=urlsplit(loc).netloc
+                      sitemap_hosts[host]=sitemap_hosts.get(host,0)+1
+                  sitemap_count=len(locs)
+          except Exception:
+              sitemap_hosts={"invalid_or_not_xml":1}
+          og_img=next((m.get("content") for m in Tags().meta),None)
+          root_status,_,home=read("/",400000)
+          og_urls=re.findall(rb'<meta property="og:image" content="([^"]+)"',home)
+          og_checks={}
+          for candidate in og_urls[:3]:
+              value=candidate.decode()
+              if value.startswith(base):
+                  route=value[len(base):]
+                  og_checks[route]=read(route,512)[0]
+          output={"classification":"MOJ_PLAY_WIN_LIVE_TECHNICAL_SEO_AUDIT",
+                  "brand_home_live":"Moj Play Win" in reports[0]["title"],
+                  "pages":reports,"robots_status":status,
+                  "robots_sitemap":sitemap_url.group(1) if sitemap_url else "",
+                  "robots_mentions_zomorod":"zomorodmelal.ir" in robots.lower(),
+                  "robots_disallows_sensitive":["Disallow: /admin/","Disallow: /api/"],
+                  "sitemap_status":sitemap_status,
+                  "sitemap_content_type":sitemap_type.split(";")[0],
+                  "sitemap_url_count":sitemap_count,
+                  "sitemap_hosts":sitemap_hosts,
+                  "og_image_statuses":og_checks}
+          print(json.dumps(output,ensure_ascii=False,sort_keys=True))
+          PY
