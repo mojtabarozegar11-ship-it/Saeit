@@ -70,7 +70,7 @@ class ManagementIncomeTests(TestCase):
         return item
 
     def url(self, ext=""):
-        return "/company/office/ecosystem/finance/income/" + ext
+        return "/company/office/ecosystem/finance/income" + (".csv" if ext else "/")
 
     def test_period_income_expense_and_result_are_actual_posted_ledger_categories(self):
         self.journal(self.farm, "IRR", amount="250")
