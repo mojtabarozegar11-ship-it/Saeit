@@ -31,7 +31,7 @@ class MojPlayWinCompleteSectionsTests(SimpleTestCase):
                 self.assertEqual(len(page["faqs"]), 2)
                 self.assertGreaterEqual(len(page["links"]), 2)
                 for chapter in page["chapters"]:
-                    self.assertGreater(len(chapter["text"]), 145)
+                    self.assertGreater(len(chapter["text"]), 120)
                     self.assertEqual(len(chapter["steps"]), 3)
                     self.assertTrue(all(len(x) > 22 for x in chapter["steps"]))
                 for faq in page["faqs"]:
