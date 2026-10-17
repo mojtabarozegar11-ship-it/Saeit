@@ -65,6 +65,11 @@ if (!is_string($response) || $error !== 0 || $status !== 200
     || !is_string($mime) || stripos($mime, 'text/html') !== 0
     || !is_int($headerSize) || $headerSize < 1) {
     http_response_code(503);
+    header('X-MPW-Canary-Stage: upstream');
+    header('X-MPW-Canary-Curl-Error: ' . (int)$error);
+    header('X-MPW-Canary-Upstream-Status: ' . (int)$status);
+    header('X-MPW-Canary-Mime-OK: ' . (int)(is_string($mime) && stripos($mime, 'text/html') === 0));
+    header('X-MPW-Canary-Header-Bytes: ' . (int)$headerSize);
     header('Content-Type: text/plain; charset=utf-8');
     exit('Source temporarily unavailable');
 }
@@ -74,6 +79,10 @@ $new = '<link rel="canonical" href="https://mojplaywin.com' . $path . '">';
 if (substr_count($body, $old) !== 1 || substr_count($body, 'rel="canonical"') !== 1
     || strlen($body) > 700000 || strlen($body) < 1000) {
     http_response_code(503);
+    header('X-MPW-Canary-Stage: canonical');
+    header('X-MPW-Canary-Wrong-Tag-Count: ' . substr_count($body, $old));
+    header('X-MPW-Canary-Canonical-Count: ' . substr_count($body, 'rel="canonical"'));
+    header('X-MPW-Canary-Body-Bytes: ' . strlen($body));
     header('Content-Type: text/plain; charset=utf-8');
     exit('Source validation failed');
 }
