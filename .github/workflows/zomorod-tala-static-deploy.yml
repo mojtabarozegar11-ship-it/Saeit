@@ -41,7 +41,7 @@ jobs:
               raise SystemExit('TALA_PAGE_VALIDATION=failed')
           if '<!-- tala-isolated-site-v1 -->' not in source:
               raise SystemExit('TALA_SCOPE_MARKER=missing')
-          for rel in ('manifest.webmanifest','sw.js','assets/tala-mark.svg'):
+          for rel in ('manifest.webmanifest','sw.js','assets/tala-mark.svg','api/health.php','api/.htaccess'):
               if not (root/rel).is_file(): raise SystemExit(f'TALA_ASSET_MISSING={rel}')
           if 'در انتظار اتصال منبع' not in source or 'قیمت زنده هنوز متصل نشده' not in source:
               raise SystemExit('TALA_UNVERIFIED_PRICE_DISCLOSURE=missing')
@@ -166,14 +166,15 @@ jobs:
         run: |
           set -euo pipefail
           base=https://zomorodmelal.ir/tala
-          for path in / /manifest.webmanifest /sw.js /assets/tala-mark.svg; do
-            code="$(curl -sS --max-time 20 -o "$RUNNER_TEMP/tala-response" -w '%{http_code}' -H 'Cache-Control: no-cache' "$base$path?__tala_verify=$GITHUB_SHA")"
+          for path in / /manifest.webmanifest /sw.js /assets/tala-mark.svg /api/health.php; do
+            code="$(curl -sS --max-time 20 -D "$RUNNER_TEMP/tala-headers" -o "$RUNNER_TEMP/tala-response" -w '%{http_code}' -H 'Cache-Control: no-cache' "$base$path?__tala_verify=$GITHUB_SHA")"
             test "$code" = 200 || { echo "TALA_HTTP_FAILED path=$path code=$code" >&2; exit 1; }
             case "$path" in
               /) grep -Fq 'تَلا | طلا، جواهر و گوهرسنگ' "$RUNNER_TEMP/tala-response"; grep -Fq 'قیمت زنده هنوز متصل نشده' "$RUNNER_TEMP/tala-response" ;;
               /manifest.webmanifest) grep -Fq '"scope":"/tala/"' "$RUNNER_TEMP/tala-response" ;;
               /sw.js) grep -Fq "const CACHE='tala-shell-v2'" "$RUNNER_TEMP/tala-response" ;;
               /assets/tala-mark.svg) grep -Fq '<svg' "$RUNNER_TEMP/tala-response" ;;
+              /api/health.php) grep -iqE '^content-type:[[:space:]]*application/json(;|[[:space:]]*$)' "$RUNNER_TEMP/tala-headers"; grep -Fq '"scope":"tala"' "$RUNNER_TEMP/tala-response"; grep -Fq '"runtime":"php"' "$RUNNER_TEMP/tala-response" ;;
             esac
             echo "TALA_PUBLIC_CHECK=$path passed"
           done
