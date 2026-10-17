@@ -25,7 +25,7 @@ def check_report(report: dict) -> dict:
     scores = {key: (categories.get(key) or {}).get("score") for key in CATEGORIES}
     # Missing/null scores count as failure: never round 99.5 up to 100.
     failed = {key: score for key, score in scores.items()
-              if score is None or not isinstance(score, (int, float)) or score < 1.0}
+              if not isinstance(score, (int, float)) or isinstance(score, bool) or score != 1.0}
     return {"scores": scores, "passes_100_out_of_100": not failed, "failed": failed}
 
 
