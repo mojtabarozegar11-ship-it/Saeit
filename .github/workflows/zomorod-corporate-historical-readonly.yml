@@ -810,6 +810,49 @@ jobs:
               except Exception as exc:print('STATIC_MANIFEST_PARSE='+type(exc).__name__)
           PY
           REMOTE
+      - name: Diagnose root-only Python 3.10 LSAPI versus working staging runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-readonly"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          export PYTHONDONTWRITEBYTECODE=1
+          python3 - <<'PY'
+          from pathlib import Path
+          import json,os,subprocess
+          home=Path.home()
+          paths={
+            "python310_lswsgi":Path("/opt/alt/python310/bin/lswsgi"),
+            "python311_lswsgi":Path("/opt/alt/python311/bin/lswsgi"),
+            "python310_binary":Path("/opt/alt/python310/bin/python3"),
+            "python311_binary":Path("/opt/alt/python311/bin/python3"),
+            "main_venv310":home/"virtualenv/Saeit/3.10/bin/python",
+            "main_venv311":home/"virtualenv/Saeit/3.11/bin/python",
+            "main_venv310_env":home/"virtualenv/Saeit/3.10/bin/set_env_vars.py",
+            "staging_venv311":home/"virtualenv/Saeit-staging/3.11/bin/python",
+            "litespeed_wrapper":Path("/usr/local/lsws/fcgi-bin/lswsgi_wrapper"),
+            "litespeed_selector_script":Path("/usr/local/lsws/admin/misc/enable_ruby_python_selector.sh"),
+          }
+          for name,path in paths.items():
+            print("LSWS_PYTHON_CANDIDATE="+name+" exists="+str(path.exists())+" executable="+str(os.access(path,os.X_OK))+" read="+str(os.access(path,os.R_OK)))
+          root=home/"virtualenv/Saeit"
+          print("MAIN_VENV_PYTHON_VERSIONS="+",".join(sorted(f.name for f in root.iterdir() if f.is_dir())) if root.is_dir() else "MAIN_VENV_PYTHON_VERSIONS=missing")
+          cmd="/usr/sbin/cloudlinux-selector"
+          r=subprocess.run([cmd,"get","--json","--interpreter","python","--user",os.environ.get("USER","zomorod2")],stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,text=True,timeout=25)
+          print("SELECTOR_READ_ONLY_EXIT="+str(r.returncode))
+          if r.returncode==0:
+            data=json.loads(r.stdout)
+            def walk(item):
+              if isinstance(item,dict):
+                if item.get("domain") in ("zomorodmelal.ir","staging.zomorodmelal.ir") and "app_uri" in item:
+                    print("SELECTOR_APPLICATION="+item.get("domain")+" version="+str(item.get("python_version") or item.get("version"))+" status="+str(item.get("app_status"))+" uri="+repr(item.get("app_uri")))
+                for value in item.values():walk(value)
+              elif isinstance(item,list):
+                for value in item:walk(value)
+            walk(data)
+          PY
+          REMOTE
       - name: Erase runner-only relay credentials
         if: always()
         run: rm -rf "$RUNNER_TEMP/zomorod-readonly"
