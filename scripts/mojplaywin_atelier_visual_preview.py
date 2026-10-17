@@ -124,6 +124,12 @@ def capture_viewports(manifest):
                         overflow: document.documentElement.scrollWidth > innerWidth + 5,
                         scrollWidth: document.documentElement.scrollWidth
                     })""")
+                    if key == "research":
+                        active_image = page.locator(".mpx-page-hero-art img").evaluate("(img) => img.currentSrc")
+                        if mode == "mobile" and "research-nexus." not in active_image:
+                            raise RuntimeError("research-mobile: optimized research image not selected")
+                        if mode == "desktop" and "research." not in active_image:
+                            raise RuntimeError("research-desktop: original photo not preserved")
                     if key == "home":
                         if page.locator("[data-mojplaywin-orbital='v1']").count() != 1:
                             raise RuntimeError(f"{key}-{mode}: approved orbital experience absent")
