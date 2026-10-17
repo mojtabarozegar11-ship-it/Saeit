@@ -7,6 +7,10 @@ on:
       - "config/settings.py"
       - "enterprise_portal/urls.py"
       - "enterprise_portal/templates/enterprise_portal/**"
+      - "enterprise_portal/views.py"
+      - "enterprise_portal/admin.py"
+      - "enterprise_portal/services.py"
+      - "enterprise_portal/trial_balance.py"
       - ".github/workflows/zomorod-ecosystem-hub-checks.yml"
   pull_request:
     branches: ["feature/zomorod-private-erp-20261017"]
@@ -49,6 +53,10 @@ jobs:
           allowed_exact={'config/settings.py','enterprise_portal/urls.py',
               'enterprise_portal/templates/enterprise_portal/shell.html',
               'enterprise_portal/templates/enterprise_portal/dashboard.html',
+              'enterprise_portal/views.py',
+              'enterprise_portal/admin.py',
+              'enterprise_portal/services.py',
+              'enterprise_portal/trial_balance.py',
               '.github/workflows/zomorod-ecosystem-hub-bootstrap.yml',
               '.github/workflows/zomorod-ecosystem-hub-checks.yml',
               'docs/zomorod-ecosystem-hub-v2.md'}

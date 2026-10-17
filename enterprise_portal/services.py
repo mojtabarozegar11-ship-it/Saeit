@@ -6,6 +6,7 @@ from django.db.models import Sum
 from django.utils import timezone
 
 from .models import AuditEvent, InventoryItem, JournalEntry, JournalLine, StockMovement
+from ecosystem_hub.access import require_unit
 
 
 def _can(actor, permission):
@@ -20,6 +21,7 @@ def post_journal(entry_id, actor):
     """Only post a balanced and internally consistent draft. Never silently edit."""
     _can(actor, "enterprise_portal.change_journalentry")
     entry = JournalEntry.objects.select_for_update().select_related("unit").get(pk=entry_id)
+    require_unit(actor, entry.unit, write=True)
     if entry.status != "draft":
         raise ValidationError("این سند قبلاً قطعی شده است.")
     rows = list(JournalLine.objects.select_related("account").filter(entry=entry))
@@ -60,7 +62,8 @@ def confirm_stock_movement(movement_id, actor):
     """Serializes movements on an item to avoid confirming negative stock."""
     _can(actor, "enterprise_portal.change_stockmovement")
     # Read item's id before acquiring its lock. It cannot be changed after confirmation.
-    initial = StockMovement.objects.get(pk=movement_id)
+    initial = StockMovement.objects.select_related("item__unit").get(pk=movement_id)
+    require_unit(actor, initial.item.unit, write=True)
     InventoryItem.objects.select_for_update().get(pk=initial.item_id)
     movement = StockMovement.objects.select_for_update().get(pk=movement_id)
     if movement.status != "draft":

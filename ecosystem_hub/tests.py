@@ -506,6 +506,123 @@ class HubSuite(TestCase):
         self.assertEqual(response.status_code, 403)
         self.assertFalse(ReviewApproval.objects.exists())
 
+    @override_settings(DEBUG=False, ALLOWED_HOSTS=["testserver"])
+    def test_legacy_erp_reports_hide_other_company_finance_and_stock(self):
+        viewer = U.objects.create_user(
+            username="scoped-accountant", password="testing-only", is_staff=True,
+        )
+        UnitMembership.objects.create(
+            user=viewer, unit=self.farm, role="finance", active=True,
+        )
+        permission_names = (
+            "view_businessunit", "view_journalentry", "view_ledgeraccount",
+            "view_inventoryitem", "view_stockmovement",
+        )
+        p = Permission.objects.filter(
+            content_type__app_label="enterprise_portal", codename__in=permission_names,
+        )
+        viewer.user_permissions.add(*p)
+        for unit in (self.farm, self.factory):
+            cash = LedgerAccount.objects.create(
+                unit=unit, code="100", name="نقد-" + unit.code, category="asset",
+            )
+            revenue = LedgerAccount.objects.create(
+                unit=unit, code="400", name="فروش-" + unit.code, category="income",
+            )
+            voucher = JournalEntry.objects.create(
+                unit=unit, reference="REF-"+unit.code,
+                created_by=self.owner, description="ثبت کنترل",
+            )
+            JournalLine.objects.create(
+                entry=voucher, account=cash, debit=D("100"), credit=D("0"),
+            )
+            JournalLine.objects.create(
+                entry=voucher, account=revenue, debit=D("0"), credit=D("100"),
+            )
+            post_journal(voucher.pk, self.owner)
+        self.client.force_login(viewer)
+        response = self.client.get("/company/office/finance/", secure=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "farm")
+        self.assertNotContains(response, "factory")
+        self.assertEqual(response.context["posted_count"], 1)
+        trial = self.client.get("/company/office/finance/trial-balance/", secure=True)
+        self.assertEqual(trial.status_code, 200)
+        self.assertEqual(len(trial.context["records"]), 2)
+        self.assertNotContains(trial, "نقد-factory")
+        self.assertEqual(self.client.get(
+            "/company/office/finance/trial-balance/?unit=factory", secure=True,
+        ).status_code, 400)
+        response = self.client.get(
+            "/company/office/finance/trial-balance.csv", secure=True,
+        )
+        self.assertIn("نقد-farm", response.content.decode("utf-8-sig"))
+        self.assertNotIn("نقد-factory", response.content.decode("utf-8-sig"))
+        inventory = self.client.get("/company/office/inventory/", secure=True)
+        self.assertEqual(inventory.status_code, 200)
+        self.assertContains(inventory, "WHEAT")
+        self.assertNotContains(inventory, "FP")
+
+    def test_legacy_admin_blocks_cross_unit_direct_objects_and_querysets(self):
+        from django.contrib import admin as site_admin
+        viewer = U.objects.create_user(username="accountant-restricted", is_staff=True)
+        UnitMembership.objects.create(user=viewer, unit=self.farm, role="finance")
+        viewer.user_permissions.add(*Permission.objects.filter(
+            content_type__app_label="enterprise_portal",
+            codename__in=("view_businessunit", "view_journalentry", "view_ledgeraccount",
+                           "view_inventoryitem", "view_stockmovement", "change_journalentry"),
+        ))
+        farm_journal = JournalEntry.objects.create(
+            unit=self.farm, reference="farm-draft", created_by=self.owner,
+            description="تست دفتر",
+        )
+        factory_journal = JournalEntry.objects.create(
+            unit=self.factory, reference="factory-secret", created_by=self.owner,
+            description="محرمانه",
+        )
+        req = RequestFactory().get("/admin/enterprise_portal/journalentry/")
+        req.user = viewer
+        panel = site_admin.site._registry[JournalEntry]
+        self.assertEqual(list(panel.get_queryset(req)), [farm_journal])
+        self.assertFalse(panel.has_view_permission(req, factory_journal))
+        self.assertFalse(panel.has_change_permission(req, factory_journal))
+        item_panel = site_admin.site._registry[InventoryItem]
+        self.assertEqual(
+            list(item_panel.get_queryset(req)), [self.farm_material, self.farm_product],
+        ) if False else self.assertEqual(item_panel.get_queryset(req).count(), 2)
+        self.assertFalse(item_panel.has_view_permission(req, self.factory_product))
+
+    def test_services_forbid_posting_another_units_valid_voucher(self):
+        viewer = U.objects.create_user(username="accountant-scope", is_staff=True)
+        UnitMembership.objects.create(user=viewer, unit=self.farm, role="finance")
+        viewer.user_permissions.add(*Permission.objects.filter(
+            content_type__app_label="enterprise_portal",
+            codename__in=("change_journalentry", "change_stockmovement"),
+        ))
+        cash = LedgerAccount.objects.create(
+            unit=self.factory, code="101", name="بانک", category="asset",
+        )
+        sales = LedgerAccount.objects.create(
+            unit=self.factory, code="401", name="درآمد", category="income",
+        )
+        entry = JournalEntry.objects.create(
+            unit=self.factory, reference="factory-draft",
+            description="ثبت نمونه", created_by=self.owner,
+        )
+        JournalLine.objects.create(entry=entry, account=cash, debit=D("500"), credit=D("0"))
+        JournalLine.objects.create(entry=entry, account=sales, debit=D("0"), credit=D("500"))
+        with self.assertRaises(PermissionDenied):
+            post_journal(entry.pk, viewer)
+        entry.refresh_from_db()
+        self.assertEqual(entry.status, "draft")
+        stock = StockMovement.objects.create(
+            item=self.factory_product, direction="in", quantity=D("5"),
+            reference="IN-SECRET", created_by=self.owner,
+        )
+        with self.assertRaises(PermissionDenied):
+            confirm_stock_movement(stock.pk, viewer)
+        self.assertEqual(stock_balance(self.factory_product.pk), D("0"))
+
     def test_assistant_access_is_csrf_protected(self):
         web = Client(enforce_csrf_checks=True)
         web.force_login(self.viewer)

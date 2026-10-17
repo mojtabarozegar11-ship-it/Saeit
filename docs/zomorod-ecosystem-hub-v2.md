@@ -82,3 +82,14 @@ pending review record and one audit event per report; it does not alter
 journals, inventory, invoices, external sites or any money transfer. CSRF,
 unit scoping and assigned approver checks apply. The final decision is a
 separate office record, not an execution instruction.
+
+
+## Private ERP tenant isolation hardening
+ERP finance, trial balance, CSV and inventory views now filter through active
+UnitMembership. Django admin list/detail/add/foreign-key selectors for the
+unit-linked finance, trade and inventory models similarly respect unit scope.
+Journal posting and final stock confirmations verify both Django permissions and
+unit membership. Company superusers retain a verified organization-wide view.
+Non-unit-scoped legacy office letters/meeting records still require separate
+entity-level isolation before general cross-company delegation: avoid granting
+these permissions to unrelated staff until this is resolved.
