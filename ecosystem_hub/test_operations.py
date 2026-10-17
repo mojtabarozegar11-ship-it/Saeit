@@ -33,7 +33,7 @@ class AssistantOperationsTests(TestCase):
         UnitMembership.objects.create(user=self.factory_reader, unit=self.factory, role="analyst")
         perms = Permission.objects.filter(
             content_type__app_label__in=("ecosystem_hub", "enterprise_portal"),
-            codename__in=("view_organization", "view_assistantrun",
+            codename__in=("view_organization", "view_assistantrun", "add_assistantrun",
                            "view_proposedautomation", "view_businessunit"),
         )
         for user in (self.analyst, self.factory_reader):
