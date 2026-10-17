@@ -1,6 +1,95 @@
-{% extends "base.html" %}
+{% extends "mojplaywin/base.html" %}
 {% load static %}
 {% block title %}{{ section_title }} | MojPlayWin{% endblock %}
 {% block meta_description %}{{ section_lead }}{% endblock %}
 {% block body_class %}mojplaywin-section{% endblock %}
-{% block content %}{% include "mojplaywin/theme.html" %}<div class="mw-shell"><section class="mw-page-hero"><span class="mw-kicker">MOJPLAYWIN · EXPLORE</span><h1>{{ section_title }}</h1><p>{{ section_lead }}</p><img src="{% static section_image %}" alt="{{ section_title }}"></section><section class="mw-section"><span class="mw-kicker">DISCOVER</span><h2>Ideas, resources, and next steps</h2><div class="mw-grid">{% for title,text in cards %}<article class="mw-card"><div class="mw-card-copy"><span class="mw-kicker">0{{ forloop.counter }}</span><h3>{{ title }}</h3><p>{{ text }}</p><a href="/store/">Explore related resources ↗</a></div></article>{% endfor %}</div>{% if section_note %}<p class="mw-note">{{ section_note }}</p>{% endif %}<div class="mw-links"><a href="/research/">Research</a><a href="/knowledge/">Learning</a><a href="/studio/">Games & Studio</a><a href="/store/">Digital Store</a></div></section>{% if active_venture %}<section class="mw-section"><span class="mw-kicker">OTHER VENTURES</span><h2>Explore connected fields</h2><div class="mw-grid">{% for item in ventures %}{% if item.slug != active_venture %}<article class="mw-card"><div class="mw-card-copy"><h3>{{ item.title }}</h3><p>{{ item.text }}</p><a href="{{ item.url }}">View page ↗</a></div></article>{% endif %}{% endfor %}</div></section>{% endif %}</div>{% include "mojplaywin/footer.html" %}{% endblock %}
+{% block content %}
+{% include "mojplaywin/theme.html" %}
+<div class="mw-shell" data-design="mojplaywin-atelier-v4">
+  <section class="mw-page-hero mpx-page-hero" aria-labelledby="mpx-section-title">
+    <div class="mpx-page-hero-copy">
+      <div class="mpx-breadcrumb"><a href="/">Home</a><span aria-hidden="true">/</span> Explore</div>
+      <span class="mpx-kicker" style="margin-top:32px">MOJPLAYWIN · EXPLORE</span>
+      <h1 id="mpx-section-title">{{ section_title }}</h1>
+      <p>{{ section_lead }}</p>
+      <div class="mpx-actions"><a class="mw-button primary" href="/services/">Explore services <span aria-hidden="true">↗</span></a>
+        <a class="mw-button" href="/store/">Digital products <span aria-hidden="true">→</span></a></div>
+    </div>
+    <div class="mpx-page-hero-art">
+      {% if section_title == "Scientific Research & Innovation" %}
+      <picture style="display:block;width:100%;height:100%">
+        <source media="(max-width: 700px)" srcset="{% static 'site/mojplaywin-atelier/research-nexus.svg' %}" type="image/svg+xml">
+        <img src="{% static section_image %}" alt="{{ section_title }}" width="900" height="640" fetchpriority="high" loading="eager" decoding="async">
+      </picture>
+      {% elif section_mobile_image %}
+      <picture class="mpx-responsive-picture">
+        <source media="(max-width: 700px)" srcset="{% static section_mobile_image %}" type="image/webp">
+        <img src="{% static section_image %}" alt="{{ section_title }}" width="900" height="640" fetchpriority="high" loading="eager" decoding="async">
+      </picture>
+      {% else %}
+      <img src="{% static section_image %}" alt="{{ section_title }}" width="900" height="640" fetchpriority="high" loading="eager" decoding="async">
+      {% endif %}
+      <span>RESEARCH · TECHNOLOGY · COMMERCE</span>
+    </div>
+  </section>
+  <section class="mpx-section" aria-labelledby="mpx-discover-title">
+    <div class="mpx-section-head"><div><span class="mpx-kicker">DISCOVER</span>
+      <h2 id="mpx-discover-title">Ideas, resources, and next steps</h2>
+      <p>Explore practical topics and research-informed project directions in {{ section_title }}.</p>
+    </div></div>
+    <div class="mpx-inner-grid">
+      {% for title,text in cards %}
+      <article class="mw-card"><div class="mw-card-copy">
+        <span class="mw-kicker">INSIGHT · 0{{ forloop.counter }}</span>
+        <h3>{{ title }}</h3><p>{{ text }}</p>
+        <a href="/store/">Explore related resources <span aria-hidden="true">↗</span></a>
+      </div></article>
+      {% endfor %}
+    </div>
+    {% if section_note %}<p class="mw-note">{{ section_note }}</p>{% endif %}
+    <div class="mw-links"><a href="/research/">Research</a><a href="/knowledge/">Learning</a>
+      <a href="/studio/">Games & Studio</a><a href="/store/">Digital Store</a></div>
+  </section>
+  {% if active_venture %}
+  <section class="mpx-section" aria-labelledby="mpx-other-ventures">
+    <div class="mpx-section-head"><div><span class="mpx-kicker">DISCOVER MORE</span>
+      <h2 id="mpx-other-ventures">Explore connected fields</h2>
+      <p>Continue exploring connected business fields and research-based opportunities.</p>
+    </div></div>
+    <div class="mpx-venture-grid">
+      {% for item in ventures %}{% if item.slug != active_venture %}
+      <article class="mpx-venture-card">
+        {% if item.mobile_image %}
+        <picture class="mpx-responsive-picture">
+          <source media="(max-width: 700px)" srcset="{% static item.mobile_image %}" type="image/webp">
+          <img src="{% static item.image %}" alt="{{ item.title }}" width="470" height="290" loading="lazy" decoding="async">
+        </picture>
+        {% else %}
+        <img src="{% static item.image %}" alt="{{ item.title }}" width="470" height="290" loading="lazy" decoding="async">
+        {% endif %}
+        <div class="mpx-card-copy"><h3>{{ item.title }}</h3><p>{{ item.text }}</p>
+          <a href="{{ item.url }}">View page <span aria-hidden="true">↗</span></a></div>
+      </article>
+      {% endif %}{% endfor %}
+    </div>
+  </section>
+  {% endif %}
+  {% include "mojplaywin/editorial_experience.html" %}
+  {% if request.path == "/agents/" and request.user.is_staff %}
+  <section class="mpx-section" id="mpx-staff-agent-operations" aria-labelledby="mpx-staff-agent-title">
+    <div class="mpx-section-head"><div>
+      <span class="mpx-kicker">AUTHORIZED STAFF ONLY</span>
+      <h2 id="mpx-staff-agent-title">Agent operations and Django administration</h2>
+      <p>Review registered agents, permissions, queue health and audit evidence before authorizing any runtime change. Shared agents must not be activated without verified main-domain isolation.</p>
+    </div></div>
+    <div class="mw-links">
+      <a href="/staff/command-center/">Open staff operations dashboard ↗</a>
+      <a href="/staff/command-center/api/agents/directory/">Read-only agent directory ↗</a>
+      <a href="/admin/core/agent/">Manage registered agents in Django ↗</a>
+      <a href="/admin/core/agenttask/">Review agent tasks in Django ↗</a>
+    </div>
+  </section>
+  {% endif %}
+</div>
+{% include "mojplaywin/footer.html" %}
+{% endblock %}

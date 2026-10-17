@@ -1,0 +1,50 @@
+{% load static %}
+{% if editorial %}
+<section class="mpx-section mpx-editorial" aria-labelledby="mpx-editorial-title" data-editorial="mojplaywin-original">
+  <div class="mpx-section-head">
+    <div>
+      <span class="mpx-kicker">IN-DEPTH FIELD GUIDE · MOJPLAYWIN</span>
+      <h2 id="mpx-editorial-title">{{ editorial.headline }}</h2>
+      <p>Research-informed explanations, an actionable workflow and clearly scoped project outputs.</p>
+    </div>
+  </div>
+  <div class="mpx-editorial-intro">
+    {% for paragraph in editorial.overview %}
+    <p>{{ paragraph }}</p>
+    {% endfor %}
+  </div>
+  <div class="mpx-editorial-media" aria-label="Related illustrated topic gallery">
+    {% for image in editorial.images %}
+      <figure class="mpx-editorial-figure">
+        {% if image.mobile_path %}
+        <picture class="mpx-responsive-picture">
+          <source media="(max-width: 700px)" srcset="{% static image.mobile_path %}" type="image/webp">
+          <img src="{% static image.path %}" alt="{{ image.alt }}" loading="lazy" decoding="async" width="640" height="430">
+        </picture>
+        {% else %}
+        <img src="{% static image.path %}" alt="{{ image.alt }}" loading="lazy" decoding="async" width="640" height="430">
+        {% endif %}
+        <figcaption>{{ image.caption }}</figcaption>
+      </figure>
+    {% endfor %}
+  </div>
+  <div class="mpx-editorial-columns">
+    <div class="mpx-editorial-panel">
+      <span class="mpx-kicker">PRACTICAL METHOD</span>
+      <h3>How a real project can be evaluated</h3>
+      <ol class="mpx-editorial-steps">
+        {% for step in editorial.steps %}
+          <li><strong>{{ step.title }}</strong><p>{{ step.detail }}</p></li>
+        {% endfor %}
+      </ol>
+    </div>
+    <div class="mpx-editorial-panel mpx-editorial-outcomes">
+      <span class="mpx-kicker">TANGIBLE OUTPUTS</span>
+      <h3>Documentation and deliverables</h3>
+      <ul>{% for item in editorial.deliverables %}<li>{{ item }}</li>{% endfor %}</ul>
+      <p class="mw-note">{{ editorial.note }}</p>
+      <a class="mw-button" href="{{ editorial.link }}">Explore collaboration information <span aria-hidden="true">↗</span></a>
+    </div>
+  </div>
+</section>
+{% endif %}

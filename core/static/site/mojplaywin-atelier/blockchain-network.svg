@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="900" viewBox="0 0 1280 900" role="img" aria-labelledby="title desc">
+<title id="title">Blockchain network technology illustration</title>
+<desc id="desc">Original nonfinancial illustration of interconnected Web3 software blocks and secure distributed network links.</desc>
+<defs>
+<linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#13151f"/><stop offset=".6" stop-color="#0a0e17"/><stop offset="1" stop-color="#19121b"/></linearGradient>
+<radialGradient id="halo"><stop stop-color="#9f7546" stop-opacity=".26"/><stop offset="1" stop-color="#9f7546" stop-opacity="0"/></radialGradient>
+<linearGradient id="top" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#f8e4b7"/><stop offset=".6" stop-color="#d5ab6f"/><stop offset="1" stop-color="#906b43"/></linearGradient>
+<linearGradient id="violet" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#d4c3fb"/><stop offset=".65" stop-color="#9b88d4"/><stop offset="1" stop-color="#594e84"/></linearGradient>
+<filter id="shadow" x="-30%" y="-45%" width="170%" height="190%"><feDropShadow dx="0" dy="26" stdDeviation="23" flood-color="#07080d" flood-opacity=".74"/></filter>
+</defs>
+<rect width="1280" height="900" fill="url(#bg)"/>
+<ellipse cx="635" cy="440" rx="590" ry="430" fill="url(#halo)"/>
+<g><ellipse cx="640" cy="455" rx="210" ry="105" fill="none" stroke="#d6b784" stroke-opacity="0.08" stroke-width="2" transform="rotate(-22 640 455)"/><ellipse cx="640" cy="455" rx="300" ry="159" fill="none" stroke="#d6b784" stroke-opacity="0.07200000000000001" stroke-width="2" transform="rotate(-22 640 455)"/><ellipse cx="640" cy="455" rx="390" ry="213" fill="none" stroke="#d6b784" stroke-opacity="0.064" stroke-width="2" transform="rotate(-22 640 455)"/><ellipse cx="640" cy="455" rx="480" ry="267" fill="none" stroke="#d6b784" stroke-opacity="0.056" stroke-width="2" transform="rotate(-22 640 455)"/><ellipse cx="640" cy="455" rx="570" ry="321" fill="none" stroke="#d6b784" stroke-opacity="0.048" stroke-width="2" transform="rotate(-22 640 455)"/><ellipse cx="640" cy="455" rx="660" ry="375" fill="none" stroke="#d6b784" stroke-opacity="0.04" stroke-width="2" transform="rotate(-22 640 455)"/><ellipse cx="640" cy="455" rx="750" ry="429" fill="none" stroke="#d6b784" stroke-opacity="0.032" stroke-width="2" transform="rotate(-22 640 455)"/></g>
+<g><path d="M315 455 L635 255" stroke="#e3c38b" stroke-opacity=".55" stroke-width="5" stroke-dasharray="none" /><path d="M635 255 L950 465" stroke="#c7b1f1" stroke-opacity=".55" stroke-width="5" stroke-dasharray="none" /><path d="M950 465 L635 690" stroke="#e3c38b" stroke-opacity=".55" stroke-width="5" stroke-dasharray="none" /><path d="M635 690 L315 455" stroke="#c7b1f1" stroke-opacity=".55" stroke-width="5" stroke-dasharray="none" /><path d="M315 455 L950 465" stroke="#e3c38b" stroke-opacity=".55" stroke-width="2" stroke-dasharray="12 16" /><path d="M635 255 L635 690" stroke="#c7b1f1" stroke-opacity=".55" stroke-width="2" stroke-dasharray="12 16" /></g>
+<g><g transform="translate(315 455) scale(1)" filter="url(#shadow)">
+<path d="M0 -120 L126 -58 L0 12 L-126 -58 Z" fill="url(#top)" stroke="#f5d99c" stroke-opacity=".7" stroke-width="3"/>
+<path d="M-126 -58 L0 12 L0 135 L-126 65 Z" fill="#202531" stroke="#d6b985" stroke-opacity=".62" stroke-width="3"/>
+<path d="M126 -58 L0 12 L0 135 L126 65 Z" fill="#171924" stroke="#d6b985" stroke-opacity=".62" stroke-width="3"/>
+<path d="M0 12 L0 135" stroke="#efce94" stroke-opacity=".35" stroke-width="3"/>
+<path d="M-79 -58 L0 -16 L79 -58 L0 -99 Z" fill="none" stroke="#fff1c5" stroke-opacity=".43" stroke-width="2"/>
+<circle cx="0" cy="-58" r="12" fill="#ffdf9e"/><circle cx="-65" cy="20" r="7" fill="#c4b0ff"/><circle cx="65" cy="20" r="7" fill="#dfc593"/>
+</g>
+<g transform="translate(635 255) scale(1.05)" filter="url(#shadow)">
+<path d="M0 -120 L126 -58 L0 12 L-126 -58 Z" fill="url(#violet)" stroke="#f5d99c" stroke-opacity=".7" stroke-width="3"/>
+<path d="M-126 -58 L0 12 L0 135 L-126 65 Z" fill="#202531" stroke="#d6b985" stroke-opacity=".62" stroke-width="3"/>
+<path d="M126 -58 L0 12 L0 135 L126 65 Z" fill="#171924" stroke="#d6b985" stroke-opacity=".62" stroke-width="3"/>
+<path d="M0 12 L0 135" stroke="#efce94" stroke-opacity=".35" stroke-width="3"/>
+<path d="M-79 -58 L0 -16 L79 -58 L0 -99 Z" fill="none" stroke="#fff1c5" stroke-opacity=".43" stroke-width="2"/>
+<circle cx="0" cy="-58" r="12" fill="#ffdf9e"/><circle cx="-65" cy="20" r="7" fill="#c4b0ff"/><circle cx="65" cy="20" r="7" fill="#dfc593"/>
+</g>
+<g transform="translate(950 465) scale(1)" filter="url(#shadow)">
+<path d="M0 -120 L126 -58 L0 12 L-126 -58 Z" fill="url(#top)" stroke="#f5d99c" stroke-opacity=".7" stroke-width="3"/>
+<path d="M-126 -58 L0 12 L0 135 L-126 65 Z" fill="#202531" stroke="#d6b985" stroke-opacity=".62" stroke-width="3"/>
+<path d="M126 -58 L0 12 L0 135 L126 65 Z" fill="#171924" stroke="#d6b985" stroke-opacity=".62" stroke-width="3"/>
+<path d="M0 12 L0 135" stroke="#efce94" stroke-opacity=".35" stroke-width="3"/>
+<path d="M-79 -58 L0 -16 L79 -58 L0 -99 Z" fill="none" stroke="#fff1c5" stroke-opacity=".43" stroke-width="2"/>
+<circle cx="0" cy="-58" r="12" fill="#ffdf9e"/><circle cx="-65" cy="20" r="7" fill="#c4b0ff"/><circle cx="65" cy="20" r="7" fill="#dfc593"/>
+</g>
+<g transform="translate(635 690) scale(0.82)" filter="url(#shadow)">
+<path d="M0 -120 L126 -58 L0 12 L-126 -58 Z" fill="url(#violet)" stroke="#f5d99c" stroke-opacity=".7" stroke-width="3"/>
+<path d="M-126 -58 L0 12 L0 135 L-126 65 Z" fill="#202531" stroke="#d6b985" stroke-opacity=".62" stroke-width="3"/>
+<path d="M126 -58 L0 12 L0 135 L126 65 Z" fill="#171924" stroke="#d6b985" stroke-opacity=".62" stroke-width="3"/>
+<path d="M0 12 L0 135" stroke="#efce94" stroke-opacity=".35" stroke-width="3"/>
+<path d="M-79 -58 L0 -16 L79 -58 L0 -99 Z" fill="none" stroke="#fff1c5" stroke-opacity=".43" stroke-width="2"/>
+<circle cx="0" cy="-58" r="12" fill="#ffdf9e"/><circle cx="-65" cy="20" r="7" fill="#c4b0ff"/><circle cx="65" cy="20" r="7" fill="#dfc593"/>
+</g></g>
+<path d="M72 120 Q370 15 635 98 T1200 110" fill="none" stroke="#d7bd91" stroke-opacity=".14" stroke-width="2" stroke-dasharray="12 14"/>
+<path d="M78 786 Q405 886 633 798 T1201 787" fill="none" stroke="#c1afe4" stroke-opacity=".16" stroke-width="2" stroke-dasharray="12 15"/>
+<g fill="#e2c38d" opacity=".62"><circle cx="116" cy="240" r="5"/><circle cx="1180" cy="269" r="6"/><circle cx="178" cy="763" r="5"/><circle cx="1150" cy="748" r="6"/></g>
+</svg>
