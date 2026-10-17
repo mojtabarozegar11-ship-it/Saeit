@@ -1,5 +1,6 @@
 from django.urls import path
 from . import views
+from . import operations as assistant_operations
 from . import financial_reporting as income
 
 app_name = "ecosystem_hub"
@@ -16,6 +17,7 @@ urlpatterns = [
     path("production/materials/<int:pk>/draft-procurement/", views.create_procurement_drafts, name="create_procurement_drafts"),
     path("oversight/", views.oversight, name="oversight"),
     path("assistants/", views.assistants, name="assistants"),
+    path("assistants/operations/", assistant_operations.operations, name="assistant_operations"),
     path("assistants/<slug:code>/run/", views.run_assistant, name="run_assistant"),
     path("reports/<int:pk>/", views.report, name="report"),
     path("reports/<int:pk>/request-review/", views.request_review, name="request_review"),
