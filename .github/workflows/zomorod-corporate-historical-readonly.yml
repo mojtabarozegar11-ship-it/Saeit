@@ -444,6 +444,44 @@ jobs:
                       print('TRACEBACK_MARKERS='+','.join(marks)+' exception='+('RuntimeError' if 'RuntimeError:' in chunk else 'ModuleNotFoundError' if 'ModuleNotFoundError:' in chunk else 'unknown'))
           PY
           REMOTE
+      - name: Compare live and staging Passenger response and recent startup hooks
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-readonly"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          echo "PUBLIC_ROUTE_COMPARISON=read_only"
+          for host in zomorodmelal.ir staging.zomorodmelal.ir; do
+            for route in /api/health/ /admin/login/ /agents/; do
+              status="$(curl -sSL --connect-timeout 6 --max-time 14 -o /dev/null -w '%{http_code}' "https://$host$route" || true)"
+              echo "ROUTE_TEST_HOST=$host PATH=$route HTTP=$status"
+            done
+          done
+          python3 - <<'PY'
+          from pathlib import Path
+          from datetime import datetime,timezone
+          import os
+          home=Path.home()
+          paths=[home/'Saeit'/'stderr.log',home/'Saeit'/'passenger.log',home/'public_html'/'error_log']
+          for p in paths:
+              if p.is_file() and not p.is_symlink():
+                  st=p.stat()
+                  print('STARTUP_LOG='+p.name+' BYTES='+str(st.st_size)+' MTIME_UTC='+datetime.fromtimestamp(st.st_mtime,timezone.utc).isoformat(timespec='seconds'))
+          roots=[home/'virtualenv'/'Saeit'/'3.10'/'lib'/'python3.10'/'site-packages',home/'virtualenv'/'Saeit'/'3.10'/'lib64'/'python3.10'/'site-packages']
+          for root in roots:
+              if root.is_dir():
+                  for p in sorted(root.glob('*.pth')):
+                      if p.is_file():
+                          t=p.read_text(errors='replace')
+                          print('PTH_STARTUP_HOOK='+p.name+' EXECUTABLE_IMPORT='+str(any(x.lstrip().startswith('import ') for x in t.splitlines()))+' REFERENCES_DJANGO='+str('django' in t.lower()))
+                  for name in ('sitecustomize.py','usercustomize.py'):
+                      p=root/name
+                      if p.is_file():
+                          t=p.read_text(errors='replace')
+                          print('PYTHON_CUSTOMIZER='+name+' PRESENT=true REFERENCES_DJANGO='+str('django' in t.lower()))
+          PY
+          REMOTE
       - name: Erase runner-only relay credentials
         if: always()
         run: rm -rf "$RUNNER_TEMP/zomorod-readonly"
