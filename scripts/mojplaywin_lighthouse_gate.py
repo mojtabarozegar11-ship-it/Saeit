@@ -16,7 +16,8 @@ import subprocess
 import threading
 
 CATEGORIES = ("performance", "accessibility", "best-practices", "seo")
-PAGES = ("home", "store", "research", "agents", "ai", "blockchain", "support", "web_engineering")
+PAGES = ("home", "store", "research", "agents", "restaurant", "ai", "blockchain", "support", "web_engineering",
+         "venture_fuel_station", "venture_jewelry_gold", "venture_carpets", "venture_crypto", "venture_ecommerce", "venture_agriculture", "venture_hospitality", "industry", "knowledge", "economy", "studio", "market", "company")
 DEVICES = ("mobile", "desktop")
 
 

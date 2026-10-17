@@ -31,6 +31,23 @@ class MojPlayWinLighthouseStrictGateTests(unittest.TestCase):
                 self.assertFalse(result["passes_100_out_of_100"])
         self.assertFalse(check_report(self.report({}))["passes_100_out_of_100"])
 
+    def test_every_offline_main_site_preview_is_a_required_lighthouse_target(self):
+        import ast
+        from pathlib import Path
+        source = Path(__file__).resolve().parents[1] / "scripts" / "mojplaywin_atelier_visual_preview.py"
+        tree = ast.parse(source.read_text(encoding="utf-8"))
+        assignments = [node for node in tree.body if isinstance(node, ast.Assign)
+                       and any(isinstance(t, ast.Name) and t.id == "ROUTES" for t in node.targets)]
+        self.assertEqual(len(assignments), 1)
+        routes = ast.literal_eval(assignments[0].value)
+        self.assertEqual(set(PAGES), set(routes))
+        self.assertGreaterEqual(len(PAGES), 22)
+        for page in routes.values():
+            self.assertTrue(page.startswith("/"))
+            self.assertNotIn("mojtaba.roozegar", page)
+            self.assertNotIn("/picm/", page)
+            self.assertNotIn("/farnaz/", page)
+
     def test_both_mobile_and_desktop_with_real_main_site_pages(self):
         self.assertEqual(set(DEVICES), {"mobile", "desktop"})
         self.assertIn("home", PAGES)

@@ -32,6 +32,19 @@ ROUTES = {
     "blockchain": "/blockchain/",
     "support": "/support/",
     "web_engineering": "/services/",
+    "venture_fuel_station": "/ventures/fuel-station/",
+    "venture_jewelry_gold": "/ventures/jewelry-gold/",
+    "venture_carpets": "/ventures/carpets/",
+    "venture_crypto": "/ventures/currency-crypto/",
+    "venture_ecommerce": "/ventures/ecommerce/",
+    "venture_agriculture": "/ventures/agriculture/",
+    "venture_hospitality": "/ventures/hospitality/",
+    "industry": "/industry/",
+    "knowledge": "/knowledge/",
+    "economy": "/economy/",
+    "studio": "/studio/",
+    "market": "/market/",
+    "company": "/company/",
 }
 MAIN_HOST = "mojplaywin.com"
 OUTPUT = Path("mojplaywin-v4-visual-preview")
