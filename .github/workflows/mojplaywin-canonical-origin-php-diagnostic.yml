@@ -1,0 +1,123 @@
+name: Moj Play Win PHP self-origin read-only diagnosis
+on:
+  push:
+    branches: ["audit/mojplaywin-backup-transport-20261017"]
+    paths: [".github/workflows/mojplaywin-canonical-origin-php-diagnostic.yml"]
+permissions:
+  contents: read
+jobs:
+  inspect-origin-read-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Compare PHP cURL HTTPS origin responses through public DNS and fixed local loopback
+        shell: bash
+        timeout-minutes: 3
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 115s ssh -T -F "$d/config" saeit-cpanel 'php -f /dev/stdin' <<'PHP'
+          <?php
+          error_reporting(E_ALL);
+          ini_set('display_errors', '0');
+          $url = 'https://mojplaywin.com/store/?__mpw_canon_passthru=1';
+          $result = [];
+          $modes = ['public_dns', 'force_local_ipv4', 'force_local_ipv4_no_cert_verify'];
+          foreach ($modes as $mode) {
+              $curl = curl_init($url);
+              $options = [
+                  CURLOPT_RETURNTRANSFER => true,
+                  CURLOPT_HEADER => true,
+                  CURLOPT_CONNECTTIMEOUT => 4,
+                  CURLOPT_TIMEOUT => 12,
+                  CURLOPT_FOLLOWLOCATION => false,
+                  CURLOPT_SSL_VERIFYPEER => true,
+                  CURLOPT_SSL_VERIFYHOST => 2,
+                  CURLOPT_PROTOCOLS => CURLPROTO_HTTPS,
+                  CURLOPT_ENCODING => 'identity',
+                  CURLOPT_USERAGENT => 'MojPlayWin-canonical-local-readonly-diagnosis/1.0',
+                  CURLOPT_HTTPHEADER => ['Accept: text/html', 'Cache-Control: no-store', 'Accept-Encoding: identity'],
+              ];
+              if ($mode !== 'public_dns') {
+                  $options[CURLOPT_RESOLVE] = ['mojplaywin.com:443:127.0.0.1'];
+              }
+              if ($mode === 'force_local_ipv4_no_cert_verify') {
+                  // Test diagnosis only. Production MUST verify TLS.
+                  $options[CURLOPT_SSL_VERIFYPEER] = false;
+                  $options[CURLOPT_SSL_VERIFYHOST] = 0;
+              }
+              curl_setopt_array($curl, $options);
+              $output = curl_exec($curl);
+              $code = curl_getinfo($curl, CURLINFO_HTTP_CODE);
+              $size = curl_getinfo($curl, CURLINFO_HEADER_SIZE);
+              $type = curl_getinfo($curl, CURLINFO_CONTENT_TYPE);
+              $errno = curl_errno($curl);
+              $errorName = function_exists('curl_strerror') ? curl_strerror($errno) : 'N/A';
+              $text = is_string($output) && is_int($size) ? substr($output, $size) : '';
+              $result[$mode] = [
+                  'error_code' => $errno,
+                  'error_kind' => $errorName,
+                  'http_code' => $code,
+                  'mime_is_html' => is_string($type) && stripos($type, 'text/html') === 0,
+                  'body_bytes' => strlen($text),
+                  'has_one_wrong_canonical' => substr_count($text, '<link rel="canonical" href="https://zomorodmelal.ir/store/">') === 1,
+                  'response_contains_passenger_site' => strpos($text, 'MojPlayWin') !== false,
+              ];
+              curl_close($curl);
+          }
+          echo json_encode(['classification' => 'MOJ_PLAY_WIN_PHP_ORIGIN_GET_READ_ONLY_DIAGNOSTIC',
+              'modes' => $result, 'site_modified' => false], JSON_UNESCAPED_SLASHES), PHP_EOL;
+          PHP
+      - name: Confirm public main root and four subsite routes remain healthy
+        shell: bash
+        timeout-minutes: 1
+        run: |
+          set -euo pipefail
+          for path in / /saman/ /picm/login/ /farnaz/ /mojtaba.roozegar/ /store/; do
+            test "$(curl -sSL -o /dev/null -w '%{http_code}' --max-time 18 "https://mojplaywin.com$path")" = 200 || exit 92
+          done
+          echo "NO_SITE_CONFIG_CHANGED_SIX_PUBLIC_URLS_200"
