@@ -30,12 +30,15 @@ def check(run):
     return BACKUPS/("run-"+run)
 def pages():
     if any(f.is_symlink() for f in ROOT.iterdir()):raise RuntimeError("preview root contains symlink")
-    files=sorted(x for x in ROOT.iterdir() if x.name.endswith(".html"))
-    if len(files)!=COUNT or not (ROOT/"index.html") in files or not (ROOT/"store.html") in files:
-        raise RuntimeError("expected exactly 22 independent static preview pages")
-    for path in files:
+    candidates=sorted(x for x in ROOT.iterdir() if x.name.endswith(".html"))
+    files=[]
+    for path in candidates:
         if not path.is_file() or path.is_symlink() or path.stat().st_size>800000:
             raise RuntimeError("preview HTML type/size")
+        if "noindex" in path.read_text(encoding="utf-8").lower():
+            files.append(path)
+    if len(files)!=COUNT or (ROOT/"index.html") not in files or (ROOT/"store.html") not in files:
+        raise RuntimeError("expected exactly 22 nonindexable independent preview pages")
     return files
 def transform(raw):
     html=raw.decode("utf-8","strict")
