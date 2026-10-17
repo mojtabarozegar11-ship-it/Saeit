@@ -9,7 +9,6 @@ class MojPlayWinCommerceScopeTests(unittest.TestCase):
         for name in (
             "core/mojplaywin_views.py",
             "core/templates/mojplaywin/store.html",
-            "core/templates/brands/mojplaywin/base.html",
             "core/static/site/mojplaywin-atelier/topic-images/venture-jewelry.svg",
             "core/tests/test_mojplaywin_unified_pages.py",
             "scripts/mojplaywin_commerce_scope.py",
@@ -32,7 +31,7 @@ class MojPlayWinCommerceScopeTests(unittest.TestCase):
             "core/static/site/mojplaywin-atelier/topic-images/venture-wallet.svg",
             "farnaz/views.py", "core/templates/farnaz/base.html",
             "core/templates/mojtaba_roozegar/home.html",
-            "core/templates/brands/zomorod/base.html", "passenger_wsgi.py",
+            "core/templates/brands/zomorod/base.html", "core/templates/brands/mojplaywin/base.html", "passenger_wsgi.py",
             "scripts/deploy_mojplaywin_branding.py", "core/templates/base.html",
             "/etc/passwd", "../config/urls.py", "core\\models.py",
         ):
