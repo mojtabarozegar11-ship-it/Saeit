@@ -134,7 +134,7 @@ def capture_viewports(manifest):
                         main_cta_color = page.locator(".mpo-experience .mpo-btn-primary").evaluate(
                             "(button) => getComputedStyle(button).color"
                         )
-                        channels = [int(x) for x in re.findall(r"\\d+", main_cta_color)[:3]]
+                        channels = [int(x) for x in re.findall(r"\d+", main_cta_color)[:3]]
                         if len(channels) != 3 or max(channels) > 85:
                             raise RuntimeError(
                                 f"{key}-{mode}: low-contrast gold CTA text: {main_cta_color}"
