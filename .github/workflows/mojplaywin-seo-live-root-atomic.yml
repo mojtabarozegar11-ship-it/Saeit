@@ -1,0 +1,162 @@
+name: Moj Play Win live homepage SEO name update with automatic rollback
+on:
+  push:
+    branches: ["audit/mojplaywin-backup-transport-20261017"]
+    paths: [".github/workflows/mojplaywin-seo-live-root-atomic.yml"]
+permissions:
+  contents: read
+concurrency:
+  group: mojplaywin-main-only-root-deploy
+  cancel-in-progress: false
+jobs:
+  upgrade-only-brand-spelling-metadata:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compile exact-file restricted SEO patch and verify expected original SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mojplaywin_main_home_spaced_seo.py
+          grep -Fq '8fd8cb59d10eb48adb95a030ee427a27869eb19b29e8928a10d87f895f4a03ce' scripts/mojplaywin_main_home_spaced_seo.py
+          grep -Fq 'Moj Play Win' scripts/mojplaywin_main_home_spaced_seo.py
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Snapshot original root and protected route statuses before minimal patch
+        shell: bash
+        timeout-minutes: 2
+        run: |
+          set -euo pipefail
+          : > "$RUNNER_TEMP/mpw-seo-before.txt"
+          paths=("/" "/saman/" "/picm/login/" "/farnaz/" "/studio.Roham/" "/mojtaba.roozegar/" "/zahra%24%24/"
+                 "/store/" "/games/" "/ai/" "/blockchain/" "/research/" "/company/" "/services/" "/knowledge/")
+          for path in "${paths[@]}"; do
+            status=$(curl -sSL -o /dev/null -w '%{http_code}' --max-time 17 "https://mojplaywin.com$path")
+            printf '%s %s\n' "$path" "$status" >> "$RUNNER_TEMP/mpw-seo-before.txt"
+            test "$status" = "200" || { echo "NO_GO_BASELINE_NOT_HEALTHY"; exit 43; }
+          done
+          echo "MAIN_AND_14_PROTECTED_ROUTES_BASELINE_200"
+      - name: Atomically patch only existing home SEO and verify real domain; always roll back if not accepted
+        shell: bash
+        timeout-minutes: 5
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          armed=no
+          cleanup(){
+            if test "$armed" = yes;then
+              echo "ROLLBACK: restoring original exact home HTML bytes"
+              timeout 38s ssh -T -F "$d/config" saeit-cpanel 'python3 - rollback' < scripts/mojplaywin_main_home_spaced_seo.py ||
+                echo "WATCHDOG_180_SECONDS_FALLBACK_REMAINS_ARMED"
+            fi
+          }
+          trap cleanup EXIT
+          timeout 43s ssh -T -F "$d/config" saeit-cpanel 'python3 - deploy' < scripts/mojplaywin_main_home_spaced_seo.py
+          armed=yes
+          python3 - <<'PY'
+          import json,re,time,urllib.request
+          from html import unescape
+          title="Moj Play Win | Games, AI, Research & Digital Products"
+          website="https://mojplaywin.com"
+          checks=[]
+          for retry in (1,2,3):
+              req=urllib.request.Request(website+"/?__mpw_seo_release_test="+str(retry),
+                  headers={"Cache-Control":"no-cache, no-store",
+                           "User-Agent":"MojPlayWin-independent-brand-seo-release"})
+              with urllib.request.urlopen(req,timeout=20) as resp:
+                  if resp.status!=200:raise RuntimeError("root returned non-200")
+                  raw=resp.read(250000)
+              h=raw.decode("utf-8")
+              match=re.search(r'<script type="application/ld\+json">([^<]+)</script>',h)
+              if not match:raise RuntimeError("Organization and WebSite schema missing")
+              document=json.loads(match.group(1))
+              records=document.get("@graph",[])
+              org=next(n for n in records if n.get("@type")=="Organization")
+              site=next(n for n in records if n.get("@type")=="WebSite")
+              flags={
+                 "title":("<title>"+title+"</title>") in h,
+                 "spaced_single_h1":h.count('<h1 id="mw-home-title">Moj <em>Play</em> Win</h1>')==1,
+                 "spaced_meta_description":'<meta name="description" content="Moj Play Win (MojPlayWin)' in h,
+                 "canonical_unchanged":'<link rel="canonical" href="https://mojplaywin.com/">' in h,
+                 "open_graph_name":'<meta property="og:site_name" content="Moj Play Win">' in h,
+                 "twitter_name":'<meta name="twitter:title" content="Moj Play Win' in h,
+                 "structured_organization":org.get("name")=="Moj Play Win" and "MojPlayWin" in org.get("alternateName",[]),
+                 "structured_web_site":site.get("name")=="Moj Play Win",
+                 "search_index_enabled":'<meta name="robots" content="index,follow,max-image-preview:large">' in h and "noindex,nofollow,noarchive" not in h,
+                 "all_cards_unchanged":h.count('class="mpo-orbit-card"')==18,
+                 "all_three_rings":h.count('class="mpo-ring"')==3,
+                 "ten_field_guides_preserved":h.count('id="home-guide-')==10,
+                 "orbital_animation_preserved":'data-globe-orbit="continuous"' in h,
+                 "links_still_same_domain":'href="https://mojplaywin.com/"' in h,
+                 "legal_text_unchanged":"© 2022 MojPlayWin. All rights reserved." in h,
+              }
+              print(json.dumps({"MAIN_HOME_SPACED_SEO_ACCEPTANCE":flags,"iteration":retry},sort_keys=True))
+              if not all(flags.values()):raise RuntimeError("SEO acceptance failed; reverting")
+              checks.append(flags)
+          print("MOJ_PLAY_WIN_SEO_PUBLIC_ROOT_3_OF_3_PASSED")
+          PY
+          : > "$RUNNER_TEMP/mpw-seo-after.txt"
+          paths=("/" "/saman/" "/picm/login/" "/farnaz/" "/studio.Roham/" "/mojtaba.roozegar/" "/zahra%24%24/"
+                 "/store/" "/games/" "/ai/" "/blockchain/" "/research/" "/company/" "/services/" "/knowledge/")
+          for path in "${paths[@]}"; do
+            status=$(curl -sSL -o /dev/null -w '%{http_code}' --max-time 17 "https://mojplaywin.com$path")
+            printf '%s %s\n' "$path" "$status" >> "$RUNNER_TEMP/mpw-seo-after.txt"
+          done
+          cmp "$RUNNER_TEMP/mpw-seo-before.txt" "$RUNNER_TEMP/mpw-seo-after.txt" || {
+            echo "MAIN_OR_PROTECTED_ROUTE_REGRESSION_SEO_AUTO_ROLLBACK";exit 51;
+          }
+          timeout 36s ssh -T -F "$d/config" saeit-cpanel 'python3 - commit' < scripts/mojplaywin_main_home_spaced_seo.py
+          armed=no
+          echo "MOJ_PLAY_WIN_MAIN_SITE_SEO_RELEASE_SUCCESS_NO_OTHER_FILES_CHANGED"
+          {
+            echo "## Moj Play Win SEO brand spelling published"
+            echo "- Canonical https://mojplaywin.com/ remains unchanged."
+            echo "- Title, description, one H1, Open Graph, Twitter, robots and Organization/WebSite JSON-LD upgraded."
+            echo "- MojPlayWin alias and original 18 cards, 10 guides, three carousels, and all 14 protected/deep routes preserved."
+            echo "- Exactly one home HTML file changed. No Passenger restart; original bytes retained in private backup."
+          } >> "$GITHUB_STEP_SUMMARY"
