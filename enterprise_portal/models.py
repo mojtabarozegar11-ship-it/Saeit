@@ -95,7 +95,7 @@ class JournalEntry(Stamp):
         return super().save(*args, **kwargs)
 
     def delete(self, *args, **kwargs):
-        if self.status == "posted":
+        if self.pk and type(self).objects.filter(pk=self.pk, status="posted").exists():
             raise ValidationError("سند قطعی حذف نمی‌شود؛ سند برگشتی ثبت کنید.")
         return super().delete(*args, **kwargs)
 
@@ -117,7 +117,7 @@ class JournalLine(models.Model):
             errors["debit"] = "مبلغ بدهکار و بستانکار باید نامنفی باشد."
         elif (self.debit > 0) == (self.credit > 0):
             errors["credit"] = "هر ردیف باید دقیقاً یکی از بدهکار یا بستانکار را داشته باشد."
-        if self.entry_id and self.entry.status != "draft":
+        if self.entry_id and JournalEntry.objects.filter(pk=self.entry_id, status="posted").exists():
             errors["entry"] = "سند قطعی قابل تغییر نیست."
         if self.account_id and self.entry_id and self.account.unit_id != self.entry.unit_id:
             errors["account"] = "حساب باید متعلق به همان واحد تجاری باشد."
@@ -131,7 +131,7 @@ class JournalLine(models.Model):
         return super().save(*args, **kwargs)
 
     def delete(self, *args, **kwargs):
-        if self.entry.status != "draft":
+        if self.entry_id and JournalEntry.objects.filter(pk=self.entry_id, status="posted").exists():
             raise ValidationError("آرتیکل سند قطعی حذف نمی‌شود.")
         return super().delete(*args, **kwargs)
 
@@ -229,7 +229,7 @@ class StockMovement(Stamp):
         return super().save(*args, **kwargs)
 
     def delete(self, *args, **kwargs):
-        if self.status == "confirmed":
+        if self.pk and type(self).objects.filter(pk=self.pk, status="confirmed").exists():
             raise ValidationError("گردش قطعی حذف نمی‌شود.")
         return super().delete(*args, **kwargs)
 
