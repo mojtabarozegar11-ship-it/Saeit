@@ -71,7 +71,7 @@ class AssistantOperationsTests(TestCase):
             unit=self.farm, assistant_code="risk-analyst", owner=self.owner, active=True,
         )
         ProposedAutomation.objects.create(
-            unit=self.farm, assistant_code="agents", owner=self.analyst, active=True,
+            unit=self.farm, assistant_code="agent-supervisor", owner=self.analyst, active=True,
         )
         ProposedAutomation.objects.create(
             unit=self.factory, assistant_code="risk-analyst",
@@ -82,7 +82,7 @@ class AssistantOperationsTests(TestCase):
             requested_by=self.owner, findings=[{"title": "محرمانه صاحب واحد"}],
         )
         AssistantRun.objects.create(
-            unit=self.farm, assistant_code="agents", requested_by=self.analyst,
+            unit=self.farm, assistant_code="agent-supervisor", requested_by=self.analyst,
             findings=[{"title": "گزارش مخصوص تحلیلگر"}],
         )
         self.client.force_login(self.analyst)
@@ -102,7 +102,7 @@ class AssistantOperationsTests(TestCase):
     def test_staff_without_source_read_permission_cannot_see_sensitive_archives(self):
         finance = generate_report(self.owner, self.farm, "receivables")
         independent = AssistantRun.objects.create(
-            unit=self.farm, assistant_code="agents", requested_by=self.analyst,
+            unit=self.farm, assistant_code="agent-supervisor", requested_by=self.analyst,
             findings=[{"title": "تنظیمات داخلی"}],
         )
         self.client.force_login(self.analyst)
