@@ -58,6 +58,15 @@ class MojPlayWinCompleteSectionsTests(SimpleTestCase):
                     self.assertIs(context["page_content"], EDITORIAL_PAGES[f"venture:{item['slug']}"])
                     self.assertEqual(context["active_venture"], item["slug"])
 
+    def test_all_venture_images_are_distinct_and_exist(self):
+        all_images = [entry["image"] for entry in VENTURES]
+        all_images += [section[2] for section in SECTIONS.values()]
+        self.assertEqual(len(all_images), 17)
+        self.assertEqual(len(set(all_images)), 17, "Every page needs a different hero illustration")
+        for filename in all_images:
+            with self.subTest(filename=filename):
+                self.assertTrue((ROOT / "core/static" / filename).is_file(), filename)
+
     def test_venture_rejects_independent_host(self):
         external_request = self.factory.get("/ventures/agriculture/", HTTP_HOST="zomorodmelal.ir")
         with self.assertRaises(Http404):
