@@ -255,7 +255,23 @@ if __name__=="__main__":
         elif mode=="commit":commit(run)
         else:raise RuntimeError("invalid mode")
     except Exception as ex:
+        # Only internally authored, fixed fail-closed codes; never expose paths,
+        # names of customers or raw exception data in action logs.
+        codes={
+          "unexpected main site directory", "routing changed; no safe publication",
+          "backup root symlink", "main-only HTML scope changed",
+          "current live file sha mismatch; refuse overwrite", "unexpected page size",
+          "footer already changed", "production page identity mismatch",
+          "preview page identity mismatch", "old style absent/duplicate",
+          "bottom copyright bar not exactly after original footer",
+          "copyright two original spans changed", "copyright original text changed",
+          "copyright mission line changed", "old founder signoff not unique",
+          "new final line not installed", "outdated higher founder line remains",
+          "gold name not inside actual footer", "copyright bar not the final footer row",
+          "copyright bar incorrectly outside footer", "previous release state exists"
+        }
+        safe_code=str(ex) if str(ex) in codes else "OTHER_FAIL_CLOSED"
         print(json.dumps({"status":"inline-founder-fail-closed",
-            "exception_type":type(ex).__name__,
+            "exception_type":type(ex).__name__,"reason_code":safe_code,
             "production_routing_changed":False},sort_keys=True))
         raise SystemExit(1)
