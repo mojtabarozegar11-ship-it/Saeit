@@ -20,6 +20,8 @@ on:
       - "tests/test_mojplaywin_mysql_quota_sanitize_readonly.py"
       - "scripts/mojplaywin_consistent_db_preflight_readonly.py"
       - "tests/test_mojplaywin_consistent_db_preflight_readonly.py"
+      - "scripts/mojplaywin_backup_vps_failure_readonly.py"
+      - "tests/test_mojplaywin_backup_vps_failure_readonly.py"
   workflow_dispatch:
 permissions:
   contents: read
@@ -161,3 +163,11 @@ jobs:
           python3 -m py_compile scripts/mojplaywin_consistent_db_preflight_readonly.py
           d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
           timeout 75s ssh -T -F "$d/config" saeit-cpanel python3 - < scripts/mojplaywin_consistent_db_preflight_readonly.py
+
+      - name: Read-only VPS private encrypted backup failure reason metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p 'test_mojplaywin_backup_vps_failure_readonly.py'
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 35s ssh -T -F "$d/config" saeit-vps python3 - < scripts/mojplaywin_backup_vps_failure_readonly.py
