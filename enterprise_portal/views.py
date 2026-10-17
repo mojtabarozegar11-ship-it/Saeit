@@ -21,6 +21,7 @@ from .models import (
     OfficeLetter, Partner, StockMovement, WorkTask,
 )
 from .services import stock_balance
+from ecosystem_hub.access import user_units, require_unit
 
 
 def no_cache(response):
@@ -112,17 +113,19 @@ def dashboard(request):
                if user.is_superuser or user.has_perm("enterprise_portal." + item["permission"])]
     summary = []
     if user.is_superuser or user.has_perm("enterprise_portal.view_businessunit"):
-        summary.append(("واحدهای شرکت", BusinessUnit.objects.filter(active=True).count()))
+        summary.append(("واحدهای شرکت", user_units(user).filter(active=True).count()))
     if user.is_superuser or user.has_perm("enterprise_portal.view_worktask"):
         tasks = WorkTask.objects.exclude(status="done")
-        if not user.is_superuser and not user.has_perm("enterprise_portal.change_worktask"):
-            tasks = tasks.filter(Q(assigned_to=user) | Q(created_by=user))
+        if not user.is_superuser:
+            tasks = tasks.filter(unit__in=user_units(user))
+            if not user.has_perm("enterprise_portal.change_worktask"):
+                tasks = tasks.filter(Q(assigned_to=user) | Q(created_by=user))
         summary.append(("کارهای باز", tasks.count()))
     if user.is_superuser or user.has_perm("enterprise_portal.view_officeletter"):
         qs = _visible_letters(user)
         summary.append(("نامه‌های ثبت‌شده", qs.count()))
     if user.is_superuser or user.has_perm("enterprise_portal.view_managementproject"):
-        summary.append(("پروژه‌های در اجرا", ManagementProject.objects.filter(status="active").count()))
+        summary.append(("پروژه‌های در اجرا", ManagementProject.objects.filter(status="active", unit__in=user_units(user)).count()))
     return page(request, "dashboard", {
         "modules": modules, "summary": summary, "section": "dashboard",
     })
@@ -130,8 +133,10 @@ def dashboard(request):
 
 def _visible_letters(user):
     qs = OfficeLetter.objects.all()
-    if not user.is_superuser and not user.has_perm("enterprise_portal.view_confidential_letters"):
-        qs = qs.filter(Q(classification="normal") | Q(assigned_to=user) | Q(created_by=user))
+    # Unscoped legacy letters must never be visible to unrelated staff.
+    # The global confidential-letter permission does NOT bypass ownership.
+    if not user.is_superuser:
+        qs = qs.filter(Q(assigned_to=user) | Q(created_by=user))
     return qs
 
 
@@ -141,7 +146,7 @@ def _visible_letters(user):
 def finance(request):
     required_permission(request, "view_journalentry")
     totals = (
-        JournalLine.objects.filter(entry__status="posted")
+        JournalLine.objects.filter(entry__status="posted", entry__unit__in=user_units(request.user))
         .values("entry__unit__code", "entry__unit__name", "entry__currency")
         .annotate(debit=Sum("debit"), credit=Sum("credit"))
         .order_by("entry__unit__code", "entry__currency")
@@ -156,8 +161,8 @@ def finance(request):
     return page(request, "finance", {
         "section": "finance",
         "records": records,
-        "posted_count": JournalEntry.objects.filter(status="posted").count(),
-        "draft_count": JournalEntry.objects.filter(status="draft").count(),
+        "posted_count": JournalEntry.objects.filter(status="posted", unit__in=user_units(request.user)).count(),
+        "draft_count": JournalEntry.objects.filter(status="draft", unit__in=user_units(request.user)).count(),
     })
 
 
@@ -168,7 +173,7 @@ def finance(request):
 def inventory(request):
     required_permission(request, "view_inventoryitem")
     required_permission(request, "view_stockmovement")
-    products = InventoryItem.objects.select_related("unit").filter(active=True).order_by("unit__code", "sku")[:150]
+    products = InventoryItem.objects.select_related("unit").filter(active=True, unit__in=user_units(request.user)).order_by("unit__code", "sku")[:150]
     records = []
     for item in products:
         balance = stock_balance(item.pk)
@@ -185,8 +190,10 @@ def inventory(request):
 def tasks(request):
     required_permission(request, "view_worktask")
     qs = WorkTask.objects.select_related("assigned_to", "unit").order_by("due_on", "-created_at")
-    if not request.user.is_superuser and not request.user.has_perm("enterprise_portal.change_worktask"):
-        qs = qs.filter(Q(assigned_to=request.user) | Q(created_by=request.user))
+    if not request.user.is_superuser:
+        qs = qs.filter(unit__in=user_units(request.user))
+        if not request.user.has_perm("enterprise_portal.change_worktask"):
+            qs = qs.filter(Q(assigned_to=request.user) | Q(created_by=request.user))
     return page(request, "tasks", {
         "section": "tasks", "tasks": qs[:100],
         "can_add": request.user.has_perm("enterprise_portal.add_worktask"),
@@ -210,10 +217,12 @@ def letters(request):
 @require_http_methods(["GET", "POST"])
 def new_task(request):
     required_permission(request, "add_worktask")
-    form = TaskForm(request.POST or None)
+    form = TaskForm(request.POST or None, user=request.user)
     if request.method == "POST" and form.is_valid():
         item = form.save(commit=False)
         item.created_by = request.user
+        if item.unit_id:
+            require_unit(request.user, item.unit, write=True)
         with transaction.atomic():
             item.save()
             AuditEvent.objects.create(actor=request.user, action="office_task_created",
@@ -230,7 +239,7 @@ def new_task(request):
 @require_http_methods(["GET", "POST"])
 def new_letter(request):
     required_permission(request, "add_officeletter")
-    form = LetterForm(request.POST or None)
+    form = LetterForm(request.POST or None, user=request.user)
     if request.method == "POST" and form.is_valid():
         item = form.save(commit=False)
         item.created_by = request.user

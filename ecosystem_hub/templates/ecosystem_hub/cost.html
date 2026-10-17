@@ -1,0 +1,37 @@
+{% extends "ecosystem_hub/base.html" %}
+{% block title %}برآورد بهای تمام‌شده تولید{% endblock %}
+{% block hub_title %}برآورد بهای تمام‌شده تولید{% endblock %}
+{% block hub_subtitle %}قیمت‌های دارای سند و بررسی انسانی؛ بدون ساخت مبلغ فرضی یا سند حسابداری{% endblock %}
+{% block hub_content %}
+<section class="hub-report-intro">
+ <div><span class="eyebrow">{{ scenario.order.code }} / {{ cost.currency }}</span>
+ <h2>{{ scenario.label }}</h2>
+ <p>محصول: {{ cost.product }} · واحد شرکت: {{ scenario.unit.name }} · تاریخ گزارش: {{ cost.as_of }}</p></div>
+ {% if cost.complete %}<span class="hub-chip">نرخ‌های کامل</span>
+ {% else %}<span class="hub-chip hub-chip-warn">نرخ ناقص؛ جمع هزینه اعلام نمی‌شود</span>{% endif %}
+</section>
+<div class="table-frame"><table>
+<thead><tr><th>کد ماده</th><th>عنوان</th><th>نیاز شامل ضایعات</th><th>نرخ بررسی‌شده</th><th>سند نرخ</th><th>هزینه ماده</th></tr></thead>
+<tbody>{% for row in cost.components %}
+<tr><td>{{ row.sku }}</td><td>{{ row.title }}</td>
+<td>{{ row.amount_needed }} {{ row.measure }}</td>
+<td>{% if row.rate is not None %}{{ row.rate }} {{ cost.currency }}{% else %}ناموجود{% endif %}</td>
+<td>{{ row.price_source|default:"فاقد مدرک" }}</td>
+<td>{% if row.material_total is not None %}{{ row.material_total }}{% else %}نامشخص{% endif %}</td></tr>
+{% empty %}<tr><td colspan="6">برای محصول، فرمول مواد اولیه ثبت نشده است.</td></tr>{% endfor %}
+</tbody></table></div>
+<div class="hub-metrics">
+<article><span>بودجه دستمزد</span><strong>{{ cost.labor_estimate }}</strong><small>{{ cost.currency }}</small></article>
+<article><span>بودجه سربار</span><strong>{{ cost.overhead_estimate }}</strong><small>{{ cost.currency }}</small></article>
+{% if cost.complete %}
+<article><span>جمع برآورد</span><strong>{{ cost.total }}</strong><small>{{ cost.currency }}</small></article>
+<article><span>برآورد هر واحد محصول</span><strong>{{ cost.unit_cost }}</strong><small>{{ cost.currency }}</small></article>
+{% endif %}
+</div>
+{% if not cost.complete %}
+<div class="hub-empty">برای تکمیل هزینه باید نرخ بررسی‌شده با منبع مستند به ارز {{ cost.currency }} برای همه مواد ثبت شود:
+{% for sku in cost.missing_skus %}<strong>{{ sku }}</strong>{% if not forloop.last %}، {% endif %}{% empty %}ابتدا فرمول مواد را کامل کنید.{% endfor %}</div>
+{% endif %}
+<div class="hub-notice">برآورد صرفاً برای تصمیم‌گیری مدیریت است. در دفتر کل ثبت نشده، معادل فاکتور یا بهای تمام‌شده حسابرسی‌شده نیست و هیچ خروج انبار یا پرداخت واقعی انجام نمی‌دهد.</div>
+<a class="hub-back" href="{% url 'enterprise_portal:ecosystem_hub:production' %}?unit={{ scenario.unit.code|urlencode }}">بازگشت به برنامه تولید ←</a>
+{% endblock %}

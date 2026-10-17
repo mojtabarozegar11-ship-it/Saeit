@@ -442,7 +442,7 @@ class InventoryAndOfficeTests(TestCase):
         self.staff.user_permissions.add(access, can_view)
         OfficeLetter.objects.create(
             number="O-1", subject="نامه عادی", direction="incoming",
-            body="متن عمومی داخلی", created_by=self.owner,
+            body="متن عمومی داخلی", created_by=self.owner, assigned_to=self.staff,
         )
         OfficeLetter.objects.create(
             number="S-1", subject="محتوای محرمانه استراتژیک", direction="internal",
@@ -460,6 +460,9 @@ class InventoryAndOfficeTests(TestCase):
         access = Permission.objects.get(content_type__app_label="enterprise_portal", codename="view_businessunit")
         can_add = Permission.objects.get(content_type__app_label="enterprise_portal", codename="add_worktask")
         self.staff.user_permissions.add(access, can_add)
+        from ecosystem_hub.models import UnitMembership
+        UnitMembership.objects.create(user=self.staff, unit=self.unit, role="operations")
+        UnitMembership.objects.create(user=self.stranger, unit=self.unit, role="operations")
         self.client.force_login(self.staff)
         response = self.client.post("/company/office/tasks/new/", {
             "title": "بررسی موجودی", "description": "بررسی انبار",

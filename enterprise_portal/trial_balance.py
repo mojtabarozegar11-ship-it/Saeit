@@ -10,6 +10,7 @@ from django.views.decorators.http import require_GET
 
 from .models import BusinessUnit, CURRENCIES, JournalLine
 from .views import office_access, required_permission, page, no_cache
+from ecosystem_hub.access import user_units
 
 ZERO = Decimal("0.00")
 
@@ -19,15 +20,17 @@ def filters(request):
         raise ValueError("پارامتر گزارش نامعتبر است.")
     unit = request.GET.get("unit", "")
     currency = request.GET.get("currency", "")
-    if unit and not BusinessUnit.objects.filter(code=unit).exists():
+    if unit and not user_units(request.user).filter(code=unit).exists():
         raise ValueError("واحد شرکت نامعتبر است.")
     if currency and currency not in dict(CURRENCIES):
         raise ValueError("ارز نامعتبر است.")
     return unit, currency
 
 
-def calculate(unit="", currency=""):
+def calculate(unit="", currency="", *, allowed_units=None):
     qs = JournalLine.objects.filter(entry__status="posted")
+    if allowed_units is not None:
+        qs = qs.filter(entry__unit__in=allowed_units)
     if unit:
         qs = qs.filter(entry__unit__code=unit)
     if currency:
@@ -79,10 +82,10 @@ def trial_balance(request):
         unit, currency = filters(request)
     except ValueError as error:
         return no_cache(HttpResponseBadRequest(str(error)))
-    accounts, totals = calculate(unit, currency)
+    accounts, totals = calculate(unit, currency, allowed_units=user_units(request.user))
     return page(request, "trial_balance", {
         "records": accounts, "totals": totals,
-        "units": BusinessUnit.objects.order_by("code"),
+        "units": user_units(request.user).order_by("code"),
         "currencies": CURRENCIES,
         "selected_unit": unit, "selected_currency": currency,
     })
@@ -98,7 +101,7 @@ def trial_balance_csv(request):
         unit, currency = filters(request)
     except ValueError as error:
         return no_cache(HttpResponseBadRequest(str(error)))
-    accounts, totals = calculate(unit, currency)
+    accounts, totals = calculate(unit, currency, allowed_units=user_units(request.user))
     response = HttpResponse(content_type="text/csv; charset=utf-8")
     response["Content-Disposition"] = 'attachment; filename="zomorod-trial-balance.csv"'
     response.write("\ufeff")
