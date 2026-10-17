@@ -177,6 +177,62 @@ class ProductionOrder(Timeline):
             raise ValidationError({"due_date": "سررسید نباید قبل از شروع تولید باشد."})
 
 
+
+class MaterialPriceReference(Timeline):
+    """Manually researched price; no inferred rates or external purchases."""
+    unit = models.ForeignKey(BusinessUnit, on_delete=models.PROTECT)
+    item = models.ForeignKey(InventoryItem, on_delete=models.PROTECT, related_name="price_references")
+    currency = models.CharField(max_length=3, choices=(
+        ("IRR", "ریال"), ("USD", "دلار"), ("EUR", "یورو"),
+        ("AED", "درهم"), ("TRY", "لیر"), ("CAD", "دلار کانادا"),
+    ), default="IRR")
+    amount = models.DecimalField(max_digits=20, decimal_places=4, validators=[
+        MinValueValidator(Decimal("0.0001"))
+    ], help_text="قیمت هر واحد اندازه‌گیری کالا")
+    as_of = models.DateField(default=timezone.localdate)
+    evidence_ref = models.CharField(max_length=280, blank=True)
+    status = models.CharField(max_length=12, choices=(
+        ("draft", "پیش‌نویس"), ("verified", "بررسی‌شده"),
+    ), default="draft")
+    recorded_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
+
+    class Meta:
+        verbose_name = "نرخ مستند ماده"
+        verbose_name_plural = "نرخ‌های مستند مواد اولیه"
+        ordering = ("-as_of", "-pk")
+
+    def clean(self):
+        if self.item_id and self.unit_id and self.item.unit_id != self.unit_id:
+            raise ValidationError({"item": "نرخ باید به کالای همان واحد تعلق داشته باشد."})
+        if self.status == "verified" and not self.evidence_ref.strip():
+            raise ValidationError({"evidence_ref": "نرخ بررسی‌شده باید منبع یا سند معتبر داشته باشد."})
+
+
+class ProductionCostScenario(Timeline):
+    """Budgetary *estimate* tied to a production order; never posted to the GL."""
+    unit = models.ForeignKey(BusinessUnit, on_delete=models.PROTECT)
+    order = models.ForeignKey(ProductionOrder, on_delete=models.PROTECT, related_name="cost_scenarios")
+    label = models.CharField(max_length=200)
+    currency = models.CharField(max_length=3, choices=(
+        ("IRR", "ریال"), ("USD", "دلار"), ("EUR", "یورو"),
+        ("AED", "درهم"), ("TRY", "لیر"), ("CAD", "دلار کانادا"),
+    ), default="IRR")
+    labor_estimate = models.DecimalField(max_digits=20, decimal_places=2, default=Decimal("0"),
+                                         validators=[MinValueValidator(Decimal("0"))])
+    overhead_estimate = models.DecimalField(max_digits=20, decimal_places=2, default=Decimal("0"),
+                                            validators=[MinValueValidator(Decimal("0"))])
+    prepared_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        verbose_name = "سناریوی بهای تولید"
+        verbose_name_plural = "برآورد بهای تمام‌شده تولید"
+
+    def clean(self):
+        if self.unit_id and self.order_id and self.order.unit_id != self.unit_id:
+            raise ValidationError({"order": "سفارش تولید و سناریوی هزینه باید متعلق به یک واحد باشند."})
+
+
 class ProcurementNeed(Timeline):
     unit = models.ForeignKey(BusinessUnit, on_delete=models.PROTECT)
     reference = models.CharField(max_length=50)
