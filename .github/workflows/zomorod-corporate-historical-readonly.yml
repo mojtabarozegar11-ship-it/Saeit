@@ -200,6 +200,67 @@ jobs:
             echo "NEW_PAGE_ASSET=$asset STATUS=$code"
             test "$code" = 200
           done
+      - name: Identify original 01AM historic restoration sources and broken route handlers read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-readonly"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          export PYTHONDONTWRITEBYTECODE=1
+          python3 - <<'PY'
+          import pathlib,os,datetime,hashlib
+          home=pathlib.Path.home()
+          paths=[home/'.backups',home/'Saeit'/'backups',home/'Saeit'/'var'/'backups',home/'backups',home/'backup']
+          print("RESTORE_PROBE=read_only")
+          print("RESTORE_CLOCK="+datetime.datetime.now(datetime.timezone.utc).isoformat())
+          hits=[]
+          for root in paths:
+              print("SOURCE_DIR="+str(root.relative_to(home))+" is_dir="+str(root.is_dir()))
+              if not root.is_dir():continue
+              for folder,dirs,files in os.walk(root):
+                  depth=len(pathlib.Path(folder).relative_to(root).parts)
+                  dirs[:]=sorted(d for d in dirs if not d.startswith('.') and not any(z in d.lower() for z in ('mohammad','ghanadi','amozeshgah','secrets','token','ssh','credentials','venv'))) if depth<5 else []
+                  if depth>5:continue
+                  for filename in files:
+                      name=filename.lower()
+                      if not (name in ('index.html','company.html','about.html','original-home.html','.htaccess','passenger_wsgi.py','manifest.json') or any(z in name for z in ('20261015','20261014','2026-10-15','2026-10-14','backup','restore','snapshot','root-home','site-full'))):
+                          continue
+                      f=pathlib.Path(folder)/filename
+                      if f.is_symlink():continue
+                      try:stat=f.stat()
+                      except OSError:continue
+                      if stat.st_size>500_000_000:continue
+                      m=datetime.datetime.fromtimestamp(stat.st_mtime,datetime.timezone.utc).isoformat(timespec='minutes')
+                      if any(z in str(f).lower() for z in ('secret','token','passwd','credential')):continue
+                      hits.append((str(f.relative_to(home)),stat.st_size,m))
+          print("HISTORICAL_CANDIDATE_COUNT="+str(len(hits)))
+          for rel,size,mtime in sorted(hits,key=lambda x:x[2])[:110]:
+              print("HISTORICAL_FILE="+rel+" bytes="+str(size)+" modified_utc="+mtime)
+          web=home/'public_html'
+          for slug in ('contact','economy','market','company','agents','admin','newsletter','store','blog','auctions'):
+              p=web/slug
+              q=p/'index.html'
+              route='/' + slug + '/'
+              print("ROUTE_FILES="+route+" folder="+str(p.is_dir())+" static_index="+str(q.is_file())+" local_htaccess="+str((p/'.htaccess').is_file()))
+              if q.is_file() and not q.is_symlink():
+                  print("ROUTE_STATIC_SHA256="+route+" "+hashlib.sha256(q.read_bytes()).hexdigest()[:24])
+          for app in (home/'Saeit'/'passenger_wsgi.py',home/'public_html'/'passenger_wsgi.py',home/'Saeit'/'config'/'wsgi.py'):
+              print("APP_RUNTIME_FILE="+str(app.relative_to(home))+" present="+str(app.is_file()))
+          for cfg in (home/'public_html'/'.htaccess',home/'Saeit'/'.htaccess'):
+              print("ROOT_ROUTING_FILE="+str(cfg.relative_to(home))+" present="+str(cfg.is_file()))
+              if not cfg.is_file():continue
+              for line in cfg.read_text(errors='replace').splitlines():
+                  item=line.strip()
+                  if item.startswith('#') or not item:continue
+                  key=item.split()[0]
+                  if key.lower().startswith(('passenger','rewrite','directoryindex','addhandler','options')):
+                      if key.lower().startswith('passenger') and any(t in key.lower() for t in ('path','root','python','app','startup')):
+                          print("ROUTING_DIRECTIVE="+key+" VALUE=REDACTED")
+                      else:
+                          print("ROUTING_DIRECTIVE_NAME="+key)
+          PY
+          REMOTE
       - name: Erase runner-only relay credentials
         if: always()
         run: rm -rf "$RUNNER_TEMP/zomorod-readonly"
