@@ -1,0 +1,61 @@
+name: MojPlayWin existing GPG archive read-only structure check
+on:
+  push:
+    branches: ["audit/mojplaywin-backup-transport-20261017"]
+    paths:
+      - ".github/workflows/mojplaywin-private-archive-structure-audit.yml"
+permissions:
+  contents: read
+concurrency:
+  group: mojplaywin-private-archive-structure-audit
+  cancel-in-progress: false
+jobs:
+  audit-existing-archive:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 24
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate audit modules on synthetic tar only
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p test_mojplaywin_restore_archive_probe.py -v
+          python3 -m py_compile scripts/mojplaywin_restore_archive_probe.py scripts/mojplaywin_restore_archive_private_check.py scripts/mojplaywin_recovery_stream_vps.py
+      - name: Establish VPS-only host-pinned SSH (no cPanel connection)
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-archive-inspect"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          chmod 600 "$d/vps.key"
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          echo "PINNED_VPS_ONLY_IDENTITY_VERIFIED=true"
+      - name: Analyze prior VERIFIED archived ciphertext only, no source or site writes
+        shell: bash
+        timeout-minutes: 19
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-archive-inspect"
+          script64="$(base64 -w0 scripts/mojplaywin_restore_archive_private_check.py)"
+          recovery64="$(base64 -w0 scripts/mojplaywin_recovery_stream_vps.py)"
+          probe64="$(base64 -w0 scripts/mojplaywin_restore_archive_probe.py)"
+          stem="mojplaywin_20261017_direct_39028678930"
+          cmd='import base64,sys;d={"__name__":"private_audit"};exec(base64.b64decode(sys.argv[1]),d);d["main"](sys.argv[2:])'
+          timeout 1080s ssh -T -i "$d/vps.key" -o BatchMode=yes -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$d/vps.known" -o ConnectTimeout=12 -o ServerAliveInterval=25 githubops@178.239.147.150 "python3 -c '$cmd' '$script64' '$recovery64' '$probe64' '$stem'"
+          echo "NO_PRODUCTION_WRITES=true"
+          echo "NO_PASSENGER_RESTART=true"
+          echo "NO_CHILD_SITE_MUTATION=true"
+          echo "LIVE_RELEASE_AUTHORIZED=false"
+      - name: Clean temporary SSH key
+        if: always()
+        shell: bash
+        run: |
+          rm -rf -- "$RUNNER_TEMP/mpw-archive-inspect"
