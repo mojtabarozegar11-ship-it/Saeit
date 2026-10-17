@@ -14,7 +14,7 @@
 <div class="hub-section-title"><div><span class="eyebrow">MANUFACTURING REGISTER</span><h2>آخرین سفارش‌های تولید</h2></div></div>
 <div class="table-frame"><table><thead><tr><th>کد سفارش</th><th>واحد</th><th>محصول</th><th>مقدار برنامه</th><th>مرکز تولید</th><th>موعد تحویل</th><th>وضعیت</th></tr></thead><tbody>
 {% for order in orders %}
-<tr><td>{{ order.code }}</td><td>{{ order.unit.name }}</td><td>{{ order.formula.product.title }}</td><td>{{ order.quantity }}</td><td>{{ order.work_center.name|default:"—" }}</td><td>{{ order.due_date|default:"—" }}</td><td>{{ order.get_state_display }}</td></tr>
+<tr><td><a href="{% url 'enterprise_portal:ecosystem_hub:material_plan' order.pk %}">{{ order.code }} ←</a></td><td>{{ order.unit.name }}</td><td>{{ order.formula.product.title }}</td><td>{{ order.quantity }}</td><td>{{ order.work_center.name|default:"—" }}</td><td>{{ order.due_date|default:"—" }}</td><td>{{ order.get_state_display }}</td></tr>
 {% empty %}<tr><td colspan="7">هنوز سفارشی در واحد انتخاب‌شده ثبت نشده است.</td></tr>{% endfor %}
 </tbody></table></div>
 

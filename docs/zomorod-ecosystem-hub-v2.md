@@ -114,3 +114,13 @@ visible to generic analysts without their corresponding per-model view grants.
 This is enforced in generate_report, not only by template visibility.
 Approved documentary input prices are immutable after verification; corrections
 must create a new source-backed price reference so past reports remain auditable.
+
+
+## Explicit production MRP draft workflow
+A staff member with relevant production/stock view permissions, add_procurementneed,
+and active unit membership in an operational role can POST a manual request
+to convert confirmed-stock shortages into **idempotent, unit-scoped, draft**
+ProcurementNeed rows. Their reference is stable for each production-order /
+material pair and the first creation appends an AuditEvent. Cancelled and closed
+orders are blocked. Repeated POSTs do not multiply requests. No supplier,
+bank, external site or confirmed inventory is mutated.

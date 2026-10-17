@@ -21,6 +21,7 @@ from enterprise_portal.services import confirm_stock_movement, post_journal, sto
 from .access import user_units, require_unit, can_view_unit
 from .analysis import generate_report
 from .costing import estimate_manufacturing_cost
+from .procurement import material_shortages
 from .catalog import CATALOG, DEPARTMENTS
 from .models import (
     Organization, UnitMembership, ManagedSite, WorkCenter, BillOfMaterials,
@@ -793,6 +794,115 @@ class HubSuite(TestCase):
         request = RequestFactory().get("/admin/ecosystem_hub/materialpricereference/")
         request.user = self.owner
         self.assertFalse(panel.has_change_permission(request, row))
+
+    def test_explicit_mrp_creates_shortage_draft_only_once_and_audits_once(self):
+        recipe = BillOfMaterials.objects.create(
+            unit=self.farm, product=self.farm_product, code="MRP-FORMULA",
+            yield_quantity=D("2"),
+        )
+        MaterialRequirement.objects.create(
+            formula=recipe, item=self.farm_material,
+            quantity=D("3"), scrap_percent=D("10"),
+        )
+        order = ProductionOrder.objects.create(
+            unit=self.farm, code="MRP-ORDER", formula=recipe,
+            quantity=D("10"), owner=self.owner,
+        )
+        self.assertEqual(material_shortages(order)[0]["shortage"], D("16.500"))
+        path = f"/company/office/ecosystem/production/materials/{order.pk}/"
+        self.client.force_login(self.owner)
+        self.assertEqual(self.client.get(path, secure=True).status_code, 200)
+        post_path = path + "draft-procurement/"
+        self.assertEqual(self.client.get(post_path, secure=True).status_code, 405)
+        for _ in range(2):
+            response = self.client.post(post_path, secure=True)
+            self.assertEqual(response.status_code, 302)
+        self.assertEqual(ProcurementNeed.objects.count(), 1)
+        record = ProcurementNeed.objects.get()
+        self.assertEqual(record.status, "draft")
+        self.assertEqual(record.unit, self.farm)
+        self.assertEqual(record.item, self.farm_material)
+        self.assertEqual(record.quantity, D("16.500"))
+        self.assertEqual(AuditEvent.objects.filter(
+            action="ecosystem_procurement_draft",
+        ).count(), 1)
+        self.assertEqual(JournalEntry.objects.count(), 0)
+        self.assertEqual(StockMovement.objects.count(), 0)
+        self.assertEqual(CommercialDocument.objects.count(), 0)
+
+    def test_mrp_requires_approving_operations_role_and_model_permission(self):
+        recipe = BillOfMaterials.objects.create(
+            unit=self.farm, product=self.farm_product, code="MRP-R",
+        )
+        MaterialRequirement.objects.create(
+            formula=recipe, item=self.farm_material, quantity=D("2"),
+        )
+        order = ProductionOrder.objects.create(
+            unit=self.farm, code="MRP-A", formula=recipe,
+            quantity=D("2"), owner=self.owner,
+        )
+        url = f"/company/office/ecosystem/production/materials/{order.pk}/draft-procurement/"
+        self.client.force_login(self.viewer)
+        self.assertEqual(self.client.post(url, secure=True).status_code, 403)
+        self.viewer.user_permissions.add(*Permission.objects.filter(
+            content_type__app_label="ecosystem_hub",
+            codename__in=("view_billofmaterials", "add_procurementneed"),
+        ))
+        self.assertEqual(self.client.post(url, secure=True).status_code, 403)
+        membership = UnitMembership.objects.get(user=self.viewer, unit=self.farm)
+        membership.role = "operations"
+        membership.save()
+        self.assertEqual(self.client.post(url, secure=True).status_code, 302)
+        self.assertEqual(ProcurementNeed.objects.count(), 1)
+
+    def test_mrp_cross_company_deep_links_and_closed_orders_rejected(self):
+        recipe = BillOfMaterials.objects.create(
+            unit=self.factory, product=self.factory_product, code="S",
+        )
+        order = ProductionOrder.objects.create(
+            unit=self.factory, formula=recipe, code="SECRET-ORDER",
+            quantity=D("1"), owner=self.owner,
+        )
+        url = f"/company/office/ecosystem/production/materials/{order.pk}/"
+        self.client.force_login(self.viewer)
+        self.assertEqual(self.client.get(url, secure=True).status_code, 403)
+        self.viewer.user_permissions.add(*Permission.objects.filter(
+            content_type__app_label="ecosystem_hub", codename="view_billofmaterials",
+        ))
+        self.assertEqual(self.client.get(url, secure=True).status_code, 404)
+        self.client.force_login(self.owner)
+        order.state = "closed"
+        order.save()
+        self.assertEqual(self.client.post(
+            url + "draft-procurement/", secure=True,
+        ).status_code, 400)
+        self.assertFalse(ProcurementNeed.objects.exists())
+
+    def test_mrp_confirmed_stock_reduces_shortage_without_stock_mutation(self):
+        recipe = BillOfMaterials.objects.create(
+            unit=self.farm, product=self.farm_product, code="MRP-STOCK",
+        )
+        MaterialRequirement.objects.create(
+            formula=recipe, item=self.farm_material, quantity=D("5"),
+        )
+        order = ProductionOrder.objects.create(
+            unit=self.farm, formula=recipe, code="MRP-STOCK-O",
+            quantity=D("2"), owner=self.owner,
+        )
+        draft_receipt = StockMovement.objects.create(
+            item=self.farm_material, direction="in", quantity=D("6"),
+            reference="PENDING-RECEIPT", created_by=self.owner,
+        )
+        self.assertEqual(material_shortages(order)[0]["shortage"], D("10.000"))
+        confirm_stock_movement(draft_receipt.pk, self.owner)
+        self.assertEqual(material_shortages(order)[0]["shortage"], D("4.000"))
+        self.client.force_login(self.owner)
+        self.client.post(
+            f"/company/office/ecosystem/production/materials/{order.pk}/draft-procurement/",
+            secure=True,
+        )
+        self.assertEqual(ProcurementNeed.objects.get().quantity, D("4.000"))
+        self.assertEqual(StockMovement.objects.count(), 1)
 
     def test_assistant_access_is_csrf_protected(self):
         web = Client(enforce_csrf_checks=True)

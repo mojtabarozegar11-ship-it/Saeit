@@ -1,0 +1,36 @@
+{% extends "ecosystem_hub/base.html" %}
+{% block title %}برنامه‌ریزی نیاز مواد تولید{% endblock %}
+{% block hub_title %}برنامه نیاز مواد اولیه تولید{% endblock %}
+{% block hub_subtitle %}تحلیل فرمول، ضایعات و موجودی قطعی برای سفارش تولید مشخص{% endblock %}
+{% block hub_content %}
+<section class="hub-report-intro">
+<div><span class="eyebrow">MANUFACTURING REQUIREMENTS PLANNING</span>
+<h2>سفارش {{ order.code }} · {{ order.formula.product.title }}</h2>
+<p>واحد: {{ order.unit.name }} · مقدار برنامه: {{ order.quantity }} · وضعیت: {{ order.get_state_display }}</p></div>
+<span class="hub-chip">تحلیل خواندنی</span>
+</section>
+<div class="table-frame"><table>
+<thead><tr><th>ماده اولیه</th><th>نیاز شامل ضایعات</th><th>موجودی قطعی</th><th>کسری قابل بررسی</th></tr></thead>
+<tbody>{% for row in materials %}
+<tr><td>{{ row.item.sku }} — {{ row.item.title }}</td><td>{{ row.required }} {{ row.measure }}</td>
+<td>{{ row.available }} {{ row.measure }}</td>
+<td>{% if row.shortage > 0 %}<span class="status status-warning">{{ row.shortage }} {{ row.measure }}</span>{% else %}<span class="status">بدون کسری</span>{% endif %}</td>
+</tr>{% empty %}<tr><td colspan="4">فرمول این محصول هنوز اجزای مواد ندارد.</td></tr>{% endfor %}
+</tbody></table></div>
+{% if allow_create %}
+<section class="hub-report-intro">
+<div><h2>ایجاد درخواست خرید پیش‌نویس</h2><p>صرفاً برای کسری‌های مشاهده‌شده؛ هیچ خرید، انتقال وجه یا ثبت خروج انبار انجام نمی‌شود. ثبت تکراری درخواست جدید نمی‌سازد.</p></div>
+<form method="post" action="{% url 'enterprise_portal:ecosystem_hub:create_procurement_drafts' order.pk %}">
+{% csrf_token %}
+<button type="submit" class="primary-btn">ساخت پیش‌نویس کسری مواد ←</button></form>
+</section>
+{% endif %}
+{% if draft_refs %}
+<section class="hub-section"><div class="hub-section-title"><h2>درخواست‌های تأمین ثبت‌شده</h2></div>
+<div class="table-frame"><table><thead><tr><th>کد درخواست</th><th>کالا</th><th>مقدار</th><th>وضعیت</th></tr></thead>
+<tbody>{% for request in draft_refs %}
+<tr><td>{{ request.reference }}</td><td>{{ request.item.title }}</td>
+<td>{{ request.quantity }}</td><td>{{ request.get_status_display }}</td></tr>
+{% endfor %}</tbody></table></div></section>{% endif %}
+<div class="hub-notice">نیاز مواد بر اساس داده‌های فعلی است و برای اقدام تجاری باید توسط مدیر تولید یا تدارکات بررسی شود. درخواست‌های این صفحه هیچ سفارش واقعی یا انتقال وجهی ارسال نمی‌کنند.</div>
+{% endblock %}

@@ -1,10 +1,10 @@
 """Server-rendered, role-filtered ecosystem workspace and assistant drafts."""
 from django.contrib.auth.decorators import user_passes_test
-from django.core.exceptions import PermissionDenied
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.db.models import Q, Count, Sum
-from django.http import Http404
+from django.http import Http404, HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -16,6 +16,7 @@ from enterprise_portal.views import office_access, no_cache
 from .access import user_units, require_unit
 from .analysis import generate_report
 from .costing import estimate_manufacturing_cost
+from .procurement import material_shortages, prepare_purchase_drafts
 from .catalog import CATALOG, DEPARTMENTS
 from .models import (
     AssistantRun, ManagementRisk, ManagedSite, ProductionOrder, ProcurementNeed,
@@ -265,6 +266,67 @@ def production(request):
         "selected_unit": unit, "units": units, "orders": orders,
         "scenarios": scenarios, "section": "production",
     })
+
+
+
+
+def _can_plan_materials(user):
+    return bool(user.is_superuser or (
+        user.has_perm("ecosystem_hub.view_productionorder")
+        and user.has_perm("ecosystem_hub.view_billofmaterials")
+        and user.has_perm("enterprise_portal.view_inventoryitem")
+        and user.has_perm("enterprise_portal.view_stockmovement")
+    ))
+
+
+@never_cache
+@office_access
+@require_GET
+def production_material_plan(request, pk):
+    require_hub(request)
+    if not _can_plan_materials(request.user):
+        raise PermissionDenied("برای مشاهده نیاز مواد باید مجوز مشاهده تولید و انبار داشته باشید.")
+    order = get_object_or_404(
+        ProductionOrder.objects.filter(unit__in=user_units(request.user))
+        .select_related("formula", "unit", "formula__product"),
+        pk=pk,
+    )
+    materials = material_shortages(order)
+    draft_refs = ProcurementNeed.objects.filter(
+        unit=order.unit, reference__startswith=f"MRP-{order.pk}-",
+    ).select_related("item").order_by("reference") if permission(request.user, "view_procurementneed") else []
+    allow_create = permission(request.user, "add_procurementneed")
+    if not request.user.is_superuser:
+        allow_create = allow_create and UnitMembership.objects.filter(
+            user=request.user, unit=order.unit, active=True,
+            role__in=("owner", "manager", "finance", "operations"),
+        ).exists()
+    return page(request, "materials", {
+        "selected_unit": order.unit, "order": order, "materials": materials,
+        "draft_refs": draft_refs, "allow_create": allow_create,
+        "section": "production",
+    })
+
+
+@never_cache
+@office_access
+@require_POST
+def create_procurement_drafts(request, pk):
+    require_hub(request)
+    if not permission(request.user, "add_procurementneed"):
+        raise PermissionDenied("مجوز ثبت پیش‌نویس درخواست خرید را ندارید.")
+    if not _can_plan_materials(request.user):
+        raise PermissionDenied("پیش از درخواست خرید، مجوز مشاهده تولید و انبار لازم است.")
+    order = get_object_or_404(
+        ProductionOrder.objects.filter(unit__in=user_units(request.user)),
+        pk=pk,
+    )
+    require_unit(request.user, order.unit, write=True)
+    try:
+        prepare_purchase_drafts(order.pk, request.user)
+    except ValidationError as error:
+        return no_cache(HttpResponseBadRequest(str(error)))
+    return no_cache(redirect("enterprise_portal:ecosystem_hub:material_plan", pk=order.pk))
 
 
 
