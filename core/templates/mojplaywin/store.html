@@ -2,9 +2,11 @@
 {% load static %}
 {% block title %}Digital Store | Moj Play Win{% endblock %}
 {% block meta_description %}Explore the Moj Play Win digital store for learning resources, original games and practical digital products.{% endblock %}
+{% block extra_head %}<style id="mojplaywin-inner-gold-css">{% include "mojplaywin/inner_gold.css" %}</style>{% endblock %}
 {% block body_class %}mojplaywin-store{% endblock %}
 {% block content %}
 {% include "mojplaywin/theme.html" %}
+{% include "mojplaywin/inner_navigation.html" %}
 <div class="mw-shell" data-design="mojplaywin-atelier-v4">
   <section class="mpx-page-hero" aria-labelledby="mpx-store-title">
     <div class="mpx-page-hero-copy">
