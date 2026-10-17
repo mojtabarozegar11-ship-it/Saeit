@@ -1,0 +1,177 @@
+name: MojPlayWin approved main-only six-template guarded LIVE release
+on:
+  push:
+    branches: ["audit/mojplaywin-backup-transport-20261017"]
+    paths:
+      - ".github/workflows/mojplaywin-mainonly-six-template-live-release.yml"
+permissions:
+  contents: read
+concurrency:
+  group: mojplaywin-exact-six-template-live-release
+  cancel-in-progress: false
+jobs:
+  scoped-main-templates:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/audit/mojplaywin-backup-transport-20261017'
+    runs-on: ubuntu-latest
+    timeout-minutes: 22
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Validate synthetic atomic publish/rollback and build exact pinned PR payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p test_mojplaywin_mainonly_six_template_atomic.py -v
+          python3 -m py_compile scripts/mojplaywin_mainonly_six_template_atomic.py scripts/mojplaywin_mainonly_release_http_guard.py
+          git fetch --quiet origin main:refs/remotes/origin/main
+          git fetch --quiet origin refs/pull/445/head:refs/remotes/origin/mpw-mainonly-candidate
+          expected="7f5bd574336049e63315da79df6b11b584bfd2ac"
+          test "$(git rev-parse refs/remotes/origin/mpw-mainonly-candidate)" = "$expected"
+          python3 - <<'PY'
+          import base64,hashlib,json,os,subprocess
+          names=("founder_signature.html","unified_visual_tokens.html","theme.html","footer.html","store.html","home.html")
+          result={"classification":"MPW_EXACT_MAINONLY_SIX","files":{}}
+          for name in names:
+              path="core/templates/mojplaywin/"+name
+              def show(ref):
+                  p=subprocess.run(["git","show",ref+":"+path],stdout=subprocess.PIPE,stderr=subprocess.DEVNULL)
+                  return p.stdout if p.returncode==0 else None
+              old=show("origin/main")
+              new=show("refs/remotes/origin/mpw-mainonly-candidate")
+              assert new is not None and 1 <= len(new) <= 200000
+              result["files"][name]={
+                  "old_sha256":hashlib.sha256(old).hexdigest() if old is not None else None,
+                  "new_sha256":hashlib.sha256(new).hexdigest(),
+                  "new_b64":base64.b64encode(new).decode("ascii"),
+              }
+          dest=os.path.join(os.environ["RUNNER_TEMP"],"mpw-exact-six-payload.json")
+          with open(dest,"w",encoding="utf-8") as f:json.dump(result,f,sort_keys=True)
+          os.chmod(dest,0o600)
+          print("CANDIDATE_PINNED_SHA=true")
+          print("EXACT_MAINONLY_TEMPLATE_COUNT=6")
+          PY
+      - name: Configure pinned VPS and cPanel relay without credential disclosure
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-live-six-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            BatchMode yes
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            ConnectTimeout 10
+            ServerAliveInterval 10
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Baseline all protected sites and target images, compare server main and shared templates to exact original
+        shell: bash
+        timeout-minutes: 7
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-live-six-ssh"
+          python3 scripts/mojplaywin_mainonly_release_http_guard.py before "$RUNNER_TEMP/mpw-protected-before.json"
+          timeout 45s ssh -T -F "$d/config" saeit-cpanel python3 - < scripts/mojplaywin_mainonly_template_fingerprint.py > "$RUNNER_TEMP/mpw-mainonly-templates-before.json"
+          python3 - <<'PY'
+          import hashlib,json,os
+          fp=json.load(open(os.environ["RUNNER_TEMP"]+"/mpw-mainonly-templates-before.json"))
+          payload=json.load(open(os.environ["RUNNER_TEMP"]+"/mpw-exact-six-payload.json"))
+          assert fp["classification"]=="MAINONLY_TEMPLATE_READONLY_FINGERPRINT"
+          for name,p in payload["files"].items():
+              rec=fp["files"]["core/templates/mojplaywin/"+name]
+              old=p["old_sha256"]
+              if old is None:assert rec["state"]=="missing"
+              else:assert rec["state"]=="file" and rec["sha256"]==old
+          print("ALL_SIX_PRODUCTION_PREIMAGES_VERIFIED=true")
+          print("SHARED_BASE_NOT_EDITED=true")
+          PY
+      - name: Install only six dedicated main-site templates with exact backup SHA and atomic rollback
+        id: install
+        shell: bash
+        timeout-minutes: 3
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-live-six-ssh"
+          script64="$(base64 -w0 scripts/mojplaywin_mainonly_six_template_atomic.py)"
+          loader='import base64,sys;code=base64.b64decode(sys.argv[1]);sys.argv=[sys.argv[0]]+sys.argv[2:];exec(compile(code,"<mainonly-approved-publisher>","exec"))'
+          timeout 110s ssh -T -F "$d/config" saeit-cpanel "python3 -c '$loader' '$script64' deploy '$GITHUB_RUN_ID'" < "$RUNNER_TEMP/mpw-exact-six-payload.json"
+      - name: Confirm 19 main-only footer routes live, protected subsite routes unchanged, shared template files unchanged
+        id: smoke
+        shell: bash
+        timeout-minutes: 8
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-live-six-ssh"
+          python3 scripts/mojplaywin_mainonly_release_http_guard.py after "$RUNNER_TEMP/mpw-protected-before.json"
+          timeout 45s ssh -T -F "$d/config" saeit-cpanel python3 - < scripts/mojplaywin_mainonly_template_fingerprint.py > "$RUNNER_TEMP/mpw-mainonly-templates-after.json"
+          python3 - <<'PY'
+          import json,os
+          prefix=os.environ["RUNNER_TEMP"]
+          before=json.load(open(prefix+"/mpw-mainonly-templates-before.json"))["files"]
+          after=json.load(open(prefix+"/mpw-mainonly-templates-after.json"))["files"]
+          payload=json.load(open(prefix+"/mpw-exact-six-payload.json"))["files"]
+          for name,prior in before.items():
+              if name.startswith("core/templates/mojplaywin/"):
+                  short=name.rsplit("/",1)[-1]
+                  expected=payload.get(short,{}).get("new_sha256",None)
+                  if expected is None:assert after[name]==prior,name
+                  else:assert after[name]["sha256"]==expected,name
+              else:assert after[name]==prior,name
+          print("ALL_MAIN_ONLY_SIX_SHA256_MATCH_LIVE=true")
+          print("ALL_SHARED_AND_LEGACY_TEMPLATE_SHA256_UNCHANGED=true")
+          print("PASSENGER_RESTART_NOT_PERFORMED=true")
+          print("PRODUCT_DATABASE_NOT_MODIFIED=true")
+          PY
+      - name: Roll back main-only six files if install or smoke check failed
+        if: failure()
+        shell: bash
+        timeout-minutes: 3
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-live-six-ssh"
+          if test -f "$d/config"; then
+            script64="$(base64 -w0 scripts/mojplaywin_mainonly_six_template_atomic.py)"
+            loader='import base64,sys;code=base64.b64decode(sys.argv[1]);sys.argv=[sys.argv[0]]+sys.argv[2:];exec(compile(code,"<mainonly-approved-publisher>","exec"))'
+            if ssh -T -F "$d/config" saeit-cpanel "test -f '/home/zomorod2/.mpw-mainonly-template-backups/run-$GITHUB_RUN_ID/manifest.json'"; then
+              timeout 100s ssh -T -F "$d/config" saeit-cpanel "python3 -c '$loader' '$script64' rollback '$GITHUB_RUN_ID'"
+              echo "MAIN_ONLY_ROLLBACK_EXECUTED=true"
+            else
+              echo "MAIN_ONLY_RELEASE_NOT_INSTALLED_NO_ROLLBACK_NEEDED=true"
+            fi
+          fi
+      - name: Clean only temporary runner credentials and payload, keep verified rollback copy on hosting
+        if: always()
+        run: |
+          rm -rf -- "$RUNNER_TEMP/mpw-live-six-ssh"
+          rm -f -- "$RUNNER_TEMP/mpw-exact-six-payload.json" "$RUNNER_TEMP/mpw-protected-before.json" "$RUNNER_TEMP/mpw-mainonly-templates-before.json" "$RUNNER_TEMP/mpw-mainonly-templates-after.json"
