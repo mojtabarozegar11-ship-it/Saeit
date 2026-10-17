@@ -220,7 +220,7 @@ def collect():
 
 def contact_sheet(picked):
     from PIL import ImageDraw
-    w, h = 1440, 4 * 255
+    w, h = 1440, ((len(picked) + 3) // 4) * 255
     canvas = Image.new("RGB", (w, h), (15, 34, 27))
     pen = ImageDraw.Draw(canvas)
     for i, item in enumerate(picked):
