@@ -48,10 +48,7 @@ class CompanyAuthenticationForm(AuthenticationForm):
     def confirm_login_allowed(self, user):
         super().confirm_login_allowed(user)
         if not has_office_access(user):
-            raise ValidationError(
-                "ورود ممکن نیست؛ اعتبارنامه یا مجوز دسترسی را بررسی کنید.",
-                code="invalid_login",
-            )
+            raise self.get_invalid_login_error()
 
 
 class TaskForm(forms.ModelForm):
