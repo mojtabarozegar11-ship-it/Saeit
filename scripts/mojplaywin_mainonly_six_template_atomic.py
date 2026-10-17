@@ -57,7 +57,7 @@ def checked_payload(data):
         old=v["old_sha256"]
         if old is not None and not re.fullmatch("[0-9a-f]{64}",old):
             raise RuntimeError("old hash format")
-        if not raw.startswith(b"{%"):
+        if not raw.startswith((b"{%", b"{#", b"<footer")):
             raise RuntimeError("unexpected template contents")
         result[name]=(old,raw)
     return result
