@@ -16,7 +16,14 @@
         <a class="mw-button" href="/store/">Digital products <span aria-hidden="true">→</span></a></div>
     </div>
     <div class="mpx-page-hero-art">
+      {% if section_title == "Scientific Research & Innovation" %}
+      <picture>
+        <source media="(max-width: 700px)" srcset="{% static 'site/mojplaywin-atelier/research-nexus.svg' %}" type="image/svg+xml">
+        <img src="{% static section_image %}" alt="{{ section_title }}" width="900" height="640" fetchpriority="high" loading="eager" decoding="async">
+      </picture>
+      {% else %}
       <img src="{% static section_image %}" alt="{{ section_title }}" width="900" height="640" fetchpriority="high" loading="eager" decoding="async">
+      {% endif %}
       <span>RESEARCH · TECHNOLOGY · COMMERCE</span>
     </div>
   </section>
