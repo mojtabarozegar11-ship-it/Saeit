@@ -47,6 +47,7 @@ SAFE_SCRIPTS = frozenset({
     "scripts/mojplaywin_release_100_gate.py",
     "scripts/mojplaywin_site_quality_agent.py",
     "scripts/mojplaywin_subsite_scope_guard.py",
+    "scripts/mojplaywin_passenger_readonly_preflight.py",
 })
 SAFE_WORKFLOWS = frozenset({
     ".github/workflows/mojplaywin-lighthouse-100-gate.yml",
@@ -55,6 +56,7 @@ SAFE_WORKFLOWS = frozenset({
     ".github/workflows/mojplaywin-site-quality-agent.yml",
     ".github/workflows/mojplaywin-visual-preview.yml",
     ".github/workflows/mojplaywin-subsite-scope-guard.yml",
+    ".github/workflows/mojplaywin-passenger-readonly-preflight.yml",
 })
 # These names resemble allowed prefixes but can restart a shared application.
 ABSOLUTE_DENY = frozenset({
