@@ -71,6 +71,7 @@ class MojPlayWinOrbitalExperienceTests(TestCase):
         self.assertIn('tabindex="0"', template)
         self.assertIn('type="button"', template)
 
+    @override_settings(ROOT_URLCONF="core.mojplaywin_atelier_preview_urls")
     def test_all_orbit_card_destinations_are_real_renderable_main_site_pages(self):
         from django.urls import resolve
 
@@ -84,6 +85,8 @@ class MojPlayWinOrbitalExperienceTests(TestCase):
                 response = self.client.get(url, HTTP_HOST="mojplaywin.com")
                 self.assertEqual(response.status_code, 200, f"Broken orbital link: {url}")
                 self.assertGreater(len(response.content), 200)
+                if url == "/services/":
+                    self.assertIn("Web experiences that demonstrate", response.content.decode("utf-8"))
 
     def test_mobile_gpu_cost_reduction_preserves_three_original_rings(self):
         home = (PAGES / "home.html").read_text(encoding="utf-8")
