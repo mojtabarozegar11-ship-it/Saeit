@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 450" width="720" height="450" role="img" aria-labelledby="title desc">
+<title id="title">Sustainable agriculture research illustration</title>
+<desc id="desc">A premium gold and forest-green illustration of sustainable farming terraces, a greenhouse, irrigation lines and seedling research.</desc>
+<defs><linearGradient id="sky" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#182832"/><stop offset="1" stop-color="#071314"/></linearGradient><linearGradient id="earth" x2="0" y1="0" x1="1" y2="1"><stop stop-color="#476445"/><stop offset=".6" stop-color="#203d31"/><stop offset="1" stop-color="#0c2622"/></linearGradient><linearGradient id="gold" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#fff1bc"/><stop offset=".5" stop-color="#d8b16c"/><stop offset="1" stop-color="#8b5d2e"/></linearGradient></defs>
+<rect width="720" height="450" fill="url(#sky)"/>
+<circle cx="547" cy="97" r="62" fill="#eac484" fill-opacity=".18" stroke="#e6ca8d" stroke-opacity=".57" stroke-width="4"/>
+<path d="M0 249L165 155L271 221L401 135L559 227L720 150V450H0Z" fill="url(#earth)" stroke="#d7b779" stroke-opacity=".45" stroke-width="3"/>
+<path d="M0 312Q181 212 356 308T720 250 M0 369Q175 280 369 362T720 308 M0 430Q175 347 367 425T720 385" fill="none" stroke="#e5bd75" stroke-opacity=".55" stroke-width="8"/>
+<g transform="translate(275 152)"><path d="M0 141L93 21L215 141Z" fill="#9ed0ad" fill-opacity=".12" stroke="url(#gold)" stroke-width="6"/><rect x="18" y="140" width="181" height="91" fill="#11282c" stroke="#edcb90" stroke-width="6"/><path d="M93 21V232 M33 141L93 60L184 141 M18 180H199 M58 140V229 M145 140V229" stroke="#d9bb85" stroke-width="4" fill="none"/><g fill="#46764e"><circle cx="43" cy="195" r="21"/><circle cx="103" cy="202" r="23"/><circle cx="165" cy="197" r="19"/></g></g>
+<g transform="translate(88 178)" fill="none" stroke="url(#gold)" stroke-linecap="round"><path d="M0 136L36 74L64 138" stroke-width="6"/><path d="M38 76Q-8 68 20 30Q50 48 38 76 M38 77Q91 64 79 21Q44 40 38 77" fill="#4a7950" stroke-width="4"/></g>
+<path d="M529 347L599 302L662 354 M528 385L599 345L661 392" fill="none" stroke="#dbbb7f" stroke-width="5" stroke-linecap="round"/>
+<g fill="#f1d396"><circle cx="89" cy="105" r="5"/><circle cx="218" cy="73" r="4"/><circle cx="675" cy="95" r="5"/></g>
+</svg>
