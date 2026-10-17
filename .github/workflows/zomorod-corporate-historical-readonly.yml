@@ -29,6 +29,10 @@ jobs:
           allowed = {
               'content/zomorod-nova-pages/about.html',
               'content/zomorod-nova-pages/company.html',
+              'content/zomorod-nova-pages/services.html',
+              'content/zomorod-nova-pages/industry.html',
+              'content/zomorod-nova-pages/research.html',
+              'content/zomorod-nova-pages/knowledge.html',
               'content/zomorod-new-home/index.html',
               'docs/zomorod-cc0-editorial-photographs.json',
               'scripts/zomorod_cc0_photography.py',
@@ -102,8 +106,13 @@ jobs:
                   if self.in_main and text.strip():
                       self.text.append(' '.join(text.split()))
 
-          for slug in ('about', 'company'):
-              path = f'content/zomorod-nova-pages/{slug}.html'
+          paths = [
+              'content/zomorod-new-home/index.html',
+              *(f'content/zomorod-nova-pages/{slug}.html' for slug in
+                ('about', 'company', 'services', 'industry', 'research', 'knowledge')),
+          ]
+          for path in paths:
+              slug = path.rsplit('/', 1)[-1].removesuffix('.html')
               before = subprocess.check_output(['git', 'show', 'origin/main:'+path], text=True)
               after = Path(path).read_text(encoding='utf-8')
               p, q = MainText(), MainText()
