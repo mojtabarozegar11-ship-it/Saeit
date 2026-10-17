@@ -63,6 +63,7 @@ class HubSuite(TestCase):
             codename__in=(
                 "view_businessunit", "view_organization", "view_assistantrun",
                 "add_assistantrun", "view_productionorder", "view_managementrisk",
+                "view_inventoryitem", "view_stockmovement", "view_procurementneed",
             ),
         )
         self.viewer.user_permissions.add(*list(permissions))
@@ -758,6 +759,40 @@ class HubSuite(TestCase):
         report = generate_report(self.owner, self.farm, "cost-accountant")
         self.assertTrue(any("نرخ‌های ناکامل" in f["title"] for f in report.findings))
         self.assertTrue(all("برآورد مستند" not in f["detail"] for f in report.findings))
+
+    def test_sensitive_financial_and_payroll_assistants_need_source_permissions(self):
+        from .analysis import HANDLER_VIEW_PERMISSIONS
+        self.assertIn("enterprise_portal.view_commercialdocument",
+                      HANDLER_VIEW_PERMISSIONS["receivables"])
+        self.assertIn("ecosystem_hub.view_timesheet", HANDLER_VIEW_PERMISSIONS["people"])
+        self.assertIn("ecosystem_hub.view_materialpricereference",
+                      HANDLER_VIEW_PERMISSIONS["cost"])
+        with self.assertRaises(PermissionDenied):
+            generate_report(self.viewer, self.farm, "receivables")
+        with self.assertRaises(PermissionDenied):
+            generate_report(self.viewer, self.farm, "cost-accountant")
+        with self.assertRaises(PermissionDenied):
+            generate_report(self.viewer, self.farm, "hr-workload")
+        self.assertEqual(AssistantRun.objects.count(), 0)
+        # An inventory-only assistant is intentionally authorized.
+        report = generate_report(self.viewer, self.farm, "inventory-alerts")
+        self.assertEqual(report.state, "draft")
+
+    def test_verified_material_reference_is_immutable_after_confirmation(self):
+        row = MaterialPriceReference.objects.create(
+            unit=self.farm, item=self.farm_material, currency="USD",
+            amount=D("15"), status="verified",
+            evidence_ref="signed-document", recorded_by=self.owner,
+        )
+        row.amount = D("1")
+        with self.assertRaises(ValidationError):
+            row.save()
+        row.refresh_from_db()
+        self.assertEqual(row.amount, D("15"))
+        panel = admin.site._registry[MaterialPriceReference]
+        request = RequestFactory().get("/admin/ecosystem_hub/materialpricereference/")
+        request.user = self.owner
+        self.assertFalse(panel.has_change_permission(request, row))
 
     def test_assistant_access_is_csrf_protected(self):
         web = Client(enforce_csrf_checks=True)

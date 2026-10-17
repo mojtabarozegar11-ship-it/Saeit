@@ -207,6 +207,12 @@ class MaterialPriceReference(Timeline):
         if self.status == "verified" and not self.evidence_ref.strip():
             raise ValidationError({"evidence_ref": "نرخ بررسی‌شده باید منبع یا سند معتبر داشته باشد."})
 
+    def save(self, *args, **kwargs):
+        if self.pk and type(self).objects.filter(pk=self.pk, status="verified").exists():
+            raise ValidationError("نرخ بررسی‌شده قفل است؛ برای اصلاح، نرخ مستند جدید ثبت کنید.")
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
 
 class ProductionCostScenario(Timeline):
     """Budgetary *estimate* tied to a production order; never posted to the GL."""

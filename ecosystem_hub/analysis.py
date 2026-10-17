@@ -25,6 +25,36 @@ from .models import (
 )
 
 
+# Assistant execution permission is additive to Django's per-app/module grants and
+# active unit membership; a generic analyst cannot inspect protected financial,
+# employee or customer records merely by possessing add_assistantrun.
+HANDLER_VIEW_PERMISSIONS = {
+    "executive": ("enterprise_portal.view_worktask", "ecosystem_hub.view_managementrisk",
+                  "ecosystem_hub.view_productionorder"),
+    "kpi": ("ecosystem_hub.view_performanceindicator",),
+    "risk": ("ecosystem_hub.view_managementrisk",),
+    "budget": ("enterprise_portal.view_budgetplan",),
+    "receivables": ("enterprise_portal.view_commercialdocument",),
+    "payables": ("enterprise_portal.view_commercialdocument",),
+    "ledger": ("enterprise_portal.view_journalentry",),
+    "cost": ("ecosystem_hub.view_productioncostscenario",
+             "ecosystem_hub.view_materialpricereference"),
+    "reorder": ("enterprise_portal.view_inventoryitem",
+                "enterprise_portal.view_stockmovement",
+                "ecosystem_hub.view_procurementneed"),
+    "production": ("ecosystem_hub.view_productionorder",
+                   "ecosystem_hub.view_billofmaterials",
+                   "enterprise_portal.view_inventoryitem",
+                   "enterprise_portal.view_stockmovement"),
+    "quality": ("ecosystem_hub.view_qualityinspection",),
+    "maintenance": ("ecosystem_hub.view_maintenanceticket",),
+    "people": ("ecosystem_hub.view_timesheet",),
+    "tasks": ("enterprise_portal.view_worktask",),
+    "sites": ("ecosystem_hub.view_managedsite",),
+    "agents": ("ecosystem_hub.view_proposedautomation",),
+}
+
+
 def issue(title, detail, *, severity="info", source=None):
     return {"title": title, "detail": str(detail)[:350],
             "severity": severity, "source": source or "داده داخلی واحد"}
@@ -198,6 +228,9 @@ def generate_report(actor, unit, code):
     require_unit(actor, unit)
     if not (actor.is_superuser or actor.has_perm("ecosystem_hub.add_assistantrun")):
         raise PermissionDenied("مجوز اجرای تحلیل این واحد موجود نیست.")
+    for permission_code in HANDLER_VIEW_PERMISSIONS.get(CATALOG[code]["handler"], ()):
+        if not (actor.is_superuser or actor.has_perm(permission_code)):
+            raise PermissionDenied("برای تحلیل داده‌های این دستیار، مجوز مشاهده اطلاعات منبع لازم است.")
     findings = scan(unit, code)
     report = AssistantRun.objects.create(
         unit=unit, requested_by=actor, assistant_code=code,

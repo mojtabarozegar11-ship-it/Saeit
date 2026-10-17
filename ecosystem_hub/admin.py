@@ -154,6 +154,11 @@ class ProductionOrderAdmin(ScopedAdmin):
 @admin.register(MaterialPriceReference)
 class MaterialPriceReferenceAdmin(ScopedAdmin):
     list_display = ("item", "unit", "currency", "amount", "as_of", "status", "evidence_ref")
+
+    def has_change_permission(self, request, obj=None):
+        if obj is not None and obj.status == "verified":
+            return False
+        return super().has_change_permission(request, obj)
     list_filter = ("unit", "currency", "status")
     search_fields = ("item__sku", "item__title", "evidence_ref")
     readonly_fields = ("recorded_by", "created_at", "updated_at")

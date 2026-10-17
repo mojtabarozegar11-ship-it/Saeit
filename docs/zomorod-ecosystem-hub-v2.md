@@ -104,3 +104,13 @@ same-currency rate for every component; missing rates produce incomplete state
 and NO total. It never silently translates FX or posts inventory/accounting
 transactions. An authorized user can view each scenario inside the production
 module. An implemented cost-accountant assistant reads the same evidence.
+
+
+## Source-permission matrix for assistants
+Even after authorized membership and add_assistantrun permission, assistant
+execution checks *every read permission* required by its query handler. Financial,
+personnel, customer, vendor, trial-balance and material-cost source data are not
+visible to generic analysts without their corresponding per-model view grants.
+This is enforced in generate_report, not only by template visibility.
+Approved documentary input prices are immutable after verification; corrections
+must create a new source-backed price reference so past reports remain auditable.
