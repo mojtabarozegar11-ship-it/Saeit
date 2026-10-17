@@ -35,5 +35,5 @@ class ManualAssistantGuidanceTests(SimpleTestCase):
                      "legal-contracts", "online-store", "social-media", "data-security"):
             output = scan(None, code)
             text = " ".join(x["detail"] for x in output)
-            self.assertIn("موتور تخصصی", text)
+            self.assertIn("هوش مصنوعی", text)
             self.assertTrue(all(x["severity"] == "info" for x in output))
