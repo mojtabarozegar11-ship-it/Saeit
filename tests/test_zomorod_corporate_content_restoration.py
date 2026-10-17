@@ -87,8 +87,7 @@ class CorporateContentPreservationTests(unittest.TestCase):
                 self.assertEqual(len(matches), 1)
                 self.assertGreaterEqual(len(matches[0]), 95)
                 self.assertLessEqual(len(matches[0]), 170)
-                self.assertTrue(any(m.get("rel") == "canonical" for m in [] ) is False)
-                self.assertIn('rel="canonical"', self.raw[name])
+                self.assertEqual(len(re.findall(r'<link[^>]+rel="canonical"[^>]*>', self.raw[name])), 1)
 
     def test_all_images_have_accessible_descriptions(self):
         for name, parser in self.parsed.items():
