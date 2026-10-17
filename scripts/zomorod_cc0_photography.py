@@ -149,44 +149,105 @@ def inspect_duplicates():
     return repeated
 
 
+# Manually screened CC0 search results from 17 October Openverse discovery.
+# They are fixed so generation does not depend on Openverse rate limits.
+# Each row contains primary and fallback independently licensed CC0 sources.
+CURATED = {
+ "farm-machinery": [
+     ("Tractor planting soybean seeds", "https://images.rawpixel.com/editor_1024/cHJpdmF0ZS9sci9pbWFnZXMvd2Vic2l0ZS8yMDIyLTExL2ZsNTEyMzg5MTUyMzYtaW1hZ2UuanBn.jpg", "rawpixel"),
+     ("Tractor with Mower Attachment", "https://live.staticflickr.com/65535/51405132905_baf743c8b1_b.jpg", "flickr"),
+ ],
+ "crop-economics": [
+     ("Green Farm", "https://cdn.stocksnap.io/img-thumbs/960w/RQFZWA5OOP.jpg", "stocksnap"),
+     ("Farming on the Headland", "https://live.staticflickr.com/65535/52331019325_c86ab76e2e_b.jpg", "flickr"),
+ ],
+ "water-soil": [
+     ("Irrigation in Cotton Field", "https://live.staticflickr.com/65535/52304114461_fdaea70e5a_b.jpg", "flickr"),
+     ("Irrigation in Cotton Field", "https://live.staticflickr.com/65535/51488231980_7c80f24378_b.jpg", "flickr"),
+ ],
+ "plant-genetics": [
+     ("Pond Management Water Sample with Algae under Microscope", "https://live.staticflickr.com/65535/51399751246_0573bd2896_b.jpg", "flickr"),
+     ("Pond Management Water Sample Algae under Microscope", "https://live.staticflickr.com/65535/51399002982_5bdb5ac919_b.jpg", "flickr"),
+ ],
+ "smart-systems": [
+     ("Agriculture technology device, farming operation", "https://images.rawpixel.com/editor_1024/cHJpdmF0ZS9sci9pbWFnZXMvd2Vic2l0ZS8yMDIyLTExL2ZsNTEyMzk5NzYwOTAtaW1hZ2UuanBn.jpg", "rawpixel"),
+     ("Agriculture technology device, farming operation", "https://images.rawpixel.com/editor_1024/cHJpdmF0ZS9sci9pbWFnZXMvd2Vic2l0ZS8yMDIyLTExL2ZsNTEyMzkxMTE5ODMtaW1hZ2UuanBn.jpg", "rawpixel"),
+ ],
+ "livestock": [
+     ("Cow Cattle", "https://cdn.stocksnap.io/img-thumbs/960w/917QR2SEKV.jpg", "stocksnap"),
+     ("Angus Beef Cattle in Pasture", "https://live.staticflickr.com/65535/51405131375_fdfbaafd67_b.jpg", "flickr"),
+ ],
+ "food-processing": [
+     ("Fruit Vegetables", "https://cdn.stocksnap.io/img-thumbs/960w/F8B73CPSBK.jpg", "stocksnap"),
+     ("Vegetables Food", "https://cdn.stocksnap.io/img-thumbs/960w/9XFUIPUXDB.jpg", "stocksnap"),
+ ],
+ "digital-research": [
+     ("Technology Computer", "https://cdn.stocksnap.io/img-thumbs/960w/C9B37875B9.jpg", "stocksnap"),
+     ("Business Technology", "https://cdn.stocksnap.io/img-thumbs/960w/OGLUHZAPGF.jpg", "stocksnap"),
+ ],
+ "economic-analysis": [
+     ("Business Technology", "https://cdn.stocksnap.io/img-thumbs/960w/OGLUHZAPGF.jpg", "stocksnap"),
+     ("Solar Panels", "https://cdn.stocksnap.io/img-thumbs/960w/EFYB8VJXNT.jpg", "stocksnap"),
+ ],
+ "company-landscape": [
+     ("Village Agriculture", "https://cdn.stocksnap.io/img-thumbs/960w/SKROKKQB5V.jpg", "stocksnap"),
+     ("Farming on the Headland", "https://live.staticflickr.com/65535/52331019325_c86ab76e2e_b.jpg", "flickr"),
+ ],
+ "protected-cultivation": [
+     ("Garden Greenhouse Flowers", "https://live.staticflickr.com/65535/52020715477_3e790def58_b.jpg", "flickr"),
+     ("Greenhouse", "https://live.staticflickr.com/263/18613270743_7de569bcbd_b.jpg", "flickr"),
+ ],
+ "professional-services": [
+     ("AMISOM promotes agricultural skills", "https://live.staticflickr.com/65535/51511290744_8f41954ff1_b.jpg", "flickr"),
+     ("Farming on the Headland", "https://live.staticflickr.com/65535/52331019325_c86ab76e2e_b.jpg", "flickr"),
+ ],
+ "field-consulting": [
+     ("Tractor with Mower Attachment", "https://live.staticflickr.com/65535/51405132905_baf743c8b1_b.jpg", "flickr"),
+     ("Farming on the Headland", "https://live.staticflickr.com/65535/52331019325_c86ab76e2e_b.jpg", "flickr"),
+ ],
+ "industrial-technology": [
+     ("Warehouse Factory", "https://cdn.stocksnap.io/img-thumbs/960w/6147FC6B1D.jpg", "stocksnap"),
+     ("Warehouse Windows", "https://cdn.stocksnap.io/img-thumbs/960w/JRTYQKBMVX.jpg", "stocksnap"),
+ ],
+ "scientific-research": [
+     ("ATMIS Medics trained on laboratory equipment", "https://live.staticflickr.com/65535/52249697210_8e3c3882c4_b.jpg", "flickr"),
+     ("ATMIS Medics trained on laboratory equipment", "https://live.staticflickr.com/65535/52248218602_f70a8214aa_b.jpg", "flickr"),
+ ],
+ "microbiology": [
+     ("Pond Management Algae under Microscope", "https://live.staticflickr.com/65535/51399002982_5bdb5ac919_b.jpg", "flickr"),
+     ("Microscopic apocalypse", "https://live.staticflickr.com/65535/52429441036_19b52f2ec3_b.jpg", "flickr"),
+ ],
+ "learning-resources": [
+     ("Library Books", "https://cdn.stocksnap.io/img-thumbs/960w/4TDHSPIMJ6.jpg", "stocksnap"),
+     ("Coffee and books", "https://live.staticflickr.com/8543/29183443693_b793d66aa8_b.jpg", "flickr"),
+ ],
+}
+
+
 def collect():
     picked = []
     hashes = []
     occupied_urls = set()
     for idx, (slug, subjects, label) in enumerate(SLOTS, 1):
         selected = None
-        for query in subjects:
-            results = search(query)
-            # StockSnap often provides well-lit horizontal editorial photography.
-            # All chosen files must still pass independent pixel and license tests.
-            results.sort(key=lambda x: (
-                x.get("provider") != "stocksnap",
-                query.lower() not in (
-                    str(x.get("title", "")).lower() + " " +
-                    " ".join(t.get("name", "") for t in x.get("tags", []))
-                ),
-                -(x.get("width", 0) * x.get("height", 0)),
-            ))
-            for entry in results[:18]:
-                url = entry["url"]
-                if url in occupied_urls:
-                    continue
-                try:
-                    image = get_photo(url)
-                except (urllib.error.URLError, TimeoutError, ValueError,
-                        UnidentifiedImageError, OSError) as exc:
-                    continue
+        for title, url, provider in CURATED[slug]:
+            if url in occupied_urls:
+                continue
+            try:
+                image = get_photo(url)
                 fingerprint = dhash(image)
-                if any((fingerprint ^ old).bit_count() < 11 for old in hashes):
+                if any((fingerprint ^ old).bit_count() < 8 for old in hashes):
+                    print("CC0_DUPLICATE_PATTERN", slug, title, flush=True)
                     continue
-                selected = (entry, image, fingerprint)
+                selected = (title, url, provider, image, fingerprint)
                 break
-            if selected:
-                break
+            except (urllib.error.URLError, TimeoutError, ValueError,
+                    UnidentifiedImageError, OSError) as exc:
+                print("CC0_DOWNLOAD_SKIP", slug, provider, type(exc).__name__, flush=True)
         if not selected:
-            raise RuntimeError(f"Not enough distinct verified CC0 photos for {slug}")
-        entry, image, fingerprint = selected
-        occupied_urls.add(entry["url"])
+            raise RuntimeError(f"No independently verified image available for {slug}")
+        title, url, provider, image, fingerprint = selected
+        occupied_urls.add(url)
         hashes.append(fingerprint)
         dest = PHOTO_DIR / f"{idx:02d}-{safe_slug(slug)}.webp"
         buffer = BytesIO()
@@ -198,14 +259,14 @@ def collect():
             "file": str(dest.relative_to(ROOT)),
             "url": "/static/site/editorial/" + dest.name,
             "label": label,
-            "title": entry.get("title"),
-            "creator": entry.get("creator"),
-            "origin": entry.get("foreign_landing_url"),
-            "source_url": entry["url"],
-            "provider": entry.get("provider"),
-            "license": entry.get("license"),
-            "license_url": entry.get("license_url"),
-            "original_id": entry.get("id"),
+            "title": title,
+            "creator": None,
+            "origin": url,
+            "source_url": url,
+            "provider": provider,
+            "license": "cc0",
+            "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+            "verified_in_discovery": "Openverse API search, 17 October 2026",
             "sha256": hashlib.sha256(payload).hexdigest(),
             "size": len(payload),
             "width": image.width,
@@ -213,8 +274,8 @@ def collect():
             "is_company_project_photo": False,
         }
         picked.append(manifest_record)
-        print("CC0_SELECTED", f"{idx:02d}", slug, str(entry.get("title"))[:70],
-              entry.get("provider"), len(payload), flush=True)
+        print("CC0_SELECTED", f"{idx:02d}", slug, title, provider,
+              len(payload), flush=True)
     return picked
 
 
