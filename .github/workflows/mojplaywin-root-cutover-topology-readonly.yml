@@ -1,0 +1,133 @@
+name: MojPlayWin real root main-only cutover topology READONLY
+on:
+  push:
+    branches: ["audit/mojplaywin-backup-transport-20261017"]
+    paths:
+      - ".github/workflows/mojplaywin-root-cutover-topology-readonly.yml"
+      - "scripts/mojplaywin_mainonly_template_fingerprint.py"
+permissions:
+  contents: read
+concurrency:
+  group: mojplaywin-root-topology-readonly
+  cancel-in-progress: false
+jobs:
+  compare-exact-templates-readonly:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Validate script without importing Django or executing site code
+        run: |
+          python3 -m py_compile scripts/mojplaywin_mainonly_template_fingerprint.py
+      - name: Configure pinned GitHub to VPS to cPanel private read-only relay
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mainonly-preflight"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            BatchMode yes
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            ConnectTimeout 10
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Root rewrite, production candidate and protected-route routing READ ONLY
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mainonly-preflight"
+          timeout 50s ssh -T -F "$d/config" saeit-cpanel 'python3 -' <<'PY'
+          from pathlib import Path
+          import hashlib,json,re
+          root=Path("/home/zomorod2/mojplaywin.com")
+          ht=root/".htaccess"
+          preview=root/"design-preview-20261017"
+          assert root.is_dir() and not root.is_symlink()
+          assert ht.is_file() and not ht.is_symlink()
+          content=ht.read_text("utf-8")
+          paths=["index.html","production-home-20261017.html","store.html"]
+          results={}
+          for filename in paths:
+              p=preview/filename
+              if p.exists() and p.is_file() and not p.is_symlink():
+                  text=p.read_text("utf-8")
+                  results[filename]={
+                      "exists":True,"sha256":hashlib.sha256(text.encode()).hexdigest(),
+                      "has_preview_founder":'data-mpw-preview-founder-20261018' in text,
+                      "has_root_marker":'MJWP_ROOT_CANDIDATE_ONLY_20261017' in text,
+                      "has_orbit":'mpo-orbit-card' in text,
+                      "noindex":'noindex,nofollow,noarchive' in text,
+                      "has_root_canonical":'https://mojplaywin.com/' in text,
+                      "has_preview_static":'/design-preview-20261017/static/' in text,
+                      "footer_ends":text.lower().count('</footer>'),
+                  }
+              else:results[filename]={"exists":False}
+          print(json.dumps({
+              "classification":"MAIN_ROOT_NO_WRITE_ROUTING_INVENTORY",
+              "htaccess_sha256":hashlib.sha256(ht.read_bytes()).hexdigest(),
+              "rewrite_engine_count":len(re.findall(r'^\s*RewriteEngine\s+On',content,re.M|re.I)),
+              "existing_scoped_root_rule":'MJWP_ONE_ROOT_ROUTE_ONLY_20261017 root' in content,
+              "scoped_main_only_canonical_rules":'MJWP_SIX_CANONICAL' in content,
+              "other_rewrite_rule_count":len(re.findall(r'^\s*RewriteRule\b',content,re.M|re.I)),
+              "production":results,
+              "no_htaccess_writes":True,
+              "no_passenger_restart":True,
+              "protected_sites_unchanged":True
+          },sort_keys=True))
+          PY
+          python3 - <<'PY'
+          import urllib.request,json,re
+          paths=("/", "/store/", "/research/", "/saman/", "/farnaz/",
+                 "/mojtaba.roozegar/", "/studio.Roham/", "/taniya/")
+          observed={}
+          for path in paths:
+              req=urllib.request.Request("https://mojplaywin.com"+path,
+                       headers={"Cache-Control":"no-cache","User-Agent":"MojPlayWin-Root-ReadOnly-Routing-Audit/1.0"})
+              try:
+                  with urllib.request.urlopen(req,timeout=15) as resp:
+                      html=resp.read(450000).decode("utf-8","replace")
+                      observed[path]={"status":resp.status,
+                        "new_founder":'data-mpw-preview-founder-20261018' in html,
+                        "root_candidate":'MJWP_ROOT_CANDIDATE_ONLY_20261017' in html,
+                        "orbit_cards":html.count('class="mpo-orbit-card"')}
+              except Exception as exc:
+                  observed[path]={"error_class":type(exc).__name__}
+          print(json.dumps({"classification":"MAIN_ROOT_HTTP_READONLY_TOPOLOGY",
+                            "routes":observed,"server_modified":False},sort_keys=True))
+          PY
+      - name: Remove private SSH credentials
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/mainonly-preflight"
