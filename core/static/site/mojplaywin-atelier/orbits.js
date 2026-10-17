@@ -18,12 +18,13 @@
     const step = card.getBoundingClientRect().width + 15;
     const max = Math.max(0, track.scrollWidth - track.clientWidth);
     const destination = track.scrollLeft + direction * step;
-    if (destination > max - 8 && direction > 0) {
+    if (max < 1) return;
+    if (direction > 0 && track.scrollLeft >= max - 8) {
       track.scrollTo({left: 0, behavior: speed()});
-    } else if (destination < 8 && direction < 0) {
+    } else if (direction < 0 && track.scrollLeft <= 8) {
       track.scrollTo({left: max, behavior: speed()});
     } else {
-      track.scrollBy({left: direction * step, behavior: speed()});
+      track.scrollBy({left: direction * Math.min(step, max), behavior: speed()});
     }
     if (userAction) stopRotation();
   }
