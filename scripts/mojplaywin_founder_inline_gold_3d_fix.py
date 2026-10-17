@@ -82,9 +82,12 @@ def rewrite(raw,is_prod):
         # the marker itself has no name: expect THREE instances in inserted HTML.
         if doc.count("Mojtaba Roozegar")!=3:
             raise RuntimeError("duplicate or missing founder name")
-    m=BRAND_FIRST.search(doc)
-    if not m or MARKER not in doc[m.start():m.end()] or NEW_LINE not in doc[m.start():m.end()]:
-        raise RuntimeError("founder not integrated within footer brand column")
+    footer_at=doc.find('<footer')
+    first_div_end=doc.find('</div>',footer_at)
+    if footer_at < 0 or first_div_end < footer_at:
+        raise RuntimeError("footer brand column topology lost")
+    if NEW_LINE not in doc[footer_at:first_div_end]:
+        raise RuntimeError("founder not integrated within footer FIRST brand column")
     if OLD_TILE.search(doc) or OLD_STYLE.search(doc):
         raise RuntimeError("old floating founder tile still present")
     return doc.encode("utf-8")
