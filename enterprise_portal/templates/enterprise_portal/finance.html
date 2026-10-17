@@ -10,8 +10,8 @@
 <div class="toolbar">{% if perms.enterprise_portal.add_journalentry %}<a class="primary-link" href="{% url 'admin:enterprise_portal_journalentry_add' %}">سند جدید +</a>{% endif %}
 {% if perms.enterprise_portal.view_journalentry %}<a href="{% url 'admin:enterprise_portal_journalentry_changelist' %}">فهرست اسناد</a>{% endif %}
 {% if perms.enterprise_portal.view_ledgeraccount %}<a href="{% url 'admin:enterprise_portal_ledgeraccount_changelist' %}">کدینگ حساب‌ها</a>{% endif %}
-{% if perms.enterprise_portal.view_ledgeraccount %}<a href="{% url 'enterprise_portal:trial_balance' %}">تراز آزمایشی حساب‌ها و خروجی CSV ←</a>{% endif %}
-{% if perms.enterprise_portal.view_journalentry and perms.enterprise_portal.view_ledgeraccount and perms.ecosystem_hub.view_organization %}<a href="{% url 'enterprise_portal:ecosystem_hub:income_report' %}">گزارش درآمد و هزینه دوره‌ای ←</a>{% endif %}</div></div>
+{% if perms.enterprise_portal.view_ledgeraccount %}<a href="{% url 'enterprise_portal:trial_balance' %}">تراز آزمایشی حساب‌ها و خروجی CSV ←</a>{% endif %}</div></div>
+{% if perms.enterprise_portal.view_journalentry and perms.enterprise_portal.view_ledgeraccount and perms.ecosystem_hub.view_organization %}<div class="toolbar"><a href="{% url 'enterprise_portal:ecosystem_hub:income_report' %}">گزارش درآمد و هزینه دوره‌ای ←</a></div>{% endif %}
 <div class="table-frame"><table><thead><tr><th>کد واحد</th><th>واحد شرکت</th><th>ارز</th><th>بدهکار</th><th>بستانکار</th></tr></thead>
 <tbody>{% for rec in records %}<tr><td>{{ rec.code }}</td><td>{{ rec.unit }}</td><td>{{ rec.currency }}</td><td class="number">{{ rec.debit|floatformat:2 }}</td><td class="number">{{ rec.credit|floatformat:2 }}</td></tr>
 {% empty %}<tr><td colspan="5">هنوز سند قطعی در دفتر شرکت ثبت نشده است.</td></tr>{% endfor %}</tbody></table></div>
