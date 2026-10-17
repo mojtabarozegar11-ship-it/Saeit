@@ -536,6 +536,44 @@ jobs:
               except subprocess.TimeoutExpired:print('OFFLINE_INTERPRETER_TIMEOUT='+label)
           PY
           REMOTE
+      - name: Inspect production PassengerPython drift and Django offline exception frames
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-readonly"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          export PYTHONDONTWRITEBYTECODE=1
+          python3 - <<'PY'
+          from pathlib import Path
+          import os,subprocess,re,datetime
+          h=Path.home()
+          candidates=[
+              h/'public_html'/'.htaccess',
+              h/'.backups'/'zomorodmelal-amozeshgah'/'htaccess.20261014T235252Z',
+              h/'.backups'/'zomorodmelal-root-homepage'/'htaccess-before-directory-index',
+          ]
+          for path in candidates:
+              if not path.is_file():continue
+              data=path.read_text(errors='replace')
+              values=[]
+              for m in re.finditer(r'(?im)^\s*PassengerPython\s+([^\n]+)',data):
+                  p=m.group(1).strip().strip('"').strip("'")
+                  values.append('venv' if '/virtualenv/' in p else 'lswsgi' if p.endswith('/lswsgi') else 'other')
+              print('PASSENGER_HISTORY='+path.name+' category='+','.join(values)+' modified_utc='+datetime.datetime.fromtimestamp(path.stat().st_mtime,datetime.timezone.utc).isoformat(timespec='minutes'))
+          root=h/'Saeit'
+          interp=h/'virtualenv'/'Saeit'/'3.10'/'bin'/'python'
+          if interp.is_file():
+              code="""import os,traceback;os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings');from django.test import Client;c=Client(HTTP_HOST='zomorodmelal.ir');print('CLIENT_TEST_STARTED=yes');targets=('/api/health/','/admin/login/','/agents/');exec("for p in targets:\n try:\n  r=c.get(p,secure=True)\n  print('CLIENT_ROUTE='+p+' status='+str(r.status_code))\n except BaseException as e:\n  frames=traceback.extract_tb(e.__traceback__)[-7:]\n  print('CLIENT_ROUTE='+p+' exception='+type(e).__name__+' last_frames='+','.join(Path(f.filename).name+':'+f.name+':'+str(f.lineno) for f in frames))")"""
+              r=subprocess.run([str(interp),'-B','-c',code],cwd=root,capture_output=True,text=True,timeout=38,env=dict(os.environ,PYTHONDONTWRITEBYTECODE='1'))
+              print('CLIENT_TEST_EXIT='+str(r.returncode))
+              for line in r.stdout.splitlines():
+                  if line.startswith(('CLIENT_TEST_STARTED=','CLIENT_ROUTE=')):print(line)
+              if r.returncode!=0:
+                  err=re.findall(r'(?m)^([A-Za-z_][A-Za-z0-9_.]*(?:Error|Exception)):',r.stderr)
+                  print('CLIENT_INITIALIZATION_ERROR='+(err[-1] if err else 'unknown'))
+          PY
+          REMOTE
       - name: Erase runner-only relay credentials
         if: always()
         run: rm -rf "$RUNNER_TEMP/zomorod-readonly"
