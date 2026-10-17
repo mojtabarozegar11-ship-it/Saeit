@@ -110,3 +110,13 @@
    contain-intrinsic-size:auto 760px;
  }
 }
+
+/* Each orbital row is an independent below-the-fold component. Chrome may
+ * skip expensive rendering until the ring approaches the viewport; cards,
+ * links and images remain in the original DOM and are restored on scroll. */
+@supports(content-visibility:auto){
+ .mojplaywin-home .mpo-orbits > .mpo-ring{
+   content-visibility:auto;
+   contain-intrinsic-size:auto 420px;
+ }
+}
