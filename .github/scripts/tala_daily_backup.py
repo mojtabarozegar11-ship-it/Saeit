@@ -71,7 +71,12 @@ def verified_backup(home: Path, runid: str, now: dt.datetime | None = None) -> P
     backups = home / ".backups"
     site_backups = backups / "zomorodmelal-tala"
     daily = site_backups / "daily"
-    for folder in (backups, site_backups, daily):
+    # ~/.backups may contain other applications' archives. Do not chmod it.
+    if backups.is_symlink() or (backups.exists() and not backups.is_dir()):
+        raise RuntimeError("TALA_SHARED_BACKUP_PARENT_UNSAFE")
+    if not backups.exists():
+        backups.mkdir(mode=0o700)
+    for folder in (site_backups, daily):
         private_directory(folder)
 
     instant = now or dt.datetime.now(dt.timezone.utc)
