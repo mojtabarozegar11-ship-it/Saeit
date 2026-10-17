@@ -1,0 +1,146 @@
+name: MojPlayWin publish root with new index file and automatic rollback
+on:
+  push:
+    branches: ["audit/mojplaywin-backup-transport-20261017"]
+    paths: [".github/workflows/mojplaywin-publish-root-index.yml"]
+permissions:
+  contents: read
+concurrency:
+  group: mojplaywin-main-only-root-deploy
+  cancel-in-progress: false
+jobs:
+  publish-with-atomic-new-file:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate the only allowed root index operation
+        run: |
+          python3 -m py_compile scripts/mojplaywin_exact_root_index.py
+          grep -q 'prior_index_absent' scripts/mojplaywin_exact_root_index.py
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Record live protected and core page status before publication
+        shell: bash
+        timeout-minutes: 2
+        run: |
+          set -euo pipefail
+          paths=("/saman/" "/picm/login/" "/farnaz/" "/studio.Roham/" "/mojtaba.roozegar/" "/zahra%24%24/"
+                 "/store/" "/games/" "/ai/" "/blockchain/" "/research/" "/company/" "/services/" "/knowledge/")
+          : > "$RUNNER_TEMP/index-publish-before.txt"
+          for path in "${paths[@]}"; do
+            status=$(curl -sSL -o /dev/null -w '%{http_code}' --max-time 14 "https://mojplaywin.com$path")
+            printf '%s %s\n' "$path" "$status" >> "$RUNNER_TEMP/index-publish-before.txt"
+            case "$path" in /saman/|/picm/login/|/farnaz/|/studio.Roham/|/mojtaba.roozegar/|/zahra%24%24/) test "$status" = 200 ;; esac
+          done
+          test "$(curl -sSL -o /dev/null -w '%{http_code}' --max-time 18 'https://mojplaywin.com/')" = 200
+          echo "INDEX_RELEASE_BASELINE_14_PATHS_PASS"
+      - name: Install only new root index.html, verify real public root, commit or remove
+        shell: bash
+        timeout-minutes: 5
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          armed=no
+          undo(){
+            if test "$armed" = yes;then
+              timeout 40s ssh -T -F "$d/config" saeit-cpanel 'python3 - rollback' < scripts/mojplaywin_exact_root_index.py ||
+                echo "INDEX_WATCHDOG_WILL_RESTORE_ORIGINAL_ROOT"
+            fi
+          }
+          trap undo EXIT
+          timeout 42s ssh -T -F "$d/config" saeit-cpanel 'python3 - deploy' < scripts/mojplaywin_exact_root_index.py
+          armed=yes
+          python3 - <<'PY'
+          import re,json,urllib.request
+          base="https://mojplaywin.com"
+          req=urllib.request.Request(base+"/?root-index-20261017=1",
+               headers={"Cache-Control":"no-cache","User-Agent":"MojPlayWin-root-index-acceptance"})
+          with urllib.request.urlopen(req,timeout=25) as response:
+              if response.status!=200:raise RuntimeError("root returned non-200")
+              data=response.read(400000).decode("utf-8")
+          checks={
+              "root_candidate": "MJWP_ROOT_CANDIDATE_ONLY_20261017" in data,
+              "globe_active":'data-globe-orbit="continuous"' in data,
+              "original_18_cards":data.count('class="mpo-orbit-card"')==18,
+              "all_three_rows":data.count('class="mpo-ring"')==3,
+              "ten_original_guides":data.count('id="home-guide-')==10,
+              "asset_links":"/design-preview-20261017/static/" in data,
+              "public_indexable":"noindex,nofollow,noarchive" not in data,
+              "main_site_canonical":'href="https://mojplaywin.com/"' in data,
+              "no_new_forms":"<form " not in data,
+          }
+          print(json.dumps({"LIVE_ROOT_INDEX_ACCEPTANCE":checks},sort_keys=True),flush=True)
+          if not all(checks.values()):raise RuntimeError("new static index not served or incomplete")
+          for label,path in (
+             ("animated-globe",re.search(r'src="(/design-preview-20261017/static/site/mojplaywin-atelier/global-technology-orbit[^"]+\.svg)"',data)),
+             ("orbit-javascript",re.search(r'src="(/design-preview-20261017/static/site/mojplaywin-atelier/globe-orbit[^"]+\.js)"',data)),
+          ):
+              if not path:raise RuntimeError(label+" absent")
+              with urllib.request.urlopen(base+path.group(1),timeout=20) as r:
+                  if r.status!=200 or not r.read(512):raise RuntimeError(label+" broken")
+          print("STATIC_INDEX_ON_ROOT_VERIFIED",flush=True)
+          PY
+          : > "$RUNNER_TEMP/index-publish-after.txt"
+          paths=("/saman/" "/picm/login/" "/farnaz/" "/studio.Roham/" "/mojtaba.roozegar/" "/zahra%24%24/"
+                 "/store/" "/games/" "/ai/" "/blockchain/" "/research/" "/company/" "/services/" "/knowledge/")
+          for path in "${paths[@]}"; do
+            status=$(curl -sSL -o /dev/null -w '%{http_code}' --max-time 14 "https://mojplaywin.com$path")
+            printf '%s %s\n' "$path" "$status" >> "$RUNNER_TEMP/index-publish-after.txt"
+          done
+          cmp "$RUNNER_TEMP/index-publish-before.txt" "$RUNNER_TEMP/index-publish-after.txt" || {
+            echo "PROTECTED_OR_INTERNAL_ROUTE_REGRESSED_ROOT_WILL_ROLLBACK";exit 64;
+          }
+          timeout 30s ssh -T -F "$d/config" saeit-cpanel 'python3 - commit' < scripts/mojplaywin_exact_root_index.py
+          armed=no
+          echo "ROOT_NEW_DESIGN_PUBLISHED_WITHOUT_MODIFYING_PASSENGER_HTACCESS_OR_CHILD_SITES"
+          {
+            echo "## MojPlayWin live root static index released"
+            echo "- https://mojplaywin.com/ has new gold interactive template."
+            echo "- All 14 deep/protected URL codes unchanged, no Passenger restart."
+            echo "- Reversible by removing ONLY new index.html (old Passenger app untouched)."
+          } >> "$GITHUB_STEP_SUMMARY"
