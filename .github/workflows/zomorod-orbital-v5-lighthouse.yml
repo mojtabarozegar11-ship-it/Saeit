@@ -35,6 +35,11 @@ jobs:
               r=json.load(open(p))
               scores={key:int(round(r["categories"][key]["score"]*100)) for key in ("performance","accessibility","best-practices","seo")}
               print(f"LH_{kind.upper()}={scores}")
+              issues=[(k,v) for k,v in r["audits"].items() if isinstance(v.get("score"),(float,int)) and v["score"]<0.999 and (v.get("scoreDisplayMode")=="numeric" or v.get("scoreDisplayMode")=="binary")]
+              for k,v in sorted(issues,key=lambda z:z[1].get("score",0)):
+                  print("LH_ISSUE",kind,k,"score=",v.get("score"),"value=",v.get("displayValue",""),"title=",v.get("title",""))
+              for metric in ("first-contentful-paint","largest-contentful-paint","total-blocking-time","cumulative-layout-shift","speed-index"):
+                  print("LH_METRIC",kind,metric,r["audits"][metric].get("displayValue","?"))
               with open(os.environ["GITHUB_STEP_SUMMARY"],"a",encoding="utf-8") as out:
                   out.write(f"## {kind}\n")
                   for key,score in scores.items():out.write(f"- {key}: **{score}/100**\n")
