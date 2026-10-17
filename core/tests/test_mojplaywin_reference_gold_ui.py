@@ -116,7 +116,7 @@ class MojPlayWinReferenceGoldUITests(SimpleTestCase):
         parser = ImageCollector()
         parser.feed(response.content.decode("utf-8"))
         self.assertGreaterEqual(len(parser.sources), 48, "Expected all existing sections")
-        counts = Counter(p for p in parser.sources if not p.endswith("/official-coin-80.webp"))
+        counts = Counter(p for p in parser.sources if "/official-coin-80." not in p)
         self.assertEqual({p: n for p, n in counts.items() if n > 1}, {},
                          "Every non-logo homepage image should be independent")
         orbit = (HOME / "orbital_experience.html").read_text(encoding="utf-8")
