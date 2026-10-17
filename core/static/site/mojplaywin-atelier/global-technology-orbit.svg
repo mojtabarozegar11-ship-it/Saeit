@@ -10,6 +10,24 @@
 <filter id="shadow"><feDropShadow dx="0" dy="28" stdDeviation="26" flood-opacity=".84"/></filter>
 <clipPath id="sphere"><circle cx="600" cy="456" r="335"/></clipPath>
 </defs>
+<style>
+/* Rotate the globe's geographic surface, not the pedestal or external rings.
+   SVG-native CSS runs inside the image without third-party JavaScript. */
+@keyframes mpw-globe-turn {
+  0% {transform:rotate(0deg)}
+  100% {transform:rotate(360deg)}
+}
+@media (prefers-reduced-motion: no-preference) {
+  .mpw-sphere-surface {
+    transform-box:view-box;
+    transform-origin:600px 456px;
+    animation:mpw-globe-turn 54s linear infinite;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mpw-sphere-surface {animation:none !important;transform:none !important}
+}
+</style>
 <rect width="1200" height="920" fill="transparent"/>
 <ellipse cx="600" cy="440" rx="570" ry="436" fill="url(#halo)"/>
 <g fill="none" transform="rotate(-13 600 456)">
@@ -20,7 +38,7 @@
 <g filter="url(#shadow)">
 <circle cx="600" cy="456" r="339" fill="#0a1015" stroke="#debc73" stroke-width="4"/>
 <circle cx="600" cy="456" r="335" fill="url(#planet)"/>
-<g clip-path="url(#sphere)">
+<g clip-path="url(#sphere)"><g class="mpw-sphere-surface">
 <path d="M377 290 L451 228 L546 244 L584 307 L544 353 L580 420 L535 473 L450 428 L420 347 Z M625 253 L733 251 L825 323 L803 375 L707 369 L659 334 Z M521 483 L611 476 L646 554 L618 630 L570 697 L515 619 L475 555 Z M685 447 L804 416 L887 472 L844 558 L781 574 L734 526 Z" fill="#325a3c" fill-opacity=".78" stroke="#dece91" stroke-opacity=".21" stroke-width="3"/>
 <path d="M382 298 L438 278 L485 316 M521 483 L552 530 L590 570 M705 469 L791 481" fill="none" stroke="#b6ad75" stroke-opacity=".32" stroke-width="4"/>
 <ellipse cx="600" cy="273" rx="218" ry="41" fill="none" stroke="#f1ce8e" stroke-opacity="0.17" stroke-width="2"/>
@@ -62,7 +80,7 @@
 <circle cx="628" cy="220" r="4" fill="#f5d894" stroke="#332510" stroke-width="1.2"/>
 <circle cx="821" cy="537" r="4" fill="#f5d894" stroke="#332510" stroke-width="1.2"/>
 <circle cx="337" cy="454" r="7" fill="#f5d894" stroke="#332510" stroke-width="1.2"/>
-</g>
+</g></g>
 <circle cx="600" cy="456" r="335" fill="none" stroke="#e6bc70" stroke-opacity=".58" stroke-width="3"/>
 <path d="M290 344 Q332 194 470 151" fill="none" stroke="#fff1bc" stroke-opacity=".78" stroke-width="7" stroke-linecap="round"/>
 </g>
