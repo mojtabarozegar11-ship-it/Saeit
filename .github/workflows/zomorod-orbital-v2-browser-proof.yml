@@ -1,0 +1,85 @@
+name: Zomorod orbital visual and interaction proof (draft only)
+on:
+  push:
+    branches: ["feature/zomorod-orbital-home-reference-20261017"]
+    paths: [".github/workflows/zomorod-orbital-v2-browser-proof.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  browser-proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 17
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Prepare entirely local proof bundle; no live-server writes
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import shutil
+          root=Path("orbital-preview")
+          (root/"static").mkdir(parents=True,exist_ok=True)
+          (root/"assets").mkdir(exist_ok=True)
+          shutil.copytree("core/static/site",root/"static/site",dirs_exist_ok=True)
+          shutil.copy("content/zomorod-new-home/nova.css",root/"assets/zm-nova-v1.css")
+          shutil.copy("content/zomorod-new-home/index.html",root/"index.html")
+          # Offline preview logo only; the live file path is left unchanged.
+          shutil.copy("content/zomorod-brand/logo-transparent-128.png",
+                      root/"static/site/company/company-logo-transparent.png")
+          PY
+      - name: Install local browser harness
+        run: python3 -m pip install --disable-pip-version-check "playwright>=1.50,<2"
+      - name: Check navigation, carousels, globe, mobile overflow and take screenshots
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m http.server 8787 --bind 127.0.0.1 --directory orbital-preview > "$RUNNER_TEMP/orbital-http.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/orbital-http.pid"
+          python3 - <<'PY'
+          import shutil
+          from pathlib import Path
+          from playwright.sync_api import sync_playwright
+          target=Path("orbital-proof")
+          target.mkdir(exist_ok=True)
+          chrome=(shutil.which("google-chrome") or shutil.which("chromium") or
+                  shutil.which("chromium-browser"))
+          assert chrome, "Chromium-based browser unavailable for genuine visual verification"
+          with sync_playwright() as p:
+              browser=p.chromium.launch(executable_path=chrome,headless=True,args=["--no-sandbox"])
+              for label,width,height in (("desktop",1440,1650),("mobile",390,900)):
+                  page=browser.new_page(viewport={"width":width,"height":height},
+                                        device_scale_factor=1,reduced_motion="no-preference")
+                  page.goto("http://127.0.0.1:8787/",wait_until="networkidle",timeout=60000)
+                  page.wait_for_function(
+                    "()=>document.querySelectorAll('.orb-deck.is-ready').length===3",timeout=15000)
+                  images=page.locator(".orb-card img")
+                  assert images.count()==15,images.count()
+                  for i in range(images.count()):
+                      assert images.nth(i).evaluate("(img)=>img.complete&&img.naturalWidth>0"),i
+                  assert page.locator(".orb-header .orb-nav-tile").count()>=7
+                  assert page.locator(".orb-globe__ball").count()==1
+                  assert page.locator(".orb-ring").count()==2
+                  before=page.locator("[data-orbital-carousel]").first.locator(".orb-card[aria-current=true]").get_attribute("data-label")
+                  page.locator("[data-orbital-carousel]").first.locator("[data-orb-next]").click()
+                  after=page.locator("[data-orbital-carousel]").first.locator(".orb-card[aria-current=true]").get_attribute("data-label")
+                  assert before!=after,(before,after)
+                  page.locator("[data-orb-motion]").click()
+                  assert page.locator("[data-orb-motion]").get_attribute("aria-pressed")=="true"
+                  overflow=page.evaluate("document.documentElement.scrollWidth-window.innerWidth")
+                  print("ORBIT_BROWSER="+label+" scroll_overflow_px="+str(overflow)+" images=15 carousel=interactive")
+                  assert overflow<=3, f"Horizontal overflow in {label}: {overflow}px"
+                  page.screenshot(path=str(target/(label+"-top.png")),full_page=False)
+                  page.locator(".orbital-scene").screenshot(path=str(target/(label+"-full-stage.png")))
+                  page.close()
+              browser.close()
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: zomorod-orbital-desktop-mobile-visual-proof
+          path: orbital-proof/*.png
+          retention-days: 7
