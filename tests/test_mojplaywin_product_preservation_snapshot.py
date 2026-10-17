@@ -25,7 +25,7 @@ class MojPlayWinPreservationSnapshotTests(unittest.TestCase):
         self.assertEqual(owner_for({}), "unverified")
         self.assertEqual(owner_for(None), "unverified")
         self.assertEqual(owner_for({"price": "USD", "currency": "ETH"}), "unverified")
-        self.assertEqual(owner_for({"site": "MojPlayWin brand"}), "other_explicit_domain")
+        self.assertEqual(owner_for({"site": "MojPlayWin brand"}), "ambiguous")
 
     def test_exact_host_names_only_and_conflict_detection(self):
         self.assertEqual(owner_for({"domain": "https://mojplaywin.com/"}), "mojplaywin")
