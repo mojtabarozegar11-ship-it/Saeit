@@ -15,6 +15,7 @@ ALLOWED_EXACT = frozenset({
     "core/mojplaywin_page_content.py",
     "core/mojplaywin_views.py",
 
+    "core/templates/mojplaywin/home.html",
     "core/templates/mojplaywin/section.html",
     "core/templates/mojplaywin/store.html",
     "core/templates/mojplaywin/theme.html",
