@@ -46,6 +46,8 @@ jobs:
           if set(c.anchors)-set(c.ids): raise SystemExit('TALA_BROKEN_ANCHOR='+','.join(sorted(set(c.anchors)-set(c.ids))))
           if '<!-- tala-isolated-site-v1 -->' not in source: raise SystemExit('TALA_SCOPE_MARKER=missing')
           if 'در انتظار اتصال منبع' not in source or 'قیمت زنده هنوز متصل نشده' not in source: raise SystemExit('TALA_UNVERIFIED_PRICE_DISCLOSURE=missing')
+          if any(x not in source for x in ('function openSearch()', 'function openProduct(i)', 'function openLessons()', 'function openInsight(i)', 'function addInquiry(i)', 'localStorage')): raise SystemExit('TALA_INTERACTIONS=missing')
+          if '/contact/' in source or '/company/' in source: raise SystemExit('TALA_OUT_OF_SCOPE_LINK=found')
           for rel in ('.htaccess','manifest.webmanifest','sw.js','assets/tala-mark.svg'):
               if not (root/rel).is_file(): raise SystemExit('TALA_ASSET_MISSING='+rel)
           rules=(root/'.htaccess').read_text(encoding='utf-8')
