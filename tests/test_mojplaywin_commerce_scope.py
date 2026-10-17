@@ -8,6 +8,7 @@ class MojPlayWinCommerceScopeTests(unittest.TestCase):
     def test_allow_intended_editorial_and_style_files(self):
         for name in (
             "core/mojplaywin_views.py",
+            "core/templates/mojplaywin/home.html",
             "core/templates/mojplaywin/store.html",
             "core/static/site/mojplaywin-atelier/topic-images/venture-jewelry.svg",
             "core/tests/test_mojplaywin_unified_pages.py",
