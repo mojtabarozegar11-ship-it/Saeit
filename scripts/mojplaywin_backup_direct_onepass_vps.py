@@ -11,6 +11,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import threading
 import types
 from pathlib import Path
 
@@ -74,6 +75,19 @@ def direct_backup(args):
             ]
             proc = subprocess.Popen(command, stdin=subprocess.DEVNULL,
                                     stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+            stop_heartbeat = threading.Event()
+            def heartbeat():
+                while not stop_heartbeat.wait(22):
+                    parent = Path.home() / ".private-mojplaywin-offhost-backups"
+                    part = parent / (stem + "_" + kind + "_" + crypto.VERSION + ".gpg.partial")
+                    try:
+                        size = part.stat().st_size // (1024 * 1024)
+                    except OSError:
+                        size = 0
+                    print("DIRECT_BACKUP_" + kind.upper() +
+                          "_ENCRYPTED_MIB=" + str(size), flush=True)
+            pulse = threading.Thread(target=heartbeat, daemon=True)
+            pulse.start()
             try:
                 if proc.stdout is None:
                     raise RuntimeError("source pipe absent")
@@ -88,6 +102,8 @@ def direct_backup(args):
                                   "plaintext_bytes": result["plaintext_bytes"],
                                   "release_permitted": False}), flush=True)
             finally:
+                stop_heartbeat.set()
+                pulse.join(timeout=5)
                 if proc.poll() is None:
                     proc.kill()
                     proc.wait()
@@ -149,6 +165,6 @@ if __name__ == "__main__":
             restore_files(args)
         else:
             raise RuntimeError("invalid mode")
-    except Exception:
-        print("DIRECT_ONEPASS_FAILED_NO_RELEASE", file=sys.stderr)
+    except Exception as exc:
+        print("DIRECT_ONEPASS_FAILED_NO_RELEASE_TYPE=" + type(exc).__name__, file=sys.stderr)
         raise SystemExit(1)
