@@ -1,0 +1,167 @@
+/* MojPlayWin — high-fidelity black/gold reference design, homepage ONLY.
+   The existing V4 sections, source images, menus, routes and products remain unchanged.
+   CSS artwork is decorative; no viewport-sized screenshot or fabricated commercial metrics. */
+.mojplaywin-home{--mp5-bg:#040609;--mp5-gold:#f6c867;--mp5-edge:#f4bd58;--mp5-pale:#fff0c8;background:#040609!important}
+.mojplaywin-home .mw-site-nav{width:min(1500px,calc(100% - 24px));margin:8px auto 0;min-height:66px;padding:8px 12px;border-radius:14px;border:1px solid #a77c39;
+  background:linear-gradient(180deg,rgba(13,14,18,.98),rgba(1,2,4,.98))!important;
+  box-shadow:0 0 0 1px #050609,0 5px 25px #000,0 1px 23px #98632330;gap:10px}
+.mojplaywin-home .mw-brand{gap:9px}
+.mojplaywin-home .mw-brand img{width:46px;height:46px;border-radius:50%!important;border-color:#e8b85a!important}
+.mojplaywin-home .mw-brand-copy strong{font-family:Georgia,serif;font-size:clamp(1.14rem,2.1vw,1.78rem);font-weight:700;color:#ffdf95!important;line-height:1}
+.mojplaywin-home .mw-brand-copy small{font-size:.61rem;letter-spacing:.025em;text-transform:none!important;color:#edc783!important}
+.mojplaywin-home .mw-navigation{gap:0}
+.mojplaywin-home .mw-navigation>a,.mojplaywin-home .mw-nav-menu>summary{border-radius:9px;font-weight:660;font-size:.74rem;min-height:43px;padding:9px 12px}
+.mojplaywin-home .mw-navigation>a[href="/"]{background:linear-gradient(155deg,#ffe89c,#e6ac43)!important;color:#0c0905!important;border:1px solid #ffdf91;box-shadow:0 0 15px #eeb25873}
+.mojplaywin-home .mw-navigation>a[href="/"]:before{content:"⌂";display:inline;font-size:1.1rem;line-height:1}
+.mojplaywin-home .mw-navigation>a[href="/games/"]:before{content:"♧";margin-right:5px;color:#eac275}
+.mojplaywin-home .mw-navigation>a[href="/ai/"]:before{content:"✧";margin-right:5px;color:#eac275}
+.mojplaywin-home .mw-nav-menu>summary{color:#f5d696!important;border-color:#ac7c35}
+.mojplaywin-home .mw-navigation>a.mw-nav-cta{background:#101217!important;color:#f4d193!important;border:1px solid #926b35}
+.mojplaywin-home .mpo-experience{--mpo-gold:#f6c867;--mpo-light:#ffde96;--mpo-line:#f3be655c;
+  width:min(1530px,100%);margin:-5px auto 0;padding:clamp(16px,2.3vw,38px) clamp(13px,2.7vw,42px) 20px;
+  background:radial-gradient(ellipse 58% 30% at 71% 7%,#007acb21,transparent 83%),radial-gradient(ellipse 65% 48% at 52% 60%,#c5851920,transparent 82%),#030609;
+  border:0;border-radius:0;box-shadow:none;color:#fff;overflow:hidden}
+.mojplaywin-home .mpo-experience:before{content:"";position:absolute;pointer-events:none;top:0;right:0;left:0;height:min(750px,60vw);
+  background:radial-gradient(ellipse at 72% 26%,#2572bf3c,transparent 42%),linear-gradient(180deg,#06101f00,#0007);
+  z-index:-1}
+.mojplaywin-home .mpo-experience-header{padding:0 0 10px}
+.mojplaywin-home .mpo-eyebrow{color:#eec27d;font-weight:700;letter-spacing:.14em;font-size:clamp(.62rem,.86vw,.78rem)}
+.mojplaywin-home .mpo-hero-columns{grid-template-columns:minmax(300px,.94fr) minmax(380px,1.06fr);min-height:clamp(425px,40vw,580px);gap:clamp(8px,2vw,28px)}
+.mojplaywin-home .mpo-hero-copy{padding:12px 0 15px;align-self:start;margin-top:clamp(18px,3vw,62px)}
+.mojplaywin-home .mpo-hero-copy h1{max-width:none;margin:10px 0 2px;font-family:Georgia,"Times New Roman",serif;
+  letter-spacing:-.047em;font-weight:700;font-size:clamp(3.1rem,6vw,6.5rem);line-height:1.07;
+  color:#fff!important;text-shadow:0 3px 13px #0008}
+.mojplaywin-home .mpo-hero-copy h1 em{color:#ffca60!important;font-style:normal}
+.mojplaywin-home .mpo-hero-subtitle{font-family:Arial,Helvetica,sans-serif;font-size:clamp(1.33rem,2.27vw,2.6rem);
+  letter-spacing:-.028em;line-height:1.2;font-weight:750;margin:3px 0 17px;max-width:23ch;
+  color:#f7c462!important}
+.mojplaywin-home .mpo-hero-copy>p:not(.mpo-hero-footnote){max-width:46ch;line-height:1.56;color:#f7f5ef!important;font-size:clamp(.88rem,1.1vw,1.08rem)}
+.mojplaywin-home .mpo-actions{margin-top:24px;gap:10px}
+.mojplaywin-home .mpo-btn{min-height:48px;border-radius:10px;border:1px solid #d29c3c;
+  box-shadow:0 0 9px #d7973b42;padding:12px 18px;gap:14px;font-weight:750}
+.mojplaywin-home a.mpo-btn-primary{background:linear-gradient(140deg,#ffdf86,#f0af3e)!important;color:#100a04!important}
+.mojplaywin-home .mpo-hero-footnote{font-size:.7rem;opacity:.82;margin:10px 0 0}
+.mojplaywin-home .mpo-feature-points{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;margin:23px 0 0;padding:0;list-style:none;max-width:610px}
+.mojplaywin-home .mpo-feature-points li{display:flex;align-items:center;gap:7px;color:#efdfbb!important;font-size:.77rem;line-height:1.22}
+.mojplaywin-home .mpo-feature-points b{font-size:1.56rem;font-weight:400;color:#ffc957;line-height:1}
+.mojplaywin-home .mpo-hero-visual{width:100%;max-width:790px;aspect-ratio:1.22;max-height:none}
+.mojplaywin-home .mpo-hero-visual>img{width:95%;height:95%;object-fit:contain;filter:drop-shadow(0 0 25px #dc9f316b)}
+.mojplaywin-home .mpo-hero-insignia{bottom:8%;right:3%;border-color:#edc17e}
+.mojplaywin-home .mpo-orbit-light{z-index:0;inset:22% 0%;border:2px solid #f2b24b77;box-shadow:0 0 18px #edaf3963, inset 0 0 19px #edaf393b}
+.mojplaywin-home .mpo-orbit-light-two{inset:36% -3%;border-color:#ffd88b5e}
+.mojplaywin-home .mpo-satellite{position:absolute;z-index:1;width:23%;aspect-ratio:1.2;overflow:hidden;
+  border:2px solid #efb955;border-radius:9px;background:#111722;text-decoration:none;
+  box-shadow:0 0 0 1px #000,0 0 16px #eeb84e96, 0 13px 30px #0009;transform:perspective(700px) rotateY(var(--turn,0deg)) rotateZ(var(--lean,0deg))}
+.mojplaywin-home .mpo-satellite img{width:100%;height:100%;object-fit:cover;display:block}
+.mojplaywin-home .mpo-satellite-one{left:0;top:15%;--turn:17deg;--lean:-8deg}
+.mojplaywin-home .mpo-satellite-two{right:1%;top:10%;--turn:-16deg;--lean:7deg}
+.mojplaywin-home .mpo-satellite-three{left:1%;bottom:17%;--turn:16deg;--lean:5deg}
+.mojplaywin-home .mpo-satellite-four{right:0;bottom:18%;--turn:-18deg;--lean:-7deg}
+.mojplaywin-home .mpo-orbit-caption{position:absolute;z-index:3;right:9%;bottom:1%;
+  text-transform:uppercase;font-size:.57rem;letter-spacing:.21em;color:#f8e9c5;background:#090b0edc;padding:10px 13px;border:1px solid #bc8b43;border-radius:9px}
+.mojplaywin-home .mpo-hero-rule{margin-bottom:8px}
+.mojplaywin-home .mpo-orbits{gap:32px;padding-top:14px}
+.mojplaywin-home .mpo-ring{position:relative;padding:clamp(9px,1.5vw,16px) 10px 20px;
+  background:radial-gradient(ellipse 62% 60% at 50% 64%,#f4ad3e15,transparent);
+  border:1px solid transparent}
+.mojplaywin-home .mpo-ring-head{display:flex;align-items:center;justify-content:center;position:relative;margin:0 10px 7px}
+.mojplaywin-home .mpo-ring-head>div:first-child{display:flex;flex-direction:column;align-items:center;min-width:0;text-align:center}
+.mojplaywin-home .mpo-ring-head h2{position:relative;padding:10px 33px;border:1px solid #e7ac51;border-radius:32px;
+  color:#ffe0a0!important;background:#04070b;font-size:clamp(.83rem,1.17vw,1.13rem);letter-spacing:.19em;line-height:1.35;font-weight:700;
+  text-transform:uppercase;margin:4px 0;box-shadow:0 0 15px #e6a94a66}
+.mojplaywin-home .mpo-ring-head p{font-size:.69rem;margin:5px auto 0;max-width:80ch;opacity:.85}
+.mojplaywin-home .mpo-ring-head .mpo-eyebrow{font-size:.57rem}
+.mojplaywin-home .mpo-ring-controls{position:absolute;z-index:2;inset:0;display:flex;justify-content:space-between;
+  align-items:center;pointer-events:none;margin:0 -14px}
+.mojplaywin-home .mpo-ring-arrow{pointer-events:auto;border:1.5px solid #ffc768;background:#05080ef0;color:#ffd57f;
+  width:clamp(35px,4vw,52px);height:clamp(35px,4vw,52px);box-shadow:0 0 14px #bd8b3852}
+.mojplaywin-home .mpo-track-shell{padding:24px 18px 32px;isolation:isolate}
+.mojplaywin-home .mpo-ring-ellipse{inset:9% 0 2%;border:2px solid #eea934d1;box-shadow:0 0 28px #f6b74e87,0 0 64px #a7742733;
+  transform:perspective(640px) rotateX(68deg);border-radius:50%}
+.mojplaywin-home .mpo-orbit-track{gap:14px;padding:7px 10px 19px;scrollbar-width:none}
+.mojplaywin-home .mpo-orbit-track::-webkit-scrollbar{display:none}
+.mojplaywin-home .mpo-orbit-item{flex-basis:clamp(156px,15.6vw,210px)}
+.mojplaywin-home .mpo-orbit-card{min-height:230px;background:#080b10;border:1.5px solid #edb44e;
+  border-radius:13px;box-shadow:inset 0 1px 0 #fff4,0 0 10px #d796334c,0 14px 29px #0009;
+  overflow:hidden;will-change:auto}
+.mojplaywin-home .mpo-orbit-card img{aspect-ratio:1.28;width:100%;height:auto;min-height:138px;
+  object-fit:cover;filter:saturate(1.13) contrast(1.08)}
+.mojplaywin-home .mpo-orbit-card-copy{display:flex;flex-direction:column;align-items:center;text-align:center;
+  justify-content:center;gap:7px;padding:11px 9px 14px;flex:1;background:linear-gradient(180deg,#0b0f17,#060708)}
+.mojplaywin-home .mpo-orbit-card strong{color:#fff5df!important;font-size:.93rem}
+.mojplaywin-home .mpo-orbit-card small{color:#e6ddc8!important;font-size:.67rem;line-height:1.25}
+.mojplaywin-home .mpo-orbit-item:focus-within .mpo-orbit-card,.mojplaywin-home .mpo-orbit-card:hover{
+  border-color:#ffe8af;box-shadow:0 0 0 1px #ffd687,0 0 23px #efbd6c9e}
+.mojplaywin-home .mpo-ring-dots{display:flex;align-items:center;justify-content:center;gap:8px;margin:2px auto 0}
+.mojplaywin-home .mpo-ring-dot{width:7px;height:7px;border-radius:50%;border:1px solid #e8b85f;background:#100d08;padding:0;cursor:pointer}
+.mojplaywin-home .mpo-ring-dot[aria-current="true"]{width:9px;height:9px;background:#ffe0a0;box-shadow:0 0 10px #ffc765}
+.mojplaywin-home .mpo-orbit-bottom{border-color:#d5a45461;padding-top:13px;gap:14px}
+.mojplaywin-home .mpo-rotation-toggle{background:#0c0d12;color:#ffd894;border-color:#c18d3f}
+.mojplaywin-home .mpo-proof-strip{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;margin:25px 2px 9px;
+  padding:17px 12px;border-block:1px solid #e2ab5494;border-radius:46px;
+  background:linear-gradient(90deg,#0d0c0e,#07080b,#0d0c0e);box-shadow:0 0 23px #d99e3640}
+.mojplaywin-home .mpo-proof-stat{display:flex;align-items:center;justify-content:center;gap:8px;text-align:left}
+.mojplaywin-home .mpo-proof-stat>span{color:#ffca65;font-size:1.35rem}
+.mojplaywin-home .mpo-proof-stat strong{font-size:clamp(.86rem,1.15vw,1.1rem);color:#fff6e4!important;display:block}
+.mojplaywin-home .mpo-proof-stat small{display:block;color:#d8d2c4!important;font-size:.62rem}
+.mojplaywin-home .mw-shell[data-deferred-legacy="true"]{border-top:1px solid #8f6d3850;margin-top:20px}
+.mojplaywin-home .mw-site-footer{border-top:1px solid #e6ae6480}
+@media(max-width:1200px){
+ .mojplaywin-home .mw-site-nav{flex-wrap:wrap}
+ .mojplaywin-home .mw-navigation{flex-wrap:wrap}
+ .mojplaywin-home .mpo-hero-columns{grid-template-columns:1fr 1fr}
+ .mojplaywin-home .mpo-feature-points{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .mojplaywin-home .mpo-proof-strip{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
+@media(max-width:780px){
+ .mojplaywin-home .mpo-experience{padding:16px 13px 28px}
+ .mojplaywin-home .mpo-hero-columns{grid-template-columns:1fr;gap:4px;min-height:0}
+ .mojplaywin-home .mpo-hero-copy{margin-top:10px;padding-top:6px}
+ .mojplaywin-home .mpo-hero-copy h1{font-size:clamp(3rem,10vw,4.7rem)}
+ .mojplaywin-home .mpo-hero-subtitle{font-size:clamp(1.3rem,4.6vw,2rem)}
+ .mojplaywin-home .mpo-feature-points{grid-template-columns:repeat(4,minmax(0,1fr))}
+ .mojplaywin-home .mpo-hero-visual{width:min(94%,550px);aspect-ratio:1.35;margin-top:9px}
+ .mojplaywin-home .mpo-ring-controls{margin:0 -4px}
+ .mojplaywin-home .mpo-ring-head h2{font-size:.83rem;letter-spacing:.11em;padding:11px 24px}
+ .mojplaywin-home .mpo-proof-strip{grid-template-columns:repeat(3,minmax(0,1fr));border-radius:20px}
+}
+@media(max-width:540px){
+ .mojplaywin-home .mw-site-nav{width:calc(100% - 16px);margin-top:5px;padding:9px;gap:8px}
+ .mojplaywin-home .mw-brand-copy strong{font-size:1.17rem}
+ .mojplaywin-home .mw-brand-copy small{font-size:.54rem}
+ .mojplaywin-home .mw-navigation{width:100%;gap:3px}
+ .mojplaywin-home .mpo-experience{width:100%;margin:0 auto;padding:14px 10px 22px}
+ .mojplaywin-home .mpo-hero-copy h1{font-size:clamp(2.65rem,12vw,3.7rem)}
+ .mojplaywin-home .mpo-hero-subtitle{font-size:1.26rem;margin-bottom:10px}
+ .mojplaywin-home .mpo-hero-copy>p:not(.mpo-hero-footnote){font-size:.88rem}
+ .mojplaywin-home .mpo-actions{gap:8px;margin-top:17px}
+ .mojplaywin-home .mpo-btn{min-height:44px;font-size:.74rem;padding:10px 12px}
+ .mojplaywin-home .mpo-feature-points{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 7px;margin-top:18px}
+ .mojplaywin-home .mpo-feature-points li{font-size:.71rem}
+ .mojplaywin-home .mpo-hero-visual{width:100%;margin-top:0;aspect-ratio:1.35;max-height:320px}
+ .mojplaywin-home .mpo-hero-visual>img{width:100%;height:100%;filter:none}
+ .mojplaywin-home .mpo-satellite{width:22%;border-width:1px;box-shadow:0 0 9px #d9a14370}
+ .mojplaywin-home .mpo-hero-insignia{width:41px}
+ .mojplaywin-home .mpo-orbit-caption{font-size:.39rem;letter-spacing:.12em;padding:6px 7px}
+ .mojplaywin-home .mpo-orbits{gap:17px;padding-top:3px}
+ .mojplaywin-home .mpo-ring{padding:9px 0 15px}
+ .mojplaywin-home .mpo-ring-head{margin:0 5px 5px}
+ .mojplaywin-home .mpo-ring-head h2{font-size:.72rem;max-width:92%;letter-spacing:.06em;padding:9px 12px;line-height:1.5}
+ .mojplaywin-home .mpo-ring-head p{font-size:.68rem;margin:5px 18px 0}
+ .mojplaywin-home .mpo-track-shell{padding:14px 7px 20px}
+ .mojplaywin-home .mpo-orbit-track{gap:10px}
+ .mojplaywin-home .mpo-orbit-item{flex-basis:clamp(135px,46vw,175px)}
+ .mojplaywin-home .mpo-orbit-card{min-height:212px;box-shadow:none}
+ .mojplaywin-home .mpo-orbit-card img{min-height:119px}
+ .mojplaywin-home .mpo-ring-ellipse{box-shadow:none}
+ .mojplaywin-home .mpo-proof-strip{grid-template-columns:repeat(2,minmax(0,1fr));gap:16px 5px;padding:19px 8px}
+ .mojplaywin-home .mpo-proof-stat{justify-content:flex-start;padding-left:8px}
+ .mojplaywin-home .mpo-proof-stat strong{font-size:.82rem}
+ .mojplaywin-home .mpo-proof-stat small{font-size:.6rem}
+}
+@media(prefers-reduced-motion:reduce){
+ .mojplaywin-home .mpo-orbit-card,.mojplaywin-home .mpo-satellite{transform:none!important;animation:none!important;transition:none!important}
+}
+@media(prefers-contrast:more){
+ .mojplaywin-home .mpo-orbit-card,.mojplaywin-home .mpo-btn,.mojplaywin-home .mpo-ring-arrow{border-color:#fff0b5!important}
+}
