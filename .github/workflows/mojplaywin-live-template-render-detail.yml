@@ -1,0 +1,102 @@
+name: MojPlayWin host dispatch and live template cache audit
+on:
+  push:
+    branches: ["audit/mojplaywin-backup-transport-20261017"]
+    paths: [".github/workflows/mojplaywin-live-template-render-detail.yml"]
+permissions:
+  contents: read
+jobs:
+  inspect-readonly:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Check scoped MojPlayWin Django route, templates and app caches read only
+        timeout-minutes: 3
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 90s ssh -T -F "$d/config" saeit-cpanel 'python3 -' <<'PY'
+          from pathlib import Path
+          import re,json,ast
+          root=Path("/home/zomorod2/Saeit-staging")
+          paths=("core/mojplaywin_views.py","core/brand_views.py","core/services_views.py",
+                 "core/templates/mojplaywin/home.html","core/templates/mojplaywin/theme.html",
+                 "core/templates/mojplaywin/store.html","core/templates/mojplaywin/section.html",
+                 "config/settings.py","config/urls.py")
+          result={}
+          for rel in paths:
+              p=root/rel
+              if p.is_symlink() or not p.is_file():
+                  result[rel]={"exists":False};continue
+              source=p.read_text(encoding="utf-8",errors="replace")
+              current={"exists":True,"lines":len(source.splitlines())}
+              if rel.endswith(".html"):
+                  current["first_350"]=source[:350]
+                  current["first_tags"]=re.findall(r'\{%(?:\s+)(?:extends|include|load)\s+[^%]+%\}',source)[:16]
+                  current["html_block_definitions"]=re.findall(r'\{%\s*block\s+([a-z_]+)',source)[:12]
+                  current["contains_customer_main_brand"]=("MojPlayWin" in source)
+                  current["page_does_not_use_shared_base"]=('extends "mojplaywin/base.html"' in source)
+              elif rel.endswith("config/settings.py"):
+                  for line in source.splitlines():
+                      if any(k in line for k in ("TEMPLATES =","'loaders':",'"loaders":','"APP_DIRS"','"DEBUG"')):
+                          current.setdefault("template_config_keys",[]).append(line.strip()[:140])
+              else:
+                  lines=source.splitlines()
+                  for i,line in enumerate(lines):
+                      if ((line.strip().startswith("def ") and any(k in line.lower() for k in ("home","branded","services","store"))) or
+                          "mojplaywin_views import home" in line or
+                          'path("",' in line or
+                          "mojplaywin.com" in line and any(k in line for k in ("get_host","_is_","host =="))):
+                          current.setdefault("dispatch_lines",[]).append({"line":i+1,"snippet":line[:180]})
+                  if rel.endswith("core/mojplaywin_views.py"):
+                      start=source.find("def home(")
+                      if start!=-1:current["home_function"]=source[start:start+400]
+              result[rel]=current
+          print(json.dumps({"classification":"MOJPLAYWIN_ACTUAL_HOST_TEMPLATE_RENDER_READ_ONLY",
+                "result":result,"shared_app_in_place":True,"changes_made":False},sort_keys=True))
+          PY
