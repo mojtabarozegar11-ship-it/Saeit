@@ -150,6 +150,54 @@ class CorporateContentPreservationTests(unittest.TestCase):
                 self.assertEqual(len(photos), 2)
                 self.assertEqual(len({img["src"] for img in photos}), 2)
 
+    def test_all_seven_website_pages_have_distinct_editorial_images(self):
+        from collections import Counter
+        pages = {
+            "home": ROOT / "content/zomorod-new-home/index.html",
+            **{slug: PAGES / (slug + ".html") for slug in
+               ("about", "company", "services", "industry", "research", "knowledge")},
+        }
+        photographs = []
+        for slug, path in pages.items():
+            parser = PageParser()
+            parser.feed(path.read_text(encoding="utf-8"))
+            photos = [img for img in parser.images
+                      if img.get("src") and "company-logo" not in img["src"]]
+            self.assertGreaterEqual(len(photos), 2, slug)
+            for img in photos:
+                with self.subTest(page=slug, src=img["src"]):
+                    self.assertTrue(img.get("alt"), "Required meaningful alt")
+                    photographs.append(img["src"])
+        self.assertEqual(len(photographs), 30)
+        repeats = {path: count for path, count in Counter(photographs).items()
+                   if count > 1}
+        self.assertEqual(repeats, {}, "Editorial images must never repeat across pages")
+
+    def test_photo_licenses_file_integrity_and_no_false_company_claims(self):
+        import json
+        licenses = ROOT / "docs/zomorod-cc0-editorial-photographs.json"
+        self.assertTrue(licenses.is_file())
+        records = json.loads(licenses.read_text(encoding="utf-8"))["photos"]
+        self.assertEqual(len(records), 17)
+        seen_hashes = set()
+        source_urls = set()
+        for image in records:
+            with self.subTest(image=image["file"]):
+                self.assertEqual(image["license"], "cc0")
+                self.assertFalse(image["is_company_project_photo"])
+                self.assertTrue(image["source_url"].startswith("https://"))
+                self.assertNotIn(image["source_url"], source_urls)
+                source_urls.add(image["source_url"])
+                self.assertIn("نمونه تصویری", image["label"])
+                file = ROOT / image["file"]
+                self.assertTrue(file.is_file())
+                self.assertGreater(file.stat().st_size, 15000)
+                self.assertLess(file.stat().st_size, 400000)
+                digest = hashlib.sha256(file.read_bytes()).hexdigest()
+                self.assertEqual(digest, image["sha256"])
+                self.assertNotIn(digest, seen_hashes)
+                seen_hashes.add(digest)
+
     def test_original_emerald_system_stylesheet_preserved(self):
         css = ROOT / "core/static/site/emerald-system.css"
         self.assertTrue(css.is_file(), "Restore original published CSS into repository")
