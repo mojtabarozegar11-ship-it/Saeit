@@ -68,8 +68,8 @@ def main_services_preview(request):
 
 urlpatterns = [
     path("services/", main_services_preview, name="mojplaywin_preview_services"),
-] + list(shared_urlpatterns) + [
     path("web-engineering/", web_engineering, name="mojplaywin_preview_web_engineering"),
+] + list(shared_urlpatterns) + [
     path(f"{page_key}/", preview_page, {"page_key": page_key}, name=f"mojplaywin_preview_{page_key}")
     for page_key in BRAND_PREVIEW_ROUTES
 ]
