@@ -11,7 +11,7 @@ from django.utils import timezone
 
 from .models import (
     AuditEvent, BusinessUnit, CommercialDocument, InventoryItem,
-    JournalEntry, JournalLine, LedgerAccount, OfficeLetter, Partner,
+    JournalEntry, JournalLine, LedgerAccount, OfficeLetter, OfficeLoginFailure, Partner,
     StockMovement, WorkTask,
 )
 from .services import confirm_stock_movement, post_journal, stock_balance
@@ -101,6 +101,73 @@ class OfficeSecurityTests(TestCase):
         self.assertNotContains(dashboard, "گزارش دفتر کل")
         self.assertEqual(self.client.get("/company/office/logout/", secure=True).status_code, 405)
         self.assertEqual(self.client.post("/company/office/logout/", secure=True).status_code, 302)
+
+    def test_five_failed_private_logins_block_even_a_correct_password(self):
+        url = "/company/office/login/"
+        for attempt in range(5):
+            response = self.client.post(url, {
+                "username": self.viewer.username,
+                "password": "wrong-password",
+            }, secure=True)
+            self.assertEqual(response.status_code, 200)
+        row = OfficeLoginFailure.objects.get()
+        self.assertEqual(row.failed_count, 5)
+        self.assertGreater(row.blocked_until, timezone.now())
+        attempted = self.client.post(url, {
+            "username": self.viewer.username,
+            "password": "TestPasswordOnly!123",
+        }, secure=True)
+        self.assertEqual(attempted.status_code, 200)
+        self.assertNotIn("_auth_user_id", self.client.session)
+
+    def test_login_lockout_is_expiring_and_records_no_plain_identifiers(self):
+        url = "/company/office/login/"
+        self.client.post(url, {
+            "username": self.viewer.username,
+            "password": "wrong-password",
+        }, secure=True)
+        row = OfficeLoginFailure.objects.get()
+        self.assertEqual(len(row.key), 64)
+        self.assertNotIn(self.viewer.username, row.key)
+        self.assertNotIn("127.0.0.1", row.key)
+        self.assertEqual(row.failed_count, 1)
+        row.blocked_until = timezone.now() - timedelta(minutes=1)
+        row.failed_count = 5
+        row.save(update_fields=("blocked_until", "failed_count"))
+        response = self.client.post(url, {
+            "username": self.viewer.username,
+            "password": "TestPasswordOnly!123",
+        }, secure=True)
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(OfficeLoginFailure.objects.exists())
+
+    def test_successful_private_login_has_short_session_lifetime(self):
+        response = self.client.post("/company/office/login/", {
+            "username": self.viewer.username,
+            "password": "TestPasswordOnly!123",
+        }, secure=True)
+        self.assertEqual(response.status_code, 302)
+        lifetime = self.client.session.get_expiry_age()
+        self.assertGreaterEqual(lifetime, 1700)
+        self.assertLessEqual(lifetime, 1800)
+
+    def test_login_rate_limits_are_scoped_by_client_and_account(self):
+        url = "/company/office/login/"
+        for _ in range(5):
+            self.client.post(url, {
+                "username": self.viewer.username,
+                "password": "invalid",
+            }, secure=True, REMOTE_ADDR="192.0.2.50")
+        blocked = self.client.post(url, {
+            "username": self.viewer.username,
+            "password": "TestPasswordOnly!123",
+        }, secure=True, REMOTE_ADDR="192.0.2.50")
+        self.assertEqual(blocked.status_code, 200)
+        independent = self.client.post(url, {
+            "username": self.viewer.username,
+            "password": "TestPasswordOnly!123",
+        }, secure=True, REMOTE_ADDR="192.0.2.51")
+        self.assertEqual(independent.status_code, 302)
 
     def test_privilege_separation_deny_finance_to_staff_without_finance_permission(self):
         self.client.force_login(self.viewer)
