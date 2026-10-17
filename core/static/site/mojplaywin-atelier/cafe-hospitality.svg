@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 450" width="720" height="450" role="img" aria-labelledby="title desc">
+<title id="title">Café and hospitality experience illustration</title>
+<desc id="desc">Luxury obsidian-and-gold illustration of a welcoming contemporary café interior with coffee service, a tablet and warm architectural lighting.</desc>
+<defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#29221c"/><stop offset="1" stop-color="#0a1017"/></linearGradient><linearGradient id="gold" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#fff2c4"/><stop offset=".5" stop-color="#cda05b"/><stop offset="1" stop-color="#76512a"/></linearGradient><linearGradient id="wood" x2="0" y2="1"><stop stop-color="#62503b"/><stop offset="1" stop-color="#25241f"/></linearGradient></defs>
+<rect width="720" height="450" fill="url(#bg)"/>
+<path d="M0 329H720" stroke="#d2ae70" stroke-opacity=".64" stroke-width="5"/>
+<path d="M58 330V78H309V330 M358 330V78H637V330" stroke="#8f6e42" stroke-width="5" fill="none"/>
+<path d="M185 0V110 M497 0V110" stroke="#d3b07b" stroke-width="5"/>
+<path d="M123 107H249L229 147H143Z M439 107H555L539 147H457Z" fill="url(#gold)" stroke="#eacb92" stroke-width="4"/>
+<circle cx="185" cy="149" r="68" fill="#f1c77c" opacity=".07"/><circle cx="497" cy="149" r="68" fill="#f1c77c" opacity=".07"/>
+<g transform="translate(112 185)">
+<rect x="0" y="104" width="251" height="31" rx="11" fill="url(#wood)" stroke="#e2bf7c" stroke-width="5"/>
+<rect x="35" y="135" width="17" height="118" fill="#ad8650"/><rect x="211" y="135" width="17" height="118" fill="#ad8650"/>
+<path d="M82 41H186V107Q186 153 134 153Q82 153 82 107Z" fill="#e8d6b6" stroke="#efd69d" stroke-width="7"/>
+<path d="M186 66Q243 62 227 105Q220 126 184 122" fill="none" stroke="#e8d6b6" stroke-width="12"/>
+<path d="M109 22Q88 7 109 -17 M147 20Q127 0 147 -23" fill="none" stroke="#ffdb95" stroke-width="5" stroke-linecap="round" opacity=".67"/>
+</g>
+<g transform="translate(453 172)">
+<rect width="189" height="181" rx="23" fill="#121b23" stroke="url(#gold)" stroke-width="6"/>
+<rect x="20" y="30" width="149" height="95" rx="12" fill="#263638"/>
+<path d="M40 87L74 53L102 77L139 45" fill="none" stroke="#e7c78a" stroke-width="7" stroke-linecap="round"/>
+<rect x="30" y="146" width="106" height="10" rx="5" fill="#d8b880"/>
+</g>
+<g fill="#ffe4a5"><circle cx="66" cy="58" r="5"/><circle cx="326" cy="37" r="4"/><circle cx="674" cy="95" r="5"/></g>
+</svg>
