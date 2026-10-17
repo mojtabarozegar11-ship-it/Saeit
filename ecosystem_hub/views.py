@@ -98,7 +98,7 @@ def run_assistant(request, code):
     if not unit:
         raise Http404("واحد شرکت تعریف نشده است.")
     report = generate_report(request.user, unit, code)
-    return no_cache(redirect("ecosystem_hub:report", pk=report.pk))
+    return no_cache(redirect("enterprise_portal:ecosystem_hub:report", pk=report.pk))
 
 
 @never_cache

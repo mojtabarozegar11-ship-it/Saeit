@@ -14,16 +14,16 @@
 {% endif %}
 <section class="hub-section">
 <div class="hub-section-title"><div><span class="eyebrow">ONE ECOSYSTEM / MULTIPLE BUSINESSES</span><h2>بخش‌های مدیریتی یکپارچه</h2></div>
-<a href="{% url 'ecosystem_hub:modules' %}">مشاهده ابزارهای تخصصی ←</a></div>
+<a href="{% url 'enterprise_portal:ecosystem_hub:modules' %}">مشاهده ابزارهای تخصصی ←</a></div>
 <div class="hub-feature-grid">
 <a class="hub-feature" href="{% url 'enterprise_portal:finance' %}"><b>۰۱ / حسابداری کل</b><p>دفتر کل، تراز، سند دوطرفه، ارزهای جدا، قراردادها و بودجه</p></a>
-<a class="hub-feature" href="{% url 'ecosystem_hub:production' %}"><b>۰۲ / تولید و زنجیره تأمین</b><p>فرمول ساخت، مواد اولیه، سفارش، ظرفیت، کیفیت و تعمیرات</p></a>
+<a class="hub-feature" href="{% url 'enterprise_portal:ecosystem_hub:production' %}"><b>۰۲ / تولید و زنجیره تأمین</b><p>فرمول ساخت، مواد اولیه، سفارش، ظرفیت، کیفیت و تعمیرات</p></a>
 <a class="hub-feature" href="{% url 'enterprise_portal:tasks' %}"><b>۰۳ / اتوماسیون اداری</b><p>دبیرخانه، وظایف، ارجاع کار، جلسات، منابع انسانی و پروژه‌ها</p></a>
-<a class="hub-feature" href="{% url 'ecosystem_hub:assistants' %}"><b>۰۴ / دستیارهای تخصصی</b><p>{{ assistant_count }} دستیار تعریف‌شده با سطح دسترسی و گزارش قابل بررسی</p></a>
+<a class="hub-feature" href="{% url 'enterprise_portal:ecosystem_hub:assistants' %}"><b>۰۴ / دستیارهای تخصصی</b><p>{{ assistant_count }} دستیار تعریف‌شده با سطح دسترسی و گزارش قابل بررسی</p></a>
 </div></section>
 <section class="hub-section">
 <div class="hub-section-title"><div><span class="eyebrow">EVIDENCE FIRST · REVIEW BEFORE ACTION</span><h2>دستیارهای مدیریت</h2></div>
-<a href="{% url 'ecosystem_hub:assistants' %}">همه دستیارها ←</a></div>
+<a href="{% url 'enterprise_portal:ecosystem_hub:assistants' %}">همه دستیارها ←</a></div>
 <div class="hub-assistant-grid">
 {% for item in assistant_preview %}
 <article class="hub-assistant"><div class="hub-spark">✧</div><h3>{{ item.title }}</h3><p>{{ item.description }}</p>

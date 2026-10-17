@@ -14,11 +14,11 @@
 <div class="hub-mark" aria-hidden="true">✥</div>
 </header>
 <nav class="hub-nav" aria-label="ابزارهای مدیریت اکوسیستم">
-<a href="{% url 'ecosystem_hub:dashboard' %}">مرکز مدیریت</a>
-<a href="{% url 'ecosystem_hub:modules' %}">واحدهای تخصصی</a>
-<a href="{% url 'ecosystem_hub:assistants' %}">دستیارهای مدیریت</a>
-{% if perms.ecosystem_hub.view_productionorder %}<a href="{% url 'ecosystem_hub:production' %}">تولید و صنعت</a>{% endif %}
-{% if perms.ecosystem_hub.view_managementrisk %}<a href="{% url 'ecosystem_hub:oversight' %}">ریسک و تصمیم‌ها</a>{% endif %}
+<a href="{% url 'enterprise_portal:ecosystem_hub:dashboard' %}">مرکز مدیریت</a>
+<a href="{% url 'enterprise_portal:ecosystem_hub:modules' %}">واحدهای تخصصی</a>
+<a href="{% url 'enterprise_portal:ecosystem_hub:assistants' %}">دستیارهای مدیریت</a>
+{% if perms.ecosystem_hub.view_productionorder %}<a href="{% url 'enterprise_portal:ecosystem_hub:production' %}">تولید و صنعت</a>{% endif %}
+{% if perms.ecosystem_hub.view_managementrisk %}<a href="{% url 'enterprise_portal:ecosystem_hub:oversight' %}">ریسک و تصمیم‌ها</a>{% endif %}
 <a href="{% url 'enterprise_portal:finance' %}">حسابداری</a>
 </nav>
 {% if units %}

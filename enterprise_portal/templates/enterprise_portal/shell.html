@@ -20,8 +20,8 @@
   <p class="sidebar-label">سامانه یکپارچه سازمانی</p>
   <nav class="main-nav" aria-label="منوی داخلی">
     <a href="{% url 'enterprise_portal:dashboard' %}">◈ &nbsp; میزکار اصلی</a>
-    {% if perms.ecosystem_hub.view_organization %}<a href="{% url 'ecosystem_hub:dashboard' %}">✥ &nbsp; مرکز مدیریت اکوسیستم</a>{% endif %}
-    {% if perms.ecosystem_hub.view_organization %}<a href="{% url 'ecosystem_hub:assistants' %}">✦ &nbsp; دستیارهای مدیریت و تولید</a>{% endif %}
+    {% if perms.ecosystem_hub.view_organization %}<a href="{% url 'enterprise_portal:ecosystem_hub:dashboard' %}">✥ &nbsp; مرکز مدیریت اکوسیستم</a>{% endif %}
+    {% if perms.ecosystem_hub.view_organization %}<a href="{% url 'enterprise_portal:ecosystem_hub:assistants' %}">✦ &nbsp; دستیارهای مدیریت و تولید</a>{% endif %}
     {% if perms.enterprise_portal.view_journalentry %}<a href="{% url 'enterprise_portal:finance' %}">▤ &nbsp; حسابداری و مالی</a>{% endif %}
     {% if perms.enterprise_portal.view_inventoryitem %}<a href="{% url 'enterprise_portal:inventory' %}">▣ &nbsp; انبار و تولید</a>{% endif %}
     {% if perms.enterprise_portal.view_worktask %}<a href="{% url 'enterprise_portal:tasks' %}">✓ &nbsp; کارها و پیگیری</a>{% endif %}

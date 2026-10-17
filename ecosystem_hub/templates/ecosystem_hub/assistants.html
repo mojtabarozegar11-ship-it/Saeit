@@ -17,7 +17,7 @@
  <div class="hub-assistant-bottom">
  <span class="hub-chip {% if not item.handler %}hub-chip-soft{% endif %}">{{ item.mode }}</span>
  {% if selected_unit and can_run %}
- <form method="post" action="{% url 'ecosystem_hub:run_assistant' item.code %}">
+ <form method="post" action="{% url 'enterprise_portal:ecosystem_hub:run_assistant' item.code %}">
  {% csrf_token %}
  <input type="hidden" name="unit" value="{{ selected_unit.code }}">
  <button type="submit">تهیه گزارش پیش‌نویس ←</button>

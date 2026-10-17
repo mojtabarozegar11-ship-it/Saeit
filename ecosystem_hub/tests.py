@@ -318,8 +318,8 @@ class HubSuite(TestCase):
         )
         report = generate_report(self.owner, self.farm, "receivables")
         out = " ".join(x["detail"]+x["title"] for x in report.findings)
-        self.assertIn("300 IRR", out)
-        self.assertIn("300 USD", out)
+        self.assertIn("300.00 IRR", out)
+        self.assertIn("300.00 USD", out)
         self.assertNotIn("SECRET-USD", out)
         self.assertEqual(JournalEntry.objects.count(), 0)
 

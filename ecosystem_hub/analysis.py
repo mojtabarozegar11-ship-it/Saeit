@@ -7,6 +7,7 @@ from collections import defaultdict
 from decimal import Decimal, ROUND_UP
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
+from django.db.models import Count
 from django.utils import timezone
 from enterprise_portal.models import (
     BudgetPlan, CommercialDocument, JournalEntry, InventoryItem,
@@ -80,7 +81,7 @@ def scan(unit, code):
         for currency, status, count in (
             JournalEntry.objects.filter(unit=unit)
             .values_list("currency", "status")
-            .annotate(count=__import__("django").db.models.Count("pk"))
+            .annotate(count=Count("pk"))
         ):
             findings.append(issue(
                 f"دفتر {currency} — {status}",
