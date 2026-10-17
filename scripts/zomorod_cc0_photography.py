@@ -194,24 +194,24 @@ CURATED = {
      ("Farming on the Headland", "https://live.staticflickr.com/65535/52331019325_c86ab76e2e_b.jpg", "flickr"),
  ],
  "protected-cultivation": [
-     ("Garden Greenhouse Flowers", "https://live.staticflickr.com/65535/52020715477_3e790def58_b.jpg", "flickr"),
-     ("Greenhouse", "https://live.staticflickr.com/263/18613270743_7de569bcbd_b.jpg", "flickr"),
+     ("Greenhouse Plants", "https://cdn.stocksnap.io/img-thumbs/960w/C9C8A976A0.jpg", "stocksnap"),
+     ("Greenhouse Plants", "https://cdn.stocksnap.io/img-thumbs/960w/1PH92S4FT5.jpg", "stocksnap"),
  ],
  "professional-services": [
-     ("AMISOM promotes agricultural skills", "https://live.staticflickr.com/65535/51511290744_8f41954ff1_b.jpg", "flickr"),
-     ("Farming on the Headland", "https://live.staticflickr.com/65535/52331019325_c86ab76e2e_b.jpg", "flickr"),
+     ("Business Meeting", "https://cdn.stocksnap.io/img-thumbs/960w/SKBXLJOILI.jpg", "stocksnap"),
+     ("Team Meeting", "https://cdn.stocksnap.io/img-thumbs/960w/VQXYE2ZEHC.jpg", "stocksnap"),
  ],
  "field-consulting": [
      ("Tractor with Mower Attachment", "https://live.staticflickr.com/65535/51405132905_baf743c8b1_b.jpg", "flickr"),
      ("Farming on the Headland", "https://live.staticflickr.com/65535/52331019325_c86ab76e2e_b.jpg", "flickr"),
  ],
  "industrial-technology": [
-     ("Warehouse Factory", "https://cdn.stocksnap.io/img-thumbs/960w/6147FC6B1D.jpg", "stocksnap"),
-     ("Warehouse Windows", "https://cdn.stocksnap.io/img-thumbs/960w/JRTYQKBMVX.jpg", "stocksnap"),
+     ("Industrial Factory", "https://cdn.stocksnap.io/img-thumbs/960w/B144524308.jpg", "stocksnap"),
+     ("3D Printer", "https://cdn.stocksnap.io/img-thumbs/960w/JCN9ZVO1SD.jpg", "stocksnap"),
  ],
  "scientific-research": [
-     ("ATMIS Medics trained on laboratory equipment", "https://live.staticflickr.com/65535/52249697210_8e3c3882c4_b.jpg", "flickr"),
-     ("ATMIS Medics trained on laboratory equipment", "https://live.staticflickr.com/65535/52248218602_f70a8214aa_b.jpg", "flickr"),
+     ("Bioprocessing manufacturing technology equipment", "https://live.staticflickr.com/65535/54499620023_f6975ae9ca_b.jpg", "flickr"),
+     ("Bioprocessing manufacturing technology equipment", "https://live.staticflickr.com/65535/54499620073_3021f8ec5e_b.jpg", "flickr"),
  ],
  "microbiology": [
      ("Pond Management Algae under Microscope", "https://live.staticflickr.com/65535/51399002982_5bdb5ac919_b.jpg", "flickr"),
