@@ -1,0 +1,44 @@
+name: MojPlayWin staged bridge 503 status-class READONLY
+on:
+  push:
+    branches: ["audit/mojplaywin-backup-transport-20261017"]
+    paths: [".github/workflows/mojplaywin-footer-bridge-503-diagnostic.yml"]
+permissions:
+  contents: read
+jobs:
+  no-write-public-status:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Compare staged same-origin bridge with existing target GET only
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from urllib.request import Request,build_opener
+          from urllib.error import HTTPError,URLError
+          base="https://mojplaywin.com"
+          for slug,path in (("research","/research/"),("agriculture","/agriculture/"),
+                            ("company","/company/"),("venture_jewelry","/ventures/jewelry-gold/")):
+              targets=(("existing",base+path+"?__mpw_footer_passthru=1"),
+                 ("bridge",base+"/design-preview-20261017/_mpw_main_footer_bridge_20261018.php?__mpw_footer_section="+slug))
+              for name,url in targets:
+                  status=0;why="none"
+                  try:
+                      req=Request(url,headers={"User-Agent":"MojPlayWin-FooterBridge-FailSafe-Diag","Accept-Encoding":"identity"})
+                      with build_opener().open(req,timeout=20) as r:
+                          status=r.status
+                          data=r.read(64) if name=="bridge" else b""
+                  except HTTPError as e:
+                      status=e.code
+                      data=e.read(64) if name=="bridge" else b""
+                  except (URLError,OSError,ValueError) as e:
+                      why=type(e).__name__;data=b""
+                  if name=="bridge":
+                      if data.startswith(b"Source unavailable"):why="upstream_unavailable"
+                      elif data.startswith(b"Unsupported original markup"):why="html_guard_rejected"
+                      elif status==200:why="200_ok"
+                      else:why="unknown_safe_fail"
+                  print(f"DIAGNOSTIC slug={slug} path_type={name} status={status} classification={why}")
+          print("PUBLIC_ONLY_NO_SERVER_FILES_MODIFIED=true")
+          PY
