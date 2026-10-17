@@ -40,7 +40,7 @@ class MojPlayWinReferenceGoldUITests(SimpleTestCase):
         self.assertIn('{% include "mojplaywin/footer.html" %}', home)
         self.assertIn("© 2022 MojPlayWin.", (HOME / "footer.html").read_text())
 
-    @override_settings(ROOT_URLCONF="core.mojplaywin_atelier_preview_urls")
+    @override_settings(ROOT_URLCONF="core.mojplaywin_atelier_preview_urls", ALLOWED_HOSTS=["mojplaywin.com", "localhost", "testserver"])
     def test_home_render_works_and_preserves_menu_and_canonical(self):
         response = self.client.get("/", HTTP_HOST="mojplaywin.com")
         self.assertEqual(response.status_code, 200)
@@ -55,7 +55,7 @@ class MojPlayWinReferenceGoldUITests(SimpleTestCase):
         self.assertEqual(html.count('class="mpo-orbit-card"'), 18)
         self.assertIn("© 2022 MojPlayWin.", html)
 
-    @override_settings(ROOT_URLCONF="core.mojplaywin_atelier_preview_urls")
+    @override_settings(ROOT_URLCONF="core.mojplaywin_atelier_preview_urls", ALLOWED_HOSTS=["mojplaywin.com", "localhost", "testserver"])
     def test_other_main_sections_unchanged_by_home_reference_style(self):
         response = self.client.get("/services/", HTTP_HOST="mojplaywin.com")
         self.assertEqual(response.status_code, 200)
