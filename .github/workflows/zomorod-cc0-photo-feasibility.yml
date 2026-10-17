@@ -17,8 +17,10 @@ jobs:
           python3 - <<'PY'
           import json,urllib.parse,urllib.request
           subjects=[
-            'library', 'books', 'microscope', 'biology', 'food processing',
-            'agriculture technology', 'vegetables'
+            'greenhouse interior','greenhouse plants','business meeting',
+            'professional agriculture','manufacturing equipment','factory equipment',
+            'laboratory equipment','scientific laboratory','industrial production',
+            'assembly line'
           ]
           for subject in subjects:
               params=urllib.parse.urlencode(dict(q=subject,license='cc0',category='photograph',page_size=12))
@@ -34,6 +36,6 @@ jobs:
                   if x.get('license')=='cc0' and x.get('url','').startswith('https://'):
                       valid.append((x.get('title','')[:75],x.get('url','')[:140],x.get('width'),x.get('height')))
               print('CC0_QUERY='+subject+' count='+str(len(valid)))
-              for title,img,width,height in valid[:3]:
+              for title,img,width,height in valid[:6]:
                   print('CC0_EXAMPLE='+title+' '+str(width)+'x'+str(height)+' '+img)
           PY
