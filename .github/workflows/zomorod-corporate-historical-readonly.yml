@@ -725,6 +725,50 @@ jobs:
                           print('SELECTOR_CONFIG='+name+' exists='+str(Path(val).exists())+' basename='+Path(val).name+' is_virtualenv='+str('/virtualenv/' in val))
           PY
           REMOTE
+      - name: Inspect LiteSpeed wrapper and CloudLinux Selector options without mutation
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-readonly"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          export PYTHONDONTWRITEBYTECODE=1
+          python3 - <<'PY'
+          from pathlib import Path
+          import subprocess,json,os,re,hashlib
+          wrapper=Path('/usr/local/lsws/fcgi-bin/lswsgi_wrapper')
+          print('LSWS_WRAPPER_READABLE='+str(wrapper.is_file() and os.access(wrapper,os.R_OK)))
+          if wrapper.is_file() and os.access(wrapper,os.R_OK):
+              for number,line in enumerate(wrapper.read_text(errors='replace').splitlines()[:35],start=1):
+                  if number<14 or any(term in line for term in ('VIRTUAL_ENV','set_env_vars.py','PYTHON','LS_PYTHON')):
+                      if len(line)<320:print('WRAPPER_LINE='+str(number)+' '+line)
+          cmd=Path('/usr/sbin/cloudlinux-selector')
+          print('CLOUDLINUX_SELECTOR_EXISTS='+str(cmd.is_file()))
+          if cmd.is_file():
+              for argset in [['--help'],['change','--help']]:
+                  try:
+                      r=subprocess.run([str(cmd),*argset],capture_output=True,text=True,timeout=12)
+                      lines=(r.stdout+'\n'+r.stderr).splitlines()
+                      print('SELECTOR_HELP_CMD='+':'.join(argset)+' exit='+str(r.returncode))
+                      for line in lines[:36]:
+                          if len(line)<180 and (line.strip().startswith('-') or 'change' in line or 'app-uri' in line or 'app-root' in line):
+                              print('SELECTOR_HELP_LINE='+line.strip())
+                  except Exception as exc:print('SELECTOR_HELP_EXCEPTION='+type(exc).__name__)
+          h=Path.home()
+          css=h/'public_html'/'static'/'site'/'emerald-system.css'
+          if css.is_file():
+              print('RECOVERABLE_CSS_BYTES='+str(css.stat().st_size))
+              print('RECOVERABLE_CSS_SHA256='+hashlib.sha256(css.read_bytes()).hexdigest())
+          manifest=h/'Saeit'/'staticfiles'/'staticfiles.json'
+          if manifest.is_file():
+              try:
+                  data=json.loads(manifest.read_text())
+                  paths=data.get('paths',{})
+                  print('STATIC_MANIFEST_ENTRIES='+str(len(paths)))
+                  print('EMERALD_IN_MANIFEST='+str('site/emerald-system.css' in paths))
+              except Exception as exc:print('STATIC_MANIFEST_PARSE='+type(exc).__name__)
+          PY
+          REMOTE
       - name: Erase runner-only relay credentials
         if: always()
         run: rm -rf "$RUNNER_TEMP/zomorod-readonly"
