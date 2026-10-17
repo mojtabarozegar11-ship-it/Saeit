@@ -17,9 +17,8 @@ jobs:
           python3 - <<'PY'
           import json,urllib.parse,urllib.request
           subjects=[
-             'farm', 'greenhouse', 'laboratory', 'factory', 'irrigation',
-             'cattle', 'tractor', 'orchard', 'research', 'plant',
-             'warehouse', 'agriculture', 'technology', 'solar panels'
+            'library', 'books', 'microscope', 'biology', 'food processing',
+            'agriculture technology', 'vegetables'
           ]
           for subject in subjects:
               params=urllib.parse.urlencode(dict(q=subject,license='cc0',category='photograph',page_size=12))
