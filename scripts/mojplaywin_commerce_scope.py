@@ -14,7 +14,7 @@ import sys
 ALLOWED_EXACT = frozenset({
     "core/mojplaywin_page_content.py",
     "core/mojplaywin_views.py",
-    "core/templates/brands/mojplaywin/base.html",
+
     "core/templates/mojplaywin/section.html",
     "core/templates/mojplaywin/store.html",
     "core/templates/mojplaywin/theme.html",
@@ -41,7 +41,7 @@ SENSITIVE_PREFIXES = (
     "core/migrations/", "config/", "farnaz/", "saman/", "picm/",
     "mojtaba.roozegar/", "studio.Roham/", "zomorod/",
     "core/templates/core/", "core/templates/taniya_studio/",
-    "core/templates/brands/zomorod/", "core/templates/brands/other/",
+    "core/templates/brands/",
 )
 
 def is_allowed_path(path: str) -> bool:
