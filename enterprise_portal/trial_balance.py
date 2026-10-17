@@ -74,6 +74,7 @@ def safe_csv(value):
 @require_GET
 def trial_balance(request):
     required_permission(request, "view_journalentry")
+    required_permission(request, "view_ledgeraccount")
     try:
         unit, currency = filters(request)
     except ValueError as error:
@@ -92,6 +93,7 @@ def trial_balance(request):
 @require_GET
 def trial_balance_csv(request):
     required_permission(request, "view_journalentry")
+    required_permission(request, "view_ledgeraccount")
     try:
         unit, currency = filters(request)
     except ValueError as error:
