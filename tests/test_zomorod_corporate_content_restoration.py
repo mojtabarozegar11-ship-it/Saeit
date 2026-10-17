@@ -239,7 +239,7 @@ class CorporateContentPreservationTests(unittest.TestCase):
         self.assertIn("شرکت کشت و صنعت زمرد ملل", about)
         self.assertIn("مجتبی روزگار", about)
         self.assertIn("original-executive-profile", self.parsed["about"].ids)
-        self.assertIn("#original-executive-profile", self.parsed["about"].links)
+        self.assertIn("#historic-executive-duties", self.parsed["about"].links)
         self.assertIn("preserved-corporate-profile-20261017", about)
         self.assertIn("preserved-corporate-records-20261017", self.raw["company"])
 
