@@ -6,6 +6,8 @@ on:
       - ".github/workflows/mojplaywin-cpanel-readonly-inventory.yml"
       - "scripts/mojplaywin_cpanel_readonly_inventory.py"
       - "tests/test_mojplaywin_cpanel_readonly_inventory.py"
+      - "scripts/mojplaywin_rewrite_backup_readonly.py"
+      - "tests/test_mojplaywin_rewrite_backup_readonly.py"
   workflow_dispatch:
 permissions:
   contents: read
@@ -83,3 +85,11 @@ jobs:
           python3 -m py_compile scripts/mojplaywin_live_routing_fingerprint.py
           d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
           timeout 35s ssh -T -F "$d/config" saeit-cpanel python3 - < scripts/mojplaywin_live_routing_fingerprint.py
+      - name: Inspect .htaccess rewrites and legacy backup metadata (never restore)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p 'test_mojplaywin_rewrite_backup_readonly.py'
+          python3 -m py_compile scripts/mojplaywin_rewrite_backup_readonly.py
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 35s ssh -T -F "$d/config" saeit-cpanel python3 - < scripts/mojplaywin_rewrite_backup_readonly.py
