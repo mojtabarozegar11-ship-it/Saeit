@@ -370,6 +370,80 @@ jobs:
               print('PASSENGER_ERROR_MARKER='+term+' count='+str(s.lower().count(term.lower())))
           PY
           REMOTE
+      - name: Correlate 14 Oct 01AM backup and cloud selector live status
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-readonly"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          export PYTHONDONTWRITEBYTECODE=1
+          python3 - <<'PY'
+          from pathlib import Path
+          from datetime import datetime,timezone
+          import os,subprocess,json,collections,re
+          home=Path.home()
+          target=datetime.fromisoformat('2026-10-13T21:30:00+00:00')
+          starts=target.timestamp()-3600
+          ends=target.timestamp()+3600
+          roots=[home/'.backups',home/'Saeit'/'backups',home/'Saeit'/'var'/'backups']
+          hits=[]
+          for root in roots:
+              if not root.is_dir():continue
+              for folder,dirs,files in os.walk(root):
+                  depth=len(Path(folder).relative_to(root).parts)
+                  dirs[:]=[d for d in dirs if not d.startswith('.') and not any(x in d.lower() for x in ('mojtaba','mohammad','ghanadi','amozeshgah','secrets','ssh','token','credential','venv'))] if depth<6 else []
+                  if depth>6:continue
+                  for name in files:
+                      if not (name.endswith(('.html','.sqlite3','.db','.tar','.tar.gz','.zip','.json','.py')) or 'backup' in name or 'snapshot' in name):continue
+                      path=Path(folder)/name
+                      try:
+                          if path.is_symlink():continue
+                          st=path.stat()
+                          if starts<=st.st_mtime<=ends:
+                              hits.append((str(path.relative_to(home)),int(st.st_size),datetime.fromtimestamp(st.st_mtime,timezone.utc).isoformat(timespec='minutes')))
+                      except (OSError,ValueError):pass
+          print('TARGET_BACKUP_TIME=2026-10-14_01:00_Asia-Tehran')
+          print('EXACT_TIME_WINDOW_CANDIDATE_COUNT='+str(len(hits)))
+          for rel,size,dt in sorted(hits,key=lambda z:z[2])[:80]:
+              print('EXACT_TIME_WINDOW_FILE='+dt+' '+str(size)+' '+rel)
+          for path in (home/'Saeit'/'core'/'middleware.py',home/'Saeit'/'core'/'middleware',home/'Saeit'/'config'/'wsgi.py',home/'Saeit'/'passenger_wsgi.py',home/'Saeit'/'tmp'/'restart.txt'):
+              print('LIVE_MODULE='+str(path.relative_to(home))+' exists='+str(path.exists())+' bytes='+(str(path.stat().st_size) if path.is_file() else 'notfile'))
+          selector=Path('/usr/sbin/cloudlinux-selector')
+          if selector.is_file() and os.access(selector,os.X_OK):
+              try:
+                  run=subprocess.run([str(selector),'get','--json','--interpreter','python','--user',os.environ.get('USER','zomorod2')],stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,text=True,timeout=18)
+                  print('SELECTOR_GET_RETURN_CODE='+str(run.returncode))
+                  if run.returncode==0:
+                      js=json.loads(run.stdout)
+                      records=[]
+                      def walk(obj):
+                          if isinstance(obj,dict):
+                              if 'domain' in obj and ('app_uri' in obj or 'app-root' in obj or 'app_root' in obj):records.append(obj)
+                              for val in obj.values():walk(val)
+                          elif isinstance(obj,list):
+                              for val in obj:walk(val)
+                      walk(js)
+                      print('SELECTOR_APP_RECORD_COUNT='+str(len(records)))
+                      for idx,obj in enumerate(records[:10],1):
+                          if obj.get('domain') not in ('zomorodmelal.ir','staging.zomorodmelal.ir'):continue
+                          print('SELECTOR_APP='+str(idx)+' domain='+str(obj.get('domain'))+' app_uri='+repr(obj.get('app_uri'))+' status='+str(obj.get('app_status'))+' version='+str(obj.get('python_version') or obj.get('app_version'))+' startup='+str(obj.get('startup_file')))
+              except Exception as exc:print('SELECTOR_GET_EXCEPTION='+type(exc).__name__)
+          log=home/'Saeit'/'stderr.log'
+          if log.is_file():
+              with log.open('rb') as stream:
+                  stream.seek(max(0,log.stat().st_size-500000))
+                  data=stream.read(500000).decode('utf8','replace')
+              chunks=data.split('Traceback (most recent call last):')
+              print('TRACEBACK_COUNT='+str(len(chunks)-1))
+              for chunk in chunks[-5:]:
+                  if 'RuntimeError' in chunk or 'ModuleNotFoundError' in chunk:
+                      marks=[]
+                      for k in ('populate() isn','core.middleware','set_env_vars.py','pydantic_core'):
+                          if k in chunk:marks.append(k)
+                      print('TRACEBACK_MARKERS='+','.join(marks)+' exception='+('RuntimeError' if 'RuntimeError:' in chunk else 'ModuleNotFoundError' if 'ModuleNotFoundError:' in chunk else 'unknown'))
+          PY
+          REMOTE
       - name: Erase runner-only relay credentials
         if: always()
         run: rm -rf "$RUNNER_TEMP/zomorod-readonly"
