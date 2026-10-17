@@ -16,10 +16,16 @@ from .models import (
 )
 from .services import confirm_stock_movement, post_journal, stock_balance
 
+TEST_STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+}
+
 User = get_user_model()
 D = Decimal
 
 
+@override_settings(STORAGES=TEST_STORAGES)
 @override_settings(DEBUG=False, ALLOWED_HOSTS=["testserver", "zomorodmelal.ir"])
 class OfficeSecurityTests(TestCase):
     def setUp(self):
@@ -125,6 +131,7 @@ class OfficeSecurityTests(TestCase):
         self.assertIn("no-store", response["Cache-Control"])
 
 
+@override_settings(STORAGES=TEST_STORAGES)
 class FinanceIntegrityTests(TestCase):
     def setUp(self):
         self.owner = User.objects.create_superuser(
@@ -236,6 +243,7 @@ class FinanceIntegrityTests(TestCase):
         self.assertEqual(AuditEvent.objects.count(), 0)
 
 
+@override_settings(STORAGES=TEST_STORAGES)
 class InventoryAndOfficeTests(TestCase):
     def setUp(self):
         self.owner = User.objects.create_superuser(username="chief", email="chief@example.org", password="test")
