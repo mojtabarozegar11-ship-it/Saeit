@@ -17,6 +17,60 @@ on:
 permissions:
   contents: read
 jobs:
+  editorial_uniqueness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Report homepage and six specialist page image reuse
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from html.parser import HTMLParser
+          from pathlib import Path
+          from collections import defaultdict
+          from hashlib import sha256
+
+          class Images(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.srcs=[]
+              def handle_starttag(self,tag,attrs):
+                  if tag!='img':return
+                  attributes=dict(attrs)
+                  source=attributes.get('src','').strip()
+                  if not source or 'company-logo' in source: return
+                  self.srcs.append(source)
+
+          pages=[Path('content/zomorod-new-home/index.html')]
+          pages.extend(Path('content/zomorod-nova-pages')/(slug+'.html')
+                       for slug in ('about','company','services','industry','research','knowledge'))
+          uses=defaultdict(list)
+          bytes_hashes=defaultdict(set)
+          for path in pages:
+              parser=Images()
+              parser.feed(path.read_text(encoding='utf-8'))
+              for source in parser.srcs:
+                  uses[source].append(path.as_posix())
+                  if source.startswith('/static/site/'):
+                      f=Path('core/static/site')/source.removeprefix('/static/site/')
+                      if f.is_file():bytes_hashes[sha256(f.read_bytes()).hexdigest()].add(source)
+          print('EDITORIAL_PAGES_AUDITED='+str(len(pages)))
+          print('EDITORIAL_PHOTOS_USED='+str(sum(len(v) for v in uses.values())))
+          print('UNIQUE_EDITORIAL_URLS='+str(len(uses)))
+          repeated=[(name,locations) for name,locations in sorted(uses.items()) if len(locations)>1]
+          repeated_hashes=[urls for urls in bytes_hashes.values() if len(urls)>1]
+          for name,locations in repeated:
+              print('DUPLICATE_EDITORIAL_IMAGE='+name+' uses='+str(len(locations))+' pages='+','.join(sorted(set(locations))))
+          for group in repeated_hashes:
+              print('IDENTICAL_IMAGE_BYTES_UNDER_MULTIPLE_NAMES='+','.join(sorted(group)))
+          print('DUPLICATE_EDITORIAL_URL_COUNT='+str(len(repeated)))
+          print('DUPLICATE_EDITORIAL_HASH_GROUPS='+str(len(repeated_hashes)))
+          if repeated or repeated_hashes:
+              raise SystemExit('Zomorod 100/100 blocked by repeated editorial imagery')
+          print('SITEWIDE_EDITORIAL_UNIQUENESS=PASS')
+          PY
   release_gate:
     runs-on: ubuntu-latest
     timeout-minutes: 8
