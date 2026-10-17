@@ -193,6 +193,15 @@ class FinanceIntegrityTests(TestCase):
         with self.assertRaises(ValidationError):
             self.line(doc, self.foreign, debit=100)
 
+    def test_account_is_immutable_after_finalized_entries(self):
+        doc = self.journal()
+        self.line(doc, self.cash, debit=150)
+        self.line(doc, self.sales, credit=150)
+        post_journal(doc.pk, self.owner)
+        self.cash.code = "999"
+        with self.assertRaises(ValidationError):
+            self.cash.save()
+
     def test_a_line_must_have_exactly_one_side(self):
         doc = self.journal()
         for debit, credit in [(100, 100), (0, 0), (-1, 0)]:
