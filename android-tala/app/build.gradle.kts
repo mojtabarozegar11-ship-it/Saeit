@@ -7,11 +7,17 @@ android {
     namespace = "ir.zomorodmelal.tala"
     compileSdk = 35
     defaultConfig {
-        applicationId = "ir.zomorodmelal.tala"
-        minSdk = 26
-        targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        applicationId = "ir.zomorodmelal.tala.mobile"
+        minSdk = 23
+        targetSdk = 29
+        versionCode = 2
+        versionName = "1.0.1"
+    }
+    signingConfigs {
+        getByName("debug") {
+            enableV1Signing = true
+            enableV2Signing = true
+        }
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
