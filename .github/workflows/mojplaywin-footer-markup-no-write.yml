@@ -1,0 +1,31 @@
+name: MojPlayWin public 503 markup classification no-write
+on:
+  push:
+    branches: ["audit/mojplaywin-backup-transport-20261017"]
+    paths: [".github/workflows/mojplaywin-footer-markup-no-write.yml"]
+permissions:
+  contents: read
+jobs:
+  source-structure-only:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Inspect only aggregate HTML guard counters; no document bodies output
+        run: |
+          python3 - <<'PY'
+          import urllib.request,re,json
+          for key,path in (("research","/research/"),("agriculture","/agriculture/"),("company","/company/"),("venture_jewelry","/ventures/jewelry-gold/")):
+              req=urllib.request.Request("https://mojplaywin.com"+path+"?__mpw_footer_passthru=1",headers={"User-Agent":"MojPlayWin-ReadOnly-HTML-Validation/1.0","Accept":"text/html","Accept-Encoding":"identity"})
+              with urllib.request.urlopen(req,timeout=20) as res:
+                  raw=res.read(1500000)
+                  mime=res.headers.get("Content-Type","")
+              result={
+                  "route":key,
+                  "bytes":len(raw),
+                  "mime_is_html":mime.startswith("text/html"),
+                  "footer_close_count":len(re.findall(rb'</footer\s*>',raw,re.I)),
+                  "head_close_count":len(re.findall(rb'</head\s*>',raw,re.I)),
+                  "founder_name_anywhere":b"Mojtaba Roozegar" in raw,
+                  "existing_edge_marker":b"data-mpw-main-founder-edge" in raw,
+              }
+              print(json.dumps(result,sort_keys=True))
+          PY
