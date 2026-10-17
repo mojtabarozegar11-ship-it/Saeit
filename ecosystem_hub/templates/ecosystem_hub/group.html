@@ -1,0 +1,29 @@
+{% extends "ecosystem_hub/base.html" %}
+{% block title %}گزارش کل اکوسیستم{% endblock %}
+{% block hub_title %}گزارش مدیریتی کل گروه{% endblock %}
+{% block hub_subtitle %}نمای یکپارچه برای مدیر ارشد؛ حفظ استقلال هر واحد حقوقی، دفتر مالی و ارز{% endblock %}
+{% block hub_content %}
+<div class="hub-notice">
+<strong>گزارش نظارتی داخلی، نه صورت مالی تلفیقی قانونی</strong>
+<p>این نما صرفاً داده‌های ثبت‌شده را در کنار هم قرار می‌دهد. تعدیلات بین‌شرکتی، نرخ ارز، مالیات، دوره‌های مالی و حذف معاملات درون‌گروهی هنوز برای گزارش حسابرسی‌شده تعیین نشده‌اند. هیچ ارز یا شخصیت حقوقی متفاوتی به‌طور خودکار جمع نشده است.</p>
+</div>
+<div class="hub-metrics"><article><span>واحدهای ثبت‌شده گروه</span><strong>{{ unit_count }}</strong><small>شامل شرکت‌ها و واحدهای مستقل</small></article></div>
+{% for record in rows %}
+<section class="hub-section">
+<div class="hub-section-title"><div><span class="eyebrow">{{ record.unit.code }}</span>
+<h2>{{ record.unit.name }}</h2>
+{% if record.identity %}<p>{{ record.identity.legal_name }} {% if record.identity.is_legal_entity %}· شخصیت حقوقی مستقل{% endif %}</p>{% endif %}
+</div><a href="{% url 'enterprise_portal:ecosystem_hub:dashboard' %}?unit={{ record.unit.code|urlencode }}">جزئیات واحد ←</a></div>
+<div class="hub-metrics">
+<article><span>سفارش تولید باز</span><strong>{{ record.production }}</strong></article>
+<article><span>ریسک باز</span><strong>{{ record.risks }}</strong></article>
+<article><span>کار سازمانی باز</span><strong>{{ record.tasks }}</strong></article>
+</div>
+<div class="table-frame"><table><thead><tr><th>ارز مستقل</th><th>گردش بدهکار قطعی</th><th>گردش بستانکار قطعی</th></tr></thead>
+<tbody>{% for rec in record.journals %}<tr>
+<td>{{ rec.currency }}</td><td class="number">{{ rec.debit|floatformat:2 }}</td><td class="number">{{ rec.credit|floatformat:2 }}</td>
+</tr>{% empty %}<tr><td colspan="3">سند قطعی این واحد ثبت نشده است.</td></tr>{% endfor %}</tbody>
+</table></div>
+</section>
+{% empty %}<div class="hub-empty">هیچ واحد تجاری ثبت نشده است.</div>{% endfor %}
+{% endblock %}

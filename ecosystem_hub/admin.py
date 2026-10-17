@@ -1,6 +1,7 @@
 """Restrict change-list, direct-object and reference lookups by accessible unit."""
 from django.contrib import admin
-from django.core.exceptions import PermissionDenied
+from django.core.exceptions import PermissionDenied, ValidationError
+from django.utils import timezone
 from django.db.models import Q
 from enterprise_portal.models import (
     BusinessUnit, InventoryItem, CompanyAsset, ManagementProject,
@@ -194,6 +195,23 @@ class PerformanceIndicatorAdmin(ScopedAdmin):
 class ReviewApprovalAdmin(ScopedAdmin):
     list_display = ("summary", "unit", "assigned_to", "decision", "reviewed_at")
     list_filter = ("unit", "decision")
+    readonly_fields = ("reviewed_at",)
+
+    def save_model(self, request, obj, form, change):
+        if change:
+            original = ReviewApproval.objects.get(pk=obj.pk)
+            immutable = ("unit_id", "summary", "target_type", "target_reference",
+                         "requested_by_id", "assigned_to_id")
+            if any(getattr(original, name) != getattr(obj, name) for name in immutable):
+                raise ValidationError("شناسه و دامنه درخواست تصمیم پس از ثبت قابل تغییر نیست.")
+            if original.decision != "pending":
+                raise ValidationError("تصمیم ثبت‌شده قابل تغییر نیست؛ پرونده جدید تشکیل دهید.")
+            if obj.decision != "pending":
+                require_unit(request.user, obj.unit, approve=True)
+                if not request.user.is_superuser and original.assigned_to_id != request.user.pk:
+                    raise PermissionDenied("این درخواست به شما ارجاع نشده است.")
+                obj.reviewed_at = timezone.now()
+        super().save_model(request, obj, form, change)
 
 
 @admin.register(ReferenceEvidence)

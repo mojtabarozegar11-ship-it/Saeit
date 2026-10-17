@@ -15,6 +15,7 @@
 </header>
 <nav class="hub-nav" aria-label="ابزارهای مدیریت اکوسیستم">
 <a href="{% url 'enterprise_portal:ecosystem_hub:dashboard' %}">مرکز مدیریت</a>
+{% if request.user.is_superuser %}<a href="{% url 'enterprise_portal:ecosystem_hub:group_overview' %}">گزارش کل گروه</a>{% endif %}
 <a href="{% url 'enterprise_portal:ecosystem_hub:modules' %}">واحدهای تخصصی</a>
 <a href="{% url 'enterprise_portal:ecosystem_hub:assistants' %}">دستیارهای مدیریت</a>
 {% if perms.ecosystem_hub.view_productionorder %}<a href="{% url 'enterprise_portal:ecosystem_hub:production' %}">تولید و صنعت</a>{% endif %}

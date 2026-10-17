@@ -6,6 +6,7 @@ app_name = "ecosystem_hub"
 urlpatterns = [
     path("", views.dashboard, name="dashboard"),
     path("modules/", views.modules, name="modules"),
+    path("group/", views.group_overview, name="group_overview"),
     path("production/", views.production, name="production"),
     path("oversight/", views.oversight, name="oversight"),
     path("assistants/", views.assistants, name="assistants"),

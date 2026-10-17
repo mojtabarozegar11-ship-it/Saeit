@@ -398,6 +398,72 @@ class HubSuite(TestCase):
         self.assertFalse(panel.has_change_permission(request))
         self.assertEqual(panel.get_queryset(request).count(), 0)
 
+    def test_group_overview_requires_true_owner_role(self):
+        self.client.force_login(self.viewer)
+        self.assertEqual(
+            self.client.get("/company/office/ecosystem/group/", secure=True).status_code,
+            403,
+        )
+        self.client.force_login(self.owner)
+        response = self.client.get("/company/office/ecosystem/group/", secure=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["unit_count"], 3)
+        self.assertContains(response, "گزارش مدیریتی کل گروه")
+
+    def test_group_finance_keeps_legal_units_and_currencies_distinct(self):
+        for unit, currency in ((self.farm, "IRR"), (self.farm, "USD"), (self.factory, "IRR")):
+            a = LedgerAccount.objects.create(
+                unit=unit, code="101", name="نقد", category="asset"
+            )
+            b = LedgerAccount.objects.create(
+                unit=unit, code="401", name="فروش", category="income"
+            )
+            entry = JournalEntry.objects.create(
+                unit=unit, reference=currency + "-" + unit.code,
+                description="ثبت کنترل", currency=currency, created_by=self.owner,
+            )
+            JournalLine.objects.create(entry=entry, account=a, debit=D("100"), credit=D("0"))
+            JournalLine.objects.create(entry=entry, account=b, credit=D("100"), debit=D("0"))
+            post_journal(entry.pk, self.owner)
+        self.client.force_login(self.owner)
+        response = self.client.get("/company/office/ecosystem/group/", secure=True)
+        self.assertEqual(response.status_code, 200)
+        rows = {x["unit"].code: x for x in response.context["rows"]}
+        self.assertEqual(len(rows["farm"]["journals"]), 2)
+        self.assertEqual(len(rows["factory"]["journals"]), 1)
+        self.assertEqual({z["currency"] for z in rows["farm"]["journals"]}, {"IRR", "USD"})
+        for unit_code in ("farm", "factory"):
+            for x in rows[unit_code]["journals"]:
+                self.assertEqual(x["debit"], x["credit"])
+                self.assertEqual(x["debit"], D("100"))
+        self.assertNotContains(response, "صورت‌های مالی تلفیقی تأیید شده")
+
+    def test_approval_requires_designated_review_approver_not_any_staff(self):
+        request = ReviewApproval.objects.create(
+            unit=self.farm, summary="آزمون تصمیم", target_type="proposed_budget",
+            target_reference="B1", requested_by=self.owner, assigned_to=self.viewer,
+        )
+        panel = admin.site._registry[ReviewApproval]
+        req = RequestFactory().post("/admin/ecosystem_hub/reviewapproval/1/change/")
+        req.user = self.viewer
+        request.decision = "accepted"
+        with self.assertRaises(PermissionDenied):
+            panel.save_model(req, request, None, change=True)
+        membership = UnitMembership.objects.get(user=self.viewer, unit=self.farm)
+        membership.role = "manager"
+        membership.save()
+        with self.assertRaises(PermissionDenied):
+            panel.save_model(req, request, None, change=True)
+        membership.can_approve = True
+        membership.save()
+        panel.save_model(req, request, None, change=True)
+        request.refresh_from_db()
+        self.assertEqual(request.decision, "accepted")
+        self.assertIsNotNone(request.reviewed_at)
+        with self.assertRaises(ValidationError):
+            panel.save_model(req, request, None, change=True)
+        self.assertFalse(JournalEntry.objects.exists())
+
     def test_assistant_access_is_csrf_protected(self):
         web = Client(enforce_csrf_checks=True)
         web.force_login(self.viewer)

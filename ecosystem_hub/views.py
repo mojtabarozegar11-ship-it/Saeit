@@ -1,7 +1,7 @@
 """Server-rendered, role-filtered ecosystem workspace and assistant drafts."""
 from django.contrib.auth.decorators import user_passes_test
 from django.core.exceptions import PermissionDenied
-from django.db.models import Q
+from django.db.models import Q, Count, Sum
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -9,13 +9,14 @@ from django.utils import timezone
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_GET, require_POST
 
-from enterprise_portal.models import BusinessUnit, InventoryItem, JournalEntry, WorkTask
+from enterprise_portal.models import BusinessUnit, InventoryItem, JournalEntry, JournalLine, WorkTask
 from enterprise_portal.views import office_access, no_cache
 from .access import user_units, require_unit
 from .analysis import generate_report
 from .catalog import CATALOG, DEPARTMENTS
 from .models import (
     AssistantRun, ManagementRisk, ManagedSite, ProductionOrder, ProcurementNeed,
+    Organization,
     QualityInspection, MaintenanceTicket, ReviewApproval, UnitMembership,
     PerformanceIndicator, ProposedAutomation,
 )
@@ -68,6 +69,59 @@ def dashboard(request):
         "assistant_preview": list(CATALOG.values())[:8],
         "section": "ecosystem",
     })
+
+
+
+@never_cache
+@office_access
+@require_GET
+def group_overview(request):
+    """Owner-only group control, not consolidated legal financial statements."""
+    require_hub(request)
+    if not request.user.is_superuser:
+        raise PermissionDenied("مقایسه همه شرکت‌ها فقط با دسترسی مدیر ارشد مجاز است.")
+    units = list(BusinessUnit.objects.order_by("code"))
+    identities = {x.unit_id: x for x in Organization.objects.select_related("parent", "unit")}
+    ledger_groups = list(
+        JournalLine.objects.filter(entry__status="posted")
+        .values("entry__unit_id", "entry__currency")
+        .annotate(debit=Sum("debit"), credit=Sum("credit"))
+        .order_by("entry__unit_id", "entry__currency")
+    )
+    finance_by_unit = {}
+    for record in ledger_groups:
+        finance_by_unit.setdefault(record["entry__unit_id"], []).append({
+            "currency": record["entry__currency"],
+            "debit": record["debit"],
+            "credit": record["credit"],
+        })
+    production = {
+        x["unit_id"]: x["total"] for x in
+        ProductionOrder.objects.exclude(state__in=("closed", "cancelled"))
+        .values("unit_id").annotate(total=Count("pk"))
+    }
+    risks = {
+        x["unit_id"]: x["total"] for x in
+        ManagementRisk.objects.exclude(state="closed")
+        .values("unit_id").annotate(total=Count("pk"))
+    }
+    work = {
+        x["unit_id"]: x["total"] for x in
+        WorkTask.objects.exclude(status="done").values("unit_id").annotate(total=Count("pk"))
+    }
+    rows = [{
+        "unit": unit,
+        "identity": identities.get(unit.id),
+        "journals": finance_by_unit.get(unit.id, []),
+        "production": production.get(unit.id, 0),
+        "risks": risks.get(unit.id, 0),
+        "tasks": work.get(unit.id, 0),
+    } for unit in units]
+    return page(request, "group", {
+        "rows": rows, "unit_count": len(units), "section": "group",
+        "selected_unit": None, "units": units,
+    })
+
 
 
 @never_cache

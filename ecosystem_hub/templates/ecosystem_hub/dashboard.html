@@ -12,6 +12,8 @@
 {% else %}
 <div class="hub-empty">واحد سازمانی قابل دسترسی وجود ندارد. مدیر سیستم باید ابتدا واحد و مجوز عضویت ثبت کند.</div>
 {% endif %}
+{% if request.user.is_superuser %}
+<div class="hub-links"><a href="{% url 'enterprise_portal:ecosystem_hub:group_overview' %}">گزارش مدیریتی همه واحدها و ارزهای مستقل ←</a></div>{% endif %}
 <section class="hub-section">
 <div class="hub-section-title"><div><span class="eyebrow">ONE ECOSYSTEM / MULTIPLE BUSINESSES</span><h2>بخش‌های مدیریتی یکپارچه</h2></div>
 <a href="{% url 'enterprise_portal:ecosystem_hub:modules' %}">مشاهده ابزارهای تخصصی ←</a></div>
