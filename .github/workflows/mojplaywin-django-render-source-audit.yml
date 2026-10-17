@@ -1,0 +1,112 @@
+name: MojPlayWin Django production templates architecture audit
+on:
+  push:
+    branches: ["audit/mojplaywin-backup-transport-20261017"]
+    paths: [".github/workflows/mojplaywin-django-render-source-audit.yml"]
+permissions:
+  contents: read
+jobs:
+  inspect-django-without-mutation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Inventory live Django main template routing and target files without importing application
+        shell: bash
+        timeout-minutes: 3
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 90s ssh -T -F "$d/config" saeit-cpanel 'python3 -' <<'PY'
+          from pathlib import Path
+          import re,json,hashlib,os,ast
+          root=Path("/home/zomorod2/Saeit-staging")
+          public=Path("/home/zomorod2/mojplaywin.com")
+          if root.is_symlink() or not root.is_dir():raise SystemExit("NO_GO_DJANGO_ROOT_MISSING")
+          paths=["core/services_views.py","core/mojplaywin_views.py","core/mojplaywin_web_views.py",
+                 "core/mojplaywin_editorial.py",
+                 "core/templates/mojplaywin/home.html","core/templates/mojplaywin/base.html",
+                 "core/templates/mojplaywin/theme.html","core/templates/mojplaywin/orbital_experience.html",
+                 "core/templates/mojplaywin/reference_gold.css","core/templates/mojplaywin/orbital_critical.css",
+                 "core/templates/mojplaywin/store.html","core/templates/mojplaywin/section.html",
+                 "core/templates/mojplaywin/footer.html",
+                 "core/static/site/mojplaywin-atelier/globe-orbit.js",
+                 "core/static/site/mojplaywin-atelier/global-technology-orbit.svg",
+                 "config/urls.py","config/settings.py","core/commerce_views.py"]
+          result={}
+          for p in paths:
+              f=root/p
+              entry={"exists":f.is_file(),"is_symlink":f.is_symlink()}
+              if f.is_file() and not f.is_symlink():
+                  data=f.read_bytes()
+                  entry.update(bytes=len(data),sha256=hashlib.sha256(data).hexdigest()[:16])
+                  if p.endswith("services_views.py"):
+                      entry.update(host_dispatch_to_new_home=(b"mojplaywin_views import home" in data),
+                                   public_host_routed=(b"mojplaywin.com" in data))
+                  if p.endswith("mojplaywin/home.html"):
+                      entry.update(orbital_v4=(b'mpo-orbit-card' in data),
+                                   build_notes_visible=(b"Offline page previews" in data))
+                  if p.endswith("config/settings.py"):
+                      entry.update(app_dirs_enabled=b'"APP_DIRS": True' in data,
+                                   custom_cached_loader=b"cached.Loader" in data,
+                                   debug_false_default=b"DEBUG=(bool, False)" in data)
+                  if p.endswith("config/urls.py"):
+                      entry.update(root_services=(b'path("", services' in data),
+                                   root_dispatch=(b'path("", branded_home_dispatch' in data))
+                  if p.endswith("orbital_experience.html"):
+                      entry.update(orbit_cards=data.count(b'class="mpo-orbit-card"'),
+                                   interactive_globe=b'data-globe-orbit="continuous"' in data)
+              result[p]=entry
+          wsgi=(public/"passenger_wsgi.py")
+          if not wsgi.is_file() or wsgi.is_symlink() or b"Saeit-staging" not in wsgi.read_bytes():
+              raise SystemExit("NO_GO_PASSENGER_MAPPING_CHANGED")
+          base=root/"core/templates/mojplaywin"
+          result["live_templates_folder_files"] = sorted(p.name for p in base.iterdir() if p.is_file() and not p.is_symlink()) if base.is_dir() else []
+          result["app_owner_match"]=root.stat().st_uid==os.getuid()
+          print(json.dumps({"classification":"MAIN_MOJPLAYWIN_DJANGO_SOURCE_READONLY","files":result,
+            "source_root_shared_with_other_sites":True,"app_processes_touched":False,
+            "passenger_unchanged":True,"write_permitted":False},sort_keys=True))
+          PY
