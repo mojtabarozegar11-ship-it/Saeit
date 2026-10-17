@@ -92,10 +92,18 @@ def prepare():
         raise RuntimeError("existing template inheritance changed")
     shared=b.decode("utf-8")
     # Existing shared parent contains exactly one canonical for Zomorod.
-    matcher=re.compile(r'<link\s+rel=["\']canonical["\']\s+href=["\']https://zomorodmelal\.ir[^"\']*["\']\s*/?>',re.I)
-    hits=list(matcher.finditer(shared))
-    if len(hits)!=1:raise RuntimeError("exactly one shared-base canonical expected")
-    patched=shared[:hits[0].start()]+EXPECTED_CANONICAL+shared[hits[0].end():]
+    # Existing template conditional compares request.path with quoted strings
+    # inside href; replace the only canonical line without HTML quote matching.
+    lines=shared.splitlines(keepends=True)
+    matches=[i for i,line in enumerate(lines)
+             if line.strip().startswith('<link rel="canonical" href="https://zomorodmelal.ir')]
+    if len(matches)!=1 or not lines[matches[0]].strip().endswith('">'):
+        raise RuntimeError("expected unique single-line shared canonical")
+    original_line=lines[matches[0]]
+    if "<script" in original_line:
+        raise RuntimeError("unexpected executable content in canonical line")
+    lines[matches[0]]=EXPECTED_CANONICAL+("\n" if original_line.endswith("\n") else "")
+    patched="".join(lines)
     if (patched.count('rel="canonical"')!=1 or
             '<link rel="canonical" href="https://zomorodmelal.ir' in patched):
         raise RuntimeError("new page-specific canonical has a conflict")
