@@ -64,13 +64,16 @@ if(!is_string($response)||$err!==0||$status!==200||$sz<=0||stripos($mime,'text/h
 }
 $head=substr($response,0,$sz);
 $body=substr($response,$sz);
+$mw_count=preg_match_all('/<footer\b[^>]*class="mw-site-footer"[^>]*>/i',$body);
+$legacy_count=preg_match_all('/<footer\b[^>]*class="mpw-footer"[^>]*>/i',$body);
 if(strlen($body)<500||strlen($body)>1250000||
- preg_match_all('/<footer\b[^>]*class="mw-site-footer"[^>]*>/i',$body)!==1||
+ $mw_count+$legacy_count!==1||
  preg_match_all('/<\/head\s*>/i',$body)!==1||
  strpos($body,'data-mpw-main-founder-edge')!==false||
  strpos($body,'Mojtaba Roozegar')!==false) {
  http_response_code(503);header('Content-Type: text/plain; charset=utf-8');exit('Unsupported original markup');
 }
+$target_class=($mw_count===1)?'mw-site-footer':'mpw-footer';
 $style='<style id="mpw-main-footer-edge-css">'
 .'.mpw-main-founder-edge{display:flex;justify-content:center;align-items:center;'
 .'max-width:440px;margin:25px auto 12px;padding:17px 24px;text-align:center;'
@@ -83,7 +86,8 @@ $style='<style id="mpw-main-footer-edge-css">'
 $plaque='<div class="mpw-main-founder-edge" data-mpw-main-founder-edge="true"'
 .' aria-label="Founder: Mojtaba Roozegar"><strong>Mojtaba Roozegar</strong></div>';
 $body=preg_replace('/<\/head\s*>/i',$style.'</head>',$body,1,$countHead);
-$body=preg_replace('/(<footer\b[^>]*class="mw-site-footer"[^>]*>.*?)<\/footer\s*>/is','$1'.$plaque.'</footer>',$body,1,$countFooter);
+$rx='/(<footer\b[^>]*class="'.preg_quote($target_class,'/').'"[^>]*>.*?)<\/footer\s*>/is';
+$body=preg_replace($rx,'$1'.$plaque.'</footer>',$body,1,$countFooter);
 if(!is_string($body)||$countHead!==1||$countFooter!==1){
  http_response_code(503);exit;
 }
