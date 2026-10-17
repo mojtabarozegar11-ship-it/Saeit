@@ -1,0 +1,60 @@
+name: MojPlayWin Lighthouse 100 acceptance gate
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/mojplaywin-lighthouse-100-gate.yml"
+      - "scripts/mojplaywin_lighthouse_gate.py"
+      - "scripts/mojplaywin_atelier_visual_preview.py"
+      - "core/templates/mojplaywin/**"
+      - "core/templates/brands/mojplaywin/**"
+      - "core/static/site/mojplaywin-atelier*"
+      - "core/mojplaywin_views.py"
+      - "core/mojplaywin_editorial.py"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: mojplaywin-lighthouse-acceptance
+  cancel-in-progress: false
+jobs:
+  strict-preview-100:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PYTHONPATH: .
+      SECRET_KEY: ci-lighthouse-preview-only
+      DEBUG: "False"
+      ALLOWED_HOSTS: mojplaywin.com,localhost,127.0.0.1,testserver
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Set up Node for Lighthouse
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install Django and preview browser
+        run: |
+          python -m pip install -r requirements.txt
+          python -m pip install playwright
+          python -m playwright install --with-deps chromium
+      - name: Collect local static files
+        run: python manage.py collectstatic --noinput
+      - name: Render isolated HTML pages (no production access)
+        run: python scripts/mojplaywin_atelier_visual_preview.py
+      - name: Demand all four Lighthouse scores equal 100 on desktop and mobile
+        run: python scripts/mojplaywin_lighthouse_gate.py
+      - name: Preserve Lighthouse evidence, including failures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mojplaywin-lighthouse-100-review
+          path: |
+            mojplaywin-lighthouse-results/
+            mojplaywin-v4-visual-preview/visual-qa.json
+            mojplaywin-v4-visual-preview/manifest.json
+          if-no-files-found: warn
+          retention-days: 14
