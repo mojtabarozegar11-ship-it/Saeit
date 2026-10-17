@@ -73,3 +73,54 @@ class MojPlayWinReferenceGoldUITests(SimpleTestCase):
             for dangerous in ("fetch(", "XMLHttpRequest", "localStorage", "paymentIntent",
                               "checkout", "/admin/"):
                 self.assertNotIn(dangerous, contents)
+
+    def test_all_31_new_subject_images_are_original_lightweight_and_valid(self):
+        from xml.etree import ElementTree
+        from hashlib import sha256
+        images = STATIC / "topic-images"
+        assets = sorted(images.glob("*.svg"))
+        self.assertEqual(len(assets), 31)
+        fingerprints = set()
+        for asset in assets:
+            with self.subTest(asset=asset.name):
+                raw = asset.read_bytes()
+                self.assertLess(len(raw), 12000)
+                root = ElementTree.fromstring(raw)
+                self.assertEqual(root.tag, "{http://www.w3.org/2000/svg}svg")
+                self.assertTrue(root.find("{http://www.w3.org/2000/svg}title") is not None)
+                self.assertNotIn(b"<script", raw.lower())
+                self.assertNotIn(b"<image", raw.lower(), "Avoid missing external image dependencies")
+                self.assertNotIn(b"http://", raw.replace(b"http://www.w3.org/2000/svg", b""))
+                self.assertNotIn(b"https://", raw)
+                fingerprints.add(sha256(raw).hexdigest())
+        self.assertEqual(len(fingerprints), 31, "No copied SVG illustrations")
+
+    @override_settings(ROOT_URLCONF="core.mojplaywin_atelier_preview_urls",
+                       ALLOWED_HOSTS=["mojplaywin.com", "localhost", "testserver"])
+    def test_no_repeated_non_logo_images_on_complete_homepage(self):
+        from collections import Counter
+        from html.parser import HTMLParser
+
+        class ImageCollector(HTMLParser):
+            def __init__(self):
+                super().__init__()
+                self.sources = []
+            def handle_starttag(self, tag, attrs):
+                if tag == "img":
+                    source = dict(attrs).get("src", "")
+                    if source:
+                        self.sources.append(source.split("?")[0])
+
+        response = self.client.get("/", HTTP_HOST="mojplaywin.com")
+        self.assertEqual(response.status_code, 200)
+        parser = ImageCollector()
+        parser.feed(response.content.decode("utf-8"))
+        self.assertGreaterEqual(len(parser.sources), 48, "Expected all existing sections")
+        counts = Counter(p for p in parser.sources if not p.endswith("/official-coin-80.webp"))
+        self.assertEqual({p: n for p, n in counts.items() if n > 1}, {},
+                         "Every non-logo homepage image should be independent")
+        orbit = (HOME / "orbital_experience.html").read_text(encoding="utf-8")
+        self.assertEqual(orbit.count('class="mpo-orbit-card"'), 18)
+        for topic in ("gold-jewelry-craft.svg", "handwoven-carpet.svg",
+                      "fuel-mobility-hub.svg", "hospitality-hotel.svg"):
+            self.assertIn(topic, orbit)
