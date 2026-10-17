@@ -369,6 +369,19 @@ class CompanyAsset(Stamp):
         verbose_name_plural = "اموال و دارایی‌های ثابت"
 
 
+
+class OfficeLoginFailure(models.Model):
+    """Hashed login key: never store attempted usernames, IPs or passwords."""
+    key = models.CharField(max_length=64, unique=True)
+    failed_count = models.PositiveSmallIntegerField(default=0)
+    last_failed_at = models.DateTimeField()
+    blocked_until = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "کنترل ورود ناموفق"
+        verbose_name_plural = "کنترل امنیت ورود"
+
+
 class AuditEvent(models.Model):
     occurred_at = models.DateTimeField(auto_now_add=True)
     actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
