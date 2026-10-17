@@ -1,0 +1,66 @@
+name: Moj Play Win extra three PHP bridge endurance read only
+on:
+  push:
+    branches: ["audit/mojplaywin-backup-transport-20261017"]
+    paths: [".github/workflows/mojplaywin-extra-three-php-endurance.yml"]
+permissions:
+  contents: read
+jobs:
+  read-only-direct-php:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check real PHP bridge without any rewrites for 45 requests and prior six routes
+        shell: bash
+        timeout-minutes: 5
+        run: |
+          python3 - <<'PY'
+          import urllib.request,urllib.error,time,json,collections
+          from urllib.parse import urlencode
+          base="https://mojplaywin.com"
+          bridge="/design-preview-20261017/_mpw_three_extra_canonical_20261017.php"
+          routes={"market":"/market/","industry":"/industry/","economy":"/economy/"}
+          class NoRedirect(urllib.request.HTTPRedirectHandler):
+              def redirect_request(self,req,fp,code,msg,headers,url):return None
+          client=urllib.request.build_opener(NoRedirect())
+          report=[]
+          for roundno in range(1,16):
+              for key,path in routes.items():
+                  req=urllib.request.Request(base+bridge+"?__mpw_canon_route="+key,headers={
+                   "Cache-Control":"no-store,no-cache","User-Agent":"MojPlayWin-three-direct-endurance-qa"})
+                  start=time.monotonic()
+                  try:
+                      try:r=client.open(req,timeout=20)
+                      except urllib.error.HTTPError as e:r=e
+                      with r:
+                          body=r.read(720000)
+                          status=r.status
+                          edge=r.headers.get("X-MPW-Canonical-Edge","")
+                          location=r.headers.get("Location","")
+                  except (urllib.error.URLError,TimeoutError):
+                      body=b"";status=0;edge="";location=""
+                  tag=('<link rel="canonical" href="https://mojplaywin.com'+path+'">').encode()
+                  if status==200 and edge=="main-only" and body.count(tag)==1:
+                      state="correct"
+                  elif status==307 and "__mpw_canon_passthru" in location:
+                      state="fallback_to_django"
+                  else:
+                      state="unclassified_error"
+                  item={"round":roundno,"page":key,"state":state,"http":status,
+                    "duration_seconds":round(time.monotonic()-start,2)}
+                  report.append(item)
+                  if state!="correct":print("ENDURANCE_EXCEPTION "+json.dumps(item,sort_keys=True),flush=True)
+          summary={"classification":"MOJ_PLAY_WIN_EXTRA_PHP_DIRECT_ENDURANCE",
+            "samples":len(report),"status_counts":dict(collections.Counter(x["state"] for x in report)),
+            "per_route":{route:dict(collections.Counter(x["state"] for x in report if x["page"]==route))
+                         for route in routes},"max_seconds":max(x["duration_seconds"] for x in report),
+            "server_files_modified":False}
+          print(json.dumps(summary,sort_keys=True),flush=True)
+          for path in ("/store/","/research/","/company/","/knowledge/","/ventures/agriculture/","/ventures/jewelry-gold/"):
+              req=urllib.request.Request(base+path,headers={"Cache-Control":"no-cache"})
+              with urllib.request.urlopen(req,timeout=17) as r:
+                  html=r.read(700000)
+                  if r.status!=200 or html.count(('<link rel="canonical" href="'+base+path+'">').encode())!=1:
+                      raise RuntimeError("one of the six original production fixes did not survive")
+          print("ALL_SIX_PRIOR_CANONICALS_STILL_LIVE_AFTER_FAILED_THREE_RULE_RELEASE",flush=True)
+          PY
