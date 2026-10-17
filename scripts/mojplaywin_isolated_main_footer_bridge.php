@@ -65,7 +65,7 @@ if(!is_string($response)||$err!==0||$status!==200||$sz<=0||stripos($mime,'text/h
 $head=substr($response,0,$sz);
 $body=substr($response,$sz);
 if(strlen($body)<500||strlen($body)>1250000||
- preg_match_all('/<\/footer\s*>/i',$body)!==1||
+ preg_match_all('/<footer\b[^>]*class="mw-site-footer"[^>]*>/i',$body)!==1||
  preg_match_all('/<\/head\s*>/i',$body)!==1||
  strpos($body,'data-mpw-main-founder-edge')!==false||
  strpos($body,'Mojtaba Roozegar')!==false) {
@@ -83,7 +83,7 @@ $style='<style id="mpw-main-footer-edge-css">'
 $plaque='<div class="mpw-main-founder-edge" data-mpw-main-founder-edge="true"'
 .' aria-label="Founder: Mojtaba Roozegar"><strong>Mojtaba Roozegar</strong></div>';
 $body=preg_replace('/<\/head\s*>/i',$style.'</head>',$body,1,$countHead);
-$body=preg_replace('/<\/footer\s*>/i',$plaque.'</footer>',$body,1,$countFooter);
+$body=preg_replace('/(<footer\b[^>]*class="mw-site-footer"[^>]*>.*?)<\/footer\s*>/is','$1'.$plaque.'</footer>',$body,1,$countFooter);
 if(!is_string($body)||$countHead!==1||$countFooter!==1){
  http_response_code(503);exit;
 }
