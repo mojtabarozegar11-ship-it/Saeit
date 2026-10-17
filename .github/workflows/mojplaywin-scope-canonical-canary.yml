@@ -1,0 +1,154 @@
+name: Moj Play Win scoped six-canonical rewrite query-only canary
+on:
+  push:
+    branches: ["audit/mojplaywin-backup-transport-20261017"]
+    paths: [".github/workflows/mojplaywin-scope-canonical-canary.yml"]
+permissions:
+  contents: read
+concurrency:
+  group: mojplaywin-main-only-root-deploy
+  cancel-in-progress: false
+jobs:
+  prove-only-test-query-is-rewritten:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compile and validate six-route exact-match rule generator
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mojplaywin_six_canonical_rewrite.py
+          python3 - <<'PY'
+          import importlib.util
+          s=importlib.util.spec_from_file_location("mpw_r","scripts/mojplaywin_six_canonical_rewrite.py")
+          mod=importlib.util.module_from_spec(s)
+          s.loader.exec_module(mod)
+          source=b"RewriteEngine On\n# PASSENGER PROTECTED\nPassengerAppRoot /placeholder\n"
+          for mode,count in (("canary",1),("production",6)):
+              text=mod.build(source,mode).decode()
+              assert text.count(mod.TARGET)==count
+              assert "RewriteCond %{REQUEST_METHOD} ^GET$" in text
+              assert "RewriteCond %{QUERY_STRING} !(^|&)" in text
+              assert "PassengerAppRoot /placeholder" in text
+              assert text.replace(mod.directives(mode),"")==source.decode()
+          assert len(mod.ROUTES)==6
+          print("EXACT_DJANGO_PASSENGER_CONFIG_PRESERVATION_RULE_TESTS_PASS")
+          PY
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Preflight immutable PHP and all protected public routes before touching htaccess
+        shell: bash
+        timeout-minutes: 2
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          expected=$(sha256sum scripts/mojplaywin_canonical_php_mainonly.php|cut -d' ' -f1)
+          timeout 40s ssh -T -F "$d/config" saeit-cpanel "test \"\$(sha256sum /home/zomorod2/mojplaywin.com/design-preview-20261017/_mpw_main_canonical_bridge_20261017.php|cut -d' ' -f1)\" = '$expected'; test \"\$(sha256sum /home/zomorod2/mojplaywin.com/.htaccess|cut -d' ' -f1)\" = 8096fd64e4a0dfa9c84aa609eb9e650a79d03b38f54c40624e0f53764187d24d"
+          for path in / /store/ /saman/ /picm/login/ /farnaz/ /studio.Roham/ /mojtaba.roozegar/;do
+            status=$(curl -sSL -o /dev/null -w '%{http_code}' --max-time 15 "https://mojplaywin.com$path")
+            test "$status" = 200 || exit 61
+          done
+          echo "LIVE_ORIGINAL_ROUTE_AND_IMMUTABLE_BRIDGE_PASS"
+      - name: Arm only the store test-query rewrite, verify, and rollback before continuing
+        shell: bash
+        timeout-minutes: 3
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          expected=$(sha256sum scripts/mojplaywin_canonical_php_mainonly.php|cut -d' ' -f1)
+          armed=no
+          cleanup(){
+            if test "$armed" = yes;then
+              timeout 40s ssh -T -F "$d/config" saeit-cpanel 'python3 - rollback' < scripts/mojplaywin_six_canonical_rewrite.py ||
+                echo "FAIL_SAFE_INDEPENDENT_180_SECOND_WATCHDOG_ACTIVE"
+            fi
+          }
+          trap cleanup EXIT
+          timeout 42s ssh -T -F "$d/config" saeit-cpanel "python3 - canary '$expected'" < scripts/mojplaywin_six_canonical_rewrite.py
+          armed=yes
+          python3 - <<'PY'
+          import urllib.request,json
+          base="https://mojplaywin.com"
+          def get(path):
+              request=urllib.request.Request(base+path,headers={"Cache-Control":"no-store","User-Agent":"MojPlayWin-root-canonical-query-only-canary"})
+              with urllib.request.urlopen(request,timeout=23) as response:
+                  if response.status!=200:raise RuntimeError("not HTTP200")
+                  return response.read(200000),response.headers.get("X-MPW-Canonical-Edge","")
+          original,_=get("/store/?__mpw_canon_probe=20261017&__mpw_canon_passthru=1")
+          intercepted,marker=get("/store/?__mpw_canon_probe=20261017")
+          old=b'<link rel="canonical" href="https://zomorodmelal.ir/store/">'
+          new=b'<link rel="canonical" href="https://mojplaywin.com/store/">'
+          checks={"only_one_canonical_replaced":original.count(old)==1 and intercepted.count(new)==1,
+                  "all_other_html_identical":original.replace(old,new)==intercepted,
+                  "php_intercept_reached":marker=="main-only"}
+          # Ordinary user traffic must STILL be handled by old Django during canary.
+          live,lmarker=get("/store/")
+          checks["unmarked_store_untouched"]=old in live and lmarker!="main-only"
+          check=[
+             get("/research/")[0],get("/company/")[0],
+             get("/ventures/agriculture/")[0]]
+          checks["unmarked_others_untouched"]=all(b"https://zomorodmelal.ir" in x for x in check)
+          print(json.dumps({"classification":"MOJ_PLAY_WIN_EXACT_QUERY_CANARY_ACCEPTANCE",
+                  "checks":checks,"production_routes_altered":False},sort_keys=True))
+          if not all(checks.values()):raise RuntimeError("exact query guard failed")
+          PY
+          cleanup
+          armed=no
+      - name: Verify original htaccess and real main/subsite pages remain exactly healthy
+        shell: bash
+        timeout-minutes: 2
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          actual=$(timeout 35s ssh -T -F "$d/config" saeit-cpanel 'sha256sum /home/zomorod2/mojplaywin.com/.htaccess'|cut -d' ' -f1)
+          test "$actual" = 8096fd64e4a0dfa9c84aa609eb9e650a79d03b38f54c40624e0f53764187d24d
+          for path in / /store/ /research/ /company/ /knowledge/ /ventures/agriculture/ /ventures/jewelry-gold/ /saman/ /picm/login/ /farnaz/ /studio.Roham/ /mojtaba.roozegar/;do
+            status=$(curl -sSL -o /dev/null -w '%{http_code}' --max-time 15 "https://mojplaywin.com$path")
+            test "$status" = 200 || { echo "UNEXPECTED_PROTECTED_SITE_STATUS"; exit 82; }
+          done
+          echo "CANARY_PASSED_ORIGINAL_HTACCESS_AND_ALL_TWELVE_URLS_RESTORED"
