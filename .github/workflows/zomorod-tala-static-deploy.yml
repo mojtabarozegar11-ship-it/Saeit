@@ -120,6 +120,11 @@ jobs:
           sha="$1"
           root="$HOME/public_html"
           target="$root/tala"
+          private_store="$HOME/.tala-private"
+          test ! -L "$private_store"
+          if test -e "$private_store"; then test -d "$private_store"; fi
+          install -d -m 700 "$private_store"
+          chmod 700 "$private_store"
           backup_root="$HOME/.backups/zomorodmelal-tala"
           backup="$backup_root/$sha"
           stage="$root/.tala-stage-$sha"
