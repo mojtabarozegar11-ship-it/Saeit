@@ -1,6 +1,6 @@
 # Tala subsite
 
-The public interface is restricted to `/tala/`. Its deploy workflow stages `public/tala/**` and swaps only `/home/zomorod2/public_html/tala`, keeping a recoverable copy before deployment. It never modifies root `.htaccess`, Passenger, Django configuration, application files, databases, or neighboring site paths.
+The public interface is restricted to `/tala/`. A local `.htaccess` sets `PassengerEnabled off` and `DirectoryIndex index.html` inside this directory only, so the static app can bypass the root Passenger application without changing the parent configuration. Its deploy workflow stages `public/tala/**` and swaps only `/home/zomorod2/public_html/tala`, keeping a recoverable copy before deployment. It never modifies root `.htaccess`, Passenger, Django configuration, application files, databases, or neighboring site paths.
 
 The current release is an installable static progressive web app with an editorial showroom, a client-side jewelry estimate, a daily learning article, five market-analysis frames, and a map of business modules.
 

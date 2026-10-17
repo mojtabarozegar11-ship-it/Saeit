@@ -1,0 +1,7 @@
+# This directory is a static-only subsite. Keep the parent Passenger app unchanged.
+PassengerEnabled off
+DirectoryIndex index.html
+Options -Indexes
+<FilesMatch "^\.">
+  Require all denied
+</FilesMatch>
