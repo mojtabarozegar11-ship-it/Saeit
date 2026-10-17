@@ -2,9 +2,11 @@
 {% load static %}
 {% block title %}Web Design & Django Engineering for Canada and the USA | MojPlayWin{% endblock %}
 {% block meta_description %}Explore research-led web engineering, professional UX, Django applications, digital commerce architecture and responsible AI integration for North American B2B teams.{% endblock %}
+{% block extra_head %}<style id="mojplaywin-inner-gold-css">{% include "mojplaywin/inner_gold.css" %}</style>{% endblock %}
 {% block body_class %}mojplaywin-section{% endblock %}
 {% block content %}
 {% include "mojplaywin/theme.html" %}
+{% include "mojplaywin/inner_navigation.html" %}
 <style id="mpw-web-engineering-only">
 .mpw-web{--we-line:rgba(237,197,126,.35);--we-cream:#f6f0e3;--we-gold:#e5bf7a;color:var(--we-cream);width:min(1390px,calc(100% - 32px));margin:22px auto 55px}
 .mpw-web *{box-sizing:border-box}
