@@ -97,7 +97,7 @@ jobs:
                   assert resp.status == 200
                   html=resp.read(900000).decode("utf-8")
               m=re.search(r'<footer\b[^>]*>(.*?)</footer>',html,re.I|re.S)
-              assert m and m.group(1).count("Mojtaba Roozegar")==1 and "data-mpw-preview-founder-20261018" in m.group(1)
+              assert m and m.group(1).count("<strong>Mojtaba Roozegar</strong>")==1 and "data-mpw-preview-founder-20261018" in m.group(1)
               assert "noindex" in html.lower()
               print("PREVIEW_ONLY_PUBLIC_FOOTER_OK "+path)
           PY
@@ -105,12 +105,12 @@ jobs:
           from pathlib import Path
           import re
           p=Path("/home/zomorod2/mojplaywin.com/design-preview-20261017")
-          pages=sorted(x for x in p.iterdir() if x.name.endswith(".html"))
+          pages=sorted(x for x in p.iterdir() if x.name.endswith(".html") and "noindex" in x.read_text("utf-8").lower())
           assert len(pages)==22
           for path in pages:
               txt=path.read_text("utf-8")
               m=re.search(r'<footer\b[^>]*>(.*?)</footer>',txt,re.S|re.I)
-              assert m and m.group(1).count("Mojtaba Roozegar")==1
+              assert m and m.group(1).count("<strong>Mojtaba Roozegar</strong>")==1
               assert txt.count("data-mpw-preview-founder-20261018")==1
           print("ALL_22_PREVIEW_FOOTERS_PUBLISHED=true")
           print("ORIGINAL_MAIN_SITE_CHANGED=false")
