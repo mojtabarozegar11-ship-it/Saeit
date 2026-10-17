@@ -172,7 +172,7 @@ jobs:
             case "$path" in
               /) grep -Fq 'تَلا | طلا، جواهر و گوهرسنگ' "$RUNNER_TEMP/tala-response"; grep -Fq 'قیمت زنده هنوز متصل نشده' "$RUNNER_TEMP/tala-response" ;;
               /manifest.webmanifest) grep -Fq '"scope":"/tala/"' "$RUNNER_TEMP/tala-response" ;;
-              /sw.js) grep -Fq "const CACHE='tala-shell-v1'" "$RUNNER_TEMP/tala-response" ;;
+              /sw.js) grep -Fq "const CACHE='tala-shell-v2'" "$RUNNER_TEMP/tala-response" ;;
               /assets/tala-mark.svg) grep -Fq '<svg' "$RUNNER_TEMP/tala-response" ;;
             esac
             echo "TALA_PUBLIC_CHECK=$path passed"
