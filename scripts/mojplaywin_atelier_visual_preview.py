@@ -131,6 +131,14 @@ def capture_viewports(manifest):
                         if mode == "desktop" and "research." not in active_image:
                             raise RuntimeError("research-desktop: original photo not preserved")
                     if key == "home":
+                        main_cta_color = page.locator(".mpo-experience .mpo-btn-primary").evaluate(
+                            "(button) => getComputedStyle(button).color"
+                        )
+                        channels = [int(x) for x in re.findall(r"\\d+", main_cta_color)[:3]]
+                        if len(channels) != 3 or max(channels) > 85:
+                            raise RuntimeError(
+                                f"{key}-{mode}: low-contrast gold CTA text: {main_cta_color}"
+                            )
                         if page.locator("[data-mojplaywin-orbital='v1']").count() != 1:
                             raise RuntimeError(f"{key}-{mode}: approved orbital experience absent")
                         if page.locator(".mpo-ring").count() != 3:
