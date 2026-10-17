@@ -1,0 +1,84 @@
+name: MojPlayWin GPG backup progress read-only
+on:
+  push:
+    branches: ["audit/mojplaywin-backup-transport-20261017"]
+    paths:
+      - ".github/workflows/mojplaywin-backup-progress-readonly.yml"
+permissions:
+  contents: read
+jobs:
+  metadata-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Check private VPS archive completion metadata without file content
+        shell: bash
+        timeout-minutes: 1
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 40s ssh -T -F "$d/config" saeit-vps 'python3 -' <<'PY'
+          from pathlib import Path
+          import json,os,time
+          root=Path.home()/".private-mojplaywin-offhost-backups"
+          for kind in ("mysql","files"):
+              pref="mojplaywin_20261017_direct_39028306081_"+kind+"_gpgv2"
+              complete=root/(pref+".gpg")
+              partial=root/(pref+".gpg.partial")
+              manifest=root/(pref+".manifest.json")
+              if complete.is_file() and manifest.is_file():
+                  try:
+                      data=json.loads(manifest.read_text())
+                      good=(data.get("ciphertext_roundtrip_integrity_verified") is True and data.get("source_completion_footer_verified") is True)
+                  except Exception:good=False
+                  print("BACKUP_"+kind.upper()+"_STATUS="+("VERIFIED" if good else "INVALID"))
+              elif partial.is_file():
+                  s=partial.stat()
+                  print("BACKUP_"+kind.upper()+"_STATUS=IN_PROGRESS SIZE_MIB="+str(s.st_size//1048576)+" AGE_SEC="+str(int(time.time()-s.st_mtime)))
+              else:
+                  print("BACKUP_"+kind.upper()+"_STATUS=NOT_STARTED")
+          PY
