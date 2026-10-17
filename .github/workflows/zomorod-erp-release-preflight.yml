@@ -19,9 +19,36 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+      - name: Verify preparation changes touch no application or protected website
+        shell: bash
+        run: |
+          python - <<'PY'
+          import subprocess
+          permitted = {
+              ".github/workflows/zomorod-erp-release-preflight.yml",
+              "docs/zomorod-erp-release-checklist.json",
+              "docs/zomorod-erp-release-preparation.md",
+              "scripts/zomorod_erp_preflight.py",
+              "tests/test_zomorod_erp_preflight.py",
+          }
+          rows = subprocess.check_output(
+              ["git", "diff", "--name-status",
+               "origin/feature/zomorod-ecosystem-hub-v2-20261017...HEAD"],
+              text=True,
+          ).splitlines()
+          assert rows, "Expected a scoped preparation PR"
+          for row in rows:
+              status, name = row.split("\t", 1)
+              assert status in ("A", "M"), f"File deleted or renamed: {row}"
+              assert name in permitted, f"Out-of-scope application or subsite change: {name}"
+          print("PREPARATION_PR_FILES_ONLY=" + str(len(rows)))
+          print("ZERO_SITE_OR_FINANCIAL_RECORD_MUTATIONS_IN_PR=yes")
+          PY
       - name: Validate inspector without touching production
         shell: bash
         run: |
