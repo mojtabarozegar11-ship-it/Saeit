@@ -2,7 +2,11 @@ name: Zomorod ecosystem v2 isolated migration bootstrap
 on:
   push:
     branches: ["feature/zomorod-ecosystem-hub-v2-20261017"]
-    paths: [".github/workflows/zomorod-ecosystem-hub-bootstrap.yml"]
+    paths:
+      - ".github/workflows/zomorod-ecosystem-hub-bootstrap.yml"
+      - "ecosystem_hub/tests.py"
+      - "ecosystem_hub/views.py"
+      - "ecosystem_hub/analysis.py"
 permissions:
   contents: write
 concurrency:
