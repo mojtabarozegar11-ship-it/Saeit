@@ -58,7 +58,7 @@ class PublicCopyMustNotShowInternalImplementationNotes(SimpleTestCase):
         self.assertEqual(page.count('class="mpo-ring"'), 3)
         self.assertEqual(page.count('id="home-guide-'), 10)
         self.assertIn('id="site-directory"', page)
-        self.assertIn("MojPlay<em>Win</em>", page)
+        self.assertIn("Moj <em>Play</em> Win", page)
         self.assertIn("Research, creativity and digital engineering", page)
         self.assertIn("Explore MojPlayWin expertise", page)
         self.assertIn("Original digital play", page)
