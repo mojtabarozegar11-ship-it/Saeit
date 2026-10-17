@@ -266,7 +266,41 @@ class AssistantRunAdmin(ScopedAdmin):
 @admin.register(ProposedAutomation)
 class ProposedAutomationAdmin(ScopedAdmin):
     list_display = ("assistant_code", "unit", "cadence", "active", "requires_human_review", "last_checked_at")
+    readonly_fields = ("last_checked_at",)
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        return qs if request.user.is_superuser else qs.filter(owner=request.user)
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "owner" and not request.user.is_superuser:
+            from django.contrib.auth import get_user_model
+            kwargs["queryset"] = get_user_model().objects.filter(pk=request.user.pk)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+    def get_changeform_initial_data(self, request):
+        data = super().get_changeform_initial_data(request)
+        if not request.user.is_superuser:
+            data["owner"] = request.user.pk
+        return data
+
+    def has_change_permission(self, request, obj=None):
+        if obj is not None and not request.user.is_superuser and obj.owner_id != request.user.pk:
+            return False
+        return super().has_change_permission(request, obj)
 
     def save_model(self, request, obj, form, change):
+        from .catalog import CATALOG
+        if obj.assistant_code not in CATALOG or not CATALOG[obj.assistant_code]["handler"]:
+            raise ValidationError("موتور تخصصی این دستیار هنوز قابل اجرای زمان‌بندی نیست.")
+        if not request.user.is_superuser:
+            if not change and not obj.owner_id:
+                obj.owner = request.user
+            if obj.owner_id != request.user.pk:
+                raise PermissionDenied("زمان‌بندی باید متعلق به کاربر مجاز همان واحد باشد.")
+        if change:
+            previous = ProposedAutomation.objects.get(pk=obj.pk)
+            if obj.last_checked_at != previous.last_checked_at:
+                raise PermissionDenied("زمان آخرین بررسی فقط توسط اجرای واقعی سامانه تنظیم می‌شود.")
         obj.requires_human_review = True
         super().save_model(request, obj, form, change)
