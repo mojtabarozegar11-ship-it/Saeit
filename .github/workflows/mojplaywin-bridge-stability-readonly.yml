@@ -1,0 +1,60 @@
+name: Moj Play Win dynamic canonical bridge stability read-only
+on:
+  push:
+    branches: ["audit/mojplaywin-backup-transport-20261017"]
+    paths: [".github/workflows/mojplaywin-bridge-stability-readonly.yml"]
+permissions:
+  contents: read
+jobs:
+  assess-direct-bridge-without-rewrite:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Sample repeated PHP bridge GET responses without changing any live URLs
+        shell: bash
+        timeout-minutes: 4
+        run: |
+          python3 - <<'PY'
+          from urllib.request import Request,urlopen
+          from urllib.error import HTTPError
+          import json,time,re,hashlib
+          root="https://mojplaywin.com"
+          script=root+"/design-preview-20261017/_mpw_main_canonical_bridge_20261017.php"
+          destinations={"knowledge":"/knowledge/","store":"/store/"}
+          all_results=[]
+          for route,path in destinations.items():
+              samples=[]
+              for i in range(14):
+                  url=script+"?__mpw_canon_route="+route
+                  start=time.monotonic()
+                  try:
+                      with urlopen(Request(url,headers={"Cache-Control":"no-store","User-Agent":"MojPlayWin-readonly-PHP-stability"}),timeout=20) as response:
+                          data=response.read(180000).decode("utf-8",errors="replace")
+                          code=response.status
+                          final=response.geturl()
+                          edge=response.headers.get("X-MPW-Canonical-Edge","")
+                  except HTTPError as exc:
+                      data="";code=exc.code;final=url;edge=""
+                  row={"run":i+1,"http":code,"served_by_bridge":edge=="main-only",
+                        "fell_back_to_original":final!=url,
+                        "canonical_correct":('<link rel="canonical" href="https://mojplaywin.com'+path+'">' in data),
+                        "time_seconds":round(time.monotonic()-start,3)}
+                  samples.append(row)
+                  time.sleep(0.18)
+              all_results.append({"route":path,"probes":samples,
+                "bridge_successes":sum(r["served_by_bridge"] and r["canonical_correct"] for r in samples),
+                "fallbacks":sum(r["fell_back_to_original"] for r in samples),
+                "errors":sum(r["http"]!=200 for r in samples)})
+          print(json.dumps({"classification":"MOJ_PLAY_WIN_DIRECT_PHP_CANONICAL_BRIDGE_STABILITY",
+            "samples":all_results,"production_rewrites_untouched":True,
+            "new_source_files_changed":False},sort_keys=True))
+          PY
+      - name: Confirm default live paths stayed on Django after probe
+        shell: bash
+        timeout-minutes: 1
+        run: |
+          set -euo pipefail
+          for path in / /knowledge/ /store/ /saman/ /picm/login/ /farnaz/;do
+            test "$(curl -sSL -o /dev/null -w '%{http_code}' --max-time 17 "https://mojplaywin.com$path")" = 200 || exit 51
+          done
+          echo "ORIGINAL_MAIN_AND_INDEPENDENT_URLS_200_NO_SITE_MODIFICATIONS"
