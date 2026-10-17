@@ -1,0 +1,133 @@
+name: MojPlayWin root production routing safe preflight
+on:
+  push:
+    branches: ["audit/mojplaywin-backup-transport-20261017"]
+    paths: [".github/workflows/mojplaywin-root-production-routing-preflight.yml"]
+permissions:
+  contents: read
+jobs:
+  inspect-root-without-writes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Inspect safe rewrite constraints and existing root features (read-only)
+        shell: bash
+        timeout-minutes: 3
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 65s ssh -T -F "$d/config" saeit-cpanel 'python3 -' <<'PY'
+          from pathlib import Path
+          import json,re,hashlib,os
+          root=Path("/home/zomorod2/mojplaywin.com")
+          ht=root/".htaccess"
+          if root.is_symlink() or ht.is_symlink() or not ht.is_file():raise SystemExit("ROOT_NOT_SAFE")
+          rules=[]
+          for raw in ht.read_text(errors="replace").splitlines():
+              pieces=raw.strip().split()
+              if not pieces or pieces[0].startswith("#"):continue
+              kind=pieces[0].lower()
+              if kind=="rewriterule":
+                  pattern=pieces[1] if len(pieces)>1 else ""
+                  flags=pieces[-1] if pieces[-1].startswith("[") else ""
+                  rules.append({"kind":"rule","matches_everything":pattern in ("^(.*)$","^.*$",".*"),"matches_index":pattern in ("^$","^/$"),
+                    "target_is_passthrough":len(pieces)>2 and pieces[2]=="-","last":bool(re.search(r"\bL\b",flags,re.I)),
+                    "end":bool(re.search(r"\bEND\b",flags,re.I)),"flags_include_proxied":bool(re.search(r"\bP\b",flags,re.I))})
+              elif kind=="rewritecond":
+                  rules.append({"kind":"condition","tests_existing_file":any(x=="-f" for x in pieces),
+                    "tests_existing_directory":any(x=="-d" for x in pieces),"negation":any(x.startswith("!") for x in pieces)})
+              elif kind.startswith("passenger"):
+                  rules.append({"kind":"passenger_setting","setting":kind})
+              else:rules.append({"kind":kind})
+          paths=("design-preview-20261017/index.html","design-preview-20261017/static",
+                 "design-preview-20261017/_mpw_release_marker.txt",".htaccess","passenger_wsgi.py",
+                 "index.html","index.php","main.html")
+          exists={p:((root/p).exists() and not (root/p).is_symlink()) for p in paths}
+          print(json.dumps({"classification":"MOJPLAYWIN_ROOT_SAFE_REWRITE_PREFLIGHT",
+            "rules":rules,"files_present":exists,
+            "root_htaccess_sha256":hashlib.sha256(ht.read_bytes()).hexdigest(),
+            "root_htaccess_mode":oct(ht.stat().st_mode&0o777),
+            "read_only":True,"root_release_permitted":False},sort_keys=True))
+          PY
+      - name: Compare functional baseline and preview relative links without exposing sensitive data
+        shell: bash
+        timeout-minutes: 2
+        run: |
+          python3 - <<'PY'
+          from html.parser import HTMLParser
+          from collections import Counter
+          from urllib.parse import urlsplit
+          from urllib.request import urlopen,Request
+          import json
+          class Parse(HTMLParser):
+              def __init__(self):
+                  super().__init__();self.tags=Counter();self.links=[];self.forms=[];self.images=[];self.scripts=[]
+              def handle_starttag(self,t,attrs):
+                  a=dict(attrs);self.tags[t]+=1
+                  if t=="a":self.links.append(a.get("href",""))
+                  if t=="form":self.forms.append((a.get("method","GET").upper(),a.get("action","")))
+                  if t=="img":self.images.append(a.get("src",""))
+                  if t=="script":self.scripts.append(a.get("src",""))
+          reports={}
+          for key,url in [("live","https://mojplaywin.com/"),("preview","https://mojplaywin.com/design-preview-20261017/index.html")]:
+              with urlopen(Request(url,headers={"User-Agent":"MojPlayWin-safe-routing-audit"}),timeout=30) as resp:
+                  if resp.status!=200:raise RuntimeError("root or preview not 200")
+                  raw=resp.read(2000000).decode("utf-8")
+              p=Parse();p.feed(raw)
+              reports[key]={"html_bytes":len(raw),"forms_count":len(p.forms),
+                "posts_count":sum(x[0]=="POST" for x in p.forms),
+                "script_count":len(p.scripts),"image_count":len(p.images),
+                "relative_assets":sum(x and not x.startswith(("http","/","data:")) for x in p.images+p.scripts),
+                "relative_anchor_count":sum(x and not x.startswith(("http","/","#","mailto:","tel:")) for x in p.links),
+                "external_anchor_count":sum(x.startswith(("http://","https://")) for x in p.links),
+                "cart_keyword":("cart" in raw.lower()),"checkout_keyword":("checkout" in raw.lower()),
+                "login_keyword":("login" in raw.lower()),"admin_keyword":("admin" in raw.lower()),
+                "noindex_meta":("noindex,nofollow,noarchive" in raw),
+                "forms_safe_to_replace":not len(p.forms)}
+          print(json.dumps({"classification":"LIVE_VS_PREVIEW_FUNCTION_AUDIT","reports":reports,
+            "publishing_root_requires_absolute_preview_asset_rewrite":True,"production_changed":False},sort_keys=True))
+          PY
