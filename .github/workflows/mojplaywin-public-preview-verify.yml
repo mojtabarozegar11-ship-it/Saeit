@@ -1,0 +1,80 @@
+name: MojPlayWin public preview independent acceptance
+on:
+  push:
+    branches: ["audit/mojplaywin-backup-transport-20261017"]
+    paths:
+      - ".github/workflows/mojplaywin-public-preview-verify.yml"
+permissions:
+  contents: read
+jobs:
+  verify-published-22-pages:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify live preview HTML navigation, isolated static files and stable existing routes
+        shell: bash
+        timeout-minutes: 4
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import re,urllib.request,urllib.error,json
+          from urllib.parse import quote
+          root="https://mojplaywin.com/"
+          base=root+"design-preview-20261017/"
+          pages=("index","store","research","agents","restaurant","ai","blockchain",
+                 "support","web_engineering","venture_fuel_station","venture_jewelry_gold",
+                 "venture_carpets","venture_crypto","venture_ecommerce","venture_agriculture",
+                 "venture_hospitality","industry","knowledge","economy","studio","market","company")
+          def retrieve(url,limit=500000):
+              req=urllib.request.Request(url,headers={"User-Agent":"MojPlayWin-Public-Preview-CI/1.0"})
+              with urllib.request.urlopen(req,timeout=20) as r:
+                  data=r.read(limit+1)
+                  if r.status!=200 or len(data)>limit:raise RuntimeError("unexpected response")
+                  return data
+          marker=retrieve(base+"_mpw_release_marker.txt",128).decode().strip()
+          if marker!="mpw-approved-artifact-39034323161":raise RuntimeError("unknown preview release")
+          checked=0
+          index=""
+          for name in pages:
+              data=retrieve(base+name+".html")
+              html=data.decode("utf-8")
+              if "<html" not in html or "mojplaywin-atelier-v4" not in html or "noindex,nofollow,noarchive" not in html:
+                  raise RuntimeError("unrecognized preview HTML: "+name)
+              if name=="index":
+                  index=html
+                  for required in ("MojPlay", "data-globe-orbit", "mpo-orbit-card", "reference-gold"):
+                      if required not in html:raise RuntimeError("main design element absent: "+required)
+              elif name=="store" and "CURATED COLLECTION" not in html:
+                  raise RuntimeError("store does not use reviewed visitor copy")
+              checked+=1
+          image=re.search(r'(?:src|href)="(static/site/mojplaywin-atelier/global-technology-orbit[^"]+\.svg)"',index)
+          if image is None:raise RuntimeError("digital globe asset absent")
+          svg=retrieve(base+image.group(1),300000)
+          if b"<svg" not in svg:raise RuntimeError("globe SVG failed")
+          javascript=re.search(r'src="(static/site/mojplaywin-atelier/globe-orbit[^"]+\.js)"',index)
+          if javascript is None:raise RuntimeError("orbit motion script missing")
+          js=retrieve(base+javascript.group(1),150000)
+          if b"requestAnimationFrame" not in js:raise RuntimeError("globe orbit not interactive")
+          rootpage=retrieve(root,2000000).decode("utf-8",errors="replace")
+          if "mojplaywin" not in rootpage.lower():raise RuntimeError("live main route regressed")
+          paths=("/saman/","/picm/login/","/farnaz/","/studio.Roham/",
+                 "/mojtaba.roozegar/","/zahra%24%24/")
+          status={}
+          for path in paths:
+              try:
+                  req=urllib.request.Request(root.rstrip("/")+path,headers={"User-Agent":"MojPlayWin-Public-Preview-CI/1.0"})
+                  with urllib.request.urlopen(req,timeout=20) as r:
+                      status[path]=r.status
+              except urllib.error.HTTPError as exc:
+                  status[path]=exc.code
+          print(json.dumps({"classification":"PUBLIC_DESIGN_PREVIEW_VERIFIED",
+                            "public_url":base+"index.html",
+                            "verified_static_pages":checked,"verified_globe":True,
+                            "verified_orbit_javascript":True,
+                            "existing_main_route_healthy":True,
+                            "protected_routes_checked":len(status),
+                            "protected_status_codes":status,
+                            "passenger_restarted":False,
+                            "production_root_replaced":False,
+                            "release_scope":"public-preview-only"},sort_keys=True))
+          PY
