@@ -26,3 +26,43 @@ jobs:
         run: python scripts/mojplaywin_commerce_scope.py --base "$BASE_SHA" --head "$HEAD_SHA"
       - name: Run negative tests for protected paths
         run: python -m unittest discover -s tests -p test_mojplaywin_commerce_scope.py -v
+
+  snapshot-known-public-health:
+    if: ${{ github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'content/mojplaywin-complete-17-sections-20261017' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout read-only revision without persisted credentials
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Verify existing deployment jobs remain hard stopped
+        run: python3 -m unittest discover -s tests -p test_mojplaywin_shared_deploy_hard_stop.py -v
+      - name: Verify anonymous public GET probe has safe fixed allowlist
+        run: python3 -m unittest discover -s tests -p test_mojplaywin_public_subsite_smoke_baseline.py -v
+      - name: Read-only baseline for 11 known public main and child routes
+        run: |
+          python3 - <<'PY'
+          from scripts.mojplaywin_public_subsite_smoke_baseline import PUBLIC_PATHS, report
+          observations = report()
+          assert len(observations["responses"]) == len(PUBLIC_PATHS) == 11
+          failures = []
+          for rec in observations["responses"]:
+              path, status = rec["path"], rec["status"]
+              error = rec["error_class"]
+              # PICM intentionally requires authentication: anonymous 401/403 is acceptable.
+              acceptable = {200} | ({401, 403} if path == "/picm/login/" else set())
+              ok = status in acceptable and error in (None, "http_status")
+              print(f"READONLY_HEALTH path={path} http={status} redirects={rec['redirects']} state={'OK' if ok else 'NO_GO'}")
+              if not ok:
+                  failures.append(path)
+          print("UNKNOWN_SUBSITES_CERTIFIED=false")
+          print("PAYMENTS_CERTIFIED=false")
+          print("BACKUP_RESTORABILITY_CERTIFIED=false")
+          print("LIVE_DEPLOY_AUTHORIZED=false")
+          if failures:
+              raise SystemExit(f"Protected public route NO-GO count={len(failures)}")
+          PY
