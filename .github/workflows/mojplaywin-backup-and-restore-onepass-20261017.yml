@@ -147,6 +147,8 @@ jobs:
             -e "SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name NOT IN ('mysql','performance_schema','information_schema','sys')")
           test "$table_count" -gt 0 && test "$schema_count" -gt 0 || { echo "NO-GO: restored database has no application schema/tables"; exit 1; }
           echo "Isolated MySQL restore passed; schemas=$schema_count application_tables=$table_count"
+          docker rm -f "$label" >/dev/null
+          echo "Temporary MariaDB removed before extracting files to reduce peak runner disk usage"
           restore_dir=$(mktemp -d "$RUNNER_TEMP/mojplaywin-restore-XXXXXXXX")
           chmod 700 "$restore_dir"
           free=$(df -PB1 "$RUNNER_TEMP" | awk 'NR == 2 {print $4}')
