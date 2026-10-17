@@ -7,10 +7,15 @@
   "protected": [
     "/mojtaba.roozegar/",
     "/picm/",
-    "all independent domain subsites",
-    "zomorodmelal.ir",
-    "ETH and TRX wallets",
-    "every existing real product and order"
+    "/studio.Roham/",
+    "/saman/",
+    "/zahra$$/",
+    "/farnaz/",
+    "/taniya/",
+    "ALL OTHER UNKNOWN INDEPENDENT CHILD SITES BY DEFAULT",
+    "zomorodmelal.ir AND ALL ITS CHILD SITES",
+    "ETH and TRX gateways",
+    "every real product, order and license"
   ],
   "gates": [
     {
@@ -128,7 +133,7 @@
     {
       "id": "protected_subsites",
       "title": "All protected sites unchanged",
-      "criteria": "Before/after baseline smoke checks on personal /mojtaba.roozegar/, independent MojPlayWin child sites, Zomorod Melal and its child sites; no page, SEO, DB or media loss",
+      "criteria": "All known AND unknown independent MojPlayWin subsites, including /mojtaba.roozegar/, /picm/, /studio.Roham/, /saman/, /zahra$$/, /farnaz/, /taniya/ and any unlisted child, must have verified intact routes, content, accounts, DB, images, forms, SEO, uptime and backups before and after publication. A shared Passenger restart or unproven isolation blocks release.",
       "status": "not_verified",
       "evidence": [],
       "verified_at_utc": null
