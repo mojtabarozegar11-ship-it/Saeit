@@ -98,3 +98,15 @@
  .mpo-orbit-card{transform:none!important}
 }
 @media(prefers-contrast:more){.mpo-experience :is(.mpo-orbit-card,.mpo-ring-arrow,.mpo-btn){border-color:#ffe0a0!important}}
+
+/* The previously published full home content stays in HTML and remains
+ * normally searchable and scrollable; rendering waits until it nears view.
+ * Only the long legacy area BELOW the approved orbital home is deferred. */
+@supports(content-visibility:auto){
+ .mojplaywin-home .mw-shell[data-deferred-legacy="true"] > :is(
+   .mpx-hero,.mpx-section,.mpx-priorities,.mpx-featured,.mw-section,.mpx-signal
+ ){
+   content-visibility:auto;
+   contain-intrinsic-size:auto 760px;
+ }
+}
