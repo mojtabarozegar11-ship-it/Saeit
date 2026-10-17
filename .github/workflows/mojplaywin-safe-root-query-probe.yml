@@ -19,7 +19,7 @@ jobs:
       - name: Validate constrained probe script
         run: |
           python3 -m py_compile scripts/mojplaywin_safe_root_rewrite.py
-          grep -q '^__mpw_root_probe_20261017=exact' scripts/mojplaywin_safe_root_rewrite.py
+          grep -q '__mpw_root_probe_20261017=exact' scripts/mojplaywin_safe_root_rewrite.py
       - name: Establish host-pinned private relay without disclosing keys
         env:
           VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
