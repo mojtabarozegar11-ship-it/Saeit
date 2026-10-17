@@ -73,7 +73,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import json,os,urllib.request
+          import json,os,urllib.request,time
           paths=("/", "/store/", "/research/", "/company/", "/games/",
                  "/mojtaba.roozegar/", "/mojtaba.roozegar/about/", "/picm/login/",
                  "/studio.Roham/", "/saman/", "/farnaz/", "/zahra%24%24/", "/taniya/")
@@ -81,9 +81,15 @@ jobs:
           for path in paths:
               req=urllib.request.Request("https://mojplaywin.com"+path,
                    headers={"User-Agent":"MojPlayWin-inline-gold-before/1.0","Cache-Control":"no-cache"})
-              with urllib.request.urlopen(req,timeout=15) as res:
-                  states[path]=res.status
-                  assert res.status==200
+              for attempt in range(3):
+                  try:
+                      with urllib.request.urlopen(req,timeout=15) as res:
+                          states[path]=res.status
+                          assert res.status==200
+                      break
+                  except (OSError,TimeoutError):
+                      if attempt==2:raise
+                      time.sleep(4)
               print("BEFORE_PROTECTED_HEALTH_OK "+path)
           filename=os.path.join(os.environ["RUNNER_TEMP"],"mpw-footer-before.json")
           with open(filename,"w") as f:json.dump(states,f,sort_keys=True)
