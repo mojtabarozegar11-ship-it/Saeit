@@ -1,0 +1,28 @@
+name: MojPlayWin known public site baseline (anonymous GET only)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/mojplaywin-known-public-smoke.yml"
+      - "scripts/mojplaywin_public_subsite_smoke_baseline.py"
+      - "tests/test_mojplaywin_public_subsite_smoke_baseline.py"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/mojplaywin-known-public-smoke.yml"
+      - "scripts/mojplaywin_public_subsite_smoke_baseline.py"
+      - "tests/test_mojplaywin_public_subsite_smoke_baseline.py"
+permissions:
+  contents: read
+jobs:
+  get-known-public-pages-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Test read-only allowlist and safe redirect handling offline
+        run: python3 -m unittest discover -s tests -p 'test_mojplaywin_public_subsite_smoke_baseline.py'
+      - name: Record only public status and truncated response fingerprints
+        run: python3 scripts/mojplaywin_public_subsite_smoke_baseline.py
