@@ -1,0 +1,67 @@
+{
+  "project": "Zomorod Melal / زمرد ملل",
+  "stage": "production preparation, no publication",
+  "created": "2026-10-17",
+  "scope": [
+    "company main site",
+    "company/office",
+    "company/office/ecosystem"
+  ],
+  "checks": {
+    "server_selector_wsgi_fixed": {
+      "status": "pending",
+      "owner": "مدیر سرور",
+      "requirement": "اصلاح اتصال LiteSpeed/Passenger و Python Selector برای سایت اصلی؛ /admin/login و /api/health باید 200 بدهند",
+      "evidence": ""
+    },
+    "verified_restorable_backup": {
+      "status": "pending",
+      "owner": "مدیر زیرساخت",
+      "requirement": "بازیابی آزمایشی مستقلِ نسخه ۱ بامداد ۳ روز قبل و سپس نسخه تازه DB و media؛ ثبت چک‌سام و نتیجه restore",
+      "evidence": ""
+    },
+    "staging_migrations_and_rollback": {
+      "status": "pending",
+      "owner": "مدیر فنی",
+      "requirement": "اجرای migrate --plan و مهاجرت‌های افزایشی ERP و hub روی دیتابیس کپی آزمایشی، حفظ تمام جداول و بازگشت آزموده‌شده",
+      "evidence": ""
+    },
+    "tls_and_secure_session_cookies": {
+      "status": "pending",
+      "owner": "مدیر امنیت",
+      "requirement": "SSL معتبر، HTTPS اجباری، CSRF/SESSION Secure و Trust Proxy با محدودیت به سرور اصلی",
+      "evidence": ""
+    },
+    "enforced_mfa_and_ingress_throttle": {
+      "status": "pending",
+      "owner": "مدیر امنیت",
+      "requirement": "تأیید عملی MFA مدیران، محدودسازی در لبه شبکه و هشدار تلاش ناموفق",
+      "evidence": ""
+    },
+    "independent_subsites_baseline": {
+      "status": "pending",
+      "owner": "مدیر فنی",
+      "requirement": "ثبت HTTP/URL/hash و سلامت مستقل /mohammad، /ghanadi، /amozeshgah و تمام دیگر زیرسایت‌ها قبل/بعد",
+      "evidence": ""
+    },
+    "intercompany_data_permissions": {
+      "status": "pending",
+      "owner": "مدیر مالی و امنیت",
+      "requirement": "آزمون واقعی جداسازی هر شخص حقوقی/واحد، دبیرخانه محرمانه، بانک اطلاعاتی و دسترسی مدیران",
+      "evidence": ""
+    },
+    "finance_and_tax_policy_review": {
+      "status": "pending",
+      "owner": "حسابدار مسئول",
+      "requirement": "تعیین سال مالی، کدینگ، موجودی اول دوره، اسناد قانونی، استاندارد مالیات، ارز، تسویه درون‌گروهی، بهای تمام‌شده",
+      "evidence": ""
+    },
+    "designated_release_approval": {
+      "status": "pending",
+      "owner": "مالک سامانه",
+      "requirement": "تأیید کتبی برنامه انتشار، پنجره زمانی، آدرس‌های سلامت، مسیر rollback و مسئول فنی",
+      "evidence": ""
+    }
+  },
+  "note": "Do not set status=verified without independent documentary evidence; a completed GitHub test run alone is not a verified restore or operational infrastructure."
+}
