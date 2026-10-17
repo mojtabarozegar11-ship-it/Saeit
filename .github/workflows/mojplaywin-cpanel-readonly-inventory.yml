@@ -8,6 +8,8 @@ on:
       - "tests/test_mojplaywin_cpanel_readonly_inventory.py"
       - "scripts/mojplaywin_rewrite_backup_readonly.py"
       - "tests/test_mojplaywin_rewrite_backup_readonly.py"
+      - "scripts/mojplaywin_cpanel_domains_backups_readonly.py"
+      - "tests/test_mojplaywin_cpanel_domains_backups_readonly.py"
   workflow_dispatch:
 permissions:
   contents: read
@@ -93,3 +95,12 @@ jobs:
           python3 -m py_compile scripts/mojplaywin_rewrite_backup_readonly.py
           d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
           timeout 35s ssh -T -F "$d/config" saeit-cpanel python3 - < scripts/mojplaywin_rewrite_backup_readonly.py
+      - name: Read account domain types and backup list (no creation or restore)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p 'test_mojplaywin_cpanel_domains_backups_readonly.py'
+          python3 -m py_compile scripts/mojplaywin_cpanel_domains_backups_readonly.py
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 35s ssh -T -F "$d/config" saeit-cpanel 'uapi --output=json DomainInfo list_domains' | python3 scripts/mojplaywin_cpanel_domains_backups_readonly.py --kind domains
+          timeout 35s ssh -T -F "$d/config" saeit-cpanel 'uapi --output=json Backup list_backups' | python3 scripts/mojplaywin_cpanel_domains_backups_readonly.py --kind backups
