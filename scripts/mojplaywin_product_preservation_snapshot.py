@@ -19,6 +19,7 @@ from decimal import Decimal
 from hashlib import sha256
 import json
 import os
+import re
 from pathlib import Path
 
 OWNERSHIP_KEYS = ("site", "domain", "storefront_host", "brand_domain")
@@ -39,7 +40,9 @@ def owner_for(metadata: object) -> str:
                 cleaned = cleaned[7:]
             # Only explicit exact host declarations count; never trust a path,
             # loose substring, URL parameters, ports or arbitrary brand text.
-            if "/" in cleaned or ":" in cleaned or "@" in cleaned or "?" in cleaned:
+            if ("/" in cleaned or ":" in cleaned or "@" in cleaned or "?" in cleaned
+                    or not re.fullmatch(r"[a-z0-9][a-z0-9.-]*\\.[a-z]{2,63}", cleaned)
+                    or ".." in cleaned):
                 return "ambiguous"
             values.append(cleaned)
     if not values:
