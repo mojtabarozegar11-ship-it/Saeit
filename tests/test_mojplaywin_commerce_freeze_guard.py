@@ -53,7 +53,7 @@ class MojPlayWinCommerceFreezeTests(unittest.TestCase):
         code1 = "def store(request):\n    return render(request, 'existing.html')\n"
         code2 = "def store(request):\n    return render(request, 'different.html')\n"
         self.assertNotEqual(guard.function_structure(code1, "store"),
-                            guard.function_structure(code2))
+                            guard.function_structure(code2, "store"))
         with self.assertRaises(ValueError):
             guard.function_structure(code1, "payment")
 
