@@ -35,7 +35,7 @@
 .mpo-orbits{display:grid;gap:34px;padding-top:18px}
 .mpo-ring{position:relative;min-width:0}
 .mpo-ring-head{display:flex;justify-content:space-between;align-items:end;gap:12px;margin:0 12px 15px}
-.mpo-ring-head h3{margin:10px 0;font-size:clamp(1.35rem,2.2vw,2.18rem);line-height:1.22;letter-spacing:-.036em;color:#f7ecd6}
+.mpo-ring-head h2{margin:10px 0;font-size:clamp(1.35rem,2.2vw,2.18rem);line-height:1.22;letter-spacing:-.036em;color:#f7ecd6}
 .mpo-ring-head p{margin:0;max-width:75ch;font-size:.85rem;line-height:1.7}
 .mpo-ring-controls{display:flex;flex:none;gap:10px;margin-bottom:5px}
 .mpo-ring-arrow{width:44px;height:44px;border-radius:50%;border:1px solid rgba(234,190,116,.72);background:#13181d;color:#eecb8e;
@@ -85,7 +85,7 @@
  .mpo-btn{width:100%;justify-content:center}
  .mpo-orbits{gap:26px;padding-top:0}
  .mpo-ring-head{margin:0 6px 12px;align-items:start}
- .mpo-ring-head h3{font-size:1.3rem}
+ .mpo-ring-head h2{font-size:1.3rem}
  .mpo-ring-head p{font-size:.75rem}
  .mpo-ring-controls{gap:5px}
  .mpo-ring-arrow{width:40px;height:40px}
