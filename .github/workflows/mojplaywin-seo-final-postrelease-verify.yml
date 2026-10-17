@@ -1,0 +1,80 @@
+name: Moj Play Win independent final SEO 30-link and nine-canonical verification
+on:
+  push:
+    branches: ["audit/mojplaywin-backup-transport-20261017"]
+    paths: [".github/workflows/mojplaywin-seo-final-postrelease-verify.yml"]
+permissions:
+  contents: read
+jobs:
+  external-read-only-proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - name: Independently verify nine canonical URLs, all sitemap URLs and subsite health
+        shell: bash
+        timeout-minutes: 6
+        run: |
+          python3 - <<'PY'
+          from urllib.request import Request,urlopen
+          from urllib.error import HTTPError
+          from xml.etree import ElementTree as ET
+          import json,re
+          from urllib.parse import urlsplit
+          origin="https://mojplaywin.com"
+          target=("/store/","/research/","/company/","/knowledge/",
+              "/ventures/agriculture/","/ventures/jewelry-gold/",
+              "/market/","/industry/","/economy/")
+          protected=("/","/saman/","/picm/login/","/farnaz/",
+                 "/studio.Roham/","/mojtaba.roozegar/","/zahra%24%24/")
+          def fetch(path):
+              req=Request(origin+path,headers={"Cache-Control":"no-store,no-cache",
+                         "User-Agent":"MojPlayWin-independent-final-SEO-qa"})
+              with urlopen(req,timeout=19) as response:
+                  if response.status!=200:raise RuntimeError("HTTP regression "+path)
+                  return response.read(1200000),response.headers
+          sitemap,sitemap_headers=fetch("/sitemap.xml")
+          if "xml" not in sitemap_headers.get("Content-Type",""):
+              raise RuntimeError("not an XML sitemap")
+          root=ET.fromstring(sitemap)
+          locs=[node.text for node in root.iter() if node.tag.endswith("loc")]
+          if len(locs)!=30 or len(set(locs))!=30:
+              raise RuntimeError("sitemap changed or duplicate/missing URLs")
+          if not all(loc.startswith(origin+"/") for loc in locs):
+              raise RuntimeError("out-of-domain URL in main sitemap")
+          for p in ("/market/","/industry/","/economy/"):
+              if locs.count(origin+p)!=1:raise RuntimeError("missing new sitemap entry "+p)
+          allpaths=list(dict.fromkeys([urlsplit(loc).path for loc in locs]+list(target)))
+          states=[]
+          for p in allpaths:
+              data,headers=fetch(p)
+              html=data.decode("utf-8",errors="replace")
+              tag=re.findall(r'<link\s+rel=["\']canonical["\']\s+href=["\']([^"\']+)["\']',html,re.I)
+              if tag!=[origin+p]:
+                  raise RuntimeError("incorrect canonical: "+p+" "+str(tag[:1]))
+              if "noindex,nofollow,noarchive" in html:
+                  raise RuntimeError("indexation disabled "+p)
+              states.append({"path":p,"http":200,"canonical":tag[0]})
+          for p in protected:
+              data,_=fetch(p)
+              if len(data)<200:raise RuntimeError("unexpected empty child/main page "+p)
+          robots,_=fetch("/robots.txt")
+          if b"https://mojplaywin.com/sitemap.xml" not in robots:
+              raise RuntimeError("robots sitemap citation lost")
+          homepage,_=fetch("/")
+          if b"Moj Play Win | Games, AI, Research & Digital Products" not in homepage:
+              raise RuntimeError("new spaced brand disappeared from main title")
+          wrong=[x for x in states if "zomorodmelal.ir" in x["canonical"]]
+          if wrong:raise RuntimeError("foreign canonical persisted")
+          print(json.dumps({
+            "classification":"MOJ_PLAY_WIN_FINAL_SEO_INDEPENDENT_PASS",
+            "unique_sitemap_urls":len(locs),
+            "all_canonical_checked":len(states),
+            "fixed_nine_approved":len(target),
+            "protected_main_and_subsites_200":len(protected),
+            "brand_spelling_correct":True,
+            "robots_points_to_active_sitemap":True,
+            "all_30_indexable_sitemap_urls":True,
+            "wrong_canonical_count":0,
+            "production_files_changed":False
+          },sort_keys=True),flush=True)
+          PY
