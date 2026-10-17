@@ -1,0 +1,27 @@
+name: MojPlayWin one-pass isolated recovery synthetic tests
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/mojplaywin-backup-and-restore-onepass-20261017.yml"
+      - ".github/workflows/mojplaywin-onepass-restore-synthetic-ci.yml"
+      - "scripts/mojplaywin_recovery_stream_vps.py"
+      - "scripts/mojplaywin_restore_files_isolated_runner.py"
+      - "tests/test_mojplaywin_recovery_isolated_once.py"
+permissions:
+  contents: read
+jobs:
+  no-real-data-fixture-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify private tar extraction and fail-closed backup source detection
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p 'test_mojplaywin_recovery_isolated_once.py'
+          python3 -m py_compile scripts/mojplaywin_recovery_stream_vps.py scripts/mojplaywin_restore_files_isolated_runner.py
