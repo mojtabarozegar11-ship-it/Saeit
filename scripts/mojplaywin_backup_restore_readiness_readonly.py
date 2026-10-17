@@ -17,7 +17,7 @@ HOME = Path("/home/zomorod2")
 APP = HOME / "Saeit-staging"
 DOCROOT = HOME / "mojplaywin.com"
 MAX_ENTRIES = 12000
-MAX_SECONDS = 8.0
+MAX_SECONDS = 4.0
 MAX_DEPTH = 7
 
 
