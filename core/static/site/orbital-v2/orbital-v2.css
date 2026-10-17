@@ -7,6 +7,7 @@ body.zm-nova{background:var(--orb-green)!important;color:var(--orb-text)!importa
 .zm-nova .section p,.zm-nova .footer p{color:#e5e6c8}
 .zm-nova .section i,.zm-nova .section .eyebrow{color:var(--orb-gold)!important}
 .zm-nova .sector-card,.zm-nova .insight,.zm-nova .agri-feature,.zm-nova .tech-card,.zm-nova .trust-grid article,.zm-nova .journal article{border:1px solid #dbb86799;border-radius:19px;box-shadow:0 12px 40px #0e260d55}
+.zm-nova .hero h2{font-size:clamp(32px,5vw,60px);line-height:1.28;font-weight:850;color:var(--orb-text)!important;margin:12px 0 23px}
 .zm-nova .hero{margin-top:20px}.zm-nova .hero-grid{min-height:0;padding-block:40px}.zm-nova .hero h1{font-size:clamp(32px,5vw,60px);margin:12px 0 23px}.zm-nova .footer{border-top:1px solid #dab86b99}
 .orb-header,.orbital-scene,.orb-bottom{font-family:"Vazirmatn","IRANSans","Segoe UI",Tahoma,Arial,sans-serif;color:var(--orb-text);box-sizing:border-box}
 .orb-header *,.orbital-scene *,.orb-bottom *{box-sizing:border-box}
