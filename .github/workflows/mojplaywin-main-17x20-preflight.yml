@@ -1,0 +1,99 @@
+name: MojPlayWin main-only 17 rows of 20 cards safe preflight
+on:
+  push:
+    branches: ["audit/mojplaywin-backup-transport-20261017"]
+    paths: [".github/workflows/mojplaywin-main-17x20-preflight.yml"]
+permissions:
+  contents: read
+jobs:
+  no-write-17-by-20:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Unit test main-owned 17 by 20 generator on synthetic homepage
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p test_mojplaywin_main_home_17x20_atomic.py -v
+          python3 -m py_compile scripts/mojplaywin_main_home_17x20_atomic.py
+          echo "ORIGINAL_18_CARDS_PRESERVED_IN_TESTS=true"
+      - name: Configure pinned GitHub to VPS to cPanel private read-only relay
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-17x20"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            BatchMode yes
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            ConnectTimeout 10
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Verify exact SHA of currently live main homepage then build new page IN MEMORY only
+        shell: bash
+        timeout-minutes: 3
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-17x20"
+          code="$(base64 -w0 scripts/mojplaywin_main_home_17x20_atomic.py)"
+          loader='import base64,sys;d={"__name__":"read_only_17x20"};exec(compile(base64.b64decode(sys.argv[1]),"<reviewed-main-only-generator>","exec"),d);d["safe"]();p=d["PAGE"];raw=p.read_bytes();new=d["rewrite"](raw);import json,re;sections=d["PATTERN"].findall(new.decode());print(json.dumps({"classification":"MAIN_ONLY_17x20_IN_MEMORY_PREFLIGHT","rows":len(sections),"counts":[s.count(chr(60)+"li class="+chr(34)+"mpo-orbit-item"+chr(34)) for s in sections],"new_bytes":len(new),"old_sha":d["sha"](raw),"new_sha":d["sha"](new),"live_files_written":False,"passenger_restart":False},sort_keys=True))'
+          timeout 75s ssh -T -F "$d/config" saeit-cpanel "python3 -c '$loader' '$code'"
+      - name: Audit existing orbit JavaScript behavior and target category routes read only
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import re,urllib.request
+          js='https://mojplaywin.com/design-preview-20261017/static/site/mojplaywin-atelier/orbits.55a4a25e9d6e.js'
+          with urllib.request.urlopen(urllib.request.Request(js,headers={"User-Agent":"MojPlayWin-17x20-orbit-preflight"}),timeout=18) as resp:
+              assert resp.status==200
+              text=resp.read(150000).decode("utf-8")
+          print("ORBIT_JAVASCRIPT_BYTES="+str(len(text)))
+          for term in ("data-orbit","querySelectorAll","data-orbit-prev","data-orbit-next","data-orbit-toggle","scrollLeft"):
+              print("EXISTING_ORBIT_SCRIPT_"+term.replace("-","_")+"="+str(term in text).lower())
+          paths=("/services/","/research/","/company/","/studio/","/ai/","/knowledge/",
+                 "/store/","/blockchain/","/ventures/ecommerce/","/economy/",
+                 "/ventures/agriculture/","/ventures/jewelry-gold/","/ventures/carpets/",
+                 "/ventures/hospitality/")
+          for p in paths:
+              req=urllib.request.Request("https://mojplaywin.com"+p,headers={"User-Agent":"MojPlayWin-mainonly-safe-category-check"})
+              with urllib.request.urlopen(req,timeout=15) as r:
+                  assert r.status==200,p
+              print("MAIN_TOPIC_LINK_HEALTH_OK "+p)
+          print("LIVE_PAGE_OR_CHILD_SITE_CHANGED=false")
+          PY
+      - name: Remove SSH credentials
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/mpw-17x20"
