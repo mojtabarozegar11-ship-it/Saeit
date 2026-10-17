@@ -81,3 +81,5 @@ jobs:
       - name: Remove private runner credentials
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/mpw-footer-refine"
+
+# Refresh SHA preimage after refined founder release; non-mutating
