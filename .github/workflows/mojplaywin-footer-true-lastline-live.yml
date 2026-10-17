@@ -175,3 +175,5 @@ jobs:
       - name: Scrub SSH credentials from runner
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/mpw-footer-lastline"
+
+# Fail-closed diagnosed retry with safe error-code only
