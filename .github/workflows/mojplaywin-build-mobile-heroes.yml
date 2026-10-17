@@ -1,0 +1,52 @@
+name: MojPlayWin create optimized mobile image copies in draft only
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/mojplaywin-build-mobile-heroes.yml"
+      - "scripts/mojplaywin_generate_mobile_heroes.py"
+permissions:
+  contents: write
+concurrency:
+  group: mojplaywin-mobile-heroes-single-draft
+  cancel-in-progress: false
+jobs:
+  build-only-our-draft-branch:
+    if: github.head_ref == 'design/mojplaywin-new-architecture-v4-20261017' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          persist-credentials: true
+          fetch-depth: 1
+      - name: Install image tools
+        run: python -m pip install 'Pillow==11.3.0'
+      - name: Create small photo derivatives without touching originals
+        run: |
+          python scripts/mojplaywin_generate_mobile_heroes.py
+          python scripts/mojplaywin_generate_mobile_heroes.py --check-only
+      - name: Commit only MojPlayWin mobile thumbnails to the existing draft branch
+        env:
+          BRANCH: ${{ github.head_ref }}
+        run: |
+          set -euo pipefail
+          test "$BRANCH" = "design/mojplaywin-new-architecture-v4-20261017"
+          git add -- core/static/site/mojplaywin-atelier/mobile-heroes/
+          git diff --cached --name-only > "$RUNNER_TEMP/mojplaywin-mobile-diff.txt"
+          python - <<'PY'
+          from pathlib import Path
+          files = Path(__import__('os').environ['RUNNER_TEMP'], 'mojplaywin-mobile-diff.txt').read_text().splitlines()
+          assert all(f.startswith('core/static/site/mojplaywin-atelier/mobile-heroes/') and f.endswith('.webp') for f in files), files
+          assert len(files) <= 22, files
+          print("Safe image-only draft changes:", len(files))
+          PY
+          if git diff --cached --quiet; then
+            echo "No mobile photo changes needed."
+            exit 0
+          fi
+          git config user.name "MojPlayWin Visual QA"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "perf(mojplaywin): preserve original photos and add small 560px mobile copies"
+          git push origin "HEAD:refs/heads/$BRANCH"
