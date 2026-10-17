@@ -207,5 +207,5 @@ if __name__=="__main__":
         elif action=="commit":commit()
         else:raise RuntimeError("unknown action")
     except Exception as e:
-        print("CANONICAL_SAFE_TEMPLATE_OPERATION_FAILED_"+type(e).__name__,file=sys.stderr)
+        print("CANONICAL_SAFE_TEMPLATE_OPERATION_FAILED_"+type(e).__name__+"_"+str(e)[:160],file=sys.stderr)
         raise SystemExit(3)
