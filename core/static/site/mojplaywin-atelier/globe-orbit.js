@@ -13,7 +13,9 @@
   );
   if (!visual) return;
   const satellites = Array.from(visual.querySelectorAll(".mpo-satellite"));
-  const toggle = visual.querySelector("[data-globe-motion-toggle]");
+  const toggle = document.querySelector(
+    '[data-mojplaywin-orbital="v1"] [data-globe-motion-toggle]'
+  );
   if (satellites.length !== 4 || !toggle) return;
 
   const reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
