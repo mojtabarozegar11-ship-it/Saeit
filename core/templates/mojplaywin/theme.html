@@ -320,7 +320,9 @@ body:is(.mojplaywin-home,.mojplaywin-section,.mojplaywin-store) main .mw-nav-pan
   </a>
   <nav class="mw-navigation" aria-label="Primary MojPlayWin navigation">
     <a href="/">Home</a><a href="/games/">Games</a><a href="/ai/">AI</a>
+    {% if request.path == "/" %}<a href="/blockchain/">Blockchain</a><a href="/store/">Products</a><a href="/knowledge/">Education</a>{% endif %}
     <a href="/research/">Research</a><a href="/services/">Services</a>
+    {% if request.path == "/" %}<a href="/about/">About</a>{% endif %}
     <details class="mw-nav-menu" id="mw-all-pages-menu"><summary aria-controls="mw-nav-panel">Explore all</summary>
       <div class="mw-nav-panel" id="mw-nav-panel">
         <section><h3>Digital economy & technology</h3>
