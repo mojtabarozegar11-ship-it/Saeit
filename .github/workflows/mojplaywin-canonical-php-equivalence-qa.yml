@@ -71,6 +71,7 @@ jobs:
           actual=$(timeout 35s ssh -T -F "$d/config" saeit-cpanel "chmod 644 '$target'; php -l '$target' >&2; sha256sum '$target' | cut -d' ' -f1")
           test "$actual" = "$expected" || { echo "CANONICAL_PHP_STAGING_NOT_IDENTICAL"; exit 31; }
           echo "DISPOSABLE_MAIN_ONLY_CANONICAL_PHP_CANDIDATE_STAGED"
+          echo "RUNNING_UPDATED_TOKEN_GATED_PHP_CANARY_DIAGNOSTICS"
       - name: Check six original and transformed responses are byte-identical after only canonical substitution
         shell: bash
         timeout-minutes: 5
