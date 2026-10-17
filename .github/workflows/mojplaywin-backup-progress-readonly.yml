@@ -1,4 +1,4 @@
-name: MojPlayWin GPG backup progress read-only
+name: MojPlayWin GPG backup progress read-only follow-up
 on:
   push:
     branches: ["audit/mojplaywin-backup-transport-20261017"]
