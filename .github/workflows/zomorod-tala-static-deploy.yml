@@ -206,7 +206,13 @@ jobs:
             else
               url="$base$path?__tala_verify=$GITHUB_SHA"
             fi
-            code="$(curl -sS --max-time 20 -D "$RUNNER_TEMP/tala-headers" -o "$RUNNER_TEMP/tala-response" -w '%{http_code}' -H 'Cache-Control: no-cache' "$url")"
+            code=""
+            for attempt in 1 2 3 4 5 6; do
+              code="$(curl -sS --max-time 20 -D "$RUNNER_TEMP/tala-headers" -o "$RUNNER_TEMP/tala-response" -w '%{http_code}' -H 'Cache-Control: no-cache' "$url&__readiness_attempt=$attempt")"
+              if test "$code" = 200; then break; fi
+              echo "TALA_READINESS_RETRY path=$path attempt=$attempt code=$code"
+              sleep 3
+            done
             test "$code" = 200 || { echo "TALA_HTTP_FAILED path=$path code=$code" >&2; exit 1; }
             case "$path" in
               /) grep -Fq 'تَلا | طلا، جواهر و گوهرسنگ' "$RUNNER_TEMP/tala-response"; grep -Fq 'قیمت زنده هنوز متصل نشده' "$RUNNER_TEMP/tala-response" ;;
