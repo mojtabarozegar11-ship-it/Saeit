@@ -124,3 +124,50 @@ class MojPlayWinReferenceGoldUITests(SimpleTestCase):
         for topic in ("gold-jewelry-craft.svg", "handwoven-carpet.svg",
                       "fuel-mobility-hub.svg", "hospitality-hotel.svg"):
             self.assertIn(topic, orbit)
+
+    def test_globe_surface_spins_independently_and_ellipse_orbits_four_panels(self):
+        from xml.etree import ElementTree as ET
+        globe_path = STATIC / "global-technology-orbit.svg"
+        globe_source = globe_path.read_text(encoding="utf-8")
+        ET.parse(globe_path)  # SVG must remain valid and safe to render as an image.
+        self.assertIn('class="mpw-sphere-surface"', globe_source)
+        self.assertIn("@keyframes mpw-globe-turn", globe_source)
+        self.assertIn("54s linear infinite", globe_source)
+        self.assertIn("prefers-reduced-motion: reduce", globe_source)
+        self.assertNotIn("<script", globe_source.lower())
+
+        orbit = (HOME / "orbital_experience.html").read_text(encoding="utf-8")
+        home = (HOME / "home.html").read_text(encoding="utf-8")
+        css = (HOME / "reference_gold.css").read_text(encoding="utf-8")
+        javascript = (STATIC / "globe-orbit.js").read_text(encoding="utf-8")
+        self.assertIn('data-globe-orbit="continuous"', orbit)
+        self.assertIn('data-globe-motion-toggle', orbit)
+        self.assertIn("globe-orbit.js", home)
+        self.assertEqual(orbit.count('class="mpo-satellite '), 4)
+        for selector in ("data-orbit-motion=\"active\"", "prefers-reduced-motion:reduce",
+                         ".mpo-globe-motion-toggle"):
+            self.assertIn(selector, css)
+        for operation in ("requestAnimationFrame", "cancelAnimationFrame",
+                          "Math.cos(angle)", "Math.sin(angle)", "rotateY(",
+                          "IntersectionObserver", "visibilitychange", "pointerenter",
+                          "pointerleave", "pointercancel", "focusin", "focusout",
+                          "prefers-reduced-motion: reduce", "data-globe-motion-toggle"):
+            self.assertIn(operation, javascript)
+        for forbidden in ("fetch(", "XMLHttpRequest", "localStorage", "sessionStorage",
+                          "/admin/", "checkout", "PaymentIntent"):
+            self.assertNotIn(forbidden, javascript)
+
+    @override_settings(ROOT_URLCONF="core.mojplaywin_atelier_preview_urls",
+                       ALLOWED_HOSTS=["mojplaywin.com", "localhost", "testserver"])
+    def test_live_render_starts_auto_orbit_without_altering_other_routes(self):
+        response = self.client.get("/", HTTP_HOST="mojplaywin.com")
+        self.assertEqual(response.status_code, 200)
+        html = response.content.decode("utf-8")
+        self.assertIn('data-globe-orbit="continuous"', html)
+        self.assertIn('data-globe-motion-toggle', html)
+        self.assertIn("site/mojplaywin-atelier/globe-orbit.", html)
+        self.assertEqual(html.count('class="mpo-orbit-card"'), 18)
+        self.assertEqual(html.count('class="mpo-ring"'), 3)
+        other = self.client.get("/services/", HTTP_HOST="mojplaywin.com")
+        self.assertEqual(other.status_code, 200)
+        self.assertNotIn('data-globe-orbit="continuous"', other.content.decode("utf-8"))
