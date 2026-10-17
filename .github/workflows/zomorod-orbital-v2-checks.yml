@@ -1,0 +1,90 @@
+name: Zomorod orbital v2 strict source and visual-asset QA (no deployment)
+on:
+  push:
+    branches: ["feature/zomorod-orbital-home-reference-20261017"]
+    paths:
+      - "content/zomorod-new-home/index.html"
+      - "core/static/site/orbital-v2/**"
+      - "tests/test_zomorod_orbital_home.py"
+      - "tests/test_zomorod_corporate_content_restoration.py"
+      - ".github/workflows/zomorod-orbital-v2-checks.yml"
+  pull_request:
+    branches: ["restore-zomorod-corporate-content-20261017"]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  safe-static-checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Verify source lineage without changing remote data
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin restore-zomorod-corporate-content-20261017
+          python3 -m unittest discover -s tests -p test_zomorod_orbital_home.py -v
+          python3 -m unittest discover -s tests -p test_zomorod_corporate_content_restoration.py -v
+          python3 -m unittest discover -s tests -p test_zomorod_nova_home.py -v
+          echo "ORIGINAL_SITE_TEXT_AND_LINKS=100_PERCENT_PRESERVED_IN_DRAFT"
+      - name: Validate browser JavaScript and local asset syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check core/static/site/orbital-v2/orbital-v2.js
+          python3 - <<'PY'
+          from pathlib import Path
+          from html.parser import HTMLParser
+          from xml.etree import ElementTree
+          root=Path.cwd()
+          for path in sorted((root/"core/static/site/orbital-v2").glob("*.svg")):
+              element=ElementTree.parse(path).getroot()
+              assert element.tag=="{http://www.w3.org/2000/svg}svg",path
+          class Checker(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.images=[]
+              def handle_starttag(self,tag,attrs):
+                  if tag=="img":
+                      self.images.append(dict(attrs))
+          doc=Checker()
+          doc.feed((root/"content/zomorod-new-home/index.html").read_text(encoding="utf8"))
+          orbital=[i for i in doc.images if i.get("src","").startswith("/static/site/orbital-v2/")]
+          assert len(orbital)==4, orbital
+          for image in doc.images:
+              src=image["src"]
+              if src.startswith("/static/site/") and ("orbital-v2/" in src or "heroes/" in src):
+                  p=root/"core/static/site"/src.removeprefix("/static/site/")
+                  assert p.is_file(), p
+                  assert p.stat().st_size>500,p
+          print("ORBIT_ASSETS_EXIST_AND_SVG_WELL_FORMED=YES")
+          PY
+      - name: Verify no deletions or unrelated subsite changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import subprocess
+          lines=subprocess.check_output([
+              'git','diff','--name-status',
+              'origin/restore-zomorod-corporate-content-20261017...HEAD',
+          ],text=True).splitlines()
+          allowed={
+            'content/zomorod-new-home/index.html',
+            'tests/test_zomorod_corporate_content_restoration.py',
+            'tests/test_zomorod_orbital_home.py',
+            '.github/workflows/zomorod-orbital-v2-checks.yml',
+          }
+          for line in lines:
+              status,path=line.split('\t',1)
+              assert status in ('A','M'),line
+              assert path in allowed or path.startswith('core/static/site/orbital-v2/'),line
+          assert lines, "Missing orbital code changes"
+          print('ZERO_DELETIONS_AND_ZERO_SUBSITE_MUTATIONS=YES')
+          PY
