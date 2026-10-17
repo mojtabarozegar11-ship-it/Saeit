@@ -8,6 +8,8 @@ on:
       - "enterprise_portal/urls.py"
       - "enterprise_portal/templates/enterprise_portal/**"
       - "enterprise_portal/views.py"
+      - "enterprise_portal/forms.py"
+      - "enterprise_portal/tests.py"
       - "enterprise_portal/admin.py"
       - "enterprise_portal/services.py"
       - "enterprise_portal/trial_balance.py"
@@ -54,6 +56,8 @@ jobs:
               'enterprise_portal/templates/enterprise_portal/shell.html',
               'enterprise_portal/templates/enterprise_portal/dashboard.html',
               'enterprise_portal/views.py',
+              'enterprise_portal/forms.py',
+              'enterprise_portal/tests.py',
               'enterprise_portal/admin.py',
               'enterprise_portal/services.py',
               'enterprise_portal/trial_balance.py',
