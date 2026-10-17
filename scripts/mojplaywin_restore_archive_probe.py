@@ -98,6 +98,17 @@ def probe(stream) -> dict:
             else:
                 counts["specials"] += 1
                 issue("special_member")
+    # Drain remaining TAR padding and the source completion marker.
+    # The private upstream GPG module separately checks ciphertext integrity.
+    tail = b""
+    while True:
+        block = stream.read(131072)
+        if not block:
+            break
+        tail = (tail + block)[-len(MARKER):]
+    footer_present = tail == MARKER
+    if not footer_present:
+        issue("source_completion_footer_missing")
     # Intentionally no names, targets or content even on error.
     return {
         "classification": "READ_ONLY_ARCHIVE_STRUCTURE_DIAGNOSTIC",
@@ -106,6 +117,7 @@ def probe(stream) -> dict:
         "counts": counts,
         "first_issue": first_issue or "none_detected",
         "issue_counts": dict(sorted(issue_counts.items())),
+        "source_completion_footer_seen": footer_present,
         "source_integrity_verified_by_probe": False,
         "isolated_restore_completed": False,
         "release_permitted": False,
