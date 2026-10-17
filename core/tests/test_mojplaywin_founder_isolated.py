@@ -17,12 +17,13 @@ class MojPlayWinFounderFooterIsolationTests(unittest.TestCase):
                          "aria-label=", "@media(max-width:540px)", "@media(forced-colors:active)"):
             self.assertIn(expected, signature)
 
-    def test_new_and_existing_footer_families_both_include_signature(self):
-        for path in (FOOTER, LEGACY):
-            with self.subTest(path=str(path)):
-                html = path.read_text(encoding="utf-8")
-                self.assertEqual(html.count(INCLUDE), 1)
-                self.assertIn(COPYRIGHT, html)
+    def test_only_main_site_footer_has_signature(self):
+        main_html = FOOTER.read_text(encoding="utf-8")
+        legacy_html = LEGACY.read_text(encoding="utf-8")
+        self.assertEqual(main_html.count(INCLUDE), 1)
+        self.assertIn(COPYRIGHT, main_html)
+        self.assertNotIn(INCLUDE, legacy_html)
+        self.assertNotIn("mojplaywin/unified_visual_tokens.html", legacy_html)
 
     def test_original_navigation_remains_present(self):
         footer = FOOTER.read_text(encoding="utf-8")
