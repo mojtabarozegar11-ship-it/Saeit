@@ -15,8 +15,9 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: mojplaywin-lighthouse-acceptance
-  cancel-in-progress: false
+  # Isolated to this PR: obsolete snapshot runs must never block the latest design.
+  group: mojplaywin-lighthouse-acceptance-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 jobs:
   strict-preview-100:
     runs-on: ubuntu-latest
