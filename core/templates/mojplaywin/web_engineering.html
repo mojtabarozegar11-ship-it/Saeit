@@ -69,7 +69,7 @@ border:1px solid var(--we-line);border-radius:25px;padding:clamp(25px,5.2vw,70px
         <a class="mpw-web-cta primary" href="/company/">Explore collaboration details <span aria-hidden="true">↗</span></a>
         <a class="mpw-web-cta" href="/research/">Review research approach <span aria-hidden="true">→</span></a>
       </div>
-      <p class="mpw-web-disclosure">This page describes a professional service framework, not a claim of completed client contracts, guaranteed business outcomes, or a live quotation submission form.</p>
+      
     </div>
     <div class="mpw-web-hero-media">
       <img src="{% static 'site/heroes/services.webp' %}" alt="Visual illustration for modern technical web services" width="1080" height="720" fetchpriority="high" decoding="async">
@@ -78,13 +78,13 @@ border:1px solid var(--we-line);border-radius:25px;padding:clamp(25px,5.2vw,70px
   </section>
 
   <section class="mpw-web-section" aria-labelledby="mpw-web-services">
-    <div class="mpw-web-section-head"><span class="mpw-web-kicker">01 · CAPABILITIES</span><h2 id="mpw-web-services">Built around real business needs</h2><p>A project may require just one focused service or a well-defined combination. Deliverables are specified before development; what is not implemented is never presented as operational.</p></div>
+    <div class="mpw-web-section-head"><span class="mpw-web-kicker">01 · CAPABILITIES</span><h2 id="mpw-web-services">Built around real business needs</h2><p>Choose one specialist service or combine several in a tailored plan. Deliverables, milestones and responsibilities are agreed before development.</p></div>
     <div class="mpw-web-grid">
       <article class="mpw-web-card"><b>WEB · 01</b><h3>Premium website design</h3><p>A visually distinctive brand experience with readable hierarchy, responsive layouts and accessible navigation.</p><ul><li>Discovery and sitemap</li><li>Reusable design tokens and component library</li><li>Desktop and mobile prototypes</li><li>Visual acceptance criteria</li></ul></article>
       <article class="mpw-web-card"><b>DJANGO · 02</b><h3>Web application engineering</h3><p>Maintainable Django projects with appropriate data models, staff workflows and role-based permissions.</p><ul><li>Architecture and schema review</li><li>Secure administration and form validation</li><li>API interfaces and integration boundaries</li><li>Unit and integration test coverage</li></ul></article>
       <article class="mpw-web-card"><b>COMMERCE · 03</b><h3>Digital commerce systems</h3><p>Product experiences that prioritize catalog integrity, explain pricing clearly and preserve dependable order fulfillment.</p><ul><li>Product identity and content requirements</li><li>Payment-provider selection and sandbox tests</li><li>Orders, downloads, license controls</li><li>Reconciliation and rollback rules</li></ul></article>
       <article class="mpw-web-card"><b>AI · 04</b><h3>AI-enabled user experiences</h3><p>Useful AI-assisted workflows should remain traceable, permission-bound and evaluated against meaningful benchmarks.</p><ul><li>Task and data-boundary assessment</li><li>Human review and failure handling</li><li>Retrieval and evidence design</li><li>Model-output quality evaluation</li></ul></article>
-      <article class="mpw-web-card"><b>PERFORMANCE · 05</b><h3>Speed, accessibility and SEO</h3><p>Technical quality is measured, not described with unsupported scores.</p><ul><li>Core Web Vitals and real-device testing</li><li>WCAG-aligned interaction patterns</li><li>Metadata, canonical URLs and structured data</li><li>Regression checks before release</li></ul></article>
+      <article class="mpw-web-card"><b>PERFORMANCE · 05</b><h3>Speed, accessibility and SEO</h3><p>Performance, accessibility and search visibility are reviewed against meaningful technical measures.</p><ul><li>Core Web Vitals and real-device testing</li><li>WCAG-aligned interaction patterns</li><li>Metadata, canonical URLs and structured data</li><li>Regression checks before release</li></ul></article>
       <article class="mpw-web-card"><b>ENGINEERING · 06</b><h3>Recovery and long-term support</h3><p>Deployment processes should account for existing content, business records, permissions and restoration.</p><ul><li>Full dependency and ownership audit</li><li>Versioned releases and safe staging</li><li>Verified restorable backups</li><li>Monitoring and incident documentation</li></ul></article>
     </div>
   </section>
@@ -98,6 +98,8 @@ border:1px solid var(--we-line);border-radius:25px;padding:clamp(25px,5.2vw,70px
         <div class="mpw-web-step"><strong>03</strong><div><h3>Build and iterate</h3><p>Deliver in reviewable increments with clear acceptance criteria, tests and version control.</p></div></div>
         <div class="mpw-web-step"><strong>04</strong><div><h3>Verify, launch and support</h3><p>Rehearse recovery, validate end-to-end journeys and check production against the approved baseline.</p></div></div>
       </div>
+      {% comment %}
+      Preserved internal project acceptance worksheet; hidden from visitors:
       <div class="mpw-web-code" aria-label="Representative project acceptance checklist">
         <span class="mpw-web-kicker">ENGINEERING REVIEW · EXAMPLE</span>
         <pre>PROJECT / WEBSITE ENGINEERING
@@ -114,6 +116,14 @@ border:1px solid var(--we-line);border-radius:25px;padding:clamp(25px,5.2vw,70px
 
 STATUS: illustration, not a live report</pre>
         <p>Scope, schedule, tools and acceptance thresholds are selected to match the actual project rather than copied from a generic template.</p>
+      </div>
+      {% endcomment %}
+      <div class="mpw-web-code" aria-label="What clients receive">
+        <span class="mpw-web-kicker">A BETTER DIGITAL EXPERIENCE</span>
+        <h3>Clear scope. Thoughtful design. Reliable delivery.</h3>
+        <p>Every project starts with your goals and the people you serve. From intuitive navigation to dependable features, the focus is a polished, useful experience beyond launch.</p>
+        <p>Explore our capabilities and discuss a focused first milestone.</p>
+        <a class="mpw-web-cta" href="/company/">Discover our approach <span aria-hidden="true">↗</span></a>
       </div>
     </div>
   </section>
@@ -145,7 +155,7 @@ STATUS: illustration, not a live report</pre>
       <a href="/company/" class="mpw-web-cta primary">View company and collaboration details <span aria-hidden="true">↗</span></a>
       <a href="/research/" class="mpw-web-cta">Explore our research approach <span aria-hidden="true">→</span></a>
     </div>
-    <p class="mpw-web-disclosure">The destination pages are informational. Contact forms, project acceptance and active service availability are independently verified before any public sales claims.</p>
+    
   </section>
 </div>
 {% include "mojplaywin/footer.html" %}
