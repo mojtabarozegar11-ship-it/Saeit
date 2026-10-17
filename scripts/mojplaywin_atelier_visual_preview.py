@@ -106,8 +106,15 @@ def capture_viewports(manifest):
                 for mode, width, height in [("desktop", 1440, 900), ("mobile", 390, 844)]:
                     page = browser.new_page(viewport={"width": width, "height": height}, device_scale_factor=1)
                     page.goto((OUTPUT / detail["filename"]).resolve().as_uri(), wait_until="load")
-                    # Only visual QA forces every image to load for full-page screenshots.
-                    # Lighthouse separately audits the unmodified real lazy-loading HTML.
+                    # Only visual QA expands below-fold sections and loads all images
+                    # so that full-page screenshots show the COMPLETE preserved content.
+                    # Lighthouse separately audits the UNMODIFIED optimized HTML.
+                    if key == "home":
+                        page.add_style_tag(content="""
+                            .mojplaywin-home .mw-shell[data-deferred-legacy="true"] > * {
+                                content-visibility: visible !important;
+                            }
+                        """)
                     page.evaluate("() => [...document.images].forEach(img => { img.loading = 'eager'; })")
                     page.wait_for_function(
                         "() => [...document.images].every(i => i.complete)",
