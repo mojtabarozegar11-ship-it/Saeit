@@ -1,4 +1,4 @@
-name: MojPlayWin restoration and exact-home routing audit
+name: MojPlayWin restoration absolute-link safety classification
 on:
   push:
     branches: ["audit/mojplaywin-backup-transport-20261017"]
