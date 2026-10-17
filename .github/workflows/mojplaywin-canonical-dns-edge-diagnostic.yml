@@ -1,0 +1,47 @@
+name: Moj Play Win canonical DNS and edge stability read only
+on:
+  push:
+    branches: ["audit/mojplaywin-backup-transport-20261017"]
+    paths: [".github/workflows/mojplaywin-canonical-dns-edge-diagnostic.yml"]
+permissions:
+  contents: read
+jobs:
+  inspect-public-resolvers:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Compare public HTTPS addresses and host-pinned canonical status without modifying any server
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import socket,subprocess,json,re,time
+          host="mojplaywin.com"
+          addresses=sorted({x[4][0] for x in socket.getaddrinfo(host,443,type=socket.SOCK_STREAM)})
+          targets=("/store/","/knowledge/","/market/")
+          probes=[]
+          for ip in addresses:
+              for path in targets:
+                  for attempt in (1,2,3):
+                      args=["curl","--silent","--show-error","--max-time","12",
+                            "--resolve",host+":443:"+ip,"-H","Cache-Control: no-store",
+                            "--write-out","\n__MPW_STATUS__:%{http_code}",
+                            "https://"+host+path]
+                      proc=subprocess.run(args,capture_output=True,text=True,timeout=16)
+                      if proc.returncode==0:
+                          content=proc.stdout
+                          match=re.search(r'__MPW_STATUS__:(\d+)',content)
+                          status=int(match.group(1)) if match else 0
+                          canon=re.findall(r'<link\s+rel="canonical"\s+href="([^"]+)"',content,re.I)
+                          outputs={"ip":ip,"path":path,"try":attempt,"status":status,
+                                   "canonical_self":canon==["https://"+host+path],
+                                   "canonical_zomorod":any("zomorodmelal.ir" in v for v in canon),
+                                   "canonical_count":len(canon)}
+                      else:
+                          outputs={"ip":ip,"path":path,"try":attempt,"status":0,
+                                   "error_class":"connect_or_tls_failure"}
+                      probes.append(outputs)
+          print(json.dumps({"classification":"MOJ_PLAY_WIN_DNS_EDGE_CANONICAL_DIAGNOSTIC",
+                  "resolved_public_address_count":len(addresses),
+                  "addresses":addresses,"checks":probes,
+                  "main_or_protected_server_files_changed":False},sort_keys=True),flush=True)
+          PY
