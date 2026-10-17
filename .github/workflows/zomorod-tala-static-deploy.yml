@@ -5,6 +5,7 @@ on:
     paths:
       - "public/tala/**"
       - ".github/workflows/zomorod-tala-static-deploy.yml"
+      - ".github/scripts/tala_storage.py"
   workflow_dispatch:
 permissions:
   contents: read
