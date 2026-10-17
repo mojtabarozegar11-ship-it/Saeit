@@ -3,6 +3,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from django.http import Http404
+from django.urls import resolve
 from django.test import RequestFactory, SimpleTestCase, override_settings
 
 from core.mojplaywin_page_content import EDITORIAL_PAGES
@@ -58,6 +59,32 @@ class MojPlayWinCompleteSectionsTests(SimpleTestCase):
                     self.assertEqual(template, "mojplaywin/section.html")
                     self.assertIs(context["page_content"], EDITORIAL_PAGES[f"venture:{item['slug']}"])
                     self.assertEqual(context["active_venture"], item["slug"])
+
+    def test_all_17_routes_are_reachable_through_the_original_urlconf(self):
+        # Verify existing routing WITHOUT modifying shared Django routes or
+        # entering an independent child site or privileged production endpoint.
+        routes = {
+            "agriculture": "/agriculture/",
+            "industry": "/industry/",
+            "research": "/research/",
+            "knowledge": "/knowledge/",
+            "economy": "/economy/",
+            "studio": "/studio/",
+            "market": "/market/",
+            "agents": "/agents/",
+            "company": "/company/",
+        }
+        routes.update({f"venture:{v['slug']}": v["url"] for v in VENTURES})
+        self.assertEqual(len(routes), 17)
+        with patch("core.mojplaywin_views.render", side_effect=lambda req, tpl, ctx: (tpl, ctx)):
+            for key, path in routes.items():
+                with self.subTest(key=key, path=path):
+                    match = resolve(path)
+                    request = self.factory.get(path, HTTP_HOST="mojplaywin.com")
+                    template, context = match.func(request, **match.kwargs)
+                    self.assertEqual(template, "mojplaywin/section.html")
+                    self.assertIs(context["page_content"], EDITORIAL_PAGES[key])
+                    self.assertIn("section_image", context)
 
     def test_all_venture_images_are_distinct_and_exist(self):
         all_images = [entry["image"] for entry in VENTURES]
