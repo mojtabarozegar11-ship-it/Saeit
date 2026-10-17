@@ -55,6 +55,7 @@ jobs:
           allowed_exact={'config/settings.py','enterprise_portal/urls.py',
               'enterprise_portal/templates/enterprise_portal/shell.html',
               'enterprise_portal/templates/enterprise_portal/dashboard.html',
+              'enterprise_portal/templates/enterprise_portal/finance.html',
               'enterprise_portal/views.py',
               'enterprise_portal/forms.py',
               'enterprise_portal/tests.py',
