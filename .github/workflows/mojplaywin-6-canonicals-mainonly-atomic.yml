@@ -23,6 +23,7 @@ jobs:
           set -euo pipefail
           python3 -m py_compile scripts/mojplaywin_exact_canonical_template_fix.py
           grep -Fq 'canonical_base.html' scripts/mojplaywin_exact_canonical_template_fix.py
+          grep -Fq 'CANONICAL_SAFE_TEMPLATE_OPERATION_FAILED_' scripts/mojplaywin_exact_canonical_template_fix.py
           grep -Fq 'shared_base_changed' scripts/mojplaywin_exact_canonical_template_fix.py
       - name: Establish host-pinned private relay without disclosing keys
         env:
