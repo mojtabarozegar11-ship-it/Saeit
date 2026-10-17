@@ -45,6 +45,16 @@ class MojPlayWinCommercePreservationTests(SimpleTestCase):
             template, context = mojplaywin_store(self.factory.get("/store/", HTTP_HOST="mojplaywin.com"))
             self.assertIs(context["products"], PRODUCTS)
 
+    def test_six_featured_illustrations_are_unique_existing_static_assets(self):
+        # Only editorial thumbnails: the actual database Product records are untouched.
+        files = [item["image"] for item in PRODUCTS]
+        self.assertEqual(len(files), 6)
+        self.assertEqual(len(set(files)), 6, "No repeated featured thumbnails")
+        for name in files:
+            with self.subTest(image=name):
+                self.assertTrue(name.startswith("site/heroes/"))
+                self.assertTrue((ROOT / "core/static" / name).is_file())
+
     def test_original_non_main_host_store_keeps_database_product_query(self):
         fake_products = MagicMock()
         query = MagicMock()
