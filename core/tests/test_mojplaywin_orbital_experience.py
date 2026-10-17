@@ -5,7 +5,7 @@ No runtime activation, no real orders/payments, no modification of other sites.
 from pathlib import Path
 import re
 
-from django.test import SimpleTestCase, override_settings
+from django.test import TestCase, override_settings
 
 ROOT = Path(__file__).resolve().parents[2]
 PAGES = ROOT / "core" / "templates" / "mojplaywin"
@@ -13,7 +13,7 @@ STATIC = ROOT / "core" / "static" / "site" / "mojplaywin-atelier"
 
 
 @override_settings(ALLOWED_HOSTS=["testserver", "mojplaywin.com", "www.mojplaywin.com", "zomorodmelal.ir"])
-class MojPlayWinOrbitalExperienceTests(SimpleTestCase):
+class MojPlayWinOrbitalExperienceTests(TestCase):
     def test_three_distinct_interactive_orbits_and_eighteen_real_navigation_cards(self):
         markup = (PAGES / "orbital_experience.html").read_text(encoding="utf-8")
         self.assertEqual(markup.count('class="mpo-ring"'), 3)
@@ -70,6 +70,20 @@ class MojPlayWinOrbitalExperienceTests(SimpleTestCase):
             self.assertIn(required, js)
         self.assertIn('tabindex="0"', template)
         self.assertIn('type="button"', template)
+
+    def test_all_orbit_card_destinations_are_real_renderable_main_site_pages(self):
+        from django.urls import resolve
+
+        markup = (PAGES / "orbital_experience.html").read_text(encoding="utf-8")
+        urls = sorted(set(re.findall(r'class="mpo-orbit-card" href="([^"]+)"', markup)))
+        self.assertGreaterEqual(len(urls), 10)
+        for url in urls:
+            with self.subTest(url=url):
+                resolved = resolve(url)
+                self.assertIsNotNone(resolved.func)
+                response = self.client.get(url, HTTP_HOST="mojplaywin.com")
+                self.assertEqual(response.status_code, 200, f"Broken orbital link: {url}")
+                self.assertGreater(len(response.content), 200)
 
     def test_rendered_home_has_only_one_h1_and_three_real_orbits(self):
         response = self.client.get("/", HTTP_HOST="mojplaywin.com")
