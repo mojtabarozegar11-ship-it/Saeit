@@ -73,3 +73,12 @@ A dashboard showing multiple unit KPIs is not a legal financial consolidation.
    quotas, retries, evidence logs and explicit action approval.
 5. Read-only bridges to independent websites and stores; preservation of
    existing payment gateways, products and external API contracts.
+
+## Human recommendation review workflow
+The authenticated author of a draft report, if granted add_reviewapproval, can
+POST to the explicit review-request route, choosing an assigned approver with
+active UnitMembership(can_approve) or company superuser. This creates one
+pending review record and one audit event per report; it does not alter
+journals, inventory, invoices, external sites or any money transfer. CSRF,
+unit scoping and assigned approver checks apply. The final decision is a
+separate office record, not an execution instruction.

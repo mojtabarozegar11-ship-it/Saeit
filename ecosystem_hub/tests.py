@@ -464,6 +464,48 @@ class HubSuite(TestCase):
             panel.save_model(req, request, None, change=True)
         self.assertFalse(JournalEntry.objects.exists())
 
+    def test_review_queue_is_human_only_idempotent_and_separate_from_payment(self):
+        report = generate_report(self.owner, self.farm, "executive-brief")
+        self.client.force_login(self.owner)
+        path = f"/company/office/ecosystem/reports/{report.pk}/request-review/"
+        self.assertEqual(self.client.get(path, secure=True).status_code, 405)
+        for i in range(2):
+            response = self.client.post(path, {"approver_id": self.owner.pk}, secure=True)
+            self.assertEqual(response.status_code, 302)
+        self.assertEqual(ReviewApproval.objects.filter(
+            target_type="assistant_report", target_reference=str(report.pk)
+        ).count(), 1)
+        report.refresh_from_db()
+        self.assertEqual(report.state, "review")
+        self.assertEqual(AuditEvent.objects.filter(
+            action="ecosystem_review_requested",
+        ).count(), 1)
+        self.assertFalse(StockMovement.objects.exists())
+        self.assertFalse(JournalEntry.objects.exists())
+        self.assertFalse(CommercialDocument.objects.exists())
+
+    def test_review_request_denies_other_units_and_unassigned_approvers(self):
+        report = generate_report(self.owner, self.factory, "executive-brief")
+        self.client.force_login(self.viewer)
+        path = f"/company/office/ecosystem/reports/{report.pk}/request-review/"
+        response = self.client.post(path, {"approver_id": self.owner.pk}, secure=True)
+        self.assertEqual(response.status_code, 403)
+        self.client.force_login(self.owner)
+        rejected = self.client.post(path, {"approver_id": self.other.pk}, secure=True)
+        self.assertEqual(rejected.status_code, 404)
+        self.assertFalse(ReviewApproval.objects.exists())
+
+    def test_assistant_review_action_requires_csrf(self):
+        report = generate_report(self.owner, self.farm, "executive-brief")
+        c = Client(enforce_csrf_checks=True)
+        c.force_login(self.owner)
+        response = c.post(
+            f"/company/office/ecosystem/reports/{report.pk}/request-review/",
+            {"approver_id": self.owner.pk}, secure=True,
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(ReviewApproval.objects.exists())
+
     def test_assistant_access_is_csrf_protected(self):
         web = Client(enforce_csrf_checks=True)
         web.force_login(self.viewer)

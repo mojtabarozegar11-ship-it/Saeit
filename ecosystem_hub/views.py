@@ -1,6 +1,8 @@
 """Server-rendered, role-filtered ecosystem workspace and assistant drafts."""
 from django.contrib.auth.decorators import user_passes_test
 from django.core.exceptions import PermissionDenied
+from django.contrib.auth import get_user_model
+from django.db import transaction
 from django.db.models import Q, Count, Sum
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
@@ -9,7 +11,7 @@ from django.utils import timezone
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_GET, require_POST
 
-from enterprise_portal.models import BusinessUnit, InventoryItem, JournalEntry, JournalLine, WorkTask
+from enterprise_portal.models import BusinessUnit, InventoryItem, JournalEntry, JournalLine, WorkTask, AuditEvent
 from enterprise_portal.views import office_access, no_cache
 from .access import user_units, require_unit
 from .analysis import generate_report
@@ -167,12 +169,79 @@ def report(request, pk):
         pk=pk,
     )
     definition = CATALOG.get(report.assistant_code)
+    user_model = get_user_model()
+    approvers = user_model.objects.filter(
+        Q(is_superuser=True) |
+        Q(ecosystem_memberships__unit=report.unit,
+          ecosystem_memberships__active=True,
+          ecosystem_memberships__can_approve=True),
+        is_active=True, is_staff=True,
+    ).distinct().order_by("username")[:40]
+    can_request_approval = (
+        permission(request.user, "add_reviewapproval") and
+        (request.user.is_superuser or report.requested_by_id == request.user.pk)
+    )
     return page(request, "report", {
+        "approvers": approvers,
+        "can_request_approval": can_request_approval,
         "report": report,
         "definition": definition,
         "selected_unit": report.unit,
         "section": "assistants",
     })
+
+
+
+@never_cache
+@office_access
+@require_POST
+@transaction.atomic
+def request_review(request, pk):
+    """Queue only a human review of a draft; never execute its findings."""
+    require_hub(request)
+    if not permission(request.user, "add_reviewapproval"):
+        raise PermissionDenied("مجوز درخواست بازبینی مدیریتی را ندارید.")
+    report = get_object_or_404(
+        AssistantRun.objects.select_for_update().select_related("unit")
+        .filter(unit__in=user_units(request.user)),
+        pk=pk,
+    )
+    if not request.user.is_superuser and report.requested_by_id != request.user.pk:
+        raise PermissionDenied("تنها درخواست‌دهنده گزارش می‌تواند آن را ارجاع دهد.")
+    user_model = get_user_model()
+    approver_pk = request.POST.get("approver_id")
+    approver = get_object_or_404(
+        user_model.objects.filter(is_active=True, is_staff=True)
+        .filter(Q(is_superuser=True) |
+                Q(ecosystem_memberships__unit=report.unit,
+                  ecosystem_memberships__active=True,
+                  ecosystem_memberships__can_approve=True)).distinct(),
+        pk=approver_pk,
+    )
+    scope = {
+        "unit": report.unit,
+        "target_type": "assistant_report",
+        "target_reference": str(report.pk),
+        "requested_by": request.user,
+    }
+    existing = ReviewApproval.objects.filter(**scope, decision="pending").first()
+    if not existing:
+        entry = ReviewApproval.objects.create(
+            **scope,
+            summary="بازبینی گزارش " + report.assistant_code,
+            assigned_to=approver,
+        )
+        AuditEvent.objects.create(
+            actor=request.user, action="ecosystem_review_requested",
+            target=f"AssistantRun:{report.pk}",
+            detail={"unit_id": report.unit_id, "approval_id": entry.pk,
+                    "no_execution": True},
+        )
+    if report.state == "draft":
+        report.state = "review"
+        report.save(update_fields=("state", "updated_at"))
+    return no_cache(redirect("enterprise_portal:ecosystem_hub:report", pk=report.pk))
+
 
 
 @never_cache

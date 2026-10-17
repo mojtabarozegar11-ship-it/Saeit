@@ -17,6 +17,20 @@
 </article>
 {% empty %}<div class="hub-empty">گزارش بدون یافته است.</div>{% endfor %}
 </div>
+{% if can_request_approval %}
+<section class="hub-report-intro" aria-label="درخواست بازبینی انسانی">
+<div><h2>ارسال برای تصمیم مدیر مجاز</h2>
+<p>این کار فقط یک درخواست بازبینی ثبت می‌کند. حتی تأیید مدیر نیز عملیات مالی یا تولیدی اجرا نمی‌کند.</p></div>
+<form method="post" action="{% url 'enterprise_portal:ecosystem_hub:request_review' report.pk %}">
+{% csrf_token %}
+<label for="approver_id">مسئول بازبینی</label>
+<select id="approver_id" name="approver_id" required>
+<option value="">انتخاب مسئول</option>
+{% for user in approvers %}<option value="{{ user.pk }}">{{ user.get_username }}</option>{% endfor %}
+</select>
+<button type="submit" class="primary-btn">ثبت درخواست بررسی ←</button>
+</form></section>
+{% endif %}
 <div class="hub-notice">
  <strong>حدود اعتبار گزارش</strong>
  <p>منبع: داده‌های ثبت‌شده و مجاز همین واحد. روش: قواعد قابل تکرار، بدون فراخوانی هوش مصنوعی یا سرویس بیرونی. در صورت نبود داده کافی، نبود هشدار به معنای سلامت قطعی نیست.</p>
