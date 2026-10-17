@@ -195,16 +195,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for candidate in about genetics smart-agriculture ai economy laboratory platform-home services research industry knowledge academy auctions contact newsletter agriculture blog marketplace store weather game-studio; do
-            candidate_url="/static/site/heroes/$candidate.webp"
-            code="$(curl -sSL --connect-timeout 5 --max-time 12 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir$candidate_url" || true)"
-            echo "IMAGE_CANDIDATE=$candidate_url STATUS=$code"
-          done
-          for candidate_url in /agriculture/assets/zomorod-olive-v1/laboratory.webp /static/site/company/company-hero.webp; do
-            code="$(curl -sSL --connect-timeout 5 --max-time 12 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir$candidate_url" || true)"
-            echo "IMAGE_CANDIDATE=$candidate_url STATUS=$code"
-          done
-          for asset in /static/site/heroes/about.webp /static/site/heroes/genetics.webp /static/site/heroes/smart-agriculture.webp; do
+          for asset in /static/site/heroes/ai.webp /static/site/heroes/economy.webp /static/site/heroes/smart-agriculture.webp; do
             code="$(curl -sSL --connect-timeout 5 --max-time 15 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir$asset" || true)"
             echo "NEW_PAGE_ASSET=$asset STATUS=$code"
             test "$code" = 200
