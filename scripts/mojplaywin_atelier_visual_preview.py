@@ -74,7 +74,7 @@ def make_html_snapshots():
                 raise RuntimeError(f"unexpected canonical for {route}")
             if "mojplaywin-atelier-v4" not in html:
                 raise RuntimeError(f"new template missing from {route}")
-            document = rewrite_local_static(html, copied, static_root).replace('loading="lazy"', 'loading="eager"')
+            document = rewrite_local_static(html, copied, static_root)
             (OUTPUT / f"{key}.html").write_text(document, encoding="utf-8")
             manifest[key] = {
                 "path": route,
@@ -106,6 +106,9 @@ def capture_viewports(manifest):
                 for mode, width, height in [("desktop", 1440, 900), ("mobile", 390, 844)]:
                     page = browser.new_page(viewport={"width": width, "height": height}, device_scale_factor=1)
                     page.goto((OUTPUT / detail["filename"]).resolve().as_uri(), wait_until="load")
+                    # Only visual QA forces every image to load for full-page screenshots.
+                    # Lighthouse separately audits the unmodified real lazy-loading HTML.
+                    page.evaluate("() => [...document.images].forEach(img => { img.loading = 'eager'; })")
                     page.wait_for_function(
                         "() => [...document.images].every(i => i.complete)",
                         timeout=15000,
