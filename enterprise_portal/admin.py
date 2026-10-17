@@ -40,7 +40,7 @@ class JournalLineInline(admin.TabularInline):
     autocomplete_fields = ("account",)
 
     def has_add_permission(self, request, obj=None):
-        return bool(obj and obj.status == "draft") and super().has_add_permission(request, obj)
+        return bool(obj is None or obj.status == "draft") and super().has_add_permission(request, obj)
 
     def has_delete_permission(self, request, obj=None):
         return bool(obj and obj.status == "draft") and super().has_delete_permission(request, obj)
@@ -55,6 +55,11 @@ class JournalEntryAdmin(OwnedByAdmin):
     inlines = (JournalLineInline,)
     actions = ("post_selected",)
     list_select_related = ("unit",)
+
+    def get_actions(self, request):
+        actions = super().get_actions(request)
+        actions.pop("delete_selected", None)
+        return actions
 
     def has_change_permission(self, request, obj=None):
         return (obj is None or obj.status == "draft") and super().has_change_permission(request, obj)
@@ -114,6 +119,11 @@ class StockMovementAdmin(OwnedByAdmin):
     readonly_fields = ("status", "confirmed_at", "created_by", "created_at", "updated_at")
     actions = ("confirm_selected",)
     autocomplete_fields = ("item",)
+
+    def get_actions(self, request):
+        actions = super().get_actions(request)
+        actions.pop("delete_selected", None)
+        return actions
 
     def has_change_permission(self, request, obj=None):
         return (obj is None or obj.status == "draft") and super().has_change_permission(request, obj)
@@ -179,7 +189,6 @@ class WorkTaskAdmin(OwnedByAdmin):
     list_filter = ("priority", "status", "unit")
     search_fields = ("title", "description")
     readonly_fields = ("created_by", "created_at", "updated_at")
-    autocomplete_fields = ("assigned_to",) if False else ()
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
