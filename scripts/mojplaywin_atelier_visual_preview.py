@@ -152,6 +152,28 @@ def capture_viewports(manifest):
                             raise RuntimeError("research-mobile: optimized research image not selected")
                         if mode == "desktop" and "research." not in active_image:
                             raise RuntimeError("research-desktop: original photo not preserved")
+                    photo_sections = {
+                        "restaurant", "venture_fuel_station", "venture_jewelry_gold",
+                        "venture_carpets", "venture_crypto", "venture_ecommerce",
+                        "venture_agriculture", "venture_hospitality",
+                        "industry", "knowledge", "economy", "studio", "market", "company",
+                    }
+                    if key in photo_sections:
+                        current_hero = page.locator(".mpx-page-hero-art img").evaluate(
+                            "(img) => img.currentSrc"
+                        )
+                        if mode == "mobile" and "/mobile-heroes/" not in current_hero:
+                            raise RuntimeError(f"{key}-{mode}: optimized photo not selected")
+                        if mode == "desktop" and "/site/heroes/" not in current_hero:
+                            raise RuntimeError(f"{key}-{mode}: original photo not preserved")
+                        if key.startswith("venture_") or key == "restaurant":
+                            card_photo = page.locator(".mpx-venture-card img").first.evaluate(
+                                "(img) => img.currentSrc"
+                            )
+                            if mode == "mobile" and "/mobile-heroes/" not in card_photo:
+                                raise RuntimeError(f"{key}-{mode}: card thumbnail not optimized")
+                            if mode == "desktop" and "/site/heroes/" not in card_photo:
+                                raise RuntimeError(f"{key}-{mode}: original card photo not preserved")
                     if key == "home":
                         main_cta_color = page.locator(".mpo-experience .mpo-btn-primary").evaluate(
                             "(button) => getComputedStyle(button).color"
