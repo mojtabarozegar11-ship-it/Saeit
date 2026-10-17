@@ -84,6 +84,10 @@ jobs:
              "arrow_controls":len(re.findall(r'data-orbit-(?:next|prev)',s)),
              "expr":list(set(re.findall(r'(?:querySelectorAll|querySelector)\([^)]{0,110}\)',s)))[:30]
           }))
+          scripts=re.findall(r'<script[^>]*>.*?</script>',s,re.S|re.I)
+          print("SCRIPT_ELEMENT_COUNT="+str(len(scripts)))
+          for idx,script in enumerate(scripts[-8:]):
+              print("EXISTING_PUBLIC_SCRIPT_"+str(idx)+"="+json.dumps(script[:4400]))
           print("NO_SOURCE_MODIFICATIONS=true")
           PY
       - name: Clear SSH credentials
