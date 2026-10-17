@@ -1,0 +1,76 @@
+name: MojPlayWin existing encrypted DB isolated restore proof (no deployment)
+on:
+  push:
+    branches: ["audit/mojplaywin-backup-transport-20261017"]
+    paths:
+      - ".github/workflows/mojplaywin-existing-db-restore-proof.yml"
+permissions:
+  contents: read
+concurrency:
+  group: mojplaywin-existing-db-restore-proof
+  cancel-in-progress: false
+jobs:
+  isolated-no-network-db-rehearsal:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 37
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate pinned archive-restoration module without production access
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mojplaywin_recovery_stream_vps.py
+          docker --version
+      - name: Pin authorized VPS SSH identity
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-db-proof"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          chmod 600 "$d/vps.key"
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+      - name: Restore EXISTING encrypted SQL into temporary network-disabled container
+        shell: bash
+        timeout-minutes: 30
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-db-proof"
+          stem="mojplaywin_20261017_direct_39028678930"
+          rec64="$(base64 -w0 scripts/mojplaywin_recovery_stream_vps.py)"
+          label="mpw-existing-db-${GITHUB_RUN_ID}"
+          trap 'docker rm -f "$label" >/dev/null 2>&1 || true' EXIT
+          free="$(df -PB1 "$RUNNER_TEMP" | awk 'NR == 2 {print $4}')"
+          test "$free" -ge 7000000000 || { echo "NO-GO isolated runner disk < 7GB";exit 1; }
+          docker run -d --rm --name "$label" --network none --memory 2g --cpus 2 --pids-limit 200 --security-opt no-new-privileges -e MARIADB_ALLOW_EMPTY_ROOT_PASSWORD=1 mariadb:11.4 >/dev/null
+          ready=0
+          for i in $(seq 1 90); do
+            if docker exec "$label" mariadb-admin --no-defaults -uroot ping --silent >/dev/null 2>&1; then ready=1;break;fi
+            sleep 2
+          done
+          test "$ready" -eq 1 || { echo "NO-GO isolated MariaDB not ready"; exit 1; }
+          call='import sys,base64;d={"__name__":"private_gpg_recovery"};exec(base64.b64decode(sys.argv[1]),d);d["STEM"]=sys.argv[2];d["decrypt_to_stdout"]("mysql")'
+          timeout 1450s ssh -T -i "$d/vps.key" -o BatchMode=yes -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$d/vps.known" -o ConnectTimeout=12 -o ServerAliveInterval=20 githubops@178.239.147.150 "python3 -c '$call' '$rec64' '$stem'" |
+            timeout 1450s docker exec -i "$label" mariadb --no-defaults -uroot --binary-mode
+          tables="$(docker exec "$label" mariadb --no-defaults -uroot --batch --skip-column-names -e "SELECT COUNT(*) FROM information_schema.tables WHERE TABLE_SCHEMA NOT IN ('mysql','performance_schema','information_schema','sys') AND TABLE_TYPE='BASE TABLE'")"
+          schemas="$(docker exec "$label" mariadb --no-defaults -uroot --batch --skip-column-names -e "SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name NOT IN ('mysql','performance_schema','information_schema','sys')")"
+          test "$tables" -gt 0 && test "$schemas" -gt 0 || { echo "NO-GO isolated SQL tables/schema missing";exit 1; }
+          echo "EXISTING_ENCRYPTED_DB_ISOLATED_RESTORE_VERIFIED=true"
+          echo "ISOLATED_APPLICATION_SCHEMAS=$schemas"
+          echo "ISOLATED_APPLICATION_TABLES=$tables"
+          echo "NETWORK_DISABLED=true"
+          echo "PRODUCTION_DB_UNCHANGED=true"
+          echo "PASSENGER_RESTART=false"
+          echo "PAYMENT_GATEWAY_UNCHANGED=true"
+          echo "LIVE_RELEASE_AUTHORIZED=false"
+      - name: Scrub temporary SSH key
+        if: always()
+        run: |
+          rm -rf -- "$RUNNER_TEMP/mojplaywin-db-proof"
