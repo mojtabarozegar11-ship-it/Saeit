@@ -1,0 +1,177 @@
+name: MojPlayWin REPLACE ugly gold with elegant footer-bottom signoff MAIN and 22 previews
+on:
+  push:
+    branches: ["audit/mojplaywin-backup-transport-20261017"]
+    paths: [".github/workflows/mojplaywin-footer-refined-gold-bottom-live.yml"]
+permissions:
+  contents: read
+concurrency:
+  group: mojplaywin-main-only-root-deploy
+  cancel-in-progress: false
+jobs:
+  fix-visible-footer-position:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify source and 3D visual placement using synthetic tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p test_mojplaywin_footer_refined_gold_bottom.py -v
+          python3 -m py_compile scripts/mojplaywin_footer_refined_gold_bottom.py
+          grep -Fq '42de5204f6c3ec0a059c66c28090362657176d77b71297582d10301e1cd75fc0' scripts/mojplaywin_footer_refined_gold_bottom.py
+          grep -Fq 'translate(.65px,1.25px)' scripts/mojplaywin_footer_refined_gold_bottom.py
+          grep -Fq 'grid-column:1/-1' scripts/mojplaywin_footer_refined_gold_bottom.py
+      - name: Configure pinned GitHub to VPS to cPanel private read-only relay
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-footer-refined"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P '' -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P '' -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            BatchMode yes
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            ConnectTimeout 10
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Record main and protected-site public baseline before any change
+        shell: bash
+        timeout-minutes: 4
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,os,urllib.request
+          paths=("/", "/store/", "/research/", "/company/", "/games/",
+                 "/mojtaba.roozegar/", "/mojtaba.roozegar/about/", "/picm/login/",
+                 "/studio.Roham/", "/saman/", "/farnaz/", "/zahra%24%24/", "/taniya/")
+          states={}
+          for path in paths:
+              req=urllib.request.Request("https://mojplaywin.com"+path,
+                   headers={"User-Agent":"MojPlayWin-inline-gold-before/1.0","Cache-Control":"no-cache"})
+              with urllib.request.urlopen(req,timeout=15) as res:
+                  states[path]=res.status
+                  assert res.status==200
+              print("BEFORE_PROTECTED_HEALTH_OK "+path)
+          filename=os.path.join(os.environ["RUNNER_TEMP"],"mpw-footer-before.json")
+          with open(filename,"w") as f:json.dump(states,f,sort_keys=True)
+          PY
+      - name: Atomic replace intrusive founder with refined bottom-of-footer gold text, 23 scoped files
+        id: install
+        shell: bash
+        timeout-minutes: 3
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-footer-refined"
+          timeout 150s ssh -T -F "$d/config" saeit-cpanel "python3 - install '$GITHUB_RUN_ID'" < scripts/mojplaywin_footer_refined_gold_bottom.py
+      - name: Verify understated gold signature is a bottom row WITHIN footer on all 23 public pages
+        id: acceptance
+        shell: bash
+        timeout-minutes: 5
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,os,re,urllib.request
+          root="https://mojplaywin.com"
+          names=("agents","ai","blockchain","company","economy","index","industry",
+            "knowledge","market","research","restaurant","store","studio","support",
+            "venture_agriculture","venture_carpets","venture_crypto","venture_ecommerce",
+            "venture_fuel_station","venture_hospitality","venture_jewelry_gold","web_engineering")
+          pages=["/"]+["/design-preview-20261017/"+name+".html" for name in names]
+          assert len(pages)==23
+          for path in pages:
+              req=urllib.request.Request(root+path+"?__footer_review=20261018v3",
+                headers={"User-Agent":"MojPlayWin-footer-refined-after-acceptance","Cache-Control":"no-cache"})
+              with urllib.request.urlopen(req,timeout=20) as response:
+                  assert response.status==200
+                  html=response.read(960000).decode("utf-8")
+              footer=re.search(r'<footer\b[^>]*class="mw-site-footer"[^>]*>(.*?)</footer>',html,re.S|re.I)
+              assert footer,path
+              content=footer.group(1)
+              assert content.count('data-mpw-bottom-signoff="true"')==1,path
+              assert content.count('class="mpw-signoff-gold"')==1,path
+              assert content.rfind('data-mpw-bottom-signoff="true"')>content.rfind('class="mw-legal"'),path
+              assert 'data-emboss="Mojtaba Roozegar"' in content,path
+              assert html.count('id="mpw-footer-refined-gold-v3"')==1,path
+              assert 'grid-column:1/-1' in html,path
+              assert "translate(.65px,1.25px)" in html,path
+              assert 'mpw-footer-founder-inline' not in html,path
+              assert 'class="mpw-root-founder"' not in html,path
+              assert 'class="mpw-preview-founder"' not in html,path
+              assert 'class="mpw-gold-3d"' not in html,path
+              assert not re.search(r'<div class="mpw-footer-bottom-signoff"[^>]*>\s*<strong',html),path
+              if path=="/":
+                  assert "MJWP_ROOT_CANDIDATE_ONLY_20261017" in html
+                  assert "noindex,nofollow,noarchive" not in html
+                  assert html.count('class="mpo-orbit-card"')==18
+              else:
+                  assert "noindex,nofollow,noarchive" in html
+              print("FOOTER_BOTTOM_REFINED_GOLD_NO_BOX_LIVE "+path)
+          before=json.load(open(os.environ["RUNNER_TEMP"]+"/mpw-footer-before.json"))
+          for path,expected in before.items():
+              req=urllib.request.Request(root+path,headers={
+                "User-Agent":"MojPlayWin-footer-protected-after","Cache-Control":"no-cache"})
+              with urllib.request.urlopen(req,timeout=20) as response:
+                  assert response.status==expected==200
+              print("PROTECTED_PATH_HEALTH_PRESERVED "+path)
+          print("ALL_23_REFINED_MAIN_FOOTERS_LIVE=true")
+          print("SEPARATE_CARD_REMOVED=true")
+          print("NO_PASSENGER_OR_SUBSITE_MUTATION=true")
+          PY
+      - name: Commit only after public 23-page bottom-footer and protected-site checks
+        id: commit
+        shell: bash
+        timeout-minutes: 2
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-footer-refined"
+          timeout 65s ssh -T -F "$d/config" saeit-cpanel "python3 - commit '$GITHUB_RUN_ID'" < scripts/mojplaywin_footer_refined_gold_bottom.py
+          echo "PUBLIC_ROOT_PLUS_22_PREVIEW_REFINED_GOLD_FOOTER_COMMITTED=true"
+      - name: Rollback only the exact 23 static main-owned files on any failure
+        if: failure()
+        shell: bash
+        timeout-minutes: 3
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-footer-refined"
+          if test -f "$d/config"; then
+            if timeout 18s ssh -T -F "$d/config" saeit-cpanel "test -f '/home/zomorod2/.mpw-founder-refined-footer-backups/run-$GITHUB_RUN_ID/state.json'"; then
+              timeout 110s ssh -T -F "$d/config" saeit-cpanel "python3 - rollback '$GITHUB_RUN_ID'" < scripts/mojplaywin_footer_refined_gold_bottom.py
+              echo "MAIN_STATIC_23_ROLLBACK_SUCCESS=true"
+            fi
+          fi
+      - name: Scrub SSH credentials from runner
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/mpw-footer-refined"
