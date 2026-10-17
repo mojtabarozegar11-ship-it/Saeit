@@ -339,6 +339,37 @@ jobs:
               print('RUNTIME_LOG_CATEGORY='+file.name+' bytes='+str(file.stat().st_size)+' markers='+','.join(t for t in tokens if t.lower() in text.lower()))
           PY
           REMOTE
+      - name: Classify Passenger failure traceback without exposing private error text
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-readonly"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          export PYTHONDONTWRITEBYTECODE=1
+          python3 - <<'PY'
+          import pathlib,re,collections
+          home=pathlib.Path.home()
+          p=home/'Saeit'/'stderr.log'
+          if not p.is_file():
+              print('PASSENGER_LOG=missing');raise SystemExit
+          with p.open('rb') as fh:
+              fh.seek(max(0,p.stat().st_size-350000))
+              s=fh.read(350000).decode('utf8','replace')
+          errors=re.findall(r'(?m)^([a-zA-Z_][a-zA-Z0-9_.]*(?:Error|Exception)):\s*[^\n]*',s)
+          print('PASSENGER_ERRORS_IN_TAIL='+repr(dict(collections.Counter(errors).most_common(12))))
+          chunks=s.split('Traceback (most recent call last):')
+          print('PASSENGER_TRACEBACKS_IN_TAIL='+str(len(chunks)-1))
+          for block in chunks[-4:]:
+              if not block.strip():continue
+              frames=re.findall(r'File "([^"]+)", line (\d+), in ([^\n]+)',block)
+              print('TRACEBACK_FRAMES='+str(len(frames))+' frame_tails='+','.join(pathlib.Path(f).name+':'+n+':'+re.sub('[^a-zA-Z0-9_]', '', fun)[:30] for f,n,fun in frames[-6:]))
+              types=re.findall(r'(?m)^([A-Za-z_][A-Za-z0-9_.]*(?:Error|Exception)):',block)
+              print('TRACEBACK_EXCEPTION='+(types[-1] if types else 'unresolved'))
+          for term in ('set_env_vars.py','VIRTUAL_ENV','populate() isn\'t reentrant','max children','Resource temporarily unavailable','pydantic_core'):
+              print('PASSENGER_ERROR_MARKER='+term+' count='+str(s.lower().count(term.lower())))
+          PY
+          REMOTE
       - name: Erase runner-only relay credentials
         if: always()
         run: rm -rf "$RUNNER_TEMP/zomorod-readonly"
