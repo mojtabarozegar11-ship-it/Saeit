@@ -72,6 +72,18 @@ jobs:
           old=subprocess.check_output(['git','show',base+':config/urls.py'],text=True)
           new=Path('config/urls.py').read_text()
           assert old==new,'Public route changes are forbidden in this ecosystem extension'
+          # Finance template may only add the permission-gated internal income report link.
+          oldfinance=subprocess.check_output(
+              ['git','show',base+':enterprise_portal/templates/enterprise_portal/finance.html'],text=True).splitlines()
+          newfinance=Path('enterprise_portal/templates/enterprise_portal/finance.html').read_text().splitlines()
+          extra=[line for line in newfinance if line not in oldfinance]
+          assert len(extra)==1, ('Unexpected finance template additions',extra)
+          assert "enterprise_portal:ecosystem_hub:income_report" in extra[0]
+          assert "perms.enterprise_portal.view_journalentry" in extra[0]
+          assert "perms.enterprise_portal.view_ledgeraccount" in extra[0]
+          assert "perms.ecosystem_hub.view_organization" in extra[0]
+          assert [line for line in newfinance if line not in extra]==oldfinance, 'Original finance template changed'
+          print('PRIVATE_FINANCE_VIEW_PRESERVED_WITH_AUTHORIZED_REPORT_LINK=yes')
           oldurl=subprocess.check_output(['git','show',base+':enterprise_portal/urls.py'],text=True)
           now=Path('enterprise_portal/urls.py').read_text()
           for line in oldurl.splitlines():
