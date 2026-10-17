@@ -70,7 +70,7 @@ jobs:
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/mpw-footer-stage"
-          target="/home/zomorod2/mojplaywin.com/design-preview-20261017/_mpw_main_footer_bridge_20261018_v2.php"
+          target="/home/zomorod2/mojplaywin.com/design-preview-20261017/_mpw_main_footer_bridge_20261018_v3.php"
           source="scripts/mojplaywin_isolated_main_footer_bridge.php"
           expected="$(sha256sum "$source" | cut -d' ' -f1)"
           timeout 25s ssh -T -F "$d/config" saeit-cpanel "test ! -e '$target' && test ! -L '$target' && test -f /home/zomorod2/mojplaywin.com/design-preview-20261017/index.html"
@@ -109,7 +109,7 @@ jobs:
                   return res.read(1400000)
           for key,path in mapping.items():
               original=read(base+path+"?__mpw_footer_passthru=1")
-              stage=read(base+"/design-preview-20261017/_mpw_main_footer_bridge_20261018_v2.php?__mpw_footer_section="+key)
+              stage=read(base+"/design-preview-20261017/_mpw_main_footer_bridge_20261018_v3.php?__mpw_footer_section="+key)
               assert stage.count(b'data-mpw-main-founder-edge="true"')==1
               assert stage.count(b'<strong>Mojtaba Roozegar</strong>')==1
               clean,n1=re.subn(rb'<style id="mpw-main-footer-edge-css">.*?</style>',b'',stage,count=1,flags=re.S)
