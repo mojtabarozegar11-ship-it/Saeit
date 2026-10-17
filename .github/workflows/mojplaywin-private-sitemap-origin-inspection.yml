@@ -1,0 +1,90 @@
+name: Moj Play Win sitemap physical origin read only
+on:
+  push:
+    branches: ["audit/mojplaywin-backup-transport-20261017"]
+    paths: [".github/workflows/mojplaywin-private-sitemap-origin-inspection.yml"]
+permissions:
+  contents: read
+jobs:
+  inspect-sitemap-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Read existing main-only sitemap and robots paths without changing or exposing private content
+        shell: bash
+        timeout-minutes: 2
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 55s ssh -T -F "$d/config" saeit-cpanel 'python3 -' <<'PY'
+          import re,hashlib,json,os
+          from pathlib import Path
+          site=Path("/home/zomorod2/mojplaywin.com")
+          output={}
+          for relative in ("sitemap.xml","robots.txt","design-preview-20261017/sitemap.xml",
+                           "design-preview-20261017/robots.txt","index.html","passenger_wsgi.py"):
+              p=site/relative
+              entry={"exists":p.exists(),"symlink":p.is_symlink()}
+              if p.is_file() and not p.is_symlink():
+                  data=p.read_bytes()
+                  entry["sha256"]=hashlib.sha256(data).hexdigest()
+                  entry["bytes"]=len(data)
+                  if relative.endswith("sitemap.xml"):
+                      entry["number_of_locs"]=len(re.findall(rb'<loc>',data))
+                      entry["market_included"]=b"https://mojplaywin.com/market/" in data
+                      entry["economy_included"]=b"https://mojplaywin.com/economy/" in data
+                      entry["industry_included"]=b"https://mojplaywin.com/industry/" in data
+                  if relative.endswith("robots.txt"):
+                      entry["sitemap_mojplaywin"]=b"https://mojplaywin.com/sitemap.xml" in data
+              output[relative]=entry
+          ht=site/".htaccess"
+          output["htaccess"]={"sha256":hashlib.sha256(ht.read_bytes()).hexdigest(),
+              "six_rule_marker":b"MPW_SIX_CANONICAL_ONLY_20261017" in ht.read_bytes(),
+              "three_new_rules_active":b"MPW_THREE_MORE_CANONICAL_ONLY_20261017" in ht.read_bytes()}
+          print(json.dumps({"classification":"MOJ_PLAY_WIN_SITEMAP_PHYSICAL_ORIGIN",
+                            "files":output,"production_modified":False},sort_keys=True),flush=True)
+          PY
