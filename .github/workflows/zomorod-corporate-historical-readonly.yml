@@ -40,6 +40,49 @@ jobs:
           print('NO_REMOVED_PAGES=true')
           print('CHANGED_FILES_SCOPED=true')
           PY
+      - name: Verify all existing visible content remains on both pages
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from collections import Counter
+          from html.parser import HTMLParser
+          from pathlib import Path
+          import subprocess
+
+          class MainText(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.in_main = False
+                  self.depth = 0
+                  self.text = []
+              def handle_starttag(self, tag, attrs):
+                  if tag == 'main':
+                      self.in_main = True
+                  if self.in_main:
+                      self.depth += 1
+              def handle_endtag(self, tag):
+                  if self.in_main:
+                      self.depth -= 1
+                      if self.depth == 0:
+                          self.in_main = False
+              def handle_data(self, text):
+                  if self.in_main and text.strip():
+                      self.text.append(' '.join(text.split()))
+
+          for slug in ('about', 'company'):
+              path = f'content/zomorod-nova-pages/{slug}.html'
+              before = subprocess.check_output(['git', 'show', 'origin/main:'+path], text=True)
+              after = Path(path).read_text(encoding='utf-8')
+              p, q = MainText(), MainText()
+              p.feed(before)
+              q.feed(after)
+              older, newer = Counter(p.text), Counter(q.text)
+              lost = [text for text, count in older.items() if newer[text] < count]
+              assert not lost, f'{slug}: original visible content removed or shortened: {lost[:8]}'
+              assert len(q.text) >= len(p.text), f'{slug}: unexpected content loss'
+              print(f'ORIGINAL_CONTENT_PRESERVED={slug}:true; fragments={len(p.text)}')
+          PY
       - name: Offline content checks
         run: python -m unittest discover -s tests -p test_zomorod_corporate_content_restoration.py -v
       - name: Prepare fingerprint-pinned cPanel relay
