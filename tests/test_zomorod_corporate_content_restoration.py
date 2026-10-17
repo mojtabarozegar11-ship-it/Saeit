@@ -132,6 +132,16 @@ class CorporateContentPreservationTests(unittest.TestCase):
                 self.assertEqual(len(photos), 2)
                 self.assertEqual(len({img["src"] for img in photos}), 2)
 
+    def test_original_emerald_system_stylesheet_preserved(self):
+        css = ROOT / "core/static/site/emerald-system.css"
+        self.assertTrue(css.is_file(), "Restore original published CSS into repository")
+        data = css.read_bytes()
+        self.assertEqual(len(data), 3480)
+        self.assertEqual(
+            hashlib.sha256(data).hexdigest(),
+            "efeb49358d01f93bad576aff9db89f1400a9ea734a1240be86831f026481aeb4",
+        )
+
     def test_in_document_navigation_targets(self):
         for name, parser in self.parsed.items():
             with self.subTest(name=name):
