@@ -2,7 +2,13 @@ name: Zomorod private ERP generate migration and test (PR only)
 on:
   push:
     branches: ["feature/zomorod-private-erp-20261017"]
-    paths: [".github/workflows/zomorod-private-office-bootstrap.yml"]
+    paths:
+      - ".github/workflows/zomorod-private-office-bootstrap.yml"
+      - "enterprise_portal/models.py"
+      - "enterprise_portal/tests.py"
+      - "enterprise_portal/views.py"
+      - "enterprise_portal/forms.py"
+      - "enterprise_portal/admin.py"
 permissions:
   contents: write
 concurrency:
