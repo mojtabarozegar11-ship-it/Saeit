@@ -31,6 +31,11 @@ jobs:
               'content/zomorod-nova-pages/company.html',
               'tests/test_zomorod_corporate_content_restoration.py',
               '.github/workflows/zomorod-corporate-historical-readonly.yml',
+              'core/static/site/emerald-system.css',
+              '.github/workflows/zomorod-selector-uri-canary.yml',
+              '.github/workflows/zomorod-selector-uri-rollback.yml',
+              '.github/workflows/zomorod-emerald-css-recovery.yml',
+              '.github/workflows/zomorod-emerald-css-export.yml',
           }
           changed = [line.split('\t', 1) for line in Path('/tmp/zomorod-changed-files.txt').read_text().splitlines()]
           assert changed, 'Nothing to verify'
