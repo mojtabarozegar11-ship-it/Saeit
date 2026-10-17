@@ -6,6 +6,9 @@
 {% if not selected_unit %}
 <div class="hub-empty">برای اجرای دستیار ابتدا یک واحد سازمانی و مجوز مربوط به آن تعریف کنید.</div>
 {% endif %}
+{% if perms.ecosystem_hub.view_assistantrun and perms.ecosystem_hub.view_proposedautomation %}
+<div class="hub-links"><a href="{% url 'enterprise_portal:ecosystem_hub:assistant_operations' %}{% if selected_unit %}?unit={{ selected_unit.code|urlencode }}{% endif %}">اتاق کنترل دستیارها و وضعیت واقعی زمان‌بندی ←</a></div>
+{% endif %}
 {% for group in groups %}
 <section class="hub-section" id="department-{{ group.key }}">
 <div class="hub-section-title"><div><span class="eyebrow">ASSISTANT CATALOG</span><h2>{{ group.label }}</h2></div><span>{{ group.entries|length }} دستیار</span></div>

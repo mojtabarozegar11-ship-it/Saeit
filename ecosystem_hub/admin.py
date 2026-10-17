@@ -7,6 +7,7 @@ from enterprise_portal.models import (
     BusinessUnit, InventoryItem, CompanyAsset, ManagementProject,
 )
 from .access import user_units, can_view_unit, require_unit
+from .report_policy import permitted_assistant_codes
 from .models import (
     Organization, UnitMembership, ManagedSite, WorkCenter, BillOfMaterials,
     MaterialRequirement, ProductionOrder, ProcurementNeed, QualityInspection,
@@ -255,6 +256,16 @@ class ReferenceEvidenceAdmin(ScopedAdmin):
 class AssistantRunAdmin(ScopedAdmin):
     list_display = ("assistant_code", "unit", "requested_by", "generated_at", "state")
     readonly_fields = ("unit", "assistant_code", "requested_by", "generated_at", "findings", "evidence", "state", "reviewed_by")
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).filter(
+            assistant_code__in=permitted_assistant_codes(request.user),
+        )
+
+    def has_view_permission(self, request, obj=None):
+        if obj is not None and obj.assistant_code not in permitted_assistant_codes(request.user):
+            return False
+        return super().has_view_permission(request, obj)
 
     def has_add_permission(self, request):
         return False  # Executions go through authenticated, scoped, audited services.

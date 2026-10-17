@@ -16,6 +16,7 @@ from enterprise_portal.models import (
 from enterprise_portal.services import stock_balance
 from .access import require_unit
 from .catalog import CATALOG
+from .manual_guides import MANUAL_GUIDES
 from .costing import estimate_manufacturing_cost
 from .models import (
     AssistantRun, BillOfMaterials, MaintenanceTicket, ManagementRisk,
@@ -213,8 +214,18 @@ def scan(unit, code):
             issue("سفارش‌های باز تولید", f"{orders} مورد"),
         ))
     else:
-        findings.append(issue("موتور تخصصی هنوز وصل نشده است",
-            "در این مرحله، چک‌لیست و گردش بازبینی قابل استفاده است، اما خروجی هوش مصنوعی تخصصی ساخته نشده."))
+        findings.append(issue(
+            "موتور تخصصی هنوز وصل نشده است",
+            "این خروجی چک‌لیست انسانی است؛ دستیار تخصصی یا هوش مصنوعی"
+            " مستقل فعال نیست و هیچ داده منبعی خودکار بررسی نشده است.",
+            source="اعلام وضعیت فنی",
+        ))
+        for subject, evidence_needed in MANUAL_GUIDES.get(code, ()):
+            findings.append(issue(
+                "اقدام پیشنهادی برای بررسی: " + subject,
+                evidence_needed + " نتیجه تنها بعد از جمع‌آوری مدرک و تأیید مسئول معتبر است.",
+                source="الگوی تخصصی انسانی؛ مدرک هنوز ارائه نشده",
+            ))
     if not findings:
         findings = [issue("مورد هشدار ثبت‌شده‌ای یافت نشد",
                           "فقط داده‌های موجود در این واحد بررسی شده‌اند. خالی بودن گزارش اثبات نبود مشکل نیست.")]

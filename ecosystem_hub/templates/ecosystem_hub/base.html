@@ -18,6 +18,7 @@
 {% if request.user.is_superuser %}<a href="{% url 'enterprise_portal:ecosystem_hub:group_overview' %}">گزارش کل گروه</a>{% endif %}
 <a href="{% url 'enterprise_portal:ecosystem_hub:modules' %}">واحدهای تخصصی</a>
 <a href="{% url 'enterprise_portal:ecosystem_hub:assistants' %}">دستیارهای مدیریت</a>
+{% if perms.ecosystem_hub.view_assistantrun and perms.ecosystem_hub.view_proposedautomation %}<a href="{% url 'enterprise_portal:ecosystem_hub:assistant_operations' %}">پایش دستیارها</a>{% endif %}
 {% if perms.ecosystem_hub.view_productionorder %}<a href="{% url 'enterprise_portal:ecosystem_hub:production' %}">تولید و صنعت</a>{% endif %}
 {% if perms.ecosystem_hub.view_managementrisk %}<a href="{% url 'enterprise_portal:ecosystem_hub:oversight' %}">ریسک و تصمیم‌ها</a>{% endif %}
 <a href="{% url 'enterprise_portal:finance' %}">حسابداری</a>
