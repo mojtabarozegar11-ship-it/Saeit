@@ -4,9 +4,7 @@ header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
 
 $drivers = class_exists('PDO') ? PDO::getAvailableDrivers() : [];
-$home = getenv('HOME') ?: '';
-$homeWritable = $home !== '' && is_dir($home) && is_writable($home);
-$privateStore = $home !== '' ? $home . '/.tala-private' : '';
+$privateStore = __DIR__ . '/.private';
 $privateStoreWritable = $privateStore !== '' && is_dir($privateStore) && is_writable($privateStore);
 $privateProbe = $privateStoreWritable ? @tempnam($privateStore, '.probe-') : false;
 if ($privateProbe !== false) {
@@ -25,7 +23,6 @@ echo json_encode([
     'scope' => 'tala',
     'runtime' => 'php',
     'pdo_sqlite' => in_array('sqlite', $drivers, true),
-    'private_home_writable' => $homeWritable,
     'api_storage_writable' => $apiWritable,
     'private_store_writable' => $privateStoreWritable,
 ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
