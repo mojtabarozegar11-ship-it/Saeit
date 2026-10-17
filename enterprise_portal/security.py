@@ -23,6 +23,7 @@ def _login_key(request, username):
     return salted_hmac(
         "zomorod-private-office-2026",
         f"{address}|{normalized}",
+        algorithm="sha256",
     ).hexdigest()
 
 
