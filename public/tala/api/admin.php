@@ -298,6 +298,7 @@ try {
         if ($id<1||text_length($reason)<4||text_length($reason)>300) fail(422,'شماره سند یا دلیل اصلاح معتبر نیست.');
         $q=$pdo->prepare('SELECT * FROM entries WHERE id=?');$q->execute([$id]);$row=$q->fetch();
         if (!$row) fail(404,'سند پیدا نشد.');
+        if ($user['role']!=='admin') fail(403,'فقط مدیر اصلی می‌تواند سند اصلاحی ثبت کند.');
         if ($row['reversal_of']!==null) fail(409,'سند اصلاحی قابل برگشت دوباره نیست.');
         $q=$pdo->prepare('SELECT COUNT(*) FROM entries WHERE reversal_of=?');$q->execute([$id]);
         if ((int)$q->fetchColumn()>0) fail(409,'برای این سند قبلاً اصلاح ثبت شده است.');
@@ -348,7 +349,8 @@ try {
     }
 
     if ($action === 'export' && $method === 'GET') {
-        current_user($pdo);
+        $user=current_user($pdo);
+        if ($user['role']!=='admin') fail(403,'فقط مدیر اصلی به خروجی کامل حسابداری دسترسی دارد.');
         header_remove('Content-Type');
         header('Content-Type: text/csv; charset=utf-8');
         header('Content-Disposition: attachment; filename="tala-ledger.csv"');
