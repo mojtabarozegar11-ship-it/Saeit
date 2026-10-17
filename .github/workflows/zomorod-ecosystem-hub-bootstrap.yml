@@ -1,0 +1,68 @@
+name: Zomorod ecosystem v2 isolated migration bootstrap
+on:
+  push:
+    branches: ["feature/zomorod-ecosystem-hub-v2-20261017"]
+    paths: [".github/workflows/zomorod-ecosystem-hub-bootstrap.yml"]
+permissions:
+  contents: write
+concurrency:
+  group: zm-ecosystem-bootstrap
+  cancel-in-progress: false
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SECRET_KEY: "isolated-ecosystem-ci-not-for-real-company-data"
+      ALLOWED_HOSTS: "localhost,testserver,zomorodmelal.ir"
+      DATABASE_URL: "sqlite:///isolated_hub_test.sqlite3"
+      DEBUG: "False"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install -r requirements.txt
+      - name: Additive schema only; isolated migration and tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF_NAME" = "feature/zomorod-ecosystem-hub-v2-20261017"
+          python manage.py makemigrations ecosystem_hub --noinput
+          python manage.py check
+          python manage.py migrate --noinput
+          python manage.py test ecosystem_hub enterprise_portal --verbosity 2
+          python manage.py makemigrations --check --dry-run ecosystem_hub
+      - name: Safely commit generated additive migrations to this draft feature branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add -- ecosystem_hub/migrations/
+          if git diff --cached --quiet; then
+            echo "HUB_MIGRATION_ALREADY_PRESENT=yes"
+            exit 0
+          fi
+          python - <<'PY'
+          import subprocess
+          a=subprocess.check_output(['git','diff','--cached','--name-status'],text=True).splitlines()
+          assert a and all(line.startswith('A\t') and line.split('\t')[1].startswith('ecosystem_hub/migrations/')
+             and line.endswith('.py') for line in a),a
+          print('ADDITIVE_MIGRATION_ONLY=yes')
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Add only independent ecosystem hub tables without modifying original ERP"
+          for i in 1 2 3; do
+            git fetch origin "$GITHUB_REF_NAME"
+            git rebase "origin/$GITHUB_REF_NAME"
+            if git push origin "HEAD:$GITHUB_REF_NAME"; then
+              echo "DRAFT_SCHEMA_COMMITTED=yes"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::Safe push rejected; no forced overwrites"
+          exit 1

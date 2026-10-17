@@ -1,0 +1,33 @@
+{% extends "ecosystem_hub/base.html" %}
+{% block title %}همه بخش‌های اکوسیستم{% endblock %}
+{% block hub_title %}تمام نرم‌افزارهای مدیریت اکوسیستم{% endblock %}
+{% block hub_subtitle %}هر بخش در پنل Django با مجوز مستقل مدیریت می‌شود؛ قابلیت‌های نیازمند اتصال خارجی مشخص هستند{% endblock %}
+{% block hub_content %}
+<section class="hub-section">
+<div class="hub-section-title"><h2>دسته‌های عملیاتی</h2></div>
+<div class="hub-feature-grid">
+{% for title, description in stats %}
+<article class="hub-feature"><b>{{ forloop.counter|stringformat:"02d" }} / {{ title }}</b><p>{{ description }}</p></article>
+{% endfor %}
+</div>
+</section>
+<div class="hub-section-title"><h2>مسیرهای ثبت و مدیریت</h2></div>
+<div class="hub-links">
+{% if perms.ecosystem_hub.view_organization %}<a href="{% url 'admin:ecosystem_hub_organization_changelist' %}">شرکت‌ها و واحدها</a>{% endif %}
+{% if perms.ecosystem_hub.view_managedsite %}<a href="{% url 'admin:ecosystem_hub_managedsite_changelist' %}">زیرسایت‌ها</a>{% endif %}
+{% if perms.ecosystem_hub.view_workcenter %}<a href="{% url 'admin:ecosystem_hub_workcenter_changelist' %}">مراکز تولید</a>{% endif %}
+{% if perms.ecosystem_hub.view_billofmaterials %}<a href="{% url 'admin:ecosystem_hub_billofmaterials_changelist' %}">فرمول ساخت</a>{% endif %}
+{% if perms.ecosystem_hub.view_productionorder %}<a href="{% url 'admin:ecosystem_hub_productionorder_changelist' %}">سفارش تولید</a>{% endif %}
+{% if perms.ecosystem_hub.view_procurementneed %}<a href="{% url 'admin:ecosystem_hub_procurementneed_changelist' %}">درخواست خرید</a>{% endif %}
+{% if perms.ecosystem_hub.view_qualityinspection %}<a href="{% url 'admin:ecosystem_hub_qualityinspection_changelist' %}">کیفیت محصول</a>{% endif %}
+{% if perms.ecosystem_hub.view_maintenanceticket %}<a href="{% url 'admin:ecosystem_hub_maintenanceticket_changelist' %}">سرویس تجهیزات</a>{% endif %}
+{% if perms.ecosystem_hub.view_staffassignment %}<a href="{% url 'admin:ecosystem_hub_staffassignment_changelist' %}">منابع انسانی</a>{% endif %}
+{% if perms.ecosystem_hub.view_timesheet %}<a href="{% url 'admin:ecosystem_hub_timesheet_changelist' %}">کارکرد نیروها</a>{% endif %}
+{% if perms.ecosystem_hub.view_managementrisk %}<a href="{% url 'admin:ecosystem_hub_managementrisk_changelist' %}">ریسک‌ها</a>{% endif %}
+{% if perms.ecosystem_hub.view_performanceindicator %}<a href="{% url 'admin:ecosystem_hub_performanceindicator_changelist' %}">شاخص‌های عملکرد</a>{% endif %}
+{% if perms.ecosystem_hub.view_reviewapproval %}<a href="{% url 'admin:ecosystem_hub_reviewapproval_changelist' %}">صف بررسی تصمیم‌ها</a>{% endif %}
+{% if perms.ecosystem_hub.view_referenceevidence %}<a href="{% url 'admin:ecosystem_hub_referenceevidence_changelist' %}">شواهد و اسناد</a>{% endif %}
+{% if perms.ecosystem_hub.view_proposedautomation %}<a href="{% url 'admin:ecosystem_hub_proposedautomation_changelist' %}">برنامه دستیارها</a>{% endif %}
+</div>
+<div class="hub-notice">هسته جامع قابل گسترش است. اتصال ERP به بانک، خزانه واقعی، حقوق و دستمزد قانونی، مالیات، انبارهای زیرسایت‌ها و موتور هوش مصنوعی بیرونی فقط بعد از قرارداد داده، امنیت، پشتیبان و تأیید عملیاتی انجام می‌شود.</div>
+{% endblock %}

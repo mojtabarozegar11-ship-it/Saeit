@@ -1,4 +1,4 @@
-from django.urls import path
+from django.urls import include, path
 from . import views
 from . import trial_balance as reports
 
@@ -9,6 +9,7 @@ urlpatterns = [
     path("logout/", views.CompanyLogout.as_view(), name="logout"),
     path("", views.dashboard, name="dashboard"),
     path("finance/", views.finance, name="finance"),
+    path("ecosystem/", include("ecosystem_hub.urls")),
     path("finance/trial-balance/", reports.trial_balance, name="trial_balance"),
     path("finance/trial-balance.csv", reports.trial_balance_csv, name="trial_balance_csv"),
     path("inventory/", views.inventory, name="inventory"),

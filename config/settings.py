@@ -35,6 +35,7 @@ INSTALLED_APPS = [
     "farnaz.apps.FarnazConfig",
     "command_center",
     "enterprise_portal.apps.EnterprisePortalConfig",
+    "ecosystem_hub.apps.EcosystemHubConfig",
 ]
 
 MIDDLEWARE = [

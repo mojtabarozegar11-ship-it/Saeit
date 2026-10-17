@@ -1,0 +1,34 @@
+{% extends "ecosystem_hub/base.html" %}
+{% block title %}مرکز مدیریت اکوسیستم{% endblock %}
+{% block hub_title %}فرماندهی کل اکوسیستم زمرد ملل{% endblock %}
+{% block hub_subtitle %}از تصمیم مدیرعامل تا برنامه تولید، ریسک و عملکرد واحدها در یک مرکز خصوصی{% endblock %}
+{% block hub_content %}
+{% if selected_unit %}
+<section class="hub-metrics" aria-label="شاخص‌های فعلی">
+{% for label, amount in cards %}
+<article><span>{{ label }}</span><strong>{{ amount }}</strong><small>داده ثبت‌شده در واحد {{ selected_unit.name }}</small></article>
+{% endfor %}
+</section>
+{% else %}
+<div class="hub-empty">واحد سازمانی قابل دسترسی وجود ندارد. مدیر سیستم باید ابتدا واحد و مجوز عضویت ثبت کند.</div>
+{% endif %}
+<section class="hub-section">
+<div class="hub-section-title"><div><span class="eyebrow">ONE ECOSYSTEM / MULTIPLE BUSINESSES</span><h2>بخش‌های مدیریتی یکپارچه</h2></div>
+<a href="{% url 'ecosystem_hub:modules' %}">مشاهده ابزارهای تخصصی ←</a></div>
+<div class="hub-feature-grid">
+<a class="hub-feature" href="{% url 'enterprise_portal:finance' %}"><b>۰۱ / حسابداری کل</b><p>دفتر کل، تراز، سند دوطرفه، ارزهای جدا، قراردادها و بودجه</p></a>
+<a class="hub-feature" href="{% url 'ecosystem_hub:production' %}"><b>۰۲ / تولید و زنجیره تأمین</b><p>فرمول ساخت، مواد اولیه، سفارش، ظرفیت، کیفیت و تعمیرات</p></a>
+<a class="hub-feature" href="{% url 'enterprise_portal:tasks' %}"><b>۰۳ / اتوماسیون اداری</b><p>دبیرخانه، وظایف، ارجاع کار، جلسات، منابع انسانی و پروژه‌ها</p></a>
+<a class="hub-feature" href="{% url 'ecosystem_hub:assistants' %}"><b>۰۴ / دستیارهای تخصصی</b><p>{{ assistant_count }} دستیار تعریف‌شده با سطح دسترسی و گزارش قابل بررسی</p></a>
+</div></section>
+<section class="hub-section">
+<div class="hub-section-title"><div><span class="eyebrow">EVIDENCE FIRST · REVIEW BEFORE ACTION</span><h2>دستیارهای مدیریت</h2></div>
+<a href="{% url 'ecosystem_hub:assistants' %}">همه دستیارها ←</a></div>
+<div class="hub-assistant-grid">
+{% for item in assistant_preview %}
+<article class="hub-assistant"><div class="hub-spark">✧</div><h3>{{ item.title }}</h3><p>{{ item.description }}</p>
+<span class="hub-chip">{{ item.mode }}</span></article>
+{% endfor %}
+</div>
+</section>
+{% endblock %}

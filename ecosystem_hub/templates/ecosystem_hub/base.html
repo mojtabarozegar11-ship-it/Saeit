@@ -1,0 +1,38 @@
+{% extends "enterprise_portal/shell.html" %}
+{% load static %}
+{% block extra_head %}
+<link rel="stylesheet" href="{% static 'ecosystem_hub/hub.css' %}">
+{% endblock %}
+{% block content %}
+<div class="hub">
+<header class="hub-top">
+<div>
+<span class="eyebrow">ZOMOROD MELAL / ENTERPRISE ECOSYSTEM</span>
+<h1>{% block hub_title %}فرماندهی کل اکوسیستم{% endblock %}</h1>
+<p>{% block hub_subtitle %}بخش‌های مدیریت، تولید و مالی یکپارچه با استقلال اطلاعات هر واحد{% endblock %}</p>
+</div>
+<div class="hub-mark" aria-hidden="true">✥</div>
+</header>
+<nav class="hub-nav" aria-label="ابزارهای مدیریت اکوسیستم">
+<a href="{% url 'ecosystem_hub:dashboard' %}">مرکز مدیریت</a>
+<a href="{% url 'ecosystem_hub:modules' %}">واحدهای تخصصی</a>
+<a href="{% url 'ecosystem_hub:assistants' %}">دستیارهای مدیریت</a>
+{% if perms.ecosystem_hub.view_productionorder %}<a href="{% url 'ecosystem_hub:production' %}">تولید و صنعت</a>{% endif %}
+{% if perms.ecosystem_hub.view_managementrisk %}<a href="{% url 'ecosystem_hub:oversight' %}">ریسک و تصمیم‌ها</a>{% endif %}
+<a href="{% url 'enterprise_portal:finance' %}">حسابداری</a>
+</nav>
+{% if units %}
+<section class="hub-units" aria-label="تفکیک واحدهای شرکت">
+ <strong>واحد فعال:</strong>
+ {% for unit in units %}
+ <a class="{% if selected_unit.pk == unit.pk %}hub-active{% endif %}"
+    href="?unit={{ unit.code|urlencode }}">{{ unit.name }}</a>
+ {% endfor %}
+</section>
+{% endif %}
+{% block hub_content %}{% endblock %}
+<div class="hub-notice" role="note">
+ این میزکار خصوصی است. خروجی دستیارها، محاسبات و گزارش‌های تولیدی پیش‌نویس تصمیم هستند و هیچ پرداخت، برداشت انبار، انتشار یا اقدام برون‌سازمانی را خودکار اجرا نمی‌کنند.
+</div>
+</div>
+{% endblock %}

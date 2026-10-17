@@ -1,0 +1,69 @@
+name: Zomorod ecosystem v2 isolated acceptance
+on:
+  push:
+    branches: ["feature/zomorod-ecosystem-hub-v2-20261017"]
+    paths:
+      - "ecosystem_hub/**"
+      - "config/settings.py"
+      - "enterprise_portal/urls.py"
+      - "enterprise_portal/templates/enterprise_portal/**"
+      - ".github/workflows/zomorod-ecosystem-hub-checks.yml"
+  pull_request:
+    branches: ["feature/zomorod-private-erp-20261017"]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SECRET_KEY: "isolated-ecosystem-ci-not-for-real-company-data"
+      ALLOWED_HOSTS: "localhost,testserver,zomorodmelal.ir"
+      DATABASE_URL: "sqlite:///isolated_hub_test.sqlite3"
+      DEBUG: "False"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install -r requirements.txt
+      - name: Schema consistency and Django system check
+        run: |
+          test -f ecosystem_hub/migrations/0001_initial.py
+          python manage.py check
+          python manage.py makemigrations --check --dry-run ecosystem_hub
+          python manage.py migrate --plan
+      - name: Run all private office and ecosystem regression tests in isolation
+        run: |
+          python manage.py test enterprise_portal ecosystem_hub --verbosity 2
+      - name: Preserve existing URLs and prohibit protected-site edits
+        run: |
+          python - <<'PY'
+          import subprocess
+          from pathlib import Path
+          base='origin/feature/zomorod-private-erp-20261017'
+          changed=subprocess.check_output(['git','diff','--name-status',base+'...HEAD'],text=True).splitlines()
+          allowed_exact={'config/settings.py','enterprise_portal/urls.py',
+              'enterprise_portal/templates/enterprise_portal/shell.html',
+              'enterprise_portal/templates/enterprise_portal/dashboard.html',
+              '.github/workflows/zomorod-ecosystem-hub-bootstrap.yml',
+              '.github/workflows/zomorod-ecosystem-hub-checks.yml',
+              'docs/zomorod-ecosystem-hub-v2.md'}
+          for line in changed:
+              status,path=line.split('\t',1)
+              assert status in ('A','M'),(status,path)
+              assert path.startswith('ecosystem_hub/') or path in allowed_exact,(status,path)
+          old=subprocess.check_output(['git','show',base+':config/urls.py'],text=True)
+          new=Path('config/urls.py').read_text()
+          assert old==new,'Public route changes are forbidden in this ecosystem extension'
+          oldurl=subprocess.check_output(['git','show',base+':enterprise_portal/urls.py'],text=True)
+          now=Path('enterprise_portal/urls.py').read_text()
+          for line in oldurl.splitlines():
+              if line.strip().startswith('path('):
+                  assert line in now, 'An existing private route was removed: '+line
+          print('ZERO_REMOVED_OR_CHANGED_PUBLIC_ROUTES=yes')
+          print('ZERO_UNRELATED_SITE_EDITS=yes')
+          PY

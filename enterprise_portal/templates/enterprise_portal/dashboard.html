@@ -8,6 +8,12 @@
  <p>از ثبت سند مالی تا عملیات تجاری و صنعتی، نامه‌های اداری، پروژه‌ها و تصمیم‌های مدیریت. بخش‌های قابل مشاهده به مجوز حساب شما وابسته‌اند.</p>
  </div><div class="hero-symbol" aria-hidden="true">◆<span class="ring"></span></div>
 </section>
+{% if perms.ecosystem_hub.view_organization %}
+<section class="section-heading"><div><span class="eyebrow">ECOSYSTEM CONTROL CENTER</span><h2>فرماندهی جامع اکوسیستم</h2></div></section>
+<div class="module-grid">
+<article class="module"><div class="module-icon">✥</div><h3>مدیریت یکپارچه همه واحدها</h3><p>تولید، عملیات، منابع انسانی، شاخص‌ها، ریسک و دسترسی هر واحد</p><a class="module-action" href="{% url 'ecosystem_hub:dashboard' %}">ورود به مرکز اکوسیستم ←</a></article>
+<article class="module"><div class="module-icon">✦</div><h3>دستیارهای تخصصی مدیریت</h3><p>تحلیل داده‌ها و تهیه پیشنهادهای مستند، فقط برای بازبینی انسانی</p><a class="module-action" href="{% url 'ecosystem_hub:assistants' %}">فهرست دستیارها ←</a></article>
+</div>{% endif %}
 {% if summary %}
 <section class="stats-grid" aria-label="شاخص‌های ثبت‌شده">
 {% for label, amount in summary %}<div class="stat"><span>{{ label }}</span><strong>{{ amount }}</strong><small>از داده‌های ثبت‌شده در پایگاه شرکت</small></div>{% endfor %}

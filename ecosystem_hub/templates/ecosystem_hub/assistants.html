@@ -1,0 +1,32 @@
+{% extends "ecosystem_hub/base.html" %}
+{% block title %}دستیارهای مدیریت و تولید{% endblock %}
+{% block hub_title %}دستیارهای مدیریت، تولید و پژوهش{% endblock %}
+{% block hub_subtitle %}تحلیل داده‌های داخلی، پیش‌نویس تصمیم، پیگیری و پیشنهاد قابل بررسی؛ بدون اجرای مالی و انتشار خودکار{% endblock %}
+{% block hub_content %}
+{% if not selected_unit %}
+<div class="hub-empty">برای اجرای دستیار ابتدا یک واحد سازمانی و مجوز مربوط به آن تعریف کنید.</div>
+{% endif %}
+{% for group in groups %}
+<section class="hub-section" id="department-{{ group.key }}">
+<div class="hub-section-title"><div><span class="eyebrow">ASSISTANT CATALOG</span><h2>{{ group.label }}</h2></div><span>{{ group.entries|length }} دستیار</span></div>
+<div class="hub-assistant-grid">
+{% for item in group.entries %}
+<article class="hub-assistant">
+ <div class="hub-spark" aria-hidden="true">✦</div>
+ <h3>{{ item.title }}</h3><p>{{ item.description }}</p>
+ <div class="hub-assistant-bottom">
+ <span class="hub-chip {% if not item.handler %}hub-chip-soft{% endif %}">{{ item.mode }}</span>
+ {% if selected_unit and can_run %}
+ <form method="post" action="{% url 'ecosystem_hub:run_assistant' item.code %}">
+ {% csrf_token %}
+ <input type="hidden" name="unit" value="{{ selected_unit.code }}">
+ <button type="submit">تهیه گزارش پیش‌نویس ←</button>
+ </form>
+ {% endif %}
+ </div>
+</article>
+{% endfor %}
+</div>
+</section>
+{% endfor %}
+{% endblock %}
