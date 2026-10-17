@@ -20,13 +20,14 @@ from enterprise_portal.models import (
 from enterprise_portal.services import confirm_stock_movement, post_journal, stock_balance
 from .access import user_units, require_unit, can_view_unit
 from .analysis import generate_report
+from .costing import estimate_manufacturing_cost
 from .catalog import CATALOG, DEPARTMENTS
 from .models import (
     Organization, UnitMembership, ManagedSite, WorkCenter, BillOfMaterials,
     MaterialRequirement, ProductionOrder, ProcurementNeed, QualityInspection,
     MaintenanceTicket, StaffAssignment, Timesheet, ManagementRisk,
     PerformanceIndicator, ReviewApproval, ReferenceEvidence,
-    AssistantRun, ProposedAutomation,
+    AssistantRun, ProposedAutomation, MaterialPriceReference, ProductionCostScenario,
 )
 
 U = get_user_model()
@@ -622,6 +623,141 @@ class HubSuite(TestCase):
         with self.assertRaises(PermissionDenied):
             confirm_stock_movement(stock.pk, viewer)
         self.assertEqual(stock_balance(self.factory_product.pk), D("0"))
+
+    def test_cost_estimate_remains_incomplete_without_verified_material_rate(self):
+        formula = BillOfMaterials.objects.create(
+            unit=self.farm, product=self.farm_product, code="COST-BOM", yield_quantity=D("2"),
+        )
+        MaterialRequirement.objects.create(
+            formula=formula, item=self.farm_material, quantity=D("3"),
+            scrap_percent=D("10"),
+        )
+        order = ProductionOrder.objects.create(
+            unit=self.farm, formula=formula, code="COST-ORDER", quantity=D("10"),
+            owner=self.owner,
+        )
+        scenario = ProductionCostScenario.objects.create(
+            unit=self.farm, order=order, label="برآورد مواد", currency="USD",
+            labor_estimate=D("100"), overhead_estimate=D("40"), prepared_by=self.owner,
+        )
+        result = estimate_manufacturing_cost(scenario)
+        self.assertFalse(result["complete"])
+        self.assertIsNone(result["total"])
+        self.assertIsNone(result["unit_cost"])
+        self.assertEqual(result["missing_skus"], ["SEED"])
+        self.assertEqual(result["components"][0]["amount_needed"], D("16.500"))
+        self.assertEqual(JournalEntry.objects.count(), 0)
+
+        # Draft rates, wrong currencies and future-dated references must not
+        # become assumed current prices.
+        MaterialPriceReference.objects.create(
+            unit=self.farm, item=self.farm_material, currency="USD",
+            amount=D("10"), status="draft", recorded_by=self.owner,
+            evidence_ref="unverified", as_of=timezone.localdate(),
+        )
+        MaterialPriceReference.objects.create(
+            unit=self.farm, item=self.farm_material, currency="IRR",
+            amount=D("999"), status="verified", recorded_by=self.owner,
+            evidence_ref="invoice-IRR", as_of=timezone.localdate(),
+        )
+        MaterialPriceReference.objects.create(
+            unit=self.farm, item=self.farm_material, currency="USD",
+            amount=D("25"), status="verified", recorded_by=self.owner,
+            evidence_ref="future-quote", as_of=timezone.localdate()+timedelta(days=3),
+        )
+        self.assertIsNone(estimate_manufacturing_cost(scenario)["total"])
+        verified = MaterialPriceReference.objects.create(
+            unit=self.farm, item=self.farm_material, currency="USD",
+            amount=D("20"), status="verified", recorded_by=self.owner,
+            evidence_ref="approved-supplier-offer",
+        )
+        result = estimate_manufacturing_cost(scenario)
+        self.assertTrue(result["complete"])
+        self.assertEqual(result["material_total"], D("330.00"))
+        self.assertEqual(result["total"], D("470.00"))
+        self.assertEqual(result["unit_cost"], D("47.00"))
+        self.assertEqual(result["components"][0]["price_source"], "approved-supplier-offer")
+        self.assertFalse(result["posted_to_ledger"])
+        self.assertFalse(result["stock_movement_created"])
+        self.assertFalse(JournalEntry.objects.exists())
+        self.assertFalse(StockMovement.objects.exists())
+
+        assistant = generate_report(self.owner, self.farm, "cost-accountant")
+        self.assertTrue(any("470.00 USD" in x["detail"] for x in assistant.findings))
+        self.assertEqual(assistant.state, "draft")
+
+    def test_cost_price_requires_documentation_and_matching_business_unit(self):
+        price = MaterialPriceReference(
+            unit=self.farm, item=self.factory_product, currency="IRR",
+            amount=D("200"), status="verified", recorded_by=self.owner,
+            evidence_ref="supplier",
+        )
+        with self.assertRaises(ValidationError):
+            price.full_clean()
+        price.item = self.farm_material
+        price.evidence_ref = ""
+        with self.assertRaises(ValidationError):
+            price.full_clean()
+        price.evidence_ref = "signed-offer"
+        price.amount = D("-5")
+        with self.assertRaises(ValidationError):
+            price.full_clean()
+        price.amount = D("500")
+        price.full_clean()
+
+    def test_cost_scenario_rejects_cross_unit_production_order(self):
+        formula = BillOfMaterials.objects.create(
+            unit=self.factory, product=self.factory_product, code="FACTORY-COST",
+        )
+        order = ProductionOrder.objects.create(
+            unit=self.factory, formula=formula, code="SECRET-COST", quantity=D("3"), owner=self.owner,
+        )
+        bad = ProductionCostScenario(
+            unit=self.farm, order=order, label="غیرمجاز", prepared_by=self.owner,
+        )
+        with self.assertRaises(ValidationError):
+            bad.full_clean()
+
+    def test_cost_report_read_permission_and_company_isolation(self):
+        formula = BillOfMaterials.objects.create(
+            unit=self.factory, product=self.factory_product, code="BOM-COST",
+        )
+        order = ProductionOrder.objects.create(
+            unit=self.factory, formula=formula, code="SECRET-COST", quantity=D("2"), owner=self.owner,
+        )
+        scenario = ProductionCostScenario.objects.create(
+            unit=self.factory, order=order, label="برآورد کارخانه", prepared_by=self.owner,
+        )
+        url = f"/company/office/ecosystem/production/cost/{scenario.pk}/"
+        self.client.force_login(self.viewer)
+        self.assertEqual(self.client.get(url, secure=True).status_code, 403)
+        self.viewer.user_permissions.add(*Permission.objects.filter(
+            content_type__app_label="ecosystem_hub",
+            codename__in=("view_productioncostscenario", "view_materialpricereference"),
+        ))
+        self.assertEqual(self.client.get(url, secure=True).status_code, 404)
+        self.client.force_login(self.owner)
+        response = self.client.get(url, secure=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "نرخ ناقص")
+
+    def test_cost_assistant_warns_when_prices_are_missing(self):
+        recipe = BillOfMaterials.objects.create(
+            unit=self.farm, product=self.farm_product, code="BOM-COST-MISS",
+        )
+        MaterialRequirement.objects.create(
+            formula=recipe, item=self.farm_material, quantity=D("2"),
+        )
+        order = ProductionOrder.objects.create(
+            unit=self.farm, formula=recipe, code="COST-MISS",
+            quantity=D("5"), owner=self.owner,
+        )
+        ProductionCostScenario.objects.create(
+            unit=self.farm, order=order, label="فاقد نرخ", prepared_by=self.owner,
+        )
+        report = generate_report(self.owner, self.farm, "cost-accountant")
+        self.assertTrue(any("نرخ‌های ناکامل" in f["title"] for f in report.findings))
+        self.assertTrue(all("برآورد مستند" not in f["detail"] for f in report.findings))
 
     def test_assistant_access_is_csrf_protected(self):
         web = Client(enforce_csrf_checks=True)
