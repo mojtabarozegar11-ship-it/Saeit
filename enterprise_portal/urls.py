@@ -8,6 +8,7 @@ urlpatterns = [
     path("logout/", views.CompanyLogout.as_view(), name="logout"),
     path("", views.dashboard, name="dashboard"),
     path("finance/", views.finance, name="finance"),
+    path("finance/trial-balance/", views.trial_balance, name="trial_balance"),
     path("inventory/", views.inventory, name="inventory"),
     path("tasks/", views.tasks, name="tasks"),
     path("tasks/new/", views.new_task, name="new_task"),
