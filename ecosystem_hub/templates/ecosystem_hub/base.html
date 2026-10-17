@@ -21,6 +21,9 @@
 {% if perms.ecosystem_hub.view_productionorder %}<a href="{% url 'enterprise_portal:ecosystem_hub:production' %}">تولید و صنعت</a>{% endif %}
 {% if perms.ecosystem_hub.view_managementrisk %}<a href="{% url 'enterprise_portal:ecosystem_hub:oversight' %}">ریسک و تصمیم‌ها</a>{% endif %}
 <a href="{% url 'enterprise_portal:finance' %}">حسابداری</a>
+{% if perms.enterprise_portal.view_journalentry and perms.enterprise_portal.view_ledgeraccount %}
+<a href="{% url 'enterprise_portal:ecosystem_hub:income_report' %}">درآمد و هزینه واحدها</a>
+{% endif %}
 </nav>
 {% if units %}
 <section class="hub-units" aria-label="تفکیک واحدهای شرکت">

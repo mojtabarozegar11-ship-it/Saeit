@@ -143,3 +143,17 @@ publishing content or paying suppliers. Specialists without implemented
 read-only handlers are excluded from the command rather than misrepresented.
 The enable flag defaults to **False**. Test backups, security and scheduler
 health before enabling it on a separate environment.
+
+## Phase 3: management income and expense overview
+The private path `/company/office/ecosystem/finance/income/` and CSV
+export `/company/office/ecosystem/finance/income.csv` report posted
+journal income and expense account movements over an explicitly validated
+date range, with optional permitted-unit and currency filters. Access
+requires both ledger-journal and account-view permissions plus ecosystem
+membership. All results keep **unit and currency as separate keys**.
+Income is (credit - debit) and expense (debit - credit); net result is
+their difference. Negative correcting entries remain negative and draft
+entries are excluded. Reports create no financial events and are
+**not audited P&L financial statements**: period closing, cost of sales,
+tax, depreciation, opening balances, FX and intercompany eliminations
+need accountant approval.
