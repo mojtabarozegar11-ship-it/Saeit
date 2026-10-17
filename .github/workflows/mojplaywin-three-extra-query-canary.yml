@@ -1,0 +1,140 @@
+name: Moj Play Win market industry economy exact-query canary
+on:
+  push:
+    branches: ["audit/mojplaywin-backup-transport-20261017"]
+    paths: [".github/workflows/mojplaywin-three-extra-query-canary.yml"]
+permissions:
+  contents: read
+concurrency:
+  group: mojplaywin-main-only-root-deploy
+  cancel-in-progress: false
+jobs:
+  canary-only-with-rollback:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compile exact three-route guard and check current six-route release
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mojplaywin_three_extra_canonical_rewrite.py
+          python3 - <<'PY'
+          import importlib.util
+          p="scripts/mojplaywin_three_extra_canonical_rewrite.py"
+          sp=importlib.util.spec_from_file_location("canon3",p)
+          x=importlib.util.module_from_spec(sp);sp.loader.exec_module(x)
+          assert len(x.ROUTES)==3
+          assert set(x.ROUTES.values())=={"/market/","/industry/","/economy/"}
+          original=b"RewriteEngine On\n# previous six-route mock\nPassengerAppRoot /protected\n"
+          for mode,n in [("canary",1),("production",3)]:
+              revised=x.build(original,mode)
+              assert revised.count(x.TARGET.encode())==n
+              assert revised.replace(x.directives(mode).encode(),b"")==original
+          print("PREVIOUS_LIVE_SIX_RULES_WOULD_BE_PRESERVED_BYTE_FOR_BYTE")
+          PY
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Arm market test-query only, compare real CGI to Django, then restore six-rule baseline
+        shell: bash
+        timeout-minutes: 3
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          phpsha=$(sha256sum scripts/mojplaywin_canonical_php_three_extra.php|cut -d' ' -f1)
+          armed=no
+          undo(){
+            if test "$armed" = yes;then
+              timeout 38s ssh -T -F "$d/config" saeit-cpanel 'python3 - rollback' < scripts/mojplaywin_three_extra_canonical_rewrite.py ||
+                echo "INDEPENDENT_180_SECOND_ORIGINAL_SIX_RULES_WATCHDOG_STILL_ACTIVE"
+            fi
+          }
+          trap undo EXIT
+          timeout 43s ssh -T -F "$d/config" saeit-cpanel "python3 - canary '$phpsha'" < scripts/mojplaywin_three_extra_canonical_rewrite.py
+          armed=yes
+          python3 - <<'PY'
+          from urllib.request import Request,urlopen
+          import json
+          base="https://mojplaywin.com"
+          def get(path):
+              req=Request(base+path,headers={"Cache-Control":"no-store","User-Agent":"MojPlayWin-exact-three-canary"})
+              with urlopen(req,timeout=22) as r:
+                  if r.status!=200:raise RuntimeError("not 200")
+                  return r.read(600000),r.headers.get("X-MPW-Canonical-Edge","")
+          wrong=b'<link rel="canonical" href="https://zomorodmelal.ir/market/">'
+          right=b'<link rel="canonical" href="https://mojplaywin.com/market/">'
+          origin,_=get("/market/?__mpw_canon_probe=20261017&__mpw_canon_passthru=1")
+          for k in (1,2,3):
+              page,edge=get("/market/?__mpw_canon_probe=20261017")
+              if page!=origin.replace(wrong,right) or edge!="main-only":
+                  raise RuntimeError("market exact-query canary did not preserve HTML")
+          plain,marker=get("/market/")
+          if wrong not in plain or marker=="main-only":
+              raise RuntimeError("ordinary live market unexpectedly modified")
+          for p in ("/store/","/research/","/knowledge/","/ventures/agriculture/"):
+              page,header=get(p)
+              canonical=('href="https://mojplaywin.com'+p+'"').encode()
+              if page.count(canonical)!=1 or header!="main-only":
+                  raise RuntimeError("prior six production canonicals affected by canary")
+          print(json.dumps({"classification":"MOJ_PLAY_WIN_THREE_EXTRA_CANARY_ACCEPTED",
+            "market_test_only_correct":True,"all_old_six_kept_active":True,
+            "ordinary_market_still_Django":True},sort_keys=True))
+          PY
+          undo
+          armed=no
+      - name: Confirm same production six-rule SHA and all protected public routes
+        shell: bash
+        timeout-minutes: 2
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          actual=$(timeout 33s ssh -T -F "$d/config" saeit-cpanel 'sha256sum /home/zomorod2/mojplaywin.com/.htaccess'|cut -d' ' -f1)
+          test "$actual" = fbfa01e3d0f694b3b65782fe957d6d943302c6dea2374803ad6a91976164128a
+          for path in / /store/ /research/ /company/ /knowledge/ /market/ /economy/ /industry/ /saman/ /picm/login/ /farnaz/ /mojtaba.roozegar/;do
+            test "$(curl -sSL -o /dev/null -w '%{http_code}' --max-time 17 "https://mojplaywin.com$path")" = 200 || exit 73
+          done
+          echo "THREE_CANARY_FULLY_REMOVED_PREVIOUS_SIX_RULES_PRESERVED"
