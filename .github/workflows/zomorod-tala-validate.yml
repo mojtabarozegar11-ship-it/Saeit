@@ -53,7 +53,10 @@ jobs:
           rules=(root/'.htaccess').read_text(encoding='utf-8')
           if 'PassengerEnabled off' not in rules or 'DirectoryIndex index.html' not in rules: raise SystemExit('TALA_STATIC_DIRECTORY_CONFIG=unsafe')
           sw=(root/'sw.js').read_text(encoding='utf-8')
-          if "startsWith('/tala/')" not in sw: raise SystemExit('TALA_SERVICE_WORKER_SCOPE=unsafe')
+          if "const CACHE='tala-shell-v3'" not in sw: raise SystemExit('TALA_CACHE_VERSION=outdated')
+          for marker in ("const SAFE_PATHS=new Set(CORE)", "SAFE_PATHS.has(url.pathname)", "key.startsWith('tala-shell-')", "key!==CACHE", "await self.clients.claim()", "request.headers.has('X-Tala-Request')"):
+              if marker not in sw: raise SystemExit('TALA_SERVICE_WORKER_PRIVATE_RESPONSE_GUARD=missing:'+marker)
+          if "startsWith('/tala/')" in sw: raise SystemExit('TALA_SERVICE_WORKER_BROAD_CACHE=unsafe')
           match=re.search(r'<script>([\s\S]*?)</script>',source)
           if not match: raise SystemExit('TALA_INLINE_SCRIPT=missing')
           Path('/tmp/tala-inline.js').write_text(match.group(1),encoding='utf-8')
@@ -66,9 +69,14 @@ jobs:
           for item in ('password_hash(', 'hash_equals(', 'HTTP_X_TALA_REQUEST', 'audit_log', "/.private/tala.sqlite3", 'BEGIN IMMEDIATE'):
               if item not in backend: raise SystemExit('TALA_BACKEND_CONTROL_MISSING='+item)
           if 'TALA_BOOTSTRAP_TOKEN_SHA256' not in backend: raise SystemExit('TALA_BOOTSTRAP_GATE=missing')
+          for guard in ("فقط مدیر اصلی می‌تواند سند اصلاحی ثبت کند.", "فقط مدیر اصلی به خروجی کامل حسابداری دسترسی دارد."):
+              if guard not in backend: raise SystemExit('TALA_ACCOUNTING_ROLE_GUARD=missing')
+          admin_page=(root/'admin/index.html').read_text(encoding='utf-8')
+          if "byId('export').hidden=!admin" not in admin_page or "activeUser?.role==='admin'&&!row.reversal_of" not in admin_page: raise SystemExit('TALA_ADMIN_UI_RBAC=missing')
           if 'Require all denied' not in (root/'api/.private/.htaccess').read_text(encoding='utf-8'): raise SystemExit('TALA_DATABASE_HTTP_BLOCK=missing')
           print('TALA_DOCUMENT=validated')
           print('TALA_SCOPE=isolated')
           PY
           node --check /tmp/tala-inline.js
           node --check /tmp/tala-admin.js
+          node --check public/tala/sw.js
