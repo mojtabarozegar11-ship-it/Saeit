@@ -1,0 +1,105 @@
+name: MojPlayWin main-only safe publication routing audit
+on:
+  push:
+    branches: ["audit/mojplaywin-backup-transport-20261017"]
+    paths:
+      - ".github/workflows/mojplaywin-mainonly-publication-routing-audit.yml"
+permissions:
+  contents: read
+jobs:
+  inspect-main-docroot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Read-only inspect main document-root routing without secret disclosure
+        shell: bash
+        timeout-minutes: 2
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 100s ssh -T -F "$d/config" saeit-cpanel 'python3 -' <<'PY'
+          from pathlib import Path
+          import os,re,json,stat
+          root=Path("/home/zomorod2/mojplaywin.com")
+          if root.is_symlink() or not root.is_dir():raise SystemExit("NO_GO_BAD_DOCROOT")
+          ht=root/".htaccess"
+          wsgi=root/"passenger_wsgi.py"
+          if not ht.is_file() or ht.is_symlink() or not wsgi.is_file() or wsgi.is_symlink():raise SystemExit("NO_GO_UNSAFE_SERVER_CONFIG")
+          s=ht.read_text(errors="replace")
+          app=wsgi.read_text(errors="replace")
+          directives=[]
+          rewrite=[]
+          for line in s.splitlines():
+              t=line.strip()
+              if not t or t.startswith("#"):continue
+              name=t.split()[0]
+              if re.fullmatch(r"[A-Za-z][A-Za-z0-9]*",name):directives.append(name.lower())
+              if name.lower() in ("rewriterule","rewritecond"):
+                  # Report directive category, never paths, auth data or actual arguments
+                  rewrite.append(name.lower())
+          protected=("picm","saman","farnaz","mohammad","ghanadi","amozeshgah","studio.Roham","zahra$$","mojtaba.roozegar")
+          found={name:(root/name).exists() for name in protected}
+          out={
+            "classification":"READ_ONLY_MAIN_DOCROOT_ROUTING",
+            "root_is_real_directory":True,
+            "static_index_present":(root/"index.html").exists(),
+            "php_index_present":(root/"index.php").exists(),
+            "custom_main_html_present":(root/"main.html").exists(),
+            "rewrite_engine_present":"rewriteengine" in directives,
+            "rewrite_rule_count":rewrite.count("rewriterule"),
+            "rewrite_condition_count":rewrite.count("rewritecond"),
+            "directory_index_directive":"directoryindex" in directives,
+            "passenger_directive_count":sum("passenger" in n for n in directives),
+            "passenger_wsgi_uses_shared_staging":"Saeit-staging" in app,
+            "protected_known_dir_count":sum(found.values()),
+            "protected_known_total":len(protected),
+            "dot_htaccess_bytes":ht.stat().st_size,
+            "wsgi_bytes":wsgi.stat().st_size,
+            "release_permitted":False
+          }
+          print(json.dumps(out,sort_keys=True))
+          PY
