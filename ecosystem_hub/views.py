@@ -15,6 +15,7 @@ from enterprise_portal.models import BusinessUnit, InventoryItem, JournalEntry, 
 from enterprise_portal.views import office_access, no_cache
 from .access import user_units, require_unit
 from .analysis import generate_report
+from .report_policy import enforce_report_sources
 from .costing import estimate_manufacturing_cost
 from .procurement import material_shortages, prepare_purchase_drafts
 from .catalog import CATALOG, DEPARTMENTS
@@ -170,6 +171,7 @@ def report(request, pk):
         AssistantRun.objects.select_related("unit", "requested_by").filter(unit__in=user_units(request.user)),
         pk=pk,
     )
+    enforce_report_sources(request.user, report)
     definition = CATALOG.get(report.assistant_code)
     user_model = get_user_model()
     approvers = user_model.objects.filter(
@@ -208,6 +210,7 @@ def request_review(request, pk):
         .filter(unit__in=user_units(request.user)),
         pk=pk,
     )
+    enforce_report_sources(request.user, report)
     if not request.user.is_superuser and report.requested_by_id != request.user.pk:
         raise PermissionDenied("تنها درخواست‌دهنده گزارش می‌تواند آن را ارجاع دهد.")
     user_model = get_user_model()
