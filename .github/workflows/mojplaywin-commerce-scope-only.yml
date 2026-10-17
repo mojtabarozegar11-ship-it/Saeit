@@ -1,0 +1,28 @@
+name: MojPlayWin Commerce Scope — Read Only
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  protect-products-and-payments:
+    if: ${{ github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'content/mojplaywin-complete-17-sections-20261017' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout candidate without credentials
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Enforce fail-closed source allowlist
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: python scripts/mojplaywin_commerce_scope.py --base "$BASE_SHA" --head "$HEAD_SHA"
+      - name: Run negative tests for protected paths
+        run: python -m unittest discover -s tests -p test_mojplaywin_commerce_scope.py -v
