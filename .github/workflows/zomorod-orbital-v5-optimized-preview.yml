@@ -1,0 +1,164 @@
+name: Zomorod Orbital V5 optimized safe preview
+on:
+  push:
+    branches: [zomorod/orbital-v5-safe-release-20261018]
+    paths: [".github/workflows/zomorod-orbital-v5-optimized-preview.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-orbital-v5-optimized-preview
+  cancel-in-progress: false
+jobs:
+  isolated-preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify complete source, without replacing any existing public file
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          from html.parser import HTMLParser
+          s=Path("content/zomorod-orbital-v5/index-optimized.html").read_text(encoding="utf-8")
+          assert len(s.encode())>1_000_000
+          for x in ['lang="fa" dir="rtl"','id="orbital-cards"','id="orbit-shelves"','بزرگ ترین شرکت تحقیقات','اخبار شرکت','function handleHash']:
+              assert x in s,x
+          assert s.count("<html")==1 and s.count("</html>")==1
+          assert s.count("</body>")==1
+          assert 'type="module"' not in s
+          print("ORBITAL_SOURCE=complete_self_contained")
+          PY
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+
+      - name: Verify protected-site baseline and archive exact root before preview
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          sha="$1"
+          web="$HOME/public_html"
+          backup="$HOME/.backups/zomorod-orbital-v5-optimized/$sha"
+          preview="$web/__zm_orbital_v5_review_20261018"
+          test -d "$web" && test -s "$web/index.html" && test ! -L "$web/index.html"
+          test -s "$web/.htaccess" && test ! -L "$web/.htaccess"
+          test ! -e "$preview" && test ! -L "$preview"
+          for child in mohammad ghanadi amozeshgah; do
+            test -s "$web/$child/index.html" && test ! -L "$web/$child/index.html"
+          done
+          test ! -e "$backup"
+          mkdir -p "$backup"
+          chmod 700 "$backup"
+          cp -p "$web/index.html" "$backup/index.original.html"
+          cmp -s "$web/index.html" "$backup/index.original.html"
+          sha256sum "$web/index.html" "$web/.htaccess" "$web/mohammad/index.html" "$web/ghanadi/index.html" "$web/amozeshgah/index.html" > "$backup/protected.sha256"
+          sha256sum "$backup/index.original.html" > "$backup/original.sha256"
+          echo "ORBITAL_BACKUP=exact_root_snapshot"
+          REMOTE
+      - name: Transfer preview file to unique path; no overwrites anywhere
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          web="/home/zomorod2/public_html"
+          preview="$web/__zm_orbital_v5_review_20261018"
+          ssh -F "$d/config" saeit-cpanel "set -eu; test ! -e '$preview'; mkdir -m 755 '$preview'"
+          # Only one new standalone file is transferred; this never writes the root index.
+          ssh -F "$d/config" saeit-cpanel "cat > '$preview/index.html'" < content/zomorod-orbital-v5/index-optimized.html
+          ssh -F "$d/config" saeit-cpanel "cat > '$preview/.htaccess'" <<'HT'
+          PassengerEnabled off
+          DirectoryIndex index.html
+          Options -Indexes
+          Header set X-Robots-Tag "noindex, nofollow"
+          HT
+          ssh -F "$d/config" saeit-cpanel "chmod 644 '$preview/index.html' '$preview/.htaccess'; sha256sum '$preview/index.html'"
+      - name: Verify preview and complete protection; remove preview if any check fails
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          source_hash="$(sha256sum content/zomorod-orbital-v5/index-optimized.html | cut -d' ' -f1)"
+          if ! ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" "$source_hash" <<'REMOTE'
+          set -euo pipefail
+          sha="$1"; expected="$2"
+          web="$HOME/public_html"
+          preview="$web/__zm_orbital_v5_review_20261018"
+          backup="$HOME/.backups/zomorod-orbital-v5-optimized/$sha"
+          test -s "$preview/index.html"
+          test "$(sha256sum "$preview/index.html" | cut -d' ' -f1)" = "$expected"
+          sha256sum -c --status "$backup/protected.sha256"
+          cmp -s "$web/index.html" "$backup/index.original.html"
+          url="https://zomorodmelal.ir/__zm_orbital_v5_review_20261018/?check=$sha"
+          status="$(curl -sS -L --max-time 30 -H 'Cache-Control: no-cache' -o "$backup/preview.response" -w '%{http_code}' "$url" || true)"
+          echo "ORBITAL_PREVIEW_HTTP=$status"
+          test "$status" = 200
+          grep -Fq 'id="orbital-cards"' "$backup/preview.response"
+          grep -Fq 'id="orbit-shelves"' "$backup/preview.response"
+          test "$(stat -c %s "$backup/preview.response")" -gt 1000000
+          for route in / /mohammad/ /ghanadi/ /amozeshgah/; do
+            code="$(curl -sS -L --max-time 20 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir$route" || true)"
+            echo "PROTECTED_ROUTE=$route CODE=$code"
+            test "$code" = 200
+          done
+          sha256sum -c --status "$backup/protected.sha256"
+          echo "ORBITAL_PREVIEW=verified_no_existing_site_files_changed"
+          REMOTE
+          then
+            ssh -F "$d/config" saeit-cpanel "bash -c 'd=/home/zomorod2/public_html/__zm_orbital_v5_review_20261018; if test -f "\$d/index.html" && grep -Fq "id=\"orbital-cards\"" "\$d/index.html"; then rm -f -- "\$d/index.html" "\$d/.htaccess"; rmdir -- "\$d"; fi'" || true
+            exit 1
+          fi
+      - name: Delete ephemeral relay credentials
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
