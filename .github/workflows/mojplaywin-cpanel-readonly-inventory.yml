@@ -22,6 +22,7 @@ on:
       - "tests/test_mojplaywin_consistent_db_preflight_readonly.py"
       - "scripts/mojplaywin_backup_vps_failure_readonly.py"
       - "tests/test_mojplaywin_backup_vps_failure_readonly.py"
+      - "scripts/mojplaywin_isolated_restore_capabilities_readonly.py"
   workflow_dispatch:
 permissions:
   contents: read
@@ -171,3 +172,11 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_mojplaywin_backup_vps_failure_readonly.py'
           d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
           timeout 35s ssh -T -F "$d/config" saeit-vps python3 - < scripts/mojplaywin_backup_vps_failure_readonly.py
+
+      - name: Inspect VPS isolation runtime capability (no DB or container writes)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mojplaywin_isolated_restore_capabilities_readonly.py
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 35s ssh -T -F "$d/config" saeit-vps python3 - < scripts/mojplaywin_isolated_restore_capabilities_readonly.py
