@@ -1,0 +1,45 @@
+name: Moj Play Win SEO share image candidates read-only
+on:
+  push:
+    branches: ["audit/mojplaywin-backup-transport-20261017"]
+    paths: [".github/workflows/mojplaywin-seo-image-candidates.yml"]
+permissions:
+  contents: read
+jobs:
+  check-branded-images:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Test existing homepage hero and branded share imagery URLs
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import urllib.request,urllib.error,re,json
+          from urllib.parse import urlsplit
+          root="https://mojplaywin.com"
+          def fetch(path):
+              try:
+                  with urllib.request.urlopen(urllib.request.Request(root+path,headers={"User-Agent":"MojPlayWin-OG-safe-readonly"}),timeout=20) as r:
+                      return r.status,r.headers.get("Content-Type",""),r.read(5_000_000)
+              except urllib.error.HTTPError as exc:
+                  return exc.code,exc.headers.get("Content-Type",""),b""
+          _,_,raw=fetch("/")
+          html=raw.decode("utf-8")
+          imgs=re.findall(r'<img\s[^>]*src="([^"]+)"',html)
+          paths=[]
+          for item in imgs:
+              if item.startswith("https://mojplaywin.com"):item=item[len(root):]
+              if item.startswith("/design-preview-20261017/static/") and item.lower().endswith((".webp",".jpg",".jpeg",".png")) and item not in paths:
+                  paths.append(item)
+          candidate=[p for p in paths if ("platform-home" in p or "official-coin" in p or
+                     "game-studio" in p or "research" in p or "store" in p or "global" in p)]
+          candidate=(candidate+paths[:10])[:16]
+          response=[]
+          for p in dict.fromkeys(candidate):
+              status,mime,data=fetch(p)
+              response.append({"asset":p,"status":status,
+                "size_bytes":len(data),"mime":mime.split(";")[0],
+                "large_enough_for_sharing":len(data)>12000})
+          print(json.dumps({"classification":"MOJ_PLAY_WIN_EXISTING_OG_IMAGE_CHOICES",
+                            "candidates":response},sort_keys=True))
+          PY
