@@ -75,8 +75,25 @@ def store(request):
    "id": offer.pk, "asset": offer.asset,
    "amount": f"{Decimal(offer.atomic_amount) / DENOMINATORS[offer.asset]:f}",
   })
+ # Sale badges remain attached to the original two book cards, and verified
+ # checkout choices appear right there only after backend payment readiness.
+ catalog_by_title = {}
+ for entry in items.values():
+  catalog_by_title.setdefault(entry["title"], []).append(entry)
+ enriched_products = []
+ promoted_ids = set()
+ for promo in PRODUCTS:
+  card = dict(promo)
+  matching = catalog_by_title.get(card["title"], [])
+  if card.get("sale_price_usd") and len(matching) == 1:
+   offer = matching[0]
+   if offer["currency"] == "USD" and Decimal(offer["price"]) == Decimal(card["sale_price_usd"]):
+    card["payments"] = offer["payments"]
+    promoted_ids.add(offer["id"])
+  enriched_products.append(card)
  return render(request, "mojplaywin/store.html", {
-  "products": PRODUCTS, "crypto_catalog": list(items.values()),
+  "products": enriched_products,
+  "crypto_catalog": [p for p in items.values() if p["id"] not in promoted_ids],
  })
 
 def venture(request, slug):
