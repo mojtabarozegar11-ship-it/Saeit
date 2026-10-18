@@ -1,0 +1,211 @@
+name: MojPlayWin International Team exact About-only live publication
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/mojplaywin-international-team-live-20261018.yml'
+permissions:
+  contents: read
+concurrency:
+  group: mojplaywin-about-exact-static-prod
+  cancel-in-progress: false
+jobs:
+  add-international-profiles-about-only:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.ref == 'refs/heads/main' &&
+      github.event_name == 'push' &&
+      contains(github.event.head_commit.message, '[approved-mpw-international-team-20261018]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate scope, illustrative disclosures, image SHA and reversible append
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_international_team_atomic_20261018.py
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib,importlib.util
+          p='scripts/mpw_international_team_atomic_20261018.py'
+          spec=importlib.util.spec_from_file_location('i',p)
+          m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
+          image=Path('assets/mpw-international-team-20261018.webp').read_bytes()
+          assert len(image)==m.EXPECTED_IMAGE_SIZE
+          assert hashlib.sha256(image).hexdigest()==m.EXPECTED_IMAGE_SHA
+          assert image[:4]==b'RIFF' and image[8:12]==b'WEBP'
+          snippet=m.validate_snippet(Path('content/mpw_international_team_section_20261018.html').read_bytes())
+          old=('<html><main><h1>About</h1>'+ ' '.join(m.EXISTING_MARKERS)
+               +('<li class="mpw-team-card">staff</li>'*10)
+               +('<li class="mpw-advisory-card">advisor</li>'*10)+'</main></html>')
+          updated=m.compose(old,snippet)
+          assert updated.count('class="mpw-intl-card"')==10
+          assert updated.count('class="mpw-team-card"')==10
+          assert updated.count('class="mpw-advisory-card"')==10
+          assert updated.replace('\n<!-- '+m.MARKER+' -->\n'+snippet+'\n','',1)==old
+          print('MPW_INTERNATIONAL_ADDITIVE_RESTORE_TEST=PASS')
+          PY
+      - name: Snapshot live About and protected route statuses before production write
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,os
+          from urllib.request import Request,urlopen
+          from urllib.error import HTTPError
+          base='https://mojplaywin.com'
+          paths=['/','/about/','/store/','/about/mojtaba-rozegar/',
+                 '/mojtaba.roozegar/','/mojtaba.roozegar/about/',
+                 '/farnaz/','/saman/','/picm/','/taniya/','/zahra/']
+          status={}
+          for path in paths:
+            url=base+path
+            req=Request(url,headers={'User-Agent':'MPWInternationalTeamBaseline/1.0','Cache-Control':'no-cache'})
+            try:
+              with urlopen(req,timeout=19) as res:code=res.status
+            except HTTPError as exc:code=exc.code
+            except Exception as exc:raise SystemExit('BASELINE_NETWORK_FAILURE '+url+' '+type(exc).__name__)
+            status[url]=code
+            print('MPW_INTL_BEFORE='+url+' '+str(code))
+          for path in ('/','/about/','/store/','/mojtaba.roozegar/','/farnaz/'):
+            assert status[base+path]==200,(path,status[base+path])
+          with open(os.environ['RUNNER_TEMP']+'/mpw-intl-baseline.json','w') as f:json.dump(status,f)
+          PY
+      - name: Configure host-key pinned and authenticated GitHub to VPS to cPanel connection
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-intl-team-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Stage exactly one HTML snippet and one WebP outside public document root
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-intl-team-ssh"
+          scp -q -F "$d/config" content/mpw_international_team_section_20261018.html \
+            "saeit-cpanel:/home/zomorod2/.mpw-intl-team-section-$GITHUB_RUN_ID.html"
+          scp -q -F "$d/config" assets/mpw-international-team-20261018.webp \
+            "saeit-cpanel:/home/zomorod2/.mpw-intl-team-image-$GITHUB_RUN_ID.webp"
+      - name: Publish only additive international profiles on isolated About HTML with rollback
+        id: publish
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-intl-team-ssh"
+          html_digest=$(sha256sum content/mpw_international_team_section_20261018.html | awk '{print $1}')
+          image_digest=$(sha256sum assets/mpw-international-team-20261018.webp | awk '{print $1}')
+          timeout 65s ssh -T -F "$d/config" saeit-cpanel \
+            "python3 - install '$GITHUB_RUN_ID' '$html_digest' '$image_digest'" \
+            < scripts/mpw_international_team_atomic_20261018.py
+      - name: Verify live ten new profiles plus both previous groups and protected routes
+        id: smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from urllib.request import Request,urlopen
+          from urllib.error import HTTPError
+          import hashlib,json,os,re,time
+          base='https://mojplaywin.com'
+          about=base+'/about/'
+          asset=base+'/design-preview-20261017/mpw-ten-editorials-20261018/pages/mpw-international-team-20261018.webp'
+          baseline=json.load(open(os.environ['RUNNER_TEMP']+'/mpw-intl-baseline.json'))
+          markers=('MPW_INTERNATIONAL_TEAM_ADDON_20261018','mpw-international-team-20261018',
+                   'International Management &amp; Operations Team','not independently verified',
+                   'Jessica','Claire','Emily','Sofia','Alessandra','Natalie','Larissa','Mika','Carlos','Liam',
+                   'MPW_SENIOR_ADVISORY_ADDON_20261018','mpw-senior-advisory-20261018',
+                   'MPW_TEAM_ADDON_V1','mpw-meet-team-20261018',
+                   'MPW_ABOUT_RESEARCH_80_20_V1','COMPLEMENTARY SPECIALISM 30','Original by Default')
+          ok=False
+          for i in range(1,6):
+            try:
+              req=Request(about+'?__mpw_intl='+os.environ['GITHUB_RUN_ID']+'-'+str(i),headers={'User-Agent':'MPWInternationalTeamLive/1.0','Cache-Control':'no-cache'})
+              with urlopen(req,timeout=22) as res:code=res.status;body=res.read(1800000).decode('utf-8','replace')
+              ok=(code==200 and all(x in body for x in markers) and
+                  body.count('class="mpw-intl-card"')==10 and
+                  body.count('class="mpw-team-card"')==10 and
+                  body.count('class="mpw-advisory-card"')==10 and
+                  len(re.findall(r'<h1\b',body,re.I))==1)
+              print('MPW_INTL_LIVE_ATTEMPT='+str(i)+' validated='+str(ok))
+              if ok:break
+            except Exception as exc:print('MPW_INTL_LIVE_RETRY='+type(exc).__name__)
+            time.sleep(3)
+          if not ok:raise RuntimeError('INTERNATIONAL_TEAM_ABOUT_NOT_VERIFIED')
+          with urlopen(Request(asset+'?run='+os.environ['GITHUB_RUN_ID'],headers={'User-Agent':'MPWInternationalTeamLive/1.0','Cache-Control':'no-cache'}),timeout=22) as res:
+            code=res.status;mime=res.headers.get('Content-Type','');data=res.read(700000)
+          actual=hashlib.sha256(data).hexdigest()
+          print('MPW_INTL_PUBLIC_WEBP='+str(code)+' bytes='+str(len(data))+' mime='+mime+' sha='+actual)
+          if code!=200 or len(data)!=300530 or actual!='f947155b8cf9b4f86e19bff805fbc821a46319d6b435de5f935babc40a9da234' or data[:4]!=b'RIFF':
+            raise RuntimeError('NEW_INTERNATIONAL_IMAGE_FAILED_VERIFICATION')
+          for url,expected in baseline.items():
+            req=Request(url,headers={'User-Agent':'MPWInternationalTeamLive/1.0','Cache-Control':'no-cache'})
+            try:
+              with urlopen(req,timeout=20) as res:code=res.status
+            except HTTPError as exc:code=exc.code
+            if code!=expected:raise RuntimeError('PROTECTED_ROUTE_CHANGED '+url+' '+str(code)+'!='+str(expected))
+            print('MPW_INTL_PROTECTED_UNCHANGED '+url+' '+str(code))
+          print('MPW_INTERNATIONAL_TEAM_PUBLICATION_VERIFIED=YES')
+          PY
+          d="$RUNNER_TEMP/mpw-intl-team-ssh"
+          timeout 30s ssh -T -F "$d/config" saeit-cpanel \
+            "python3 - status '$GITHUB_RUN_ID'" \
+            < scripts/mpw_international_team_atomic_20261018.py
+      - name: Roll back only newly added profiles and image if smoke test fails
+        if: failure() && steps.publish.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-intl-team-ssh"
+          timeout 55s ssh -T -F "$d/config" saeit-cpanel \
+            "python3 - rollback '$GITHUB_RUN_ID'" \
+            < scripts/mpw_international_team_atomic_20261018.py
+      - name: Remove only private temporary transfer files
+        if: always()
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/mpw-intl-team-ssh"
+          if test -f "$d/config"; then
+            timeout 25s ssh -T -F "$d/config" saeit-cpanel \
+              "test ! -L /home/zomorod2/.mpw-intl-team-section-$GITHUB_RUN_ID.html && test ! -L /home/zomorod2/.mpw-intl-team-image-$GITHUB_RUN_ID.webp && rm -f -- /home/zomorod2/.mpw-intl-team-section-$GITHUB_RUN_ID.html /home/zomorod2/.mpw-intl-team-image-$GITHUB_RUN_ID.webp" || true
+          fi
