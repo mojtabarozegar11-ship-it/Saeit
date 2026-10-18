@@ -22,7 +22,7 @@ jobs:
           expected='5d7338c2ef1438f60248865f064f258458bb807dca9d06711eebbd856dc4cef7'
           snippets=Path('content/mojplaywin_about_team_section_20261018.html').read_text('utf-8')
           for i in range(3):
-            url='https://mojplaywin.com/about/?_team_routing_diagnostic='+str(time.time_ns())+'-'+str(i)
+            url=('https://mojplaywin.com/design-preview-20261017/complete-about-20261018.html' if i==1 else 'https://mojplaywin.com/about/')+'?_team_routing_diagnostic='+str(time.time_ns())+'-'+str(i)
             req=Request(url,headers={'User-Agent':'MojPlayWinExactReadOnlyDiagnostics/1.0','Cache-Control':'no-cache'})
             with urlopen(req,timeout=23) as r:
               data=r.read(1500000)
@@ -31,7 +31,7 @@ jobs:
             html=data.decode('utf-8','replace')
             terms=['MPW_ABOUT_RESEARCH_80_20_V1','SPECIALISM 28','COMPLEMENTARY SPECIALISM 30','Original by Default',
                    'Mojtaba Roozegar','mpw-meet-team-20261018','data:image/avif;base64,']
-            print('TEAM_ABOUT_READONLY_DIAG='+json.dumps({'status':status,'length':len(data),'sha256':hashlib.sha256(data).hexdigest(),
+            print('TEAM_ABOUT_READONLY_DIAG='+json.dumps({'url':url,'status':status,'length':len(data),'sha256':hashlib.sha256(data).hexdigest(),
              'matches_expected_rolled_back_static':hashlib.sha256(data).hexdigest()==expected,
              'h1_count':len(re.findall(r'<h1\b',html,re.I)),
              'main_count':len(re.findall(r'<main\b',html,re.I)),
