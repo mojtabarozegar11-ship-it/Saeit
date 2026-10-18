@@ -18,7 +18,7 @@ jobs:
   observe-without-writes:
     if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/feature/mojplaywin-crypto-gateway-20261018'
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
@@ -96,6 +96,19 @@ jobs:
           set -euo pipefail
           d="$RUNNER_TEMP/mojplaywin-crypto-preflight-ssh"
           timeout 40s ssh -T -F "$d/config" saeit-cpanel python3 - < scripts/mojplaywin_backup_restore_readiness_readonly.py
+      - name: Check sanitized effective MySQL preflight without DB modifications
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-crypto-preflight-ssh"
+          timeout 80s ssh -T -F "$d/config" saeit-cpanel python3 - < scripts/mojplaywin_consistent_db_preflight_readonly.py
+      - name: Inspect offhost backup capability and aborted backup metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-crypto-preflight-ssh"
+          timeout 40s ssh -T -F "$d/config" saeit-vps python3 - vps < scripts/mojplaywin_backup_vps_destination_readonly.py
+          timeout 40s ssh -T -F "$d/config" saeit-vps python3 - < scripts/mojplaywin_backup_vps_failure_readonly.py
       - name: Inspect VPS isolated restore capabilities without server writes
         shell: bash
         run: |
