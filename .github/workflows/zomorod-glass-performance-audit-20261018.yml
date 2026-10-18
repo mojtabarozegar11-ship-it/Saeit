@@ -1,0 +1,103 @@
+name: Zomorod glass cards live performance and accessibility read only
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/zomorod-glass-performance-audit-20261018.yml]
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - name: Browser inspect glass cards and rows in four viewport sizes
+        run: |
+          set -euo pipefail
+          dir="$RUNNER_TEMP/zm-glass-audit";mkdir -p "$dir";cd "$dir"
+          npm --silent init -y >/dev/null
+          npm --silent install --no-save playwright@1.55.0
+          npx playwright install chromium
+          cat > audit.cjs <<'JS'
+          const {chromium}=require('playwright');
+          const browserAudit=async()=>{
+            const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
+            for(const width of [1440,768,390,320]){
+              const page=await browser.newPage({viewport:{width,height:850}});
+              await page.goto('https://zomorodmelal.ir/?glass_audit='+width,{waitUntil:'domcontentloaded',timeout:50000});
+              await page.locator('.topic-card').first().waitFor({timeout:23000});
+              await page.waitForTimeout(600);
+              const audit=await page.evaluate(async()=>{
+                const cards=[...document.querySelectorAll('.topic-card')];
+                const rows=[...document.querySelectorAll('.card-track')];
+                const shelves=[...document.querySelectorAll('.orbit-shelf')];
+                const el=cards[0];
+                const image=el.querySelector('img');
+                const label=el.querySelector('.topic-name');
+                const style=getComputedStyle(el),ps=getComputedStyle(el,'::after');
+                const ss=el.getBoundingClientRect();
+                const ls=label?.getBoundingClientRect();
+                let visible=0;
+                for(const card of cards){
+                  const b=card.getBoundingClientRect();
+                  if(b.bottom>0&&b.top<innerHeight&&b.right>0&&b.left<innerWidth)visible++;
+                }
+                const t0=performance.now(),samples=[];
+                await new Promise(resolve=>{
+                  let n=0,last=performance.now();
+                  const tick=(stamp)=>{
+                    if(n++>=90){resolve();return}
+                    samples.push(stamp-last);last=stamp;
+                    requestAnimationFrame(tick);
+                  };requestAnimationFrame(tick);
+                });
+                const sorted=samples.filter(x=>x>0).sort((a,b)=>a-b);
+                const avg=samples.reduce((s,x)=>s+x,0)/samples.length;
+                const p95=sorted[Math.floor(sorted.length*.95)]||0;
+                const height=document.documentElement.scrollHeight;
+                const scrollable=height>innerHeight;
+                const buttonLinks=Array.from(cards.slice(0,20)).filter(c=>c.matches('a[href]')).length;
+                const allUrlsValid=Array.from(cards.slice(0,20)).every(c=>c.getAttribute('href'));
+                const labelContrast=label?getComputedStyle(label).color:null;
+                const labelBackground=label?getComputedStyle(label).backgroundImage:null;
+                const keyframes=document.getAnimations().length;
+                const cardAttr=el.getAttribute('class');
+                const oldT=style.transform;
+                const result={
+                  cardCount:cards.length,rowCount:rows.length,shelfCount:shelves.length,
+                  cardAttr,width:innerWidth,scrollable,pageHeight:height,
+                  bg:getComputedStyle(document.body).backgroundAttachment,
+                  glass:style.backdropFilter,overlay:ps.content,overlayPointer:ps.pointerEvents,
+                  overlayBackdrop:ps.backdropFilter,animation:style.animationName,
+                  animateCount:keyframes,firstImageLoaded:!!image?.naturalWidth,
+                  imageSize:image?[image.naturalWidth,image.naturalHeight]:null,
+                  labelColor:labelContrast,labelBackground:labelBackground,
+                  labelZ:label?getComputedStyle(label).zIndex:null,
+                  firstCardSize:[ss.width,ss.height],labelSize:ls?[ls.width,ls.height]:null,
+                  first20Links:buttonLinks,allUrlsValid,
+                  visibleAnimatedCards:visible,
+                  avgFrameMs:avg,p95FrameMs:p95
+                };
+                const oldCoords=rows.slice(0,6).map(e=>[e.offsetLeft,e.offsetTop,e.offsetWidth,e.offsetHeight]);
+                const styleEl=document.getElementById('zm-glass-floating-cards-20261018');
+                styleEl.sheet.disabled=true;
+                const geometryAfter=rows.slice(0,6).map(e=>[e.offsetLeft,e.offsetTop,e.offsetWidth,e.offsetHeight]);
+                const baselineTransform=getComputedStyle(el).transform;
+                styleEl.sheet.disabled=false;
+                result.geometryIdentical=JSON.stringify(oldCoords)===JSON.stringify(geometryAfter);
+                result.transformPreserved=oldT===baselineTransform;
+                return result;
+              });
+              console.log('GLASS_AUDIT_METRICS='+JSON.stringify(audit));
+              if(audit.cardCount<600||audit.rowCount<25||!audit.geometryIdentical||
+                !audit.transformPreserved||!audit.allUrlsValid||!audit.scrollable||
+                audit.bg!=='fixed'||audit.animation==='none'||audit.glass==='none'||
+                audit.overlay==='none'||audit.overlayPointer!=='none'||audit.labelZ==='auto')
+                throw Error('Structural/accessibility baseline issue at '+width);
+              await page.close();
+            }
+            await browser.close();
+            console.log('GLASS_AUDIT_READONLY=passed');
+          };
+          browserAudit().catch(e=>{console.error(e.stack);process.exit(1)});
+          JS
+          node audit.cjs
