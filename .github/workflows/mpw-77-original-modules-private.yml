@@ -17,7 +17,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-          ref: 1a37caaa81787993ffd49aff5b5387f43188d58f
+          ref: 46f8c1903ea08c0e8424994d88e62aff22384719
       - name: Verify and really import-run 77 SHA-pinned modules offline
         shell: bash
         run: |
@@ -105,6 +105,9 @@ jobs:
           assert record["status"]=="77_verified_original_modules_exercised_privately"
           assert record["modules_hash_verified"]==77
           assert record["modules_import_executed"]==77
+          assert record["capability_namespaces_active"]==77
+          assert record["functional_probes_executed"]>=14
+          assert len(record["per_module_capability_registry"])==77
           assert record["public_site_modified"] is False
           assert record["financial_authority"] is False
           cron=subprocess.run(["crontab","-l"],capture_output=True,text=True,check=True,timeout=12).stdout
@@ -121,6 +124,8 @@ jobs:
           print("ALL_77_V91_MODULES_RUNNING_AS_PRIVATE_HOURLY_IMPORT_CHECK=true")
           print("SHA256_ORIGINALS_PASS=77")
           print("ACTUALLY_IMPORTED_ON_CPANEL=77")
+          print("ALL_77_CAPABILITY_NAMESPACES_ACTIVE=true")
+          print("CROSS_GENERATION_FUNCTIONS_TESTED="+str(record["functional_probes_executed"]))
           print("MAIN_PRIVATE_CRONS_PRESERVED=true")
           print("SITE_AND_SIBLINGS_UNCHANGED=true")
           PY
