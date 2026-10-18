@@ -88,10 +88,14 @@ class MainSitePreviewSecurityTests(unittest.TestCase):
             req=factory.post("/agents/v91/review/",data=payload,content_type="application/json",
                              HTTP_HOST="zomorodmelal.ir")
             req.user=SimpleNamespace(is_authenticated=True,is_staff=True)
+            # Bypass CSRF only for this direct-view test so host isolation is exercised.
+            # Production requests still require the real CSRF cookie and token.
+            req._dont_enforce_csrf_checks=True
             with self.assertRaises(Http404):
                 mojplaywin_v91_agent_preview(req)
             req=factory.post("/agents/v91/review/",data=payload,content_type="application/json",
                              HTTP_HOST="mojplaywin.com")
+            req._dont_enforce_csrf_checks=True
             req.user=SimpleNamespace(is_authenticated=False,is_staff=False)
             self.assertEqual(mojplaywin_v91_agent_preview(req).status_code,403)
             req.user=SimpleNamespace(is_authenticated=True,is_staff=True)
