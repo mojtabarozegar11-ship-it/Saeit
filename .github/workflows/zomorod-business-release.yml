@@ -105,6 +105,14 @@ jobs:
           "$phpbin" -l "$stage/index.php"
           mkdir -p "$HOME/.private"
           chmod 700 "$HOME/.private"
+          rollback() {
+            set +e
+            if test -d "$web" && test ! -e "$stage/failed-public"; then mv "$web" "$stage/failed-public"; fi
+            if test -d "$private" && test ! -e "$stage/failed-private"; then mv "$private" "$stage/failed-private"; fi
+            echo BUSINESS_DEPLOY_ROLLBACK=quarantined_without_deleting_data
+          }
+          active=1
+          trap 'rc=$?; trap - EXIT; if test "$active" = 1; then rollback; fi; exit "$rc"' EXIT
           mkdir -m 700 "$private"
           mkdir -m 755 "$web"
           cp -p "$stage/app.php" "$private/app.php"
@@ -117,6 +125,7 @@ jobs:
           test "$code" = 200
           grep -Fq 'راه‌اندازی امن میز مدیریت' "$stage/response.html"
           sha256sum -c --status "$stage/immutable.sha256"
+          active=0;trap - EXIT
           echo BUSINESS_LOGIN_DEPLOY=healthy
           echo BUSINESS_PUBLIC_URL=https://zomorodmelal.ir/business/
           REMOTE
