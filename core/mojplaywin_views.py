@@ -60,12 +60,24 @@ def branded_store_dispatch(request):
 def store(request):
  from .mojplaywin_crypto_gateway import available_offers, DENOMINATORS
  from decimal import Decimal
- offers = [
-  {"id": x.pk, "title": x.product.title, "asset": x.asset,
-   "amount": f"{Decimal(x.atomic_amount) / DENOMINATORS[x.asset]:f}"}
-  for x in available_offers()
- ]
- return render(request,"mojplaywin/store.html",{"products":PRODUCTS, "crypto_offers":offers})
+ # Payment choices are built from every ACTIVE AND PRICED Django store product,
+ # not from six promotional cards. No buyer can set their own quote.
+ items = {}
+ for offer in available_offers():
+  product = offer.product
+  if product.pk not in items:
+   items[product.pk] = {
+    "id": product.pk, "title": product.title,
+    "price": product.price, "currency": product.currency,
+    "fulfillment_mode": offer.fulfillment_mode, "payments": [],
+   }
+  items[product.pk]["payments"].append({
+   "id": offer.pk, "asset": offer.asset,
+   "amount": f"{Decimal(offer.atomic_amount) / DENOMINATORS[offer.asset]:f}",
+  })
+ return render(request, "mojplaywin/store.html", {
+  "products": PRODUCTS, "crypto_catalog": list(items.values()),
+ })
 
 def venture(request, slug):
  if not _is_mojplaywin(request):
