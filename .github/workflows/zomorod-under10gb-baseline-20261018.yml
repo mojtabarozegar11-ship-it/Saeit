@@ -1,0 +1,141 @@
+name: Zomorod under-10GB cleanup baseline and dependency audit
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/zomorod-under10gb-baseline-20261018.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-under10gb-baseline-20261018
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - name: Measure top disk consumers and protected-site dependencies without modifying files
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          test "$HOME" = /home/zomorod2
+          python3 - <<'PY'
+          import os,subprocess,json,stat,time,hashlib
+          from pathlib import Path
+          H=Path.home()
+          def du(path,secs=60):
+              try:
+                  r=subprocess.run(["du","-sk","--",str(path)],text=True,capture_output=True,timeout=secs,check=True)
+                  return int(r.stdout.split()[0])*1024
+              except Exception:return -1
+          print("BEFORE_DU_BYTES="+str(du(H,150)))
+          for rootstr in ("Saeit","Saeit-staging",".backups","saeit_v91","saeit_v91_runtime_stage_20261012",".npm",".cache","mojtaba_personal","browser",".cagefs"):
+              p=H/rootstr
+              if not p.exists():continue
+              print("TOP_ROOT="+json.dumps({"p":rootstr,"bytes":du(p,130)}))
+          groups=[
+            ".backups/zomorodmelal-complete",
+            ".backups/zomorodmelal-complete/9fcadc9ea749075785829565e57770f5cc173a8b",
+            "Saeit/var/mother_robot/lab",
+            "Saeit-staging","Saeit-staging/var",
+            "Saeit-staging/var/factory",
+            "Saeit-staging/var/factory/astra-backups",
+            "Saeit-staging/admin-smoke",
+            "Saeit/backups",
+            "Saeit/var","Saeit/agent_imports",
+          ]
+          for name in groups:
+              base=H/name
+              if not base.is_dir():continue
+              print("DETAIL_ROOT="+name+" size="+str(du(base,95)))
+              kids=list(base.iterdir())
+              ranked=[]
+              for q in kids:
+                  if q.is_symlink():continue
+                  try:
+                      n=du(q,45) if q.is_dir() else q.stat().st_size
+                      ranked.append({"name":q.name,"bytes":n,"dir":q.is_dir(),"age_days":round((time.time()-q.stat().st_mtime)/86400,1)})
+                  except OSError:pass
+              for x in sorted(ranked,key=lambda x:x["bytes"],reverse=True)[:38]:
+                  print("DETAIL_CHILD="+json.dumps({"root":name,**x},ensure_ascii=False))
+          for name in (".backups/zomorodmelal-app",".backups/zomorodmelal-db-recovery-validation","Saeit/agent_imports/v91_genomes","Saeit-staging/mojplaywin.sqlite3","Saeit/db.sqlite3"):
+              q=H/name
+              print("PROTECTED_CHECK="+name+" present="+str(q.exists())+" bytes="+str(du(q,45)) )
+          ps=subprocess.run(["ps","-u","zomorod2","-o","args="],text=True,capture_output=True,timeout=15)
+          cr=subprocess.run(["crontab","-l"],text=True,capture_output=True,timeout=15)
+          words=["saeit_v91","Saeit-staging","admin-smoke","mother_robot/lab",".backups/zomorodmelal-complete","astra-backups"]
+          for word in words:
+              proc=sum(word in line and "bash -se" not in line and "python3 - " not in line for line in ps.stdout.splitlines())
+              cron=sum(word in line for line in cr.stdout.splitlines())
+              print("DEPENDENCY_SIGNAL="+word+" processes="+str(proc)+" crons="+str(cron))
+          try:
+              u=subprocess.run(["uapi","--output=json","Quota","get_quota_info"],capture_output=True,text=True,timeout=18)
+              data=json.loads(u.stdout).get("result",{}).get("data",{})
+              print("BEFORE_QUOTA_USED_MB="+str(data.get("megabytes_used")))
+              print("BEFORE_QUOTA_LIMIT_MB="+str(data.get("megabyte_limit")))
+          except Exception as e:print("QUOTA_READ_ERROR="+type(e).__name__)
+          print("BASELINE_COMPLETE=yes")
+          PY
+          REMOTE
+      - name: Smoke-test protected public pages (read-only)
+        shell: bash
+        run: |
+          for url in "https://zomorodmelal.ir/" "https://zomorodmelal.ir/agents/" "https://mojplaywin.com/"; do
+            code="$(curl --max-time 16 -sS -o /dev/null -w '%{http_code}' "$url" || true)"
+            echo "BASELINE_SITE=$url code=$code"
+          done
+      - name: Remove credentials
+        if: always()
+        shell: bash
+        run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
