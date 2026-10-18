@@ -1,0 +1,49 @@
+name: Verify current live company thick cinematic glass (read only)
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/zomorod-company-thick-glass-live-verify-20261018.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Confirm live HTML contains both glass layers with unchanged company content
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os
+          from urllib.request import Request,urlopen
+          u='https://zomorodmelal.ir/company/?glass_current_verify='+os.environ['GITHUB_RUN_ID']
+          with urlopen(Request(u,headers={'Cache-Control':'no-cache,no-store','Pragma':'no-cache','User-Agent':'ZomorodCompanyCurrentGlassReadOnly/1'}),timeout=35) as response:
+              data=response.read(5500000)
+              print('PUBLIC_COMPANY_HTTP='+str(response.status),flush=True)
+              print('PUBLIC_COMPANY_BYTES='+str(len(data)),flush=True)
+              assert response.status==200 and len(data)>40000
+          tests={
+              'COMPANY_BASE_GLASS_LAYER':b'id="zm-company-cinematic-glass-20261018"',
+              'COMPANY_THICK_GLASS_LAYER':b'id="zm-company-thick-glass-20261018"',
+              'COMPANY_ORIGINAL_CONTENT':b'zm-history-company-content-20261018',
+              'COMPANY_UNIFIED_TEMPLATE':b'zm-unified-v7-20261018',
+              'COMPANY_CARDS':b'zm-history-card',
+              'COMPANY_ROW_HEADERS':b'zm-section-head',
+              'COMPANY_GLASS_BEVEL':b'inset 0 -6px',
+              'COMPANY_FLOAT_ANIMATION':b'zm-company-card-float-20261018',
+              'COMPANY_REDUCED_MOTION':b'prefers-reduced-motion:reduce'
+          }
+          for name,needle in tests.items():
+              count=data.count(needle)
+              print(name+'='+str(count),flush=True)
+              assert count>=1,name
+          assert data.count(tests['COMPANY_THICK_GLASS_LAYER'])==1
+          for route in ('/','/about/','/search/','/store/','/tala/'):
+              with urlopen(Request('https://zomorodmelal.ir'+route,headers={'Cache-Control':'no-cache'}),timeout=30) as r:
+                  assert r.status==200 and len(r.read(200000))>200
+              print('PROTECTED_ROUTE_OK='+route,flush=True)
+          print('CURRENT_COMPANY_THICK_GLASS_LIVE_VERIFIED=yes',flush=True)
+          PY
