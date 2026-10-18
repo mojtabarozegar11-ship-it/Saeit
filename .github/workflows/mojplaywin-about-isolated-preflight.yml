@@ -1,0 +1,110 @@
+name: MojPlayWin isolated About publication preflight (read-only)
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/mojplaywin-about-isolated-preflight.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: mojplaywin-about-preflight
+  cancel-in-progress: false
+jobs:
+  inspect:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Examine About physical-path isolation and root rewrite precedence (read-only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 60s ssh -T -F "$d/config" saeit-cpanel python3 - <<'PY'
+          from pathlib import Path
+          import os,hashlib,json,re,stat
+          root=Path('/home/zomorod2/mojplaywin.com')
+          assert root.is_dir() and not root.is_symlink()
+          about=root/'about'; ht=root/'.htaccess'; preview=root/'design-preview-20261017'/'company.html'
+          vals={'category':'ABOUT_ISOLATED_STATIC_PREFLIGHT','docroot_exists':True,'about_exists':about.exists(),'about_is_symlink':about.is_symlink(),'about_is_dir':about.is_dir(),'about_index_exists':(about/'index.html').exists(),'about_htaccess_exists':(about/'.htaccess').exists(),'preview_company_exists':preview.is_file(),'preview_company_bytes':preview.stat().st_size if preview.is_file() else 0,'root_htaccess_exists':ht.is_file(),'root_htaccess_sha256':hashlib.sha256(ht.read_bytes()).hexdigest() if ht.is_file() and not ht.is_symlink() else '', 'disk_free_bytes':os.statvfs(root).f_bavail*os.statvfs(root).f_frsize}
+          if ht.is_file() and not ht.is_symlink():
+            s=ht.read_text(errors='replace')
+            vals['rewrite_about_explicit']=bool(re.search(r'about|\^/about',s,re.I))
+            vals['rewrite_engine_present']='RewriteEngine On' in s
+            vals['rewriterules_count']=len(re.findall(r'^\s*RewriteRule\b',s,re.M|re.I))
+            vals['passenger_directives_present']='PassengerAppRoot' in s
+            vals['fallback_rewrite_rules']=sum(1 for l in s.splitlines() if l.lstrip().startswith('RewriteRule') and ('.*' in l or '^' in l))
+          for name in ('/mojtaba.roozegar','/picm','/farnaz','/saman','/taniya'):
+            vals['protected_'+name.strip('/').replace('.','_')+'_exists']=(root/name.strip('/')).exists()
+          vals['safe_to_try_additive_about_directory']=(not about.exists() and not about.is_symlink() and vals.get('root_htaccess_exists') and vals.get('preview_company_exists') and vals.get('disk_free_bytes',0)>10000000)
+          print(json.dumps(vals,sort_keys=True))
+          PY
+      - name: Inspect current public About HTML topology without content export
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import urllib.request,html.parser,re,json
+          class Parser(html.parser.HTMLParser):
+            def __init__(self): super().__init__();self.main=0;self.forms=0;self.headings=[]
+            def handle_starttag(self,t,a):
+              if t=='main':self.main+=1
+              if t=='form':self.forms+=1
+              if t in ('h1','h2'): self.headings.append(t)
+          urls=['https://mojplaywin.com/about/','https://mojplaywin.com/store/','https://mojplaywin.com/mojtaba.roozegar/','https://mojplaywin.com/farnaz/']
+          for url in urls:
+            try:
+              req=urllib.request.Request(url,headers={'User-Agent':'MojPlayWinAboutReadonly/1.0','Cache-Control':'no-cache'})
+              with urllib.request.urlopen(req,timeout=17) as r:
+                body=r.read(1600000).decode('utf-8','replace');status=r.status
+              p=Parser();p.feed(body)
+              print(json.dumps({'url':url,'status':status,'length':len(body),'main_count':p.main,'forms':p.forms,'h1_count':p.headings.count('h1'),'has_original_about':'Original by Default' in body,'has_about_80_20':'The complementary 20%' in body,'has_doctype':'<!doctype' in body.lower()}))
+            except Exception as ex: print(json.dumps({'url':url,'error_type':type(ex).__name__}))
+          PY
