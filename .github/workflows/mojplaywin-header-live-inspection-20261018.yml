@@ -178,6 +178,22 @@ jobs:
             except Exception as exc:
               print('PUBLIC_ROUTE_ERROR='+route+' '+type(exc).__name__)
           PY
+      - name: Inspect only reference gold control script content
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 35s ssh -T -F "$RUNNER_TEMP/mpw-header-inspect/config" saeit-cpanel 'python3 -' <<'PY'
+          from pathlib import Path
+          import hashlib
+          folder=Path('/home/zomorod2/mojplaywin.com/design-preview-20261017/static/site/mojplaywin-atelier')
+          for p in folder.glob('*controls*.js'):
+            if not p.is_file() or p.is_symlink(): continue
+            s=p.read_text(errors='replace')
+            print('CONTROL_SCRIPT='+p.name+' SIZE='+str(len(s))+' SHA256='+hashlib.sha256(s.encode()).hexdigest())
+            print('CONTROL_SOURCE_BEGIN')
+            print(s[:10000])
+            print('CONTROL_SOURCE_END')
+          PY
       - name: Remove key material
         if: always()
         shell: bash
