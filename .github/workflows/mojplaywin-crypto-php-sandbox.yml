@@ -140,6 +140,14 @@ jobs:
           code=$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:8585/ -H 'Host: mojplaywin.com' -H "Cookie: $cookie" --data-urlencode "csrf=$csrf" --data-urlencode action=create --data-urlencode asset=TRX --data-urlencode amount=0 --data-urlencode reference=Consulting)
           echo "ZERO_PAYMENT_HTTP_STATUS=$code"
           test "$code" = 400
+          # Reject ETH quantities that would overflow PHP integers and
+          # any TRX quantity exceeding the configured sale limit.
+          code=$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:8585/ -H 'Host: mojplaywin.com' -H "Cookie: $cookie" --data-urlencode "csrf=$csrf" --data-urlencode action=create --data-urlencode asset=ETH --data-urlencode amount=999999 --data-urlencode reference=Overflow)
+          echo "OVERFLOW_ETH_PAYMENT_HTTP_STATUS=$code"
+          test "$code" = 400
+          code=$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:8585/ -H 'Host: mojplaywin.com' -H "Cookie: $cookie" --data-urlencode "csrf=$csrf" --data-urlencode action=create --data-urlencode asset=TRX --data-urlencode amount=10001 --data-urlencode reference=Excessive)
+          echo "EXCESSIVE_TRX_PAYMENT_HTTP_STATUS=$code"
+          test "$code" = 400
           python3 - "$RUNNER_TEMP/eth.headers" <<'PY'
           import re,sqlite3,sys
           content=open(sys.argv[1]).read()
