@@ -9,17 +9,32 @@ import argparse, hashlib, html, io, json, re, time
 from pathlib import Path
 from urllib.parse import urlencode, quote
 from urllib.request import Request, urlopen
+from urllib.error import HTTPError, URLError
 from PIL import Image, ImageOps
 
 API="https://commons.wikimedia.org/w/api.php"
 UA="ZomorodMelalScientificContent/1.0 (Wikimedia reusable-media attribution workflow)"
 def retrieve(url,limit=16000000):
     req=Request(url,headers={"User-Agent":UA,"Accept":"application/json,image/*"})
-    with urlopen(req,timeout=45) as r:
-        data=r.read(limit+1)
-        if len(data)>limit:
-            raise ValueError("Image exceeds byte ceiling")
-        return data
+    for attempt in range(5):
+        try:
+            with urlopen(req,timeout=45) as r:
+                data=r.read(limit+1)
+                if len(data)>limit:
+                    raise ValueError("Image exceeds byte ceiling")
+                return data
+        except HTTPError as exc:
+            if exc.code not in (429, 502, 503) or attempt == 4:
+                raise
+            retry_after=exc.headers.get("Retry-After","")
+            server_delay=int(retry_after) if retry_after.isdigit() else 0
+            delay=max(server_delay, (10,22,42,70)[attempt])
+            print(f"WIKIMEDIA_TEMPORARY_LIMIT code={exc.code} retry={attempt+1} pause={delay}",flush=True)
+            time.sleep(min(delay,100))
+        except URLError:
+            if attempt == 4:raise
+            time.sleep((8,15,25,40)[attempt])
+    raise RuntimeError("No valid media response")
 def main():
     args=argparse.ArgumentParser()
     args.add_argument("--catalog",required=True,type=Path)
