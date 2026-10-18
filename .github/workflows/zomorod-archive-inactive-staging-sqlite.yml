@@ -1,0 +1,153 @@
+name: Preserve inactive staging SQLite and free original storage
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/zomorod-archive-inactive-staging-sqlite.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-archive-inactive-staging-db
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - name: Verify production DB separation and gzip old staging SQLite with checksum before removing raw file
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          python3 - <<'PY'
+          import os,gzip,hashlib,subprocess,sqlite3,time
+          from pathlib import Path
+          H=Path.home()
+          assert H==Path("/home/zomorod2")
+          db=H/"Saeit-staging/mojplaywin.sqlite3"
+          archived=H/".backups/mojplaywin-staging-sqlite-20261018.gz"
+          tmp=H/".backups/.mojplaywin-staging-sqlite-20261018.partial"
+          assert db.is_file() and not db.is_symlink() and 1_000_000_000<db.stat().st_size<1_500_000_000
+          assert time.time()-db.stat().st_mtime > 48*3600
+          assert not archived.exists() and not tmp.exists()
+          assert (H/"Saeit-staging/manage.py").is_file()
+          assert (H/"Saeit/manage.py").is_file()
+          assert (H/"Saeit-staging/.env").is_file()
+          assert "DATABASE_URL" in (H/"Saeit-staging/.env").read_text(errors="ignore")
+          assert "mojplaywin.sqlite3" not in (H/"Saeit-staging/.env").read_text(errors="ignore")
+          py=H/"Saeit/.venv/bin/python"
+          assert py.is_file()
+          command="import sys,os;sys.path.insert(0,"+repr(str(H/"Saeit-staging"))+");os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings');from django.conf import settings;print(str(settings.DATABASES['default']['NAME']))"
+          r=subprocess.run([str(py),"-c",command],cwd=H/"Saeit-staging",capture_output=True,text=True,timeout=20,check=True)
+          name=r.stdout.strip().splitlines()[-1]
+          assert name=="zomorod2_sites_main","STAGING_DATABASE_IS_NOT_EXPECTED_MAIN_DB"
+          assert str(db) not in name
+          cr=subprocess.run(["crontab","-l"],capture_output=True,text=True,timeout=10)
+          ps=subprocess.run(["ps","-u","zomorod2","-o","pid=,args="],capture_output=True,text=True,timeout=10)
+          assert str(db) not in cr.stdout
+          assert not any(str(db) in row and "python3 - " not in row for row in ps.stdout.splitlines())
+          for row in ps.stdout.splitlines():
+              try: pid=int(row.strip().split()[0])
+              except Exception:continue
+              fdroot=Path("/proc")/str(pid)/"fd"
+              if not fdroot.is_dir():continue
+              try:
+                  for fd in fdroot.iterdir():
+                      try:
+                          if str(db) in os.readlink(fd):raise SystemExit("STAGING_SQLITE_FILE_STILL_OPEN")
+                      except OSError:pass
+              except OSError:pass
+          con=sqlite3.connect("file:"+str(db)+"?mode=ro",uri=True,timeout=20)
+          assert con.execute("SELECT count(*) FROM sqlite_master WHERE type='table'").fetchone()[0]>=80
+          check=con.execute("PRAGMA quick_check").fetchone()[0]
+          con.close()
+          assert check=="ok"
+          def digest(p,decompress=False):
+              d=hashlib.sha256()
+              op=gzip.open if decompress else open
+              with op(p,"rb") as file:
+                  for chunk in iter(lambda:file.read(4*1024*1024),b""):d.update(chunk)
+              return d.hexdigest()
+          orig_hash=digest(db)
+          before=db.stat().st_size
+          try:
+              with db.open("rb") as source, gzip.open(tmp,"wb",compresslevel=1) as dest:
+                  for block in iter(lambda:source.read(2*1024*1024),b""):dest.write(block)
+              with tmp.open("rb") as fd:os.fsync(fd.fileno())
+              assert digest(tmp,True)==orig_hash and digest(db)==orig_hash
+              os.replace(tmp,archived)
+              assert digest(archived,True)==orig_hash
+              packed=archived.stat().st_size
+              db.unlink()
+              assert not db.exists() and archived.is_file()
+              print("INACTIVE_STAGING_DB_PRESERVED_COMPRESSED=yes")
+              print("INACTIVE_STAGING_DB_ORIGINAL_BYTES="+str(before))
+              print("INACTIVE_STAGING_DB_ARCHIVE_BYTES="+str(packed))
+              print("INACTIVE_STAGING_DB_SPACE_SAVED="+str(before-packed))
+              print("PRODUCTION_MAIN_SQL_DATABASE_UNMODIFIED=yes")
+          finally:
+              if tmp.exists():tmp.unlink()
+          PY
+          REMOTE
+      - name: Post-archive site checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          for url in "https://zomorodmelal.ir/" "https://zomorodmelal.ir/agents/" "https://mojplaywin.com/"; do
+            code="$(curl -sS --max-time 16 -o /dev/null -w '%{http_code}' "$url" || true)"
+            echo "STAGING_ARCHIVE_SITE=$url:$code"
+            test "$code" = 200
+          done
+      - name: Remove temporary secrets
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
