@@ -21,7 +21,7 @@ HOME = Path("/home/zomorod2")
 APP = HOME / "Saeit-staging"
 DOCROOT = HOME / "mojplaywin.com"
 MAX_BYTES = 32 * 1024 * 1024
-MAX_SECONDS = 50
+MAX_SECONDS = 60
 
 
 def source():
@@ -46,7 +46,7 @@ def check():
     result = {
         "classification": "READ_ONLY_SCHEMA_DUMP_SOURCE_PREFLIGHT",
         "single_mysql_url": False,
-        "schema_dumper_present": shutil.which("mariadb-dump") is not None,
+        "schema_dumper_present": shutil.which("mariadb-dump") is not None and shutil.which("timeout") is not None,
         "schema_dump_exit_ok": False,
         "bytes_drained_only_in_memory": 0,
         "elapsed_seconds": None,
@@ -77,7 +77,7 @@ def check():
     total = 0
     try:
         proc = subprocess.Popen(
-            args, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+            ["timeout", "55s", *args], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
             env=dict(os.environ, MYSQL_PWD=password), bufsize=0,
         )
         while time.monotonic() - t0 < MAX_SECONDS:
