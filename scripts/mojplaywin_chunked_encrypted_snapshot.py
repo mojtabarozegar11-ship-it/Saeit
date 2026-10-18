@@ -20,6 +20,7 @@ import sys
 from pathlib import Path
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from cryptography.exceptions import InvalidTag
 
 FORMAT = "MJWP-CHUNK-AEAD-v1"
 MAX_SOURCE = 12 * 1024**3
@@ -121,7 +122,10 @@ def _decrypt(blob, master, plan, index, length):
     if len(blob) < 29 or len(blob) > MAX_PART + 28:
         raise ValueError("Invalid ciphertext length")
     key, aad = _key_and_aad(master, plan, index, length)
-    plain = AESGCM(key).decrypt(blob[:12], blob[12:], aad)
+    try:
+        plain = AESGCM(key).decrypt(blob[:12], blob[12:], aad)
+    except InvalidTag as exc:
+        raise ValueError("Authenticated chunk integrity check failed") from exc
     if len(plain) != length:
         raise ValueError("Chunk plaintext size mismatch")
     return plain
