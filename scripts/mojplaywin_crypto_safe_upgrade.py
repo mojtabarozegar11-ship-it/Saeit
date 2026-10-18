@@ -68,11 +68,32 @@ def upgrade(stage, old_hashes, new_hashes):
     print("PROTECTED_CHILD_SITES_CHANGED=false")
 
 
+def restore(stage, old_hashes, new_hashes):
+    """Rollback only known upgraded bytes while payment intake is disabled."""
+    if (PRIVATE/"enabled.flag").exists() or (PRIVATE/"enabled.flag").is_symlink():
+        raise RuntimeError("Never roll back while real payments may be active")
+    if GATEWAY.is_symlink() or not GATEWAY.is_dir() or stage.is_symlink():
+        raise RuntimeError("Unsafe restoration path")
+    for name in FILES:
+        require_file(GATEWAY/name, new_hashes[name])
+        require_file(stage/("backup-"+name), old_hashes[name])
+    for name in FILES:
+        backup=stage/("backup-"+name)
+        os.chmod(backup,0o644)
+        os.replace(backup,GATEWAY/name)
+        require_file(GATEWAY/name,old_hashes[name])
+    print("MOJPLAYWIN_STANDALONE_GATEWAY_ROLLED_BACK=true")
+    print("PRIVATE_PAYMENT_ENABLED=false")
+
+
 if __name__=="__main__":
-    if len(sys.argv)!=7 or sys.argv[1]!="upgrade":
-        raise SystemExit("usage: upgrade.py upgrade stagedir sha_old_index sha_old_boot sha_new_index sha_new_boot")
+    if len(sys.argv)!=7 or sys.argv[1] not in ("upgrade","restore"):
+        raise SystemExit("usage: upgrade.py upgrade|restore stagedir sha_old_index sha_old_boot sha_new_index sha_new_boot")
     _,stage,oldi,oldb,newi,newb=sys.argv[1:]
     for value in (oldi,oldb,newi,newb):
         if len(value)!=64 or any(c not in "0123456789abcdef" for c in value):
             raise SystemExit("Invalid SHA256 digest.")
-    upgrade(Path(stage),{"index.php":oldi,"bootstrap.php":oldb},{"index.php":newi,"bootstrap.php":newb})
+    old={"index.php":oldi,"bootstrap.php":oldb}
+    new={"index.php":newi,"bootstrap.php":newb}
+    if sys.argv[1]=="upgrade": upgrade(Path(stage),old,new)
+    else: restore(Path(stage),old,new)
