@@ -1,4 +1,4 @@
-name: Zomorod V91 cPanel site agent guard audit (read only)
+name: Zomorod V91 content validation contract read only
 on:
   push:
     branches: ["audit/zomorod-v91-agent-extraction-20261018"]
@@ -66,7 +66,7 @@ jobs:
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
-          timeout 60s ssh -T -F "$d/config" saeit-cpanel python3 - < scripts/zomorod_v91_site_agents_controls.py
+          timeout 60s ssh -T -F "$d/config" saeit-cpanel python3 - < scripts/zomorod_v91_generation_contract_readonly.py
       - name: Remove temporary SSH credentials
         if: always()
         shell: bash
