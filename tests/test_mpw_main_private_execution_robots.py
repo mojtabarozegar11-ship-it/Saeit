@@ -100,7 +100,11 @@ class MainRobotsTests(unittest.TestCase):
                     "observed_utc":datetime.now(timezone.utc).isoformat()}
             (root/"evolution_runtime_20261018/gen65_operational_report.json").write_text(json.dumps(report))
             (root/"evolution_runtime_20261018/all_77_modules_last_run.json").write_text(
-                json.dumps({"tenant":"mojplaywin-main","modules_import_executed":77}))
+                json.dumps({"tenant":"mojplaywin-main","modules_import_executed":77,
+                            "capability_namespaces_active":77,
+                            "functional_probes_executed":14,
+                            "per_module_capability_registry":[{"loaded":True,
+                                "safe_scope":"read_only_private"} for _ in range(77)]}))
             (root/"site_health_v11_port_20261018/last_scan.json").write_text(
                 json.dumps({"tenant":"mojplaywin-main","total_agents":11,"runs":[{}]*11}))
             markers={"MPW_V91_MAIN_ONLY_20261018":"17",
@@ -113,6 +117,8 @@ class MainRobotsTests(unittest.TestCase):
             with patch.object(robots,"EVO",root/"evolution_runtime_20261018"),patch.object(robots,"PRIVATE",root):
                 out=robots.agent_robot(cron)
                 self.assertEqual(out["status"],"ok")
+                self.assertEqual(out["legacy_modules_active_capabilities"],77)
+                self.assertGreaterEqual(out["legacy_module_functional_contracts"],14)
                 bad=robots.agent_robot(cron.replace("43 * * * *","41 * * * *"))
                 self.assertEqual(bad["status"],"warning")
                 self.assertIn("MPW_77_MODULES_MAIN_ONLY_20261018",bad["schedule_mismatches"])
