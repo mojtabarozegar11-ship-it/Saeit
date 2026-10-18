@@ -114,6 +114,7 @@ def assets(data,paths,output):
         images=list(dict.fromkeys(data["pages"][path]["images"]+base))
         records[path]=[]
         for i,stem in enumerate(images[:10]):
+            stem={"market":"marketplace"}.get(stem,stem)
             inp=IMAGES/(stem+".webp")
             if not inp.is_file():raise ValueError("Source photo absent: "+stem)
             with Image.open(inp) as raw:
