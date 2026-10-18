@@ -1,4 +1,5 @@
 name: Build 190 lightweight illustrated MojPlayWin field notes
+# Validate updated realistic source-preservation tests before producing a review artifact.
 on:
   push:
     branches: [main]
