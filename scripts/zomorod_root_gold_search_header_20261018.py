@@ -177,10 +177,10 @@ def patch(s:str)->str:
     result=result.replace('</head>',CSS+'</head>',1)
     if result.count('id="'+NEW_ID+'"')!=1:
         raise RuntimeError("Toolbar duplicate")
-    if result.count('action="/search/"')!=1:
-        raise RuntimeError("Search form duplicated")
-    if result.count('href="/store/"')!=1:
-        raise RuntimeError("Store action duplicated")
+    if result.count('action="/search/"')!=s.count('action="/search/"'):
+        raise RuntimeError("Search routes added or removed")
+    if result.count('href="/store/"')!=s.count('href="/store/"'):
+        raise RuntimeError("Store links added or removed")
     if result.find('id="'+NEW_ID+'"') > result.find('<main id="content">'):
         raise RuntimeError("Toolbar not at the top")
     if result.find('id="'+NEW_ID+'"') > result.find('<footer'):
