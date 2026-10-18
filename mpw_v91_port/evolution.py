@@ -15,6 +15,11 @@ from pathlib import Path
 import tempfile
 from datetime import datetime, timezone
 
+try:
+    from .generation_factory import produce as produce_next_generation
+except ImportError:  # Direct, isolated script execution from private cPanel Cron.
+    from generation_factory import produce as produce_next_generation
+
 PREFIX = Path("/home/zomorod2/.private_mojplaywin_main_agents")
 AGENT_STATE = PREFIX / "v91_verified_main_port_20261018" / "operator_state"
 HEALTH = PREFIX / "site_health_v11_port_20261018" / "last_scan.json"
@@ -205,9 +210,27 @@ def cycle() -> dict:
                     "benchmark", "verified_outcome_count", "new_verified_outcomes",
                     "site_health", "self_modified_code", "executed_financial_actions",
                     "auto_published", "shared_runtime_modified")})
-        return {key: result[key] for key in ("status", "epoch", "active_policy",
-                                           "decision", "verified_outcome_count",
-                                           "new_verified_outcomes", "site_health")}
+        # Create real, compile-checked GEN65+ Python source in a private quarantine.
+        # A new generation is NOT a live controller: no execution, imports, or
+        # publishing occur. Existing minute cron drives this bounded factory.
+        generation = produce_next_generation(
+            EVOLUTION, rows,
+            demonstrated_policy_improvement=(result["policy_changed"] is True
+                and result["decision"] == "private_policy_improved_on_verified_outcomes"))
+        _atomic(EVOLUTION / "last_generation_report.json",
+                {"tenant": TENANT, "generated_by_master": 64,
+                 "generation": generation["generation"],
+                 "factory_status": generation["status"],
+                 "observed_utc": now if (now := result["observed_utc"]) else "",
+                 "experimental_only": True, "production_changed": False,
+                 "code_sha256": generation.get("code_sha256"),
+                 "verified_outcomes": len(rows)})
+        return {**{key: result[key] for key in (
+                    "status", "epoch", "active_policy", "decision",
+                    "verified_outcome_count", "new_verified_outcomes", "site_health")},
+                "next_generation": generation["generation"],
+                "generation_factory_status": generation["status"],
+                "generation_experimental_only": True}
     finally:
         os.close(fd)
 
