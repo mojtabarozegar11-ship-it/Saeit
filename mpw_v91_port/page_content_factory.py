@@ -42,6 +42,7 @@ BRIEFS = (
         ("Measure quality with representative samples", "Separate factual correctness, relevance, completeness, clarity, and harmful mistakes into different review fields. Record failures rather than keeping only successful demonstrations. A reviewer should be able to reproduce the input and understand why a result passed or failed. Avoid claiming accuracy from a few hand-picked examples."),
         ("Control deployment and monitoring", "Make human approval explicit for consequential or irreversible actions. Define ownership, time limits, rollback, and ways to report unexpected output. Review performance again when content, users, integrations, or operating conditions change. A passing test today does not guarantee safe behavior indefinitely."),
       ],
+      "exercise": "Take five real examples from your intended workflow and add three examples where a confident answer could still be wrong. Create a review sheet with separate fields for relevance, evidence, and the action a reader might take. Ask a second reviewer to assess the same cases without seeing the first reviewer’s scores. Compare disagreements before changing any automated threshold; disagreement is useful evidence of an unclear evaluation question.",
       "limitations": "This is a planning guide, not a certification, safety guarantee, or report on a deployed MojPlayWin AI model. Thresholds require task-specific evidence and expert assessment.",
       "sources": ("nist", "playbook"),
     },
@@ -56,6 +57,7 @@ BRIEFS = (
         ("Capture review decisions", "Document which criteria were applied, who had approval authority, and the reasons for accepting, revising, or declining a result. Distinguish editorial approval from legal, security, or scientific validation. A single numerical quality score is not a substitute for those checks."),
         ("Prepare for correction", "Maintain a route for users and reviewers to report errors. Make changes reversible where possible and preserve earlier versions for comparison. If an automated feature becomes unreliable, there should be a clear way to disable it without disabling unrelated website functions."),
       ],
+      "exercise": "For a recent non-sensitive editorial decision, prepare a one-page evidence ledger. List the question, the retrieved source, any generated suggestion, the person who reviewed it, and the final action. Then deliberately introduce an unsupported suggestion and see whether the process makes its uncertainty visible. If the ledger cannot show why the suggestion was declined, improve the record before scaling the workflow.",
       "limitations": "The examples describe recommended governance practice and do not assert that a particular vendor, website, or employee has completed these controls.",
       "sources": ("nist", "playbook"),
     },
@@ -70,6 +72,7 @@ BRIEFS = (
         ("Make the structure navigable", "Use one clear page title and descriptive headings in a meaningful order. Provide descriptive link text rather than relying on phrases such as click here. Illustrations should support the explanation, with suitable text alternatives when they communicate information. Check reading order and keyboard access in the final interface."),
         ("Review usefulness before publishing", "Ask someone unfamiliar with the topic to follow the instructions. Note where assumptions, missing steps, or vague warnings make progress difficult. Confirm that references support the specific claims and distinguish the author’s practical recommendations from externally established facts."),
       ],
+      "exercise": "Choose one existing tutorial and give it to a reader who did not write it. Ask them to complete the task using the headings rather than reading every sentence. Check whether meaningful links, image descriptions, and warning messages remain understandable when removed from their visual context. Record three concrete points of confusion and improve those before adding more background information.",
       "limitations": "This is a guide to editorial practice; it is not a claim that any specific website satisfies WCAG 2.2 or that an article has been independently tested with assistive technology.",
       "sources": ("wcag", "google"),
     },
@@ -84,6 +87,7 @@ BRIEFS = (
         ("Provide examples and failure cases", "Show the inputs, an expected intermediate result, and common mistakes that might change the answer. Discuss the conditions under which a method is not suitable. Avoid recycled filler, exaggerated promises, fabricated metrics, or unsupported product recommendations."),
         ("Maintain the guide over time", "Record which references and assumptions were used. If a standard, interface, or process changes, revise the affected instructions rather than repeatedly publishing near-identical pages. Archive outdated steps when maintaining them would confuse users."),
       ],
+      "exercise": "Write down three questions a reader might ask before arriving at a tutorial. Answer the central question in two sentences, then outline a real example and one circumstance where your instructions would fail. Have someone attempt the example using only what you wrote. Their questions usually reveal missing prerequisites more effectively than adding another paragraph of broad introductory claims.",
       "limitations": "Search rankings and commercial performance cannot be guaranteed by following an editorial method. Content should be reviewed for accessibility, accuracy, and relevance before public release.",
       "sources": ("google", "wcag"),
     },
@@ -98,6 +102,7 @@ BRIEFS = (
         ("Offer control over motion and feedback", "Avoid using motion as the only way to explain status, direction, or progress. Consider reduced-motion preferences and ways to pause moving content when appropriate. Use text or accessible status messages to communicate essential results of an interaction."),
         ("Check contrast, labels and recovery", "Readable text, meaningful control names, and clear error messages help both first-time and experienced users. Verify that someone can recover from an incorrect input without losing unrelated work. Record device and assistive-technology test limitations rather than claiming universal compatibility."),
       ],
+      "exercise": "Use a simple interaction such as selecting a card or opening a dialog as a test case. Operate it without a mouse, at increased zoom, and with reduced-motion settings. Note whether focus is visible, whether the action can be undone, and whether any critical feedback depends on animation alone. Treat missing behavior as a design task with a clear owner rather than a problem to solve after launch.",
       "limitations": "A checklist is an early design aid, not an accessibility audit, product certification, or proof that a finished game implements these practices.",
       "sources": ("wcag", "google"),
     },
@@ -112,6 +117,7 @@ BRIEFS = (
         ("Validate inputs and dependencies", "Treat user input as untrusted and keep secrets outside public files. Review relevant security guidance, test failure cases, and verify that client-side checks are not the only protection for sensitive operations. Know which third-party services or packages are required for the experience to work."),
         ("Prove recovery before release", "Keep a restorable backup and verify the essential journey in a staging environment. Record the artifact version, test results, and a rollback procedure. After deployment, check health without assuming that a successful upload means the application is functioning."),
       ],
+      "exercise": "Make a release inventory on a blank page: affected routes, source files, deployment credentials, dependent services, backup location, and rollback command. Ask a colleague to find one shared file you may have overlooked. Practice restoring an isolated test artifact before touching production. A written inventory cannot replace automated tests, but it makes the boundary of an intended change easier to inspect.",
       "limitations": "These are general software-release recommendations; they do not claim any particular MojPlayWin feature has been deployed, independently audited, or certified secure.",
       "sources": ("owasp", "wcag"),
     },
@@ -126,6 +132,7 @@ BRIEFS = (
         ("Keep an evidence trail", "Record source titles, publication dates where known, definitions, and the steps used to compare or summarize them. Prefer primary documentation for claims about standards or methods. Separate a cited claim from a new hypothesis; document conflicting findings rather than silently removing them."),
         ("Review uncertainty and reproducibility", "Ask whether a colleague could independently repeat the reasoning with the same references. Identify omitted data, uncertain measurements, and limits on generalization. Maintain a version history so changes to the question, sources, or interpretation are visible."),
       ],
+      "exercise": "Select a narrow research question and write a three-column note: source observation, interpretation, and uncertainty. Record where each observation came from and why it belongs in the comparison. Invite another reader to reconstruct your conclusion from only the note and linked references. Differences between their conclusion and yours are signals to clarify assumptions, not reasons to hide inconvenient evidence.",
       "limitations": "This guide does not represent new experimental data, original peer-reviewed findings, completed laboratory research, or external scientific validation.",
       "sources": ("nist", "google"),
     },
@@ -140,6 +147,7 @@ BRIEFS = (
         ("Separate retrieval from interpretation", "Check cited material directly. An accurately retrieved document does not guarantee that a generated conclusion faithfully reflects it. Record whether a statement is quoted, paraphrased, inferred, or hypothetical; each form requires a different standard of review."),
         ("Monitor errors and updates", "Keep a repeatable test set and compare results after tool, model, source, or configuration changes. Document uncertainty, access restrictions, and the need for domain-expert judgment. Turn unexpected failures into concrete test cases instead of silently adjusting a single score."),
       ],
+      "exercise": "Build a small test set of straightforward, ambiguous, and deliberately misleading research questions. For each result, inspect whether the cited reference really supports the precise statement, not just a nearby topic. Record errors using categories that permit follow-up tests. Repeat the same set after an update and compare individual cases; a single average score can conceal a serious new failure.",
       "limitations": "This educational checklist is not a comparative evaluation of any named commercial product or evidence that a deployed AI system satisfies a regulatory requirement.",
       "sources": ("nist", "playbook"),
     },
@@ -187,6 +195,7 @@ def build(brief: dict, stamp: str) -> dict:
     guide = f"# {brief['title']}\n\n{brief['intro']}\n\n"
     for heading, paragraph in brief["steps"]:
         guide += f"## {heading}\n\n{paragraph}\n\n"
+    guide += f"## Practical exercise\n\n{brief['exercise']}\n\n"
     guide += f"## Scope and limitations\n\n{brief['limitations']}\n\n"
     guide += "## Reference frameworks\n\n"
     for key in brief["sources"]:
