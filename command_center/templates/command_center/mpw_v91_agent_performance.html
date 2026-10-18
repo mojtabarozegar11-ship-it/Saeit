@@ -36,7 +36,7 @@ function settingRow(parent,label,value){
 }
 function drawChart(parent,agent){
   const isAudit=agent.metric_kind==="site_health_checks";
-  const metricText=isAudit?"پایش موفق":"پیش‌نویس";
+  const metricText=isAudit?"پایش موفق":agent.metric_kind==="editorial_quality_reviews"?"بررسی کیفیت":"پیش‌نویس";
   parent.appendChild(el("h4",null,isAudit?"نمودار پایش موفق ۱۴ روز اخیر":"نمودار عملکرد ۱۴ روز اخیر"));
   if(agent.history_available!==true || !Array.isArray(agent.series) || !Array.isArray(agent.days)){
     parent.appendChild(el("div","mpw-v91-nodata","سابقه روزانه برای این ایجنت ثبت نشده است؛ نمودار ساختگی نمایش داده نمی‌شود."));
@@ -85,7 +85,15 @@ async function refresh(){
       settingRow(settings,"وضعیت",statusLabels[agent.status]||"نامشخص");
       if(agent.schedule)settingRow(settings,"زمان‌بندی",agent.schedule);
       if(Number.isSafeInteger(agent.queue))settingRow(settings,"وظایف در صف",agent.queue);
-      if(Number.isSafeInteger(agent.completed))settingRow(settings,agent.metric_kind==="site_health_checks"?"پایش‌های موفق":"پیش‌نویس‌های تولیدشده",agent.completed);
+      if(Number.isSafeInteger(agent.completed))settingRow(settings,
+        agent.metric_kind==="site_health_checks"?"پایش‌های موفق":
+        agent.metric_kind==="editorial_quality_reviews"?"پیش‌نویس‌های ارزیابی‌شده":"پیش‌نویس‌های تولیدشده",agent.completed);
+      if(agent.metric_kind==="editorial_quality_reviews"){
+        if(Number.isSafeInteger(agent.needs_revision))settingRow(settings,"نیازمند اصلاح",agent.needs_revision);
+        if(Number.isSafeInteger(agent.ready_for_human_review))settingRow(settings,"آماده بررسی مدیر",agent.ready_for_human_review);
+        if(agent.last_observed_utc)settingRow(settings,"آخرین کنترل UTC",agent.last_observed_utc);
+        settingRow(settings,"زمان‌بندی","ساعتی؛ دقیقه ۴۹");
+      }
       if(agent.metric_kind==="site_health_checks"){
         if(Number.isSafeInteger(agent.warning_count))settingRow(settings,"هشدار",agent.warning_count);
         if(Number.isSafeInteger(agent.error_count))settingRow(settings,"خطا",agent.error_count);
