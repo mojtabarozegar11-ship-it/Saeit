@@ -33,6 +33,7 @@ jobs:
         if: github.event_name == 'pull_request'
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           python3 - <<'PY'
           import os
@@ -46,8 +47,11 @@ jobs:
             "tests/test_mpw_page_skin_safety.py",
             ".github/workflows/mojplaywin-unify-pages-qa.yml",
           }
+          common = subprocess.check_output(
+            ["git", "merge-base", os.environ["BASE_SHA"], os.environ["HEAD_SHA"]], text=True
+          ).strip()
           changed = set(subprocess.check_output(
-            ["git", "diff", "--name-only", os.environ["BASE_SHA"], "HEAD"], text=True
+            ["git", "diff", "--name-only", common, os.environ["HEAD_SHA"]], text=True
           ).splitlines())
           unexpected = sorted(changed - allowed)
           assert not unexpected, f"Protected files touched: {unexpected}"
