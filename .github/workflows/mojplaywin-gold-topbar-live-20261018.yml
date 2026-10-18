@@ -1,0 +1,199 @@
+name: MojPlayWin gold search topbar surgical release
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/mojplaywin-gold-topbar-live-20261018.yml
+      - scripts/mojplaywin_gold_utility_topbar_live_20261018.py
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: mojplaywin-gold-topbar-release
+  cancel-in-progress: false
+jobs:
+  release:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify code and mocked homepage before server connection
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mojplaywin_gold_utility_topbar_live_20261018.py
+          python3 scripts/mojplaywin_gold_utility_topbar_live_20261018.py selftest
+      - name: Baseline public content read only
+        run: |
+          python3 - <<'PY'
+          from urllib.request import Request,urlopen
+          for uri in ('/','/store/','/ai/','/search/'):
+            with urlopen(Request('https://mojplaywin.com'+uri,headers={'Cache-Control':'no-cache','User-Agent':'MpwGoldTopbarBaseline/1.0'}),timeout=22) as response:
+              data=response.read(1500000).decode('utf8','replace')
+              assert response.status==200
+              assert len(data)>1500
+            print('BASELINE_PUBLIC_OK='+uri,flush=True)
+            if uri=='/':
+              assert 'id="mpw-top-search-gold-20261018"' in data
+              assert 'id="mpw-top-utility-panel-20261018"' not in data
+              assert 'mpw-home-ten-guides' in data
+          PY
+      - name: Prepare pinned VPS relay to exact cPanel account
+        id: relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/mpw-gold-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          echo "MPW_PINNED_RELAY_READY=yes"
+      - name: Stage isolated patch in MojPlayWin temporary directory
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-gold-ssh"
+          stage="/home/zomorod2/.mpw-gold-topbar-$GITHUB_RUN_ID"
+          timeout 35s ssh -T -F "$d/config" saeit-cpanel "test ! -e '$stage' && test ! -L '$stage' && install -d -m 700 '$stage'"
+          cat scripts/mojplaywin_gold_utility_topbar_live_20261018.py | timeout 45s ssh -T -F "$d/config" saeit-cpanel "cat > '$stage/patch.py'"
+          timeout 35s ssh -T -F "$d/config" saeit-cpanel "test -s '$stage/patch.py' && python3 '$stage/patch.py' selftest"
+      - name: Apply atomic patch to ONE static homepage file after verified backup
+        id: install
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 55s ssh -T -F "$RUNNER_TEMP/mpw-gold-ssh/config" saeit-cpanel "python3 '/home/zomorod2/.mpw-gold-topbar-$GITHUB_RUN_ID/patch.py' install '$GITHUB_RUN_ID'"
+      - name: Verify public page content, independent main-site routes and no duplicates
+        id: public-smoke
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os,time
+          from urllib.request import Request,urlopen
+          good=False
+          for attempt in range(1,7):
+            try:
+              url='https://mojplaywin.com/?__mpw_gold_topbar='+os.environ['GITHUB_RUN_ID']+'-'+str(attempt)
+              with urlopen(Request(url,headers={'Cache-Control':'no-cache, no-store','User-Agent':'MpwTopbarSmoke/1.0'}),timeout=23) as response:
+                html=response.read(1800000).decode('utf8','replace')
+                assert response.status==200
+              panel=html.index('id="mpw-top-utility-panel-20261018"')
+              header=html.index('<header class="mw-site-nav"')
+              footer=html.index('<footer class="mw-site-footer"')
+              assert 0<panel<header<footer
+              assert html.count('id="mpw-top-utility-panel-20261018"')==1
+              assert html.count('id="mpw-top-search-gold-20261018"')==1
+              assert 'action="/search/"' in html and 'Enter Store ↗' in html
+              assert 'mpw-home-ten-guides' in html and 'mpw-17x20-mainonly-autostart' in html
+              assert 'Mojtaba Roozegar' in html
+              assert len(html)>260000
+              good=True
+              print('MPW_TOPBAR_PUBLIC_HTML_OK=true',flush=True)
+              break
+            except Exception as e:
+              print('TOPBAR_VERIFY_RETRY='+str(attempt)+' '+repr(e)[:150],flush=True)
+              time.sleep(2)
+          if not good:raise RuntimeError('Topbar not verified in public homepage')
+          for uri in ('/store/','/ai/','/search/'):
+            with urlopen(Request('https://mojplaywin.com'+uri,headers={'User-Agent':'MpwTopbarSmoke/1.0'}),timeout=20) as response:
+              assert response.status==200
+              assert len(response.read(1500000))>1500
+            print('MPW_PROTECTED_PUBLIC_ROUTE_OK='+uri,flush=True)
+          PY
+      - name: Validate desktop and mobile visible positioning with actual Chromium
+        id: visual
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/mpw-topbar-browser"
+          cd "$RUNNER_TEMP/mpw-topbar-browser"
+          npm --silent init -y >/dev/null
+          npm --silent install --no-save playwright@1.55.0
+          npx playwright install chromium
+          cat > audit.cjs <<'JS'
+          const {chromium}=require('playwright');
+          (async()=>{
+            const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
+            for(const width of [1440,1024,768,390,320]){
+              const page=await browser.newPage({viewport:{width,height:850},deviceScaleFactor:1});
+              await page.goto('https://mojplaywin.com/?__mpw_gold_visual_'+width,{waitUntil:'domcontentloaded',timeout:35000});
+              await page.waitForTimeout(500);
+              const layout=await page.evaluate(()=>{
+                function rect(q){const e=document.querySelector(q);if(!e)return null;const b=e.getBoundingClientRect();return{x:b.x,y:b.y,width:b.width,height:b.height};}
+                const p=rect('#mpw-top-utility-panel-20261018'),h=rect('header.mw-site-nav'),f=rect('.mpw-header-search-gold'),b=rect('#mpw-top-utility-panel-20261018 .mw-nav-cta'),foot=rect('.mw-site-footer');
+                const input=document.querySelector('#mpw-top-utility-panel-20261018 input[type="search"]');
+                return{viewport:innerWidth,documentWidth:document.documentElement.scrollWidth,panel:p,header:h,search:f,store:b,footer:foot,
+                 formBackground: f?getComputedStyle(document.querySelector('.mpw-header-search-gold')).backgroundColor:null,
+                 hasSearchInput:!!input,controlsInsidePanel:!!p&&!!f&&!!b&&f.y>=p.y&&b.y>=p.y&&f.y+f.height<=p.y+p.height+3&&b.y+b.height<=p.y+p.height+3,
+                 panelBeforeHeader:!!p&&!!h&&p.y+p.height<=h.y+3,
+                 searchFitsViewport:!!f&&f.x>=-2&&f.x+f.width<=innerWidth+2,
+                 storeFitsViewport:!!b&&b.x>=-2&&b.x+b.width<=innerWidth+2,
+                 searchAboveFooter:!!p&&!!foot&&p.y+p.height<foot.y};
+              });
+              console.log('MPW_GOLD_TOPBAR_VISUAL '+JSON.stringify(layout));
+              if(!layout.hasSearchInput||!layout.controlsInsidePanel||!layout.panelBeforeHeader||
+               !layout.searchFitsViewport||!layout.storeFitsViewport||!layout.searchAboveFooter||
+               layout.documentWidth>width+3||layout.search.width<(width>=1000?300:width>=500?200:240))throw Error('Invalid topbar placement at '+width);
+              await page.close();
+            }
+            await browser.close();
+          })().catch(e=>{console.error(e.stack);process.exit(1)});
+          JS
+          node audit.cjs
+          echo "MPW_TOPBAR_DESKTOP_MOBILE_VERIFIED=true"
+      - name: Roll back ONLY patched root file on any failure after install
+        if: failure() && steps.install.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-gold-ssh"
+          stage="/home/zomorod2/.mpw-gold-topbar-$GITHUB_RUN_ID"
+          timeout 60s ssh -T -F "$d/config" saeit-cpanel "python3 '$stage/patch.py' rollback '$GITHUB_RUN_ID'"
+      - name: Clean relay staging; retain SHA-verified rollback backup
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          d="$RUNNER_TEMP/mpw-gold-ssh"
+          stage="/home/zomorod2/.mpw-gold-topbar-$GITHUB_RUN_ID"
+          if test -f "$d/config"; then
+            timeout 30s ssh -T -F "$d/config" saeit-cpanel "rm -f '$stage/patch.py'; rmdir '$stage'" || true
+          fi
+          rm -rf -- "$d"
