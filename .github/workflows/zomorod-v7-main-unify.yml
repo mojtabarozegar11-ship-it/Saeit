@@ -1,0 +1,211 @@
+name: Publish unified V7 on Zomorod main-site static pages
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/zomorod-v7-main-unify.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-v7-public-atomic
+  cancel-in-progress: false
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate approved main domain skin, source injector and supplied logo
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile content/zomorod-v7/apply_skin.py
+          python3 - <<'PY'
+          from pathlib import Path
+          import base64
+          folder=Path('content/zomorod-v7')
+          blob=base64.b64decode((folder/'logo.webp.b64').read_text().strip(),validate=True)
+          assert blob[:4]==b'RIFF' and blob[8:12]==b'WEBP'
+          assert 2500<len(blob)<25000
+          css=(folder/'inner-v7.css').read_text()
+          code=(folder/'apply_skin.py').read_text()
+          for test in ('zm-v7-chain','zm-v7-logo','zm-v7-footer-copyright','prefers-reduced-motion'):
+            assert test in css
+          for test in ("BANNED_TOP","'business'","'tala'","'mohammad'","'ghanadi'","'amozeshgah'","MARKER"):
+            assert test in code
+          print('V7_SOURCE_AND_LOGO=passed')
+          PY
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - name: Stage V7 privately without touching pages or sub-sites
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1"
+          backup="$HOME/.backups/zomorod-v7-unify/$sha"
+          test ! -e "$backup"
+          test -s "$HOME/public_html/index.html"
+          test ! -L "$HOME/public_html"
+          test ! -e "$HOME/public_html/static/site/zomorod-v7"
+          mkdir -p "$(dirname "$backup")"
+          mkdir -m 700 "$backup"
+          mkdir -m 700 "$backup/stage"
+          echo V7_PRIVATE_STAGE=ready
+          REMOTE
+          tar -cf - -C content/zomorod-v7 apply_skin.py inner-v7.css logo.webp.b64 |
+            ssh -F "$d/config" saeit-cpanel "tar -xf - -C /home/zomorod2/.backups/zomorod-v7-unify/$GITHUB_SHA/stage"
+      - name: Plan every eligible main page and make tested byte-exact recovery archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1"
+          web="$HOME/public_html"
+          backup="$HOME/.backups/zomorod-v7-unify/$sha"
+          python3 "$backup/stage/apply_skin.py" "$web" --manifest "$backup/pages.txt" > "$backup/dryrun.log"
+          grep -Fq 'UNIFY_DRY_RUN_OK=' "$backup/dryrun.log"
+          python3 - "$backup/pages.txt" <<'PY'
+          from pathlib import Path
+          import sys
+          files=Path(sys.argv[1]).read_text().splitlines()
+          assert 28<=len(files)<=95,len(files)
+          assert len(files)==len(set(files))
+          assert {'index.html','about/index.html','company/index.html','agriculture/index.html','agriculture/genetics/index.html','industry/index.html'}<=set(files)
+          banned={'mohammad','ghanadi','amozeshgah','tala','education','site-heritage','business','static','admin'}
+          assert all(not(set(Path(x).parts)&banned) and not any(p.startswith('__') for p in Path(x).parts) for x in files)
+          print('MAIN_PAGE_OWNERSHIP=valid')
+          print('MAIN_PAGE_COUNT='+str(len(files)))
+          PY
+          (cd "$web" && tar -cf "$backup/original-pages.tar" -T "$backup/pages.txt")
+          test -s "$backup/original-pages.tar"
+          tar -tf "$backup/original-pages.tar" > "$backup/archived-paths.txt"
+          diff -u "$backup/pages.txt" "$backup/archived-paths.txt"
+          (cd "$web" && sha256sum -- $(cat "$backup/pages.txt")) > "$backup/original-pages.sha256"
+          (cd "$web" && sha256sum -c --status "$backup/original-pages.sha256")
+          for sub in mohammad ghanadi amozeshgah tala education business site-heritage; do
+            if test -f "$web/$sub/index.html"; then sha256sum "$web/$sub/index.html"; fi
+          done > "$backup/protected-subsites.sha256"
+          sha256sum "$web/.htaccess" > "$backup/root-config.sha256"
+          echo V7_RESTORE_ARCHIVE=verified
+          REMOTE
+      - name: Atomically apply V7 to main static pages with on-error restore
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1"
+          web="$HOME/public_html"
+          backup="$HOME/.backups/zomorod-v7-unify/$sha"
+          assets="$web/static/site/zomorod-v7"
+          test ! -e "$assets" && test -s "$backup/original-pages.tar"
+          rollback(){
+            set +e
+            (cd "$web" && tar -xf "$backup/original-pages.tar")
+            (cd "$web" && sha256sum -c --status "$backup/original-pages.sha256")
+            if test -d "$assets"; then rm -f "$assets/inner-v7.css" "$assets/company-logo.webp"; rmdir "$assets" 2>/dev/null || true; fi
+            echo V7_AUTO_ROLLBACK=original_pages_restored
+          }
+          active=1
+          trap 'rc=$?; trap - EXIT; if test "$active" = 1; then rollback; fi; exit "$rc"' EXIT
+          mkdir -m 755 "$assets"
+          cp -p "$backup/stage/inner-v7.css" "$assets/inner-v7.css"
+          python3 - "$backup/stage/logo.webp.b64" "$assets/company-logo.webp" <<'PY'
+          import base64,sys
+          blob=base64.b64decode(open(sys.argv[1]).read().strip(),validate=True)
+          assert blob[:4]==b'RIFF' and blob[8:12]==b'WEBP' and 2500<len(blob)<25000
+          with open(sys.argv[2],'wb') as f:f.write(blob)
+          PY
+          chmod 644 "$assets/inner-v7.css" "$assets/company-logo.webp"
+          python3 "$backup/stage/apply_skin.py" "$web" --apply > "$backup/applied.log"
+          grep -Fq 'UNIFY_APPLIED=' "$backup/applied.log"
+          python3 - "$web" "$backup/pages.txt" <<'PY'
+          import sys
+          from pathlib import Path
+          web=Path(sys.argv[1])
+          files=Path(sys.argv[2]).read_text().splitlines()
+          for filename in files:
+            s=(web/filename).read_text()
+            assert 'zm-unified-v7-20261018' in s,filename
+            assert '/static/site/zomorod-v7/company-logo.webp' in s,filename
+            assert '/static/site/zomorod-v7/inner-v7.css' in s,filename
+            if filename!='index.html':
+              assert 'zm-v7-footer-copyright' in s and 'zm-v7-header' in s,filename
+              assert s.count('</main>')==1,filename
+          print('V7_DOM_MARKUP=passed',len(files))
+          PY
+          for route in / /company/ /about/ /services/ /agriculture/ /agriculture/genetics/ /industry/ /research/ /knowledge/; do
+            code="$(curl -sS -L --max-time 20 -o "$backup/served.html" -w '%{http_code}' "https://zomorodmelal.ir$route?v7=$sha" || true)"
+            echo "V7_PUBLIC_PAGE $route $code"
+            test "$code" = 200
+            grep -Fq 'zm-unified-v7-20261018' "$backup/served.html"
+            grep -Fq '/static/site/zomorod-v7/company-logo.webp' "$backup/served.html"
+          done
+          for file in inner-v7.css company-logo.webp; do
+            code="$(curl -sS --max-time 20 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir/static/site/zomorod-v7/$file")"
+            test "$code" = 200
+          done
+          (cd "$web" && sha256sum -c --status "$backup/protected-subsites.sha256")
+          sha256sum -c --status "$backup/root-config.sha256"
+          active=0
+          trap - EXIT
+          echo V7_MAIN_PAGES_PUBLISHED=yes
+          echo V7_IMMUTABLE_SUBSITES=verified
+          echo V7_ROLLBACK_ARCHIVE="$backup/original-pages.tar"
+          REMOTE
+      - name: Clear temporary runner credentials
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
