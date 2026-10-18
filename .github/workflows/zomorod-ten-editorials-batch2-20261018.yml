@@ -55,7 +55,14 @@ jobs:
             --catalog content/zomorod-ten-editorials-batch2-20261018/pages.json \
             --assets "$RUNNER_TEMP/zm-ten-batch2-images"
           test "$(find "$RUNNER_TEMP/zm-ten-batch2-images" -name '*.webp' -type f | wc -l)" -eq 10
-      - name: Test byte-preserving insertion against ten sample original pages
+      - name: Retain verified media exactly once per GitHub run
+        uses: actions/upload-artifact@v4
+        with:
+          name: zm-ten-batch2-validated-images
+          path: ${{ runner.temp }}/zm-ten-batch2-images/
+          retention-days: 2
+          if-no-files-found: error
+            - name: Test byte-preserving insertion against ten sample original pages
         shell: bash
         run: |
           set -euo pipefail
@@ -96,13 +103,28 @@ jobs:
     timeout-minutes: 29
     steps:
       - uses: actions/checkout@v4
-      - name: Recreate and verify ten distinct photo assets
+      - name: Reuse exact images verified in this GitHub run
+        uses: actions/download-artifact@v4
+        with:
+          name: zm-ten-batch2-validated-images
+          path: ${{ runner.temp }}/zm-ten-batch2-images/
+      - name: Verify photo integrity and pack for protected deployment
         shell: bash
         run: |
           set -euo pipefail
-          python3 -m pip install --quiet Pillow==11.3.0
-          python3 content/zomorod-ten-editorials-batch2-20261018/prepare_ten_photos.py \
-            --catalog content/zomorod-ten-editorials-batch2-20261018/pages.json --assets "$RUNNER_TEMP/zm-ten-batch2-images"
+          python3 - <<'PY'
+          import json,hashlib,os
+          from pathlib import Path
+          root=Path(os.environ['RUNNER_TEMP'])/'zm-ten-batch2-images'
+          x=json.loads((root/'photo-manifest.json').read_text(encoding='utf-8'))
+          assert len(x)==10 and len({r['sha256'] for r in x})==10
+          for item in x:
+            p=root/(item['id']+'.webp')
+            raw=p.read_bytes()
+            assert raw.startswith(b'RIFF') and raw[8:12]==b'WEBP'
+            assert hashlib.sha256(raw).hexdigest()==item['sha256']
+          print('VERIFIED_MEDIA_DOWNLOAD_FROM_SAME_RUN=yes')
+          PY
           tar -czf "$RUNNER_TEMP/zm-ten-batch2-image-assets.tgz" -C "$RUNNER_TEMP" zm-ten-batch2-images
       - name: Establish pinned authenticated VPS-to-cPanel relay
         shell: bash
