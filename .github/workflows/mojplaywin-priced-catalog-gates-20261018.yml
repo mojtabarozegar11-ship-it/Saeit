@@ -1,0 +1,94 @@
+name: MojPlayWin priced catalog sale gate verified inventory only
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/mojplaywin-priced-catalog-gates-20261018.yml"]
+permissions: {contents: read}
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Read-only count sale rights and verified product delivery for priced items
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 80s ssh -T -F "$d/config" saeit-cpanel bash -s <<'BASH'
+          set -euo pipefail
+          cd /home/zomorod2/Saeit-staging
+          /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - <<'PY'
+          import os,json
+          os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          import django
+          django.setup()
+          from core.models import Product
+          from core.cryptopay_checkout import product_delivery_ready
+          summary={'priced_total':0,'approved_checkout_count':0,'verified_rights_count':0,'has_verified_delivery':0,
+             'has_sale_ready_state':0,'associated_knowledge_count':0,'all_priced_products':[]}
+          for product in Product.objects.filter(price__gt=0).order_by('pk'):
+              meta=product.metadata if isinstance(product.metadata,dict) else {}
+              rights=meta.get('owner_exclusive_rights_declared') is True
+              checkout=meta.get('checkout_enabled') is True
+              verified=bool(product_delivery_ready(product))
+              allowed=meta.get('factory_publication_permission') is True
+              item={'product_id':product.pk,'priced':True,'active':product.active,
+                 'currency':product.currency,'has_delivery':verified,
+                 'seller_rights_confirmed':rights,'publication_permitted':allowed,
+                 'checkout_enabled':checkout,'knowledge_linked':product.knowledge_article_id is not None}
+              summary['all_priced_products'].append(item)
+              summary['priced_total']+=1
+              summary['approved_checkout_count']+=int(checkout)
+              summary['verified_rights_count']+=int(rights)
+              summary['has_verified_delivery']+=int(verified)
+              summary['has_sale_ready_state']+=int(allowed)
+              summary['associated_knowledge_count']+=int(item['knowledge_linked'])
+          print('MPW_PRICED_CATALOG_SAFE_GATES='+json.dumps(summary,sort_keys=True))
+          PY
+          BASH
