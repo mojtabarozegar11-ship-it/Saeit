@@ -1,6 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{% if q %}جستجو: {{ q }}{% else %}جستجوی سایت{% endif %} — Zomorodmelal{% endif %}
-{% endblock %}
+{% block title %}{% if q %}جستجو: {{ q }}{% else %}جستجوی سایت{% endif %} — Zomorodmelal{% endblock %}
 {% block meta_description %}موتور جستجوی محتوای شرکت کشت و صنعت زمرد ملل؛ خبرنامه، دانش، محصولات و صفحات رسمی.{% endblock %}
 {% block content %}
 {% if request.get_host == "mojplaywin.com" or request.get_host == "www.mojplaywin.com" %}
@@ -52,4 +51,5 @@
   {% empty %}{% if q %}<div style="padding:28px;border:1px dashed #b9ad98">نتیجه‌ای پیدا نشد. عبارت را با نام شرکت، موضوع پژوهش یا عنوان خبر دوباره جستجو کنید.</div>{% else %}<div style="padding:28px">عبارت جستجو را وارد کنید.</div>{% endif %}{% endfor %}
   </section>
 </div>
+{% endif %}
 {% endblock %}
