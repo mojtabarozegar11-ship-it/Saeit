@@ -80,6 +80,43 @@ jobs:
               except Exception as e:
                   print("ROUTE_BEFORE path="+path+" error="+type(e).__name__)
           PY
+      - name: Diagnose MojPlayWin real domain document root without writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 45s ssh -T -F "$RUNNER_TEMP/mojplaywin-inventory-ssh/config" saeit-cpanel 'python3 -' <<'PY'
+          import json,subprocess
+          p=subprocess.run(["uapi","--output=json","DomainInfo","single_domain_data","domain=mojplaywin.com"],capture_output=True,text=True,timeout=20)
+          print("SINGLE_DOMAIN_INFO_OK="+str(p.returncode==0))
+          if p.returncode==0:
+              r=json.loads(p.stdout)
+              def scan(obj):
+                  if isinstance(obj,dict):
+                      print("DOMAIN_DATA_FIELDS="+json.dumps({k:v for k,v in obj.items() if k.lower() in ("domain","documentroot","document_root","dir","homedir","type","domain_type","base_uri","webroot","web_root")},default=str)[:800])
+                      for value in obj.values():scan(value)
+                  elif isinstance(obj,list):
+                      for value in obj:scan(value)
+              scan(r.get("result",r))
+          PY
+      - name: Compare known public static targets without writes
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import urllib.request,urllib.error,time
+          for path in ("/design-preview-20261017/production-home-20261017.html",
+                       "/mpw-editorial/index.html","/mpw-editorial/style.css",
+                       "/design-preview-20261017/"):
+              url="https://mojplaywin.com"+path+"?probe="+str(time.time_ns())
+              try:
+                  with urllib.request.urlopen(url,timeout=14) as r:
+                      body=r.read(1000).decode("utf8","replace")
+                      print("STATIC_ROUTE_PROBE path="+path+" status="+str(r.status)
+                            +" mime="+str(r.headers.get("Content-Type"))+" sample="+body[:90].replace("\n"," "))
+              except urllib.error.HTTPError as e:
+                  print("STATIC_ROUTE_PROBE path="+path+" status="+str(e.code))
+              except Exception as e:
+                  print("STATIC_ROUTE_PROBE path="+path+" failure="+type(e).__name__)
+          PY
       - name: Clean ephemeral runner SSH keys
         if: always()
         shell: bash
