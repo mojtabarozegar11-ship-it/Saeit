@@ -10,7 +10,7 @@ from django.contrib.auth import login
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.views import LoginView
 from django.db import IntegrityError, transaction
-from django.http import FileResponse, Http404, HttpResponse
+from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods, require_POST
@@ -180,6 +180,28 @@ def _owner_invoice(request, token):
         MojCryptoInvoice.objects.select_related("order", "offer__product"),
         token=token, order__customer=request.user,
     ), None
+
+
+@require_http_methods(["GET"])
+def gateway_home(request):
+    """A gateway landing link, not a second unapproved catalog."""
+    _guard(request)
+    return redirect("/store/#verified-crypto-offers")
+
+
+@require_http_methods(["GET"])
+def invoice_status(request, token):
+    """Private cache-free payment status for automatic UI updates; never settles."""
+    invoice, auth = _owner_invoice(request, token)
+    if auth:
+        return auth
+    response = JsonResponse({
+        "status": invoice.status,
+        "paid": invoice.status == "paid" and invoice.order.status == "paid",
+        "expires_at": invoice.expires_at.isoformat(),
+    })
+    response["Cache-Control"] = "private, no-store"
+    return response
 
 
 @require_http_methods(["GET"])
