@@ -10,9 +10,12 @@ from .editorial_detail import detail
 from .media_album import album
 from .agent_media_catalog import search as media_search
 from .story_image_suggestions import suggestions as story_images
+from .mpw_monitor_views import dashboard as mpw_monitor, telemetry_api as mpw_monitor_api
 
 urlpatterns = [
     path("", dashboard, name="command_center_dashboard"),
+    path("mpw-agents/", mpw_monitor, name="mpw_agent_monitor"),
+    path("api/mpw-agents/", mpw_monitor_api, name="mpw_agent_monitor_api"),
     path("api/overview/", overview_api, name="command_center_overview_api"),
     path("api/agents/", metrics, name="command_center_agent_metrics_api"),
     path("api/agents/directory/", directory, name="command_center_agent_directory_api"),
