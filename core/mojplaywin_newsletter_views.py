@@ -39,9 +39,12 @@ def detail(request, slug):
     return render(request, "mojplaywin/newsletter_detail.html", {"story": story})
 
 
-@staff_member_required
 def staff_dashboard(request):
     only_mojplaywin(request)
+    return staff_member_required(_staff_dashboard)(request)
+
+
+def _staff_dashboard(request):
     return render(request, "mojplaywin/newsletter_staff.html", {
         "stats": Newsroom(private_db_path()).stats(),
         "minimum_quality": 90,
