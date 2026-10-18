@@ -261,7 +261,7 @@ def selftest():
     assert out.find(NEW_ID)<out.find('<main id="content">')
     assert out.find(NEW_ID)<out.find('<footer')
     assert '<b>Legal content</b>' in out
-    assert out.count('action="/search/"')==1 and out.count('href="/store/"')==1
+    assert out.count('action="/search/"')==1 and len(re.findall(r'<a\b[^>]*href="/store/"',out))==1
     print("ZM_GOLD_ROOT_PATCH_SELFTEST=passed")
 
 if __name__=="__main__":
