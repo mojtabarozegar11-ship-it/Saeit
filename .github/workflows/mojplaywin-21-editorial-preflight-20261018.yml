@@ -42,7 +42,7 @@ jobs:
                 content_type=res.headers.get("Content-Type","")
               au=Audit();au.feed(raw)
               result={"path":path,"status":status,"chars":len(raw),"main_count":au.main,
-                 "main_end_count":len(re.findall(r"</main\\s*>",raw,re.I)),
+                 "main_end_count":len(re.findall(r"</main\s*>",raw,re.I)),
                  "forms":au.forms,"buttons_submit":au.submit,"iframes":au.iframes,
                  "scripts":au.scripts,"content_type":content_type,
                  "existing_dossier":"SPECIALISM 28" in raw,
