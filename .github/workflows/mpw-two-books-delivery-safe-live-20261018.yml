@@ -1,0 +1,145 @@
+name: MojPlayWin two books private-delivery live preparation (NO PAYMENTS)
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/mpw-two-books-delivery-safe-live-20261018.yml"]
+permissions: {contents: read}
+concurrency:
+  group: mojplaywin-two-books-private-delivery
+  cancel-in-progress: false
+jobs:
+  private-only:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false, ref: 6a2b5cb7f60665ca2fcb7f6f4fe552cd77603493}
+      - name: Prove exact vetted source and identity
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "6a2b5cb7f60665ca2fcb7f6f4fe552cd77603493"
+          python3 -m py_compile scripts/mpw_two_books_private_file_prepare.py
+      - name: Before-state live smoke protected routes
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from urllib.request import urlopen,Request
+          from urllib.error import HTTPError
+          import json,os
+          base="https://mojplaywin.com"
+          paths=["/","/store/","/taniya/","/farnaz/","/saman/","/picm/"]
+          baseline={}
+          for path in paths:
+              try:
+                  with urlopen(Request(base+path,headers={"Cache-Control":"no-cache","User-Agent":"MPWTwoBooksIsolatedRelease"}),timeout=18) as res: status=res.status
+              except HTTPError as e:status=e.code
+              baseline[path]=status
+          for required in ("/","/store/","/taniya/","/farnaz/"):
+              if baseline[required]!=200:raise RuntimeError("Unhealthy protected baseline for "+required)
+          with open(os.environ["RUNNER_TEMP"]+"/two-books-baseline.json","w") as f:json.dump(baseline,f)
+          print("PROTECTED_SITE_BEFORE="+json.dumps(baseline))
+          PY
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Check exact books without any writes on cPanel
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 120s ssh -T -F "$d/config" saeit-cpanel '/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - preflight' < scripts/mpw_two_books_private_file_prepare.py
+      - name: Copy only two PDF files to protected delivery root and save mapping
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 135s ssh -T -F "$d/config" saeit-cpanel '/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - prepare' < scripts/mpw_two_books_private_file_prepare.py
+          touch "$RUNNER_TEMP/mpw-two-books-private-success"
+      - name: Verify Django sees valid deliverables with checkout and products still disabled
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 75s ssh -T -F "$d/config" saeit-cpanel bash -s <<'BASH'
+          set -euo pipefail
+          cd /home/zomorod2/Saeit-staging
+          /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - <<'PY'
+          import os,json
+          os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          import django;django.setup()
+          from core.models import Product,Order,PaymentIntent
+          from core.cryptopay_checkout import product_delivery_ready
+          result=[]
+          for pk in (72,225):
+              p=Product.objects.get(pk=pk)
+              ready=product_delivery_ready(p)
+              if (not ready or p.active or p.metadata.get('checkout_enabled') is not False or p.metadata.get('payment_live') is True):
+                  raise RuntimeError("Commercial safety gate failed for product "+str(pk))
+              result.append({'id':pk,'delivery_ready':ready,'public_sale_enabled':p.active,
+                  'checkout_enabled':p.metadata.get('checkout_enabled'),'private_file_prepared':p.metadata.get('mpw_private_file_prepared') is True})
+          print('MPW_TWO_BOOKS_PREPARED_LIVE_VERIFIED='+json.dumps(result))
+          PY
+          BASH
+      - name: Recheck original site and protected child routes are unchanged
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,os
+          from urllib.request import urlopen,Request
+          from urllib.error import HTTPError
+          with open(os.environ["RUNNER_TEMP"]+"/two-books-baseline.json") as f:baseline=json.load(f)
+          after={}
+          for path in baseline:
+              try:
+                  with urlopen(Request("https://mojplaywin.com"+path,headers={"Cache-Control":"no-cache","User-Agent":"MPWTwoBooksIsolatedRelease"}),timeout=18) as res:status=res.status
+              except HTTPError as e:status=e.code
+              after[path]=status
+          if baseline!=after:raise RuntimeError("Protected live route changed: "+str({k:(baseline[k],after[k]) for k in baseline if baseline[k]!=after[k]}))
+          print("PROTECTED_SITE_AFTER="+json.dumps(after))
+          PY
+      - name: Fail-closed metadata rollback if post-install tests fail
+        if: failure()
+        run: |
+          if test -f "$RUNNER_TEMP/mpw-two-books-private-success"; then
+            d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+            timeout 75s ssh -T -F "$d/config" saeit-cpanel '/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - rollback' < scripts/mpw_two_books_private_file_prepare.py
+          fi
