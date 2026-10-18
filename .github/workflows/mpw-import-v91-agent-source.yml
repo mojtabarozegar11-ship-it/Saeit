@@ -1,0 +1,81 @@
+name: MojPlayWin import verified V91 agent modules to isolated branch
+on:
+  push:
+    branches: ["feat/mpw-v91-agent-port-isolated-20261018"]
+    paths: [".github/workflows/mpw-import-v91-agent-source.yml"]
+permissions:
+  contents: write
+concurrency:
+  group: mpw-v91-import-source-branch-only
+  cancel-in-progress: false
+jobs:
+  port-original-modules:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/feat/mpw-v91-agent-port-isolated-20261018'
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/mpw-v91-agent-port-isolated-20261018
+          fetch-depth: 1
+      - name: Verify source importer is offline and syntactically valid
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_import_v91_verified_agents.py
+          test ! -d mpw_v91_port/legacy
+      - name: Establish pinned read-only VPS SSH transport
+        shell: bash
+        env:
+          VPS_KEY: {{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-v91-source"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/vps.key"
+          chmod 600 "$d/vps.key"
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+      - name: Copy only previously verified archive bytes, read-only from VPS
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-v91-source"
+          timeout 55s ssh -T -F "$d/config" saeit-vps 'cat /home/githubops/.private_zomorod_v91_agents/v91_master_agents_20261018_run39086083902/agents.tar.gz' > "$d/agents.tar.gz"
+          test "$(sha256sum "$d/agents.tar.gz" | cut -d ' ' -f 1)" = '4b825f80e06d632d5aac1717f82fac32b731ca89247a45b48f2222bdd86c858c'
+          python3 scripts/mpw_import_v91_verified_agents.py "$d/agents.tar.gz"
+          python3 -m compileall -q mpw_v91_port
+      - name: Commit ONLY selected new MojPlayWin agent modules to feature branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add -- mpw_v91_port/legacy mpw_v91_port/__init__.py mpw_v91_port/ORIGIN.json
+          test -n "$(git diff --cached --name-only)"
+          git diff --cached --name-only | while IFS= read -r p; do
+            case "$p" in
+              mpw_v91_port/legacy/*|mpw_v91_port/__init__.py|mpw_v91_port/ORIGIN.json) ;;
+              *) echo 'UNAUTHORIZED_PATH' >&2; exit 2 ;;
+            esac
+          done
+          git -c user.name='mpw-v91-port-bot' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'feat(mpw): preserve original V91 master generations and editorial agent code (verified)'
+          git push origin HEAD:refs/heads/feat/mpw-v91-agent-port-isolated-20261018
+      - name: Purge transient runner SSH key and archive
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/mpw-v91-source"
