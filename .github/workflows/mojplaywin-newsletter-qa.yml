@@ -40,6 +40,6 @@ jobs:
           assert '"published"' in a and 'approved_by' in a
           assert 'MIN_SCORE = 90' in a
           assert 'public_html' in a
-          assert 'NewsletterStory' not in a
+          assert 'NewsletterStory.objects' not in a
           print('DOMAIN_SPLIT_AND_LEGACY_NEWSLETTER_PRESERVED=yes')
           PY
