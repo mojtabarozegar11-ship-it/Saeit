@@ -37,7 +37,7 @@ def main(root,dest):
   if url in seen:continue
   try:s=f.read_text('utf-8');o=Parse();o.feed(s)
   except (OSError,UnicodeError):continue
-  if len(o.text)<3 or len(' '.join(o.text))<90:continue
+  if len(' '.join(o.text))<90:continue
   title=(o.title.strip() or ' '.join(o.headings[:1]) or url)[:160]
   body=' '.join(o.text)
   body=re.sub(r'\s+',' ',body)
