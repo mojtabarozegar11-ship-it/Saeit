@@ -1,0 +1,207 @@
+name: Zomorod About scientific research profile - protected publishing
+on:
+  pull_request:
+    paths:
+      - "content/zomorod-about-profile-20261018/**"
+      - ".github/workflows/zomorod-about-scientific-profile.yml"
+  push:
+    branches: [main]
+    paths:
+      - "content/zomorod-about-profile-20261018/**"
+      - ".github/workflows/zomorod-about-scientific-profile.yml"
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-about-scientific-profile-only
+  cancel-in-progress: false
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test additive script against preserved live-shell fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile content/zomorod-about-profile-20261018/add_official_about.py
+          python3 - <<'PY'
+          from pathlib import Path
+          content=Path('content/zomorod-about-profile-20261018/official-about-section.html').read_text()
+          assert content.count('<details')==7
+          assert content.count('<article>')==33
+          assert 'حدود ۲۳۰' in content and 'نزدیک به ۹۰' in content
+          assert 'مجتبی روزگار' in content and 'غذاهای فراسودمند' in content
+          assert 'نبود حمایت' not in content or 'بدون دریافت بودجه' in content
+          original='''<!doctype html><html lang="fa"><head><title>درباره زمرد ملل</title></head><body>
+          <!-- zm-unified-v7-20261018 --><header class="zm-v7-header" role="banner"><nav>مناطق عمومی</nav></header>
+          <main><h1>ریشه در تجربه، رو به یادگیری.</h1><section>تمام نوشته‌ها و تصاویر قدیمی حفظ می‌شوند.</section>
+          <section>معرفی و حوزه‌های فعالیت در نسخه پیشین</section></main></body></html>'''
+          Path('/tmp/zm-about-original.html').write_text(original)
+          PY
+          python3 content/zomorod-about-profile-20261018/add_official_about.py \
+            /tmp/zm-about-original.html content/zomorod-about-profile-20261018/official-about-section.html \
+            --output /tmp/zm-about-candidate.html
+          python3 - <<'PY'
+          from pathlib import Path
+          original=Path('/tmp/zm-about-original.html').read_text()
+          edited=Path('/tmp/zm-about-candidate.html').read_text()
+          fragment=Path('content/zomorod-about-profile-20261018/official-about-section.html').read_text()
+          assert edited.replace('\n'+fragment+'\n','',1)==original
+          assert edited.count('zm-about-official-scientific-profile-20261018')==1
+          assert 'معرفی و حوزه‌های فعالیت در نسخه پیشین' in edited
+          assert 'ریشه در تجربه' in edited
+          print('ABOUT_ADDITIVE_QA=passed')
+          PY
+  publish:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify pinned SSH identity and the VPS relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-about"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo VERIFIED_PRIVATE_RELAY=yes
+      - name: Make verified immutable backup of About and hashes of protected site pages
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-about"
+          ssh -F "$d/config" saeit-cpanel bash -s -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1";web="$HOME/public_html";backup="$HOME/.backups/zomorod-about-scientific/$sha"
+          test ! -e "$backup"
+          test -s "$web/about/index.html" && test ! -L "$web/about/index.html"
+          test -f "$web/.htaccess" && test -s "$web/index.html"
+          grep -Fq 'zm-unified-v7-20261018' "$web/about/index.html"
+          grep -Fq 'ریشه در تجربه' "$web/about/index.html"
+          ! grep -Fq 'zm-about-official-scientific-profile-20261018' "$web/about/index.html"
+          mkdir -p "$(dirname "$backup")"
+          mkdir -m 700 "$backup"
+          mkdir -m 700 "$backup/stage"
+          cp -p "$web/about/index.html" "$backup/about.original.html"
+          cmp -s "$web/about/index.html" "$backup/about.original.html"
+          sha256sum "$web/about/index.html" > "$backup/original.sha256"
+          (cd "$web"; for p in .htaccess index.html company/index.html research/index.html agriculture/index.html industry/index.html services/index.html tala/index.html mohammad/index.html ghanadi/index.html amozeshgah/index.html; do
+            if test -f "$p"; then sha256sum "$p"; fi
+          done) > "$backup/protected.sha256"
+          echo ABOUT_BACKUP_BYTE_VERIFIED=yes
+          REMOTE
+          tar -cf - -C content/zomorod-about-profile-20261018 add_official_about.py official-about-section.html |
+            ssh -F "$d/config" saeit-cpanel "tar -xf - -C '/home/zomorod2/.backups/zomorod-about-scientific/$GITHUB_SHA/stage'"
+      - name: Prepare production-specific About candidate without touching current HTML
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-about"
+          ssh -F "$d/config" saeit-cpanel bash -s -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1";web="$HOME/public_html";backup="$HOME/.backups/zomorod-about-scientific/$sha"
+          sha256sum -c --status "$backup/original.sha256"
+          python3 -m py_compile "$backup/stage/add_official_about.py"
+          python3 "$backup/stage/add_official_about.py" "$backup/about.original.html" \
+            "$backup/stage/official-about-section.html" --output "$backup/about.candidate.html"
+          cmp -s "$backup/about.original.html" "$backup/about.candidate.html" && exit 1
+          python3 - "$backup" <<'PY'
+          import sys
+          from pathlib import Path
+          p=Path(sys.argv[1])
+          a=(p/'about.original.html').read_text(encoding='utf-8')
+          b=(p/'about.candidate.html').read_text(encoding='utf-8')
+          c=(p/'stage/official-about-section.html').read_text(encoding='utf-8')
+          assert b.replace('\n'+c+'\n','',1)==a
+          assert b.count('zm-about-official-scientific-profile-20261018')==1
+          print('STAGED_ABOUT_ALL_ORIGINAL_BYTES_PRESERVED=yes')
+          PY
+          (cd "$web"; sha256sum -c --status "$backup/protected.sha256")
+          REMOTE
+      - name: Atomic About-only publication and live verification with rollback
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-about"
+          ssh -F "$d/config" saeit-cpanel bash -s -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1";web="$HOME/public_html";backup="$HOME/.backups/zomorod-about-scientific/$sha"
+          target="$web/about/index.html"
+          sha256sum -c --status "$backup/original.sha256"
+          test -s "$backup/about.candidate.html"
+          active=0
+          rollback() {
+            set +e
+            cp -p "$backup/about.original.html" "$web/about/.index.rollback.$sha"
+            mv -f "$web/about/.index.rollback.$sha" "$target"
+            echo ABOUT_RESTORED_FROM_IMMUTABLE_BACKUP=yes
+          }
+          trap 'rc=$?;trap - EXIT;if test "$active" = 1;then rollback;fi;exit "$rc"' EXIT
+          cp -p "$backup/about.candidate.html" "$web/about/.index.next.$sha"
+          chmod --reference="$target" "$web/about/.index.next.$sha"
+          active=1
+          mv -f "$web/about/.index.next.$sha" "$target"
+          code="$(curl -sSL --max-time 35 -H 'Cache-Control: no-cache' \
+            -o "$backup/live-about.html" -w '%{http_code}' \
+            "https://zomorodmelal.ir/about/?profile=$sha" || true)"
+          echo LIVE_ABOUT_HTTP="$code"
+          test "$code" = 200
+          grep -Fq 'zm-about-official-scientific-profile-20261018' "$backup/live-about.html"
+          grep -Fq 'حدود ۲۳۰ واحد' "$backup/live-about.html"
+          grep -Fq 'نزدیک به ۹۰٪' "$backup/live-about.html"
+          grep -Fq 'مجتبی روزگار' "$backup/live-about.html"
+          grep -Fq 'غذاهای فراسودمند' "$backup/live-about.html"
+          grep -Fq 'ریشه در تجربه' "$backup/live-about.html"
+          grep -Fq 'معرفی و حوزه‌های فعالیت در نسخه پیشین' "$backup/live-about.html"
+          (cd "$web"; sha256sum -c --status "$backup/protected.sha256")
+          trap - EXIT
+          echo ABOUT_SCIENTIFIC_PROFILE_LIVE=verified
+          echo ALL_OLD_ABOUT_CONTENT=preserved
+          echo ALL_PROTECTED_PATHS=unchanged
+          REMOTE
+      - name: Shred ephemeral runner SSH material
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/zomorod-about"
