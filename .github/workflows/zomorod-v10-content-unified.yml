@@ -1,0 +1,224 @@
+name: Zomorod V10 restore prior content and unify all main internal pages
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/zomorod-v10-content-unified.yml"]
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-v10-main-internal-content
+  cancel-in-progress: false
+jobs:
+  restore-and-unify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate V10 content restoration source
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile content/zomorod-v10/restore_and_unify.py
+          grep -Fq 'V10_EDITS_PRESERVE_ORIGINAL_MAIN_TEXT=yes' content/zomorod-v10/restore_and_unify.py
+          grep -Fq 'site-heritage/home-before-redesign/index.html' content/zomorod-v10/restore_and_unify.py
+          grep -Fq 'site-heritage/home-before-v6-20261018/index.html' content/zomorod-v10/restore_and_unify.py
+          grep -Fq 'prefers-reduced-motion' content/zomorod-v10/inner-v10.css
+          test "$(wc -c < content/zomorod-v10/inner-v10.css)" -gt 3000
+          echo V10_SOURCE_VALIDATION=passed
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - name: Stage content restoration scripts privately without touching the website
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1";web="$HOME/public_html"
+          backup="$HOME/.backups/zomorod-v10-content-restore/$sha"
+          test ! -e "$backup"
+          test -s "$web/index.html"
+          test -s "$web/.htaccess"
+          test ! -L "$web/index.html" && test ! -L "$web/.htaccess"
+          test ! -e "$web/static/site/zomorod-v10"
+          for legacy in site-heritage/home-before-redesign/index.html site-heritage/home-before-v6-20261018/index.html; do
+            test -s "$web/$legacy" && test ! -L "$web/$legacy"
+          done
+          mkdir -p "$(dirname "$backup")"
+          mkdir -m 700 "$backup"
+          mkdir -m 700 "$backup/source"
+          echo V10_PRIVATE_STAGING=ready
+          REMOTE
+          tar -cf - -C content/zomorod-v10 restore_and_unify.py inner-v10.css |
+            ssh -F "$d/config" saeit-cpanel "tar -xf - -C /home/zomorod2/.backups/zomorod-v10-content-restore/$GITHUB_SHA/source"
+      - name: Reconstruct original content in an isolated staging copy and verify byte-preserving backups
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1"; web="$HOME/public_html";backup="$HOME/.backups/zomorod-v10-content-restore/$sha"
+          python3 -m py_compile "$backup/source/restore_and_unify.py"
+          python3 "$backup/source/restore_and_unify.py" "$web" --output-dir "$backup/candidate" > "$backup/preflight.log"
+          python3 - "$backup/candidate/V10_MANIFEST.json" "$backup/page-list.txt" <<'PY'
+          import sys,json
+          from pathlib import Path
+          a=json.loads(Path(sys.argv[1]).read_text(encoding='utf-8'))
+          assert 42<=a['count']<=75
+          paths=[p['relative'] for p in a['pages']]
+          assert len(paths)==len(set(paths))==a['count']
+          protected={'mohammad','ghanadi','amozeshgah','tala','business','admin','education','site-heritage','static'}
+          assert all(not (set(Path(p).parts)&protected) and not any(x.startswith('__') for x in Path(p).parts) for p in paths)
+          assert 'index.html' not in paths
+          for name,minimum in [('knowledge/index.html',12000),('about/index.html',2800)]:
+            detail=a['restored'][name]
+            assert detail['main_text_chars']>=minimum,(name,detail)
+            assert detail['images']>=1
+            assert len(detail['sha256_of_html_fragment'])==64
+            print('V10_ARCHIVED_CONTENT',name,'visible_chars',detail['main_text_chars'],'images',detail['images'],'links',detail['links'])
+          assert sum(p['old_main_chars'] for p in a['pages'])>70000
+          assert all(p['new_main_chars']>=p['old_main_chars'] for p in a['pages'])
+          Path(sys.argv[2]).write_text('\n'.join(paths)+'\n',encoding='utf-8')
+          print('V10_RESTORABLE_MAIN_PAGES='+str(a['count']))
+          PY
+          (cd "$web" && tar -cf "$backup/original-pages.tar" -T "$backup/page-list.txt")
+          test -s "$backup/original-pages.tar"
+          tar -tf "$backup/original-pages.tar" > "$backup/archived-paths.txt"
+          diff -u "$backup/page-list.txt" "$backup/archived-paths.txt"
+          (cd "$web" && sha256sum -- $(cat "$backup/page-list.txt")) > "$backup/original-pages.sha256"
+          (cd "$web" && sha256sum -c --status "$backup/original-pages.sha256")
+          sha256sum "$web/index.html" "$web/.htaccess" "$web/static/site/zomorod-v7/inner-v7.css" "$web/static/site/zomorod-v7/company-logo.webp" > "$backup/protected.sha256"
+          for sub in mohammad ghanadi amozeshgah tala business site-heritage; do
+            if test -f "$web/$sub/index.html"; then sha256sum "$web/$sub/index.html" >> "$backup/protected.sha256"; fi
+            if test -f "$web/$sub/index.php"; then sha256sum "$web/$sub/index.php" >> "$backup/protected.sha256"; fi
+          done
+          for archive in site-heritage/home-before-redesign/index.html site-heritage/home-before-v6-20261018/index.html; do
+            sha256sum "$web/$archive" >> "$backup/protected.sha256"
+          done
+          echo V10_RECOVERY_ARCHIVE=byte_verified
+          REMOTE
+      - name: Apply one shared visual skin and archival contents atomically with automatic rollback
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1";web="$HOME/public_html";backup="$HOME/.backups/zomorod-v10-content-restore/$sha"
+          asset="$web/static/site/zomorod-v10"
+          (cd "$web" && sha256sum -c --status "$backup/original-pages.sha256")
+          test -s "$backup/source/inner-v10.css" && test ! -e "$asset"
+          rollback(){
+            set +e
+            (cd "$web" && tar -xf "$backup/original-pages.tar")
+            (cd "$web" && sha256sum -c --status "$backup/original-pages.sha256")
+            if test -d "$asset"; then rm -f "$asset/inner-v10.css"; rmdir "$asset" 2>/dev/null || true; fi
+            echo V10_ROLLBACK=all_previous_internal_pages_restored
+          }
+          active=1
+          trap 'rc=$?;trap - EXIT;if test "$active" = 1;then rollback;fi;exit "$rc"' EXIT
+          mkdir -m 755 "$asset"
+          cp -p "$backup/source/inner-v10.css" "$asset/inner-v10.css"
+          chmod 644 "$asset/inner-v10.css"
+          while IFS= read -r rel; do
+            test -n "$rel"
+            original="$web/$rel"
+            updated="$backup/candidate/$rel"
+            test -f "$original" && test -s "$updated"
+            candidate="$original.zm-v10-next.$sha"
+            test ! -e "$candidate"
+            cp -p "$updated" "$candidate"
+            chmod --reference="$original" "$candidate"
+            mv -f "$candidate" "$original"
+          done < "$backup/page-list.txt"
+          python3 - "$web" "$backup/candidate/V10_MANIFEST.json" <<'PY'
+          import sys,json
+          from pathlib import Path
+          web=Path(sys.argv[1]);m=json.loads(Path(sys.argv[2]).read_text())
+          for obj in m['pages']:
+            p=web/obj['relative'];s=p.read_text(encoding='utf-8')
+            assert s.count('zm-v10-restored-content-and-unified-internal-pages-20261018')>=1,p
+            assert s.count('data-zm-v10="shared-theme"')==1,p
+            assert 'zm-v7-header' in s and 'zm-v7-footer-copyright' in s,p
+            assert obj['old_main_chars']<=obj['new_main_chars'],p
+          knowledge=(web/'knowledge/index.html').read_text()
+          about=(web/'about/index.html').read_text()
+          assert 'id="restored-earlier-specialist-content"' in knowledge
+          assert 'id="restored-earlier-corporate-content"' in about
+          assert knowledge.count('<img')>=m['restored']['knowledge/index.html']['images']
+          assert 'مجموعه تخصصی زمرد ملل' in knowledge
+          print('V10_ALL_INTERNAL_MARKUP_AND_CONTENT=verified',m['count'])
+          PY
+          for route in /company/ /about/ /knowledge/ /agriculture/ /agriculture/genetics/ /services/ /industry/ /research/ /blog/ /news/ /economy/ /market/ /weather/ /studio/ /agents/ /contact/; do
+            code="$(curl -sS -L --max-time 20 -o "$backup/page-check.html" -w '%{http_code}' "https://zomorodmelal.ir$route?v10=$sha" || true)"
+            echo "V10_PUBLIC_PAGE $route $code"
+            test "$code" = 200
+            grep -Fq 'data-zm-v10="shared-theme"' "$backup/page-check.html"
+            grep -Fq 'zm-v7-header' "$backup/page-check.html"
+          done
+          code="$(curl -sS -L --max-time 20 -o "$backup/knowledge-live.html" -w '%{http_code}' "https://zomorodmelal.ir/knowledge/?archive=$sha" || true)"
+          test "$code" = 200
+          grep -Fq 'id="restored-earlier-specialist-content"' "$backup/knowledge-live.html"
+          grep -Fq 'از شناخت مزرعه تا تصمیم درست برای تولید' "$backup/knowledge-live.html"
+          curl -fsSL --max-time 20 'https://zomorodmelal.ir/static/site/zomorod-v10/inner-v10.css' -o "$backup/live-style.css"
+          cmp -s "$backup/source/inner-v10.css" "$backup/live-style.css"
+          (cd "$web" && sha256sum -c --status "$backup/protected.sha256")
+          root_http="$(curl -sS -L --max-time 20 -o /dev/null -w '%{http_code}' 'https://zomorodmelal.ir/' || true)"
+          test "$root_http" = 200
+          active=0
+          trap - EXIT
+          echo V10_RESTORED_LEGACY_CONTENT=published
+          echo V10_UNIFIED_INTERNAL_PAGES=verified
+          echo V10_PROTECTED_ROOT_AND_SUBSITES=unchanged
+          echo V10_BACKUP="$backup/original-pages.tar"
+          REMOTE
+      - name: Remove runner SSH credentials
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
