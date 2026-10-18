@@ -32,7 +32,9 @@ def _production_payment_verifier():
         owned = import_module("mpw_native_checkout.wallet_ownership").proven_assets()
         eth = import_module("core.cryptopay_mainnet_config")
         tron = import_module("core.cryptopay_tron_config")
-    except (ImportError, AttributeError, ValueError, RuntimeError, OSError):
+    except Exception:
+        # Private wallet/database/provider failures must not break the public site
+        # or accidentally make a product appear purchasable.
         return None
     if not isinstance(owned, dict) or not callable(delivery):
         return None
