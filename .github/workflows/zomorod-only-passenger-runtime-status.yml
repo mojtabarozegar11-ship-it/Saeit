@@ -193,3 +193,5 @@ jobs:
       - name: Clean temporary runner SSH keys
         if: always()
         run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
+
+# Read-only Passenger diagnostic requested for V7 release on 2026-10-18.
