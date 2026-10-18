@@ -4,7 +4,7 @@ from unittest.mock import patch
 from pathlib import Path
 import pytest
 from django.test import override_settings
-from core.models import LedgerEntry, Order, PaymentIntent, Product
+from core.models import LedgerEntry, Order, PaymentIntent, Product, KnowledgeArticle
 from core.mojplaywin_crypto_models import MojCryptoOffer, MojCryptoInvoice
 from core.mojplaywin_chain_verify import Proof, VerificationError
 from core.mojplaywin_crypto_gateway import settle
@@ -19,9 +19,10 @@ def buyer(django_user_model):
 def priced_offer(django_user_model, tmp_path):
     owner = django_user_model.objects.create_user(username="crypto-owner", password="safe-test-password")
     (tmp_path / "sample.pdf").write_bytes(b"%PDF-1.4 test file")
+    article = KnowledgeArticle.objects.create(title="Published checkout content", slug="crypto-approved-checkout", content="book content", published=True)
     product = Product.objects.create(
         title="Approved chess study", product_type="ebook", price="9.00",
-        currency="USD", active=True, owner=owner,
+        currency="USD", active=True, owner=owner, knowledge_article=article,
     )
     offer = MojCryptoOffer.objects.create(
         product=product, asset="ETH", atomic_amount=Decimal("10000000000000000"),
