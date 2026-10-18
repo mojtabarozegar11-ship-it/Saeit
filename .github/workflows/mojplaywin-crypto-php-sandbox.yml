@@ -4,6 +4,7 @@ on:
     branches: [feature/mojplaywin-crypto-gateway-20261018]
     paths:
       - isolated_crypto_gateway/**
+      - tests/mojplaywin_crypto_chain_mock_e2e.py
       - scripts/mojplaywin_crypto_safe_upgrade.py
       - tests/test_mojplaywin_crypto_safe_upgrade.py
       - .github/workflows/mojplaywin-crypto-php-sandbox.yml
@@ -42,6 +43,13 @@ jobs:
           php isolated_crypto_gateway/index.php reconcile | grep -q "MOJPLAYWIN_AUTORECONCILE_ENABLED=false"
           echo "CLI_AUTORECONCILE_FAIL_CLOSED=passed"
           echo "PAYMENT_CONFIG_IS_FAIL_CLOSED=true"
+      - name: Validate Ethereum and native TRON automatic settlements with loopback-only chain data
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile tests/mojplaywin_crypto_chain_mock_e2e.py
+          python3 tests/mojplaywin_crypto_chain_mock_e2e.py
+          echo "REAL_FUNDS_OR_WALLET_KEYS_ACCESSED=false"
       - name: Test disabled-on-arrival HTTP and fake local invoice flow
         shell: bash
         run: |
