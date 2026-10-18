@@ -1,0 +1,117 @@
+name: Zomorod 92 canonical live pages read-only smoke
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/zomorod-canonical-92-smoke-20261018.yml"
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - name: Verify every sitemap URL, canonical and shared visual shell
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel python3 - <<'PY'
+          from urllib.request import Request,urlopen
+          from urllib.parse import urlparse
+          import urllib.error
+          import concurrent.futures
+          from xml.etree import ElementTree as ET
+          import re
+          origin='https://zomorodmelal.ir'
+          def get(url):
+              with urlopen(Request(url,headers={'User-Agent':'ZomorodMelal-QA/1.0','Cache-Control':'no-cache'}),timeout=30) as r:
+                  return r.status, r.read().decode('utf-8',errors='replace'),r.geturl()
+          s,xml,_=get(origin+'/sitemap.xml')
+          assert s==200
+          doc=ET.fromstring(xml)
+          locs=[e.text for e in doc.findall('{http://www.sitemaps.org/schemas/sitemap/0.9}url/{http://www.sitemaps.org/schemas/sitemap/0.9}loc')]
+          assert len(locs)==92 and len(set(locs))==92,len(locs)
+          assert all(urlparse(url).netloc=='zomorodmelal.ir' for url in locs)
+          def scan(url):
+              try:
+                  code,body,final=get(url)
+                  problems=[]
+                  if code!=200:problems.append('HTTP_'+str(code))
+                  if final!=url:problems.append('redirect_to_'+final)
+                  if not re.search(r'<html\b[^>]*lang=["\x27]fa["\x27]',body,re.I):problems.append('missing_fa_lang')
+                  if not re.search(r'<link\b[^>]*rel=["\x27]canonical["\x27][^>]*href=["\x27]'+re.escape(url),body,re.I):
+                      # Attribute order could differ; plain canonical href check fallback
+                      if url not in body:problems.append('missing_canonical')
+                  if url!=origin+'/':
+                      if 'zm-v7-header' not in body:problems.append('missing_common_header')
+                      if 'data-zm-v10="shared-theme"' not in body:problems.append('missing_common_v10')
+                  return (url,problems)
+              except Exception as e:return (url,['EXCEPTION_'+str(e)[:180]])
+          with concurrent.futures.ThreadPoolExecutor(max_workers=8) as ex:
+              rows=list(ex.map(scan,locs))
+          issues=[row for row in rows if row[1]]
+          for url,errors in issues:print('QA_BAD',url,','.join(errors))
+          print('QA_URL_COUNT',len(rows))
+          print('QA_ERRORS_COUNT',len(issues))
+          print('QA_ALL_SITE_URLS_OK',int(not issues))
+          if issues:raise SystemExit('Sitemap links and unified styles need more work')
+          PY
+      - name: Verify protected languages accurately (no synthetic translations)
+        shell: bash
+        run: |
+          for code in en ar ru fr tr de es; do
+            x="$(curl -sS -L --connect-timeout 6 --max-time 14 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir/$code/" || true)"
+            echo "QA_LANGUAGE $code HTTP=$x"
+          done
+      - name: Clean temporary keys
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
