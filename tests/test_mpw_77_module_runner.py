@@ -26,6 +26,24 @@ class Module77Test(unittest.TestCase):
         self.assertEqual(report["modules_import_executed"],77)
         self.assertEqual(report["modules_syntax_checked"],77)
         self.assertIn("gen12_pareto_selection",report["safe_function_probes"])
+        self.assertEqual(report["capability_namespaces_active"],77)
+        self.assertGreaterEqual(report["functional_probes_executed"],14)
+        self.assertEqual(len(report["per_module_capability_registry"]),77)
+        self.assertTrue(all(row["loaded"] and row["safe_scope"]=="read_only_private"
+                            for row in report["per_module_capability_registry"]))
+        self.assertTrue(all(row["exported_callables"] for row in report["per_module_capability_registry"]
+                            if row["kind"]=="capability_module"))
+        expected={"gen12_deterministic_cache_fingerprint",
+                  "gen16_tamper_evident_telemetry",
+                  "gen20_semantic_canonicalization",
+                  "gen24_executable_contract_guard",
+                  "gen28_dependency_budget_planner",
+                  "gen32_failure_circuit_guard",
+                  "gen40_versioned_state_cas",
+                  "gen48_integrity_checked_checkpoint",
+                  "gen56_open_recover_circuit",
+                  "v91_legacy_clean_text"}
+        self.assertTrue(expected.issubset(set(report["safe_function_probes"])))
         self.assertFalse(report["financial_authority"])
         self.assertFalse(report["public_site_modified"])
         self.assertEqual(report["standalone_agent_processes_created"],0)
