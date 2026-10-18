@@ -4,6 +4,9 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/zomorod-v7-main-unify.yml"
+      - "content/zomorod-v7/apply_skin.py"
+      - "content/zomorod-v7/inner-v7.css"
+      - "content/zomorod-v7/logo.webp.b64"
   workflow_dispatch:
 permissions:
   contents: read
