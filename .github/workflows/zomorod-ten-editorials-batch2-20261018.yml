@@ -62,7 +62,7 @@ jobs:
           path: ${{ runner.temp }}/zm-ten-batch2-images/
           retention-days: 2
           if-no-files-found: error
-            - name: Test byte-preserving insertion against ten sample original pages
+      - name: Test byte-preserving insertion against ten sample original pages
         shell: bash
         run: |
           set -euo pipefail
