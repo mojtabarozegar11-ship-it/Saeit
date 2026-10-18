@@ -1,6 +1,7 @@
 from django.urls import path
 from .views import dashboard, overview_api
 from .agent_views import metrics
+from .mpw_v91_agent_views import private_mpw_agent_metrics
 from .agent_directory import directory
 from .agent_proposals import propose
 from .approval_queue import pending
@@ -15,6 +16,7 @@ urlpatterns = [
     path("", dashboard, name="command_center_dashboard"),
     path("api/overview/", overview_api, name="command_center_overview_api"),
     path("api/agents/", metrics, name="command_center_agent_metrics_api"),
+    path("api/mojplaywin/v91/performance/", private_mpw_agent_metrics, name="mpw_private_v91_agent_performance"),
     path("api/agents/directory/", directory, name="command_center_agent_directory_api"),
     path("api/agents/proposals/", propose, name="command_center_agent_proposals_api"),
     path("api/approvals/pending/", pending, name="command_center_pending_approvals_api"),
