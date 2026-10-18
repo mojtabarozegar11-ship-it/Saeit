@@ -1,0 +1,86 @@
+name: Zomorod glass desktop CLS and track diagnostic 20261018
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/zomorod-glass-cls-track-readonly-20261018.yml]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 13
+    steps:
+      - name: Chromium isolate layout shifts and desktop manual carousel movement
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/zm-cls"
+          cd "$RUNNER_TEMP/zm-cls"
+          npm --silent init -y >/dev/null
+          npm --silent install --no-save playwright@1.55.0
+          npx playwright install chromium
+          cat > inspect.cjs <<'JS'
+          const {chromium}=require('playwright');
+          (async()=>{
+            const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
+            for(const width of [1440,1024,390]){
+              const page=await browser.newPage({viewport:{width,height:900},deviceScaleFactor:1});
+              await page.addInitScript(()=>{
+                window.__zmShiftEntries=[];
+                const identify=node=>{
+                  if(!node)return 'null';
+                  if(node.id)return '#'+node.id;
+                  if(node.className&&typeof node.className==='string')
+                    return node.tagName+'.'+node.className.trim().replace(/\s+/g,'.').slice(0,90);
+                  return node.tagName;
+                };
+                new PerformanceObserver(list=>list.getEntries().forEach(e=>{
+                  if(e.hadRecentInput)return;
+                  window.__zmShiftEntries.push({
+                    at:Math.round(e.startTime),val:+e.value.toFixed(5),
+                    sources:(e.sources||[]).slice(0,5).map(s=>({
+                      target:identify(s.node),
+                      prev:s.previousRect?[Math.round(s.previousRect.x),Math.round(s.previousRect.y),
+                        Math.round(s.previousRect.width),Math.round(s.previousRect.height)]:null,
+                      now:s.currentRect?[Math.round(s.currentRect.x),Math.round(s.currentRect.y),
+                        Math.round(s.currentRect.width),Math.round(s.currentRect.height)]:null
+                    }))
+                  });
+                })).observe({type:'layout-shift',buffered:true});
+              });
+              await page.goto('https://zomorodmelal.ir/?__cls_track_diagnose='+width,{waitUntil:'domcontentloaded',timeout:45000});
+              await page.locator('.topic-card').first().waitFor({timeout:23000});
+              await page.waitForTimeout(1200);
+              let init=await page.evaluate(()=>({entries:window.__zmShiftEntries.slice(0,12),
+                sum:window.__zmShiftEntries.reduce((v,x)=>v+x.val,0),
+                y:scrollY,fonts:document.fonts.status}));
+              const metric=await page.evaluate(async()=>{
+                const shelf=document.querySelectorAll('.orbit-shelf')[14];
+                shelf.scrollIntoView({behavior:'instant',block:'center'});
+                await new Promise(r=>setTimeout(r,750));
+                const track=shelf.querySelector('.card-track');
+                const initial=track.scrollLeft;
+                const max=track.scrollWidth-track.clientWidth;
+                const rtl=getComputedStyle(track).direction==='rtl';
+                const steps=[];
+                for(const pos of [rtl?0:max,rtl?-max:0,rtl?-max/2:max/2]){
+                  track.scrollLeft=pos;
+                  await new Promise(r=>setTimeout(r,220));
+                  steps.push({requested:pos,actual:track.scrollLeft});
+                }
+                return {initial,max,rtl,steps,
+                  focus:document.activeElement?.tagName,
+                  rowCount:document.querySelectorAll('.card-track').length,
+                  cards:document.querySelectorAll('.topic-card').length,
+                  clsEntries:window.__zmShiftEntries.slice(0,12),
+                  clsSum:window.__zmShiftEntries.reduce((v,x)=>v+x.val,0)};
+              });
+              console.log('CLS_TRACK_DIAG='+JSON.stringify({width,initial:init,after:metric}));
+              if(metric.rowCount!==29||metric.cards!==605)throw Error('Unexpected card counts');
+              await page.close();
+            }
+            await browser.close();
+            console.log('CLS_TRACK_READ_ONLY_DONE=yes');
+          })().catch(e=>{console.error(e.stack);process.exit(1)});
+          JS
+          node inspect.cjs
