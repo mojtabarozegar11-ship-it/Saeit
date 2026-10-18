@@ -112,6 +112,13 @@ class MojPlayWinManufacturingOrder(models.Model):
                 condition=models.Q(priority_hypothesis__gte=1, priority_hypothesis__lte=5),
                 name="mpw_brief_priority_1_5",
             ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(origin_type="site", signal__isnull=False)
+                    | models.Q(origin_type__in=("customer", "market", "invention"), signal__isnull=True)
+                ),
+                name="mpw_order_origin_signal_boundary",
+            ),
         ]
 
     def clean(self):
