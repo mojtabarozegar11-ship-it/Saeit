@@ -119,7 +119,7 @@ def test_chain_verified_payment_unlocks_once_and_replay_is_safe(client, buyer, p
         client.post(f"/checkout/crypto/buy/{offer.pk}/", HTTP_HOST="mojplaywin.com")
         invoice = MojCryptoInvoice.objects.get()
         tx = "0x" + "a" * 64
-        with patch("core.mojplaywin_crypto_gateway._verify_invoice", return_value=Proof(123456, 20)):
+        with patch("core.mojplaywin_crypto_gateway._verify_invoice", return_value=Proof(123456, 20, int(invoice.created_at.timestamp() * 1000))):
             first = settle(invoice.pk, tx)
             second = settle(invoice.pk, tx)
         assert first.status == "paid" and second.status == "paid"
@@ -155,3 +155,47 @@ def test_invalid_payment_proof_never_unlocks(client, buyer, priced_offer):
         invoice.refresh_from_db()
         assert invoice.status == "awaiting_payment"
         assert LedgerEntry.objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_old_transaction_cannot_pay_new_invoice(client, buyer, priced_offer):
+    from datetime import timedelta
+    offer, folder = priced_offer
+    with override_settings(
+        ALLOWED_HOSTS=["mojplaywin.com"], MOJPLAYWIN_CRYPTO_ENABLED=True,
+        MOJPLAYWIN_PRIVATE_ASSET_ROOT=str(folder),
+        MOJPLAYWIN_ETH_ADDRESS="0x" + "1" * 40,
+        MOJPLAYWIN_ETH_RPC_URL="https://eth.example.org",
+    ):
+        client.force_login(buyer)
+        assert client.post(f"/checkout/crypto/buy/{offer.pk}/", HTTP_HOST="mojplaywin.com").status_code == 302
+        invoice = MojCryptoInvoice.objects.get()
+        old = int((invoice.created_at - timedelta(days=2)).timestamp() * 1000)
+        with patch("core.mojplaywin_crypto_gateway._verify_invoice", return_value=Proof(123456, 100, old)):
+            with pytest.raises(VerificationError, match="invoice payment window"):
+                settle(invoice.pk, "0x" + "a" * 64)
+        invoice.refresh_from_db()
+        assert invoice.status == "awaiting_payment"
+        assert LedgerEntry.objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_timely_chain_payment_can_be_verified_after_expiry(client, buyer, priced_offer):
+    from datetime import timedelta
+    from django.utils import timezone
+    offer, folder = priced_offer
+    with override_settings(
+        ALLOWED_HOSTS=["mojplaywin.com"], MOJPLAYWIN_CRYPTO_ENABLED=True,
+        MOJPLAYWIN_PRIVATE_ASSET_ROOT=str(folder),
+        MOJPLAYWIN_ETH_ADDRESS="0x" + "1" * 40,
+        MOJPLAYWIN_ETH_RPC_URL="https://eth.example.org",
+    ):
+        client.force_login(buyer)
+        client.post(f"/checkout/crypto/buy/{offer.pk}/", HTTP_HOST="mojplaywin.com")
+        invoice = MojCryptoInvoice.objects.get()
+        proof_time = int(invoice.created_at.timestamp() * 1000)
+        invoice.expires_at = timezone.now() - timedelta(minutes=1)
+        invoice.save(update_fields=["expires_at"])
+        with patch("core.mojplaywin_crypto_gateway._verify_invoice", return_value=Proof(123456, 20, proof_time)):
+            assert settle(invoice.pk, "0x" + "c" * 64).status == "paid"
+        assert LedgerEntry.objects.count() == 1
