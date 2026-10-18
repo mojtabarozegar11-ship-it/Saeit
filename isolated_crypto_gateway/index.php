@@ -149,7 +149,14 @@ function check_chain(array $i,string $hash):array{
 function reconcile(PDO $db,array $invoice,string $tx):string{
  $tx=strtolower(trim($tx));
  $tx=$invoice['asset']==='ETH'?'0x'.substr($tx,-64):substr($tx,-64);
- if($invoice['status']==='paid')return 'paid';
+ if($invoice['status']==='paid'){
+  // A paid invoice is idempotent ONLY for the same already verified transfer.
+  // Never return success in response to an unrelated transaction hash.
+  if (!is_string($invoice['tx_hash']) || !hash_equals(strtolower($invoice['tx_hash']),$tx)) {
+   throw new RuntimeException('Invoice has already been paid by a different transaction.');
+  }
+  return 'paid';
+ }
  if($invoice['tx_hash']!==null&&strtolower($tx)!==strtolower((string)$invoice['tx_hash']))throw new RuntimeException('This invoice is bound to another transaction.');
  $proof=check_chain($invoice,$tx);$status=$proof['confirmations']>=$proof['required']?'paid':'confirming';
  $db->exec('BEGIN IMMEDIATE');
