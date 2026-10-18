@@ -1,0 +1,148 @@
+name: Full live MySQL recovery archive before compression
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/zomorod-live-mysql-precompression-backup.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-mysql-protect-precompress
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - name: Single transaction safe backup full live database and verify gzip integrity
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          timeout 1750s ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 - <<'PY'
+          import os,subprocess,tempfile,urllib.parse,gzip,hashlib,json,time
+          from pathlib import Path
+          h=Path.home()
+          assert h==Path("/home/zomorod2")
+          env=h/"Saeit-staging/.env"
+          u=next((line.split("=",1)[1].strip().strip("'\"") for line in env.read_text().splitlines() if line.startswith("DATABASE_URL=")),None)
+          assert u
+          url=urllib.parse.urlsplit(u)
+          db=url.path.strip("/")
+          assert db=="zomorod2_sites_main"
+          conf={"user":urllib.parse.unquote(url.username or ""), "password":urllib.parse.unquote(url.password or ""), "host":url.hostname or "localhost","port":str(url.port or 3306)}
+          assert all(conf.values())
+          out=h/".backups/mysql-precompression-20261018.sql.gz"
+          tmp=h/".backups/.mysql-precompression-20261018.sql.gz.partial"
+          assert not out.exists() and not tmp.exists()
+          assert (h/"Saeit/manage.py").is_file()
+          with tempfile.TemporaryDirectory(prefix=".mysql-backup-",dir=str(h/".cagefs/tmp")) as work:
+              opts=Path(work)/"client.cnf"
+              def esc(x):return '"'+str(x).replace("\\","\\\\").replace('"','\\"')+'"'
+              opts.write_text("[client]\n"+"".join(k+"="+esc(v)+"\n" for k,v in conf.items()))
+              opts.chmod(0o600)
+              arg=["mysqldump","--defaults-extra-file="+str(opts),"--single-transaction","--quick","--triggers","--skip-lock-tables","--hex-blob","--max-allowed-packet=256M","--databases",db]
+              proc=subprocess.Popen(arg,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+              size=0
+              try:
+                  with gzip.open(tmp,"wb",compresslevel=1) as dest:
+                      while True:
+                          chunk=proc.stdout.read(1024*1024)
+                          if not chunk:break
+                          dest.write(chunk)
+                          size+=len(chunk)
+                  assert proc.wait(timeout=700)==0,"MYSQLDUMP_ERROR"
+                  assert size>100000000,"MYSQL_BACKUP_UNEXPECTED_SIZE"
+                  with tmp.open("rb") as fd:os.fsync(fd.fileno())
+                  # Verify end-to-end decompression, including gzip CRC.
+                  decompressed=0
+                  start=bytearray()
+                  with gzip.open(tmp,"rb") as stream:
+                      while True:
+                          x=stream.read(2*1024*1024)
+                          if not x:break
+                          decompressed+=len(x)
+                          if len(start)<4096:start.extend(x[:4096-len(start)])
+                  assert decompressed==size
+                  assert b"MariaDB" in start or b"MySQL" in start or b"SQL" in start
+                  os.replace(tmp,out)
+                  assert out.stat().st_size>10000000
+                  digest=hashlib.sha256()
+                  with out.open("rb") as fp:
+                      for x in iter(lambda:fp.read(2*1024*1024),b""):digest.update(x)
+                  manifest={"database":db,"filename":out.name,"compressed_bytes":out.stat().st_size,"uncompressed_bytes":size,"sha256_gzip":digest.hexdigest(),"gzip_crc_verified":True,"method":"mysqldump single-transaction"}
+                  m=h/".backups/mysql-precompression-20261018.manifest.json"
+                  m.write_text(json.dumps(manifest,indent=2))
+                  m.chmod(0o600)
+                  print("LIVE_MYSQL_BACKUP_VERIFIED=yes")
+                  print("LIVE_MYSQL_BACKUP_COMPRESSED_BYTES="+str(out.stat().st_size))
+                  print("LIVE_MYSQL_BACKUP_DUMP_BYTES="+str(size))
+                  print("LIVE_MYSQL_BACKUP_MANIFEST_SAVED=yes")
+                  print("LIVE_MYSQL_DATABASE_UNMODIFIED=yes")
+              finally:
+                  if tmp.exists():tmp.unlink()
+                  if proc.poll() is None:proc.kill()
+          PY
+          REMOTE
+      - name: Verify live main sites after backup
+        shell: bash
+        run: |
+          set -euo pipefail
+          for site in "https://zomorodmelal.ir/" "https://zomorodmelal.ir/agents/" "https://mojplaywin.com/"; do
+            c="$(curl -sS --max-time 16 -o /dev/null -w '%{http_code}' "$site" || true)"
+            echo "MYSQL_BACKUP_HEALTH=$site:$c"
+            test "$c" = 200
+          done
+      - name: Clear SSH temporary credentials
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
