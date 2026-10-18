@@ -15,7 +15,10 @@ from pathlib import Path
 import tempfile
 from typing import Any
 
-from mpw_v91_port.generation_factory import _code, TENANT, MAX_GENERATION
+try:
+    from .generation_factory import _code, TENANT, MAX_GENERATION
+except ImportError:  # Direct private Cron script path, package parent absent.
+    from generation_factory import _code, TENANT, MAX_GENERATION
 
 GENERATION = 65
 EXPECTED_CODE = _code(65, 95, 2)
