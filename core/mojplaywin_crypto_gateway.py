@@ -17,6 +17,7 @@ from django.views.decorators.http import require_http_methods, require_POST
 from .models import LedgerEntry, Order, OrderItem, PaymentIntent
 from .mojplaywin_crypto_models import MojCryptoInvoice, MojCryptoOffer
 from .mojplaywin_chain_verify import VerificationError, _tron_address_hex, verify_eth, verify_trx
+from .mojplaywin_crypto_throttle import check_limit
 
 
 HOSTS = {"mojplaywin.com", "www.mojplaywin.com"}
@@ -90,12 +91,20 @@ def _buyer(request):
 @require_http_methods(["GET", "POST"])
 def signin(request):
     _guard(request)
+    if request.method == "POST":
+        limited = check_limit(request, "ten-login-ip", 10, 600)
+        if limited:
+            return limited
     return LoginView.as_view(template_name="mojplaywin/crypto_login.html", redirect_authenticated_user=True, next_page="/store/")(request)
 
 
 @require_http_methods(["GET", "POST"])
 def signup(request):
     _guard(request)
+    if request.method == "POST":
+        limited = check_limit(request, "ten-register-ip", 3, 600)
+        if limited:
+            return limited
     form = UserCreationForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
         with transaction.atomic():
@@ -123,6 +132,12 @@ def buy(request, offer_id):
         })
     if int(offer.atomic_amount) <= 0 or offer.product.price <= 0:
         return HttpResponse("Product pricing is invalid.", status=409)
+    for response in (
+        check_limit(request, "ten-buy-user", 5, 600, user=True),
+        check_limit(request, "ten-buy-ip", 20, 600),
+    ):
+        if response:
+            return response
     with transaction.atomic():
         order = Order.objects.create(
             customer=request.user, total=offer.product.price,
@@ -269,6 +284,12 @@ def submit_tx(request, token):
     invoice, auth = _owner_invoice(request, token)
     if auth:
         return auth
+    for response in (
+        check_limit(request, "min-invoice-verify", 6, 60, invoice=invoice.pk),
+        check_limit(request, "ten-user-verify", 30, 600, user=True),
+    ):
+        if response:
+            return response
     tx_hash = str(request.POST.get("tx_hash", "")).strip()
     if not HASH_RE.fullmatch(tx_hash):
         return HttpResponse("Invalid transaction identifier.", status=400)
