@@ -1,0 +1,120 @@
+name: MojPlayWin change chess commerce delivery to final 415-page book only
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/mpw-chess-415-final-commerce-book-20261018.yml"]
+permissions: {contents: read}
+concurrency:
+  group: mpw-private-chess-commerce-edition
+  cancel-in-progress: false
+jobs:
+  correct:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Select only already verified final chess PDF in commerce delivery
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 125s ssh -T -F "$d/config" saeit-cpanel bash -s <<'BASH'
+          set -euo pipefail
+          /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - <<'PY'
+          import os,sys,copy,hashlib,json
+          from pathlib import Path
+          from types import SimpleNamespace
+          h=Path('/home/zomorod2');app=h/'Saeit-staging'
+          sys.path.insert(0,str(app));os.chdir(app);os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          import django;django.setup()
+          from django.db import transaction
+          from core.models import Product
+          from core.cryptopay_checkout import product_delivery_ready
+          from mpw_commerce.downloads import _private_file
+
+          FINAL='store/chess-improvement/MojPlayWin_Chess_Grandmaster_Final_Covered_2026.pdf'
+          OLD='store/chess-improvement/MojPlayWin_Chess_Master_Editorial_Working_741p.pdf'
+          SHA='3837fc3cb21ed1a2e7c33e0db8f8e10d158583309b02b97d4d674d25a147207a'
+
+          def sha(p):
+           h=hashlib.sha256()
+           with p.open('rb') as f:
+            for b in iter(lambda:f.read(1048576),b''):h.update(b)
+           return h.hexdigest()
+
+          with transaction.atomic():
+           p=Product.objects.select_for_update().get(pk=72)
+           m=p.metadata if isinstance(p.metadata,dict) else {}
+           c=m.get('mpw_commerce')
+           if m.get('product_id')!='mojplaywin-chess-improvement-2026' or p.active or not p.owner_id or str(p.price)!='7.50' or p.currency!='USD':
+            raise RuntimeError('Protected chess identity/price/status differs')
+           if m.get('checkout_enabled') is not False or not product_delivery_ready(p):
+            raise RuntimeError('Safe paused checkout or private delivery not confirmed')
+           if not isinstance(c,dict) or c.get('enabled') is not False or c.get('private_file') not in (OLD,FINAL):
+            raise RuntimeError('Unexpected commerce source edition or enabled checkout')
+           q=copy.copy(p)
+           q.metadata=copy.deepcopy(m)
+           q.metadata['mpw_commerce']['private_file']=FINAL
+           pdf=_private_file(SimpleNamespace(product=q))
+           if pdf.is_symlink() or not pdf.is_file() or pdf.name!='MojPlayWin_Chess_Grandmaster_Final_Covered_2026.pdf' or sha(pdf)!=SHA:
+            raise RuntimeError('Proposed finalized book is missing or SHA mismatch')
+           changed=c['private_file']!=FINAL
+           if changed:
+            p.metadata=q.metadata
+            p.save(update_fields=['metadata','updated_at'])
+           verified=Product.objects.get(pk=72)
+           current=_private_file(SimpleNamespace(product=verified))
+           if current.name!='MojPlayWin_Chess_Grandmaster_Final_Covered_2026.pdf' or sha(current)!=SHA or verified.active or verified.metadata['mpw_commerce'].get('enabled') is not False:
+            raise RuntimeError('Commerce book file after update incorrect: rollback transaction')
+           q225=Product.objects.get(pk=225)
+           if q225.active or q225.metadata.get('checkout_enabled') is not False or not product_delivery_ready(q225):
+            raise RuntimeError('Protected Taniya readiness changed')
+           print('MPW_CHESS_FINAL_EDITION_MAPPED='+json.dumps({'product':72,'edition':'final-415-page','file_hash_verified':True,'changed':changed,'sale_activation':False,'checkout_disabled':True,'taniya_unchanged':True,'protected_other_records':True}))
+
+          PY
+          BASH
