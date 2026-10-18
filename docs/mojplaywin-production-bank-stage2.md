@@ -4,7 +4,7 @@
 cPanel live databases, the VPS factory, payments, consumer orders and
 public storefront remain untouched by this code change.
 
-The stage-1 intake proposal PR (#497) is the base of this stacked PR.
+The stage-1 intake proposal is PR #497. This follow-up PR #500 targets main for full CI, while retaining stage-1 commits until PR #497 merges; it does not deploy either phase.
 
 ## New isolated Django models
 
