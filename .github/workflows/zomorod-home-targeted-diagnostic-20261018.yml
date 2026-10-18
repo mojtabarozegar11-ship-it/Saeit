@@ -1,0 +1,51 @@
+name: Diagnose homepage root layout and duplicate headings without changes
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/zomorod-home-targeted-diagnostic-20261018.yml]
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Examine live DOM overflow sources and headings
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/zm-home-diagnostic"
+          cd "$RUNNER_TEMP/zm-home-diagnostic"
+          npm --silent init -y >/dev/null
+          npm --silent install --no-save playwright@1.55.0
+          npx playwright install chromium
+          cat > scan.cjs <<'JS'
+          const {chromium}=require('playwright');
+          (async()=>{
+           const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
+           for(const width of [320,390,768,1024,1440]){
+            const context=await browser.newContext({viewport:{width,height:900}});
+            const page=await context.newPage();
+            await page.goto('https://zomorodmelal.ir/?__root_diag='+width,{waitUntil:'domcontentloaded',timeout:45000});
+            await page.locator('.topic-card').first().waitFor({timeout:22000});
+            await page.waitForTimeout(500);
+            const data=await page.evaluate(()=>{
+             const q=s=>[...document.querySelectorAll(s)],B=e=>e.getBoundingClientRect();
+             const cw=innerWidth;
+             const all=q('body *').filter(e=>{let c=getComputedStyle(e),b=B(e);return c.display!=='none'&&b.width>0&&b.height>0});
+             const overflowing=all.filter(e=>{let b=B(e);return b.right>innerWidth+3||b.left< -3}).map(e=>{let b=B(e);return {tag:e.tagName,cls:typeof e.className==='string'?e.className.slice(0,65):'',id:e.id||'',right:Math.round(b.right),left:Math.round(b.left),width:Math.round(b.width),scrollWidth:e.scrollWidth,overflowX:getComputedStyle(e).overflowX,position:getComputedStyle(e).position,transform:getComputedStyle(e).transform.slice(0,90)}}).sort((a,b)=>b.right-a.right);
+             const repeated=q('.topic-card .topic-name').map(x=>x.textContent.trim()).filter((x,i,a)=>a.indexOf(x)!==i);
+             const h1=q('h1').map(x=>({text:x.textContent.trim(),html:x.outerHTML.slice(0,310),visible:B(x).width>0&&B(x).height>0}));
+             const selectors=['.orbit-shelf','.card-track','.topic-card','.site-header','.site-nav','main','#content','.orbit-header','.carousel-track'];
+             const groups=Object.fromEntries(selectors.map(s=>[s,q(s).slice(0,2).map(e=>({scrollWidth:e.scrollWidth,clientWidth:e.clientWidth,overflow:getComputedStyle(e).overflowX,rectLeft:Math.round(B(e).left),rectRight:Math.round(B(e).right)}))]));
+             const phone=q('a[href^="tel:"]').map(x=>({html:x.outerHTML.slice(0,180),parent:x.parentElement?.outerHTML.slice(0,280)})).slice(-5);
+             const css=[...document.styleSheets].map(x=>x.href||'inline').slice(-12);
+             return {width:cw,scrollWidth:document.documentElement.scrollWidth,bodyScroll:document.body.scrollWidth,rightEdgeOverflow:document.documentElement.scrollWidth-cw,overflowTop:overflowing.slice(0,25),overflowCommon:overflowing.reduce((a,x)=>(a[x.cls]=(a[x.cls]||0)+1,a),{}),h1,repeated:repeated.slice(0,16),groups,phone,css,cardCount:q('.topic-card').length};
+            });
+            console.log('ROOT_DIAGNOSTIC='+JSON.stringify(data));
+            await context.close();
+           }
+           await browser.close();
+          })().catch(e=>{console.error(e.stack);process.exit(1)})
+          JS
+          node scan.cjs
