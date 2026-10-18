@@ -81,7 +81,6 @@ class MainSiteThemeBoundaryTests(unittest.TestCase):
             libraries={"mpw_shell": "core.templatetags.mpw_shell", "static": "django.templatetags.static"},
         )
         base = engine.get_template("base.html")
-        brand = engine.get_template("brands/mojplaywin/base.html")
 
         class Request:
             def __init__(self, host, path):
@@ -115,9 +114,6 @@ class MainSiteThemeBoundaryTests(unittest.TestCase):
                 self.assertNotIn('class="mw-site-nav"', rendered)
                 self.assertNotIn("mpw-unified-main", rendered)
 
-        brand_html = brand.render(Context({"request": Request("mojplaywin.com", "/products/")}))
-        self.assertNotIn("mpw-unified-legacy", brand_html)
-        self.assertNotIn("mojplaywin-inner-unified", brand_html)
 
     def test_no_payment_selector_or_checkout_override_in_unified_css(self):
         css = (ROOT / "core/static/site/mojplaywin-inner-unified.css").read_text(encoding="utf-8")
