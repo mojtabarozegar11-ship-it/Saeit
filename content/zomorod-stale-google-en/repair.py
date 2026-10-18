@@ -187,6 +187,7 @@ def render(root:Path,out:Path,indexed:Path):
   name=' '.join(parser.title).strip() or (' '.join(parser.headings[:1]) or route)
   row={'url':route,'title':name[:170],'headings':' · '.join(parser.headings[:15])[:550],
        'summary':body[:500],'content':body[:4500]}
+  if route=='/': row['content'] += ' Zomorod Melal zomorod_melal Zomorod Mell زمرد ملل'
   rows.append(row)
  assert len(rows)==139 and len(set(x['url'] for x in rows))==139
  (out/'search/index.json').write_text(json.dumps({'version':2,'count':len(rows),'pages':rows},ensure_ascii=False,separators=(',',':')),encoding='utf-8')
