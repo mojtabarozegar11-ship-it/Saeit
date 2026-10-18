@@ -106,6 +106,24 @@ jobs:
           "$python_path" -c 'import django, environ, rest_framework, whitenoise'
           cd "$app"
           "$python_path" manage.py check
+          "$python_path" - <<'DBREADONLY'
+          import os
+          from pathlib import Path
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+          import django
+          django.setup()
+          from django.conf import settings
+          from django.db import connection
+          print("SITE_AGENT_ENV_FILE_PRESENT=" + str((Path.cwd() / ".env").is_file()))
+          print("SITE_AGENT_DB_ENGINE=" + str(settings.DATABASES["default"]["ENGINE"]).rsplit(".", 1)[-1])
+          with connection.cursor() as cur:
+              names=set(connection.introspection.table_names(cur))
+              print("SITE_AGENT_DB_TABLE_COUNT=" + str(len(names)))
+              print("SITE_AGENT_DB_MIGRATIONS_TABLE_PRESENT=" + str("django_migrations" in names))
+              if "django_migrations" in names:
+                  cur.execute("SELECT COUNT(*) FROM django_migrations")
+                  print("SITE_AGENT_DB_APPLIED_MIGRATIONS=" + str(cur.fetchone()[0]))
+          DBREADONLY
           if ! "$python_path" manage.py migrate --check; then
             echo "SITE_AGENT_MIGRATIONS_PENDING=yes"
             "$python_path" manage.py showmigrations --plan | tail -n 60
