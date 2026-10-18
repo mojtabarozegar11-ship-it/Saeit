@@ -35,7 +35,9 @@ function settingRow(parent,label,value){
   parent.appendChild(row);
 }
 function drawChart(parent,agent){
-  parent.appendChild(el("h4",null,"نمودار عملکرد ۱۴ روز اخیر"));
+  const isAudit=agent.metric_kind==="site_health_checks";
+  const metricText=isAudit?"پایش موفق":"پیش‌نویس";
+  parent.appendChild(el("h4",null,isAudit?"نمودار پایش موفق ۱۴ روز اخیر":"نمودار عملکرد ۱۴ روز اخیر"));
   if(agent.history_available!==true || !Array.isArray(agent.series) || !Array.isArray(agent.days)){
     parent.appendChild(el("div","mpw-v91-nodata","سابقه روزانه برای این ایجنت ثبت نشده است؛ نمودار ساختگی نمایش داده نمی‌شود."));
     return;
@@ -47,12 +49,12 @@ function drawChart(parent,agent){
   const maximum=Math.max(1,...agent.series);
   const figure=el("div","mpw-v91-chart");
   figure.setAttribute("role","img");
-  figure.setAttribute("aria-label","تعداد پیش‌نویس‌های تولیدشده در ۱۴ روز گذشته: "+agent.series.map((n,i)=>agent.days[i]+": "+n).join("، "));
+  figure.setAttribute("aria-label","تعداد "+metricText+" در ۱۴ روز گذشته: "+agent.series.map((n,i)=>agent.days[i]+": "+n).join("، "));
   agent.series.forEach((count,i)=>{
     const column=el("div","mpw-v91-day");
     const bar=el("div","mpw-v91-bar");
     bar.style.height=(count ? Math.max(5,Math.round(82*count/maximum)):0)+"px";
-    bar.title=agent.days[i]+" | "+count+" خروجی";
+    bar.title=agent.days[i]+" | "+count+" "+metricText;
     column.appendChild(bar);
     figure.appendChild(column);
   });
@@ -61,7 +63,7 @@ function drawChart(parent,agent){
   ticks.append(el("small",null,agent.days[0]),el("small",null,agent.days[13]));
   parent.appendChild(ticks);
   if(!agent.series.some(x=>x>0)){
-    parent.appendChild(el("p","mpw-v91-status","در این بازه خروجی ثبت‌شده‌ای وجود ندارد."));
+    parent.appendChild(el("p","mpw-v91-status","در این بازه "+metricText+" ثبت‌شده‌ای وجود ندارد."));
   }
 }
 async function refresh(){
@@ -79,10 +81,18 @@ async function refresh(){
       card.appendChild(el("h3",null,agent.title));
       const settings=el("div","mpw-v91-settings");
       settingRow(settings,"مأموریت",agent.setting);
-      settingRow(settings,"وضعیت",agent.status==="active_private"?"فعال در فضای خصوصی":agent.status==="stale_heartbeat"?"گزارش فعالیت قدیمی است":"نامشخص");
+      const statusLabels={active_private:"فعال در فضای خصوصی",stale_heartbeat:"گزارش فعالیت قدیمی است",ok:"پایش سالم",warning:"هشدار در آخرین پایش",error:"خطا در آخرین پایش",unavailable:"بدون داده"};
+      settingRow(settings,"وضعیت",statusLabels[agent.status]||"نامشخص");
       if(agent.schedule)settingRow(settings,"زمان‌بندی",agent.schedule);
       if(Number.isSafeInteger(agent.queue))settingRow(settings,"وظایف در صف",agent.queue);
-      if(Number.isSafeInteger(agent.completed))settingRow(settings,"پیش‌نویس‌های تولیدشده",agent.completed);
+      if(Number.isSafeInteger(agent.completed))settingRow(settings,agent.metric_kind==="site_health_checks"?"پایش‌های موفق":"پیش‌نویس‌های تولیدشده",agent.completed);
+      if(agent.metric_kind==="site_health_checks"){
+        if(Number.isSafeInteger(agent.warning_count))settingRow(settings,"هشدار",agent.warning_count);
+        if(Number.isSafeInteger(agent.error_count))settingRow(settings,"خطا",agent.error_count);
+        if(agent.last_observed_utc)settingRow(settings,"آخرین بررسی UTC",agent.last_observed_utc);
+      }
+      if(agent.metric_kind==="site_health_checks")
+        settingRow(settings,"زمان‌بندی","هر ساعت، دقیقه ۳۷؛ مستقل از موتور تولید محتوا");
       settingRow(settings,"انتشار خودکار","غیرفعال");
       card.appendChild(settings);
       drawChart(card,agent);
