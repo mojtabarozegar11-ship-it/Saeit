@@ -110,7 +110,7 @@ def static_patch(name,data):
  if name=='tala/index.html':s=add_canonical(s,'https://zomorodmelal.ir/tala/')
  if name in DESCS:
   desc='This page introduces an area of work. It does not guarantee availability, delivery or project completion. Confirm the scope and terms before making a decision.'
-  if s.count(desc)!=1:raise RuntimeError('Unexpected English description '+name)
+  if desc not in s[:s.index('</head>')]:raise RuntimeError('Expected English description absent from head '+name)
   s=s.replace(desc,DESCS[name],1)
  s=with_style(s,name)
  return s.encode('utf-8')
