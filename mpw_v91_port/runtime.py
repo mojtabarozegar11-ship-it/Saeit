@@ -25,7 +25,7 @@ def _validate(source):
         raise MojPlayWinAgentInputError("invalid_payload")
     # Only original local extraction-based agent modes, no external LLM calls.
     kind=source.get("kind","research_digest")
-    if kind not in ("research_digest","product_proposal"):
+    if kind != "research_digest":
         raise MojPlayWinAgentInputError("unsupported_agent_kind")
     title=source.get("title","")
     summary=source.get("summary","")
