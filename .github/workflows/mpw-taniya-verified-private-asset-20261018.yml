@@ -1,0 +1,110 @@
+name: MojPlayWin Taniya PDF asset verification exact one-product gate
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/mpw-taniya-verified-private-asset-20261018.yml"]
+permissions: {contents: read}
+concurrency:
+  group: mpw-taniya-private-asset-proof
+  cancel-in-progress: false
+jobs:
+  verify:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Verify Taniya PDF hashes in both download engines and flag asset only
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 120s ssh -T -F "$d/config" saeit-cpanel bash -s <<'BASH'
+          set -euo pipefail
+          /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - <<'PY'
+          import os,sys,json,hashlib
+          from pathlib import Path
+          from types import SimpleNamespace
+          h=Path('/home/zomorod2');app=h/'Saeit-staging';sys.path.insert(0,str(app));os.chdir(app)
+          os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          import django;django.setup()
+          from django.db import transaction
+          from core.models import Product
+          from core.cryptopay_checkout import product_delivery_ready
+          from mpw_commerce.downloads import _private_file
+          EXPECTED='2f6dace4e5bc09ffe5f8d7a677ddff4980fe00de94b7c2ea5b286d1303901d48'
+          def filehash(path):
+           h=hashlib.sha256()
+           with path.open('rb') as stream:
+            for block in iter(lambda:stream.read(1048576),b''):h.update(block)
+           return h.hexdigest()
+          with transaction.atomic():
+           p=Product.objects.select_for_update().get(pk=225)
+           m=p.metadata if isinstance(p.metadata,dict) else {}
+           c=m.get('mpw_commerce')
+           if m.get('product_id')!='mojplaywin-taniya-little-baker-worms' or not p.owner_id or p.active or p.currency!='USD' or str(p.price)!='4.00':
+            raise RuntimeError('Taniya ownership/commerce status changed')
+           if m.get('checkout_enabled') is not False or not isinstance(c,dict) or c.get('enabled') is not False:
+            raise RuntimeError('Taniya payments are no longer gated')
+           if m.get('sha256')!=EXPECTED or not product_delivery_ready(p):
+            raise RuntimeError('Taniya private delivery proof missing')
+           path=_private_file(SimpleNamespace(product=p))
+           if path.is_symlink() or not path.is_file() or filehash(path)!=EXPECTED:
+            raise RuntimeError('Taniya commerce file hash mismatch')
+           if m.get('asset_verified') not in (None,False,True):raise RuntimeError('Unrecognized asset gate state')
+           changed=m.get('asset_verified') is not True
+           if changed:
+            p.metadata={**m,'asset_verified':True}
+            p.save(update_fields=['metadata','updated_at'])
+           p.refresh_from_db()
+           if p.metadata.get('asset_verified') is not True or p.active or p.metadata.get('checkout_enabled') is not False or not product_delivery_ready(p):
+            raise RuntimeError('Taniya after-write verification failed')
+           print('MPW_TANIYA_DIGITAL_ASSET_VERIFIED='+json.dumps({'product':225,'hash_match':True,'core_delivery_ready':True,'commerce_pdf_verified':True,'asset_flag_changed':changed,'sales_enabled':False,'owner_record_changed':False,'other_products_changed':False}))
+
+          PY
+          BASH
