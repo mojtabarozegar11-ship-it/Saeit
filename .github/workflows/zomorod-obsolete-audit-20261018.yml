@@ -1,0 +1,130 @@
+name: Zomorod obsolete candidates and mirror audit
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/zomorod-obsolete-audit-20261018.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-obsolete-audit-20261018
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - name: Identify genuinely disposable and mirrored files, read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          test "$HOME" = /home/zomorod2
+          PYTHONDONTWRITEBYTECODE=1 python3 - <<'PY'
+          from pathlib import Path
+          import hashlib,os,stat,subprocess,time,json
+          home=Path.home()
+          base=home/"Saeit"
+          v91=home/"saeit_v91"
+          assert base.is_dir() and (base/"manage.py").is_file() and v91.is_dir() and not v91.is_symlink()
+          b=home/".backups"/"zomorodmelal-complete"/"9fcadc9ea749075785829565e57770f5cc173a8b"/"database"/"var"/"mother_robot"/"lab"
+          lab=base/"var"/"mother_robot"/"lab"
+          def du(p):
+              try:
+                  r=subprocess.run(["du","-sk","--",str(p)],stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,text=True,timeout=60,check=True)
+                  return int(r.stdout.split()[0])*1024
+              except Exception:
+                  return -1
+          print("ACCOUNT_KB="+str(du(home)//1024))
+          print("V91_KB="+str(du(v91)//1024))
+          print("LAB_LIVE_KB="+str(du(lab)//1024))
+          print("LAB_BACKUP_KB="+str(du(b)//1024))
+          if b.is_dir() and lab.is_dir():
+              expected=[]
+              for dirpath,dirs,files in os.walk(lab,followlinks=False):
+                  dirs[:]=[d for d in dirs if not (Path(dirpath)/d).is_symlink()]
+                  for name in files:
+                      p=Path(dirpath)/name
+                      if p.is_file() and not p.is_symlink():expected.append(p.relative_to(lab))
+              present=sum((b/rel).is_file() for rel in expected)
+              same_size=sum((b/rel).is_file() and (b/rel).stat().st_size==(lab/rel).stat().st_size for rel in expected)
+              print("LAB_MIRROR_FILE_COUNT="+str(len(expected)))
+              print("LAB_MIRROR_PRESENT="+str(present))
+              print("LAB_MIRROR_SAME_SIZE="+str(same_size))
+          for rootname in ("saeit_v91","Saeit-staging/admin-smoke","Saeit-staging/zomorod_json_admin_stage/backups","Saeit-staging/var/factory/astra-backups","Saeit/backups",".backups/zomorodmelal-complete","Saeit/var/mother_robot/lab"):
+              root=home/rootname
+              if not root.is_dir():continue
+              dirs=[p for p in root.iterdir() if p.is_dir() and not p.is_symlink()]
+              files=[p for p in root.iterdir() if p.is_file() and not p.is_symlink()]
+              print("FOLDER="+rootname+" SIZE="+str(du(root))+" DIRS="+str(len(dirs))+" FILES="+str(len(files)))
+              for f in sorted(files,key=lambda p:p.stat().st_size,reverse=True)[:15]:
+                  print("LARGE_FILE="+json.dumps({"dir":rootname,"name":f.name,"bytes":f.stat().st_size},ensure_ascii=False))
+              for p in sorted(dirs,key=lambda x:du(x),reverse=True)[:12]:
+                  print("LARGE_CHILD="+json.dumps({"dir":rootname,"name":p.name,"bytes":du(p),"mtime_days":round((time.time()-p.stat().st_mtime)/86400,1)},ensure_ascii=False))
+          for root in [v91,home/"Saeit-staging",base]:
+              if not root.is_dir():continue
+              count=0;cache_size=0
+              for path,dirs,files in os.walk(root,followlinks=False):
+                  rel=Path(path).relative_to(root)
+                  dirs[:]=[d for d in dirs if d not in {".git",".venv","node_modules","site-packages","backups","staticfiles","media","var"} and not (Path(path)/d).is_symlink() and len(rel.parts)<9]
+                  for name in dirs:
+                      if name in {"__pycache__",".pytest_cache",".ruff_cache",".mypy_cache"}:
+                          c=Path(path)/name; count+=1;cache_size+=max(0,du(c))
+              print("SOURCE_CACHE_ROOT="+root.name+" COUNT="+str(count)+" KB="+str(cache_size//1024))
+          print("AUDIT_ONLY_DONE=yes")
+          PY
+          REMOTE
+      - name: Clean temporary credentials
+        if: always()
+        shell: bash
+        run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
