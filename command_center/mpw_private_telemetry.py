@@ -173,7 +173,7 @@ def snapshot(root=BASE, now=None, with_history=True):
         put("worker_" + slug, title, "agent", reports[slug], None, None)
     history_available = False
     if with_history:
-        history = _read(root, EVO + "/" + HISTORY, 300_000) or {}
+        history = _read(root, EVO + "/" + HISTORY, 950_000) or {}
         timelines = history.get("points") or {}
         if isinstance(timelines, dict):
             for item in items:
@@ -206,7 +206,7 @@ def collect(root=BASE, now=None):
     output = target_dir / HISTORY
     if output.is_symlink():
         raise RuntimeError("TELEMETRY_SYMLINK_BLOCKED")
-    old = _read(root, EVO + "/" + HISTORY, 300_000) or {}
+    old = _read(root, EVO + "/" + HISTORY, 950_000) or {}
     points = old.get("points") if isinstance(old.get("points"), dict) else {}
     current = snapshot(root=root, now=now, with_history=False)
     if len(current["items"]) < 25:
@@ -230,7 +230,7 @@ def collect(root=BASE, now=None):
     points = {k: v for k, v in points.items() if k in permitted}
     payload = json.dumps({"tenant": TENANT, "collected_at": stamp,
                           "points": points}, separators=(",", ":"), sort_keys=True).encode()
-    if len(payload) > 300_000:
+    if len(payload) > 950_000:
         raise RuntimeError("TELEMETRY_TOO_LARGE")
     fd, temp = tempfile.mkstemp(prefix=".mpw-monitor-", dir=str(target_dir))
     try:
