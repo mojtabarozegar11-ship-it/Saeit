@@ -1,0 +1,164 @@
+name: V91 and cPanel hosting deep space inventory read-only
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/zomorod-v91-hosting-space-inventory-20261018.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-v91-space-audit-20261018
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - name: Read-only cPanel account sizes, V91 subtree, quota and live dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          timeout 740s ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          test "$HOME" = /home/zomorod2
+          python3 - <<'PY'
+          from pathlib import Path
+          import os,subprocess,json,stat,shutil,re
+          home=Path.home()
+          v91=home/"saeit_v91"
+          active=home/"Saeit"
+          assert v91.is_dir() and not v91.is_symlink()
+          assert active.is_dir() and (active/"manage.py").is_file()
+          def du(paths,deadline=110):
+              if not paths:return {}
+              try:
+                  p=subprocess.run(["du","-sk","--"]+[str(x) for x in paths],capture_output=True,text=True,timeout=deadline)
+                  if p.returncode not in (0,1):
+                      print("DU_ERROR_RETURN="+str(p.returncode))
+                  out={}
+                  for row in p.stdout.splitlines():
+                      parts=row.split("\t",1)
+                      if len(parts)==2:out[parts[1]]=int(parts[0])*1024
+                  return out
+              except Exception as e:
+                  print("DU_EXCEPTION="+type(e).__name__)
+                  return {}
+          # Disk quota and apparent account consumption are distinct from whole mount df.
+          st=os.statvfs(home)
+          print("MOUNT_AVAILABLE_BYTES="+str(st.f_bavail*st.f_frsize))
+          print("MOUNT_TOTAL_BYTES="+str(st.f_blocks*st.f_frsize))
+          sizes=du([home],210)
+          print("ACCOUNT_DU_BYTES="+str(sizes.get(str(home),-1)))
+          entries=[]
+          for p in home.iterdir():
+              try:
+                  s=p.lstat()
+                  if stat.S_ISDIR(s.st_mode) and not stat.S_ISLNK(s.st_mode):entries.append(p)
+              except OSError:pass
+          sizes=du(entries,180)
+          for p in sorted(entries,key=lambda x:sizes.get(str(x),-1),reverse=True)[:45]:
+              print("ACCOUNT_TOP="+json.dumps({"name":p.name,"du_bytes":sizes.get(str(p),-1)},ensure_ascii=False))
+          ventries=[p for p in v91.iterdir() if p.is_dir() and not p.is_symlink()]
+          vsizes=du(ventries,140)
+          print("V91_TOTAL_DU_BYTES="+str(du([v91],140).get(str(v91),-1)))
+          for p in sorted(ventries,key=lambda x:vsizes.get(str(x),-1),reverse=True):
+              print("V91_TOP="+json.dumps({"name":p.name,"du_bytes":vsizes.get(str(p),-1)},ensure_ascii=False))
+          print("V91_ROOT_FILES="+json.dumps(sorted(p.name for p in v91.iterdir() if p.is_file() and not p.is_symlink())[:80]))
+          refpaths=[
+              home/"public_html/.htaccess",home/"public_html/passenger_wsgi.py",
+              home/"Saeit/passenger_wsgi.py", home/"Saeit/config/settings.py",
+              home/"Saeit/config/settings_production.py",
+              home/"mojplaywin.com/passenger_wsgi.py",
+              home/"mojplaywin.com/.htaccess",
+          ]
+          patterns=re.compile(r"saeit_v91|V91_runtime|v91_runtime|saeit-v91|site_master")
+          for p in refpaths:
+              if p.is_file() and not p.is_symlink() and p.stat().st_size<120_000:
+                  text=p.read_text(encoding="utf-8",errors="ignore")
+                  print("ACTIVE_REFERENCE="+str(p.relative_to(home))+":"+str(bool(patterns.search(text))))
+          try:
+              proc=subprocess.run(["crontab","-l"],capture_output=True,text=True,timeout=8)
+              lines=proc.stdout.splitlines()
+              print("CRON_ENTRIES="+str(len([x for x in lines if x.strip() and not x.lstrip().startswith("#")])))
+              print("CRON_V91_REFERENCES="+str(sum(bool(patterns.search(x)) for x in lines)))
+          except (OSError,subprocess.TimeoutExpired):
+              print("CRON_ENTRIES=unavailable")
+          # Symlink targets under account, first 3 levels, without traversing symlinks.
+          refs=[]
+          for root,dirs,files in os.walk(home,followlinks=False):
+              depth=len(Path(root).relative_to(home).parts)
+              dirs[:]=[d for d in dirs if depth<3 and d not in {".git",".venv","virtualenv","node_modules","mail","tmp","logs",".cpanel"}]
+              for name in dirs+files:
+                  p=Path(root)/name
+                  try:
+                      if p.is_symlink() and patterns.search(str(p.resolve(strict=False))):
+                          refs.append(str(p.relative_to(home)))
+                  except OSError:pass
+          print("V91_SYMLINK_REFERENCES="+json.dumps(refs[:45],ensure_ascii=False))
+          print("SPACE_INVENTORY_COMPLETE=yes")
+          PY
+          echo 'CPANEL_QUOTA_SNAPSHOT'
+          if command -v uapi >/dev/null 2>&1; then
+            timeout 20s uapi --output=json Quota get_quota_info 2>/dev/null | python3 -c 'import sys,json;d=json.load(sys.stdin);x=d.get("result",{}).get("data",{}); print("QUOTA_DATA="+json.dumps({k:v for k,v in x.items() if isinstance(v,(str,int,float,bool)) and any(t in k.lower() for t in ("limit","used","quota","mb","byte","percent","total"))},ensure_ascii=False)[:2400])' || echo QUOTA_UNAVAILABLE
+          fi
+          REMOTE
+      - name: Verify public baseline without touching site
+        shell: bash
+        run: |
+          for path in / /agents/ /admin/login/; do
+            status="$(curl -sS --max-time 14 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir$path" || true)"
+            echo "PUBLIC_BASELINE=$path:$status"
+          done
+      - name: Clean temporary SSH identities
+        if: always()
+        shell: bash
+        run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
