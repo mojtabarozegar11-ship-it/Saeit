@@ -123,13 +123,24 @@ def audit(event, args):
 sys.addaudithook(audit)
 loaded=[]
 probes=[]
+registry=[]
 for name in names:
     module=importlib.import_module(name)
     source=Path(module.__file__).resolve()
     if not source.is_relative_to(root):
         raise RuntimeError("MODULE_ESCAPED_MAIN_STAGE:"+name)
-    # Some importers map the same file under two names: the requested import
-    # itself must resolve to the SHA-verified file path.
+    # All modules must be importable in the real V91 runtime and their
+    # exposed first-party namespace inspected. Package initializers are
+    # loaded as packages, not misrepresented as standalone workers.
+    exported={key:val for key,val in vars(module).items()
+              if not key.startswith("_") and getattr(val,"__module__",None)==name
+              and callable(val)}
+    kind="package_initializer" if source.name=="__init__.py" else "capability_module"
+    if kind=="capability_module" and not exported:
+        raise RuntimeError("MODULE_NO_USABLE_PUBLIC_CAPABILITY:"+name)
+    registry.append({"module":name,"kind":kind,
+                     "exported_callables":sorted(exported),
+                     "loaded":True,"safe_scope":"read_only_private"})
     loaded.append(name)
 # Curated, actual side-effect-free functional calls exercising generation
 # selection and editorial source-validation in the V91 family.
@@ -149,8 +160,65 @@ from mpw_v91_port.legacy.site_master.vendor.master_gen64.cycles import Awakening
 awake=AwakeningCycles(lambda:None,lambda:None,60,180,run_immediately=False)
 assert not awake.running and awake.stats().internal_runs==0
 probes.append("gen64_opt_in_cycle_construct_only")
+# Cross-generation functional contracts are invoked on real inherited
+# implementation, never self-mocked or based on AST-only status. All mutations
+# below affect ephemeral in-memory objects inside the deny-write child.
+cache=importlib.import_module("mpw_v91_port.legacy.site_master.vendor.master_gen12.cache")
+key=cache.TaskResultCache.fingerprint("mojplaywin-main",{"article":"example"})
+assert len(key)==64
+probes.append("gen12_deterministic_cache_fingerprint")
+trace_module=importlib.import_module("mpw_v91_port.legacy.site_master.vendor.master_gen16.telemetry")
+trace=trace_module.TamperEvidentTrace(max_events=3)
+trace.append("candidate_observed",{"tenant":"mojplaywin-main"})
+assert trace.verify()["valid"] and trace.verify()["events"]==1
+probes.append("gen16_tamper_evident_telemetry")
+semantic=importlib.import_module("mpw_v91_port.legacy.site_master.vendor.master_gen20.semantic_quorum")
+assert semantic.canonical_json({"b":2,"a":1})==semantic.canonical_json({"a":1,"b":2})
+probes.append("gen20_semantic_canonicalization")
+contract=importlib.import_module("mpw_v91_port.legacy.site_master.vendor.master_gen24.contracts")
+verified=contract.ContractGuard(pre=lambda kw:kw["quality"]>=0,
+    post=lambda output:output=="ok").run(lambda quality:"ok",quality=96)
+assert verified.ok and verified.value=="ok"
+probes.append("gen24_executable_contract_guard")
+planner=importlib.import_module("mpw_v91_port.legacy.site_master.vendor.master_gen28.planner")
+plan=planner.BudgetAwarePlanner().build([
+    planner.PlanStep("collect",estimated_cost=0.1),
+    planner.PlanStep("review",dependencies=("collect",),estimated_cost=0.1)],
+    max_cost=0.3)
+assert [p.name for p in plan.steps]==["collect","review"]
+probes.append("gen28_dependency_budget_planner")
+resilience=importlib.import_module("mpw_v91_port.legacy.site_master.vendor.master_gen32.resilience")
+breaker=resilience.DeterministicCircuitBreaker(failure_threshold=2,cooldown_ticks=3)
+assert breaker.allow("main-site-demo",0)
+breaker.record("main-site-demo",False,0)
+breaker.record("main-site-demo",False,1)
+assert not breaker.allow("main-site-demo",2)
+probes.append("gen32_failure_circuit_guard")
+state_module=importlib.import_module("mpw_v91_port.legacy.site_master.vendor.master_gen40.state")
+store=state_module.VersionedStateStore()
+snap=store.commit({"site":"mojplaywin-main"},expected_version=0)
+assert snap.version==1 and store.snapshot().payload["site"]=="mojplaywin-main"
+probes.append("gen40_versioned_state_cas")
+codec=importlib.import_module("mpw_v91_port.legacy.site_master.vendor.master_gen48.checkpoint")
+checkpoint=codec.CheckpointCodec()
+package=checkpoint.encode(1,{"site":"mojplaywin-main"})
+assert checkpoint.verify(package) and checkpoint.decode(package)=={"site":"mojplaywin-main"}
+probes.append("gen48_integrity_checked_checkpoint")
+cb=importlib.import_module("mpw_v91_port.legacy.site_master.vendor.master_gen56.circuit")
+circuit=cb.CircuitBreaker(failure_threshold=2,recovery_successes=2)
+assert circuit.allowed("quality")
+circuit.observe("quality",False);circuit.observe("quality",False)
+assert not circuit.allowed("quality")
+circuit.observe("quality",True);circuit.observe("quality",True)
+assert circuit.allowed("quality")
+probes.append("gen56_open_recover_circuit")
+engine=importlib.import_module("mpw_v91_port.legacy.portal.agent_engine")
+assert engine.clean_text("<em>Hello</em>  MojPlayWin")=="Hello MojPlayWin"
+probes.append("v91_legacy_clean_text")
+assert len(registry)==77 and len(probes)>=14
 print(json.dumps({"tenant":"mojplaywin-main","status":"all_77_imported_in_readonly_child",
                   "import_count":len(loaded),"imported":loaded,
+                  "per_module_capability_registry":registry,
                   "safe_pure_function_probes":probes,
                   "forbidden_network_or_write_operations":0,
                   "main_entrypoints_executed":0,
@@ -172,7 +240,9 @@ def execute():
     ensure(output.get("tenant")==TENANT and output.get("import_count")==77
            and output.get("status")=="all_77_imported_in_readonly_child"
            and output.get("public_site_writes")==0
-           and output.get("main_entrypoints_executed")==0,
+           and output.get("main_entrypoints_executed")==0
+           and len(output.get("per_module_capability_registry",[]))==77
+           and len(output.get("safe_pure_function_probes",[]))>=14,
            "LEGACY_MODULE_CHILD_INCOMPLETE")
     return {"tenant":TENANT,
             "status":"77_verified_original_modules_exercised_privately",
@@ -181,6 +251,11 @@ def execute():
             "modules_syntax_checked":len(inspected),
             "modules_import_executed":output["import_count"],
             "module_names":names,
+            "per_module_capability_registry":output["per_module_capability_registry"],
+            "capability_namespaces_active":77,
+            "package_initializers_loaded":sum(x["kind"]=="package_initializer"
+                                               for x in output["per_module_capability_registry"]),
+            "functional_probes_executed":len(output["safe_pure_function_probes"]),
             "safe_function_probes":output["safe_pure_function_probes"],
             "import_side_effects_blocked":True,
             "standalone_agent_processes_created":0,
@@ -263,6 +338,8 @@ def main():
                           "verified":record["modules_hash_verified"],
                           "imported":record["modules_import_executed"],
                           "pure_probes":record["safe_function_probes"],
+                          "capability_namespaces_active":record["capability_namespaces_active"],
+                          "functional_probes_executed":record["functional_probes_executed"],
                           "public_site_modified":False},sort_keys=True))
     else:
         print(json.dumps(install_cron(),sort_keys=True))
