@@ -86,8 +86,15 @@ def main():
     cron_before=subprocess.run(["crontab","-l"],capture_output=True,text=True,check=True,timeout=15).stdout
     ensure(sum(EVOLUTION_MARK in x for x in cron_before.splitlines())==1,
            "MAIN_GEN65_EVOLUTION_NOT_SCHEDULED")
-    ensure(CRON_MARK not in cron_before,
-           "MODULE_77_CRON_ALREADY_PRESENT_MANUAL_VERIFICATION_REQUIRED")
+    # Safe in-place upgrade of an already operational private 77-module
+    # heartbeat: only the exact previously installed task is accepted.
+    existing=[row for row in cron_before.splitlines() if CRON_MARK in row]
+    approved=("43 * * * * /usr/bin/flock -n "+str(EVO/"modules77.cron.lock")
+         +" /usr/bin/python3 -B "+str(DEST)
+         +" --once > "+str(EVO/"modules77.last.log")
+         +" 2>&1 # "+CRON_MARK)
+    ensure(not existing or existing==[approved],
+           "MODULE_77_CRON_OWNERSHIP_OR_SCHEDULE_CONFLICT")
     ensure(not DEST.is_symlink(),"MODULE_SOURCE_SYMLINK")
     previous=DEST.read_bytes() if DEST.is_file() else None
     fd=os.open(str(EVO/"modules77.install.lock"),os.O_CREAT|os.O_RDWR|
@@ -103,7 +110,9 @@ def main():
             result=run_agent("--once")
             ensure(result.get("verified")==77
                    and result.get("imported")==77
-                   and result.get("status")=="77_verified_original_modules_exercised_privately",
+                   and result.get("status")=="77_verified_original_modules_exercised_privately"
+                   and result.get("capability_namespaces_active")==77
+                   and result.get("functional_probes_executed")>=14,
                    "NOT_ALL_77_IMPORTED_IN_CPANEL")
             result_cron=run_agent("--install-cron")
             ensure(result_cron.get("status") in ("77_module_hourly_health_job_enabled",
@@ -117,6 +126,9 @@ def main():
             report=json.loads(report_path.read_text())
             ensure(report["modules_import_executed"]==77
                    and report["modules_hash_verified"]==77
+                   and report["capability_namespaces_active"]==77
+                   and report["functional_probes_executed"]>=14
+                   and len(report["per_module_capability_registry"])==77
                    and report["financial_authority"] is False
                    and report["public_site_modified"] is False,
                    "PRIVATE_77_EXECUTION_READBACK_FAILED")
@@ -124,6 +136,8 @@ def main():
                  "status":"ALL_77_ORIGINAL_MODULES_IMPORTED_AND_EXERCISED_ON_CPANEL",
                  "module_count":77,"successful_imports":77,
                  "pure_contract_checks":result["pure_probes"],
+                 "capability_namespaces_active":77,
+                 "functional_contracts_exercised":result["functional_probes_executed"],
                  "source_sha256":hashlib.sha256(code).hexdigest(),
                  "schedule":"43 * * * *",
                  "gen64_and_gen65_crons_preserved":True,
