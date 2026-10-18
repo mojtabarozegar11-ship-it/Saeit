@@ -1,0 +1,110 @@
+name: MojPlayWin real general-commerce native crypto checkout readiness READ ONLY
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/mpw-two-books-general-commerce-readonly-20261018.yml"]
+permissions: {contents: read}
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 11
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Inspect general commerce functions and live route resolution without writes
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 160s ssh -T -F "$d/config" saeit-cpanel bash -s <<'BASH'
+          set -euo pipefail
+          /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - <<'PY'
+          import os,sys,json,ast,pathlib
+          from importlib.util import find_spec
+          h=pathlib.Path('/home/zomorod2');app=h/'Saeit-staging'
+          sys.path.insert(0,str(app));os.chdir(app);os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          import django;django.setup()
+          for package in ('mpw_commerce','mpw_native_checkout'):
+           d=app/package
+           print('MPW_COMMERCE_PACKAGE='+json.dumps({'name':package,'exists':d.is_dir(),'module_files':sorted([p.name for p in d.glob('*.py')]) if d.is_dir() else []}))
+           if not d.is_dir():continue
+           for file in sorted(d.glob('*.py')):
+            if file.name in ('__init__.py','apps.py'):continue
+            source=file.read_text('utf8','replace')
+            try:tree=ast.parse(source)
+            except Exception as e:
+             print('MPW_COMMERCE_PARSE_ERROR='+json.dumps({'file':file.name,'error':type(e).__name__}));continue
+            funcs=[]
+            for n in tree.body:
+             if not isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef,ast.ClassDef)):continue
+             if n.name.startswith('_') and n.name not in ('_validate','_get_product'):continue
+             details={
+              'name':n.name,'lines':n.end_lineno-n.lineno+1,
+              'mentions_72':any(isinstance(t,ast.Constant) and t.value==72 for t in ast.walk(n)),
+              'mentions_verified_invoice':any(isinstance(t,ast.Name) and 'invoice' in t.id for t in ast.walk(n)),
+              'mentions_delivery':any(isinstance(t,ast.Name) and any(s in t.id for s in ('delivery','download','entitle','fulfill')) for t in ast.walk(n)),
+              'mentions_payment_live':any(isinstance(t,ast.Constant) and t.value=='payment_live' for t in ast.walk(n)),
+             }
+             funcs.append(details)
+            print('MPW_COMMERCE_SCHEMA='+json.dumps({'file':str(file.relative_to(app)),'functions':funcs[:45],'file_bytes':len(source),
+            'staging_notice':'STAGING ONLY' in source,'uses_settings_flag':'MPW_NATIVE_AUTOPAY_ENABLED' in source,
+            'references_eth':('ETH' in source),'references_trx':('TRX' in source),
+            'explicit_mainnet_verifier':('ethereum-mainnet-verified' in source or 'tron-solidity-verified' in source)}))
+          from django.urls import get_resolver
+          def routes(patterns,prefix='',depth=0):
+           for entry in patterns:
+            if depth>7:return
+            full=prefix+str(entry.pattern)
+            if hasattr(entry,'url_patterns'):routes(entry.url_patterns,full,depth+1)
+            elif ('checkout' in full.lower() or 'invoice' in full.lower() or 'payment' in full.lower() or 'commerce' in full.lower() or 'download' in full.lower() or 'store/' in full.lower()):
+             print('MPW_COMMERCE_ROUTE='+json.dumps({'path':full[:140],'name':entry.name,'func':getattr(getattr(entry,'callback',None),'__module__','')},ensure_ascii=False))
+          routes(get_resolver().url_patterns)
+          from django.conf import settings
+          for name in ('MPW_NATIVE_AUTOPAY_ENABLED','MPW_CRYPTO_LIVE_ENABLED','PAYMENT_LIVE_ENABLED','CRYPTO_PAYMENT_ENABLED'):
+           print('MPW_COMMERCE_FLAG='+json.dumps({'name':name,'is_enabled':getattr(settings,name,None) is True,'is_defined':hasattr(settings,name)}))
+
+          PY
+          BASH
