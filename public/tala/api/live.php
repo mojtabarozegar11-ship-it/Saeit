@@ -31,7 +31,7 @@ if(!is_array($body)||($body['scope']??'')!=='tala'||($body['schema']??0)!==1||
 $generated=strtotime((string)($body['generated_at']??''));
 $age=$generated===false?PHP_INT_MAX:time()-$generated;
 if($age< -300||$age>2592000)output_live($fallback);
-$approved=['xau','xag','xpt','xpd','btc','eth','usdt','trx','bnb','sol',
+$approved=['xau','xag','xpt','xpd','gold18_spot','gold24_spot','silver925_spot','silver999_spot','btc','eth','usdt','trx','bnb','sol',
            'usd_usd','usd_eur','usd_gbp','usd_aed','usd_try','usd_cad','usd_irr'];
 $quotes=[];
 foreach($body['quotes'] as $symbol=>$row){
