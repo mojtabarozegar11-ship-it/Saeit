@@ -1,0 +1,125 @@
+name: Apply Zomorod V7 styling to isolated business login
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/zomorod-v7-business-style.yml"]
+permissions:
+  contents: read
+jobs:
+  style:
+    runs-on: ubuntu-latest
+    timeout-minutes: 11
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate business application PHP and logo markup
+        run: |
+          set -euo pipefail
+          php -l content/zomorod-business/app.php
+          grep -Fq 'company-logo.webp' content/zomorod-business/app.php
+          grep -Fq 'password_change' content/zomorod-business/app.php
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - name: Save existing PHP source and main-site checksums
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          run="$1"; home="$HOME"
+          backup="$home/.backups/zomorod-business-v7-style/$run"
+          app="$home/.private/zomorod-business/app.php"
+          test -s "$app" && test ! -L "$app" && test ! -e "$backup"
+          mkdir -p "$(dirname "$backup")"
+          mkdir -m 700 "$backup"
+          cp -p "$app" "$backup/app.original.php"
+          cmp -s "$backup/app.original.php" "$app"
+          sha256sum "$home/public_html/index.html" "$home/public_html/.htaccess" > "$backup/protected.sha256"
+          for sub in company about mohammad ghanadi amozeshgah tala; do
+            if test -f "$home/public_html/$sub/index.html"; then sha256sum "$home/public_html/$sub/index.html" >> "$backup/protected.sha256"; fi
+          done
+          echo BUSINESS_CODE_BACKUP=verified
+          REMOTE
+          tar -cf - -C content/zomorod-business app.php |
+            ssh -F "$d/config" saeit-cpanel "tar -xf - -C /home/zomorod2/.backups/zomorod-business-v7-style/$GITHUB_SHA"
+      - name: Publish styling without touching finance database
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          run="$1"
+          home="$HOME"
+          backup="$home/.backups/zomorod-business-v7-style/$run"
+          target="$home/.private/zomorod-business/app.php"
+          phpbin="$(command -v php || true)"
+          if test -z "$phpbin"; then phpbin=/opt/cpanel/ea-php82/root/usr/bin/php; fi
+          "$phpbin" -l "$backup/app.php"
+          test -s "$backup/app.php"
+          rollback(){
+            set +e
+            cp -p "$backup/app.original.php" "$target.v7-rollback"
+            mv -f "$target.v7-rollback" "$target"
+            echo BUSINESS_STYLE_ROLLBACK=restored
+          }
+          trap 'rc=$?; trap - EXIT; rollback; exit "$rc"' EXIT
+          cp -p "$backup/app.php" "$target.v7-next"
+          chmod 600 "$target.v7-next"
+          mv -f "$target.v7-next" "$target"
+          cmp -s "$backup/app.php" "$target"
+          status="$(curl -sS -L --max-time 22 -o "$backup/login.html" -w '%{http_code}' 'https://zomorodmelal.ir/business/' || true)"
+          test "$status" = 200
+          grep -Fq '/static/site/zomorod-v7/company-logo.webp' "$backup/login.html"
+          grep -Fq 'آبان ۱۳۹۸ مجتبی روزگار' "$backup/login.html"
+          sha256sum -c --status "$backup/protected.sha256"
+          trap - EXIT
+          echo ZOMOROD_BUSINESS_STYLE_V7=published
+          REMOTE
+      - name: Cleanup runner credentials
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
