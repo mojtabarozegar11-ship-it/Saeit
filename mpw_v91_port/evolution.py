@@ -20,6 +20,11 @@ try:
 except ImportError:  # Direct, isolated script execution from private cPanel Cron.
     from generation_factory import produce as produce_next_generation
 
+try:
+    from .gen65_runtime import operate as operate_gen65
+except ImportError:  # Direct, isolated private Cron script.
+    from gen65_runtime import operate as operate_gen65
+
 PREFIX = Path("/home/zomorod2/.private_mojplaywin_main_agents")
 AGENT_STATE = PREFIX / "v91_verified_main_port_20261018" / "operator_state"
 HEALTH = PREFIX / "site_health_v11_port_20261018" / "last_scan.json"
@@ -217,6 +222,9 @@ def cycle() -> dict:
             EVOLUTION, rows,
             demonstrated_policy_improvement=(result["policy_changed"] is True
                 and result["decision"] == "private_policy_improved_on_verified_outcomes"))
+        # Execute SHA-attested Gen65 as a real but private read-only controller.
+        # The owner enable flag controls operation; absent flags leave it disabled.
+        gen65 = operate_gen65(EVOLUTION, rows, result["epoch"], result["observed_utc"])
         _atomic(EVOLUTION / "last_generation_report.json",
                 {"tenant": TENANT, "generated_by_master": 64,
                  "generation": generation["generation"],
@@ -230,7 +238,9 @@ def cycle() -> dict:
                     "verified_outcome_count", "new_verified_outcomes", "site_health")},
                 "next_generation": generation["generation"],
                 "generation_factory_status": generation["status"],
-                "generation_experimental_only": True}
+                "generation_experimental_only": gen65["status"] != "gen65_operational_private",
+                "gen65_runtime_status": gen65["status"],
+                "gen65_active_private_generation": (65 if gen65["status"] == "gen65_operational_private" else None)}
     finally:
         os.close(fd)
 
