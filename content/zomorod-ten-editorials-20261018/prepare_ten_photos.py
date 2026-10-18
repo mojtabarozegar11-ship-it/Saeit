@@ -50,7 +50,18 @@ def main():
         imageurl=info.get("thumburl") or info.get("url")
         if not imageurl or not imageurl.startswith(("https://upload.wikimedia.org/","https://thumb.wikimedia.org/")):
             raise ValueError(f"No safe Wikimedia image URL for {name}; origin={str(imageurl)[:140]}")
-        raw=retrieve(imageurl,limit=6000000)
+        try:
+            raw=retrieve(imageurl,limit=6000000)
+        except Exception as first_error:
+            # Wikimedia's thumbnail proxy can rate-limit independently of the
+            # verified original host. Switch only to the API-provided original
+            # with a short bounded backoff; never substitute another photo.
+            original=info.get("url","")
+            if not original.startswith("https://upload.wikimedia.org/") or original==imageurl:
+                raise
+            print("WIKIMEDIA_THUMB_RETRY_ORIGINAL",p["id"],type(first_error).__name__,flush=True)
+            time.sleep(4)
+            raw=retrieve(original,limit=6000000)
         im=Image.open(io.BytesIO(raw))
         im.verify()
         im=Image.open(io.BytesIO(raw))
