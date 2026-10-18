@@ -1,4 +1,4 @@
-name: Final verified cPanel quota after temporary dump cleanup
+name: Full storage and protected multisite health audit after safe cleanup
 on:
   push:
     branches: [main]
@@ -125,15 +125,15 @@ jobs:
               print("BEFORE_QUOTA_USED_MB="+str(data.get("megabytes_used")))
               print("BEFORE_QUOTA_LIMIT_MB="+str(data.get("megabyte_limit")))
           except Exception as e:print("QUOTA_READ_ERROR="+type(e).__name__)
-          print("FINAL_POST_SCRATCH_REMOVAL_VERIFIED=yes")
+          print("ALL_SAFE_CLEANUP_FINAL_CHECK_DONE=yes")
           PY
           REMOTE
       - name: Smoke-test protected public pages (read-only)
         shell: bash
         run: |
-          for url in "https://zomorodmelal.ir/" "https://zomorodmelal.ir/agents/" "https://mojplaywin.com/"; do
+          for url in "https://zomorodmelal.ir/" "https://zomorodmelal.ir/agents/" "https://zomorodmelal.ir/tala/" "https://zomorodmelal.ir/mohammad/" "https://mojplaywin.com/" "https://mojplaywin.com/store/" "https://mojplaywin.com/shop/" "https://mojplaywin.com/farnaz/" "https://mojplaywin.com/mojtaba.roozegar/" "https://mojplaywin.com/roham/" "https://mojplaywin.com/saman/" "https://mojplaywin.com/zehra/" "https://mojplaywin.com/tania/"; do
             code="$(curl --max-time 16 -sS -o /dev/null -w '%{http_code}' "$url" || true)"
-            echo "BASELINE_SITE=$url code=$code"
+            echo "PROTECTED_SITE_HTTP=$url code=$code"
           done
       - name: Remove credentials
         if: always()
