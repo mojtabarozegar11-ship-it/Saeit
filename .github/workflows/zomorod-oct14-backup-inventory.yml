@@ -58,11 +58,36 @@ jobs:
           test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
           cp "$d/host.candidate" "$d/host.known"
           echo "PINNED_RELAY=verified"
-      - name: Identify backup candidates by date (read only)
+      - name: Locate historical company/about snapshots without changing data
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/zomorod-baseline-inventory"
-          ssh -F "$d/config" saeit-cpanel 'date "+SERVER_DATE=%FT%T%z"; for root in "$HOME/.backups" "$HOME/backups" "$HOME/Saeit/backups" "$HOME/Saeit-staging/backups"; do if test -d "$root"; then echo "SEARCH_BACKUPS_IN=$root"; find "$root" -maxdepth 5 -type f -newermt "2026-10-12 00:00:00" ! -newermt "2026-10-16 00:00:00" -printf "%TY-%Tm-%Td %TH:%TM size=%s %P\n" | head -75; fi; done'
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          echo SERVER_TIME=$(date -Is)
+          for root in "$HOME/Saeit/backups" "$HOME/.backups"; do
+            if test -d "$root"; then
+              echo "BACKUP_ROOT=$root"
+              find "$root" -maxdepth 5 -type f \( -iname "*about*" -o -iname "*company*" -o -iname "*homepage*" -o -iname "*.sqlite3" -o -iname "*.tar*" -o -iname "*.zip" -o -iname "*restore*" \) -printf "%TY-%Tm-%TdT%TH:%TM:%TS bytes=%s %P\n" | grep -E '2026-10-1[0-6]|zomorod|company|about|db-before' | head -100 || true
+            fi
+          done
+          python3 - <<'PY'
+          from pathlib import Path
+          import sqlite3
+          f=Path.home()/'Saeit/backups/zomorod_gallery_20261014/db-before-first-publish.sqlite3'
+          if not f.is_file():print("OCT14_GALLERY_DB=absent")
+          else:
+            conn=sqlite3.connect('file:'+str(f)+'?mode=ro&immutable=1',uri=True)
+            names=[r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")]
+            print("OCT14_GALLERY_DB=readable")
+            print("OCT14_DB_TABLES="+','.join(names[:90]))
+            for n in names:
+              if any(x in n.lower() for x in ('company','content','article','page','gallery')):
+                try: print("HISTORICAL_TABLE="+n+" ROWS="+str(conn.execute('SELECT COUNT(*) FROM "'+n+'"').fetchone()[0]))
+                except Exception: pass
+            conn.close()
+          PY
+          REMOTE
       - name: Clean keys
         if: always()
         run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
