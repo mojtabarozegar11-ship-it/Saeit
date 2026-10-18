@@ -162,7 +162,7 @@ def render(root:Path,out:Path,indexed:Path):
  old=[n.text for n in xml.findall(f'{{{NS}}}url/{{{NS}}}loc')]
  assert len(old)==92 and len(set(old))==92,('unexpected original sitemap',len(old))
  new=sorted(ORIGIN+x for x in routes)
- for url in new:ET.SubElement(ET.SubElement(xml,'url'),'loc').text=url
+ for url in new:ET.SubElement(ET.SubElement(xml,f'{{{NS}}}url'),f'{{{NS}}}loc').text=url
  ET.register_namespace('',NS)
  content=ET.tostring(xml,encoding='utf-8',xml_declaration=True)
  (out/'sitemap.xml').write_bytes(content)
