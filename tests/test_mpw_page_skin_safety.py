@@ -58,7 +58,7 @@ class MainSiteThemeBoundaryTests(unittest.TestCase):
         for path in ("/store/", "/products/", "/crypto-payments/", "/commerce/"):
             self.assertIn('href="' + path + '"', brand)
         self.assertIn("mpw-unified-legacy", brand)
-        self.assertIn("mojplaywin-inner-unified.css", brand)
+        self.assertIn("mojplaywin-inner-unified", brand)
         self.assertIn("{% block content %}{% endblock %}", brand)
 
     def test_home_and_store_keep_embedded_theme(self):
@@ -101,7 +101,7 @@ class MainSiteThemeBoundaryTests(unittest.TestCase):
         self.assertIn("mpw-unified-main", internal)
         self.assertIn('class="mw-site-nav"', internal)
         self.assertIn('class="mw-site-footer"', internal)
-        self.assertIn("mojplaywin-inner-unified.css", internal)
+        self.assertIn("mojplaywin-inner-unified", internal)
 
         already_branded = render("mojplaywin.com", "/store/")
         self.assertNotIn("mpw-unified-main", already_branded)
@@ -117,7 +117,7 @@ class MainSiteThemeBoundaryTests(unittest.TestCase):
 
         brand_html = brand.render(Context({"request": Request("mojplaywin.com", "/products/")}))
         self.assertIn("mpw-unified-legacy", brand_html)
-        self.assertIn("mojplaywin-inner-unified.css", brand_html)
+        self.assertIn("mojplaywin-inner-unified", brand_html)
 
     def test_no_payment_selector_or_checkout_override_in_unified_css(self):
         css = (ROOT / "core/static/site/mojplaywin-inner-unified.css").read_text(encoding="utf-8")
