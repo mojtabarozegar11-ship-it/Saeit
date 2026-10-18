@@ -1,0 +1,269 @@
+name: Zomorod four tasteful visuals CSS-only protected publication
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/zomorod-four-visual-effects-css-only-20261018.yml
+      - scripts/zomorod_four_fx_additive_20261018.py
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-four-visual-fx-only-20261018
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify the CSS-only patch and lossless source round trip
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/zomorod_four_fx_additive_20261018.py
+          python3 scripts/zomorod_four_fx_additive_20261018.py selftest
+          ! grep -E 'exec\(|eval\(|subprocess|urllib|requests' scripts/zomorod_four_fx_additive_20261018.py
+          echo ZM_FX4_SAFE_PYTHON=passed
+      - name: Confirm public baseline and independent live routes
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import hashlib
+          from urllib.request import urlopen,Request
+          for path in ('/','/topics/','/search/','/store/','/about/','/tala/'):
+            req=Request('https://zomorodmelal.ir'+path,headers={'User-Agent':'ZmFX4Baseline/1.0','Cache-Control':'no-cache'})
+            with urlopen(req,timeout=25) as r:
+              data=r.read(3500000)
+              assert r.status==200 and len(data)>200,path
+            if path=='/':
+              assert hashlib.sha256(data).hexdigest()=='67d1253f53960cc324d3c18e93dde3f1717d7b1e794d4091527472380c539723','Public main root changed'
+              assert b'zm-topics-top-icon-20261018' in data
+              assert b'class="globe-ring ring-one"' in data
+              assert b'zm-four-premium-fx-css-20261018' not in data
+            print('ZM_FX4_BASELINE_ROUTE='+path+' HTTP200',flush=True)
+          PY
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+
+      - name: Privately stage only CSS patch script and retest
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          stage="/home/zomorod2/.zm-fx4-stage-$GITHUB_RUN_ID"
+          timeout 35s ssh -T -F "$d/config" saeit-cpanel "test ! -e '$stage' && test ! -L '$stage' && install -d -m 700 '$stage'"
+          cat scripts/zomorod_four_fx_additive_20261018.py | timeout 42s ssh -T -F "$d/config" saeit-cpanel "cat > '$stage/patch.py'"
+          timeout 35s ssh -T -F "$d/config" saeit-cpanel "test -s '$stage/patch.py' && python3 '$stage/patch.py' selftest"
+      - name: Save SHA of protected pages and routes before any edit
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          timeout 45s ssh -T -F "$d/config" saeit-cpanel 'python3 -' <<'PY' > "$RUNNER_TEMP/zm-fx4-protected-before.txt"
+          from pathlib import Path
+          import hashlib
+          r=Path('/home/zomorod2/public_html')
+          for name in ('.htaccess','search/index.html','store/index.php','topics/index.html','about/index.html','company/index.html','tala/index.php','business/index.php'):
+            p=r/name
+            if p.is_file() and not p.is_symlink():
+              print(name+' '+hashlib.sha256(p.read_bytes()).hexdigest())
+          PY
+          test -s "$RUNNER_TEMP/zm-fx4-protected-before.txt"
+      - name: Atomically append ONE isolated CSS style after verifiable backup
+        id: install
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 65s ssh -T -F "$RUNNER_TEMP/zomorod-baseline-inventory/config" saeit-cpanel "python3 '/home/zomorod2/.zm-fx4-stage-$GITHUB_RUN_ID/patch.py' install '$GITHUB_RUN_ID'"
+      - name: Verify homepage retains all content and CSS features online
+        id: html
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os,time
+          from urllib.request import Request,urlopen
+          confirmed=False
+          for attempt in range(1,7):
+            try:
+              uri='https://zomorodmelal.ir/?__fx4='+os.environ['GITHUB_RUN_ID']+'-'+str(attempt)
+              with urlopen(Request(uri,headers={'User-Agent':'ZmFX4PublicSmoke/1.0','Cache-Control':'no-cache,no-store'}),timeout=24) as r:
+                html=r.read(3500000).decode('utf8','replace')
+                assert r.status==200
+              assert html.count('id="zm-four-premium-fx-css-20261018"')==1
+              assert all(key in html for key in ('FX 1:','FX 2:','FX 3:','FX 4:','prefers-reduced-motion','motion-paused'))
+              assert html.count('<div class="globe-ring ring-one"></div>')==1
+              assert html.count('<div class="globe-ring ring-two"></div>')==1
+              assert html.count('<div class="globe-ring ring-three"></div>')==1
+              assert html.count('id="zm-topics-top-icon-20261018"')==1
+              assert 'ZOMOROD_ORBIT_DATA' in html
+              assert 'تمام حقوق مادی و معنوی' in html
+              assert len(html)>2250000
+              confirmed=True
+              print('ZM_FX4_PUBLIC_HTML_INTACT=yes',flush=True)
+              break
+            except Exception as exc:
+              print('ZM_FX4_RECHECK='+str(attempt)+' '+repr(exc)[:180],flush=True)
+              time.sleep(2)
+          if not confirmed:raise RuntimeError('Public homepage CSS update not verified')
+          for path in ('/topics/','/search/','/store/','/about/','/tala/'):
+            with urlopen(Request('https://zomorodmelal.ir'+path,headers={'User-Agent':'ZmFX4PublicSmoke/1.0'}),timeout=22) as r:
+              assert r.status==200 and len(r.read(3500000))>200
+            print('ZM_FX4_PROTECTED_PUBLIC_OK='+path,flush=True)
+          PY
+      - name: Browser QA visual effects and untouched layout at desktop tablet and mobile sizes
+        id: visual
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/zm-fx4-browser"
+          cd "$RUNNER_TEMP/zm-fx4-browser"
+          npm --silent init -y >/dev/null
+          npm --silent install --no-save playwright@1.55.0
+          npx playwright install chromium
+          cat > inspect.cjs <<'JS'
+          const {chromium}=require('playwright');
+          (async()=>{
+            const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
+            for(const width of [1440,1024,768,390,320]){
+              const page=await browser.newPage({viewport:{width,height:860},deviceScaleFactor:1});
+              await page.goto('https://zomorodmelal.ir/?__fx4_viewport_'+width,
+                {waitUntil:'domcontentloaded',timeout:35000});
+              await page.waitForTimeout(550);
+              const info=await page.evaluate(()=>{
+                const style=document.getElementById('zm-four-premium-fx-css-20261018');
+                const ring=document.querySelector('#solar-stage .globe-ring.ring-one');
+                const stars=document.querySelector('#solar-stage .orbital-stars');
+                const firstCard=document.querySelector('#orbital-cards .topic-card');
+                const icon=document.querySelector('.header-orbit a > span');
+                const markers=['header.topbar','.header-orbit','#zm-gold-search-toolbar-20261018',
+                  '#solar-stage','#orbit-intro','#site-footer'];
+                function geometry(){
+                  return Object.fromEntries(markers.map(q=>{
+                    const el=document.querySelector(q),b=el?.getBoundingClientRect();
+                    return[q,b?{x:b.x,y:b.y,w:b.width,h:b.height}:null];
+                  }));
+                }
+                const before=geometry();
+                const effects={
+                  ringBefore:ring?getComputedStyle(ring,'::before').content:null,
+                  starsBefore:stars?getComputedStyle(stars,'::before').content:null,
+                  starsAfter:stars?getComputedStyle(stars,'::after').content:null,
+                  iconTextShadow:icon?getComputedStyle(icon).textShadow:null,
+                  cardOutline:firstCard?getComputedStyle(firstCard).outlineStyle:null,
+                  renderedCards:document.querySelectorAll('#orbital-cards .topic-card').length,
+                  hasStyle:!!style,
+                  reducedMotionRule:!!style?.textContent.includes('prefers-reduced-motion')};
+                if(!style?.sheet)throw Error('Missing active inline CSS sheet');
+                style.sheet.disabled=true;
+                const originalGeometry=geometry();
+                style.sheet.disabled=false;
+                const changed=[];
+                for(const q of markers){
+                  const b=before[q],o=originalGeometry[q];if(!b||!o)continue;
+                  const delta=Math.max(Math.abs(b.x-o.x),Math.abs(b.y-o.y),Math.abs(b.w-o.w),Math.abs(b.h-o.h));
+                  if(delta>3)changed.push({q,delta});
+                }
+                return {viewport:innerWidth,geometryChanged:changed,effects};
+              });
+              console.log('ZM_FX4_BROWSER '+JSON.stringify(info));
+              const fx=info.effects;
+              if(!fx.hasStyle||!fx.reducedMotionRule||
+                !fx.ringBefore||fx.ringBefore==='none'||
+                !fx.starsBefore||fx.starsBefore==='none'||
+                !fx.starsAfter||fx.starsAfter==='none'||
+                !fx.iconTextShadow||fx.iconTextShadow==='none'||
+                info.geometryChanged.length>0||
+                (fx.renderedCards>0&&fx.cardOutline==='none'))
+                throw Error('Visual-only feature or geometry check failed at '+width);
+              await page.close();
+            }
+            await browser.close();
+            console.log('ZM_FX4_FIVE_VIEWPORTS_VERIFIED=yes');
+          })().catch(e=>{console.error('ZM_FX4_VISUAL_ERROR '+e.stack);process.exit(1)});
+          JS
+          node inspect.cjs
+      - name: Confirm all protected cPanel files remain byte-for-byte unchanged
+        id: integrity
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          timeout 45s ssh -T -F "$d/config" saeit-cpanel 'python3 -' <<'PY' > "$RUNNER_TEMP/zm-fx4-protected-after.txt"
+          from pathlib import Path
+          import hashlib
+          r=Path('/home/zomorod2/public_html')
+          for name in ('.htaccess','search/index.html','store/index.php','topics/index.html','about/index.html','company/index.html','tala/index.php','business/index.php'):
+            p=r/name
+            if p.is_file() and not p.is_symlink():
+              print(name+' '+hashlib.sha256(p.read_bytes()).hexdigest())
+          PY
+          diff -u "$RUNNER_TEMP/zm-fx4-protected-before.txt" "$RUNNER_TEMP/zm-fx4-protected-after.txt"
+          echo ZM_FX4_PROTECTED_FILES_UNCHANGED=yes
+      - name: Rollback CSS insertion only on any verification failure
+        if: failure() && steps.install.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          timeout 60s ssh -T -F "$d/config" saeit-cpanel "python3 '/home/zomorod2/.zm-fx4-stage-$GITHUB_RUN_ID/patch.py' rollback '$GITHUB_RUN_ID'"
+      - name: Delete only temporary script and SSH keys, retain recovery backup
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          stage="/home/zomorod2/.zm-fx4-stage-$GITHUB_RUN_ID"
+          if test -f "$d/config"; then
+            timeout 30s ssh -T -F "$d/config" saeit-cpanel "rm -f '$stage/patch.py'; rmdir '$stage'" || true
+          fi
+          rm -rf -- "$d"
