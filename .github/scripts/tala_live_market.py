@@ -73,6 +73,23 @@ def assemble(fetch=get,now=None):
                 "Gold API","https://gold-api.com/",data["updatedAt"],"metals",now)
         except (ValueError,KeyError,TypeError,TimeoutError,OSError) as e:
             failures.append(symbol+":"+type(e).__name__)
+    # Transparent derived theoretical gram quotes (not Iranian retail prices).
+    if "xau" in quotes:
+        q=quotes["xau"]
+        quotes["gold18_spot"]=record(
+            "gold18_spot",q["price"]*0.75,"USD","gram","Gold API",
+            "https://gold-api.com/",q["observed_at"],"metals",now)
+        quotes["gold24_spot"]=record(
+            "gold24_spot",q["price"],"USD","gram","Gold API",
+            "https://gold-api.com/",q["observed_at"],"metals",now)
+    if "xag" in quotes:
+        q=quotes["xag"]
+        quotes["silver925_spot"]=record(
+            "silver925_spot",q["price"]*0.925,"USD","gram","Gold API",
+            "https://gold-api.com/",q["observed_at"],"metals",now)
+        quotes["silver999_spot"]=record(
+            "silver999_spot",q["price"]*0.999,"USD","gram","Gold API",
+            "https://gold-api.com/",q["observed_at"],"metals",now)
     for symbol,remote in COINS.items():
         try:
             data=fetch("https://api.gold-api.com/price/"+remote)
@@ -130,7 +147,7 @@ def check_doc(doc):
     if not isinstance(doc.get("quotes"),dict) or len(doc["quotes"])<1 or len(doc["quotes"])>24:
         raise ValueError("invalid quote collection")
     for name,value in doc["quotes"].items():
-        if name not in set(SPOTS)|set(COINS)|{"usd_"+x.lower() for x in FX}:
+        if name not in set(SPOTS)|set(COINS)|{"usd_"+x.lower() for x in FX}|{"gold18_spot","gold24_spot","silver925_spot","silver999_spot"}:
             raise ValueError("unapproved symbol")
         if not reasonable(value["price"]) or value.get("symbol")!=name:
             raise ValueError("invalid quote")
@@ -151,7 +168,11 @@ def selftest():
                     for k in FX if k!="USD"]
         raise AssertionError("unexpected provider URL")
     doc=assemble(fake,now)
-    assert len(doc["quotes"])==13
+    assert len(doc["quotes"])==17
+    assert round(doc["quotes"]["gold18_spot"]["price"],4)==75
+    assert round(doc["quotes"]["gold24_spot"]["price"],4)==100
+    assert doc["quotes"]["silver999_spot"]["price"]>doc["quotes"]["silver925_spot"]["price"]
+    assert doc["quotes"]["gold18_spot"]["unit"]=="gram"
     assert doc["quotes"]["xau"]["price"]==100
     assert doc["quotes"]["usd_irr"]["source"]=="Frankfurter blended reference"
     assert doc["quotes"]["btc"]["source"]=="Gold API"
