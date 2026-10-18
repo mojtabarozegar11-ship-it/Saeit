@@ -58,7 +58,10 @@ def branded_store_dispatch(request):
  return branded_store(request)
 
 def store(request):
- return render(request,"mojplaywin/store.html",{"products":PRODUCTS})
+ from .mpw_sales import verified_sales_offers
+ return render(request,"mojplaywin/store.html",{
+  "products":PRODUCTS, "ready_offers":verified_sales_offers(),
+ })
 
 def venture(request, slug):
  if not _is_mojplaywin(request):
