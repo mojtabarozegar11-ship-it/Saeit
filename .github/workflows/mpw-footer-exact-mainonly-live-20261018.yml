@@ -1,0 +1,124 @@
+name: MojPlayWin isolated footer atomic publish
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/mpw-footer-exact-mainonly-live-20261018.yml"
+      - "scripts/mpw_footer_exact_mainonly_patch_20261018.py"
+permissions:
+  contents: read
+jobs:
+  release:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event_name == 'push' && contains(github.event.head_commit.message, '[approved-mpw-mainonly-footer-20261018]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Validate exact patch and baseline responses
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_footer_exact_mainonly_patch_20261018.py
+          python3 scripts/mpw_footer_exact_mainonly_patch_20261018.py selftest
+          python3 - <<'PY'
+          import urllib.request,json,os
+          paths=['/','/store/','/games/','/ai/','/about/','/research/','/services/','/company/','/knowledge/','/farnaz/','/saman/','/picm/']
+          baseline={}
+          for p in paths:
+              req=urllib.request.Request('https://mojplaywin.com'+p,headers={'User-Agent':'MainOnlyFooterPreflight/1.0','Cache-Control':'no-cache'})
+              with urllib.request.urlopen(req,timeout=20) as res:
+                  baseline[p]=res.status
+              print('BASELINE '+p+' '+str(baseline[p]),flush=True)
+              if baseline[p]!=200:raise SystemExit('BASELINE_UNHEALTHY '+p)
+          with open(os.environ['RUNNER_TEMP']+'/mpw-founder-baseline.json','w') as f:json.dump(baseline,f)
+          PY
+      - name: Set up pinned VPS and cPanel SSH
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-footer-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Audit exact 19 rewrites plus 2 owner-only templates
+        run: |
+          set -euo pipefail
+          timeout 65s ssh -T -F "$RUNNER_TEMP/mpw-footer-inventory/config" saeit-cpanel python3 - audit < scripts/mpw_footer_exact_mainonly_patch_20261018.py
+      - name: Publish additive gold founder footer, with SHA backups
+        run: |
+          set -euo pipefail
+          timeout 90s ssh -T -F "$RUNNER_TEMP/mpw-footer-inventory/config" saeit-cpanel python3 - install "$GITHUB_RUN_ID" < scripts/mpw_footer_exact_mainonly_patch_20261018.py
+      - name: Verify public 19 main routes, dynamic routes, and protected baselines
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,os,re,urllib.request
+          from pathlib import Path
+          routes=['/about/','/about/mojtaba-rozegar/','/agents/','/company/','/economy/','/industry/','/knowledge/','/market/','/research/','/services/','/studio/','/ventures/agriculture/','/ventures/cafe-restaurant/','/ventures/carpets/','/ventures/currency-crypto/','/ventures/ecommerce/','/ventures/fuel-station/','/ventures/hospitality/','/ventures/jewelry-gold/']
+          baseline=json.loads(Path(os.environ['RUNNER_TEMP']+'/mpw-founder-baseline.json').read_text())
+          for route in routes:
+              req=urllib.request.Request('https://mojplaywin.com'+route,headers={'User-Agent':'MainOnlyFooterVerify/1.0','Cache-Control':'no-cache'})
+              with urllib.request.urlopen(req,timeout=20) as r:
+                  body=r.read(1800000).decode('utf8','replace')
+                  if r.status!=200:raise SystemExit('BAD_STATUS '+route)
+              foot=re.findall(r'<footer\b[^>]*>[\s\S]*?</footer\s*>',body,re.I)
+              found=[x for x in foot if 'MojPlayWin' in x and ('mw-site-footer' in x or 'mpw-footer' in x)]
+              if len(found)!=1 or 'mpw-founder-footer-final' not in found[0] or 'Mojtaba Roozegar' not in found[0]:
+                  raise SystemExit('FOOTER_NOT_VISIBLE '+route)
+              print('MAIN_FOOTER_OK '+route,flush=True)
+          for route in ('/farnaz/','/saman/','/picm/'):
+              with urllib.request.urlopen('https://mojplaywin.com'+route,timeout=20) as r:
+                  if r.status!=baseline[route]:raise SystemExit('PROTECTED_SUBSITE_CHANGED '+route)
+              print('PROTECTED_SUBSITE_STATUS_OK '+route,flush=True)
+          for route in ('/store/','/games/','/ai/','/contact/','/support/'):
+              with urllib.request.urlopen('https://mojplaywin.com'+route,timeout=20) as r:body=r.read(1200000).decode('utf8','replace')
+              foot=re.findall(r'<footer\b[^>]*>[\s\S]*?</footer\s*>',body,re.I)
+              visible=any('Mojtaba Roozegar' in x for x in foot if 'MojPlayWin' in x)
+              print('DYNAMIC_FOOTER '+route+' PRESENT='+str(visible),flush=True)
+          print('MAIN_ONLY_STATIC_FOOTERS=19 VERIFIED=true',flush=True)
+          PY
+      - name: Roll back only these 21 files on release failure
+        if: failure()
+        run: |
+          d="$RUNNER_TEMP/mpw-footer-inventory/config"
+          if test -s "$d" && test -f "$RUNNER_TEMP/mpw-founder-baseline.json"; then
+            timeout 80s ssh -T -F "$d" saeit-cpanel python3 - rollback "$GITHUB_RUN_ID" < scripts/mpw_footer_exact_mainonly_patch_20261018.py || true
+          fi
+      - name: Remove relay material
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/mpw-footer-inventory"
