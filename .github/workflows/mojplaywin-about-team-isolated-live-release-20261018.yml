@@ -161,6 +161,11 @@ jobs:
                      and html.count('class="mpw-team-card"')==10
                      and len(re.findall(r'<h1\b',html,re.I))==1)
               print('TEAM_ABOUT_LIVE_ATTEMPT='+str(i)+' status='+str(status)+' validated='+str(found))
+              if not found and i in (1,6):
+                print('TEAM_ABOUT_DIAGNOSTIC missing='+repr([x for x in expected if x not in html])
+                      +' cards='+str(html.count('class="mpw-team-card"'))
+                      +' h1='+str(len(re.findall(r'<h1\b',html,re.I)))
+                      +' html_bytes='+str(len(html.encode('utf-8'))))
               if found:break
             except Exception as e:print('TEAM_ABOUT_LIVE_RETRY='+type(e).__name__)
             time.sleep(3)
