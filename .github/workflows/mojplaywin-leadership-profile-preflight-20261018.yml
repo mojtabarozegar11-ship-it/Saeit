@@ -1,0 +1,112 @@
+name: MojPlayWin professor profile photo and route preflight read only
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/mojplaywin-leadership-profile-preflight-20261018.yml"
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify official portrait and old leadership route over public HTTP
+        run: |
+          python3 - <<'PY'
+          from urllib.request import Request,urlopen
+          from html.parser import HTMLParser
+          import json,hashlib,re
+          urls={
+            'profile':'https://mojplaywin.com/about/mojtaba-rozegar/',
+            'portrait':'https://mojplaywin.com/mojtaba.roozegar/assets/personal_site/official_profile_20261016/portrait.2935ce8cb70d.webp',
+            'avatar':'https://mojplaywin.com/mojtaba.roozegar/assets/personal_site/official_profile_20261016/avatar.38d8403bfc48.webp',
+            'resume':'https://mojplaywin.com/mojtaba.roozegar/resume/',
+            'personal':'https://mojplaywin.com/mojtaba.roozegar/',
+          }
+          for key,url in urls.items():
+            req=Request(url,headers={'User-Agent':'MPWLeadershipPhotoSafety/1.0','Cache-Control':'no-cache'})
+            with urlopen(req,timeout=18) as res:
+              data=res.read(500000)
+              content_type=res.headers.get('Content-Type','')
+              status=res.status
+            text=data.decode('utf-8','replace') if key=='profile' else ''
+            info={'asset':key,'status':status,'content_type':content_type,'bytes':len(data)}
+            if text:
+              info.update({'h1_count':len(re.findall(r'<h1\b',text,re.I)),
+                           'has_main':bool(re.search(r'<main\b',text,re.I)),
+                           'body_end':bool(re.search(r'</body>',text,re.I)),
+                           'old_name_present': 'Mojtaba Rozegar' in text,
+                           'has_old_picture':'mojtaba-rozegar-mojplaywin-ceo' in text})
+            print('MPW_LEADERSHIP_PUBLIC_PROBE='+json.dumps(info))
+          PY
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Read-only exact rewrite and location eligibility
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 60s ssh -T -F "$d/config" saeit-cpanel python3 - <<'PY'
+          from pathlib import Path
+          import hashlib,json,re
+          root=Path('/home/zomorod2/mojplaywin.com')
+          ht=root/'.htaccess'
+          target=root/'design-preview-20261017'/'professor-mojtaba-roozegar-20261018.html'
+          src=ht.read_bytes()
+          print('MPW_LEADERSHIP_SCOPE_PREFLIGHT='+json.dumps({
+            'root_exists':root.is_dir(),'target_exists':target.exists(),
+            'target_symlink':target.is_symlink(),
+            'htaccess_sha256':hashlib.sha256(src).hexdigest(),
+            'about_rule_present':b'MPW_EXACT_ABOUT_80_20_20261018' in src,
+            'profile_special_case_present':b'MPW_EXACT_LEADERSHIP' in src,
+            'rewrite_before_passenger':src.find(b'RewriteEngine On')>=0,
+            'free_bytes':__import__('os').statvfs(root).f_bavail*__import__('os').statvfs(root).f_frsize,
+            'read_only':True
+          }))
+          PY
