@@ -158,6 +158,21 @@ jobs:
                       q=Path(str(p)+ext)
                       print('CSS_COMPRESSED '+q.name+' exists='+str(q.is_file()),flush=True)
           PY
+      - name: Inspect alternate store asset byte fingerprints
+        run: |
+          set -euo pipefail
+          timeout 45s ssh -T -F "$RUNNER_TEMP/mpw-footer-inventory/config" saeit-cpanel python3 - <<'PY'
+          from pathlib import Path
+          import hashlib,gzip
+          root=Path('/home/zomorod2/Saeit-staging/staticfiles/site')
+          for name in ('main.55db389feb64.css','luxury-pages.a1587ddcb800.css','site-polish-v3.cc1a03accbde.css','page-themes.2052296cc3f0.css'):
+              p=root/name
+              if p.is_file() and not p.is_symlink():
+                  data=p.read_bytes()
+                  zipfile=root/(name+'.gz')
+                  valid=zipfile.is_file() and not zipfile.is_symlink() and gzip.decompress(zipfile.read_bytes())==data
+                  print('STORE_ASSET '+name+' SHA='+hashlib.sha256(data).hexdigest()+' LENGTH='+str(len(data))+' GZIP_VALID='+str(valid),flush=True)
+          PY
       - name: Remove relay material
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/mpw-footer-inventory"
