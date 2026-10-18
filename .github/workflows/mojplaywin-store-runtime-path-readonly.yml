@@ -1,0 +1,87 @@
+name: MojPlayWin identify actual store runtime loader only
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/mojplaywin-store-runtime-path-readonly.yml"]
+permissions: {contents: read}
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Find renderer origin, Passenger app root and 10-guide candidate location
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 65s ssh -T -F "$d/config" saeit-cpanel python3 - <<'PY'
+          from pathlib import Path
+          import json,re,hashlib,os
+          home=Path('/home/zomorod2')
+          for f in (home/'mojplaywin.com/passenger_wsgi.py',home/'Saeit/config/urls.py'):
+            if f.is_file():
+              raw=f.read_text('utf8','replace')
+              lines=raw.splitlines()
+              interesting=[x.strip() for x in lines if any(t in x for t in ('APP =','APP_ROOT','path(','mojplaywin','sys.path','os.environ.setdefault'))]
+              sanitized=[re.sub(r'(?i)(secret|password|token|private_key)\s*=.*','[redacted]',x)[:220] for x in interesting]
+              print('MPW_STORE_RUNTIME_HINT='+json.dumps({'source':str(f),'lines':sanitized[:70]}))
+          for root in (home/'Saeit/templates',home/'Saeit/core/templates',home/'Saeit/mojplaywin',home/'mojplaywin.com'):
+            if root.exists():
+              print('MPW_STORE_DIR_META='+json.dumps({'path':str(root),'symlink':root.is_symlink(),'resolved':str(root.resolve()),'children':[x.name for x in list(root.iterdir())[:40]] if root.is_dir() else []}))
+          for root in (home/'Saeit',home/'mojplaywin.com'):
+            if not root.exists():continue
+            matches=[]
+            for path in root.rglob('store.html'):
+              if not path.is_file():continue
+              try:
+                b=path.read_bytes()
+                matches.append({'path':str(path),'size':len(b),'sha':hashlib.sha256(b).hexdigest(),'has_mw_catalog':b'INITIAL COLLECTION' in b,'has_ten':b'mpw-store-ten-guides' in b})
+                if len(matches)>=20:break
+              except Exception:pass
+            print('MPW_STORE_FILE_FIND='+json.dumps({'root':str(root),'matches':matches}))
+          PY
