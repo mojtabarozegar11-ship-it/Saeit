@@ -1,4 +1,4 @@
-name: Zomorod V91 Gen64 bounded offline runtime smoke
+name: Zomorod V91 editorial agent bounded content smoke
 on:
   push:
     branches: ["audit/zomorod-v91-agent-extraction-20261018"]
@@ -66,7 +66,7 @@ jobs:
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
-          timeout 60s ssh -T -F "$d/config" saeit-vps python3 - < scripts/zomorod_v91_gen64_bounded_smoke.py
+          timeout 60s ssh -T -F "$d/config" saeit-vps python3 - < scripts/zomorod_v91_agent_content_smoke.py
       - name: Remove temporary SSH credentials
         if: always()
         shell: bash
