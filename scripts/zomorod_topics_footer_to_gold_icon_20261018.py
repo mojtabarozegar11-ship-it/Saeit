@@ -132,7 +132,7 @@ def transform(src:str)->str:
         raise RuntimeError('Top header damaged')
     if result.count('action="/search/"')!=src.count('action="/search/"'):
         raise RuntimeError('Search form route damaged')
-    if result.count('href="/store/"')!=src.count('href="/store/"'):
+    if len(re.findall(r'<a\b[^>]*href="/store/"',result))!=len(re.findall(r'<a\b[^>]*href="/store/"',src)):
         raise RuntimeError('Store entry changed')
     if not 2200000<len(result)<2350000:
         raise RuntimeError('Unexpected main homepage size')
