@@ -27,6 +27,13 @@ section{margin-top:24px;scroll-margin-top:92px}
 <section id="staff-summary" class="grid" aria-label="Staff summary"><article class="card"><strong>{{ staff_counts.staff }}</strong><p>{% if lang == "fa" %}کاربر فعال پرسنل{% else %}Active staff accounts{% endif %}</p></article><article class="card"><strong>{{ staff_counts.agents }}</strong><p>{% if lang == "fa" %}ایجنت ثبت‌شده{% else %}Registered agents{% endif %}</p></article><article class="card"><strong>{{ staff_counts.approvals }}</strong><p>{% if lang == "fa" %}تأییدیه در انتظار{% else %}Pending approvals{% endif %}</p></article><article class="card"><strong>{{ staff_counts.drafts }}</strong><p>{% if lang == "fa" %}پیش‌نویس محتوا{% else %}Content drafts{% endif %}</p></article></section>
 <section id="management-modules" class="card"><h2>{% if lang == "fa" %}بخش‌های مدیریتی{% else %}Management Modules{% endif %}</h2><div class="grid">{% for item in modules %}<div class="card"><span class="label">{{ item.label }}</span><p><small>{% if item.connected %}{% if lang == "fa" %}بخش اولیه موجود است{% else %}Initial section available{% endif %}{% else %}{% if lang == "fa" %}در انتظار تکمیل{% else %}Integration pending{% endif %}{% endif %}</small></p></div>{% endfor %}</div></section><section class="card"><h2>{% if lang == "fa" %}آمار ثبت‌شده ایجنت‌ها{% else %}Recorded Agent Metrics{% endif %}</h2><p id="agent-metrics">{% if lang == "fa" %}در انتظار دریافت داده از پایگاه داده{% else %}Waiting for database snapshot{% endif %}</p><small>{% if lang == "fa" %}این اعداد نشان‌دهنده سلامت پردازش زنده نیستند.{% else %}These counts do not prove live worker health.{% endif %}</small></section>
 {% if request.get_host == "mojplaywin.com" or request.get_host == "www.mojplaywin.com" %}
+{% if request.user.is_superuser %}
+<section class="card" id="mpw-store-management">
+<h2>فروشگاه MojPlayWin — وضعیت واقعی</h2>
+<p>موجودی محصولات، قیمت‌گذاری و آمادگی فروش، فقط‌خواندنی و بدون تغییر درگاه یا سفارش‌ها.</p>
+<a href="{% url 'mpw_store_control' %}">مشاهده وضعیت پایگاه داده فروشگاه ↗</a>
+</section>
+{% endif %}
 <section class="card" id="mpw-runtime-monitor">
 <h2>مرکز فرماندهی ربات‌ها و ایجنت‌های MojPlayWin</h2>
 <p>اتصال فقط‌خواندنی به گزارش خصوصی cPanel؛ نمودار تاریخی مجزای هر ایجنت، ربات و ماژول با وضعیت واقعی.</p>
