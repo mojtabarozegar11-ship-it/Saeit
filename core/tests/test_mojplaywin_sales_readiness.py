@@ -5,7 +5,10 @@ from unittest.mock import patch, MagicMock
 
 from django.test import SimpleTestCase, RequestFactory, override_settings
 
-from core.mojplaywin_catalog_readiness import public_product_card, read_main_store_catalog, safe_main_path
+from core.mojplaywin_catalog_readiness import (
+    CRYPTO_RELEASE_FLAGS, existing_crypto_checkout_path,
+    public_product_card, read_main_store_catalog, safe_main_path,
+)
 
 
 def product(**overrides):
@@ -15,6 +18,7 @@ def product(**overrides):
         "title": "Research guide", "product_type": "ebook", "active": True,
         "knowledge_article": SimpleNamespace(published=True),
         "price": Decimal("14.00"), "currency": "USD",
+        "pk": 23, "owner_id": 1, "knowledge_article_id": 1,
     }
     values.update(overrides)
     return SimpleNamespace(**values)
@@ -35,24 +39,43 @@ class MojPlayWinSalesReadinessTests(SimpleTestCase):
         self.assertFalse(card["for_sale"])
         self.assertEqual(card["checkout_path"], "")
 
-    def test_both_global_gate_and_four_product_attestations_are_required(self):
+    def test_existing_eth_trx_gateway_requires_all_eight_existing_flags(self):
         meta = {
             "brand": "mojplaywin", "public_detail_path": "/products/guide/",
-            "public_checkout_path": "/store/checkout/guide/",
-            "gateway_merchant_verified": True, "payment_e2e_verified": True,
-            "delivery_e2e_verified": True, "owner_sales_release": True,
+            "owner_sales_release": True, "factory_publication_permission": True,
+            "asset_verified": True, "quality_approved": True,
+            "license_verified": True,
+            "mpw_commerce": {"enabled": True, "fulfillment": "digital",
+                             "private_file": "private/approved.pdf"},
         }
-        sale = product(metadata=meta)
+        sale = product(metadata=meta, product_type="digital_book")
         self.assertFalse(public_product_card(sale, paid_enabled=False)["for_sale"])
-        for field in ("gateway_merchant_verified", "payment_e2e_verified",
-                      "delivery_e2e_verified", "owner_sales_release"):
-            modified = dict(meta)
-            modified[field] = False
-            self.assertFalse(public_product_card(
-                product(metadata=modified), paid_enabled=True)["for_sale"])
-        allowed = public_product_card(sale, paid_enabled=True)
-        self.assertTrue(allowed["for_sale"])
-        self.assertEqual(allowed["checkout_path"], "/store/checkout/guide/")
+        self.assertFalse(public_product_card(sale, paid_enabled=True)["for_sale"])
+        flags = {name: True for name in CRYPTO_RELEASE_FLAGS}
+        for key in CRYPTO_RELEASE_FLAGS:
+            with self.subTest(missing_flag=key):
+                missing = dict(flags)
+                missing[key] = False
+                with override_settings(**missing):
+                    self.assertEqual(existing_crypto_checkout_path(sale), "")
+        # Merely claiming the flags are ready cannot revive an unmerged
+        # checkout app, unverified private asset or wallet proof.
+        with override_settings(**flags):
+            self.assertEqual(existing_crypto_checkout_path(sale), "")
+            for key in ("owner_sales_release", "asset_verified",
+                        "quality_approved", "license_verified"):
+                m = dict(meta)
+                m[key] = False
+                self.assertEqual(existing_crypto_checkout_path(
+                    product(metadata=m, product_type="digital_book")), "")
+
+    def test_stripe_and_untrusted_payment_links_are_not_accepted(self):
+        meta = {"brand": "mojplaywin", "public_checkout_path":
+                "https://checkout.stripe.com/unverified",
+                "gateway_merchant_verified": True, "owner_sales_release": True}
+        item = public_product_card(product(metadata=meta), paid_enabled=True)
+        self.assertFalse(item["for_sale"])
+        self.assertEqual(item["checkout_path"], "")
 
     def test_no_unapproved_or_other_brand_data_appears(self):
         for item in (
@@ -69,7 +92,7 @@ class MojPlayWinSalesReadinessTests(SimpleTestCase):
             model.objects.filter.assert_not_called()
 
     @override_settings(MOJPLAYWIN_NATIVE_CATALOG_ENABLED=True,
-                       MOJPLAYWIN_PAID_CHECKOUT_ENABLED=False)
+                       MOJPLAYWIN_NATIVE_CRYPTO_CHECKOUT_ENABLED=False)
     def test_enabled_catalog_is_select_only_and_tenant_scoped(self):
         prod = product()
         manager = MagicMock()
