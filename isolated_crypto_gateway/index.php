@@ -101,6 +101,8 @@ function check_chain(array $i,string $hash):array{
  return ['hash'=>$h,'confirmations'=>$confirmations,'required'=>$needed,'height'=>$block];
 }
 function reconcile(PDO $db,array $invoice,string $tx):string{
+ $tx=strtolower(trim($tx));
+ $tx=$invoice['asset']==='ETH'?'0x'.substr($tx,-64):substr($tx,-64);
  if($invoice['status']==='paid')return 'paid';
  if($invoice['tx_hash']!==null&&strtolower($tx)!==strtolower((string)$invoice['tx_hash']))throw new RuntimeException('This invoice is bound to another transaction.');
  $proof=check_chain($invoice,$tx);$status=$proof['confirmations']>=$proof['required']?'paid':'confirming';
@@ -108,7 +110,7 @@ function reconcile(PDO $db,array $invoice,string $tx):string{
  try{
   $q=$db->prepare('SELECT status,tx_hash FROM invoices WHERE token=?');$q->execute([$invoice['token']]);$latest=$q->fetch();
   if(!$latest)throw new RuntimeException('Invoice no longer exists.');
-  if($latest['status']==='paid'){$db->exec('COMMIT');return 'paid';}
+  if($latest['status']==='paid'){if($latest['tx_hash']!==$proof['hash'])throw new RuntimeException('Already paid by another transaction.');$db->exec('COMMIT');return 'paid';}
   if($latest['tx_hash']!==null&&$latest['tx_hash']!==$proof['hash'])throw new RuntimeException('Changed transaction claim.');
   $q=$db->prepare('UPDATE invoices SET status=?,tx_hash=?,block_height=?,paid_at=? WHERE token=?');
   $q->execute([$status,$proof['hash'],$proof['height'],$status==='paid'?time():null,$invoice['token']]);
@@ -124,7 +126,7 @@ function invoice_screen(array $i,string $msg=''):never{
   if(time()>(int)$i['expires_at'])$s.='<p>Invoice expired. Do not send new funds. You can verify a previous transfer made during its valid window.</p>';
   else $s.='<p>Send exactly <strong>'.e(human((int)$i['quote'],$i['asset'])).' '.e($i['asset']).'</strong> on '.($i['asset']==='ETH'?'Ethereum Mainnet':'TRON Mainnet').' to:</p><code>'.e($i['merchant']).'</code>';
   $s.='<p>Invoice expiry: '.gmdate('Y-m-d H:i',(int)$i['expires_at']).' UTC.</p><form method="post">'.csrf().'<input type="hidden" name="action" value="verify"><input type="hidden" name="id" value="'.e($i['token']).'"><label>Your on-chain transaction hash</label><input name="tx_hash" maxlength="66" value="'.e($i['tx_hash']??'').'" required><button>Verify payment automatically</button></form>';
-  if($i['status']==='confirming')$s.='<p>Network finality pending; refresh to retry confirmation. No merchant approval is needed.</p>';
+  if($i['status']==='confirming')$s.='<p>Network finality pending. This page checks again automatically while open; no merchant approval is needed.</p><script>setTimeout(function(){var f=document.querySelector("form");if(f)f.submit()},30000);</script>';
  }
  display('Payment invoice #'.substr($i['token'],0,8),$s);
 }
@@ -141,8 +143,8 @@ try{
   $merchant=$asset==='ETH'?ETH_TO:TRX_TO;$token=bin2hex(random_bytes(24));$now=time();
   for($n=0;$n<16;$n++){
    $amount=$base+random_int(1,9999);
-   $q=$db->prepare('SELECT 1 FROM invoices WHERE merchant=? AND quote=? AND (expires_at>=? OR status="confirming") LIMIT 1');
-   $q->execute([$merchant,$amount,$now]);if($q->fetchColumn())continue;
+   $q=$db->prepare('SELECT 1 FROM invoices WHERE merchant=? AND quote=? LIMIT 1');
+   $q->execute([$merchant,$amount]);if($q->fetchColumn())continue;
    $q=$db->prepare('INSERT INTO invoices(token,asset,base,quote,merchant,reference,created_at,expires_at,status) VALUES(?,?,?,?,?,?,?,?,"awaiting_payment")');
    $q->execute([$token,$asset,$base,$amount,$merchant,$ref,$now,$now+1800]);
    header('Location: '.ROOT.'?id='.$token,true,303);exit;
