@@ -216,14 +216,23 @@ def settle(invoice_id, tx_hash):
             raise VerificationError("Order already settled.")
         if invoice.tx_hash and invoice.tx_hash != canonical:
             raise VerificationError("Transaction changed.")
-        if timezone.now() > invoice.expires_at and invoice.status != "confirming":
-            raise VerificationError("Invoice expired. Contact support for late transfers.")
+        # Reconcile by MINED TIME, not by when the buyer submits the hash.
+        # This also stops claims made with an old transaction at a recycled quote.
+        if not isinstance(proof.timestamp_ms, int) or proof.timestamp_ms <= 0:
+            raise VerificationError("On-chain block timestamp could not be verified.")
+        window_start = int(invoice.created_at.timestamp() * 1000) - 60000
+        window_end = int(invoice.expires_at.timestamp() * 1000) + 60000
+        now_ms = int(timezone.now().timestamp() * 1000)
+        if not window_start <= proof.timestamp_ms <= window_end or proof.timestamp_ms > now_ms + 120000:
+            raise VerificationError("Transfer was not mined during the invoice payment window.")
         if MojCryptoInvoice.objects.filter(tx_hash=canonical).exclude(pk=invoice.pk).exists():
             raise VerificationError("This transfer was already used.")
         required = (
             settings.MOJPLAYWIN_ETH_CONFIRMATIONS if invoice.asset == "ETH"
             else settings.MOJPLAYWIN_TRX_CONFIRMATIONS
         )
+        if not isinstance(required, int) or required < 1:
+            raise VerificationError("Confirmation policy is not configured safely.")
         if proof.confirmations < required:
             invoice.tx_hash = canonical
             invoice.status = "confirming"
