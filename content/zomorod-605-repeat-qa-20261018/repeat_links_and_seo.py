@@ -88,8 +88,7 @@ def check_page(doc: Path, card: dict):
         if len(improved)>190:
             improved=improved[:185].rstrip(' ،.؛')+'…'
         raw=raw[:meta.start(1)]+h(improved)+raw[meta.end(1):]
-        meta=re.search(r'<meta\\s+name="description"\\s+content="([^"]+)"',raw,re.I)
-        assert meta and title in html.unescape(meta.group(1))
+        assert title in improved
     canonical = re.search(r'<link\s+rel="canonical"\s+href="([^"]+)"',raw,re.I)
     if not canonical or canonical.group(1) != canon:
         raise ValueError('Missing canonical matching linked URL: '+str(doc))
