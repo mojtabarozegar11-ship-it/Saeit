@@ -1,0 +1,134 @@
+name: Deploy Zomorod independent business application
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/zomorod-business-release.yml"]
+permissions:
+  contents: read
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check source syntax and configured isolation
+        run: |
+          set -euo pipefail
+          test -s content/zomorod-business/app.php
+          test -s content/zomorod-business/index.php
+          grep -Fq '.private/zomorod-business/app.php' content/zomorod-business/index.php
+          php -l content/zomorod-business/app.php
+          php -l content/zomorod-business/index.php
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - name: Verify unused destination, stage private source and preserve existing main site
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          stage="$HOME/.backups/zomorod-business-release/$1"
+          test ! -e "$stage"
+          test ! -e "$HOME/public_html/business"
+          test ! -e "$HOME/.private/zomorod-business"
+          test -f "$HOME/public_html/index.html"
+          test -f "$HOME/public_html/.htaccess"
+          mkdir -p "$(dirname "$stage")"
+          mkdir -m 700 "$stage"
+          sha256sum "$HOME/public_html/index.html" "$HOME/public_html/.htaccess" > "$stage/immutable.sha256"
+          for site in mohammad ghanadi amozeshgah tala company about; do
+            if test -f "$HOME/public_html/$site/index.html"; then sha256sum "$HOME/public_html/$site/index.html" >> "$stage/immutable.sha256"; fi
+          done
+          REMOTE
+          tar -cf - -C content/zomorod-business app.php index.php .htaccess |
+            ssh -F "$d/config" saeit-cpanel "tar -xf - -C /home/zomorod2/.backups/zomorod-business-release/$GITHUB_SHA"
+      - name: Install new business login only, no changes to existing pages
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          stage="$HOME/.backups/zomorod-business-release/$1"
+          private="$HOME/.private/zomorod-business"
+          web="$HOME/public_html/business"
+          test ! -e "$private" && test ! -e "$web"
+          phpbin="$(command -v php || true)"
+          if test -z "$phpbin"; then phpbin="/opt/cpanel/ea-php82/root/usr/bin/php"; fi
+          "$phpbin" -r 'exit(extension_loaded("pdo_sqlite")?0:1);'
+          "$phpbin" -l "$stage/app.php"
+          "$phpbin" -l "$stage/index.php"
+          mkdir -p "$HOME/.private"
+          chmod 700 "$HOME/.private"
+          rollback() {
+            set +e
+            if test -d "$web" && test ! -e "$stage/failed-public"; then mv "$web" "$stage/failed-public"; fi
+            if test -d "$private" && test ! -e "$stage/failed-private"; then mv "$private" "$stage/failed-private"; fi
+            echo BUSINESS_DEPLOY_ROLLBACK=quarantined_without_deleting_data
+          }
+          active=1
+          trap 'rc=$?; trap - EXIT; if test "$active" = 1; then rollback; fi; exit "$rc"' EXIT
+          mkdir -m 700 "$private"
+          mkdir -m 755 "$web"
+          cp -p "$stage/app.php" "$private/app.php"
+          cp -p "$stage/index.php" "$web/index.php"
+          cp -p "$stage/.htaccess" "$web/.htaccess"
+          chmod 600 "$private/app.php"
+          chmod 644 "$web/index.php" "$web/.htaccess"
+          code="$(curl -sS -L --max-time 30 -o "$stage/response.html" -w '%{http_code}' "https://zomorodmelal.ir/business/?release=$1" || true)"
+          echo BUSINESS_HTTP="$code"
+          test "$code" = 200
+          grep -Fq 'راه‌اندازی امن میز مدیریت' "$stage/response.html"
+          sha256sum -c --status "$stage/immutable.sha256"
+          active=0;trap - EXIT
+          echo BUSINESS_LOGIN_DEPLOY=healthy
+          echo BUSINESS_PUBLIC_URL=https://zomorodmelal.ir/business/
+          REMOTE
+      - name: Remove temporary SSH keys
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
