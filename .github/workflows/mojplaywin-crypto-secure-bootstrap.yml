@@ -1,0 +1,107 @@
+name: MojPlayWin protect private CLI bootstrap (DISABLED)
+on:
+  push:
+    branches: [feature/mojplaywin-crypto-gateway-20261018]
+    paths:
+      - .github/workflows/mojplaywin-crypto-secure-bootstrap.yml
+permissions:
+  contents: read
+concurrency:
+  group: mojplaywin-crypto-isolated-security-maintenance
+  cancel-in-progress: false
+jobs:
+  secure-only:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/feature/mojplaywin-crypto-gateway-20261018'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false, fetch-depth: 0}
+      - name: Validate isolated guard version diff without changing any files
+        shell: bash
+        run: |
+          set -euo pipefail
+          php -l isolated_crypto_gateway/bootstrap.php
+          python3 -m py_compile scripts/mojplaywin_crypto_fix_web_cli_guard.py
+          git show 34e55f745b60a9a8793ecd713641e4a40447f330:isolated_crypto_gateway/bootstrap.php > "$RUNNER_TEMP/old-bootstrap.php"
+          python3 - <<'PY'
+          from pathlib import Path
+          old=Path(__import__('os').environ['RUNNER_TEMP'],'old-bootstrap.php').read_text()
+          current=Path('isolated_crypto_gateway/bootstrap.php').read_text()
+          assert 'http_response_code(404);' in current
+          assert "PHP_SAPI !== 'cli'" in current
+          assert old!=current
+          print('HTTP_CLI_GUARD_REVIEWED=true')
+          PY
+      - name: Set up host-fingerprint-pinned read-only relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-crypto-preflight-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+          echo "PINNED_READONLY_RELAY=connected"
+
+
+      - name: Apply only the inactive CLI guard; protect other applications
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-crypto-preflight-ssh"
+          stage="/home/zomorod2/.mjwp-sec-cli-$GITHUB_RUN_ID"
+          old="$(sha256sum "$RUNNER_TEMP/old-bootstrap.php" | cut -d' ' -f1)"
+          new="$(sha256sum isolated_crypto_gateway/bootstrap.php | cut -d' ' -f1)"
+          timeout 25s ssh -T -F "$d/config" saeit-cpanel "test ! -e '$stage' && test ! -L '$stage' && install -d -m 700 '$stage'"
+          cleanup() {
+            ssh -T -F "$d/config" saeit-cpanel "test -d '$stage' && rm -f -- '$stage/bootstrap.php' '$stage/fix.py' && rmdir -- '$stage'" || true
+          }
+          trap cleanup EXIT
+          ssh -T -F "$d/config" saeit-cpanel "umask 077; cat > '$stage/bootstrap.php'" < isolated_crypto_gateway/bootstrap.php
+          ssh -T -F "$d/config" saeit-cpanel "umask 077; cat > '$stage/fix.py'" < scripts/mojplaywin_crypto_fix_web_cli_guard.py
+          timeout 40s ssh -T -F "$d/config" saeit-cpanel "python3 '$stage/fix.py' '$stage/bootstrap.php' '$old' '$new'"
+          timeout 25s ssh -T -F "$d/config" saeit-cpanel "php -l /home/zomorod2/mojplaywin.com/checkout/crypto/bootstrap.php && php /home/zomorod2/mojplaywin.com/checkout/crypto/bootstrap.php status"
+          status="$(curl -sS --max-time 20 -o "$RUNNER_TEMP/bootstrap-denied" -w '%{http_code}' https://mojplaywin.com/checkout/crypto/bootstrap.php)"
+          echo "PRIVATE_CLI_PUBLIC_HTTP_STATUS=$status"
+          test "$status" = 404
+          test "$(curl -sS --max-time 20 -o /dev/null -w '%{http_code}' https://mojplaywin.com/checkout/crypto/index.php)" = 503
+          test "$(curl -sS --max-time 20 -o /dev/null -w '%{http_code}' https://mojplaywin.com/store/)" = 200
+          test "$(curl -sS --max-time 20 -o /dev/null -w '%{http_code}' https://mojplaywin.com/farnaz/)" = 200
+          echo "GATEWAY_CLI_SOURCE_ACCESS_FROM_WEB=denied"
+          echo "REAL_MERCHANT_PAYMENTS_ENABLED=false"
