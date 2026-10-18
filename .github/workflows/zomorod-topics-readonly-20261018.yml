@@ -70,6 +70,11 @@ jobs:
           for route in topics topics/index.html topics/zm-r01/wheat/index.html research/directory/units/molecular-genetics/index.html;do
             if test -e "$web/$route";then stat -c 'ROUTE_MODE=%a %n' "$web/$route";fi
           done
+          echo "PREVIOUS_FAILED_STAGING_MODES:"
+          root="$HOME/.backups/zomorod-605-topic-pages/896f4032d1e01a146a387df54733a5a403b42e26"
+          for p in "$root" "$root/topics-failed.896f4032d1e01a146a387df54733a5a403b42e26" "$root/topics-failed.896f4032d1e01a146a387df54733a5a403b42e26/index.html" "$root/topics-failed.896f4032d1e01a146a387df54733a5a403b42e26/zm-r01" "$root/topics-failed.896f4032d1e01a146a387df54733a5a403b42e26/zm-r01/wheat" "$root/topics-failed.896f4032d1e01a146a387df54733a5a403b42e26/zm-r01/wheat/index.html";do
+            if test -e "$p";then stat -c 'OLD_MODE=%a OWNER=%U GROUP=%G TYPE=%F PATH=%n' "$p";else echo "OLD_NOT_PRESENT=$p";fi
+          done
           echo "ROOT_INDEX_PREVIOUS_VERSION:"
           grep -Fq 'zm-all-cards-dedicated-topics-20261018' "$web/index.html" && echo new_605 || echo old_29
           echo "RESEARCH_ROLLBACK:"
