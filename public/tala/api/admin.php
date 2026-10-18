@@ -8,7 +8,7 @@ header('X-Content-Type-Options: nosniff');
 header('X-Frame-Options: DENY');
 header('Referrer-Policy: no-referrer');
 
-const TALA_BOOTSTRAP_TOKEN_SHA256 = '2546ea174f615e02a3b8e3159503b6ea77d7c322e90ffa27f1bb8aae5000c90d';
+const TALA_BOOTSTRAP_TOKEN_SHA256 = '58121dce5ef5c9c3620f7c388b8c70563a0d26a024870e666d6d91d1a180e08c';
 const TALA_DB_FILE = __DIR__ . '/../../../.tala-secure/tala.sqlite3';
 
 function respond(array $payload, int $status = 200): void {
