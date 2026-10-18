@@ -44,6 +44,7 @@ urlpatterns = [
     path("search/", site_search, name="site_search"),
     path("robots.txt", robots_txt, name="robots_txt"),
     path("sitemap.xml", sitemap_xml, name="sitemap_xml"),
+    path("checkout/crypto/", include("core.mojplaywin_crypto_urls")),
     path("store/", store_home, name="store"),
     path("auctions/", auctions_home, name="auctions"),
     path("company-gallery/", company_gallery, name="company_gallery"),
