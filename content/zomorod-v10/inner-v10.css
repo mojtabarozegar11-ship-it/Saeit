@@ -1,0 +1,28 @@
+/* V10 unified presentation: additive skin; original editorial markup, copy and images are retained. */
+:root{--zm10-base:#203b23;--zm10-panel:#28472d;--zm10-panel-high:#315238;--zm10-border:#b8a05f;--zm10-gold:#f0d48d;--zm10-paper:#f3efda}
+body.zm-unified-v7{background:var(--zm10-base)!important;background-image:none!important;color:var(--zm10-paper)!important}
+body.zm-unified-v7>header:not(.zm-v7-header),body.zm-unified-v7>footer:not(.zm-v7-footer),body.zm-unified-v7>.zm-site-header,body.zm-unified-v7>.zm-footer,body.zm-unified-v7>.top,body.zm-unified-v7>.foot,body.zm-unified-v7>nav:not(.zm-v7-chain){display:none!important}
+body.zm-unified-v7 main{direction:rtl;min-height:46vh;color:var(--zm10-paper);background:var(--zm10-base)!important;background-image:none!important}
+body.zm-unified-v7 main :is(.zm-page-section,.zm-narrative,.zm-next,.section,.hero,.frame,.zm-hero){background:var(--zm10-base)!important;background-image:none!important;color:var(--zm10-paper)!important}
+body.zm-unified-v7 main :is(.zm-card,.zm-article,.card,.note,.tile,.feature-card,.zm-v7-content-card){background:var(--zm10-panel)!important;color:var(--zm10-paper)!important;border:1px solid var(--zm10-border)!important;border-radius:18px!important;box-shadow:0 10px 24px #0b201344!important}
+body.zm-unified-v7 main :is(h1,h2,h3,h4,h5){color:var(--zm10-gold)!important}
+body.zm-unified-v7 main :is(p,li,dd,.lead){color:#e5ecd9!important;line-height:1.9}
+body.zm-unified-v7 main :is(.zm-container,.wrap,.frame){max-width:min(100%,1320px)}
+body.zm-unified-v7 main img{max-width:100%;height:auto;object-fit:cover}
+body.zm-unified-v7 main a{color:#f3d995;text-decoration-color:#9c8451}
+body.zm-unified-v7 main a:focus-visible{outline:3px solid #fae8ad;outline-offset:3px}
+.zm-v7-header{border-bottom:2px solid #dac07e!important;background:#1a341e!important}.zm-v7-header .zm-v7-logo-frame{border-color:#f2d88b!important}
+.zm-v7-footer{background:#142c1a!important;border-top:3px solid #cdb06b!important}
+.zm-v10-restored{max-width:1320px;margin:45px auto 70px;padding:26px 20px 36px;border:1px solid #c3a966;border-radius:24px;background:#24422b!important;color:#f3efda;overflow:hidden}
+.zm-v10-restored-heading{padding:6px 8px 24px;border-bottom:1px solid #ae965c}.zm-v10-restored-heading span{color:#f7dfaa;font-size:13px;font-weight:700}.zm-v10-restored-heading h2{font-size:clamp(24px,4vw,38px);line-height:1.5;margin:8px 0;color:#f3d791!important}.zm-v10-restored-heading p{margin:0;color:#d9e2cf!important}
+.zm-v10-history-content{margin-top:24px}.zm-v10-history-content :is(section,article){background:#28472d!important;color:#f3efda!important;border:1px solid #837a4b;border-radius:18px;padding:20px;margin:18px 0;max-width:100%}
+.zm-v10-history-content :is(h1,h2,h3,h4){font-size:clamp(18px,2.5vw,27px);color:#f1d68e!important;line-height:1.6}
+.zm-v10-history-content :is(p,li,blockquote){color:#e7ecd9!important;line-height:2;font-size:15px;overflow-wrap:anywhere}
+.zm-v10-history-content :is(.zm-feature-grid,.zm-guide-grid,.zm-card-grid,.grid,.cards,.feature-grid){display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:18px}
+.zm-v10-history-content img{display:block;max-width:100%;height:auto!important;border-radius:14px;object-fit:cover;border:1px solid #a38f5b;box-shadow:0 6px 15px #081c0d33}
+.zm-v10-history-content :is(a,.cta,.link){color:#fae1a5!important;word-break:break-word}
+.zm-v10-history-content :is(table,pre){display:block;max-width:100%;overflow-x:auto}
+.zm-v10-archive-entry{max-width:1250px;margin:35px auto;background:#28472d;border:1px solid #d0b776;border-radius:18px;padding:16px 22px}
+.zm-v10-archive-entry a{color:#f9e2ab!important;font-weight:700;text-decoration:none;display:flex;align-items:center;gap:13px;line-height:1.8}.zm-v10-archive-entry a:hover{text-decoration:underline}
+@media(max-width:620px){.zm-v10-restored{margin:20px 9px;padding:17px 12px}.zm-v10-history-content :is(section,article){padding:15px 12px}.zm-v7-top{padding:8px 12px!important}.zm-v7-chain{gap:6px!important}}
+@media(prefers-reduced-motion:reduce){.zm-v7-header *{animation:none!important;transition:none!important}}
