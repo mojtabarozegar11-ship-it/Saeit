@@ -1,0 +1,17 @@
+{% extends "admin/base_site.html" %}
+{% block title %}MojPlayWin private newsroom performance{% endblock %}
+{% block content %}
+<h1>MojPlayWin · private newsroom</h1>
+<p>This protected view shows the independently stored MojPlayWin editorial state. Nothing here controls Zomorod Melal or any sibling subsite.</p>
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:16px">
+{% for key,value in stats.items %}
+<section style="border:1px solid #b6a37a;padding:22px;border-radius:12px">
+  <div>{{ key|title }}</div><strong style="font-size:2rem">{{ value }}</strong>
+  <div style="background:#9993;height:8px;border-radius:8px;overflow:hidden;margin-top:9px">
+    <div style="width:{% widthratio value 1 2 %}%;max-width:100%;height:100%;background:#bf9b4e"></div>
+  </div>
+</section>
+{% endfor %}
+</div>
+<p>Publication minimum: {{ minimum_quality }}/100. Human approval and attributable evidence are mandatory. This dashboard is read-only; automation agents do not appear in public pages.</p>
+{% endblock %}
