@@ -179,7 +179,7 @@ def patch(s:str)->str:
         raise RuntimeError("Toolbar duplicate")
     if result.count('action="/search/"')!=s.count('action="/search/"'):
         raise RuntimeError("Search routes added or removed")
-    if result.count('href="/store/"')!=s.count('href="/store/"'):
+    if len(re.findall(r'<a\b[^>]*href="/store/"',result))!=len(re.findall(r'<a\b[^>]*href="/store/"',s)):
         raise RuntimeError("Store links added or removed")
     if result.find('id="'+NEW_ID+'"') > result.find('<main id="content">'):
         raise RuntimeError("Toolbar not at the top")
