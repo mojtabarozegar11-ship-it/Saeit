@@ -58,7 +58,7 @@ class MojPlayWinAboutTests(SimpleTestCase):
             "Game mechanics",
             "Enterprise web architecture",
             "Digital product lifecycle",
-            "Learning science",
+            "Curriculum architecture",
             "Scientific and executive leadership",
         ):
             # Check on-page specialist material is rendered by Django.
@@ -69,5 +69,5 @@ class MojPlayWinAboutTests(SimpleTestCase):
             self.assertContains(response, 'id="dossier-%d"' % index)
         for domain in ("nist.gov", "w3.org", "owasp.org", "nature.com"):
             self.assertContains(response, domain)
-        self.assertContains(response, "does not certify")
+        self.assertContains(response, "do not certify")
         self.assertContains(response, "not evidence")
