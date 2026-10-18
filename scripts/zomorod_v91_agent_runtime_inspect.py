@@ -45,7 +45,5 @@ for path in PROBES:
     for n in tree.body:
         if isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef,ast.ClassDef)):
             actions.append({"type":n.__class__.__name__,"name":n.name,"methods":[x.name for x in n.body if isinstance(x,(ast.FunctionDef,ast.AsyncFunctionDef))][:25]} if isinstance(n,ast.ClassDef) else {"type":n.__class__.__name__,"name":n.name})
-    # Return selected source of the two entry-point commands, which were copied without secrets.
-    excerpt=text[:7500] if "/management/commands/" in path else ""
-    results.append({"path":path,"size":len(data),"imports":imports[:50],"defs":actions[:70],"command_source":excerpt})
+    results.append({"path":path,"size":len(data),"imports":imports[:50],"defs":actions[:70]})
 print(json.dumps({"status":"ok","files":results},ensure_ascii=False))
