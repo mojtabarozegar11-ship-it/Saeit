@@ -1,0 +1,121 @@
+name: MojPlayWin chess and Taniya PDF live cPanel audit (READ ONLY)
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/mpw-two-books-live-preflight-20261018.yml"]
+permissions: {contents: read}
+jobs:
+  inventory:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Verify books inside private File Manager without writes
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 180s ssh -T -F "$d/config" saeit-cpanel bash -s <<'BASH'
+          set -euo pipefail
+          /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - <<'PY'
+          import os,sys,re,json,hashlib,pathlib
+          from django.db.models import Q
+          H=pathlib.Path('/home/zomorod2')
+          roots=[H/'MojPlayWin_Private_Assets/store/chess-improvement',H/'MojPlayWin_Private_Assets/chess-improvement-2026',H/'MojPlayWin_Private_Assets',H/'MojPlayWin_Private_Uploads']
+          seen=set();matches=[]
+          for base in roots:
+           if not base.is_dir() or base.is_symlink():continue
+           for root,dirs,files in os.walk(base,followlinks=False):
+            dirs[:]=[d for d in dirs if not (pathlib.Path(root)/d).is_symlink() and d not in ['.git','__pycache__','.venv']]
+            for name in files:
+             p=pathlib.Path(root)/name
+             if p in seen:continue
+             seen.add(p)
+             if not name.lower().endswith('.pdf') or not re.search('chess|grandmaster|science|taniya|baker|worms|editorial',name,re.I):continue
+             if p.is_symlink() or not p.is_file():continue
+             size=p.stat().st_size
+             if size<100 or size>100000000:continue
+             with p.open('rb') as f:header=f.read(8)
+             matches.append({'name':name,'relative_path':str(p.relative_to(H)),'size':size,'valid_pdf_header':header.startswith(b'%PDF-'),'sha256':hashlib.sha256(p.read_bytes()).hexdigest() if size<30000000 else 'skipped_large'})
+            if len(seen)>3500:break
+          print('MPW_BOOK_FILES='+json.dumps({'files':matches[:35],'root_exists':{str(x.relative_to(H)):x.is_dir() for x in roots},'inspected':len(seen)},ensure_ascii=False))
+          app=H/'Saeit-staging'
+          sys.path.insert(0,str(app))
+          os.chdir(app)
+          os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          import django
+          django.setup()
+          from core.models import Product,Order,PaymentIntent
+          rows=list(Product.objects.filter(Q(pk=72)|Q(title__icontains='taniya')|Q(title__icontains='chess')|Q(title__icontains='baker')|Q(title__icontains='شطرنج')|Q(title__icontains='تانیا')).order_by('pk')[:40])
+          data=[]
+          for p in rows:
+           m=p.metadata if isinstance(p.metadata,dict) else {}
+           refs={}
+           for k,v in m.items():
+            if not isinstance(v,str) or not any(x in k.lower() for x in ('file','path','archive','ref','delivery')):continue
+            if len(v)>300:continue
+            pp=pathlib.Path(v)
+            candidates=[pp] if pp.is_absolute() else [H/pp,app/pp]
+            refs[k]={'basename':pp.name[:130],'suffix':pp.suffix,'exists':any(c.is_file() and not c.is_symlink() for c in candidates)}
+           flags={k:m[k] for k in ('payment_live','checkout_enabled','factory_publication_permission','owner_exclusive_rights_declared','publication_approved','rights_cleared','auto_settlement_verified','fulfillment_status','factory_status','factory_state') if k in m}
+           data.append({'id':p.pk,'title':p.title,'active':p.active,'price':str(p.price),'currency':p.currency,'owner_record':bool(p.owner_id),'flags':flags,'refs':refs})
+          print('MPW_BOOK_DB_MATCH='+json.dumps(data,ensure_ascii=False))
+          try:
+           from core.cryptopay_checkout import product_delivery_ready
+           delivery=[{'id':p.pk,'ready':bool(product_delivery_ready(p))} for p in rows]
+          except Exception as e:delivery={'error':type(e).__name__}
+          print('MPW_BOOK_DELIVERY_READY='+json.dumps(delivery))
+          for name in ['core/cryptopay_tron_config.py','core/cryptopay_mainnet_config.py','mpw_native_checkout/autopay_worker.py','mpw_native_checkout/settlement.py']:
+           f=app/name
+           if not f.is_file() or f.is_symlink():continue
+           s=f.read_text('utf8','replace')
+           print('MPW_BOOK_GATEWAY='+json.dumps({'module':name,'mainnet_literal_false':bool(re.search(r'MAINNET_ENABLED\s*=\s*False',s)),'only_product_72':('product_id=72' in s),'staging_only':('STAGING ONLY' in s),'scheduler_required':('Must be called by a trusted scheduler' in s)}))
+          from mpw_native_checkout.models import NativeInvoice,NativeChainTransfer
+          print('MPW_BOOK_ORDERS='+json.dumps({'active_products':Product.objects.filter(active=True).count(),'paid_orders':Order.objects.filter(status='paid').count(),'payment_intents':PaymentIntent.objects.count(),'native_invoices':NativeInvoice.objects.count(),'native_transfers':NativeChainTransfer.objects.count()}))
+
+          PY
+          BASH
