@@ -1,4 +1,5 @@
 name: MojPlayWin professor photos and English-only heading exact page release
+# Retry scoped professor-caption check after safe failed preflight; no other page touched.
 on:
   push:
     branches: [main]
