@@ -1,0 +1,139 @@
+name: Read-only audit of Zomorod company cinematic glass template
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/zomorod-company-glass-audit-20261018.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Prepare isolated headless browser and accessibility auditor
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/zomorod-company-audit"
+          cd "$RUNNER_TEMP/zomorod-company-audit"
+          npm --silent init -y >/dev/null
+          npm --silent install --no-save playwright@1.55.0 @axe-core/playwright@4.10.2
+          npx playwright install chromium
+      - name: Inspect public pages without modifying them
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/zomorod-company-audit"
+          cat > audit.cjs <<'JS'
+          const {chromium} = require('playwright');
+          const AxeBuilder = require('@axe-core/playwright').default;
+          const fs = require('fs');
+          const url='https://zomorodmelal.ir/company/';
+          const widths=[320,390,768,1024,1440,1920];
+          const findings={audit_date:new Date().toISOString(),url,screens:[],broken_links:[],a11y:[],errors:[],warnings:[]};
+          const delay=t=>new Promise(r=>setTimeout(r,t));
+          (async()=>{
+            const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
+            for(const width of widths){
+              const ctx=await browser.newContext({viewport:{width,height:900},deviceScaleFactor:1});
+              const page=await ctx.newPage();
+              const errors=[],failed=[];
+              page.on('pageerror',e=>errors.push(e.message));
+              page.on('console',m=>{if(m.type()==='error')errors.push('console: '+m.text().slice(0,180))});
+              page.on('requestfailed',r=>failed.push({url:r.url(),reason:r.failure()?.errorText}));
+              const response=await page.goto(url+'?__audit_glass='+width,{waitUntil:'domcontentloaded',timeout:50000});
+              await page.locator('#zm-company-comprehensive').waitFor({state:'attached',timeout:20000});
+              await page.waitForTimeout(750);
+              const stats=await page.evaluate(()=>{
+                const q=(s)=>[...document.querySelectorAll(s)];
+                const box=e=>{const r=e.getBoundingClientRect();return {x:r.x,y:r.y,w:r.width,h:r.height}};
+                const visible=e=>{const b=box(e),s=getComputedStyle(e);return b.w>0&&b.h>0&&s.visibility!=='hidden'&&s.display!=='none'};
+                const cx=e=>getComputedStyle(e);
+                const cards=q('.zm-card'),articles=q('.zm-article'),history=q('.zm-history-card'),heads=q('.zm-section-head'),topics=q('.zm-history-topic'),summaries=q('.zm-history-topic > summary');
+                const glassIds=['zm-company-cinematic-glass-20261018','zm-company-thick-glass-20261018'];
+                const images=q('img').filter(visible);
+                const brokenImages=images.filter(e=>e.complete&&e.naturalWidth===0).map(e=>e.getAttribute('src'));
+                const anchors=q('a[href],button,summary').filter(visible);
+                const smallTargets=anchors.filter(e=>{let r=box(e);return r.w<24||r.h<24}).slice(0,12).map(e=>({text:(e.innerText||e.getAttribute('aria-label')||'').trim().slice(0,44),tag:e.tagName,w:Math.round(box(e).w),h:Math.round(box(e).h)}));
+                const tallHeader=q('.zm-v7-header')[0];
+                const styleCard=cards[0]&&cx(cards[0]),styleHead=heads[0]&&cx(heads[0]),styleHistory=history[0]&&cx(history[0]);
+                const overflowX=Math.max(document.documentElement.scrollWidth,document.body.scrollWidth)-innerWidth;
+                const allContents=q('#main').flatMap(root=>[...root.querySelectorAll('*')]).filter(visible);
+                const escaped=allContents.filter(e=>{let b=box(e);return b.x < -3 || b.x+b.w>innerWidth+3}).filter(e=>!e.matches('.zm-v7-chain *')).slice(0,14).map(e=>({tag:e.tagName,cls:String(e.className||'').slice(0,70),text:e.textContent?.trim().slice(0,55),...box(e)}));
+                const overlap=(arr)=>{let count=0,sample=[];for(let i=0;i<arr.length;i++){let A=arr[i],a=box(A);for(let j=i+1;j<arr.length;j++){let B=arr[j],b=box(B);if(a.w===0||b.w===0)continue;let area=Math.max(0,Math.min(a.x+a.w,b.x+b.w)-Math.max(a.x,b.x))*Math.max(0,Math.min(a.y+a.h,b.y+b.h)-Math.max(a.y,b.y));if(area>90){count++;if(sample.length<3)sample.push({a:A.textContent?.trim().slice(0,26),b:B.textContent?.trim().slice(0,26),area})}}}return {count,sample}};
+                const nav=q('.zm-v7-chain a');
+                const detailsOpen=topics.filter(e=>e.open).length;
+                const styleLayers=Object.fromEntries(glassIds.map(id=>[id,q('#'+id).length]));
+                const metrics=performance.getEntriesByType('resource').map(x=>({name:x.name.split('?')[0],bytes:x.transferSize||x.decodedBodySize||0,duration:Math.round(x.duration)})).sort((a,b)=>b.bytes-a.bytes).slice(0,8);
+                return {
+                  screen_width:innerWidth,height:document.documentElement.scrollHeight,overflowX,
+                  cards:cards.length,articles:articles.length,history_cards:history.length,section_heads:heads.length,details:topics.length,details_open:detailsOpen,nav_items:nav.length,
+                  header_height:Math.round(tallHeader?.getBoundingClientRect().height||0),
+                  glass_layers:styleLayers,
+                  card_shadow:styleCard?.boxShadow?.slice(0,700),head_shadow:styleHead?.boxShadow?.slice(0,700),history_shadow:styleHistory?.boxShadow?.slice(0,700),
+                  card_backdrop:styleCard?.backdropFilter,history_backdrop:styleHistory?.backdropFilter,
+                  card_animation:styleCard?.animationName,
+                  clipped_images:brokenImages,
+                  smallTargets,escaped,
+                  overlaps_cards:overlap(cards),overlaps_articles:overlap(articles),
+                  topResources:metrics,
+                  title:document.title,description:document.querySelector('meta[name="description"]')?.content||'',
+                  canonical:document.querySelector('link[rel="canonical"]')?.href||'',
+                  allAnchors:[...new Set(q('a[href]').map(a=>a.href))].filter(h=>h.startsWith(location.origin)).slice(0,65)
+                };
+              });
+              if(width===390||width===1440){
+                await page.screenshot({path:'company-'+width+'.png',fullPage:true,animations:'disabled',timeout:35000}).catch(e=>errors.push('screenshot: '+e.message));
+                const a=await new AxeBuilder({page}).withTags(['wcag2a','wcag2aa','wcag21a','wcag21aa','best-practice']).analyze();
+                findings.a11y.push({width,violations:a.violations.map(v=>({id:v.id,impact:v.impact,description:v.help,count:v.nodes.length,examples:v.nodes.slice(0,3).map(n=>({html:n.html.slice(0,240),failure:n.failureSummary?.slice(0,200)}))})),incomplete:a.incomplete.map(v=>({id:v.id,count:v.nodes.length}))});
+                if(width===390){
+                  const details=page.locator('.zm-history-topic').first();
+                  await details.locator('summary').click();
+                  await page.waitForTimeout(150);
+                  const exp=await page.evaluate(()=>({expanded:document.querySelector('.zm-history-topic').open,hOverflow:Math.max(document.documentElement.scrollWidth,document.body.scrollWidth)-innerWidth,expandedCards:[...document.querySelectorAll('.zm-history-topic:first-of-type .zm-history-card')].filter(el=>el.getBoundingClientRect().width>0).length}));
+                  stats.expanded=exp;
+                  await page.screenshot({path:'company-390-expanded.png',fullPage:false,animations:'disabled'}).catch(e=>errors.push('expanded screenshot: '+e.message));
+                }
+              }
+              if(width===1440){
+                findings.candidate_links=stats.allAnchors;
+              }
+              delete stats.allAnchors;
+              findings.screens.push({...stats,errors,failed:failed.slice(0,12)});
+              console.log('AUDIT_SCREEN='+JSON.stringify({...stats,errors,failed:failed.slice(0,8)}));
+              await ctx.close();
+            }
+            const ctx=await browser.newContext({viewport:{width:390,height:844},reducedMotion:'reduce'});
+            const page=await ctx.newPage();await page.goto(url+'?__audit_reduce_motion=1',{waitUntil:'domcontentloaded',timeout:40000});
+            findings.reducedMotion=await page.locator('.zm-card').first().evaluate(e=>({animation:getComputedStyle(e).animationName,transition:getComputedStyle(e).transitionDuration}));
+            console.log('AUDIT_REDUCED_MOTION='+JSON.stringify(findings.reducedMotion));
+            await ctx.close();
+            const request=await browser.newContext({ignoreHTTPSErrors:false});
+            for(const href of (findings.candidate_links||[]).slice(0,45)){
+              try{
+                const r=await request.request.get(href,{timeout:18000});
+                if(r.status()>=400)findings.broken_links.push({url:href,status:r.status()});
+              }catch(e){findings.broken_links.push({url:href,error:e.message.slice(0,130)})}
+            }
+            await request.close();
+            delete findings.candidate_links;
+            fs.writeFileSync('audit.json',JSON.stringify(findings,null,2));
+            console.log('AUDIT_BROKEN_LINKS='+JSON.stringify(findings.broken_links));
+            console.log('AUDIT_AXE='+JSON.stringify(findings.a11y));
+            console.log('AUDIT_SUMMARY='+JSON.stringify({screens:findings.screens.length,overflow:findings.screens.filter(x=>x.overflowX>3).map(x=>({w:x.screen_width,px:x.overflowX})),jsErrors:findings.screens.reduce((sum,x)=>sum+x.errors.length,0),brokenLinks:findings.broken_links.length,a11yViolations:findings.a11y.map(x=>({w:x.width,issues:x.violations.map(v=>v.id+':'+v.count)})),reducedMotion:findings.reducedMotion}));
+            await browser.close();
+          })().catch(e=>{console.error('AUDIT_FATAL',e.stack);process.exit(1)});
+          JS
+          node audit.cjs
+      - name: Upload diagnostic report and screenshot artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zomorod-company-audit-read-only
+          path: |
+            ${{ runner.temp }}/zomorod-company-audit/audit.json
+            ${{ runner.temp }}/zomorod-company-audit/*.png
+          if-no-files-found: warn
+          retention-days: 14
