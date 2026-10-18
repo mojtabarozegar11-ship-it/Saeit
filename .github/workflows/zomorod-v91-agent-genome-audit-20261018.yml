@@ -252,6 +252,48 @@ jobs:
           print("GENE_DEPENDENCY_AUDIT_COMPLETE=read_only")
           PY
           REMOTE
+      - name: Inspect generation API contracts and master command extension points
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 - <<'PY'
+          import ast,json
+          from pathlib import Path
+          root=Path.home()/"Saeit"
+          g=root/"agent_imports"/"v91_genomes"/"site_master"
+          sources=[
+              root/"portal/management/commands/run_site_master.py",
+              root/"portal/agent_engine.py",
+              g/"bridge.py",
+              g/"vendor/master_gen56/controller.py",
+              g/"vendor/master_gen56/risk.py",
+              g/"vendor/master_gen56/slo.py",
+              g/"vendor/master_gen56/learning.py",
+              g/"vendor/master_gen64/controller.py",
+              g/"vendor/master_gen64/cycles.py",
+              g/"vendor/master_gen64/proof.py",
+              Path.home()/"saeit_v91"/"zomorodmelal/tests_offline/test_v25_hosting_gen64.py"]
+          for p in sources:
+              if not p.is_file(): continue
+              tree=ast.parse(p.read_text("utf-8-sig"))
+              defs=[]
+              for node in tree.body:
+                  if isinstance(node,(ast.FunctionDef,ast.AsyncFunctionDef)):
+                      defs.append({"name":node.name,"args":[a.arg for a in node.args.args],"kw":[a.arg for a in node.args.kwonlyargs],"defaults":len(node.args.defaults),"body_nodes":len(node.body)})
+                  if isinstance(node,ast.ClassDef):
+                      methods=[]
+                      for m in node.body:
+                          if isinstance(m,(ast.FunctionDef,ast.AsyncFunctionDef)):
+                              methods.append({"name":m.name,"args":[a.arg for a in m.args.args],"kw":[a.arg for a in m.args.kwonlyargs],"defaults":len(m.args.defaults),"body_nodes":len(m.body)})
+                      defs.append({"class":node.name,"methods":methods})
+              label=str(p.relative_to(root)) if p.is_relative_to(root) else "V91/"+str(p.name)
+              print("GENOME_API="+json.dumps({"path":label,"definitions":defs},ensure_ascii=False,separators=(",",":")))
+          print("GENOME_API_AUDIT_COMPLETE=read_only")
+          PY
+          REMOTE
       - name: Check public site baseline without mutation
         shell: bash
         run: |
