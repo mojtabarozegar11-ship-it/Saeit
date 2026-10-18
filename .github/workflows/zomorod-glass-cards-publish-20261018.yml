@@ -1,0 +1,228 @@
+name: Zomorod floating 3D glass cards protected publication
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/zomorod-glass-cards-publish-20261018.yml]
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-root-homepage
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 24
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate surgical CSS patch and lossless selftest
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/zomorod_glass_cards_safe_20261018.py
+          python3 scripts/zomorod_glass_cards_safe_20261018.py selftest
+      - name: Confirm fixed background and protected routes before patch
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from urllib.request import urlopen,Request
+          for p in ('/','/topics/','/search/','/store/','/about/','/tala/'):
+            with urlopen(Request('https://zomorodmelal.ir'+p,headers={'Cache-Control':'no-cache'}),timeout=25) as r:
+              b=r.read(3500000)
+              assert r.status==200 and len(b)>200
+            if p=='/':
+              assert len(b)>1500000
+              for k in (b'id="solar-stage"',b'id="orbital-cards"',b'ZOMOROD_ORBIT_DATA'):assert k in b
+              assert b'zm-fixed-scientific-background-20261018' in b
+              assert b'zm-glass-floating-cards-20261018' not in b
+            print("BASELINE_OK="+p)
+          PY
+      - name: Prepare pinned VPS SSH and cPanel jump
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zm-bg-relay"; mkdir -p -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.known"
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+      - name: Stage glass CSS patch outside public_html
+        id: stage
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-bg-relay"
+          stage="/home/zomorod2/.zm-bg-stage-$GITHUB_RUN_ID"
+          timeout 40s ssh -T -F "$d/config" saeit-cpanel "test ! -e '$stage' && mkdir -m 700 '$stage'"
+          timeout 65s scp -q -F "$d/config" scripts/zomorod_glass_cards_safe_20261018.py saeit-cpanel:"$stage/install.py"
+      - name: Record protected file SHA baseline
+        run: |
+          set -euo pipefail
+          timeout 40s ssh -T -F "$RUNNER_TEMP/zm-bg-relay/config" saeit-cpanel 'python3 -' <<'PY' > "$RUNNER_TEMP/protected.before"
+          from pathlib import Path
+          import hashlib
+          root=Path('/home/zomorod2/public_html')
+          for name in ('.htaccess','search/index.html','store/index.php','topics/index.html','about/index.html','company/index.html','tala/index.php','business/index.php'):
+            p=root/name
+            if p.is_file() and not p.is_symlink(): print(name,hashlib.sha256(p.read_bytes()).hexdigest())
+          PY
+          test -s "$RUNNER_TEMP/protected.before"
+      - name: Atomically insert glass CSS with SHA-256 backup and no HTML edits
+        id: install
+        run: |
+          set -euo pipefail
+          stage="/home/zomorod2/.zm-bg-stage-$GITHUB_RUN_ID"
+          expected="$(timeout 30s ssh -T -F "$RUNNER_TEMP/zm-bg-relay/config" saeit-cpanel 'sha256sum /home/zomorod2/public_html/index.html' | awk '{print $1}')"
+          test "$(printf '%s' "$expected" | wc -c)" -eq 64
+          timeout 80s ssh -T -F "$RUNNER_TEMP/zm-bg-relay/config" saeit-cpanel "python3 '$stage/install.py' apply '$GITHUB_RUN_ID' '$expected'"
+      - name: Verify only one CSS insertion, live fixed background and protected pages
+        run: |
+          set -euo pipefail
+          stage="/home/zomorod2/.zm-bg-stage-$GITHUB_RUN_ID"
+          timeout 40s ssh -T -F "$RUNNER_TEMP/zm-bg-relay/config" saeit-cpanel "python3 '$stage/install.py' verify '$GITHUB_RUN_ID'"
+          python3 - <<'PY'
+          from urllib.request import Request,urlopen
+          import time
+          verified=False
+          for i in range(7):
+            try:
+              with urlopen(Request('https://zomorodmelal.ir/?glass_published='+str(i),headers={'Cache-Control':'no-cache,no-store'}),timeout=30) as r:
+                b=r.read(3600000);assert r.status==200 and len(b)>1500000
+              assert b.count(b'id="zm-glass-floating-cards-20261018"')==1
+              assert b.count(b'id="zm-fixed-scientific-background-20261018"')==1
+              assert b'zm-card-microfloat-20261018' in b
+              for marker in (b'ZOMOROD_ORBIT_DATA',b'id="orbital-cards"',b'id="site-footer"'):
+                assert marker in b
+              verified=True;break
+            except Exception as e:
+              print('PUBLIC_RETRY='+str(i)+' '+repr(e)[:120],flush=True);time.sleep(3)
+          assert verified,"Glass CSS not confirmed live"
+          with urlopen('https://zomorodmelal.ir/static/site/heroes/zomorod-fixed-cosmos-20261018.webp',timeout=30) as r:
+            img=r.read(8000000);assert r.status==200
+          assert img[:4]==b'RIFF' and img[8:12]==b'WEBP'
+          for path in ('/topics/','/search/','/store/','/about/','/tala/'):
+            with urlopen(Request('https://zomorodmelal.ir'+path,headers={'Cache-Control':'no-cache'}),timeout=30) as r:
+              assert r.status==200 and len(r.read(3600000))>200
+            print('PROTECTED_OK='+path,flush=True)
+          print('GLASS_AND_FIXED_IMAGE_ONLINE=yes',flush=True)
+          PY
+      - name: Check real Chromium desktop/tablet/mobile glass and unchanged rows
+        run: |
+          set -euo pipefail
+          dir="$RUNNER_TEMP/zm-glass-browser";mkdir -p "$dir";cd "$dir"
+          npm --silent init -y >/dev/null
+          npm --silent install --no-save playwright@1.55.0
+          npx playwright install chromium
+          cat > check.cjs <<'JS'
+          const {chromium}=require('playwright');
+          (async()=>{
+            const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
+            for(const width of [1440,900,768,390,320]){
+              const page=await browser.newPage({viewport:{width,height:850}});
+              await page.goto('https://zomorodmelal.ir/?__glass_browser_'+width,{waitUntil:'domcontentloaded',timeout:45000});
+              await page.locator('.topic-card').first().waitFor({timeout:18000});
+              const report=await page.evaluate(()=>{
+                const sheet=document.getElementById('zm-glass-floating-cards-20261018');
+                if(!sheet?.sheet)throw Error('Stylesheet missing');
+                const cards=[...document.querySelectorAll('.topic-card')];
+                const tracks=[...document.querySelectorAll('.card-track')], shelves=[...document.querySelectorAll('.orbit-shelf')];
+                const card=cards[0], cs=getComputedStyle(card), ps=getComputedStyle(card,'::after');
+                const fixed=getComputedStyle(document.body);
+                function layout(){return {
+                  rows:tracks.slice(0,10).map(e=>[e.offsetLeft,e.offsetTop,e.offsetWidth,e.offsetHeight,e.scrollWidth]),
+                  shelves:shelves.slice(0,10).map(e=>[e.offsetLeft,e.offsetTop,e.offsetWidth,e.offsetHeight])
+                }}
+                const withStyle=layout(), originalTransform=cs.transform;
+                const info={cards:cards.length,tracks:tracks.length,shelves:shelves.length,
+                  animation:cs.animationName,glass:cs.backdropFilter,overlay:ps.content,
+                  overlayPointer:ps.pointerEvents,overlayBlur:ps.backdropFilter,
+                  bg:cs.backgroundImage,oldTransform:originalTransform,
+                  bodyImage:fixed.backgroundImage,attachment:fixed.backgroundAttachment};
+                sheet.sheet.disabled=true;
+                const withoutStyle=layout(),underlyingTransform=getComputedStyle(card).transform;
+                sheet.sheet.disabled=false;
+                return {...info,unchanged:JSON.stringify(withStyle)===JSON.stringify(withoutStyle),
+                  sameTransform:originalTransform===underlyingTransform};
+              });
+              console.log('ZM_GLASS_BROWSER='+JSON.stringify({width,cards:report.cards,tracks:report.tracks,
+                shelves:report.shelves,unchanged:report.unchanged,animation:report.animation,
+                blur:report.glass,overlay:report.overlay,fixed:report.attachment}));
+              if(report.cards<50||report.tracks<10||!report.unchanged||!report.sameTransform||
+                report.animation==='none'||report.glass==='none'||report.overlay==='none'||
+                report.overlayPointer!=='none'||report.overlayBlur==='none'||
+                !report.bg.includes('gradient')||report.attachment!=='fixed'||
+                !report.bodyImage.includes('zomorod-fixed-cosmos-20261018.webp'))
+                  throw Error('Glass style or preserved row geometry invalid: '+width);
+              await page.close();
+            }
+            const accessible=await browser.newPage({viewport:{width:390,height:850}});
+            await accessible.emulateMedia({reducedMotion:'reduce'});
+            await accessible.goto('https://zomorodmelal.ir/?__glass_reduced',{waitUntil:'domcontentloaded',timeout:45000});
+            await accessible.locator('.topic-card').first().waitFor({timeout:18000});
+            const animation=await accessible.locator('.topic-card').first().evaluate(el=>getComputedStyle(el).animationName);
+            if(animation!=='none')throw Error('Reduced motion broken: '+animation);
+            await accessible.close();
+            await browser.close();
+            console.log('GLASS_CARDS_FIVE_VIEWPORTS_AND_REDUCED_MOTION=passed');
+          })().catch(e=>{console.error(e.stack);process.exit(1)});
+          JS
+          node check.cjs
+      - name: Verify all protected files remain unchanged
+        run: |
+          set -euo pipefail
+          timeout 40s ssh -T -F "$RUNNER_TEMP/zm-bg-relay/config" saeit-cpanel 'python3 -' <<'PY' > "$RUNNER_TEMP/protected.after"
+          from pathlib import Path
+          import hashlib
+          root=Path('/home/zomorod2/public_html')
+          for name in ('.htaccess','search/index.html','store/index.php','topics/index.html','about/index.html','company/index.html','tala/index.php','business/index.php'):
+            p=root/name
+            if p.is_file() and not p.is_symlink():print(name,hashlib.sha256(p.read_bytes()).hexdigest())
+          PY
+          diff -u "$RUNNER_TEMP/protected.before" "$RUNNER_TEMP/protected.after"
+      - name: Restore original homepage automatically on any downstream failure
+        if: failure() && steps.stage.outcome == 'success'
+        run: |
+          stage="/home/zomorod2/.zm-bg-stage-$GITHUB_RUN_ID"
+          timeout 65s ssh -T -F "$RUNNER_TEMP/zm-bg-relay/config" saeit-cpanel "python3 '$stage/install.py' rollback '$GITHUB_RUN_ID'"
+      - name: Delete only temporary stage, retain backup
+        if: always()
+        run: |
+          set +e
+          d="$RUNNER_TEMP/zm-bg-relay"
+          stage="/home/zomorod2/.zm-bg-stage-$GITHUB_RUN_ID"
+          if test -s "$d/config"; then
+            timeout 35s ssh -T -F "$d/config" saeit-cpanel "rm -f '$stage/install.py'; rmdir '$stage'"
+          fi
+          rm -rf "$d"
