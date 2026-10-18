@@ -178,12 +178,21 @@ jobs:
                           succeeded=succeeded and 'COMPLEMENTARY SPECIALISM 30' in body
                       if route=='/about/mojtaba-rozegar/':
                           succeeded=succeeded and 'Professor Mojtaba Roozegar' in body
-                      print('190_EDITORIAL_LIVE='+route+' attempt='+str(attempt)+' status='+str(code)+' verified='+str(succeeded))
+                      print('190_EDITORIAL_LIVE='+route+' attempt='+str(attempt)+' status='+str(code)+' verified='+str(succeeded)+' size='+str(len(body))+' cards='+str(body.count('class="mpw-ten-card"'))+' marker='+str(body.count('id="mpw-ten-illustrated-20261018"'))+' images='+str(len(re.findall(r'/design-preview-20261017/mpw-ten-editorials-20261018/images/[^"\\s]+\\.webp',body))))
                       if succeeded:break
                   except Exception as e:
                       print('190_EDITORIAL_LIVE_RETRY='+route+' '+type(e).__name__)
                   time.sleep(3)
-              if not succeeded:raise SystemExit('EDITORIAL_ROUTE_CONTENT_NOT_VISIBLE '+route)
+              if not succeeded:
+                  if route=='/company/':
+                      direct='https://mojplaywin.com/design-preview-20261017/mpw-ten-editorials-20261018/pages/company.html'
+                      try:
+                          with urllib.request.urlopen(urllib.request.Request(direct,headers={'Cache-Control':'no-cache'}),timeout=20) as response:
+                              page=response.read(150000).decode('utf-8','replace')
+                              print('190_EDITORIAL_DIRECT_ASSET='+str(response.status)+' cards='+str(page.count('class="mpw-ten-card"'))+' marker='+str(page.count('id="mpw-ten-illustrated-20261018"')))
+                      except Exception as e:
+                          print('190_EDITORIAL_DIRECT_ASSET_ERROR='+type(e).__name__)
+                  raise SystemExit('EDITORIAL_ROUTE_CONTENT_NOT_VISIBLE '+route)
           samples=('company-01.webp','research-04.webp','ventures-carpets-10.webp','about-mojtaba-rozegar-03.webp')
           for name in samples:
               uri='https://mojplaywin.com/design-preview-20261017/mpw-ten-editorials-20261018/images/'+name
