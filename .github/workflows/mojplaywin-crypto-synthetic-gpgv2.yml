@@ -75,16 +75,16 @@ jobs:
           mv "$d/host.candidate" "$d/host.known"
           echo "PINNED_READONLY_RELAY=connected"
 
-      - name: Transfer fake random data and test isolated temporary GPGv2 roundtrip
+      - name: Transfer 128MiB of fake random data and test isolated GPGv2 roundtrip
         shell: bash
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/mojplaywin-crypto-preflight-ssh"
           payload64="$(base64 -w0 scripts/mojplaywin_gpg_synthetic_stream_vps.py)"
           pycall="import base64,sys; exec(base64.b64decode(sys.argv[1]))"
-          timeout 180s ssh -T -F "$d/config" saeit-cpanel "python3 -c 'import os,sys; o=sys.stdout.buffer; [o.write(os.urandom(1048576)) for _ in range(16)]; o.flush()'" |
+          timeout 300s ssh -T -F "$d/config" saeit-cpanel "python3 -c 'import os,sys; o=sys.stdout.buffer; [o.write(os.urandom(1048576)) for _ in range(128)]; o.flush()'" |
             timeout 180s ssh -T -F "$d/config" saeit-vps "python3 -c '$pycall' '$payload64'" |
-            python3 -c 'import json,sys; d=json.load(sys.stdin); print(json.dumps(d,sort_keys=True)); assert d.get("roundtrip_integrity_verified") is True and d.get("fixture_bytes")==16777216 and d.get("real_backup_modified") is False'
+            python3 -c 'import json,sys; d=json.load(sys.stdin); print(json.dumps(d,sort_keys=True)); assert d.get("roundtrip_integrity_verified") is True and d.get("fixture_bytes")==134217728 and d.get("real_backup_modified") is False'
       - name: Production release denied regardless of synthetic result
         run: |
           echo "ONLY_EPHEMERAL_SYNTHETIC_VPS_FIXTURE=true"
