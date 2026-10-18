@@ -471,4 +471,4 @@ class EducationCertificate(T):
 
 
 # Separate native-asset offer/invoice tables for MojPlayWin only.
-from .mojplaywin_crypto_models import MojCryptoOffer, MojCryptoInvoice  # noqa: E402,F401
+from .mojplaywin_crypto_models import MojCryptoOffer, MojCryptoInvoice, MojCryptoThrottle  # noqa: E402,F401
