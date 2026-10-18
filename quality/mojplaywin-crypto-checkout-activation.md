@@ -38,6 +38,22 @@ do not bypass it.
 8. USDT is NOT supported. It needs pinned token contracts, transfer-event decoding,
    decimals, double-spend and chain verification and separate merchant acceptance.
 
+## Merchant receiving wallets supplied 2026-10-18 (PUBLIC addresses ONLY)
+Owner supplied Trust Wallet receive-screen screenshots for both native assets.
+These **public receiving addresses** were transcribed and their address checks validated.
+The TRON Base58Check checksum was valid and the Ethereum mixed-case EIP-55 checksum matched.
+Screenshot possession **does not cryptographically prove wallet ownership**: confirm
+both addresses inside the intended merchant wallet again before enabling.
+
+- Ethereum mainnet / native ETH: `0x89149b01f59115B86553561F12438D2ADF517E75`
+- TRON mainnet / native TRX: `THFNU1iEXHd71WjEgjqUksd2UnMg2pUi73`
+- TRX screenshot explicitly says no memo is required.
+- Neither address accepts arbitrary coins, wrapped ETH, USDT or cross-chain transfers
+  in the current checkout. **Do not send other assets or networks.**
+- Do not hard-code these as production defaults or switch the feature flag on.
+  Configure the corresponding environment variables on the isolated merchant
+  deployment **only after** owner-side wallet comparison and restore-capable backups.
+
 ## Server-only environment variable names
 ```env
 MOJPLAYWIN_CRYPTO_ENABLED=False
