@@ -1,0 +1,47 @@
+name: Zomorod row heading read-only target audit 20261018
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/zomorod-row-heading-readonly-20261018.yml
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Inspect existing heading/card structure in Chromium without edits
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/zm-row-heading-audit";cd "$RUNNER_TEMP/zm-row-heading-audit"
+          npm --silent init -y >/dev/null
+          npm --silent install --no-save playwright@1.55.0
+          npx playwright install chromium
+          cat > inspect.cjs <<'JS'
+          const {chromium}=require('playwright');
+          (async()=>{
+            const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
+            const page=await browser.newPage({viewport:{width:1440,height:900}});
+            await page.goto('https://zomorodmelal.ir/?__heading_readonly_20261018',{waitUntil:'domcontentloaded',timeout:45000});
+            await page.locator('.topic-card').first().waitFor({timeout:20000});
+            const result=await page.evaluate(()=>{
+              const scopes=['.orbit-shelf','.shelf-heading-line','.shelf-explanation','.card-track','.topic-card','.detail-card'];
+              const counts=Object.fromEntries(scopes.map(q=>[q,document.querySelectorAll(q).length]));
+              const s=document.querySelector('.orbit-shelf');
+              const heads=[...document.querySelectorAll('.orbit-shelf')].slice(0,3).map(e=>{
+                const h=e.querySelector('.shelf-heading-line'),d=e.querySelector('.shelf-explanation');
+                function info(x){if(!x)return null;const k=getComputedStyle(x),r=x.getBoundingClientRect();return {tag:x.tagName,cls:x.className,html:x.outerHTML.slice(0,1300),size:[r.width,r.height],background:k.backgroundImage,color:k.color,border:k.border,position:k.position,display:k.display};}
+                return {children:[...e.children].slice(0,6).map(x=>({tag:x.tagName,cls:x.className})),head:info(h),explain:info(d)};
+              });
+              const markers=['zm-fixed-scientific-background-20261018','zm-glass-floating-cards-20261018'];
+              return {counts,heads,markers:markers.map(x=>!!document.getElementById(x)),bodyFixed:getComputedStyle(document.body).backgroundAttachment};
+            });
+            console.log('ROW_HEADING_READONLY='+JSON.stringify(result));
+            if(result.counts['.topic-card']<600||result.counts['.card-track']<20||result.counts['.shelf-heading-line']<20||!result.markers.every(Boolean)||result.bodyFixed!=='fixed')throw Error('Header audit preconditions failed');
+            await browser.close();
+            console.log('ROW_HEADING_DOM_READONLY_VALID=yes');
+          })().catch(e=>{console.error(e.stack);process.exit(1)});
+          JS
+          node inspect.cjs
