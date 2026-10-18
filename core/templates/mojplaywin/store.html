@@ -20,7 +20,39 @@
     </article>
     {% endfor %}
   </div>
-</section><section class="mw-section mw-store-help" aria-labelledby="mpw-store-help-title">
+</section>
+<section class="mw-section mw-store-releases" id="mpw-available-now" aria-labelledby="mpw-free-tool-title">
+  <span class="mw-kicker">AVAILABLE NOW · VERIFIED PUBLIC RELEASE</span>
+  <h2 id="mpw-free-tool-title">Farm Enterprise Economics Toolkit — Free Edition</h2>
+  <p>A real downloadable offline calculator for enterprise margins, break-even, and scenario planning. The release page includes a ZIP file, setup instructions, and a SHA-256 integrity manifest. No payment is required.</p>
+  <div class="mw-actions"><a class="mw-button primary" href="/factory-releases/farm-enterprise-economics-v1/">View and download free toolkit ↗</a></div>
+  <p class="mw-note">Free edition; commercial checkout is not offered for this release.</p>
+</section>
+{% if registered_products %}
+<section class="mw-section mw-store-native-catalog" aria-labelledby="mpw-native-store-title">
+  <span class="mw-kicker">REGISTERED · PUBLISHED · MAIN SITE ONLY</span>
+  <h2 id="mpw-native-store-title">Registered digital products</h2>
+  <p>These items have a published native catalog record. A price does not mean checkout has been enabled.</p>
+  <div class="mw-grid">
+    {% for item in registered_products %}
+    <article class="mw-card"><div class="mw-card-copy">
+      <span class="mw-kicker">{{ item.category }}</span>
+      <h3>{{ item.title }}</h3>
+      <p>{{ item.description }}</p>
+      <p><strong>{{ item.price }} {{ item.currency }}</strong></p>
+      {% if item.for_sale %}
+      <a href="{{ item.checkout_path }}" class="mw-button primary">Proceed to verified checkout ↗</a>
+      {% elif item.details_path %}
+      <a href="{{ item.details_path }}">View product details ↗</a>
+      {% else %}
+      <p class="mw-note">Checkout not yet available</p>
+      {% endif %}
+    </div></article>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+<section class="mw-section mw-store-help" aria-labelledby="mpw-store-help-title">
   <span class="mw-kicker">CHOOSING A DIGITAL PRODUCT</span>
   <h2 id="mpw-store-help-title">Know what you are getting</h2>
   <div class="mw-grid">
