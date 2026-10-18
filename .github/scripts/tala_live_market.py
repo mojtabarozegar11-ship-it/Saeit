@@ -16,10 +16,11 @@ import urllib.request
 
 OZ_TO_GRAM = 31.1034768
 SPOTS = {"xau": "XAU", "xag": "XAG", "xpt": "XPT", "xpd": "XPD"}
-COINS = {"btc": "bitcoin", "eth": "ethereum", "usdt": "tether",
-         "trx": "tron", "bnb": "binancecoin", "sol": "solana"}
+# Gold API explicitly permits public commercial use and lists BTC / ETH.
+# No CoinGecko keyless data: its free tier does not grant commercial display rights.
+COINS = {"btc": "BTC", "eth": "ETH"}
 FX = ("USD", "EUR", "GBP", "AED", "TRY", "CAD", "IRR")
-PROVIDERS = ("api.gold-api.com", "api.coingecko.com", "open.er-api.com")
+PROVIDERS = ("api.gold-api.com", "api.frankfurter.dev")
 
 def utc(ts):
     if isinstance(ts,(int,float)):
@@ -72,33 +73,48 @@ def assemble(fetch=get,now=None):
                 "Gold API","https://gold-api.com/",data["updatedAt"],"metals",now)
         except (ValueError,KeyError,TypeError,TimeoutError,OSError) as e:
             failures.append(symbol+":"+type(e).__name__)
-    coin_ids=",".join(COINS.values())
+    for symbol,remote in COINS.items():
+        try:
+            data=fetch("https://api.gold-api.com/price/"+remote)
+            if data.get("symbol")!=remote or data.get("currency")!="USD":
+                raise ValueError("crypto symbol or currency mismatch")
+            quotes[symbol]=record(symbol,float(data["price"]),"USD","coin",
+                "Gold API","https://gold-api.com/",data["updatedAt"],"crypto",now)
+        except (ValueError,KeyError,TypeError,TimeoutError,OSError) as e:
+            failures.append(symbol+":"+type(e).__name__)
     try:
-        data=fetch("https://api.coingecko.com/api/v3/simple/price?ids="+coin_ids+"&vs_currencies=usd&include_last_updated_at=true")
-        for symbol,remote in COINS.items():
-            try:
-                row=data[remote]
-                quotes[symbol]=record(symbol,row["usd"],"USD","coin",
-                    "CoinGecko","https://www.coingecko.com/",row["last_updated_at"],"crypto",now)
-            except (ValueError,KeyError,TypeError,OverflowError,OSError) as e:
-                failures.append(symbol+":"+type(e).__name__)
-    except (ValueError,KeyError,TypeError,TimeoutError,OSError) as e:
-        failures.append("coingecko:"+type(e).__name__)
-    try:
-        data=fetch("https://open.er-api.com/v6/latest/USD")
-        if data.get("result")!="success" or data.get("base_code")!="USD":
-            raise ValueError("unsupported forex reference")
-        observed=data["time_last_update_unix"]
-        rates=data["rates"]
+        data=fetch("https://api.frankfurter.dev/v2/rates?base=USD&quotes=IRR,EUR,GBP,AED,TRY,CAD")
+        if not isinstance(data,list):
+            raise ValueError("unexpected forex payload")
+        rates={}
+        dates={}
+        for row in data:
+            if (not isinstance(row,dict) or row.get("base")!="USD"
+                or row.get("quote") not in FX):
+                continue
+            target=row["quote"]
+            rate=row.get("rate")
+            day=row.get("date")
+            if not reasonable(rate,max_value=1000000000) or not isinstance(day,str):
+                continue
+            observed=dt.datetime.strptime(day,"%Y-%m-%d").replace(tzinfo=dt.timezone.utc)
+            rates[target]=rate
+            dates[target]=observed
         for target in FX:
+            if target=="USD":
+                continue
             try:
                 price=rates[target]
-                # Reference cross-rate of 1 USD, NOT free-market Iranian quotes.
                 quotes["usd_"+target.lower()]=record("usd_"+target.lower(),price,target,"per_usd",
-                    "ExchangeRate-API reference","https://www.exchangerate-api.com/",
-                    observed,"forex_reference",now)
+                    "Frankfurter blended reference","https://frankfurter.dev/",
+                    dates[target].isoformat(),"forex_reference",now)
             except (ValueError,KeyError,TypeError,OverflowError,OSError) as e:
                 failures.append("usd_"+target.lower()+":"+type(e).__name__)
+        if len(rates)==len(FX)-1:
+            observed=min(dates.values())
+            quotes["usd_usd"]=record("usd_usd",1,"USD","per_usd",
+                "Frankfurter blended reference","https://frankfurter.dev/",
+                observed.isoformat(),"forex_reference",now)
     except (ValueError,KeyError,TypeError,TimeoutError,OSError) as e:
         failures.append("fx:"+type(e).__name__)
     if not quotes:
@@ -118,7 +134,7 @@ def check_doc(doc):
             raise ValueError("unapproved symbol")
         if not reasonable(value["price"]) or value.get("symbol")!=name:
             raise ValueError("invalid quote")
-        if value.get("source") not in ("Gold API","CoinGecko","ExchangeRate-API reference"):
+        if value.get("source") not in ("Gold API","Frankfurter blended reference"):
             raise ValueError("unapproved source")
         utc(value["observed_at"])
     utc(doc["generated_at"])
@@ -130,15 +146,16 @@ def selftest():
             symbol=url.rsplit("/",1)[-1]
             return {"symbol":symbol,"currency":"USD","price":3110.34768,
                     "updatedAt":"2026-10-18T04:59:00Z"}
-        if "coingecko" in url:
-            return {coin:{"usd":100,"last_updated_at":1792299540} for coin in COINS.values()}
-        return {"result":"success","base_code":"USD",
-                "time_last_update_unix":1792281751,
-                "rates":{k:2 for k in FX}}
+        if "frankfurter" in url:
+            return [{"date":"2026-10-17","base":"USD","quote":k,"rate":2}
+                    for k in FX if k!="USD"]
+        raise AssertionError("unexpected provider URL")
     doc=assemble(fake,now)
-    assert len(doc["quotes"])==17
+    assert len(doc["quotes"])==13
     assert doc["quotes"]["xau"]["price"]==100
-    assert doc["quotes"]["usd_irr"]["source"]=="ExchangeRate-API reference"
+    assert doc["quotes"]["usd_irr"]["source"]=="Frankfurter blended reference"
+    assert doc["quotes"]["btc"]["source"]=="Gold API"
+    assert "usdt" not in doc["quotes"]
     check_doc(doc)
     print("TALA_LIVE_PROVIDER_SELFTEST=passed")
 
