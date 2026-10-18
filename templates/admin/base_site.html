@@ -13,6 +13,8 @@
 </div>
 {% else %}
 <div id="site-name"><a href="{% url 'admin:index' %}">{{ site_header|default:_("Django administration") }}</a></div>
+{% elif request.get_host == "mojplaywin.com" or request.get_host == "www.mojplaywin.com" %}
+<a href="{% url 'mpw_agent_monitor' %}" style="display:inline-block;margin:8px;padding:8px 14px;border:1px solid #517b9f;border-radius:8px;color:#eff5ff">پایش عملکرد مستر ایجنت‌ها و ربات‌ها ↗</a>
 {% endif %}
 {% endblock %}
 {% block extrastyle %}{{ block.super }}
