@@ -46,14 +46,18 @@ def atomic(path,raw,mode):
     finally:
         if os.path.exists(tmp):os.unlink(tmp)
 def rules():
+    # Match the exact REQUEST_URI in the already-isolated MojPlayWin document root.
+    # Its existing working About, professor and sector rules use the same shape.
+    # HTTP_HOST is intentionally not relied on because the cPanel reverse proxy
+    # can normalize it before per-directory mod_rewrite runs.
     result=[START]
     for path in PATHS:
-        expression="^"+re.escape(path.strip("/"))+"/$"
+        condition="^"+re.escape(path)+"$"
         target="/"+PUBLIC_BASE+"/pages/"+slug(path)+".html"
         result.extend((
           "RewriteCond %{REQUEST_METHOD} ^GET$",
-          "RewriteCond %{HTTP_HOST} ^(www\\.)?mojplaywin\\.com$ [NC]",
-          "RewriteRule "+expression+" "+target+" [END,QSD]",
+          "RewriteCond %{REQUEST_URI} "+condition,
+          "RewriteRule ^.*$ "+target+" [END,QSD]",
         ))
     result.append(END)
     return ("\n".join(result)+"\n").encode("ascii")
@@ -67,8 +71,8 @@ def patch_ht(raw):
         stop("Preserved professor About route unexpectedly absent")
     edited=raw.replace(b"RewriteEngine On",b"RewriteEngine On\n"+rules(),1)
     if edited.replace(b"\n"+rules(),b"",1)!=raw:stop("Rewrite not exactly reversible")
-    for forbidden in ("store","checkout","payment","admin","api","farnaz","saman","picm","mojtaba.roozegar"):
-        if "RewriteRule ^"+forbidden in rules().decode():
+    for forbidden in ("/store/","/checkout/","/payment/","/admin/","/api/","/farnaz/","/saman/","/picm/","/mojtaba.roozegar/"):
+        if any(route.startswith(forbidden) for route in PATHS):
             stop("Sensitive or child-site route unexpectedly included")
     if rules().count(b"RewriteRule")!=len(PATHS):stop("Rule count mismatch")
     return edited
