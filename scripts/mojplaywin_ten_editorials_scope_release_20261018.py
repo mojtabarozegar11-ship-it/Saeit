@@ -75,7 +75,7 @@ def patch_ht(raw):
 def stage_archive(src,folder):
     with tarfile.open(src,mode="r:gz") as tar:
         files=[m for m in tar if m.isfile()]
-        if len(files)!=211:stop("Unexpected archived file count (19 html +190 webp+manifest expected)")
+        if len(files)!=210:stop("Unexpected archived file count (19 html +190 webp+manifest expected)")
         for item in files:
             if item.issym() or item.islnk() or item.size>950000:
                 stop("Invalid member type or size")
