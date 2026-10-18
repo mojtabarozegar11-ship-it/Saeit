@@ -48,13 +48,13 @@ if ht.is_file() and not ht.is_symlink() and ht.stat().st_size<100000:
     ht_lines=ht.read_text(encoding="utf8",errors="replace").splitlines()
     meaningful=[ln.strip() for ln in ht_lines if ln.strip() and not ln.lstrip().startswith("#")]
     result["rewrite_policy"]={
-        "request_file_negative_condition":sum(bool(re.search(r"RewriteCond.*REQUEST_FILENAME.*!-f",ln,re.I)) for ln in meaningful),
-        "request_dir_negative_condition":sum(bool(re.search(r"RewriteCond.*REQUEST_FILENAME.*!-d",ln,re.I)) for ln in meaningful),
-        "rewrite_rule_count":sum(bool(re.match(r"(?i)^RewriteRule\\b",ln)) for ln in meaningful),
-        "rewrite_engine_count":sum(bool(re.match(r"(?i)^RewriteEngine\\b",ln)) for ln in meaningful),
-        "rewrite_flag_last_count":sum(bool(re.search(r"\\[(?:[^]]*,)?L(?:,|\\])",ln,re.I)) for ln in meaningful),
-        "rewrite_policy_unknown":True,
+        "request_file_negative_condition":sum(("REQUEST_FILENAME" in ln.upper() and "!-f" in ln.lower()) for ln in meaningful),
+        "request_dir_negative_condition":sum(("REQUEST_FILENAME" in ln.upper() and "!-d" in ln.lower()) for ln in meaningful),
+        "rewrite_rule_count":sum(ln.lower().startswith("rewriterule ") for ln in meaningful),
+        "rewrite_engine_count":sum(ln.lower().startswith("rewriteengine ") for ln in meaningful),
+        "directory_bypass_not_proven":True,
     }
+
 result["safe_isolated_live_route_proven"]=False
 result["shared_passenger_restart_permitted"]=False
 result["backup_restore_verified"]=False
