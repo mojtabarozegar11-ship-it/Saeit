@@ -55,7 +55,7 @@ def main():
         return
     if read_cron(program)!=original:
         raise RuntimeError("CRON_CHANGED_DURING_PREFLIGHT")
-    updated=original.rstrip("\n")+"\n"+schedule+"\n"
+    updated=original+("" if not original or original.endswith("\n") else "\n")+schedule+"\n"
     p=subprocess.run([program,"-"],input=updated,text=True,
                      capture_output=True,timeout=16)
     if p.returncode!=0:raise RuntimeError("CRON_INSTALL_REJECTED")
