@@ -1,0 +1,123 @@
+name: MojPlayWin actual crypto engine eligibility audit without secrets
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/mojplaywin-crypto-checkout-detailed-audit.yml"]
+permissions: {contents: read}
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Inspect live wallet-checkout code safeguards (read-only no secrets)
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 90s ssh -T -F "$d/config" saeit-cpanel python3 - <<'PY'
+          from pathlib import Path
+          import re,json,hashlib,os
+          base=Path('/home/zomorod2/Saeit-staging')
+          names=('core/cryptopay_checkout.py','core/cryptopay_mainnet_config.py','core/cryptopay_tron_config.py',
+              'core/cryptopay_v1.py','core/cryptopay_tron.py','core/cryptopay_rpc.py',
+              'core/cryptopay_order.py','mpw_native_checkout/merchant_wallet_urls.py',
+              'mpw_native_checkout/merchant_wallet_views.py')
+          for name in names:
+            p=base/name
+            if not p.is_file() or p.is_symlink():
+              print('MPW_CRYPTO_MODULE='+json.dumps({'name':name,'exists':False}))
+              continue
+            raw=p.read_text('utf8','replace')
+            out=[]
+            for n,row in enumerate(raw.splitlines(),1):
+              line=row.strip()
+              if not line or line.startswith('#'):continue
+              if re.search(r'(?i)secret|token|password|private|seed|mnemonic|api_key|address|wallet',line):
+                # Show nonsecret control names, not account identifiers or sensitive literal values.
+                if line.startswith(('def ','class ','from ','import ')):
+                  out.append(str(n)+':'+line[:155])
+                else:
+                  out.append(str(n)+':'+('[redacted wallet or credential line]'))
+              elif re.search(r'route|^def |^class |network|mainnet|testnet|tron|ethereum|USDT|_enabled|enabled|status|confirm|transaction|chain|broadcast|rpc|requests|urllib|redirect|template|error|quantity|amount|render|provider|order',line,re.I):
+                # Limit content to sanitized short code line.
+                safe=re.sub(r'(0x[a-fA-F0-9]{30,}|T[1-9A-HJ-NP-Za-km-z]{33})','[public-address]',line)
+                out.append(str(n)+':'+safe[:210])
+            print('MPW_CRYPTO_MODULE='+json.dumps({'name':name,'exists':True,'sha256':hashlib.sha256(p.read_bytes()).hexdigest(),'lines':out[:100]}))
+          # Report only counts; do not print any personal records or amounts.
+          try:
+            os.chdir(base)
+            import sys
+            sys.path.insert(0,str(base))
+            os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+            import django
+            django.setup()
+            from django.conf import settings
+            from django.urls import resolve,Resolver404
+            results={}
+            for path in ['/checkout/','/store/','/store/product/1/','/store/product/1/checkout/','/store/order/1/crypto/','/store/order/1/download/']:
+              try:
+                match=resolve(path)
+                results[path]={'name':match.url_name,'module':match.func.__module__}
+              except Resolver404:results[path]={'name':None}
+            print('MPW_CRYPTO_DJANGO_URL_RESOLVE='+json.dumps(results))
+            opts={}
+            for key in ('PAYMENT_LIVE_ENABLED','CRYPTO_PAYMENT_ENABLED','TRON_MAINNET_ENABLED',
+                'USDT_TRC20_MAINNET_ENABLED','USDT_ERC20_MAINNET_ENABLED',
+                'CRYPTO_MAINNET_ENABLED','MPW_CRYPTO_LIVE_ENABLED'):
+              value=getattr(settings,key,None)
+              opts[key]=value if isinstance(value,(bool,int,type(None))) else ('configured' if value else 'empty')
+            print('MPW_CRYPTO_SETTINGS_FLAGS='+json.dumps(opts))
+            from core.models import Product,Order,PaymentIntent
+            data={'active_products':Product.objects.filter(active=True).count(),
+              'all_products':Product.objects.count(),'pending_orders':Order.objects.filter(status='pending').count(),
+              'paid_orders':Order.objects.filter(status='paid').count(),
+              'payment_intents':PaymentIntent.objects.count()}
+            print('MPW_CRYPTO_DB_AGGREGATE='+json.dumps(data))
+          except Exception as exc:
+            print('MPW_CRYPTO_DJANGO_READ_ERROR='+type(exc).__name__)
+          PY
