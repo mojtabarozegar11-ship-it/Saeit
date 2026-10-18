@@ -95,6 +95,16 @@ def _publish():
         require(private(ROLLBACKS),"ROLLBACK_STORAGE_NOT_PRIVATE")
         # Keep only one authoritative rollback snapshot; refuse ambiguity.
         prior=ROLLBACKS/"previous"
+        if prior.exists():
+            state=read_json(CONTROL)
+            require(state.get("status")=="published_verified_by_external_smoke"
+                    and prior.is_dir() and not prior.is_symlink()
+                    and read_json(prior/OWNER).get("scope")==
+                    "mojplaywin-main-static-mpw-editorial-only",
+                    "PREVIOUS_ROLLBACK_NOT_RECONCILED")
+            # Rotate one explicitly owned prior backup only after successful
+            # external smoke of the currently live release.
+            shutil.rmtree(prior)
         require(not prior.exists() and not prior.is_symlink(),"PREVIOUS_ROLLBACK_NOT_RECONCILED")
         _public_permissions(tmp)
         if LIVE.exists():
@@ -156,14 +166,7 @@ def _finalize():
     require(LIVE.is_dir() and not LIVE.is_symlink(),"PUBLICATION_TARGET_NOT_AVAILABLE")
     require(_content_signature(read_json(LIVE/OWNER))==state.get("content_signature"),
             "PUBLICATION_PROOF_CHANGED")
-    rollback=ROLLBACKS/"previous"
-    if rollback.exists():
-        require(rollback.is_dir() and not rollback.is_symlink()
-                and read_json(rollback/OWNER).get("scope")=="mojplaywin-main-static-mpw-editorial-only",
-                "PUBLISH_BACKUP_NOT_OWNED")
-        # Keeping the last good version consumes very little (<300KB).
-        # Prune only the one prior owned backup after external smoke succeeded.
-        shutil.rmtree(rollback)
+    # Keep the most recent verified prior release as the restoration snapshot.
     state["status"]="published_verified_by_external_smoke"
     atomic_json(CONTROL,state)
     return {"status":"standalone_public_content_smoke_confirmed","articles":state["articles"]}
@@ -177,7 +180,7 @@ def _cron():
     require(raw.returncode==0,"CRON_READ_FAILED")
     lines=[x for x in raw.stdout.splitlines() if MARKER in x]
     command=("12 * * * * /usr/bin/flock -n "+str(EVO/"editorial_cron.lock")
-             +" /usr/bin/python3 -B "+str(CODE.parent.parent/"scripts"/"mpw_static_editorial_release_control.py")
+             +" /usr/bin/python3 -B "+str(CODE.parent/"scripts"/"mpw_static_editorial_release_control.py")
              +" --publish > "+str(EVO/"editorial_cron_last.log")
              +" 2>&1 # "+MARKER)
     require(len(lines)<=1,"DUPLICATE_PUBLISHER_CRON")
@@ -186,7 +189,7 @@ def _cron():
         return {"status":"private_editorial_publisher_hourly_cron_already_installed"}
     # Source code is stored in a private scripts directory installed by a
     # separate checked deploy; never points to shared application runtime.
-    script=CODE.parent.parent/"scripts"/"mpw_static_editorial_release_control.py"
+    script=CODE.parent/"scripts"/"mpw_static_editorial_release_control.py"
     require(script.is_file() and not script.is_symlink(),"PINNED_PUBLISHER_SCRIPT_MISSING")
     backed=EVO/"editorial_crontab_before.txt"
     require(not backed.is_symlink(),"CRON_BACKUP_SYMLINK")
