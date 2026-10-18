@@ -46,6 +46,8 @@ jobs:
           echo "VPS_USER=$(id -un)"
           echo "VPS_HOSTNAME=$(hostname)"
           echo "VPS_UPTIME=$(uptime -p)"
+          echo "FACTORY_AUDIT_UTC=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          echo "VPS_BOOT_TIME=$(uptime -s)"
           df -h "$HOME" | tail -n 1 | awk '{print "VPS_DISK_USED=" $5 " VPS_DISK_FREE=" $4}'
           free -m | awk '/^Mem:/ {print "VPS_MEMORY_TOTAL_MB=" $2 " VPS_MEMORY_AVAILABLE_MB=" $7}'
           for p in "$base" "$ops" "$app" "$base/.venv/bin/python" "$ops/vps-only-loop.sh" "$base/private/factory-fresh-isolated.sqlite3"; do
