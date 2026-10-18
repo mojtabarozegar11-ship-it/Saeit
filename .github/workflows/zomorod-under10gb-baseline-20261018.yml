@@ -1,4 +1,4 @@
-name: Zomorod under-10GB cleanup baseline and dependency audit
+name: Zomorod under-10GB post-cleanup quota and dependency audit
 on:
   push:
     branches: [main]
@@ -125,7 +125,7 @@ jobs:
               print("BEFORE_QUOTA_USED_MB="+str(data.get("megabytes_used")))
               print("BEFORE_QUOTA_LIMIT_MB="+str(data.get("megabyte_limit")))
           except Exception as e:print("QUOTA_READ_ERROR="+type(e).__name__)
-          print("BASELINE_COMPLETE=yes")
+          print("POST_CLEANUP_INVENTORY_COMPLETE=yes")
           PY
           REMOTE
       - name: Smoke-test protected public pages (read-only)
