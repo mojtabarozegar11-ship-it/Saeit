@@ -74,6 +74,12 @@ jobs:
           quote=(root/'api/quotes.php').read_text(encoding='utf-8')
           for x in ("TALA_SESSION","hash_equals(","'role'","CREATE TABLE IF NOT EXISTS tala_quote_history","mode'=>'manager_verified'","updated_automatically"):
               if x not in quote: raise SystemExit('TALA_PRICE_BOARD_CONTROL_MISSING='+x)
+          if 'id="live-market"' not in source or 'id="spot-xau"' not in source or 'id="spot-xag"' not in source:
+              raise SystemExit('TALA_LIVE_WORLD_SPOT_UI=missing')
+          if '/tala/assets/tala-live-spot.js' not in source or 'tv-market-data' not in source or 'widgets.tradingview-widget.com' not in source:
+              raise SystemExit('TALA_OFFICIAL_MARKET_WIDGET=missing')
+          if 'Gold API' not in source or 'نه قیمت بازار آزاد ایران' not in source or 'TradingView' not in source:
+              raise SystemExit('TALA_LIVE_PRICE_ATTRIBUTION=missing')
           if 'assets/tala-calculator.js' not in source or 'id="gold-calculator"' not in source or 'id="jewelry-calculator"' not in source:
               raise SystemExit('TALA_PRICE_CALCULATOR_UI=missing')
           for marker in ('market-metals-grid','market-forex-grid','market-crypto-grid','renderTalaExtendedBoard'):
@@ -103,5 +109,7 @@ jobs:
           node --check public/tala/sw.js
           node --check public/tala/assets/tala-calculator.js
           node .github/scripts/tala_quote_calc_test.cjs
+          node --check public/tala/assets/tala-live-spot.js
+          node .github/scripts/tala_live_spot_test.cjs
           if command -v php >/dev/null 2>&1; then php -l public/tala/api/quotes.php; fi
           python3 .github/scripts/tala_storage.py selftest

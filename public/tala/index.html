@@ -34,14 +34,49 @@
 .market-extra .ticker-card em{display:block;overflow-wrap:anywhere}
 @media(max-width:850px){.market-extra{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:560px){.market-extra{grid-template-columns:repeat(2,minmax(0,1fr))}.market-subsection{padding:14px 12px}}
+
+/* Scoped world-price board; existing Rial, inquiry and admin sections stay unchanged. */
+.tala-live-market{background:#161712;border-block:1px solid var(--line)}
+.live-spot-status{color:var(--gold);font-size:12px;margin:0 0 15px}
+.live-spot-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.live-spot-card{padding:20px 16px;border:1px solid var(--line);background:#1c1d18;border-radius:18px;min-width:0}
+.live-spot-card small{display:block;color:var(--muted);font-size:11px}
+.live-spot-card strong{display:block;color:var(--gold);font-size:clamp(16px,1.9vw,24px);font-weight:600;overflow-wrap:anywhere;margin:9px 0 4px;direction:ltr;text-align:right}
+.live-spot-card em{font-style:normal;color:var(--muted);font-size:10px;display:block}
+.world-market-widget{margin-top:24px;padding:18px 16px;border:1px solid var(--line);border-radius:18px;background:#1c1d18}
+.world-market-widget h3{font-size:18px;color:var(--gold);margin:0}
+.world-market-widget p,.live-source-note{font-size:11px;color:var(--muted)}
+.world-market-widget tv-market-data{display:block;width:100%;min-height:420px;overflow:hidden}
+.live-source-note{line-height:2.1;margin:20px 0 0}.live-source-note a{color:var(--gold);text-decoration:underline}
+@media(max-width:850px){.live-spot-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:560px){.live-spot-grid{gap:9px}.live-spot-card{padding:12px 10px}.live-spot-card strong{font-size:15px}.world-market-widget{padding:12px 9px}}
 </style>
 <!-- tala-isolated-site-v1 -->
 </head>
 <body>
 <div class="topline"><div>زیرمجموعهٔ تخصصی <b>شرکت کشت و صنعت زمرد ملل</b></div><div><span class="app-badge">تجربهٔ وب‌اپلیکیشن</span> <span id="clock">—</span></div></div>
-<header class="header"><div class="wrap nav"><a class="brand" href="/tala/"><img src="/tala/assets/tala-mark.svg" alt="نشان تلا"><span><strong>تَلا</strong><small>GOLD · JEWELRY · GEMS</small></span></a><nav class="links" id="menu"><a href="#market">بازار امروز</a><a href="#calculators">محاسبه قیمت طلا و جواهر</a><a href="#showcase">ویترین</a><a href="#learn">دانش‌نامه</a><a href="#insight">دیدبان بازار</a><a href="#studio">میزکار کسب‌وکار</a><a href="/tala/admin/">ورود مدیریت</a></nav><div class="nav-actions"><button class="iconbtn" aria-label="جستجو" onclick="openSearch()">⌕</button><a class="btn login" href="/tala/admin/">ورود به میزکار</a><button class="iconbtn" aria-label="پیش‌نویس‌های استعلام" onclick="openInquiries()">♧<span id="inquiry-count" style="font-size:9px">۰</span></button><button class="iconbtn menu-toggle" aria-label="منو" onclick="document.getElementById('menu').classList.toggle('open')">☰</button></div></div></header>
+<header class="header"><div class="wrap nav"><a class="brand" href="/tala/"><img src="/tala/assets/tala-mark.svg" alt="نشان تلا"><span><strong>تَلا</strong><small>GOLD · JEWELRY · GEMS</small></span></a><nav class="links" id="menu"><a href="#live-market">قیمت جهانی زنده</a><a href="#market">بازار امروز</a><a href="#calculators">محاسبه قیمت طلا و جواهر</a><a href="#showcase">ویترین</a><a href="#learn">دانش‌نامه</a><a href="#insight">دیدبان بازار</a><a href="#studio">میزکار کسب‌وکار</a><a href="/tala/admin/">ورود مدیریت</a></nav><div class="nav-actions"><button class="iconbtn" aria-label="جستجو" onclick="openSearch()">⌕</button><a class="btn login" href="/tala/admin/">ورود به میزکار</a><button class="iconbtn" aria-label="پیش‌نویس‌های استعلام" onclick="openInquiries()">♧<span id="inquiry-count" style="font-size:9px">۰</span></button><button class="iconbtn menu-toggle" aria-label="منو" onclick="document.getElementById('menu').classList.toggle('open')">☰</button></div></div></header>
 <main>
 <section class="wrap hero"><div class="hero-copy"><div class="eyebrow">طلا، جواهر و گوهرسنگ؛ با نگاهی نو</div><h1>ارزش را<br><span>باوقار بسازید.</span></h1><p class="lead">خانه‌ای برای هنر زرگری، انتخاب آگاهانهٔ طلا و سکه، شناخت گوهرها و مدیریت حرفه‌ای کسب‌وکار جواهرات؛ پیوندی میان میراث دست‌ساز و ابزارهای روز.</p><div class="hero-actions"><a class="btn btn-gold" href="#showcase">ورود به ویترین <span>←</span></a><a class="btn" href="#learn">اکتشاف دانش‌نامه</a></div><div class="proof"><span><b>طراحی و ساخت</b>از ایده تا قطعهٔ نهایی</span><span><b>شفافیت در ارزش‌گذاری</b>قیمت‌گذاری با اعلام مبنا</span><span><b>دانش حرفه‌ای</b>آموزش و تحلیل مستمر</span></div></div><div class="orbit" aria-label="ترکیب نمادین جواهر"><div class="orbital"></div><div class="float-icon f1">✧</div><div class="float-icon f2">♢</div><div class="float-icon f3">⌑</div><div class="float-icon f4">◈</div><svg class="gem" viewBox="0 0 240 300" role="img" aria-label="نگین زمردی هنری"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#e3cf97"/><stop offset=".4" stop-color="#887348"/><stop offset="1" stop-color="#d5bf82"/></linearGradient><linearGradient id="s" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#5f7959"/><stop offset=".5" stop-color="#243d2e"/><stop offset="1" stop-color="#91a274"/></linearGradient></defs><path d="M120 20 205 72 190 217 120 278 50 217 35 72Z" fill="url(#g)"/><path d="M120 35 188 78 174 204 120 252 66 204 52 78Z" fill="url(#s)" stroke="#efdfac" stroke-opacity=".58" stroke-width="2"/><path d="m52 78 68 36 68-36m-68 36v138m-54-48 54-90 54 90M35 72l85 42 85-42m-15 145-70-107-70 107" fill="none" stroke="#d8c68e" stroke-opacity=".58" stroke-width="1.5"/><path d="m120 35 68 43-68 36Z" fill="#c4d0a1" fill-opacity=".15"/><path d="m52 78 68 36-54 90Z" fill="#cde4be" fill-opacity=".12"/></svg><div class="seal">طلا و هنر<br>از ۱۳۹۸</div></div></section>
+<section class="section tala-live-market" id="live-market"><div class="wrap">
+<div class="section-head"><div><div class="eyebrow">WORLD SPOT · LIVE FEEDS</div>
+<h2>تابلوی قیمت جهانی زنده</h2>
+<p>طلای جهانی، نقره، ارزهای اصلی و رمزارزها؛ دادهٔ مستقیم از ارائه‌دهندهٔ بازار، با امکان تأخیر در بعضی نمادها.</p></div>
+<a class="btn" href="#market">تابلوی نرخ‌های ریالی مدیر ←</a></div>
+<div class="live-spot-status" id="tala-world-spot-status" aria-live="polite">در حال دریافت نرخ‌های جهانی از منبع…</div>
+<div class="live-spot-grid">
+<div class="live-spot-card"><small>طلا · XAU / اونس تروا</small><strong id="spot-xau">در حال دریافت…</strong><em id="spot-xau-meta">دلار آمریکا / اونس؛ منبع Gold API</em></div>
+<div class="live-spot-card"><small>نقره · XAG / اونس تروا</small><strong id="spot-xag">در حال دریافت…</strong><em id="spot-xag-meta">دلار آمریکا / اونس؛ منبع Gold API</em></div>
+<div class="live-spot-card"><small>پلاتین · XPT / اونس تروا</small><strong id="spot-xpt">در حال دریافت…</strong><em id="spot-xpt-meta">دلار آمریکا / اونس؛ منبع Gold API</em></div>
+<div class="live-spot-card"><small>پالادیوم · XPD / اونس تروا</small><strong id="spot-xpd">در حال دریافت…</strong><em id="spot-xpd-meta">دلار آمریکا / اونس؛ منبع Gold API</em></div>
+</div>
+<div class="world-market-widget">
+<h3>نرخ‌های جهانی ارز و رمزارز</h3><p>تب فلزات، ارزهای اصلی و ارزهای دیجیتال را انتخاب کنید. داده‌ها و زمان تأخیر احتمالی توسط TradingView و بازار مربوط تعیین می‌شوند.</p>
+<tv-market-data symbol-sectors='[{"sectionName":"Metals","symbols":["OANDA:XAUUSD","OANDA:XAGUSD"]},{"sectionName":"Forex","symbols":["FX:EURUSD","FX:GBPUSD","FX:USDJPY","FX:USDCAD","FX:USDTRY","FX:USDAED"]},{"sectionName":"Crypto","symbols":["BITSTAMP:BTCUSD","BITSTAMP:ETHUSD","KRAKEN:USDTUSD","BINANCE:TRXUSDT","BINANCE:BNBUSDT","BINANCE:SOLUSDT"]}]' locale="en"></tv-market-data>
+<noscript><p>برای نمایش تابلوی قیمت جهانی، جاوااسکریپت باید فعال باشد. <a href="https://www.tradingview.com/markets/" target="_blank" rel="noopener noreferrer">مشاهده در TradingView</a></p></noscript>
+</div>
+<p class="live-source-note">منابع: <a href="https://gold-api.com/" rel="noopener noreferrer" target="_blank">Gold API</a> (نرخ لحظه‌ای/آخرین نرخ در دسترس با زمان مرجع) و <a href="https://www.tradingview.com/widget/" rel="noopener noreferrer" target="_blank">TradingView</a> (نمایشگر رسمی بازار). واحد این بخش <strong>USD</strong> یا جفت‌ارز نمایش‌داده‌شده است، <strong>نه قیمت بازار آزاد ایران و نه قیمت قطعی معامله</strong>. در تعطیلی بازار یا قطع ارتباط، نرخ قدیمی/نامعتبر مشخص می‌شود.</p>
+</div></section>
 <section class="ticker" id="market"><div class="wrap">
 <div class="section-head" style="margin:12px 0"><div><div class="eyebrow">TALA · PRICE BOARD</div><h2 style="font-size:25px">تابلوی قیمت طلا و سکه</h2></div><button class="btn" type="button" onclick="loadTalaQuotes()">دریافت آخرین نرخ ثبت‌شده ↻</button></div>
 <div class="ticker-row"><div class="ticker-card"><small>طلای ۱۸ عیار · هر گرم</small><strong id="q-gold18">در انتظار اتصال منبع</strong><em id="q-gold18-meta">قیمت زنده هنوز متصل نشده</em></div><div class="ticker-card"><small>طلای ۲۴ عیار · هر گرم</small><strong id="q-gold24">در انتظار نرخ</strong><em id="q-gold24-meta">نرخ مدیریت‌شده</em></div><div class="ticker-card"><small>طلای آب‌شده · مظنه</small><strong id="q-melted">در انتظار نرخ</strong><em id="q-melted-meta">مبنای مظنه را از مرجع کنترل کنید</em></div><div class="ticker-card"><small>سکهٔ تمام · هر قطعه</small><strong id="q-coin">در انتظار نرخ</strong><em id="q-coin-meta">نوع و شرایط سکه نیازمند تأیید</em></div></div>
@@ -248,4 +283,6 @@ for(const id of ['gc-rate','jc-rate']){
 loadTalaQuotes();
 window.setInterval(()=>{if(!document.hidden)loadTalaQuotes()},600000);
 </script>
+<script defer src="/tala/assets/tala-live-spot.js"></script>
+<script type="module" src="https://widgets.tradingview-widget.com/w/en/tv-market-data.js"></script>
 </body></html>
