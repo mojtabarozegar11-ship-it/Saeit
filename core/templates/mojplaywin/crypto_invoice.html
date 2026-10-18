@@ -1,0 +1,16 @@
+{% extends "base.html" %}{% block title %}Order {{ invoice.order_id }} | MojPlayWin{% endblock %}
+{% block content %}<main style="max-width:680px;margin:4rem auto;padding:2rem;color:#e9d79b;background:#111;overflow-wrap:anywhere">
+<h1>MojPlayWin payment invoice</h1><p>Order: #{{ invoice.order_id }} | Status: {{ invoice.status }}</p>
+{% if invoice.status == "paid" %}
+<p>Payment confirmed on the blockchain.</p><a href="{% url 'moj_crypto_download' token=invoice.token %}">Download your purchase</a>
+{% elif expired %}<p>Invoice expired. Do not send a new payment. Contact support for any late transfer.</p>
+{% else %}
+<p>Send <strong>{{ amount }} {{ invoice.asset }}</strong> exactly on {% if invoice.asset == "ETH" %}Ethereum Mainnet{% else %}TRON Mainnet{% endif %} to:</p>
+<pre style="white-space:pre-wrap;word-break:break-word">{{ invoice.merchant_address }}</pre>
+<p>Expires at {{ invoice.expires_at }}. Never use a different network or a token contract. This checkout accepts native coins only.</p>
+{% if error %}<p role="alert">{{ error }}</p>{% endif %}
+<form action="{% url 'moj_crypto_verify' token=invoice.token %}" method="post">{% csrf_token %}
+<label for="tx_hash">Blockchain transaction hash</label><input id="tx_hash" name="tx_hash" maxlength="66" required>
+<button type="submit">Check transaction and confirm payment</button></form>
+<p>Unconfirmed transfers never unlock files. You may recheck after the required network confirmations.</p>
+{% endif %}<p><a href="/store/">Return to store</a></p></main>{% endblock %}
