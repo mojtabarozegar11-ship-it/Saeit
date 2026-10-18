@@ -35,7 +35,7 @@ jobs:
           assert '/about/mojtaba-rozegar/' in pub.PATHS
           assert pub.rules().count(b'RewriteRule')==19
           assert 'RewriteCond %{REQUEST_METHOD} ^GET$' in pub.rules().decode('ascii')
-          assert 'mojplaywin' in pub.rules().decode('ascii')
+          assert 'REQUEST_URI' in pub.rules().decode('ascii')
           print('SCOPE_ONLY_NINETEEN_EXACT_GET_ROUTES_TESTED=yes')
           PY
       - name: Capture protected live baseline before writes
