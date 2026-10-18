@@ -5,9 +5,16 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from scripts.mojplaywin_chunked_encrypted_snapshot import stage, verify, restore
+try:
+    from scripts.mojplaywin_chunked_encrypted_snapshot import stage, verify, restore
+    HAS_CRYPTOGRAPHY = True
+except ModuleNotFoundError as exc:
+    if exc.name != "cryptography":
+        raise
+    HAS_CRYPTOGRAPHY = False
 
 
+@unittest.skipUnless(HAS_CRYPTOGRAPHY, "Standalone crypto test runs in dedicated CI with cryptography installed")
 class ChunkedEncryptedSnapshotTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="mjwp-synthetic-")
