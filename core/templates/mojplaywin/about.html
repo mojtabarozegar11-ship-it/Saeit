@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% load static %}
 {% block mojplaywin_title %}About MojPlayWin | Research, AI, Games & Digital Innovation{% endblock %}
-{% block mojplaywin_meta_description %}Discover MojPlayWin (Moj Play Win): our mission, research-led digital products, games, AI, software engineering, education, values and founder Mojtaba Roozegar.{% endblock %}
+{% block mojplaywin_meta_description %}Explore MojPlayWin: research-led games, AI, software engineering, digital learning, scientific methods, specialist disciplines and founder Mojtaba Roozegar.{% endblock %}
 {% block body_class %}mojplaywin-section mojplaywin-about{% endblock %}
 {% block page_head %}{{ block.super }}
 <meta property="og:type" content="website">
@@ -47,7 +47,7 @@ body.mojplaywin-about .mw-about-copy li{margin-bottom:.75em}
     <p>Original ideas. Research-led technology. Games, AI, software, learning and digital products designed to create practical value.</p>
     <p class="mw-about-identity">MojPlayWin (also written Moj Play Win) is an international-facing digital brand founded by <strong>Mojtaba Roozegar</strong>. We bring together creative technology, responsible innovation, independent research, interactive entertainment and accessible knowledge.</p>
     <nav class="mw-about-toc" aria-label="About page sections">
-      <a href="#our-story">Our story</a><a href="#mission">Mission &amp; vision</a><a href="#expertise">What we do</a><a href="#development">Our approach</a><a href="#leadership">Founder</a><a href="#collaboration">Collaboration</a>
+      <a href="#doctoral-dossier">Advanced technical dossier</a><a href="#our-story">Our story</a><a href="#mission">Mission &amp; vision</a><a href="#expertise">What we do</a><a href="#development">Our approach</a><a href="#leadership">Founder</a><a href="#collaboration">Collaboration</a>
     </nav>
   </header>
 
@@ -168,6 +168,7 @@ body.mojplaywin-about .mw-about-copy li{margin-bottom:.75em}
     <p>Our long-term direction is to deepen original gaming experiences, advance useful AI and software tools, publish stronger specialist learning material, improve digital commerce reliability and create opportunities for meaningful cross-border collaboration. Each release should be judged by what works for people in practice.</p>
     <p>Thank you for exploring MojPlayWin—a place for research, original ideas, responsible technology and the next generation of digital experiences.</p>
   </section>
+{% include "mojplaywin/about_research_dossier.html" %}
 </div>
 {% include "mojplaywin/footer.html" %}
 {% endblock %}
