@@ -137,6 +137,11 @@ def install(run):
     backup.mkdir(mode=0o700)
     try:
         manifest=stage_archive(source,unpack)
+        # tempfile.mkdtemp defaults to 0700: Apache cannot serve those files.
+        # Set only the new public content directory and its known child directories to 0755.
+        for public_dir in (unpack,unpack/"pages",unpack/"images"):
+            if not public_dir.is_dir() or public_dir.is_symlink():stop("Unsafe public directory")
+            public_dir.chmod(0o755)
         (backup/"original.htaccess").write_bytes(before)
         os.chmod(backup/"original.htaccess",0o600)
         meta={"runid":run,"before_sha":sha(before),"after_sha":sha(after),"rules":len(PATHS),
