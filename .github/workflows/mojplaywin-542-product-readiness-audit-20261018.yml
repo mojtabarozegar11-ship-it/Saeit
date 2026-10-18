@@ -1,0 +1,109 @@
+name: MojPlayWin 542 digital product eligibility and delivery readiness audit
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/mojplaywin-542-product-readiness-audit-20261018.yml"
+permissions:
+  contents: read
+jobs:
+  readonly:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Inspect product metadata schema and sale eligibility without disclosing customers
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 100s ssh -T -F "$d/config" saeit-cpanel bash -s <<'BASH'
+          cd /home/zomorod2/Saeit-staging
+          /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - <<'PY'
+          import os,json,collections,decimal
+          os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          import django
+          django.setup()
+          from django.db.models import Count
+          from core.models import Product
+          from core.cryptopay_checkout import product_delivery_ready
+          root=os.path.realpath(os.getcwd())
+          rows=Product.objects.all().values('id','title','product_type','currency','price','active','metadata','knowledge_article_id','owner_id')
+          d={'total':0,'type_counts':collections.Counter(),'currency_counts':collections.Counter(),'metadata_status_counts':collections.Counter(),
+             'metadata_key_counts':collections.Counter(),'eligible_deliverable_inactive':0,'usd_eligible_deliverable':0,'active':0,
+             'knowledge_linked':0,'owner_linked':0,'positive_price':0,'complete_approved_metadata':0,'safe_candidate_examples':[]}
+          for item in rows.iterator(chunk_size=100):
+              d['total']+=1
+              d['type_counts'][str(item['product_type'])[:50]]+=1
+              d['currency_counts'][str(item['currency'])[:12]]+=1
+              meta=item.get('metadata') or {}
+              if not isinstance(meta,dict):meta={}
+              d['metadata_status_counts'][str(meta.get('factory_status') or meta.get('status') or '<unset>')[:60]]+=1
+              for k in meta:
+                  if isinstance(k,str):d['metadata_key_counts'][k[:80]]+=1
+              d['active']+=int(bool(item['active']))
+              d['knowledge_linked']+=int(item['knowledge_article_id'] is not None)
+              d['owner_linked']+=int(item['owner_id'] is not None)
+              d['positive_price']+=int(item['price']>0)
+              if meta.get('payment_live') is True:d['complete_approved_metadata']+=1
+              try:
+                  product=Product.objects.only('pk','active','currency','price','metadata','knowledge_article_id','owner_id').get(pk=item['id'])
+                  ready=product_delivery_ready(product)
+              except Exception:ready=False
+              if ready:
+                  d['eligible_deliverable_inactive']+=int(not item['active'])
+                  d['usd_eligible_deliverable']+=int(item['currency']=='USD' and item['price']>0)
+                  if len(d['safe_candidate_examples'])<5:
+                      d['safe_candidate_examples'].append({'id':item['id'],'type':str(item['product_type'])[:50],
+                        'currency':item['currency'],'positive_price':bool(item['price']>0),'active':item['active'],
+                        'article_linked':item['knowledge_article_id'] is not None})
+          for key in ('type_counts','currency_counts','metadata_status_counts','metadata_key_counts'):
+              d[key]=dict(d[key].most_common(35))
+          print('MPW_PRODUCT_READINESS_AGGREGATE='+json.dumps(d,sort_keys=True,default=str))
+          PY
+          BASH
