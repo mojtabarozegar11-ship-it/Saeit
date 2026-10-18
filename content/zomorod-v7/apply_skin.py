@@ -90,8 +90,8 @@ def patch(data:bytes,rel:Path)->bytes:
         else:tag=tag[:-1]+' class="zm-unified-v7">'
         src=src[:b.start()]+tag+HEADER+src[b.end():]
         src=re.sub(r'</body>',FOOTER+'</body>',src,count=1,flags=re.I)
-    if len(src)<=len(data):raise ValueError('unanticipated size decrease')
-    if not src.endswith('</html>') and not src.endswith('</html>\n'):raise ValueError('missing ending')
+    if len(src.encode('utf-8'))<=len(data):raise ValueError('unanticipated size decrease')
+    if not src.rstrip().lower().endswith('</html>'):raise ValueError('missing ending')
     return src.encode('utf-8')
 
 def main():
