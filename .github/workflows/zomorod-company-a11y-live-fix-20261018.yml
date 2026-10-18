@@ -170,7 +170,7 @@ jobs:
           (async()=>{
             const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
             for(const width of [1440,1024,768,390,320]){
-              const page=await browser.newPage({viewport:{width,height:900}});
+              const context=await browser.newContext({viewport:{width,height:900}});const page=await context.newPage();
               await page.goto('https://zomorodmelal.ir/company/?__cg_browser='+width,{waitUntil:'domcontentloaded',timeout:50000});
               await page.locator('.zm-history-card').first().waitFor({state:'attached',timeout:22000});
               const report=await page.evaluate(()=>{
@@ -212,7 +212,7 @@ jobs:
                 console.log('COMPANY_TOUCH_AUDIT='+JSON.stringify({width,links:t.length,small}));
                 if(small.length)throw Error('Touch area regression '+width);
               }
-              await page.close();
+              await page.close();await context.close();
             }
             const page=await browser.newPage({viewport:{width:390,height:900}});
             await page.emulateMedia({reducedMotion:'reduce'});
