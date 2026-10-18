@@ -99,5 +99,19 @@ jobs:
             functions.append({'name':node.name,'args':[a.arg for a in node.args.args],'attributes':attrs[:60],'constants':strings[:60],'line_count':node.end_lineno-node.lineno+1})
            print('MPW_BOOK_FUNC_SCHEMA='+json.dumps({'file':modpath,'functions':functions[:25]}))
 
+          
+          import ast
+          for wanted in ('_file_for','product_delivery_ready'):
+           src=(app/'core/cryptopay_checkout.py').read_text('utf8','replace')
+           node=next(n for n in ast.walk(ast.parse(src)) if isinstance(n,ast.FunctionDef) and n.name==wanted)
+           print('MPW_EXACT_DELIVERY_FUNCTION='+json.dumps({'name':wanted,'body':src.splitlines()[node.lineno-1:node.end_lineno]},ensure_ascii=False))
+          for p_id, rel, digest in (
+          (72,'MojPlayWin_Private_Assets/store/chess-improvement/MojPlayWin_Chess_Grandmaster_Final_Covered_2026.pdf','3837fc3cb21ed1a2e7c33e0db8f8e10d158583309b02b97d4d674d25a147207a'),
+          (225,'MojPlayWin_Private_Assets/taniya-little-baker-worms/Taniya_and_the_Little_Baker_Worms.pdf','2f6dace4e5bc09ffe5f8d7a677ddff4980fe00de94b7c2ea5b286d1303901d48')):
+           q=copy.copy(Product.objects.get(pk=p_id));q.active=True;q.metadata=dict(q.metadata or {})
+           q.metadata['private_file']=str(H/rel);q.metadata['sha256']=digest
+           try:result={'file_is_found':_file_for(q) is not None,'delivery_ready':bool(product_delivery_ready(q))}
+           except Exception as e:result={'error':type(e).__name__}
+           print('MPW_BOOK_SIMULATED_PRIVATE_FILE='+json.dumps({'id':p_id,**result}))
           PY
           BASH
