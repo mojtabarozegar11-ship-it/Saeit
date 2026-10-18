@@ -159,7 +159,7 @@ def patch(s:str)->str:
     if not (s.index('<footer')<old.start()<s.index('</footer>')):
         raise RuntimeError("Legacy links no longer in footer")
     top=list(ANCHOR_REGEX.finditer(s))
-    if len(top)!=1 or not top[0].end() < s.index('<main id="content">'):
+    if len(top)!=1 or not top[0].end() <= s.index('<main id="content">'):
         raise RuntimeError("Expected single header-orbit immediately before main")
     if not (top[0].end() < s.index('<footer')):
         raise RuntimeError("Top navigation not above footer")
