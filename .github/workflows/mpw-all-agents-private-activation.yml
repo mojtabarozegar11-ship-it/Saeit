@@ -14,6 +14,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 7
     steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          ref: e9c8822f169516f4fbb877eec043adcd37f3e042
+      - name: Offline safety and functional tests for five robots
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_mpw_main_private_execution_robots.py -v
+          python3 -m py_compile scripts/mpw_main_private_execution_robots.py scripts/mpw_install_private_execution_robots_cpanel.py
       - name: Establish host-pinned private relay without disclosing keys
         env:
           VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
