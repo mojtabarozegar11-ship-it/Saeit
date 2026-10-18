@@ -1,0 +1,58 @@
+name: MojPlayWin About live semantic and SEO QA
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/mojplaywin-about-live-qa-20261018.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Inspect public HTML semantics, canonical, OG and key links (read only)
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from html.parser import HTMLParser
+          from urllib.request import Request,urlopen
+          from urllib.parse import urlparse,urljoin
+          from urllib.error import HTTPError
+          import json,re
+          class Audit(HTMLParser):
+            def __init__(self):
+              super().__init__(); self.current=None;self.depth=0;self.h1=[];self.h2=[];self.title=[];self.meta=[];self.styles=[];self.links=[];self.ids=[];self.main=0;self.img=[];self.heading_stack=[]
+            def handle_starttag(self,tag,attrs):
+              a=dict(attrs)
+              if tag=='main':self.main+=1
+              if tag in ('h1','h2'):self.heading_stack.append([tag,''])
+              if tag=='title':self.current='title'
+              if tag=='meta':self.meta.append({k:a.get(k) for k in ('name','property','content') if a.get(k)})
+              if tag=='style':self.styles.append((a.get('id') or '',0))
+              if tag=='a' and 'href' in a:self.links.append(a['href'])
+              if tag=='img':self.img.append({k:a.get(k,'') for k in ('src','alt')})
+              if 'id' in a:self.ids.append(a['id'])
+            def handle_data(self,data):
+              if self.current=='title':self.title.append(data)
+              if self.heading_stack:self.heading_stack[-1][1]+=data
+            def handle_endtag(self,tag):
+              if tag=='title':self.current=None
+              if tag in ('h1','h2') and self.heading_stack:
+                t,s=self.heading_stack.pop()
+                if t=='h1':self.h1.append(s.strip())
+                else:self.h2.append(s.strip())
+          urls=['https://mojplaywin.com/about/?__mpw_qa=18oct-h','https://mojplaywin.com/about/mojtaba-rozegar/','https://mojplaywin.com/company/']
+          for url in urls:
+            req=Request(url,headers={'User-Agent':'Mozilla/5.0 MojPlayWinAboutQuality/1.0','Cache-Control':'no-cache'})
+            with urlopen(req,timeout=20) as r:
+              raw=r.read(600000).decode('utf-8','replace');status=r.status;content_type=r.headers.get('Content-Type','')
+            a=Audit();a.feed(raw)
+            names={m.get('name'):m.get('content') for m in a.meta if m.get('name')}
+            og={m.get('property'):m.get('content') for m in a.meta if (m.get('property') or '').startswith('og:')}
+            anchors=set(a.ids)
+            broken=[x for x in a.links if x.startswith('#') and x[1:] not in anchors]
+            summary={'url':url,'status':status,'bytes':len(raw.encode()),'type':content_type,'title':''.join(a.title),'description':names.get('description'),'og_title':og.get('og:title'),'og_description':og.get('og:description'),'h1':a.h1[:5],'h2_count':len(a.h2),'main_count':a.main,'image_count':len(a.img),'images_without_alt':sum(1 for x in a.img if not x['alt']),'all_link_count':len(a.links),'invalid_anchors':broken[:20],'has_dossier28':'SPECIALISM 28' in raw,'has_complementary30':'COMPLEMENTARY SPECIALISM 30' in raw,'legacy_preserved':'Original by Default' in raw,'has_unique_styles':'mpw-about-advanced-style' in raw,'original_static_rewrite_tag':'MPW_ABOUT_RESEARCH_80_20_V1' in raw}
+            print('MPW_ABOUT_LIVE_SEO_AUDIT='+json.dumps(summary))
+          PY
