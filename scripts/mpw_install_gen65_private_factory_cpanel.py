@@ -53,8 +53,9 @@ def read_package():
         files = {}
         for name in names:
             member = archive.getmember(name)
-            must(member.isfile() and 2000 <= member.size <= 26000,
-                 "INVALID_SOURCE_PACKAGE_MEMBER")
+            limit_ok = (0 < member.size <= 4500) if name == "MANIFEST.json" else (
+                2000 <= member.size <= 26000)
+            must(member.isfile() and limit_ok, "INVALID_SOURCE_PACKAGE_MEMBER")
             files[name] = archive.extractfile(member).read()
     manifest = json.loads(files.pop("MANIFEST.json"))
     must(manifest.get("tenant") == TENANT
