@@ -37,7 +37,7 @@ function settingRow(parent,label,value){
 function drawChart(parent,agent){
   const isAudit=agent.metric_kind==="site_health_checks";
   const metricText=isAudit?"پایش موفق":agent.metric_kind==="editorial_quality_reviews"?"بررسی کیفیت":"پیش‌نویس";
-  parent.appendChild(el("h4",null,isAudit?"نمودار پایش موفق ۱۴ روز اخیر":"نمودار عملکرد ۱۴ روز اخیر"));
+  parent.appendChild(el("h4",null,isAudit?"نمودار پایش موفق ۱۴ روز اخیر":isReview?"نمودار بازبینی‌های ۱۴ روز اخیر":"نمودار عملکرد ۱۴ روز اخیر"));
   if(agent.history_available!==true || !Array.isArray(agent.series) || !Array.isArray(agent.days)){
     parent.appendChild(el("div","mpw-v91-nodata","سابقه روزانه برای این ایجنت ثبت نشده است؛ نمودار ساختگی نمایش داده نمی‌شود."));
     return;
@@ -94,8 +94,8 @@ async function refresh(){
         if(agent.last_observed_utc)settingRow(settings,"آخرین کنترل UTC",agent.last_observed_utc);
         settingRow(settings,"زمان‌بندی","ساعتی؛ دقیقه ۴۹");
       }
-      if(agent.metric_kind==="site_health_checks"){
-        if(Number.isSafeInteger(agent.warning_count))settingRow(settings,"هشدار",agent.warning_count);
+      if(agent.metric_kind==="site_health_checks" || agent.metric_kind==="private_review_checks"){
+        if(Number.isSafeInteger(agent.warning_count))settingRow(settings,agent.metric_kind==="private_review_checks"?"نیازمند اصلاح یا تأیید":"هشدار",agent.warning_count);
         if(Number.isSafeInteger(agent.error_count))settingRow(settings,"خطا",agent.error_count);
         if(agent.last_observed_utc)settingRow(settings,"آخرین بررسی UTC",agent.last_observed_utc);
       }
