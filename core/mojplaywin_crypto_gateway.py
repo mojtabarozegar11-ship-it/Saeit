@@ -10,6 +10,7 @@ from django.contrib.auth import login
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.views import LoginView
 from django.db import IntegrityError, transaction
+from django.db.models import Q
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -70,8 +71,11 @@ def _private_file(offer):
 def available_offers():
     if not getattr(settings, "MOJPLAYWIN_CRYPTO_ENABLED", False):
         return []
-    offers = MojCryptoOffer.objects.select_related("product").filter(active=True, product__active=True, product__knowledge_article__published=True)
-    return [x for x in offers if configured(x.asset) and _file_ready(x)]
+    offers = MojCryptoOffer.objects.select_related("product", "product__knowledge_article").filter(
+        Q(product__knowledge_article__isnull=True) | Q(product__knowledge_article__published=True),
+        active=True, product__active=True, product__price__gt=0,
+    )
+    return [x for x in offers if configured(x.asset) and _fulfillment_ready(x)]
 
 
 def _file_ready(offer):
@@ -80,6 +84,15 @@ def _file_ready(offer):
         return True
     except Http404:
         return False
+
+
+def _fulfillment_ready(offer):
+    """Never advertise checkout for a missing file or unspecified service."""
+    if offer.fulfillment_mode == "download":
+        return _file_ready(offer)
+    if offer.fulfillment_mode == "service":
+        return not bool(offer.private_file)
+    return False
 
 
 def _buyer(request):
@@ -122,10 +135,12 @@ def buy(request, offer_id):
         return auth
     offer = get_object_or_404(
         MojCryptoOffer.objects.select_related("product"),
-        pk=offer_id, active=True, product__active=True, product__knowledge_article__published=True,
+        Q(product__knowledge_article__isnull=True) | Q(product__knowledge_article__published=True),
+        pk=offer_id, active=True, product__active=True, product__price__gt=0,
     )
     destination = _address(offer.asset)
-    _private_file(offer)  # Never sell a missing digital download.
+    if not _fulfillment_ready(offer):
+        raise Http404("Offer fulfillment is not configured.")
     if request.method == "GET":
         return render(request, "mojplaywin/crypto_buy.html", {
             "offer": offer, "amount": f"{int(offer.atomic_amount) / DENOMINATORS[offer.asset]:f}",
@@ -334,6 +349,8 @@ def download(request, token):
     if auth:
         return auth
     if invoice.status != "paid" or invoice.order.status != "paid":
+        raise Http404
+    if invoice.offer.fulfillment_mode != "download":
         raise Http404
     path = _private_file(invoice.offer)
     response = FileResponse(path.open("rb"), as_attachment=True, filename=path.name)
