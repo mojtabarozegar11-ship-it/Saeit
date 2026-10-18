@@ -119,6 +119,31 @@ jobs:
           assert row == ('confirming', None), row
           print('FALSE_PAYMENT_NEVER_SETTLED_BY_CRON=true')
           PY
+          # Both native networks must create exact server-controlled invoices.
+          # No real transfers; only a disposable GitHub runner SQLite database.
+          code=$(curl -sS -D "$RUNNER_TEMP/eth.headers" -o "$RUNNER_TEMP/eth.body" -w '%{http_code}' http://127.0.0.1:8585/ -H 'Host: mojplaywin.com' -H "Cookie: $cookie" --data-urlencode "csrf=$csrf" --data-urlencode action=create --data-urlencode asset=ETH --data-urlencode amount=0.01 --data-urlencode reference="Digital consulting")
+          echo "ETH_TEST_INVOICE_HTTP_STATUS=$code"
+          test "$code" = 303
+          code=$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:8585/ -H 'Host: mojplaywin.com' -H "Cookie: $cookie" --data-urlencode "csrf=00000" --data-urlencode action=create --data-urlencode asset=TRX --data-urlencode amount=15 --data-urlencode reference=Consulting)
+          echo "BAD_CSRF_HTTP_STATUS=$code"
+          test "$code" = 403
+          code=$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:8585/ -H 'Host: mojplaywin.com' -H "Cookie: $cookie" --data-urlencode "csrf=$csrf" --data-urlencode action=create --data-urlencode asset=TRX --data-urlencode amount=0 --data-urlencode reference=Consulting)
+          echo "ZERO_PAYMENT_HTTP_STATUS=$code"
+          test "$code" = 400
+          python3 - "$RUNNER_TEMP/eth.headers" <<'PY'
+          import re,sqlite3,sys
+          content=open(sys.argv[1]).read()
+          token=re.search(r'Location: https://mojplaywin.com/checkout/crypto/index\\.php\\?id=([a-f0-9]{48})',content,re.I)
+          assert token,'ETH invoice is not routed to live PHP path'
+          db=sqlite3.connect('/home/zomorod2/.mojplaywin-crypto-payments-v1/payments.sqlite3')
+          row=db.execute('SELECT asset,base,quote,status FROM invoices WHERE token=?',(token.group(1),)).fetchone()
+          assert row and row[0]=='ETH' and row[1]==10000000000000000 and row[1]<row[2]<=row[1]+9999 and row[3]=='awaiting_payment',row
+          assert db.execute("SELECT COUNT(*) FROM invoices WHERE status='paid'").fetchone()[0] == 0
+          assert db.execute('SELECT COUNT(*) FROM invoices').fetchone()[0] == 2
+          print('BOTH_NATIVE_NETWORK_INVOICES_VALIDATED=true')
+          print('ZERO_AND_CSRF_INVALID_REQUESTS_BLOCKED=true')
+          print('NO_FAKE_TRANSACTIONS_SETTLED=true')
+          PY
           echo "REAL_PAYMENTS_SENT=false"
           echo "LIVE_SERVER_CHANGED=false"
           echo "WALLET_PRIVATE_KEYS_READ=false"
