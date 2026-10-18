@@ -1,0 +1,101 @@
+name: MojPlayWin store insertion path final read-only diagnostic
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/mojplaywin-store-insertion-final-preflight.yml"]
+permissions: {contents: read}
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Query only store runtime paths and root static scripts
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 60s ssh -T -F "$d/config" saeit-cpanel python3 - <<'PY'
+          from pathlib import Path
+          import json,re,hashlib
+          root=Path('/home/zomorod2/mojplaywin.com')
+          p=root/'passenger_wsgi.py'
+          t=p.read_text('utf8','replace')
+          context=[]
+          for n,line in enumerate(t.splitlines(),1):
+              if any(y in line for y in ("APP", "sys.path", "get_wsgi", "import","DJANGO_SETTINGS")):
+                  # Do not export any private host secrets.
+                  if any(y in line.lower() for y in ("password", "token", "secret", ".env", "private_key")):continue
+                  context.append(str(n)+":"+line.strip()[:240])
+          print("STORE_WSGI_RUNTIME_MAP="+json.dumps(context[:40]))
+          for d in [root/"static",root/"mpw-editorial",root/"design-preview-20261017",Path('/home/zomorod2/Saeit/core/templates/mojplaywin')]:
+              print("STORE_STATIC_LOCATION="+json.dumps({"path":str(d),"exists":d.exists(),"is_dir":d.is_dir(),"is_symlink":d.is_symlink(),"files":[x.name for x in d.iterdir()][:35] if d.is_dir() else []}))
+          PY
+      - name: Inspect public store scripts, product links and interactive markers
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json,re,urllib.request,html.parser,urllib.parse
+          class Scan(html.parser.HTMLParser):
+            def __init__(self):
+              super().__init__();self.js=[];self.links=[];self.forms=0;self.buttons=[];self.images=[];self.heading=""
+            def handle_starttag(self,t,a):
+              d=dict(a)
+              if t=="script":self.js.append({"src":d.get("src",""),"type":d.get("type","")})
+              if t=="a":self.links.append({"href":d.get("href",""),"text":d.get("aria-label","")})
+              if t=="form":self.forms+=1
+              if t=="button":self.buttons.append(d.get("type",""))
+              if t=="img":self.images.append(d.get("src",""))
+          u="https://mojplaywin.com/store/?_safe_runtime=20261018"
+          with urllib.request.urlopen(urllib.request.Request(u,headers={"User-Agent":"StoreSpecificInsertionAudit/1.0","Cache-Control":"no-cache"}),timeout=20) as r:
+              text=r.read(600000).decode('utf8','replace')
+          p=Scan();p.feed(text)
+          print("STORE_LIVE_SCRIPT_INVENTORY="+json.dumps({"scripts":p.js[:40],"forms":p.forms,
+              "buttons":p.buttons[:20],"anchors":p.links[:45],"imgs":p.images[:18],
+              "scriptInlineContainsCheckout":bool(re.search(r"checkout|stripe|payment|window\.location",text,re.I)),
+              "html_start":text[:350],"html_end":text[-320:]},ensure_ascii=True))
+          PY
