@@ -4,6 +4,7 @@ on:
     branches: [feature/mojplaywin-crypto-gateway-20261018]
     paths:
       - isolated_crypto_gateway/**
+      - tests/mojplaywin_crypto_rates.php
       - tests/mojplaywin_crypto_chain_mock_e2e.py
       - scripts/mojplaywin_crypto_safe_upgrade.py
       - tests/test_mojplaywin_crypto_safe_upgrade.py
@@ -28,6 +29,13 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_mojplaywin_crypto_safe_upgrade.py' -v
           echo "PAYMENT_SOURCE_UPGRADE_GUARDS_TESTED=true"
           echo "PRODUCTION_FILES_CHANGED=false"
+      - name: Regression-test merchant dual-source USD conversion without network
+        run: |
+          set -euo pipefail
+          php -l isolated_crypto_gateway/merchant_rates.php
+          php -l tests/mojplaywin_crypto_rates.php
+          php tests/mojplaywin_crypto_rates.php
+          echo "NO_PRODUCTION_ASSETS_OR_RATES_CHANGED=true"
       - name: Prepare offline private payment sandbox on runner only
         shell: bash
         run: |
