@@ -2,7 +2,7 @@
 {% block content %}<main style="max-width:680px;margin:4rem auto;padding:2rem;color:#e9d79b;background:#111;overflow-wrap:anywhere">
 <h1>MojPlayWin payment invoice</h1><p>Order: #{{ invoice.order_id }} | Status: {{ invoice.status }}</p>
 {% if invoice.status == "paid" %}
-<p>Payment confirmed on the blockchain.</p><a href="{% url 'moj_crypto_download' token=invoice.token %}">Download your purchase</a>
+<p>Payment confirmed on the blockchain. Your receipt is available on this order page.</p>{% if invoice.offer.fulfillment_mode == 'download' %}<a href="{% url 'moj_crypto_download' token=invoice.token %}">Download your purchase</a>{% else %}<p>Your service order has been paid successfully and will be fulfilled according to its service description.</p>{% endif %}
 {% else %}
 {% if expired %}<p>Invoice expired. Do not send funds now. If you already paid within the invoice window, submit your transaction hash below for verification.</p>{% else %}
 <p>Send <strong>{{ amount }} {{ invoice.asset }}</strong> exactly on {% if invoice.asset == "ETH" %}Ethereum Mainnet{% else %}TRON Mainnet{% endif %} to:</p>
