@@ -2,7 +2,9 @@ name: Zomorod V10 restore prior content and unify all main internal pages
 on:
   push:
     branches: [main]
-    paths: [".github/workflows/zomorod-v10-content-unified.yml"]
+    paths:
+      - ".github/workflows/zomorod-v10-content-unified.yml"
+      - "content/zomorod-v10/restore_and_unify.py"
 permissions:
   contents: read
 concurrency:
