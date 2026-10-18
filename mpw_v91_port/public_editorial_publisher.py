@@ -123,7 +123,7 @@ def _frame(title: str, body: str, canonical: str, description: str):
             '<title>'+esc(title)+' | MojPlayWin</title><meta name="description" content="'+esc(description[:155])+'">'
             '<link rel="canonical" href="'+esc(canonical)+'"><link rel="stylesheet" href="/mpw-editorial/style.css">'
             '</head><body><header><nav aria-label="MojPlayWin">'
-            '<a href="/">MojPlayWin</a><a href="/mpw-editorial/">Knowledge & Insights</a>'
+            '<a href="/">MojPlayWin</a><a href="/mpw-editorial/index.html">Knowledge & Insights</a>'
             '<a href="/agents/">AI</a><a href="/knowledge/">Knowledge</a>'
             '<a href="/studio/">Studio</a><a href="/research/">Research</a></nav></header>'
             '<main>'+body+'</main><footer><p>MojPlayWin · Independent educational guides.'
@@ -141,13 +141,13 @@ def make_files(records: list[dict]):
         for row in subset:
             slug=row["slug"]
             relative=f"{section}/{slug}/index.html"
-            public_url=f"https://mojplaywin.com/mpw-editorial/{section}/{slug}/"
+            public_url=f"https://mojplaywin.com/mpw-editorial/{section}/{slug}/index.html"
             article=(_render_markdown(row["body_markdown"])
                      + '<p class="note">Educational material: this is a guide, not '
                      'a verified claim that MojPlayWin has deployed these controls. '
                      'Check linked primary sources before applying the advice.</p>')
             files[relative]=_frame(row["title"],article,public_url,row["summary"]).encode("utf8")
-            link=f'<article><span class="label">{html.escape(label)}</span><h2><a href="/mpw-editorial/{section}/{slug}/">{html.escape(row["title"])}</a></h2><p>{html.escape(row["summary"][:195])}</p></article>'
+            link=f'<article><span class="label">{html.escape(label)}</span><h2><a href="/mpw-editorial/{section}/{slug}/index.html">{html.escape(row["title"])}</a></h2><p>{html.escape(row["summary"][:195])}</p></article>'
             cards.append(link);all_cards.append(link)
         body=(f'<span class="label">MojPlayWin / {html.escape(label)}</span>'
               f'<h1>{html.escape(label)} — Learning Guides</h1>'
@@ -155,14 +155,14 @@ def make_files(records: list[dict]):
               f'These articles are independent content, not product claims.</p>'
               '<div class="grid">'+"".join(cards or ['<p>New guides are being prepared.</p>'])+'</div>')
         files[f"{section}/index.html"]=_frame(label,body,
-             f"https://mojplaywin.com/mpw-editorial/{section}/",
+             f"https://mojplaywin.com/mpw-editorial/{section}/index.html",
              f"Educational guides about {label.lower()} from MojPlayWin.").encode("utf8")
     body=('<span class="label">MOJPLAYWIN / FREE EDUCATIONAL RESOURCES</span>'
           '<h1>Knowledge & Insights</h1><p>Independent guides for understanding '
           'AI evaluation, accessible learning, creative technology and research methods.</p>'
           '<div class="grid">'+"".join(all_cards or ['<p>Guides are being prepared.</p>'])+'</div>')
     files["index.html"]=_frame("Knowledge & Insights",body,
-             "https://mojplaywin.com/mpw-editorial/",
+             "https://mojplaywin.com/mpw-editorial/index.html",
              "Free practical educational guides on AI, learning, studio and research.").encode("utf8")
     files[OWNER]=json.dumps({"tenant":TENANT,"published_articles":len(records),
               "scope":"mojplaywin-main-static-mpw-editorial-only",
