@@ -45,3 +45,29 @@ class MojPlayWinAboutTests(SimpleTestCase):
         self.assertContains(response, "not</strong> an audited allocation")
         self.assertContains(response, "concept from a working prototype")
         self.assertContains(response, "not</strong> an audited allocation", count=1)
+
+    def test_advanced_dossier_contains_real_methods_not_only_promotional_copy(self):
+        response = self.client.get("/about/", HTTP_HOST="mojplaywin.com")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Research-grade company dossier")
+        for phrase in (
+            "Research design, epistemology",
+            "Quantitative analysis",
+            "Large language models",
+            "Agent orchestration",
+            "Game mechanics",
+            "Enterprise web architecture",
+            "Digital product lifecycle",
+            "Learning science",
+            "Scientific and executive leadership",
+        ):
+            # Check on-page specialist material is rendered by Django.
+            self.assertContains(response, phrase)
+        for index in range(1, 29):
+            self.assertContains(response, "SPECIALISM %02d" % index)
+        for index in range(1, 8):
+            self.assertContains(response, 'id="dossier-%d"' % index)
+        for domain in ("nist.gov", "w3.org", "owasp.org", "nature.com"):
+            self.assertContains(response, domain)
+        self.assertContains(response, "does not certify")
+        self.assertContains(response, "not evidence")
