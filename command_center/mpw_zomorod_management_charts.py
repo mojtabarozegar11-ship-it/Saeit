@@ -43,8 +43,8 @@ def rows(now=None,root=ROOT):
         results.append({
             "id":code,"title":title,"setting":mission,"metric_kind":kind,
             "status":"active_private" if fresh else "stale_heartbeat" if time else "unavailable",
-            "days":days,"series":[1 if d==day else None for d in days] if measured else None,
-            "history_available":measured,"chart_type":"last_observation",
+            "days":days,"series":None,
+            "history_available":False,"chart_type":"last_observation",
             "queue":None,"completed":1 if measured else None,
             "last_observed_utc":time.isoformat() if time else None,
             "note":"فقط آخرین اجرای واقعی ثبت شده است. روزهای بدون سابقه، نامشخص هستند؛ انتشار و عملیات مالی مجاز نیست.",
