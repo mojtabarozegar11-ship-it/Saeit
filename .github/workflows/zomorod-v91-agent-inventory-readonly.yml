@@ -1,4 +1,4 @@
-name: Zomorod V91 cPanel agent launch gates (read only)
+name: Zomorod V91 cPanel isolated Python discovery (read only)
 on:
   push:
     branches: ["audit/zomorod-v91-agent-extraction-20261018"]
@@ -66,7 +66,7 @@ jobs:
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
-          timeout 60s ssh -T -F "$d/config" saeit-cpanel python3 - < scripts/zomorod_v91_launch_gates_readonly.py
+          timeout 75s ssh -T -F "$d/config" saeit-cpanel python3 - < scripts/zomorod_v91_python_env_inventory.py
       - name: Remove temporary SSH credentials
         if: always()
         shell: bash
