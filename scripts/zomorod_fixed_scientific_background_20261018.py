@@ -5,7 +5,7 @@ from pathlib import Path
 
 ROOT=Path("/home/zomorod2/public_html")
 HOME=ROOT/"index.html"
-IMAGE=ROOT/"static/site/backgrounds/zomorod-fixed-cosmos-20261018.webp"
+IMAGE=ROOT/"static/site/heroes/zomorod-fixed-cosmos-20261018.webp"
 BACKUPS=Path("/home/zomorod2/.backups/zomorod-fixed-background-20261018")
 MARKER='zm-fixed-scientific-background-20261018'
 CSS="""<style id="zm-fixed-scientific-background-20261018">
@@ -13,7 +13,7 @@ CSS="""<style id="zm-fixed-scientific-background-20261018">
 html {background-color:#04180f!important}
 body {
   background-color:#04180f!important;
-  background-image:url('/static/site/backgrounds/zomorod-fixed-cosmos-20261018.webp')!important;
+  background-image:url('/static/site/heroes/zomorod-fixed-cosmos-20261018.webp')!important;
   background-position:center center!important;
   background-repeat:no-repeat!important;
   background-size:cover!important;
