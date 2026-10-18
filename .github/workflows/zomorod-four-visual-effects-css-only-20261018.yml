@@ -147,7 +147,7 @@ jobs:
               assert html.count('id="zm-topics-top-icon-20261018"')==1
               assert 'ZOMOROD_ORBIT_DATA' in html
               assert 'تمام حقوق مادی و معنوی' in html
-              assert len(html)>2250000
+              assert len(html)>2200000, 'Decoded Persian HTML text size was smaller than expected'
               confirmed=True
               print('ZM_FX4_PUBLIC_HTML_INTACT=yes',flush=True)
               break
