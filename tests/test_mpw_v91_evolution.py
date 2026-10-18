@@ -69,6 +69,7 @@ class EvolutionTests(unittest.TestCase):
     def test_draft_and_review_must_match_source_and_tenant(self):
         with tempfile.TemporaryDirectory() as folder:
             state = Path(folder) / "state"
+            state.mkdir(mode=0o700)
             for name in ("processed", "drafts", "quality_reviews"):
                 (state / name).mkdir(parents=True, mode=0o700)
             payload = {"tenant": e.TENANT, "review_only": True, "kind": "research_digest"}
