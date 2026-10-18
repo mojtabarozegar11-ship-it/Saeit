@@ -69,3 +69,4 @@ jobs:
           test -x "$base/operations/vps-only-loop.sh" && echo FACTORY_LOOP_SCRIPT_PRESENT
           REMOTE
 # Post-activation independent owner verification 2026-10-16.
+# Independent read-only master agent recheck requested 2026-10-18; no state mutation.
