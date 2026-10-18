@@ -1,0 +1,109 @@
+name: MojPlayWin crypto product readiness final read-only evaluation
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/mojplaywin-crypto-product-readiness-final.yml"]
+permissions: {contents: read}
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Inspect only live Django crypto route and pricing guards
+        run: |
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 90s ssh -T -F "$d/config" saeit-cpanel python3 - <<'PY'
+          from pathlib import Path
+          import ast,re,json,os
+          app=Path('/home/zomorod2/Saeit-staging')
+          for filename in ['core/cryptopay_checkout.py','core/cryptopay_tron_config.py','core/cryptopay_tron.py']:
+            p=app/filename
+            if not p.is_file() or p.is_symlink():continue
+            lines=p.read_text('utf8','replace').splitlines()
+            results=[]
+            for no,raw in enumerate(lines,1):
+              text=raw.strip()
+              if not text or text.startswith('#'):continue
+              if any(k in text for k in ('RECEIVING_ADDRESS','TRONSCAN','TOKEN','RPC_URL','API_KEY')):
+                # Only return source control type, not value.
+                results.append(str(no)+':[wallet-configuration-or-reference]')
+              elif any(k in text.lower() for k in ('mainnet_enabled','return httpresponse','def checkout','def crypto_order',
+                'expected_atomic','user.is_authenticated','product_delivery_ready','product.active','get_object_or_404',
+                'transaction.atomic','intent.amount','required_confirmations','txid','POST','request.method','model','form','price','quantity',
+                'delivery','webhook','poll','ready','url','order.status')):
+                clean=re.sub(r'(0x[a-fA-F0-9]{30,}|T[1-9A-HJ-NP-Za-km-z]{33})','[redacted]',text)
+                results.append(str(no)+':'+clean[:175])
+            print('MPW_LIVE_CHECKOUT_GUARDS='+json.dumps({'file':filename,'lines':results[:90]}))
+          env=app/'mpw_native_checkout'
+          print('MPW_WALLET_PACKAGE_AUDIT='+json.dumps({'exists':env.is_dir(),
+            'python_modules':[p.name for p in env.glob('*.py')][:40],
+            'test_files':[p.name for p in env.glob('*test*')][:20]}))
+          # Check interpreters, never invoke an installed process or mutate the database.
+          choices=[]
+          for d in ['/home/zomorod2/virtualenv/Saeit-staging',
+                    '/home/zomorod2/Saeit-staging/venv','/home/zomorod2/Saeit-staging/.venv']:
+              p=Path(d)
+              if p.is_dir():
+                choices.extend(str(e) for e in p.glob('*/bin/python*') if e.is_file() and not e.is_symlink())
+                choices.extend(str(e) for e in p.glob('bin/python*') if e.is_file() and not e.is_symlink())
+          print('MPW_RUNTIME_PYTHON_PATHS='+json.dumps(choices[:8]))
+          PY
+      - name: Public purchase endpoints response without creating orders
+        run: |
+          python3 - <<'PY'
+          import urllib.request,urllib.error,json
+          paths=['/store/product/1/','/store/product/1/checkout/','/store/product/2/',
+                 '/store/product/2/checkout/','/crypto-payments/','/store/']
+          for path in paths:
+            req=urllib.request.Request('https://mojplaywin.com'+path,headers={'Cache-Control':'no-cache','User-Agent':'MPWCheckoutFinalPreflight/1.0'})
+            try:
+              with urllib.request.urlopen(req,timeout=18) as res:code=res.status;ctype=res.headers.get('Content-Type','')
+            except urllib.error.HTTPError as ex:code=ex.code;ctype=ex.headers.get('Content-Type','')
+            print('MPW_PURCHASE_ENDPOINT_STATUS='+json.dumps({'path':path,'status':code,'content_type':ctype[:70]}))
+          PY
