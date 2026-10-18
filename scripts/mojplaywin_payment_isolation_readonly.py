@@ -54,6 +54,22 @@ def main():
         "webroot_has_passenger_routing": "passenger" in httext.lower(),
         "webroot_has_rewrite_rules": "rewriterule" in httext.lower(),
         "webroot_has_filesystem_rewrite_cond": "-f" in httext or "-d" in httext,
+        "apache_routing_tokens": [
+            # Whitelisted non-secret directives only, with paths/user values omitted.
+            {"directive": line.strip().split(None, 1)[0].lower(),
+             "mentions_checkout": "checkout" in line.lower(),
+             "mentions_passenger": "passenger" in line.lower(),
+             "mentions_index_php": "index.php" in line.lower(),
+             "mentions_static_f": "-f" in line,
+             "mentions_static_d": "-d" in line,
+             "has_last_flag": "[l" in line.lower() or ",l" in line.lower()}
+            for line in httext.splitlines()
+            if line.strip() and not line.lstrip().startswith("#")
+            and line.strip().split(None, 1)[0].lower()
+            in {"rewriteengine", "rewritecond", "rewriterule", "rewritebase", "directoryindex",
+                "passengerenabled", "passengerappenv", "passengerbaseuri", "passengerapproot",
+                "passengerpython", "passengerapproot", "options", "sethandler"}
+        ][:70],
         "shared_django_project_exists": SHARED.is_dir(),
         "standalone_gateway_safe_to_deploy": False,
         "production_code_changed": False,
