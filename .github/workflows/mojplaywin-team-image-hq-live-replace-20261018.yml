@@ -1,0 +1,218 @@
+name: MojPlayWin exact About team image quality replacement (isolated)
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/mojplaywin-team-image-hq-live-replace-20261018.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: mojplaywin-about-exact-static-prod
+  cancel-in-progress: false
+jobs:
+  replace-one-team-image:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.ref == 'refs/heads/main' &&
+      github.event_name == 'push' &&
+      contains(github.event.head_commit.message, '[approved-mpw-team-hq-20261018]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify exact high-quality source and narrow patch offline
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mojplaywin_team_hq_exact_replacement_20261018.py
+          python3 - <<'PY_INNER'
+          from pathlib import Path
+          import hashlib, importlib.util
+          img=Path('assets/mojplaywin-team-gallery-hq-20261018.webp').read_bytes()
+          assert len(img)==459542,len(img)
+          assert hashlib.sha256(img).hexdigest()=='55eac88d17b4866a9f4db97e1ec3b2f69a50527f372619b3cebd83337a7f6a1d'
+          assert img[:4]==b'RIFF' and img[8:12]==b'WEBP'
+          spec=importlib.util.spec_from_file_location('replace','scripts/mojplaywin_team_hq_exact_replacement_20261018.py')
+          obj=importlib.util.module_from_spec(spec);spec.loader.exec_module(obj)
+          assert obj.EXPECTED_PAGE_SHA=='bc831aec453e67051093e4adde4dce4eb0a4dbbc875ed6f94db207adcf1e0ac3'
+          s=Path('content/mojplaywin_about_team_section_20261018.html').read_text('utf-8')
+          example=('<!doctype html><html><head></head><body><main><h1>About</h1>'
+                   +' '.join(obj.MARKS)+'<!-- MPW_TEAM_ADDON_V1 -->'+s+'</main></body></html>')
+          old_hash=obj.EXPECTED_PAGE_SHA
+          obj.EXPECTED_PAGE_SHA=hashlib.sha256(example.encode()).hexdigest()
+          updated=obj.patch(example.encode()).decode()
+          assert updated.count(obj.PUBLIC_IMAGE)==1
+          assert updated.count('class="mpw-team-card"')==10
+          assert 'width="1672" height="941"' in updated
+          assert updated.replace(obj.PUBLIC_IMAGE,'')!=example
+          obj.EXPECTED_PAGE_SHA=old_hash
+          print('TEAM_IMAGE_REPLACEMENT_EXACT_PATCH_TEST=PASS')
+          PY_INNER
+      - name: Record prepublication status of main and all known protected paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from urllib.request import Request,urlopen
+          from urllib.error import HTTPError
+          import os,json
+          root='https://mojplaywin.com'
+          paths=['/','/about/','/store/','/about/mojtaba-rozegar/',
+                 '/mojtaba.roozegar/','/mojtaba.roozegar/about/',
+                 '/farnaz/','/saman/','/picm/','/taniya/','/zahra/']
+          statuses={}
+          for path in paths:
+            url=root+path
+            try:
+              req=Request(url,headers={'User-Agent':'MPWTeamSafeRelease/1.0','Cache-Control':'no-cache'})
+              with urlopen(req,timeout=17) as r:code=r.status
+            except HTTPError as e:code=e.code
+            except Exception as e:raise RuntimeError('BASELINE_NETWORK_ERROR '+url+' '+type(e).__name__)
+            statuses[url]=code
+            print('BASELINE '+url+' '+str(code))
+          for path in ('/','/about/','/store/','/mojtaba.roozegar/','/farnaz/'):
+            if statuses[root+path]!=200:raise RuntimeError('UNHEALTHY_CRITICAL_BASELINE '+path)
+          with open(os.environ['RUNNER_TEMP']+'/mpw-team-baseline.json','w') as f:json.dump(statuses,f)
+          PY
+      - name: Establish locked host-key verified GitHub to VPS relay to cPanel
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-team-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          mv "$d/host.candidate" "$d/host.known"
+          echo 'PINNED_TEAM_RELAY_READY'
+      - name: Stage one approved, immutable high-quality WebP outside webroot
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-team-ssh"
+          scp -q -F "$d/config" assets/mojplaywin-team-gallery-hq-20261018.webp \
+            "saeit-cpanel:/home/zomorod2/.mpw-team-image-stage-$GITHUB_RUN_ID.webp"
+      - name: Atomically replace only low-resolution team image with protected rollback
+        id: install
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-team-ssh"
+          timeout 65s ssh -T -F "$d/config" saeit-cpanel \
+            "python3 - install '$GITHUB_RUN_ID'" \
+            < scripts/mojplaywin_team_hq_exact_replacement_20261018.py
+      - name: Confirm public 1672x941 image loads, team text preserved, protected URLs unchanged
+        id: smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY_INNER'
+          from urllib.request import Request,urlopen
+          from urllib.error import HTTPError
+          import hashlib, os, json, time, re
+          baseline=json.load(open(os.environ['RUNNER_TEMP']+'/mpw-team-baseline.json'))
+          url='https://mojplaywin.com/about/'
+          image_url=('https://mojplaywin.com/design-preview-20261017/'
+                     'mpw-ten-editorials-20261018/pages/mpw-team-gallery-hq-20261018.webp')
+          expected_sha='55eac88d17b4866a9f4db97e1ec3b2f69a50527f372619b3cebd83337a7f6a1d'
+          ok=False
+          for attempt in range(1,6):
+            try:
+              req=Request(url+'?team_highres='+os.environ['GITHUB_RUN_ID']+'-'+str(attempt),
+                          headers={'User-Agent':'MPWImageHighResAudit/1.0','Cache-Control':'no-cache'})
+              with urlopen(req,timeout=22) as r:
+                status=r.status;body=r.read(1600000).decode('utf-8','replace')
+              section=body[body.index('<section id="mpw-meet-team-20261018"'):]
+              ok=(status==200 and image_url.replace('https://mojplaywin.com','') in section
+                  and 'data:image/avif;base64,' not in section.split('</figure>',1)[0]
+                  and 'width="1672" height="941"' in section
+                  and body.count('class="mpw-team-card"')==10
+                  and all(x in section for x in ('Sophia','Isabella','Olivia','Camila','Valentina',
+                      'Emma','Charlotte','Amelia','Luca','Noah','AI-generated illustrations',
+                      'The role focuses on evaluating opportunities'))
+                  and all(x in body for x in ('MPW_ABOUT_RESEARCH_80_20_V1',
+                      'COMPLEMENTARY SPECIALISM 30','Original by Default'))
+                  and len(re.findall(r'<h1\b',body,re.I))==1)
+              print('ABOUT_HIGH_QUALITY_IMAGE_ATTEMPT='+str(attempt)+' ok='+str(ok))
+              if ok:break
+            except Exception as e:
+              print('ABOUT_HIGH_QUALITY_IMAGE_RETRY='+type(e).__name__)
+            time.sleep(3)
+          if not ok:raise RuntimeError('NEW_TEAM_IMAGE_NOT_VISIBLE_ON_ABOUT')
+          req=Request(image_url+'?v='+os.environ['GITHUB_RUN_ID'],
+                      headers={'User-Agent':'MPWImageHighResAudit/1.0','Cache-Control':'no-cache'})
+          with urlopen(req,timeout=22) as r:
+            status=r.status;binary=r.read(500000);content_type=r.headers.get('Content-Type','')
+          got_sha=hashlib.sha256(binary).hexdigest()
+          print('TEAM_PUBLIC_IMAGE status='+str(status)+' bytes='+str(len(binary))+
+                ' type='+content_type+' sha='+got_sha)
+          if status!=200 or got_sha!=expected_sha or not binary.startswith(b'RIFF'):
+            raise RuntimeError('TEAM_IMAGE_NOT_PUBLIC_OR_HASH_MISMATCH')
+          for check_url,expected_status in baseline.items():
+            req=Request(check_url,headers={'User-Agent':'MPWImageHighResAudit/1.0','Cache-Control':'no-cache'})
+            try:
+              with urlopen(req,timeout=19) as r:code=r.status
+            except HTTPError as e:code=e.code
+            if code!=expected_status:raise RuntimeError('PROTECTED_URL_CHANGED '+check_url)
+            print('PROTECTED_STATUS_UNCHANGED '+check_url+' '+str(code))
+          print('MPW_HIGH_QUALITY_TEAM_IMAGE_LIVE_VERIFIED=YES')
+          PY_INNER
+          d="$RUNNER_TEMP/mojplaywin-team-ssh"
+          timeout 30s ssh -T -F "$d/config" saeit-cpanel \
+            "python3 - status '$GITHUB_RUN_ID'" \
+            < scripts/mojplaywin_team_hq_exact_replacement_20261018.py
+      - name: Roll back only this team image if publication or smoke fails
+        if: failure() && steps.install.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-team-ssh"
+          timeout 50s ssh -T -F "$d/config" saeit-cpanel \
+            "python3 - rollback '$GITHUB_RUN_ID'" \
+            < scripts/mojplaywin_team_hq_exact_replacement_20261018.py
+      - name: Remove only temporary private staged image
+        if: always()
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/mojplaywin-team-ssh"
+          if test -f "$d/config"; then
+            ssh -T -F "$d/config" -o ConnectTimeout=10 saeit-cpanel \
+              "test ! -L /home/zomorod2/.mpw-team-image-stage-$GITHUB_RUN_ID.webp && rm -f -- /home/zomorod2/.mpw-team-image-stage-$GITHUB_RUN_ID.webp" || true
+          fi
