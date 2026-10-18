@@ -16,7 +16,7 @@ import sys
 import tempfile
 import time
 
-MAX_BYTES = 16 * 1024 * 1024
+MAX_BYTES = 128 * 1024 * 1024
 EXPECTED_BYTES = MAX_BYTES
 
 
