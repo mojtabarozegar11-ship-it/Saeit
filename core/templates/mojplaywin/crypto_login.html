@@ -1,0 +1,4 @@
+{% extends "base.html" %}{% block title %}Customer login | MojPlayWin{% endblock %}
+{% block content %}<main style="max-width:480px;margin:4rem auto;padding:2rem;color:#f5dfa5;background:#111"><h1>Customer sign in</h1>
+<form method="post">{% csrf_token %}{{ form.as_p }}<input type="hidden" name="next" value="{{ next }}"><button type="submit">Sign in</button></form>
+<p><a href="/checkout/crypto/register/">Create a customer account</a></p></main>{% endblock %}
