@@ -133,7 +133,7 @@ jobs:
           python3 - "$RUNNER_TEMP/eth.headers" <<'PY'
           import re,sqlite3,sys
           content=open(sys.argv[1]).read()
-          token=re.search(r'Location: https://mojplaywin.com/checkout/crypto/index\\.php\\?id=([a-f0-9]{48})',content,re.I)
+          token=re.search(r'Location: https://mojplaywin.com/checkout/crypto/index\.php\?id=([a-f0-9]{48})',content,re.I)
           assert token,'ETH invoice is not routed to live PHP path'
           db=sqlite3.connect('/home/zomorod2/.mojplaywin-crypto-payments-v1/payments.sqlite3')
           row=db.execute('SELECT asset,base,quote,status FROM invoices WHERE token=?',(token.group(1),)).fetchone()
