@@ -71,6 +71,8 @@ def archived_fragment(root:Path,relative:str):
  matches=list(re.finditer(r'<main\b[^>]*>(.*?)</main\s*>',original,re.I|re.S))
  if len(matches)!=1:raise ValueError('Historical source has unexpected main sections: '+relative)
  fragment=matches[0].group(1)
+ # Strip obsolete inline styles and executable JS from the historical display copy only.
+ fragment=re.sub(r'<(script|style)\b[^>]*>.*?</\1\s*>','',fragment,flags=re.I|re.S)
  # Historic pages may contain obsolete inline mouse events. Remove only executable
  # attributes from the copied HTML; keep every visible word, image and link.
  before_visible=visible_main('<main>'+fragment+'</main>')
