@@ -23,13 +23,10 @@ class MojPlayWinAboutTests(SimpleTestCase):
             "Digital products",
             "Mojtaba Roozegar",
             "Zomorod Melal",
-            "Founding",
         ):
-            # Check concrete branding/identity, without asserting aspirational claims as launches.
-            if phrase == "Founding":
-                continue
+            # Check concrete branding/identity without claiming a commercial launch.
             self.assertContains(response, phrase)
-        self.assertContains(response, "About MojPlayWin | Research, AI, Games &amp; Digital Innovation")
+        self.assertContains(response, "About MojPlayWin | Research, AI, Games & Digital Innovation")
         self.assertContains(response, 'https://mojplaywin.com/about/')
 
     def test_www_mojplaywin_about_works(self):
