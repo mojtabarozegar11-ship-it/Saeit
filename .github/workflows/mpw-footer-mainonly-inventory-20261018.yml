@@ -117,6 +117,30 @@ jobs:
                   if count>=100:break
           print('STATIC_HTML_FOOTER_CANDIDATES='+str(count))
           PY
+      - name: Inspect scoped dynamic injection capabilities without writes
+        run: |
+          set -euo pipefail
+          timeout 65s ssh -T -F "$RUNNER_TEMP/mpw-footer-inventory/config" saeit-cpanel python3 - <<'PY'
+          from pathlib import Path
+          import os,subprocess,re,hashlib
+          root=Path('/home/zomorod2/mojplaywin.com')
+          ht=root/'.htaccess'
+          text=ht.read_text('utf8')
+          print('HT_SHA256='+hashlib.sha256(ht.read_bytes()).hexdigest(),flush=True)
+          print('HT_LENGTH='+str(len(text))+' OWNER='+str(os.getuid()),flush=True)
+          for name in ('apachectl','httpd','/usr/sbin/httpd','/usr/sbin/apachectl'):
+              try:
+                  r=subprocess.run([name,'-M'],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,timeout=8)
+                  modules=sorted(set(re.findall(r'(?:substitute|filter|headers|rewrite|php|proxy|deflate|brotli)_module',r.stdout+r.stderr,re.I)))
+                  print('MODULE_PROBE='+name+' EXIT='+str(r.returncode)+' MODULES='+repr(modules)+' ERR='+re.sub(r'\\s+',' ',r.stderr)[:150],flush=True)
+              except (OSError,subprocess.TimeoutExpired) as e:
+                  print('MODULE_PROBE='+name+' UNAVAILABLE='+type(e).__name__,flush=True)
+          for path in ('/store/','/games/','/ai/','/contact/','/support/'):
+              import urllib.request
+              with urllib.request.urlopen(urllib.request.Request('https://mojplaywin.com'+path,headers={'Cache-Control':'no-cache'}),timeout=18) as resp:
+                  body=resp.read(1400000).decode('utf8','replace')
+                  print('DYNAMIC '+path+' STATUS='+str(resp.status)+' CHARSET='+str(resp.headers.get_content_charset())+' CSP='+repr(resp.headers.get('Content-Security-Policy'))+' ENCODING='+str(resp.headers.get('Content-Encoding'))+' END_BODY='+str('</body>' in body.lower())+' FOOTERS='+str(len(re.findall(r'<footer\\b',body,re.I)))+' FOUNDER='+str('Mojtaba Roozegar' in body),flush=True)
+          PY
       - name: Remove relay material
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/mpw-footer-inventory"
