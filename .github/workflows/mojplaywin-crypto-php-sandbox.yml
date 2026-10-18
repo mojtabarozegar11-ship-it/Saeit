@@ -29,6 +29,8 @@ jobs:
           php isolated_crypto_gateway/bootstrap.php init
           test -f /home/zomorod2/.mojplaywin-crypto-payments-v1/payments.sqlite3
           test ! -f /home/zomorod2/.mojplaywin-crypto-payments-v1/enabled.flag
+          php isolated_crypto_gateway/index.php reconcile | grep -q "MOJPLAYWIN_AUTORECONCILE_ENABLED=false"
+          echo "CLI_AUTORECONCILE_FAIL_CLOSED=passed"
           echo "PAYMENT_CONFIG_IS_FAIL_CLOSED=true"
       - name: Test disabled-on-arrival HTTP and fake local invoice flow
         shell: bash
@@ -98,6 +100,24 @@ jobs:
           token=open(sys.argv[1]).read().strip()
           assert db.execute('SELECT status,tx_hash FROM invoices WHERE token=?',(token,)).fetchone()==('awaiting_payment',None)
           print('MOJPLAYWIN_OFFLINE_PAYMENT_INVOICE_TEST=passed')
+          PY
+          php isolated_crypto_gateway/index.php reconcile | grep -q "MOJPLAYWIN_AUTORECONCILE_CHECKED=0"
+          python3 - "$RUNNER_TEMP/token" <<'PY'
+          import sqlite3, sys
+          db=sqlite3.connect('/home/zomorod2/.mojplaywin-crypto-payments-v1/payments.sqlite3')
+          with db:
+              db.execute("UPDATE invoices SET status='confirming',tx_hash=? WHERE token=?",('x'*64,open(sys.argv[1]).read().strip()))
+          PY
+          cron_output="$(php isolated_crypto_gateway/index.php reconcile)"
+          printf '%s\n' "$cron_output"
+          grep -qx 'MOJPLAYWIN_AUTORECONCILE_PAID=0' <<< "$cron_output"
+          grep -qx 'MOJPLAYWIN_AUTORECONCILE_ERRORS=1' <<< "$cron_output"
+          python3 - "$RUNNER_TEMP/token" <<'PY'
+          import sqlite3, sys
+          db=sqlite3.connect('/home/zomorod2/.mojplaywin-crypto-payments-v1/payments.sqlite3')
+          row=db.execute('SELECT status,paid_at FROM invoices WHERE token=?',(open(sys.argv[1]).read().strip(),)).fetchone()
+          assert row == ('confirming', None), row
+          print('FALSE_PAYMENT_NEVER_SETTLED_BY_CRON=true')
           PY
           echo "REAL_PAYMENTS_SENT=false"
           echo "LIVE_SERVER_CHANGED=false"
