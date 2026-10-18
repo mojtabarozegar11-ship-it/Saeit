@@ -7,13 +7,14 @@ ini_set('display_errors', '0');
 ini_set('log_errors', '1');
 header('Content-Type: text/html; charset=utf-8');
 header('Cache-Control: no-store, max-age=0');
+header('X-Robots-Tag: noindex, nofollow');
 header('X-Content-Type-Options: nosniff');
 header('X-Frame-Options: DENY');
 header('Referrer-Policy: no-referrer');
 header('Content-Security-Policy: default-src \'none\'; style-src \'unsafe-inline\'; form-action \'self\'; base-uri \'none\'; frame-ancestors \'none\'');
 if (extension_loaded('session')) {
     session_name('ZM_BUSINESS');
-    session_set_cookie_params(['lifetime'=>0, 'path'=>'/business/', 'secure'=>!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off', 'httponly'=>true, 'samesite'=>'Strict']);
+    session_set_cookie_params(['lifetime'=>0, 'path'=>'/business/', 'secure'=>true, 'httponly'=>true, 'samesite'=>'Strict']);
     session_start();
 }
 const APP_TITLE = 'میز مدیریت و حسابداری زمرد ملل';
@@ -93,6 +94,11 @@ try {
     if(empty($_SESSION['csrf']))doCsrf();
     $count=(int)one($db,'SELECT COUNT(*) FROM users');
     if($count===0){
+        $setupFile=$private.'/setup.token';
+        if(!is_file($setupFile)){
+            $fp=@fopen($setupFile,'x');
+            if($fp!==false){fwrite($fp,bin2hex(random_bytes(32))."\n");fclose($fp);@chmod($setupFile,0600);}
+        }
         if($_SERVER['REQUEST_METHOD']==='POST'){
             verifyCsrf();
             $key=$private.'/setup.token';
@@ -136,7 +142,7 @@ try {
             $code=req('code');$name=req('name');$type=req('type');if(!preg_match('/^[0-9]{3,8}$/',$code)||$name===''||mbSafeLen($name)>120||!in_array($type,['asset','liability','equity','income','expense'],true))bail('مشخصات حساب نامعتبر است.');
             $db->prepare('INSERT INTO ledger_accounts(code,name,type) VALUES(?,?,?)')->execute([$code,$name,$type]);audit($db,'create','ledger-account',(int)$db->lastInsertId());
         } elseif($action==='journal'){
-            $cur=currency();$date=inputDate('date');$note=req('note');$no=req('doc_no',uniqueNo('JV'));
+            $cur=currency();$date=inputDate('date');$note=req('note');$no=req('doc_no');if($no==='')$no=uniqueNo('JV');
             $lines=[];
             for($i=0;$i<6;$i++){
                 $code=req('account_'.$i);$dr=req('debit_'.$i);$cr=req('credit_'.$i);
@@ -154,17 +160,17 @@ try {
             $amount=cents(req('amount'));if($amount<=0)bail('مبلغ باید مثبت باشد.');
             $cur=currency();$date=inputDate('date');$due=req('due_date',$date);if(!validDate($due))bail('سررسید نامعتبر است.');
             $desc=req('description');if($desc==='')bail('شرح فاکتور الزامی است.');
-            $no=req('invoice_no',uniqueNo('INV'));if(strlen($no)>70)bail('شماره فاکتور طولانی است.');
+            $no=req('invoice_no');if($no==='')$no=uniqueNo('INV');if(strlen($no)>70)bail('شماره فاکتور طولانی است.');
             $db->beginTransaction();try{
                 $j=record($db,uniqueNo('IV'),$date,'فاکتور '.$no.' | '.$desc,$cur,$kind==='sale'?[['1100',$amount,0],['4000',0,$amount]]:[['1200',$amount,0],['2000',0,$amount]]);
                 $db->prepare('INSERT INTO invoices(invoice_no,kind,party_id,invoice_date,due_date,description,amount,currency,posted_entry,created_by) VALUES(?,?,?,?,?,?,?,?,?,?)')->execute([$no,$kind,$party,$date,$due,$desc,$amount,$cur,$j,actor()]);audit($db,'create','invoice',(int)$db->lastInsertId());$db->commit();
             }catch(Throwable $e){$db->rollBack();throw $e;}
         } elseif($action==='payment'){
-            $invoice=(int)req('invoice_id');$rows=q($db,'SELECT i.*,COALESCE((SELECT SUM(amount) FROM invoice_payments WHERE invoice_id=i.id),0) AS paid FROM invoices i WHERE i.id=?',[$invoice]);
+            $invoice=(int)req('invoice_id');$db->beginTransaction();$rows=q($db,'SELECT i.*,COALESCE((SELECT SUM(amount) FROM invoice_payments WHERE invoice_id=i.id),0) AS paid FROM invoices i WHERE i.id=?',[$invoice]);
             if(!$rows)bail('فاکتور پیدا نشد.');$inv=$rows[0];$amount=cents(req('amount'));$remaining=(int)$inv['amount']-(int)$inv['paid'];
             if($amount<=0||$amount>$remaining)bail('مبلغ بیشتر از مانده فاکتور یا نامعتبر است.');
             $on=inputDate('date');
-            $db->beginTransaction();try{
+            try{
                 $j=record($db,uniqueNo('PAY'),$on,'تسویه فاکتور '.$inv['invoice_no'],(string)$inv['currency'],$inv['kind']==='sale'?[['1010',$amount,0],['1100',0,$amount]]:[['2000',$amount,0],['1010',0,$amount]]);
                 $db->prepare('INSERT INTO invoice_payments(invoice_id,amount,paid_on,entry_id,created_by) VALUES(?,?,?,?,?)')->execute([$invoice,$amount,$on,$j,actor()]);audit($db,'create','invoice-payment',(int)$db->lastInsertId());$db->commit();
             }catch(Throwable $e){$db->rollBack();throw $e;}
