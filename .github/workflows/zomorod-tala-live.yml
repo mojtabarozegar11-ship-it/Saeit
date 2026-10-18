@@ -11,7 +11,7 @@ on:
       - ".github/workflows/zomorod-tala-live.yml"
       - "public/tala/api/live.php"
   schedule:
-    - cron: "*/10 * * * *"
+    - cron: "*/5 * * * *"
   workflow_dispatch:
 permissions:
   contents: read
