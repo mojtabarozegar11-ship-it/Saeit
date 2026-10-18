@@ -1,0 +1,91 @@
+name: MojPlayWin two books owner and PDF integrity read only
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/mpw-books-owner-pdfinfo-readonly-20261018.yml"]
+permissions: {contents: read}
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Verify exact two books authorship relationship and PDF pages without writes
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 110s ssh -T -F "$d/config" saeit-cpanel bash -s <<'BASH'
+          set -euo pipefail
+          /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - <<'PY'
+          import os,sys,json,hashlib,pathlib,subprocess,shutil
+          H=pathlib.Path('/home/zomorod2');A=H/'Saeit-staging'
+          os.chdir(A);sys.path.insert(0,str(A));os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          import django;django.setup()
+          from core.models import Product
+          a=Product.objects.get(pk=72)
+          b=Product.objects.get(pk=225)
+          def normalized(s):return ' '.join(str(s or '').lower().split())
+          author_match=normalized(a.metadata.get('author'))==normalized(b.metadata.get('author'))
+          print('MPW_TWO_BOOK_OWNERSHIP_RELATION='+json.dumps({'same_book_author_declared':author_match,'chess_owner_id_present':bool(a.owner_id),'taniya_owner_id_present':bool(b.owner_id),'owner_user_has_name':bool(a.owner.first_name or a.owner.last_name) if a.owner else False}))
+          files={
+          72:H/'MojPlayWin_Private_Assets/store/chess-improvement/MojPlayWin_Chess_Grandmaster_Final_Covered_2026.pdf',
+          225:H/'MojPlayWin_Private_Assets/taniya-little-baker-worms/Taniya_and_the_Little_Baker_Worms.pdf'
+          }
+          for id,path in files.items():
+           result={'product_id':id,'exists':path.is_file(),'pdfinfo_available':bool(shutil.which('pdfinfo'))}
+           if result['pdfinfo_available'] and path.is_file():
+            p=subprocess.run(['pdfinfo',str(path)],capture_output=True,text=True,timeout=30)
+            result['pdfinfo_success']=p.returncode==0
+            for line in p.stdout.splitlines():
+             if line.startswith('Pages:'):result['pages']=line.partition(':')[2].strip()
+             if line.startswith('Encrypted:'):result['encrypted']=line.partition(':')[2].strip()
+             if line.startswith('Page size:'):result['page_size']=line.partition(':')[2].strip()[:45]
+           print('MPW_BOOK_TECH_QA='+json.dumps(result))
+
+          PY
+          BASH
