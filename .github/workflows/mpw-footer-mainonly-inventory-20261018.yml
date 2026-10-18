@@ -1,0 +1,122 @@
+name: MojPlayWin footer main-only live inventory
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/mpw-footer-mainonly-inventory-20261018.yml"]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Public main-site footer baseline
+        run: |
+          python3 - <<'PY'
+          import urllib.request,re
+          for path in ('/','/store/','/about/','/games/','/research/','/ai/','/company/','/knowledge/','/services/','/farnaz/','/saman/','/picm/'):
+              try:
+                  req=urllib.request.Request('https://mojplaywin.com'+path,headers={'User-Agent':'MpwFooterInventory/1.0','Cache-Control':'no-cache'})
+                  with urllib.request.urlopen(req,timeout=20) as res: b=res.read(1400000).decode('utf8','replace');status=res.status
+                  fs=re.findall(r'<footer\b[^>]*>[\s\S]*?</footer>',b,re.I)
+                  print('PUBLIC '+path+' status='+str(status)+' footers='+str(len(fs))+' footer_name='+str(bool(fs and re.search('Mojtaba Roozegar',fs[-1],re.I)))+' html_bytes='+str(len(b)),flush=True)
+              except Exception as exc:
+                  print('PUBLIC_ERROR '+path+' '+type(exc).__name__,flush=True)
+          PY
+      - name: Set up pinned VPS and cPanel SSH
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-footer-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Read exact route map and candidate main-only page files
+        run: |
+          set -euo pipefail
+          timeout 100s ssh -T -F "$RUNNER_TEMP/mpw-footer-inventory/config" saeit-cpanel python3 - <<'PY'
+          from pathlib import Path
+          import os,re,hashlib
+          home=Path('/home/zomorod2')
+          root=home/'mojplaywin.com'
+          app=home/'Saeit-staging'
+          for p in (root,app):
+              assert p.is_dir() and not p.is_symlink(),p
+          wsgi=root/'passenger_wsgi.py'
+          assert wsgi.is_file() and not wsgi.is_symlink() and 'Saeit-staging' in wsgi.read_text(errors='replace')
+          print('REMOTE_ID='+str(os.getuid())+' WSGI_OWNER_VERIFIED=true')
+          ht=root/'.htaccess'
+          if ht.is_file() and not ht.is_symlink():
+              for i,line in enumerate(ht.read_text(errors='replace').splitlines()):
+                  if re.search(r'REQUEST_URI|RewriteRule|Passenger|design-preview',line,re.I):
+                      safe=line.strip()
+                      if re.search('password|token|key|secret',safe,re.I): continue
+                      print('ROUTING '+str(i+1)+' '+safe[:230])
+          probes=[
+              app/'core/templates/mojplaywin/footer.html',
+              app/'core/templates/mojplaywin/site_base.html',
+              app/'core/templates/mojplaywin/theme.html',
+              app/'core/templates/brands/mojplaywin/base.html',
+              root/'design-preview-20261017/production-home-20261017.html',
+              root/'design-preview-20261017/complete-about-20261018.html',
+          ]
+          for p in probes:
+              if p.is_file() and not p.is_symlink():
+                  s=p.read_text(encoding='utf8',errors='replace')
+                  f=re.findall(r'<footer\b[^>]*>[\s\S]*?</footer>',s,re.I)
+                  print('PROBE '+str(p.relative_to(home))+' sha='+hashlib.sha256(p.read_bytes()).hexdigest()+' len='+str(len(s))+' footer='+str(len(f))+' founder_in_footer='+str(bool(f and 'Mojtaba Roozegar' in f[-1])))
+              else: print('PROBE_MISSING '+str(p.relative_to(home)))
+          pre=root/'design-preview-20261017'
+          count=0
+          if pre.is_dir() and not pre.is_symlink():
+              for p in sorted(pre.rglob('*.html')):
+                  if p.is_symlink() or not p.is_file() or p.stat().st_size>1500000:continue
+                  rel=p.relative_to(pre)
+                  if len(rel.parts)>5:continue
+                  s=p.read_text('utf8',errors='replace')
+                  f=re.findall(r'<footer\b[^>]*>[\s\S]*?</footer>',s,re.I)
+                  if not f:continue
+                  count+=1
+                  print('STATIC '+str(rel)+' sha='+hashlib.sha256(p.read_bytes()).hexdigest()+' footers='+str(len(f))+' founder='+str('Mojtaba Roozegar' in f[-1])+' siteBrand='+str('MojPlayWin' in f[-1]))
+                  if count>=100:break
+          print('STATIC_HTML_FOOTER_CANDIDATES='+str(count))
+          PY
+      - name: Remove relay material
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/mpw-footer-inventory"
