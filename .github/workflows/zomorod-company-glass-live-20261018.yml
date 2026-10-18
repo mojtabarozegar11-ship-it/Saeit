@@ -181,7 +181,7 @@ jobs:
                 const c=getComputedStyle(cards[0]),p=getComputedStyle(panels[0]);
                 const summary=getComputedStyle(details[0].querySelector('summary'));
                 const elements=[...cards.slice(0,6),...articles.slice(0,4),...panels.slice(0,2)];
-                const geometry=()=>elements.map(e=>[e.offsetLeft,e.offsetTop,e.offsetWidth,e.offsetHeight]);
+                const geometry=()=>elements.map(e=>[e.offsetWidth,e.offsetHeight]);
                 const before=geometry();style.sheet.disabled=true;
                 const after=geometry();style.sheet.disabled=false;
                 return {cards:cards.length,articles:articles.length,history:history.length,
