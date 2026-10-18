@@ -95,7 +95,7 @@ jobs:
           sha="$1"
           web="$HOME/public_html"
           backup="$HOME/.backups/zomorod-v6-preview/$sha"
-          preview="$web/__zm_orbital_v6_preview_20261018"
+          preview="$web/__zm_premium_orbital_v6_20261018_448"
           test -s "$web/index.html" && test ! -L "$web/index.html"
           test -f "$web/.htaccess" && test ! -L "$web/.htaccess"
           test ! -e "$preview" && test ! -L "$preview"
@@ -130,7 +130,7 @@ jobs:
           set -euo pipefail
           sha="$1"; web="$HOME/public_html"
           backup="$HOME/.backups/zomorod-v6-preview/$sha"
-          preview="$web/__zm_orbital_v6_preview_20261018"
+          preview="$web/__zm_premium_orbital_v6_20261018_448"
           source_html="$backup/staging/index.html"
           test -s "$source_html" && test ! -e "$preview"
           rollback() {
@@ -162,7 +162,7 @@ jobs:
           Path(sys.argv[2]).write_bytes(src)
           PY
           chmod 644 "$preview/index.html"
-          url="https://zomorodmelal.ir/__zm_orbital_v6_preview_20261018/"
+          url="https://zomorodmelal.ir/__zm_premium_orbital_v6_20261018_448/"
           code="$(curl -sS -L --max-time 25 -o "$backup/preview.response.html" -w '%{http_code}' "$url?preview=$sha" || true)"
           echo V6_PREVIEW_HTTP="$code"
           test "$code" = 200
@@ -176,7 +176,7 @@ jobs:
           echo V6_ROOT_SUBSITES_ORIGINAL=sha256_verified
           active=0; trap - EXIT
           echo V6_PREVIEW=passed
-          echo V6_PREVIEW_URL=https://zomorodmelal.ir/__zm_orbital_v6_preview_20261018/
+          echo V6_PREVIEW_URL=https://zomorodmelal.ir/__zm_premium_orbital_v6_20261018_448/
           REMOTE
       - name: Clean runner credentials
         if: always()
