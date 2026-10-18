@@ -71,7 +71,7 @@ class TestStandAloneUpgrade(unittest.TestCase):
     def test_rollback_if_second_rename_fails(self):
         original_replace=updater.os.replace
         def fail_second(src,dst):
-            if Path(dst).name=="index.php":
+            if Path(dst).name=="bootstrap.php":
                 raise OSError("simulated atomic rename failure")
             return original_replace(src,dst)
         with mock.patch.object(updater.os,"replace",side_effect=fail_second):
