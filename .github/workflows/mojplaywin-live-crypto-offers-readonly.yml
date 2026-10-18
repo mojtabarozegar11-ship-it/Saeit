@@ -2,7 +2,7 @@ name: MojPlayWin live crypto offer readiness (READ ONLY)
 on:
   push:
     branches: [feature/mojplaywin-crypto-gateway-20261018]
-    paths: [.github/workflows/mojplaywin-live-crypto-offers-readonly.yml]
+    paths: [.github/workflows/mojplaywin-live-crypto-offers-readonly.yml, scripts/mojplaywin_crypto_live_offers_readonly.py]
   workflow_dispatch:
 permissions:
   contents: read
