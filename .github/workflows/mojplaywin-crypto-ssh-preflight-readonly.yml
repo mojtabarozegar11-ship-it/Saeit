@@ -102,6 +102,12 @@ jobs:
           set -euo pipefail
           d="$RUNNER_TEMP/mojplaywin-crypto-preflight-ssh"
           timeout 80s ssh -T -F "$d/config" saeit-cpanel python3 - < scripts/mojplaywin_consistent_db_preflight_readonly.py
+      - name: Bound and drain a schema-only MySQL dump into memory (NO customer rows)
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-crypto-preflight-ssh"
+          timeout 95s ssh -T -F "$d/config" saeit-cpanel python3 - < scripts/mojplaywin_mysql_schema_dump_readonly_probe.py
       - name: Inspect offhost backup capability and aborted backup metadata
         shell: bash
         run: |
