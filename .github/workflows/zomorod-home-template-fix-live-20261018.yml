@@ -1,4 +1,4 @@
-name: Zomorod homepage expert audit targeted fixes safe live publish
+name: Zomorod homepage targeted fixes and observer selector verified release
 on:
   push:
     branches: [main]
