@@ -1,0 +1,174 @@
+name: Zomorod fixed background protected one-time publish
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/zomorod-fixed-bg-publish-20261018.yml]
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-root-homepage
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 17
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate isolated updater
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/zomorod_fixed_scientific_background_20261018.py
+          python3 scripts/zomorod_fixed_scientific_background_20261018.py selftest
+      - name: Acquire approved existing image and check exact size/format
+        env:
+          IMAGE_URL: "https://d2jqrm6oza8nb6.cloudfront.net/datasets/13f501c6-4009-4345-b0f9-5b3b25522c6f.webp?_jwt=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJrZXlIYXNoIjoiNzcwYWM0ZDE3ZmQ1NDAzYyIsImJ1Y2tldCI6InJ1bndheS1kYXRhc2V0cyIsInN0YWdlIjoicHJvZCIsImV4cCI6MTc5MjQyNjQ0OX0.Ry5uYF4Fikgy03gQBF6afVIj1zPgy7uUo6vedVNPnwY"
+        run: |
+          set -euo pipefail
+          curl --fail --location --silent --show-error --max-time 70 "$IMAGE_URL" -o "$RUNNER_TEMP/bg.webp"
+          python3 - <<'PY'
+          from pathlib import Path
+          import struct,os,hashlib
+          p=Path(os.environ["RUNNER_TEMP"])/"bg.webp"
+          b=p.read_bytes()
+          assert 10000<len(b)<10000000 and b[:4]==b"RIFF" and b[8:12]==b"WEBP"
+          assert len(b)>=16
+          print("APPROVED_WEBP_SIZE="+str(len(b)))
+          print("APPROVED_WEBP_SHA256="+hashlib.sha256(b).hexdigest())
+          PY
+      - name: Verify main site availability prior to any mutation
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from urllib.request import urlopen,Request
+          for p in ('/','/topics/','/search/','/store/','/about/','/tala/'):
+            with urlopen(Request('https://zomorodmelal.ir'+p,headers={'Cache-Control':'no-cache'}),timeout=25) as r:
+              b=r.read(3500000)
+              assert r.status==200 and len(b)>200
+            if p=='/':
+              assert len(b)>1500000
+              for k in (b'id="solar-stage"',b'id="orbital-cards"',b'ZOMOROD_ORBIT_DATA'):assert k in b
+              assert b'zm-fixed-scientific-background-20261018' not in b
+            print("BASELINE_OK="+p)
+          PY
+      - name: Prepare pinned VPS SSH and cPanel jump
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zm-bg-relay"; mkdir -p -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.known"
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+      - name: Stage files outside docroot
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-bg-relay"
+          stage="/home/zomorod2/.zm-bg-stage-$GITHUB_RUN_ID"
+          timeout 40s ssh -T -F "$d/config" saeit-cpanel "test ! -e '$stage' && mkdir -m 700 '$stage'"
+          timeout 65s scp -q -F "$d/config" scripts/zomorod_fixed_scientific_background_20261018.py saeit-cpanel:"$stage/install.py"
+          timeout 65s scp -q -F "$d/config" "$RUNNER_TEMP/bg.webp" saeit-cpanel:"$stage/bg.webp"
+      - name: Record protected file SHA baseline
+        run: |
+          set -euo pipefail
+          timeout 40s ssh -T -F "$RUNNER_TEMP/zm-bg-relay/config" saeit-cpanel 'python3 -' <<'PY' > "$RUNNER_TEMP/protected.before"
+          from pathlib import Path
+          import hashlib
+          root=Path('/home/zomorod2/public_html')
+          for name in ('.htaccess','search/index.html','store/index.php','topics/index.html','about/index.html','company/index.html','tala/index.php','business/index.php'):
+            p=root/name
+            if p.is_file() and not p.is_symlink(): print(name,hashlib.sha256(p.read_bytes()).hexdigest())
+          PY
+          test -s "$RUNNER_TEMP/protected.before"
+      - name: Apply single background CSS rule and optimized image atomically
+        id: install
+        run: |
+          set -euo pipefail
+          stage="/home/zomorod2/.zm-bg-stage-$GITHUB_RUN_ID"
+          timeout 70s ssh -T -F "$RUNNER_TEMP/zm-bg-relay/config" saeit-cpanel "python3 '$stage/install.py' install '$GITHUB_RUN_ID' '$stage/bg.webp'"
+      - name: Verify byte-perfect original homepage and public image
+        run: |
+          set -euo pipefail
+          stage="/home/zomorod2/.zm-bg-stage-$GITHUB_RUN_ID"
+          timeout 35s ssh -T -F "$RUNNER_TEMP/zm-bg-relay/config" saeit-cpanel "python3 '$stage/install.py' verify '$GITHUB_RUN_ID'"
+          python3 - <<'PY'
+          from urllib.request import urlopen,Request
+          import time
+          for i in range(6):
+            try:
+              with urlopen(Request('https://zomorodmelal.ir/?fixed_bg='+str(i),headers={'Cache-Control':'no-cache,no-store'}),timeout=25) as r:
+                data=r.read(3500000);assert r.status==200
+              assert data.count(b'id="zm-fixed-scientific-background-20261018"')==1
+              assert b'background-attachment:fixed!important' in data
+              with urlopen('https://zomorodmelal.ir/static/site/heroes/zomorod-fixed-cosmos-20261018.webp',timeout=25) as r:
+                image=r.read(10000000);assert r.status==200
+              assert image[:4]==b'RIFF' and image[8:12]==b'WEBP'
+              break
+            except Exception:
+              if i==5:raise
+              time.sleep(3)
+          for p in ('/topics/','/search/','/store/','/about/','/tala/'):
+            with urlopen('https://zomorodmelal.ir'+p,timeout=25) as r:assert r.status==200
+          print('PUBLIC_IMAGE_AND_PAGES_OK=yes')
+          PY
+      - name: Verify all protected files remain unchanged
+        run: |
+          set -euo pipefail
+          timeout 40s ssh -T -F "$RUNNER_TEMP/zm-bg-relay/config" saeit-cpanel 'python3 -' <<'PY' > "$RUNNER_TEMP/protected.after"
+          from pathlib import Path
+          import hashlib
+          root=Path('/home/zomorod2/public_html')
+          for name in ('.htaccess','search/index.html','store/index.php','topics/index.html','about/index.html','company/index.html','tala/index.php','business/index.php'):
+            p=root/name
+            if p.is_file() and not p.is_symlink():print(name,hashlib.sha256(p.read_bytes()).hexdigest())
+          PY
+          diff -u "$RUNNER_TEMP/protected.before" "$RUNNER_TEMP/protected.after"
+      - name: Restore original homepage automatically on any downstream failure
+        if: failure() && steps.install.outcome == 'success'
+        run: |
+          stage="/home/zomorod2/.zm-bg-stage-$GITHUB_RUN_ID"
+          timeout 65s ssh -T -F "$RUNNER_TEMP/zm-bg-relay/config" saeit-cpanel "python3 '$stage/install.py' rollback '$GITHUB_RUN_ID'"
+      - name: Delete only temporary stage, retain backup
+        if: always()
+        run: |
+          set +e
+          d="$RUNNER_TEMP/zm-bg-relay"
+          stage="/home/zomorod2/.zm-bg-stage-$GITHUB_RUN_ID"
+          if test -s "$d/config"; then
+            timeout 35s ssh -T -F "$d/config" saeit-cpanel "rm -f '$stage/install.py' '$stage/bg.webp'; rmdir '$stage'"
+          fi
+          rm -rf "$d"
