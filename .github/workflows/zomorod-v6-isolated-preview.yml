@@ -1,0 +1,183 @@
+name: Zomorod V6 isolated preview deploy
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/zomorod-v6-isolated-preview.yml"
+      - "content/zomorod-v6-20261018/index.html"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-v6-isolated-preview
+  cancel-in-progress: false
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate orbital template without touching main site
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path("content/zomorod-v6-20261018/index.html").read_text(encoding="utf-8")
+          rules=[
+            s.lstrip().startswith("<!doctype html>"),
+            s.rstrip().endswith("</html>"),
+            'lang="fa" dir="rtl"' in s,
+            'footer-copyright' in s,
+            'footer-social-icon' in s,
+            'window.ZOMOROD_ORBIT_DATA=' in s,
+            'تمام حقوق مادی و معنوی سایت برای شرکت کشت و صنعت زمرد ملل محفوظ است . آبان ۱۳۹۸ مجتبی روزگار' in s,
+            len(s.encode("utf-8")) > 1500000,
+          ]
+          print("V6_SOURCE_RULES_PASS=",sum(rules),"/",len(rules))
+          if not all(rules):raise SystemExit("V6 source failed")
+          PY
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - name: Snapshot root and protected subsite hashes
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1"
+          web="$HOME/public_html"
+          backup="$HOME/.backups/zomorod-v6-preview/$sha"
+          preview="$web/__zm_orbital_v6_preview_20261018"
+          test -s "$web/index.html" && test ! -L "$web/index.html"
+          test -f "$web/.htaccess" && test ! -L "$web/.htaccess"
+          test ! -e "$preview" && test ! -L "$preview"
+          mkdir -p "$(dirname "$backup")"
+          test ! -e "$backup"
+          mkdir -m 700 "$backup"
+          mkdir -m 700 "$backup/staging"
+          cp -p "$web/index.html" "$backup/index.original.html"
+          cmp -s "$web/index.html" "$backup/index.original.html"
+          sha256sum "$web/index.html" "$web/.htaccess" > "$backup/protected.sha256"
+          for child in mohammad ghanadi amozeshgah tala; do
+            if test -f "$web/$child/index.html" && test ! -L "$web/$child/index.html"; then
+              sha256sum "$web/$child/index.html" >> "$backup/protected.sha256"
+            fi
+          done
+          echo V6_ROOT_BACKUP=byte_verified
+          REMOTE
+      - name: Transfer V6 HTML into private staging only
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          tar -cf - -C content/zomorod-v6-20261018 index.html |
+            ssh -F "$d/config" saeit-cpanel "tar -xf - -C /home/zomorod2/.backups/zomorod-v6-preview/$GITHUB_SHA/staging"
+          echo V6_STAGING=private_complete
+      - name: Publish only isolated noindex preview with rollback
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1"; web="$HOME/public_html"
+          backup="$HOME/.backups/zomorod-v6-preview/$sha"
+          preview="$web/__zm_orbital_v6_preview_20261018"
+          source_html="$backup/staging/index.html"
+          test -s "$source_html" && test ! -e "$preview"
+          rollback() {
+            set +e
+            if test -d "$preview" && test -f "$preview/index.html" && grep -Fq 'footer-copyright' "$preview/index.html"; then
+              rm -f "$preview/index.html" "$preview/.htaccess"
+              rmdir "$preview" 2>/dev/null || true
+            fi
+            echo V6_PREVIEW_ROLLBACK=complete
+          }
+          active=1
+          trap 'rc=$?; trap - EXIT; if test "$active" = 1; then rollback; fi; exit "$rc"' EXIT
+          mkdir -m 755 "$preview"
+          cat > "$preview/.htaccess" <<'HT'
+          PassengerEnabled off
+          DirectoryIndex index.html
+          Options -Indexes
+          <IfModule mod_headers.c>
+          Header set X-Robots-Tag "noindex, nofollow"
+          </IfModule>
+          HT
+          python3 - "$source_html" "$preview/index.html" <<'PY'
+          from pathlib import Path
+          import sys
+          src=Path(sys.argv[1]).read_bytes()
+          assert b'footer-copyright' in src
+          assert src.count(b"</head>")==1
+          src=src.replace(b"</head>",b'<meta name="robots" content="noindex, nofollow"></head>',1)
+          Path(sys.argv[2]).write_bytes(src)
+          PY
+          chmod 644 "$preview/index.html"
+          url="https://zomorodmelal.ir/__zm_orbital_v6_preview_20261018/"
+          code="$(curl -sS -L --max-time 25 -o "$backup/preview.response.html" -w '%{http_code}' "$url?preview=$sha" || true)"
+          echo V6_PREVIEW_HTTP="$code"
+          test "$code" = 200
+          grep -Fq 'footer-copyright' "$backup/preview.response.html"
+          grep -Fq 'name="robots" content="noindex, nofollow"' "$backup/preview.response.html"
+          grep -Fq 'تمام حقوق مادی و معنوی سایت برای شرکت کشت و صنعت زمرد ملل محفوظ است' "$backup/preview.response.html"
+          sha256sum -c --status "$backup/protected.sha256"
+          status="$(curl -sS -L --max-time 18 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir/" || true)"
+          echo V6_ORIGINAL_HOMEPAGE_HTTP="$status"
+          test "$status" = 200
+          echo V6_ROOT_SUBSITES_ORIGINAL=sha256_verified
+          active=0; trap - EXIT
+          echo V6_PREVIEW=passed
+          echo V6_PREVIEW_URL=https://zomorodmelal.ir/__zm_orbital_v6_preview_20261018/
+          REMOTE
+      - name: Clean runner credentials
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
