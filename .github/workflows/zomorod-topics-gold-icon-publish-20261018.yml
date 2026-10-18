@@ -1,0 +1,259 @@
+name: Zomorod all topics icon - protected live homepage release
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/zomorod-topics-gold-icon-publish-20261018.yml
+      - scripts/zomorod_topics_footer_to_gold_icon_20261018.py
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-topics-gold-icon-only-20261018
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify reversible, scope-limited patch offline
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/zomorod_topics_footer_to_gold_icon_20261018.py
+          python3 scripts/zomorod_topics_footer_to_gold_icon_20261018.py selftest
+      - name: Preflight main homepage and topics, store, search routes read only
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from urllib.request import urlopen,Request
+          import hashlib
+          for route in ('/','/topics/','/search/','/store/','/about/','/tala/'):
+            with urlopen(Request('https://zomorodmelal.ir'+route,
+              headers={'User-Agent':'ZomorodIconPreflight/1.0','Cache-Control':'no-cache'}),timeout=23) as r:
+              body=r.read()
+              assert r.status==200 and len(body)>200,route
+            if route=='/':
+              assert hashlib.sha256(body).hexdigest()=='7eb3cebe8285c357604695490f9ee6b58031aee2e4f7116d289d5adeb2a4e4c0', 'Public source changed'
+              assert b'zm-full-topics-index-link' in body
+              assert b'zm-gold-search-toolbar-20261018' in body
+            print('ZM_TOPICS_ICON_PRECHECK='+route+' HTTP200',flush=True)
+          PY
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+
+      - name: Stage gold icon script only in private transient folder
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          stage="/home/zomorod2/.zm-topics-icon-stage-$GITHUB_RUN_ID"
+          timeout 35s ssh -T -F "$d/config" saeit-cpanel "test ! -e '$stage' && test ! -L '$stage' && install -d -m 700 '$stage'"
+          cat scripts/zomorod_topics_footer_to_gold_icon_20261018.py | timeout 40s ssh -T -F "$d/config" saeit-cpanel "cat > '$stage/patch.py'"
+          timeout 35s ssh -T -F "$d/config" saeit-cpanel "test -s '$stage/patch.py' && python3 '$stage/patch.py' selftest"
+      - name: Record protected routes and site configuration checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          timeout 38s ssh -T -F "$d/config" saeit-cpanel 'python3 -' <<'PY' > "$RUNNER_TEMP/zm-protected-files-before.txt"
+          from pathlib import Path
+          import hashlib
+          root=Path('/home/zomorod2/public_html')
+          for name in ('.htaccess','search/index.html','store/index.php','topics/index.html','about/index.html','company/index.html','tala/index.php','business/index.php'):
+            p=root/name
+            if not p.is_file() or p.is_symlink():continue
+            print(name+' '+hashlib.sha256(p.read_bytes()).hexdigest())
+          PY
+          test -s "$RUNNER_TEMP/zm-protected-files-before.txt"
+          echo 'ZM_TOPICS_ICON_PROTECTED_BASELINE=yes'
+      - name: Publish gold icon after byte-exact root backup
+        id: apply
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 60s ssh -T -F "$RUNNER_TEMP/zomorod-baseline-inventory/config" saeit-cpanel "python3 '/home/zomorod2/.zm-topics-icon-stage-$GITHUB_RUN_ID/patch.py' apply '$GITHUB_RUN_ID'"
+      - name: Public HTML and protected route smoke checks
+        id: smoke
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os,time
+          from urllib.request import urlopen,Request
+          passed=False
+          for attempt in range(1,7):
+            try:
+              uri='https://zomorodmelal.ir/?__top_topics_icon='+os.environ['GITHUB_RUN_ID']+'-'+str(attempt)
+              with urlopen(Request(uri,headers={'User-Agent':'ZmTopicsIconSmoke/1.0','Cache-Control':'no-cache, no-store'}),timeout=25) as r:
+                html=r.read(4000000).decode('utf8','replace')
+                assert r.status==200
+              top=html.index('id="zm-topics-top-icon-20261018"')
+              nav=html.index('<nav class="zm-gold-toolbar-controls"')
+              end=html.index('</nav>',nav)
+              footer=html.index('<footer class="footer"')
+              main=html.index('<main id="content">')
+              assert 0<nav<top<end<main<footer
+              assert html.count('id="zm-topics-top-icon-20261018"')==1
+              assert html.count('zm-full-topics-index-link')==0
+              assert 'href="/topics/" title="دانشنامه تخصصی' in html
+              assert 'ZOMOROD_ORBIT_DATA' in html and 'zm-gold-search-toolbar-20261018' in html
+              assert 'class="zm-gold-store-entry" href="/store/"' in html
+              assert len(html)>2200000
+              passed=True
+              print('ZM_TOPICS_ICON_PUBLIC_VERIFIED=yes',flush=True)
+              break
+            except Exception as e:
+              print('ZM_TOPICS_ICON_SMOKE_RETRY='+str(attempt)+' '+repr(e)[:160],flush=True)
+              time.sleep(2)
+          if not passed:raise RuntimeError('Gold topics icon not visible in served HTML')
+          for route in ('/topics/','/search/','/store/','/about/','/tala/'):
+            with urlopen(Request('https://zomorodmelal.ir'+route,headers={'User-Agent':'ZmTopicsIconSmoke/1.0'}),timeout=22) as r:
+              assert r.status==200 and len(r.read(4000000))>200
+            print('ZM_TOPICS_ICON_PROTECTED_ROUTE_UP='+route,flush=True)
+          PY
+      - name: Browser geometry check at five viewport widths
+        id: visual
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/zm-topics-browser"
+          cd "$RUNNER_TEMP/zm-topics-browser"
+          npm --silent init -y >/dev/null
+          npm --silent install --no-save playwright@1.55.0
+          npx playwright install chromium
+          cat > inspect.cjs <<'JS'
+          const {chromium}=require('playwright');
+          (async()=>{
+            const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
+            for(const width of [1440,1024,768,390,320]){
+              const page=await browser.newPage({viewport:{width,height:900},deviceScaleFactor:1});
+              await page.goto('https://zomorodmelal.ir/?__zm_topics_icon_visual='+width,{waitUntil:'domcontentloaded',timeout:35000});
+              await page.waitForTimeout(500);
+              const data=await page.evaluate(()=>{
+                function box(q){
+                  const el=document.querySelector(q);if(!el)return null;
+                  const b=el.getBoundingClientRect();
+                  return {x:b.x,y:b.y,w:b.width,h:b.height}
+                }
+                const panel=box('#zm-gold-search-toolbar-20261018'),
+                  icon=box('#zm-topics-top-icon-20261018'),
+                  store=box('#zm-gold-search-toolbar-20261018 .zm-gold-store-entry'),
+                  search=box('#zm-gold-search-toolbar-20261018 .zm-gold-search'),
+                  main=box('main#content'),footer=box('footer#site-footer');
+                const el=document.querySelector('#zm-topics-top-icon-20261018');
+                const svg=el?.querySelector('svg');
+                const style=el?getComputedStyle(el):null;
+                const horizontalOverlap=!!store&&!!icon&&store.x<icon.x+icon.w&&icon.x<store.x+store.w;
+                const verticalOverlap=!!store&&!!icon&&store.y<icon.y+icon.h&&icon.y<store.y+store.h;
+                return {width:innerWidth,panel,icon,store,search,main,footer,
+                  label:el?.getAttribute('aria-label'),
+                  href:el?.getAttribute('href'),
+                  goldColor:style?.color,
+                  bg:style?.backgroundImage,
+                  hasSvg:!!svg,
+                  formerFooterLinePresent:!!document.querySelector('.zm-full-topics-index-link'),
+                  beforeMain:!!panel&&!!main&&panel.y+panel.h<=main.y+4,
+                  withinPanel:!!panel&&!!icon&&icon.y>=panel.y-2&&icon.y+icon.h<=panel.y+panel.h+3,
+                  fullyOnscreen:!!icon&&icon.w>=48&&icon.x>=-3&&icon.x+icon.w<=innerWidth+3,
+                  aboveFooter:!!icon&&!!footer&&icon.y+icon.h<footer.y,
+                  noStoreOverlap:!(horizontalOverlap&&verticalOverlap),
+                  mobileSameRow:!!store&&!!icon&&Math.abs(store.y-icon.y)<8};
+              });
+              console.log('ZM_TOPICS_ICON_VISUAL '+JSON.stringify(data));
+              if(data.href!='/topics/'||!data.hasSvg||!data.label||data.bg==='none'||
+                 data.formerFooterLinePresent||!data.beforeMain||!data.withinPanel||
+                 !data.fullyOnscreen||!data.aboveFooter||!data.noStoreOverlap||
+                 (width<=390&&!data.mobileSameRow))
+                throw Error('Topics icon layout verification failed at '+width);
+              await page.close();
+            }
+            await browser.close();
+            console.log('ZM_TOPICS_ICON_ALL_VIEWPORTS_OK=yes');
+          })().catch(e=>{console.error('ZM_TOPICS_ICON_VISUAL_ERROR '+e.stack);process.exit(1)});
+          JS
+          node inspect.cjs
+      - name: Confirm protected cPanel files remained byte-identical
+        id: protected
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          timeout 45s ssh -T -F "$d/config" saeit-cpanel 'python3 -' <<'PY' > "$RUNNER_TEMP/zm-protected-files-after.txt"
+          from pathlib import Path
+          import hashlib
+          root=Path('/home/zomorod2/public_html')
+          for name in ('.htaccess','search/index.html','store/index.php','topics/index.html','about/index.html','company/index.html','tala/index.php','business/index.php'):
+            p=root/name
+            if not p.is_file() or p.is_symlink():continue
+            print(name+' '+hashlib.sha256(p.read_bytes()).hexdigest())
+          PY
+          diff -u "$RUNNER_TEMP/zm-protected-files-before.txt" "$RUNNER_TEMP/zm-protected-files-after.txt"
+          echo ZM_TOPICS_ICON_PROTECTED_CONTENT_UNCHANGED=yes
+      - name: Rollback only homepage on post-publication verification failure
+        if: failure() && steps.apply.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          timeout 60s ssh -T -F "$d/config" saeit-cpanel "python3 '/home/zomorod2/.zm-topics-icon-stage-$GITHUB_RUN_ID/patch.py' rollback '$GITHUB_RUN_ID'"
+      - name: Remove temp transfer but retain original backup
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          stage="/home/zomorod2/.zm-topics-icon-stage-$GITHUB_RUN_ID"
+          if test -f "$d/config"; then
+            timeout 30s ssh -T -F "$d/config" saeit-cpanel "rm -f '$stage/patch.py'; rmdir '$stage'" || true
+          fi
+          rm -rf -- "$d"
