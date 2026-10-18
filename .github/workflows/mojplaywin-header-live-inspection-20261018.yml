@@ -141,6 +141,43 @@ jobs:
             if hits>=45:break
           print('SCANNED_FILES='+str(scanned)+' MATCHED_FILES='+str(hits))
           PY
+      - name: Map actual public response to static preview files
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 75s ssh -T -F "$RUNNER_TEMP/mpw-header-inspect/config" saeit-cpanel 'python3 -' <<'PY'
+          from pathlib import Path
+          import hashlib,re,urllib.request
+          root=Path('/home/zomorod2/mojplaywin.com')
+          pre=root/'design-preview-20261017'
+          for filename in ('.htaccess','design-preview-20261017/.htaccess'):
+            p=root/filename
+            if not p.is_file() or p.is_symlink():continue
+            print('REWRITE_FILE='+filename)
+            for line in p.read_text(errors='replace').splitlines():
+              if re.search(r'RewriteRule|DirectoryIndex|Passenger|design-preview|RewriteCond|index',line,re.I):
+                print('REWRITE='+line[:230])
+          for filename in ('index.html','production-home-20261017.html','store.html','ai.html'):
+            p=pre/filename
+            if not p.is_file() or p.is_symlink(): continue
+            s=p.read_text(errors='replace')
+            print('PREVIEW_FILE='+filename+' SIZE='+str(len(s))+' HEADER='+str(s.find('<header'))+' FOOTER='+str(s.rfind('</footer>'))+' AFTER_FOOTER='+str(len(s)-s.rfind('</footer>')))
+            for needle in ('mw-nav-cta','mpw-home-ten-guides','Mojtaba Roozegar','Search','Enter Store','/search/'):
+              print('PREVIEW_NEEDLE='+filename+' '+needle+' '+str(s.find(needle)))
+            idx=s.rfind('</footer>')
+            if idx>0:print('PREVIEW_END='+filename+' '+re.sub(r'\s+',' ',s[idx:idx+440])[:440])
+          for route in ('/','/store/','/ai/'):
+            u='https://mojplaywin.com'+route
+            try:
+              req=urllib.request.Request(u,headers={'User-Agent':'MojPlayWinHeaderReadonly/1.0','Cache-Control':'no-cache'})
+              with urllib.request.urlopen(req,timeout=12) as res:
+                body=res.read(1400000).decode('utf8','replace')
+                print('PUBLIC_ROUTE='+route+' STATUS='+str(res.status)+' LENGTH='+str(len(body))+' V4='+str('atelier-v4' in body)+' TOPSEARCH='+str(body.find('mw-search-form'))+' SEARCHLINK='+str(body.find('/search/'))+' TEN='+str('mpw-home-ten-guides' in body))
+                tail=body.rfind('</footer>')
+                print('PUBLIC_AFTER_FOOTER='+route+' '+re.sub(r'\s+',' ',body[tail:tail+370])[:370] if tail>0 else 'PUBLIC_NO_FOOTER')
+            except Exception as exc:
+              print('PUBLIC_ROUTE_ERROR='+route+' '+type(exc).__name__)
+          PY
       - name: Remove key material
         if: always()
         shell: bash
