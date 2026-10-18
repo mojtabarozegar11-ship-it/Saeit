@@ -22,6 +22,12 @@ function get_fx(string $url,string $provider): array {
     $eth=$j['data']['amount']??null;
  } elseif($provider==='coinbase-trx'&&is_array($j)) {
     $trx=$j['data']['amount']??null;
+ } elseif($provider==='cryptocompare'&&is_array($j)) {
+    $eth=$j['ETH']['USD']??null;$trx=$j['TRX']['USD']??null;
+ } elseif($provider==='kraken-eth'&&is_array($j)) {
+    foreach(($j['result']??[]) as $ticker) { $eth=$ticker['c'][0]??null; break; }
+ } elseif($provider==='kraken-trx'&&is_array($j)) {
+    foreach(($j['result']??[]) as $ticker) { $trx=$ticker['c'][0]??null; break; }
  }
  $valid=fn($v)=>is_numeric($v)&&(float)$v>0&&is_finite((float)$v);
  return ['provider'=>$provider,'http'=>$status,'connection_error'=>$errno!==0,
@@ -33,5 +39,8 @@ $result=[
     get_fx('https://api.coingecko.com/api/v3/simple/price?ids=ethereum%2Ctron&vs_currencies=usd','coingecko'),
     get_fx('https://api.coinbase.com/v2/prices/ETH-USD/spot','coinbase-eth'),
     get_fx('https://api.coinbase.com/v2/prices/TRX-USD/spot','coinbase-trx'),
+    get_fx('https://min-api.cryptocompare.com/data/pricemulti?fsyms=ETH%2CTRX&tsyms=USD','cryptocompare'),
+    get_fx('https://api.kraken.com/0/public/Ticker?pair=ETHUSD','kraken-eth'),
+    get_fx('https://api.kraken.com/0/public/Ticker?pair=TRXUSD','kraken-trx'),
 ];
 echo json_encode(['classification'=>'MOJPLAYWIN_CRYPTO_FX_READONLY','sources'=>$result,'transactions_created'=>false,'payments_enabled_by_probe'=>false],JSON_THROW_ON_ERROR),PHP_EOL;
