@@ -1,0 +1,32 @@
+name: Read-only comprehensive Zomorod public sitemap technical and SEO crawl
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/zomorod-full-public-crawl-20261019.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  crawl:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Crawl root sitemap, topic sitemap, and public top-level routes read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/zomorod-public-crawl"
+          AUDIT_DIR="$RUNNER_TEMP/zomorod-public-crawl" python3 scripts/zomorod_sitewide_public_crawl_20261019.py
+      - name: Upload page-by-page URL and audit records
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zomorod-sitewide-public-crawl-20261019
+          path: |
+            ${{ runner.temp }}/zomorod-public-crawl/site-crawl.json
+            ${{ runner.temp }}/zomorod-public-crawl/site-pages.csv
+          if-no-files-found: warn
+          retention-days: 14
