@@ -69,39 +69,8 @@ body.mojplaywin-site.mpw-unified-main .mpw-unified-surface th,
 body.mojplaywin-site.mpw-unified-main .mpw-unified-surface td{
   border-color:rgba(217,180,92,.23)
 }
-/* Legacy MojPlayWin brand templates: harmonize palette and chrome only.
-   Product/cart/checkout markup and field names remain completely untouched. */
-body.mpw-unified-legacy{
-  --bg:#080807;--panel:#171611;--ink:#f5f0e4;--muted:#b8b1a2;
-  --line:rgba(217,180,92,.23);--acid:#d6ad55;--violet:#d6ad55;
-  --mpw-gold:#d6ad55;--mpw-gold-light:#f0cf82;
-  color:#f5f0e4;background:#080807
-}
-body.mpw-unified-legacy .mpw-header{
-  border:1px solid rgba(217,180,92,.23);border-radius:18px;
-  max-width:1240px;margin:16px auto 24px;height:auto;min-height:74px;
-  background:rgba(13,13,11,.94);box-shadow:0 12px 40px rgba(0,0,0,.28)
-}
-body.mpw-unified-legacy .mpw-mark{
-  border-color:#d6ad55;color:#f0cf82;border-radius:50%;box-shadow:0 0 24px rgba(214,173,85,.16)
-}
-body.mpw-unified-legacy .mpw-nav a:hover,
-body.mpw-unified-legacy .mpw-footer a:hover{color:#f0cf82}
-body.mpw-unified-legacy .mpw-cta{
-  border:1px solid #d6ad55;border-radius:12px;
-  color:#16120a;background:linear-gradient(135deg,#e4c273,#bc9140)
-}
-body.mpw-unified-legacy .mpw-footer{
-  max-width:1240px;margin:26px auto 0;border:1px solid rgba(217,180,92,.23);
-  border-radius:18px;background:#11110f
-}
-body.mpw-unified-legacy :where(.game-feature,.game-card,.principles article,.news-grid article,.mpw-page-card,.mpw-venture-card){
-  background:#171611;border-color:rgba(217,180,92,.3)
-}
-/* Do NOT restyle #checkout, form action URLs, prices, product purchase controls or
-   payment provider elements: those must be regression-tested independently. */
+/* Shared brand/product/checkout templates intentionally excluded. */
 @media(max-width:780px){
-  body.mpw-unified-legacy .mpw-header{margin:10px;padding:12px;min-height:60px;border-radius:14px}
   body.mojplaywin-site.mpw-unified-main>main#main-content{padding:12px!important}
   body.mojplaywin-site.mpw-unified-main .mpw-unified-surface>div,
   body.mojplaywin-site.mpw-unified-main .mpw-unified-surface>section,
@@ -111,6 +80,5 @@ body.mpw-unified-legacy :where(.game-feature,.game-card,.principles article,.new
   }
 }
 @media(prefers-reduced-motion:reduce){
-  body.mojplaywin-site.mpw-unified-main *,
-  body.mpw-unified-legacy *{scroll-behavior:auto}
+  body.mojplaywin-site.mpw-unified-main *{scroll-behavior:auto}
 }
