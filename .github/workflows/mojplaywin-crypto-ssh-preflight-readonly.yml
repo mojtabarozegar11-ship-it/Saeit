@@ -140,16 +140,13 @@ jobs:
           echo "$outcome"
           echo "SOURCE_DATA_READ=false"
           echo "BACKUP_WRITTEN=false"
-      - name: Verify bounded 16MiB synthetic cPanel-to-VPS throughput
+      - name: Measure both sides of synthetic SSH pipe twice with bounded timings
         shell: bash
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/mojplaywin-crypto-preflight-ssh"
           payload64="$(base64 -w0 scripts/mojplaywin_synthetic_throughput_readonly.py)"
-          pycall="import base64,sys; code=sys.argv.pop(1); exec(base64.b64decode(code))"
-          timeout 90s ssh -T -F "$d/config" saeit-cpanel "python3 -c '$pycall' '$payload64' produce" |
-            timeout 90s ssh -T -F "$d/config" saeit-vps "python3 -c '$pycall' '$payload64' consume" |
-            python3 -c 'import json,sys; x=json.load(sys.stdin); print(json.dumps(x,sort_keys=True)); assert x["checksum_matches"] and x["bytes_read"]==16777216 and not x["backup_written"]'
+          python3 scripts/mojplaywin_transport_stage_diagnostic.py "$d/config" "$payload64"
       - name: Diagnose AES-GCM using synthetic data solely in VPS memory
         shell: bash
         run: |
