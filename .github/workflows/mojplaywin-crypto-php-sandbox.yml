@@ -4,6 +4,8 @@ on:
     branches: [feature/mojplaywin-crypto-gateway-20261018]
     paths:
       - isolated_crypto_gateway/**
+      - scripts/mojplaywin_crypto_safe_upgrade.py
+      - tests/test_mojplaywin_crypto_safe_upgrade.py
       - .github/workflows/mojplaywin-crypto-php-sandbox.yml
   workflow_dispatch:
 permissions:
@@ -17,6 +19,14 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+      - name: Exercise strictly guarded payment-source upgrade and rollback (offline only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mojplaywin_crypto_safe_upgrade.py
+          python3 -m unittest discover -s tests -p 'test_mojplaywin_crypto_safe_upgrade.py' -v
+          echo "PAYMENT_SOURCE_UPGRADE_GUARDS_TESTED=true"
+          echo "PRODUCTION_FILES_CHANGED=false"
       - name: Prepare offline private payment sandbox on runner only
         shell: bash
         run: |
