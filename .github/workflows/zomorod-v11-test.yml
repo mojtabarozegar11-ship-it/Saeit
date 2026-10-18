@@ -1,0 +1,53 @@
+name: Zomorod V11 source unit QA
+on:
+  push:
+    branches: [release/zomorod-v11-search-store-siteagents-20261018]
+  pull_request:
+    branches: [main]
+    paths:
+      - "content/zomorod-v11/**"
+      - "content/zomorod-business/app.php"
+      - ".github/workflows/zomorod-v11-test.yml"
+permissions:
+  contents: read
+jobs:
+  qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_sqlite,sqlite3,curl
+      - name: Syntax and isolated functional data tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile content/zomorod-v11/search_build.py
+          for file in content/zomorod-v11/*.php content/zomorod-business/app.php; do php -l "$file"; done
+          export D="$RUNNER_TEMP/private"
+          mkdir -m 700 "$D"
+          php -r 'require "content/zomorod-v11/site_agents.php"; $d=zmAgentDb(getenv("D"));if($d->query("SELECT COUNT(*) FROM agents")->fetchColumn()!=11)exit(3);$d->exec("INSERT INTO runs(agent_code,status,http_code,duration_ms,detail) VALUES('"'master'"','"'ok'"',200,24,'"'test'"')");$rows=$d->query("SELECT * FROM runs")->fetchAll();if(!str_contains(zmAgentChart($rows),"<svg"))exit(4);echo "AGENT_CHART_REAL_ROWS=1\n";'
+          php -r 'require "content/zomorod-v11/site_store.php"; $d=zmStoreDb(getenv("D"));if($d->query("SELECT state FROM payment_state WHERE id=1")->fetchColumn()!=="not_configured")exit(3);if($d->query("SELECT COUNT(*) FROM products")->fetchColumn()!=0)exit(4);echo "SHOP_NO_FAKE_PRODUCTS_OR_PAYMENTS=passed\n";'
+          export ROOT="$RUNNER_TEMP/mock-public" TARGET="$RUNNER_TEMP/search-built"
+          mkdir -p "$ROOT/company" "$ROOT/agriculture" "$ROOT/business" "$ROOT/mohammad"
+          printf '<html><head><title>خانه</title></head><body><main><p>%s</p></main></body></html>' "$(printf 'محتوای واقعی نمونه %.0s' {1..20})" > "$ROOT/index.html"
+          for i in $(seq 1 38);do
+            mkdir -p "$ROOT/page-$i"
+            printf '<html><head><title>صفحه %s</title></head><body><main><h1>محتوای واقعی</h1><p>%s</p></main></body></html>' "$i" "$(printf 'پژوهش و کشاورزی %.0s' {1..20})" > "$ROOT/page-$i/index.html"
+          done
+          printf '<main>PRIVATE SECRET DO NOT INDEX</main>' > "$ROOT/business/index.html"
+          printf '<main>CHILD SITE SECRET DO NOT INDEX</main>' > "$ROOT/mohammad/index.html"
+          python3 content/zomorod-v11/search_build.py "$ROOT" "$TARGET"
+          python3 - <<'PY'
+          from pathlib import Path
+          import json,os
+          d=json.loads((Path(os.environ['TARGET'])/'index.json').read_text())
+          assert d['count']==39
+          t=json.dumps(d,ensure_ascii=False)
+          assert 'PRIVATE SECRET' not in t and 'CHILD SITE SECRET' not in t
+          assert '/business/' not in t and '/mohammad/' not in t
+          assert (Path(os.environ['TARGET'])/'index.html').is_file()
+          print("SEARCH_INDEX_EXCLUDES_SUBSITES_AND_PRIVATE=passed")
+          PY
