@@ -94,7 +94,7 @@ def copy_verified(source, dest, digest):
         verify_pdf(Path(temp), digest)
         if dest.exists() or dest.is_symlink():
             raise RuntimeError("Concurrent book destination modification")
-        os.replace(temp, dest)
+        os.link(temp, dest)  # Exclusive create: never overwrite an existing asset.
         verify_pdf(dest, digest)
     finally:
         if os.path.exists(temp):
@@ -168,7 +168,7 @@ def prepare():
                 json.dump(prev, stream, ensure_ascii=False)
                 stream.flush()
                 os.fsync(stream.fileno())
-            os.replace(temp, backup)
+            os.link(temp, backup)  # Exclusive creation; preserve any concurrent backup.
         finally:
             if os.path.exists(temp):
                 os.unlink(temp)
@@ -204,10 +204,48 @@ def preflight():
     print("MPW_TWO_BOOKS_PREFLIGHT="+json.dumps(results, ensure_ascii=False))
 
 
+def rollback():
+    """Undo only our own metadata keys; refuse if a sale was ever enabled."""
+    Product, root, ready = setup_django()
+    directory = root / "mpw-two-books-2026"
+    backup = directory / "original-django-product-metadata.json"
+    if backup.is_symlink() or not backup.is_file():
+        raise RuntimeError("Missing protected rollback metadata")
+    original = json.loads(backup.read_text("utf8"))
+    if set(original) != {"72", "225"}:
+        raise RuntimeError("Unexpected backup product set")
+    from django.db import transaction
+    with transaction.atomic():
+        rows = {p.pk: p for p in Product.objects.select_for_update().filter(pk__in=PILOTS)}
+        if len(rows) != 2:
+            raise RuntimeError("One or more product records disappeared")
+        for id_, spec in PILOTS.items():
+            p = rows[id_]
+            check_product(p, id_, spec)
+            md = dict(p.metadata or {})
+            expected_rel = "mpw-two-books-2026/%d.pdf" % id_
+            if (md.get("private_file") != expected_rel or
+                    md.get("sha256") != spec["sha"] or
+                    md.get("mpw_private_file_prepared") is not True):
+                raise RuntimeError("Concurrent product metadata modification: rollback refused")
+            old = original[str(id_)]
+            for k, v in md.items():
+                if k not in ("private_file", "sha256", "mpw_private_file_prepared") and old.get(k) != v:
+                    raise RuntimeError("Other product fields changed: rollback refused")
+            p.metadata = old
+            p.save(update_fields=["metadata", "updated_at"])
+    # Keep harmless private PDFs and backup as evidence; never touch originals.
+    print("MPW_TWO_BOOKS_METADATA_ROLLED_BACK="+json.dumps({
+        "ids":sorted(PILOTS),"payment_flags_changed":0,"original_assets_untouched":True
+    }))
+
+
 if __name__ == "__main__":
-    if len(sys.argv) != 2 or sys.argv[1] not in ("preflight", "prepare"):
-        raise SystemExit("Usage: script.py preflight | prepare")
+    if len(sys.argv) != 2 or sys.argv[1] not in ("preflight", "prepare", "rollback"):
+        raise SystemExit("Usage: script.py preflight | prepare | rollback")
     if sys.argv[1] == "preflight":
         preflight()
-    else:
+    elif sys.argv[1] == "prepare":
         prepare()
+    else:
+        rollback()
