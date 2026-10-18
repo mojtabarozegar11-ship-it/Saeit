@@ -1,0 +1,212 @@
+name: MojPlayWin professor photos and English-only heading exact page release
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/mojplaywin-professor-gallery-english-only-20261018.yml"
+permissions:
+  contents: read
+concurrency:
+  group: mojplaywin-about-exact-static-prod
+  cancel-in-progress: false
+jobs:
+  modify-only-profile-page:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && github.event_name == 'push' && contains(github.event.head_commit.message, '[approved-mpw-professor-gallery-english-20261018]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate exactly five distinct photographs and requested Persian caption removal
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mojplaywin_professor_gallery_exact_patch_20261018.py
+          python3 - <<'PY'
+          from pathlib import Path
+          import sys
+          sys.path.insert(0,'scripts')
+          import mojplaywin_professor_gallery_exact_patch_20261018 as p
+          template=Path('core/templates/mojplaywin/leadership_executive_cv_20261018.html').read_text(encoding='utf-8')
+          assert p.PERSIAN_LABEL not in template
+          assert 'پرفسور مجتبی روزگار' not in template
+          assert len(p.PHOTO_PARTS)==len(set(p.PHOTO_PARTS))==5
+          assert template.count('class="mpw-exec-gallery-item"')==5
+          assert template.count('loading="lazy"')==5
+          assert template.count('<h2 id="mpw-professor-title">Professor Mojtaba Roozegar</h2>')==1
+          assert p.EXPECTED_HT=='021c3b7c947f709cc39393fe6e84ba6e84c7e820122631a05c865d86e69aa464'
+          assert p.EXPECTED_PAGE=='7ae97fae5e95163aa4dc18b36feb933f2e7f2d61ffe98beef0dc23dd98112e44'
+          print('PROFILE_PERSIAN_CAPTION_GALLERY_SOURCE_PASS=yes')
+          PY
+      - name: Test availability of the five original personal-gallery image URLs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import sys,urllib.request
+          sys.path.insert(0,'scripts')
+          import mojplaywin_professor_gallery_exact_patch_20261018 as p
+          for item in p.PHOTO_PARTS:
+              url=p.URL_PREFIX+item
+              req=urllib.request.Request(url,headers={'User-Agent':'MojPlayWinProfileGalleryCheck/1.0','Range':'bytes=0-80'})
+              with urllib.request.urlopen(req,timeout=20) as res:
+                  code=res.status
+                  mime=res.headers.get('Content-Type','').split(';')[0]
+                  sample=res.read(90)
+              if code not in (200,206) or mime not in ('image/jpeg','image/jpg') or not sample:
+                  raise SystemExit('PHOTO_NOT_AVAILABLE '+item+' '+str(code)+' '+mime)
+              print('ORIGINAL_PHOTO_OK='+item+' '+str(code)+' '+mime)
+          PY
+      - name: Capture current health of main site, store and protected subsites
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,os,urllib.request,urllib.error
+          paths=[
+             "https://mojplaywin.com/",
+             "https://mojplaywin.com/about/",
+             "https://mojplaywin.com/store/",
+             "https://mojplaywin.com/mojtaba.roozegar/",
+             "https://mojplaywin.com/mojtaba.roozegar/about/",
+             "https://mojplaywin.com/mojtaba.roozegar/resume/",
+             "https://mojplaywin.com/farnaz/",
+             "https://mojplaywin.com/saman/",
+             "https://mojplaywin.com/picm/",
+             "https://zomorodmelal.ir/"]
+          checks={}
+          for uri in paths:
+              req=urllib.request.Request(uri,headers={'User-Agent':'MojPlayWinGalleryProtectedScope/1.0','Cache-Control':'no-cache'})
+              try:
+                  with urllib.request.urlopen(req,timeout=19) as res:status=res.status
+              except urllib.error.HTTPError as exc:status=exc.code
+              checks[uri]=status
+              print('PROFILE_GALLERY_BASELINE='+uri+' '+str(status))
+              if status!=200:raise SystemExit('PRE_DEPLOY_NO_GO '+uri)
+          with open(os.environ['RUNNER_TEMP']+'/mpw-gallery-before.json','w') as out:json.dump(checks,out)
+          PY
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Stage edited source only, outside the web document root
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          scp -q -F "$d/config" \
+            core/templates/mojplaywin/leadership_executive_cv_20261018.html \
+            "saeit-cpanel:/home/zomorod2/.mpw-professor-gallery-$GITHUB_RUN_ID.source.html"
+      - name: Apply atomic single-static-file patch and preserve full rollback
+        id: publish
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 50s ssh -T -F "$d/config" saeit-cpanel \
+            "python3 - install '$GITHUB_RUN_ID'" \
+            < scripts/mojplaywin_professor_gallery_exact_patch_20261018.py
+      - name: Check live page photos, English-only title and all protected paths
+        id: smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,os,re,time,urllib.request,urllib.error,sys
+          sys.path.insert(0,'scripts')
+          import mojplaywin_professor_gallery_exact_patch_20261018 as p
+          good=False
+          for n in range(1,5):
+              try:
+                  req=urllib.request.Request(
+                      'https://mojplaywin.com/about/mojtaba-rozegar/?__gallery_release='+os.environ['GITHUB_RUN_ID']+'-'+str(n),
+                      headers={'User-Agent':'MojPlayWinProfileGallerySmoke/1.0','Cache-Control':'no-cache'})
+                  with urllib.request.urlopen(req,timeout=20) as res:
+                      html=res.read(125000).decode('utf-8','replace')
+                      code=res.status
+                  good=bool(
+                      code==200 and
+                      'Professor Mojtaba Roozegar' in html and
+                      'پروفسور مجتبی روزگار' not in html and
+                      'پرفسور مجتبی روزگار' not in html and
+                      html.count('class="mpw-exec-gallery-item"')==5 and
+                      all(html.count(p.URL_PREFIX+name)==2 for name in p.PHOTO_PARTS) and
+                      'Universiti Putra Malaysia' in html and
+                      'Production Economics and Farm Management' in html and
+                      'official_profile_20261016/portrait.2935ce8cb70d.webp' in html and
+                      len(re.findall(r'<h1\b',html,re.I))==1
+                  )
+                  print('PROFILE_GALLERY_LIVE_ATTEMPT='+str(n)+' status='+str(code)+' verified='+str(good))
+                  if good:break
+              except Exception as exc: print('PROFILE_GALLERY_LIVE_RETRY='+type(exc).__name__)
+              time.sleep(3)
+          if not good:raise SystemExit('PROFILE_GALLERY_NOT_LIVE_ROLLBACK_REQUIRED')
+          baseline=json.load(open(os.environ['RUNNER_TEMP']+'/mpw-gallery-before.json'))
+          for uri,expected in baseline.items():
+              req=urllib.request.Request(uri,headers={'User-Agent':'MojPlayWinGalleryProtectedScope/1.0','Cache-Control':'no-cache'})
+              try:
+                  with urllib.request.urlopen(req,timeout=20) as res:status=res.status
+              except urllib.error.HTTPError as exc:status=exc.code
+              print('PROFILE_GALLERY_PROTECTED_AFTER='+uri+' '+str(status)+' expected='+str(expected))
+              if status!=expected:raise SystemExit('PROTECTED_SITE_REGRESSION '+uri)
+          print('PROFILE_GALLERY_ENGLISH_ONLY_LIVE_VERIFIED=yes')
+          PY
+      - name: Roll back exact file on smoke-test failure
+        if: failure() && steps.publish.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 50s ssh -T -F "$d/config" saeit-cpanel \
+            "python3 - rollback '$GITHUB_RUN_ID'" \
+            < scripts/mojplaywin_professor_gallery_exact_patch_20261018.py
+      - name: Remove temporary staged editorial HTML only
+        if: always()
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          if test -f "$d/config"; then
+            ssh -T -F "$d/config" -o ConnectTimeout=10 saeit-cpanel \
+              "test ! -L /home/zomorod2/.mpw-professor-gallery-$GITHUB_RUN_ID.source.html && rm -f -- /home/zomorod2/.mpw-professor-gallery-$GITHUB_RUN_ID.source.html" || true
+          fi
