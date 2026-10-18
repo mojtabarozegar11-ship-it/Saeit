@@ -59,7 +59,11 @@ def branded_store_dispatch(request):
  return branded_store(request)
 
 def store(request):
- return render(request,"mojplaywin/store.html",{"products":PRODUCTS})
+ from .mojplaywin_catalog_readiness import read_main_store_catalog
+ # The six original editorial cards are preserved. Only an explicitly enabled,
+ # approved MojPlayWin product list can be added, using read-only SELECTs.
+ return render(request,"mojplaywin/store.html",
+               {"products":PRODUCTS, "registered_products":read_main_store_catalog()})
 
 def venture(request, slug):
  if not _is_mojplaywin(request):
