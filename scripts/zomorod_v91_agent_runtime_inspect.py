@@ -58,8 +58,8 @@ def summarize_callable(rel, search_name):
             "keywords": [arg.arg for arg in args.kwonlyargs],
             "has_vararg": args.vararg is not None,
             "has_kwarg": args.kwarg is not None,
-            "call_targets": sorted({ast.unparse(n.func)[:95] for n in ast.walk(node) if isinstance(n,ast.Call)})[:55],
-            "raise_types": sorted({ast.unparse(n.exc)[:95] for n in ast.walk(node) if isinstance(n,ast.Raise) and n.exc is not None})[:15],
+            "call_targets": sorted({getattr(n.func,'id',getattr(n.func,'attr',type(n.func).__name__)) for n in ast.walk(node) if isinstance(n,ast.Call)})[:55],
+            "raise_types": sorted({getattr(n.exc,'id',getattr(n.exc,'attr',type(n.exc).__name__)) for n in ast.walk(node) if isinstance(n,ast.Raise) and n.exc is not None})[:15],
         }
     for n in tree.body:
         if isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef)) and n.name==search_name:
