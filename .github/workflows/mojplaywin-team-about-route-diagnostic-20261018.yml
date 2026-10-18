@@ -103,5 +103,8 @@ jobs:
               if path.name=='.htaccess':
                 src=raw.decode('utf-8','replace')
                 info['about_rewrite_directives']=[line.strip()[:260] for line in src.splitlines() if 'MPW_EXACT_ABOUT' in line or 'RewriteRule ^about/' in line or 'REQUEST_URI} ^/about/' in line]
+                lines=src.splitlines()
+                info['about_route_contexts']=[{'line':n+1,'directives':[(i+1,lines[i].strip()[:240]) for i in range(max(0,n-2),min(len(lines),n+6)) if lines[i].lstrip().startswith(('RewriteCond','RewriteRule','# MPW'))]} for n,line in enumerate(lines) if 'REQUEST_URI} ^/about/$' in line]
+                info['html_rewrite_rules']=[line.strip()[:240] for line in lines if line.lstrip().startswith('RewriteRule') and '.html' in line][:25]
             print('ROUTE_DISK='+json.dumps(info,sort_keys=True))
           PY2
