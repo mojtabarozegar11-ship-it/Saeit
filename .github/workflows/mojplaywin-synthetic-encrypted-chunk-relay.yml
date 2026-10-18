@@ -5,6 +5,8 @@ on:
       - feature/mojplaywin-crypto-gateway-20261018
     paths:
       - .github/workflows/mojplaywin-synthetic-encrypted-chunk-relay.yml
+      - scripts/mojplaywin_synthetic_encrypted_chunk_relay.py
+      - scripts/mojplaywin_chunked_encrypted_snapshot.py
   workflow_dispatch:
 permissions:
   contents: read
