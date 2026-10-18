@@ -72,6 +72,7 @@ jobs:
           assert sum(c.startswith('/research/directory/') for c in canonical)==60
           n=Path('/tmp/topics-generated/topics')
           assert len(list(n.rglob('index.html')))==546
+          assert (n/'.htaccess').read_text(encoding='ascii') == 'PassengerEnabled off\nDirectoryIndex index.html\nOptions -Indexes\n'
           assert len(list(Path('/tmp/topics-research-pages').rglob('index.html')))==60
           assert len(list(n.glob('zm-r*')))==26
           dirs=[n/p.lstrip('/')/'index.html' for p in canonical if p.startswith('/topics/')]
@@ -205,6 +206,7 @@ jobs:
           python3 "$backup/scripts/enrich_existing_research.py" \
             --pages-root "$backup/research-candidate" --definitions "$backup/scripts/research_definitions.py"
           test "$(find "$backup/generated/topics" -type f -name index.html | wc -l)" -eq 546
+          grep -Fxq 'PassengerEnabled off' "$backup/generated/topics/.htaccess"
           test "$(find "$backup/research-candidate" -type f -name index.html | wc -l)" -eq 60
           python3 - "$backup" <<'PY'
           from pathlib import Path
@@ -284,7 +286,8 @@ jobs:
             test "$code" = 200
           done
           for route in /topics/zm-r01/wheat/ /research/directory/units/molecular-genetics/;do
-            curl -sSL --max-time 25 "https://zomorodmelal.ir$route?seo_proof=$sha" | grep -Fq 'application/ld+json'
+            curl -sSL --max-time 25 -o "$backup/seo-live.html" "https://zomorodmelal.ir$route?seo_proof=$sha"
+            grep -Fq 'application/ld+json' "$backup/seo-live.html"
           done
           code="$(curl -sSL --max-time 25 -o "$backup/live-sitemap.xml" -w '%{http_code}' "https://zomorodmelal.ir/topics/sitemap.xml?sitemap=$sha" || true)"
           test "$code" = 200
