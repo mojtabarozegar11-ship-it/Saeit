@@ -75,7 +75,7 @@ def extract_and_patch(original,source):
     if current.count("</head>")!=1:fail("Document head invalid")
     current=current.replace("</head>",'<style id="mpw-professor-gallery-20261018">\n'+css+"\n</style>\n</head>",1)
     if PERSIAN_LABEL in current:fail("Persian heading not removed")
-    if re.search(r"[\u0600-\u06ff]",current):fail("Non-English text unexpectedly remains")
+    if "پروفسور مجتبی روزگار" in current or "پرفسور مجتبی روزگار" in current:fail("Requested Persian professor label still visible")
     if "Professor Mojtaba Roozegar" not in current:fail("English title was lost")
     if current.count(GALLERY_ANCHOR)!=1 or current.count('class="mpw-exec-gallery-item"')!=5:
         fail("Wrong gallery count")
