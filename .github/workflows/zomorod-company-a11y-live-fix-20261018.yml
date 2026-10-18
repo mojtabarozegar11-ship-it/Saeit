@@ -1,4 +1,4 @@
-name: Zomorod company accessibility and mobile performance safe fixes
+name: Zomorod company a11y safe fixes with mobile wrap regression
 on:
   push:
     branches: [main]
