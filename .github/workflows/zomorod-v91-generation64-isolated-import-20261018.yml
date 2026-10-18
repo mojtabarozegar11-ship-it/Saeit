@@ -1,0 +1,176 @@
+name: V91 Master Agent generation64 dependent bundle isolated import
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/zomorod-v91-generation64-isolated-import-20261018.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-v91-generation64-isolated-import
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - name: Stage V91 generation chain with dependency closure and cryptographic checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          test "$HOME" = /home/zomorod2
+          test -d "$HOME/Saeit" && test -f "$HOME/Saeit/manage.py"
+          test -d "$HOME/saeit_v91/zomorodmelal/site_master/vendor/master_gen64"
+          PYTHONDONTWRITEBYTECODE=1 python3 - <<'PY'
+          import ast, hashlib, json, os, shutil, subprocess, sys, tempfile, time
+          from pathlib import Path
+          src=Path.home()/"saeit_v91"/"zomorodmelal"/"site_master"
+          main=Path.home()/"Saeit"
+          base=main/"agent_imports"/"v91_genomes"
+          final=base/"site_master"
+          if any(p.is_symlink() for p in (src,main,main/"agent_imports",base,final)):
+              raise SystemExit("GENOME_COPY_BLOCKED_SYMLINK")
+          files=sorted(p for p in src.rglob("*.py") if p.is_file() and not p.is_symlink() and len(p.relative_to(src).parts)<6)
+          if len(files)!=73:raise SystemExit("GENOME_COPY_BLOCKED_UNEXPECTED_SOURCE_COUNT_"+str(len(files)))
+          generation_counts={}
+          sha={}
+          for f in files:
+              rel=f.relative_to(src)
+              raw=f.read_bytes()
+              if len(raw)>200000:raise SystemExit("GENOME_COPY_BLOCKED_LARGE_MODULE")
+              code=raw.decode("utf-8-sig")
+              tree=ast.parse(code,filename=str(rel))
+              compile(tree,str(rel),"exec")
+              # Refuse imports which execute arbitrary commands at the module top-level.
+              for n in tree.body:
+                  if isinstance(n,ast.Expr) and isinstance(n.value,ast.Call):
+                      raise SystemExit("GENOME_COPY_BLOCKED_TOP_LEVEL_CALL:"+str(rel))
+              sha[str(rel)]=hashlib.sha256(raw).hexdigest()
+              if len(rel.parts)>2 and rel.parts[0]=="vendor":
+                  part=rel.parts[1]
+                  generation_counts[part]=generation_counts.get(part,0)+1
+          gens=set(generation_counts)
+          required={f"master_gen{v}" for v in (12,16,20,24,28,32,40,48,56,64)}
+          if gens!=required:raise SystemExit("GENOME_COPY_BLOCKED_INCOMPLETE_DEPENDENCIES")
+          if final.exists():
+              existing=sorted(p for p in final.rglob("*.py") if p.is_file())
+              verified=(len(existing)==len(files) and all((final/rel).is_file() and hashlib.sha256((final/rel).read_bytes()).hexdigest()==dig for rel,dig in sha.items()))
+              if not verified:
+                  raise SystemExit("GENOME_COPY_BLOCKED_PREEXISTING_NONIDENTICAL_DESTINATION")
+              print("GENOME_COPY_ALREADY_PRESENT_VERIFIED=73")
+          else:
+              base.mkdir(mode=0o700,parents=True,exist_ok=True)
+              tmp=Path(tempfile.mkdtemp(prefix=".v91-gen-stage-",dir=base))
+              try:
+                  staged=tmp/"site_master"
+                  staged.mkdir(mode=0o700)
+                  for f in files:
+                      rel=f.relative_to(src)
+                      dst=staged/rel
+                      dst.parent.mkdir(mode=0o700,parents=True,exist_ok=True)
+                      dst.write_bytes(f.read_bytes())
+                      dst.chmod(0o600)
+                      if hashlib.sha256(dst.read_bytes()).hexdigest()!=sha[str(rel)]:
+                          raise SystemExit("GENOME_COPY_BLOCKED_HASH_MISMATCH")
+                  # Import validation is performed in an environment without application secrets.
+                  py=sys.executable
+                  snippet="""import sys
+          from pathlib import Path
+          root=Path(sys.argv[1])
+          sys.path.insert(0,str(root))
+          sys.path.insert(0,str(root/'site_master'/'vendor'))
+          import site_master.vendor.master_gen64.controller as g64
+          import site_master.vendor.master_gen56.controller as g56
+          assert hasattr(g64,'Generation64Controller')
+          assert hasattr(g56,'Generation56Controller')
+          print('GENOME64_IMPORT_TEST=passed')
+          """
+                  env={"PATH":os.environ.get("PATH","/usr/bin:/bin"),"HOME":str(tmp),"PYTHONDONTWRITEBYTECODE":"1"}
+                  test=subprocess.run([py,"-B","-c",snippet,str(tmp)],
+                       env=env,cwd=tmp,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,timeout=45,check=False)
+                  if test.returncode:
+                      print("GENOME_IMPORT_TEST_FAILED="+test.stderr[-1500:].replace("\n"," | "))
+                      raise SystemExit("GENOME_COPY_BLOCKED_IMPORT_TEST")
+                  print(test.stdout.strip())
+                  os.rename(staged,final)
+                  print("GENOME_COPY_NEW_FILES=73")
+              finally:
+                  shutil.rmtree(tmp,ignore_errors=True)
+          report={"source":str(src),"destination":str(final),"source_modules":len(files),
+                  "generation_module_counts":generation_counts,"sha256_by_relative_path":sha,
+                  "status":"isolated_only","production_activated":False,
+                  "live_master_overwritten":False,"source_v91_modified":False}
+          manifest=base/"generation64_dependency_manifest.json"
+          if not manifest.exists():
+              with manifest.open("x",encoding="utf-8") as output:
+                  json.dump(report,output,ensure_ascii=False,indent=2)
+              os.chmod(manifest,0o600)
+          print("GENOME_IMPORT_GENERATIONS="+json.dumps(generation_counts,sort_keys=True))
+          print("GENOME_IMPORT_MANIFEST="+str(manifest))
+          print("GENOME_IMPORT_STAGED_COUNT="+str(len(files)))
+          print("GENOME_IMPORT_NO_PRODUCTION_ACTIVATION=yes")
+          print("GENOME_IMPORT_V91_PRESERVED=yes")
+          PY
+          REMOTE
+      - name: Check site public health and isolate from live routes
+        shell: bash
+        run: |
+          for path in / /agents/; do
+            code="$(curl -sS --max-time 16 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir$path" || true)"
+            echo "SITE_PUBLIC_AFTER_STAGE path=$path status=$code"
+          done
+      - name: Remove temporary SSH relay material
+        if: always()
+        shell: bash
+        run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
