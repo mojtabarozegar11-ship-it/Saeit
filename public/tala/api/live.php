@@ -44,7 +44,7 @@ foreach($body['quotes'] as $symbol=>$row){
     $providerTime=strtotime($stamp);
     if(!is_numeric($value)||!is_finite((float)$value)||(float)$value<=0||
        !in_array($unit,['gram','coin','per_usd'],true)||
-       !in_array($source,['Gold API','CoinGecko','ExchangeRate-API reference'],true)||
+       !in_array($source,['Gold API','Frankfurter blended reference'],true)||
        !preg_match('/^[A-Z]{3}$/D',$currency)||
        $providerTime===false)continue;
     // 30 minutes metals/crypto; 48h FX references (daily data includes weekends).
@@ -62,5 +62,5 @@ output_live([
     'mode'=>'provider_snapshot','generated_at'=>$body['generated_at'],
     'quotes'=>$quotes,'stale'=>$age>1800,
     'partial'=>(bool)($body['partial']??false),
-    'notice'=>'ارزش‌های بین‌المللی و نرخ‌های مرجع هستند، نه قیمت معامله بازار آزاد ایران.'
+    'notice'=>'فلزات و BTC/ETH از Gold API، نرخ ارز روزانه از Frankfurter است؛ نرخ بازار آزاد ایران یا پیشنهاد معامله نیست. نرخ رمزارزهای فاقد مجوز مناسب نمایش داده نمی‌شود.'
 ]);
