@@ -1,0 +1,192 @@
+name: Zomorod P0 to P3 ONE coordinated reversible production release
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/zomorod-p0p3-one-stage-live-20261019.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-root-homepage
+  cancel-in-progress: false
+jobs:
+  release:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Selftest isolated one-stage Python installer
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/zomorod_p0p3_one_stage_safe_20261019.py
+          python3 scripts/zomorod_p0p3_one_stage_safe_20261019.py selftest
+      - name: Read-only public baseline before changing any file
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from urllib.request import urlopen,Request
+          for route in ('/','/about/','/research/','/knowledge/','/agriculture/','/search/','/topics/','/store/','/tala/','/business/','/en/market/','/en/auctions/','/company/','/agriculture/livestock/'):
+              with urlopen(Request('https://zomorodmelal.ir'+route,headers={'Cache-Control':'no-cache'}),timeout=28) as r:
+                  assert r.status==200 and len(r.read(90000))>150,route
+              print('PREFLIGHT_PUBLIC_OK='+route,flush=True)
+          PY
+      - name: Prepare verified VPS to cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zm-glass-headers-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.known"
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          echo PINNED_HOST_AND_RELAY_VERIFIED=yes
+      - name: Stage installer in private non-public directory and validate the entire plan
+        id: stage
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-glass-headers-ssh"
+          stage="/home/zomorod2/.zm-p0p3-release-$GITHUB_RUN_ID"
+          timeout 45s ssh -T -F "$d/config" saeit-cpanel "test ! -e '$stage' && test ! -L '$stage' && install -d -m 700 '$stage'"
+          cat scripts/zomorod_p0p3_one_stage_safe_20261019.py | timeout 65s ssh -T -F "$d/config" saeit-cpanel "cat > '$stage/install.py'"
+          timeout 40s ssh -T -F "$d/config" saeit-cpanel "python3 '$stage/install.py' selftest"
+          timeout 80s ssh -T -F "$d/config" saeit-cpanel "python3 '$stage/install.py' plan"
+      - name: Capture protected site and legacy route digests before release
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -T -F "$RUNNER_TEMP/zm-glass-headers-ssh/config" saeit-cpanel 'python3 -' <<'PY' > "$RUNNER_TEMP/zm-protected-before.txt"
+          import hashlib
+          from pathlib import Path
+          root=Path('/home/zomorod2/public_html')
+          for name in ('index.html','company/index.html','contact/index.html','agents/index.html','industry/index.html','services/index.html','agriculture/livestock/index.html','news/index.html','blog/index.html','tala/api/health.php','business/index.php','topics/sitemap.xml'):
+              p=root/name
+              if p.is_file() and not p.is_symlink():print(name+' '+hashlib.sha256(p.read_bytes()).hexdigest())
+          PY
+          test -s "$RUNNER_TEMP/zm-protected-before.txt"
+      - name: Apply single batch after verified SHA snapshots
+        id: install
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-glass-headers-ssh"
+          stage="/home/zomorod2/.zm-p0p3-release-$GITHUB_RUN_ID"
+          timeout 120s ssh -T -F "$d/config" saeit-cpanel "python3 '$stage/install.py' apply '$GITHUB_RUN_ID'"
+          timeout 90s ssh -T -F "$d/config" saeit-cpanel "python3 '$stage/install.py' verify '$GITHUB_RUN_ID'"
+          timeout 35s ssh -T -F "$d/config" saeit-cpanel 'php -l /home/zomorod2/.private/zomorod-business/app.php'
+          timeout 35s ssh -T -F "$d/config" saeit-cpanel 'php -l /home/zomorod2/public_html/store/index.php'
+      - name: Verify public HTML and non-enforcing security headers
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os,time
+          from urllib.request import Request,urlopen
+          base='https://zomorodmelal.ir'
+          routes=['/','/about/','/research/','/knowledge/','/agriculture/','/search/','/topics/','/store/','/tala/','/business/','/en/market/','/en/auctions/','/company/','/agriculture/livestock/','/tala/api/health.php']
+          for path in routes:
+              data=None
+              for attempt in range(5):
+                  with urlopen(Request(base+path+'?__zm_p0p3='+os.environ['GITHUB_RUN_ID']+'-'+str(attempt),headers={'Cache-Control':'no-cache,no-store'}),timeout=35) as r:
+                      content=r.read(600000)
+                      assert r.status==200,path
+                      if path=='/':
+                          assert b'zm-home-template-repairs-20261018' in content
+                          assert b'zm-glass-floating-cards-20261018' in content
+                      if path in ('/about/','/research/','/knowledge/','/agriculture/','/search/','/topics/','/store/','/tala/','/en/market/','/en/auctions/'):
+                          if b'zm-priority-p0p3-20261019' not in content:
+                              time.sleep(2);continue
+                      if path=='/':
+                          assert r.headers.get('Strict-Transport-Security') is not None,'HSTS not applied'
+                          assert r.headers.get('X-Content-Type-Options')=='nosniff','Missing MIME sniffing protection'
+                          assert r.headers.get('Content-Security-Policy-Report-Only') is not None,'CSP report-only not active'
+                      data=content
+                      break
+              assert data is not None,'Live version not observed: '+path
+              print('P0P3_PUBLIC_OK='+path,flush=True)
+          PY
+      - name: Browser QA 13 representative templates in two screen widths with accessibility gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          dir="$RUNNER_TEMP/zm-p0p3-browser";mkdir -p "$dir";cd "$dir"
+          npm --silent init -y >/dev/null
+          npm --silent install --no-save playwright@1.55.0 @axe-core/playwright@4.10.2
+          npx playwright install chromium
+          cp "$GITHUB_WORKSPACE/scripts/zomorod_p0p3_live_qa_20261019.cjs" test.cjs
+          node test.cjs
+      - name: Confirm all unaffected production files are byte identical
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -T -F "$RUNNER_TEMP/zm-glass-headers-ssh/config" saeit-cpanel 'python3 -' <<'PY' > "$RUNNER_TEMP/zm-protected-after.txt"
+          import hashlib
+          from pathlib import Path
+          root=Path('/home/zomorod2/public_html')
+          for name in ('index.html','company/index.html','contact/index.html','agents/index.html','industry/index.html','services/index.html','agriculture/livestock/index.html','news/index.html','blog/index.html','tala/api/health.php','business/index.php','topics/sitemap.xml'):
+              p=root/name
+              if p.is_file() and not p.is_symlink():print(name+' '+hashlib.sha256(p.read_bytes()).hexdigest())
+          PY
+          diff -u "$RUNNER_TEMP/zm-protected-before.txt" "$RUNNER_TEMP/zm-protected-after.txt"
+          echo ONE_STAGE_UNAFFECTED_LIVE_FILES_BYTE_IDENTICAL=yes
+      - name: Restore every changed page and header atomically on any downstream failure
+        if: failure() && steps.stage.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-glass-headers-ssh"
+          stage="/home/zomorod2/.zm-p0p3-release-$GITHUB_RUN_ID"
+          timeout 120s ssh -T -F "$d/config" saeit-cpanel "python3 '$stage/install.py' rollback '$GITHUB_RUN_ID'"
+      - name: Remove staged installer and keys, retain private verified backup
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          d="$RUNNER_TEMP/zm-glass-headers-ssh"
+          stage="/home/zomorod2/.zm-p0p3-release-$GITHUB_RUN_ID"
+          if test -f "$d/config"; then
+            timeout 35s ssh -T -F "$d/config" saeit-cpanel "rm -f '$stage/install.py';rmdir '$stage'"
+          fi
+          rm -rf "$d"
