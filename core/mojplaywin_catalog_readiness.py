@@ -5,6 +5,7 @@ new route is performed by this module. A product being active is NOT evidence
 that its payment and delivery systems work.
 """
 from decimal import Decimal, InvalidOperation
+import re
 from urllib.parse import urlsplit
 
 from django.conf import settings
@@ -19,7 +20,7 @@ def safe_main_path(value, prefix):
         return ""
     if not parsed.path.startswith(prefix) or "//" in parsed.path or ".." in parsed.path:
         return ""
-    if any(ord(character) < 32 or ord(character) > 126 for character in parsed.path):
+    if not re.fullmatch(r"/[A-Za-z0-9._/-]+", parsed.path) or "\\\\" in parsed.path:
         return ""
     return parsed.path
 
