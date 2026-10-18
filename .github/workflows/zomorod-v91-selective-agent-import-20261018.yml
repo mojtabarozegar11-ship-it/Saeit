@@ -248,6 +248,94 @@ jobs:
           print("TRANSFER_COPIED_COUNT=" + str(len(copied)))
           print("TRANSFER_STATUS=isolated_copy_only_no_activation")
           print("SOURCE_V91_PRESERVED=yes")
+          # Separate PHP agent source inventory, with conservative no-overwrite import.
+          import shutil
+          import subprocess
+          php_candidates = []
+          for root, subdirs, files in os.walk(source,followlinks=False):
+              rel_dir = Path(root).relative_to(source)
+              subdirs[:] = [d for d in subdirs if d.lower() not in refuse and
+                            not Path(root,d).is_symlink() and len(rel_dir.parts)<7]
+              for name in files:
+                  if not name.endswith(".php") or name.startswith("test_"):
+                      continue
+                  rel = rel_dir / name
+                  if any(p.lower() in refuse or p.lower().startswith("tests") for p in rel.parts):
+                      continue
+                  if not (any(s in name.lower() for s in signals) or any(p.lower() in dirs for p in rel.parts[:-1])):
+                      continue
+                  p = source / rel
+                  if p.is_symlink() or not p.is_file() or p.stat().st_size > 180000:
+                      continue
+                  raw = p.read_bytes()
+                  if b"<?php" not in raw[:512] or re.search(rb"(?i)(shell_exec|passthru|eval\s*\(|base64_decode|private_key\s*=|api_key\s*=|password\s*=)",raw):
+                      print("PHP_REJECTED=" + str(rel))
+                      continue
+                  php_candidates.append((rel,raw,hashlib.sha256(raw).hexdigest()))
+          php_existing = {}
+          for base in (active,home/".private"/"zomorod-business"):
+              if not base.is_dir(): continue
+              for root, subdirs, files in os.walk(base,followlinks=False):
+                  rel_dir = Path(root).relative_to(base)
+                  subdirs[:] = [d for d in subdirs if d.lower() not in refuse and
+                                d!="agent_imports" and not Path(root,d).is_symlink() and len(rel_dir.parts)<7]
+                  for name in files:
+                      if name.endswith(".php"):
+                          php_existing.setdefault(name.casefold(),[]).append(Path(root)/name)
+          php_missing=[]
+          for rel,raw,digest in sorted(php_candidates,key=lambda p:str(p[0])):
+              matches=php_existing.get(rel.name.casefold(),[])
+              if matches:
+                  for match in matches[:3]:
+                      try: same=hashlib.sha256(match.read_bytes()).hexdigest()==digest
+                      except OSError: same=False
+                      print("PHP_COMPARE="+str(rel)+" existing="+str(match)+" identical="+str(same))
+              else:
+                  php_missing.append((rel,raw,digest))
+          print("PHP_AGENT_CANDIDATES="+str(len(php_candidates)))
+          print("PHP_AGENT_SAME_NAME_EXISTING="+str(len(php_candidates)-len(php_missing)))
+          print("PHP_AGENT_MISSING="+str(len(php_missing)))
+          if len(php_missing)>40:
+              raise SystemExit("PHP_TRANSFER_HALTED_UNREVIEWED_CANDIDATES")
+          php_exec=shutil.which("php")
+          if not php_exec:
+              possible=Path("/opt/cpanel/ea-php82/root/usr/bin/php")
+              if possible.is_file(): php_exec=str(possible)
+          php_copied=[]
+          for rel,raw,digest in php_missing:
+              if not php_exec:
+                  print("PHP_IMPORT_SKIPPED_NO_LINTER="+str(rel))
+                  continue
+              validation=subprocess.run([php_exec,"-l",str(source/rel)],
+                                        stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,
+                                        timeout=12,check=False)
+              if validation.returncode:
+                  print("PHP_IMPORT_SKIPPED_SYNTAX="+str(rel))
+                  continue
+              out=target/"php_source"/rel
+              if not target.exists(): target.mkdir(parents=True,mode=0o700,exist_ok=True)
+              out.parent.mkdir(parents=True,mode=0o700,exist_ok=True)
+              if out.is_symlink() or out.parent.is_symlink():
+                  raise SystemExit("PHP_TRANSFER_HALTED_SYMLINK")
+              if out.exists():
+                  print("PHP_ALREADY_STAGED="+str(rel))
+                  continue
+              with out.open("xb") as handle:
+                  handle.write(raw)
+                  handle.flush()
+                  os.fsync(handle.fileno())
+              os.chmod(out,0o600)
+              if hashlib.sha256(out.read_bytes()).hexdigest()!=digest:
+                  out.unlink()
+                  raise SystemExit("PHP_TRANSFER_HASH_MISMATCH")
+              php_copied.append(str(rel))
+              print("PHP_TRANSFER_COPIED="+str(rel)+" sha256="+digest)
+          if php_copied:
+              pm=target/("php_manifest_"+str(int(time.time()))+".json")
+              with pm.open("x",encoding="utf-8") as handle:
+                  json.dump({"files":php_copied,"active":False,"v91_untouched":True},handle,indent=2)
+              os.chmod(pm,0o600)
+          print("PHP_TRANSFER_COPIED_COUNT="+str(len(php_copied)))
           PY
           REMOTE
       - name: Site public smoke checks (read-only)
