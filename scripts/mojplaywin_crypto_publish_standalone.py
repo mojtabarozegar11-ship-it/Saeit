@@ -52,6 +52,23 @@ def publish(stage, expected):
     print("MOJPLAYWIN_STANDALONE_PAYMENT_FILES_STAGED=true")
     print("SHARED_DJANGO_AND_CHILD_SITES_TOUCHED=false")
 
+def verify(existing, expected):
+    """Idempotent verification; this never rewrites pre-existing production files."""
+    if existing.is_symlink() or not existing.is_dir() or PARENT.is_symlink():
+        raise RuntimeError("Unsafe gateway deployment path.")
+    actual = {p.name for p in existing.iterdir() if p.is_file()}
+    if not EXPECTED.issubset(actual):
+        raise RuntimeError("Deployed gateway source is incomplete.")
+    for name in EXPECTED:
+        f=existing/name
+        if f.is_symlink() or f.stat().st_size>200_000:
+            raise RuntimeError("Deployed source is symlinked or oversized.")
+        if hashlib.sha256(f.read_bytes()).hexdigest()!=expected[name]:
+            raise RuntimeError("Deployed gateway does not match reviewed source.")
+    print("MOJPLAYWIN_STANDALONE_EXISTING_FILES_VERIFIED=true")
+    print("MOJPLAYWIN_PRODUCTION_FILES_OVERWRITTEN=false")
+
+
 def rollback(expected):
     if TARGET.is_symlink() or PARENT.is_symlink():
         raise RuntimeError("Symlink encountered in rollback; refusing.")
@@ -71,9 +88,10 @@ def rollback(expected):
     print("MOJPLAYWIN_STANDALONE_ROUTE_REMOVED=true")
 
 if __name__=="__main__":
-    if len(sys.argv)!=5 or sys.argv[1] not in ("publish","rollback"):
-        raise SystemExit("usage: stage.py publish|rollback stagedir sha_index sha_bootstrap")
+    if len(sys.argv)!=5 or sys.argv[1] not in ("publish","rollback","verify"):
+        raise SystemExit("usage: stage.py publish|rollback|verify stagedir sha_index sha_bootstrap")
     mode,stage,hash_index,hash_boot=sys.argv[1:]
     manifest={"index.php":hash_index,"bootstrap.php":hash_boot}
     if mode=="publish": publish(Path(stage),manifest)
+    elif mode=="verify": verify(TARGET,manifest)
     else: rollback(manifest)
