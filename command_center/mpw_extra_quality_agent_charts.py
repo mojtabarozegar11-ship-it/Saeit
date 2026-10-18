@@ -45,20 +45,19 @@ def extra_review_charts(now=None,state=PRIVATE):
         if private_dir(state_dir):
             for f in list(sorted(state_dir.glob("*.json")))[:MAX_RECORDS]:
                 r=entry(f)
-                if not r or r.get("tenant")!="mojplaywin-main" and code=="product_policy_v91":continue
+                if not r or r.get("tenant")!="mojplaywin-main":continue
                 if code=="scientific_quality_v11":
                     status=r.get("status")
                     if status not in ("needs_editorial_revision","review_ready_not_published"):continue
-                    blocked+=int(status=="needs_editorial_revision")
                 else:
                     gate=r.get("workbook_gate")
                     if not isinstance(gate,dict) or r.get("auto_publish") is not False or r.get("sale_ready") is not False:
                         continue
-                    blocked+=int(not gate.get("allowed",False))
                 stamp=parsed_date(r.get("reviewed_utc"))
                 if stamp is None or stamp>now+timedelta(minutes=5):continue
                 key=stamp.date().isoformat()
                 if key in counts:
+                    blocked+=int(status=="needs_editorial_revision") if code=="scientific_quality_v11" else int(not gate.get("allowed",False))
                     counts[key]+=1
                     if last is None or stamp>last:last=stamp
         series=list(counts.values())
