@@ -93,10 +93,19 @@ function limit(PDO $db,string $action,int $max):void{
 function atomic(string $s,string $asset):int{
  $digits=$asset==='ETH'?18:6;
  if(!preg_match('/^(?:0|[1-9][0-9]{0,5})(?:\.[0-9]{1,'.$digits.'})?$/D',$s))bad('Invalid native coin amount.');
- $parts=explode('.',$s,2);$whole=(int)$parts[0];$fraction=(int)str_pad($parts[1]??'',$digits,'0');
+ $parts=explode('.',$s,2);$whole=(int)$parts[0];
+ // Guard the whole part BEFORE multiplication to prevent float coercion or
+ // platform-dependent overflow when a client submits 999999 ETH.
+ if ($asset==='ETH' && $whole>1) bad('ETH payments cannot exceed 1 ETH.');
+ if ($asset==='TRX' && $whole>10000) bad('TRX payments cannot exceed 10000 TRX.');
+ $fraction=(int)str_pad($parts[1]??'',$digits,'0');
+ if (($asset==='ETH' && $whole===1 && $fraction>0) ||
+     ($asset==='TRX' && $whole===10000 && $fraction>0)) {
+     bad('Payment amount exceeds the maximum.');
+ }
  $n=$whole*(10**$digits)+$fraction;
  $min=$asset==='ETH'?100000000000000:1000000;$max=$asset==='ETH'?MAX_ETH:MAX_TRX;
- if($n<$min||$n>$max)bad('For TRX select 1–10000 coins; for ETH select 0.0001–1 coin.');
+ if(!is_int($n)||$n<$min||$n>$max)bad('For TRX select 1–10000 coins; for ETH select 0.0001–1 coin.');
  return $n;
 }
 function human(int $n,string $asset):string{
