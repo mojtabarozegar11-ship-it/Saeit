@@ -1,9 +1,9 @@
 {% extends "base.html" %}{% block title %}Secure crypto checkout | MojPlayWin{% endblock %}
 {% block content %}<main style="max-width:680px;margin:4rem auto;padding:2rem;color:#e9d79b;background:#111">
-<h1>Secure digital checkout</h1><h2>{{ offer.product.title }}</h2>
+<h1>Secure product & service checkout</h1><h2>{{ offer.product.title }}</h2>
 <p>Asset: {{ offer.asset }} on {% if offer.asset == "ETH" %}Ethereum mainnet{% else %}TRON mainnet{% endif %}.</p>
 <p>Base price: {{ amount }} {{ offer.asset }}. A tiny invoice-unique amount (at most 0.009999 TRX or 0.000000000000009999 ETH) will be included and displayed before you pay.</p>
-<p>You will receive a protected download after the payment is independently verified on-chain.</p>
+{% if offer.fulfillment_mode == 'service' %}<p>After blockchain verification, your service payment and receipt will be recorded automatically. Service delivery follows the agreed service terms.</p>{% else %}<p>You will receive a protected download after the payment is independently verified on-chain.</p>{% endif %}
 <form method="post">{% csrf_token %}<button type="submit">Create my 30-minute invoice</button></form>
 <a href="/store/">Back to MojPlayWin store</a>
 </main>{% endblock %}
