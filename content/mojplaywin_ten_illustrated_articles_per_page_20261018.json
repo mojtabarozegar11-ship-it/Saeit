@@ -1,0 +1,1417 @@
+{
+  "version": "2026-10-18",
+  "language": "en",
+  "base_source": "core/static/site/heroes/*.webp",
+  "photo_format": "webp",
+  "editorial_notice": "Educational content; no invented operating sites, inventories or credentials.",
+  "pages": {
+    "/": {
+      "title": "MojPlayWin — Research, Play and Digital Technology",
+      "images": [
+        "game-studio",
+        "ai",
+        "research",
+        "knowledge",
+        "education-detail",
+        "store",
+        "industry",
+        "economy",
+        "agriculture",
+        "services"
+      ],
+      "items": [
+        {
+          "title": "Original ideas to playable proof",
+          "method": "turn a game concept into one testable interaction loop",
+          "deliverable": "a short prototype and plain-language test notes"
+        },
+        {
+          "title": "Creative systems through player feedback",
+          "method": "watch where users hesitate before adding more features",
+          "deliverable": "a friction log and revised gameplay map"
+        },
+        {
+          "title": "AI that assists rather than invents",
+          "method": "start from a verifiable research or service task",
+          "deliverable": "a source-aware assistant specification"
+        },
+        {
+          "title": "Choosing useful digital products",
+          "method": "match each product promise with a demonstrable outcome",
+          "deliverable": "a buyer-facing feature and limitation sheet"
+        },
+        {
+          "title": "Learning paths with measurable progress",
+          "method": "divide advanced subjects into short tasks with clear checks",
+          "deliverable": "a sequence of exercises and answer criteria"
+        },
+        {
+          "title": "Web experiences that respect accessibility",
+          "method": "test keyboard paths, contrast and responsive layouts",
+          "deliverable": "an accessible interface audit"
+        },
+        {
+          "title": "Research notes that can be traced",
+          "method": "record the origin and date of each important claim",
+          "deliverable": "an evidence ledger and uncertainties"
+        },
+        {
+          "title": "Digital commerce with transparent delivery",
+          "method": "define when payment, entitlement and delivery become complete",
+          "deliverable": "an order-lifecycle checklist"
+        },
+        {
+          "title": "Connecting industry questions to software",
+          "method": "identify one field-workflow bottleneck before designing a dashboard",
+          "deliverable": "a measurable pilot outline"
+        },
+        {
+          "title": "Responsible product development roadmap",
+          "method": "prioritize reversible experiments and documented risk",
+          "deliverable": "a release gate with go/no-go criteria"
+        }
+      ]
+    },
+    "/company/": {
+      "title": "Inside MojPlayWin — Identity, Governance and Direction",
+      "images": [
+        "platform-home",
+        "research",
+        "services",
+        "ai",
+        "industry",
+        "knowledge",
+        "economy",
+        "store",
+        "agriculture",
+        "laboratory"
+      ],
+      "items": [
+        {
+          "title": "Mission and scope without inflated claims",
+          "method": "separate existing work from intended development areas",
+          "deliverable": "a status-labeled capability map"
+        },
+        {
+          "title": "The strategic 80–20 balance",
+          "method": "explain the digital core and complementary sectors as an intended allocation",
+          "deliverable": "a clear portfolio framework rather than audited totals"
+        },
+        {
+          "title": "Research and product development disciplines",
+          "method": "align hypotheses, prototypes and release criteria",
+          "deliverable": "a traceable development process"
+        },
+        {
+          "title": "Leadership and scientific background",
+          "method": "distinguish self-reported education from independently verified records",
+          "deliverable": "a transparent professional biography"
+        },
+        {
+          "title": "Technology priorities and practical constraints",
+          "method": "choose projects by user need, data readiness and maintenance cost",
+          "deliverable": "a sequenced technology roadmap"
+        },
+        {
+          "title": "Cross-sector ventures and boundaries",
+          "method": "describe experience without suggesting every facility is operating",
+          "deliverable": "an honest sector overview"
+        },
+        {
+          "title": "Ethical communications and editorial proof",
+          "method": "link each material factual claim to its source",
+          "deliverable": "a reviewed publication checklist"
+        },
+        {
+          "title": "Digital customer experience principles",
+          "method": "treat accessibility and clear service expectations as core quality",
+          "deliverable": "a customer journey map"
+        },
+        {
+          "title": "Operational resilience and cybersecurity",
+          "method": "define backup, access, monitoring and recovery tests",
+          "deliverable": "a continuity and security register"
+        },
+        {
+          "title": "Collaboration and future milestones",
+          "method": "make proposed partnerships measurable and permission-aware",
+          "deliverable": "a milestone plan with named responsibilities"
+        }
+      ]
+    },
+    "/research/": {
+      "title": "Scientific Research — Methods and Evidence",
+      "images": [
+        "research",
+        "laboratory",
+        "genetics",
+        "knowledge",
+        "ai",
+        "agriculture",
+        "smart-agriculture",
+        "economy",
+        "industry",
+        "services"
+      ],
+      "items": [
+        {
+          "title": "Research questions and testable hypotheses",
+          "method": "translate a broad issue into observable variables and a comparison plan",
+          "deliverable": "a preregisterable study outline"
+        },
+        {
+          "title": "Evidence reviews and source confidence",
+          "method": "compare recent primary sources rather than isolated claims",
+          "deliverable": "an annotated evidence matrix"
+        },
+        {
+          "title": "Experimental design and confounders",
+          "method": "separate intervention effects from background changes",
+          "deliverable": "a controlled protocol with limitations"
+        },
+        {
+          "title": "Data stewardship and reproducibility",
+          "method": "record collection methods, versions and access rules",
+          "deliverable": "a documented reproducibility package"
+        },
+        {
+          "title": "Quantitative analysis under uncertainty",
+          "method": "report sensitivity, intervals and competing explanations",
+          "deliverable": "an interpretable model report"
+        },
+        {
+          "title": "Interdisciplinary research integration",
+          "method": "connect biological, economic and technical knowledge with domain review",
+          "deliverable": "a joint terminology and assumptions register"
+        },
+        {
+          "title": "Laboratory quality and measurement integrity",
+          "method": "confirm calibration, traceability and method validity before inference",
+          "deliverable": "an auditable measurement plan"
+        },
+        {
+          "title": "Research ethics and responsible communication",
+          "method": "identify consent, safety and misuse concerns at project start",
+          "deliverable": "an ethics screening memo"
+        },
+        {
+          "title": "From research findings to prototypes",
+          "method": "state where evidence ends and engineering assumptions begin",
+          "deliverable": "a validation plan with benchmarks"
+        },
+        {
+          "title": "Publishing useful scientific findings",
+          "method": "describe methods, uncertainty and replicable references openly",
+          "deliverable": "a structured technical brief"
+        }
+      ]
+    },
+    "/knowledge/": {
+      "title": "Knowledge Library — Applied Learning",
+      "images": [
+        "knowledge",
+        "education-detail",
+        "research",
+        "academy",
+        "ai",
+        "blog",
+        "industry",
+        "laboratory",
+        "economy",
+        "services"
+      ],
+      "items": [
+        {
+          "title": "Building a learning objective that matters",
+          "method": "define what learners can perform rather than what they will read",
+          "deliverable": "a measurable outcome rubric"
+        },
+        {
+          "title": "From fundamentals to specialized study",
+          "method": "sequence prerequisites before advanced theory",
+          "deliverable": "a concept and dependency map"
+        },
+        {
+          "title": "Evidence-backed explanatory writing",
+          "method": "cross-check examples against authoritative sources",
+          "deliverable": "a dated source bibliography"
+        },
+        {
+          "title": "Worked examples and guided practice",
+          "method": "pair every abstract definition with a practical exercise",
+          "deliverable": "a solved example and independent task"
+        },
+        {
+          "title": "Learning for different accessibility needs",
+          "method": "support readable layouts and alternative content formats",
+          "deliverable": "a learner-friendly resource checklist"
+        },
+        {
+          "title": "Assessing understanding rather than memorization",
+          "method": "measure application and reasoning with varied examples",
+          "deliverable": "a transparent assessment guide"
+        },
+        {
+          "title": "Updating technical educational materials",
+          "method": "flag time-sensitive facts and document revisions",
+          "deliverable": "a version-controlled knowledge page"
+        },
+        {
+          "title": "Finding trustworthy scientific information",
+          "method": "evaluate methods, conflicts and reproducibility",
+          "deliverable": "a source credibility worksheet"
+        },
+        {
+          "title": "Connecting skills to real projects",
+          "method": "teach through bounded tasks with explicit outputs",
+          "deliverable": "a small project portfolio assignment"
+        },
+        {
+          "title": "Responsible AI use while learning",
+          "method": "require learners to validate model output independently",
+          "deliverable": "an attribution and verification protocol"
+        }
+      ]
+    },
+    "/industry/": {
+      "title": "Industrial Product Development — Feasibility and Quality",
+      "images": [
+        "industry",
+        "laboratory",
+        "services",
+        "ai",
+        "research",
+        "smart-agriculture",
+        "economy",
+        "market",
+        "marketplace",
+        "knowledge"
+      ],
+      "items": [
+        {
+          "title": "From idea to production requirement",
+          "method": "translate customer demand into measurable specifications",
+          "deliverable": "a product requirements sheet"
+        },
+        {
+          "title": "Engineering feasibility before investment",
+          "method": "compare capacity, process constraints and startup costs",
+          "deliverable": "a decision-ready feasibility study"
+        },
+        {
+          "title": "Process maps and bottleneck discovery",
+          "method": "measure cycle times and handoff delays",
+          "deliverable": "a ranked improvement register"
+        },
+        {
+          "title": "Quality control and measurement systems",
+          "method": "establish tolerances, sampling and calibration records",
+          "deliverable": "a documented inspection plan"
+        },
+        {
+          "title": "Safety by design in industrial projects",
+          "method": "review hazards before introducing equipment or automation",
+          "deliverable": "a safety risk register"
+        },
+        {
+          "title": "Supplier qualification and sourcing",
+          "method": "test conformity beyond quoted purchase price",
+          "deliverable": "a scored supplier comparison"
+        },
+        {
+          "title": "Prototype validation and field trials",
+          "method": "test with realistic inputs and repeatable acceptance thresholds",
+          "deliverable": "a pilot test protocol"
+        },
+        {
+          "title": "Energy, water and material efficiency",
+          "method": "track resource intensity alongside output quality",
+          "deliverable": "a baseline efficiency dashboard"
+        },
+        {
+          "title": "Maintenance and reliability engineering",
+          "method": "identify failure modes and feasible preventive actions",
+          "deliverable": "a maintenance schedule"
+        },
+        {
+          "title": "Scale-up governance and economics",
+          "method": "reconcile throughput, workforce and working capital",
+          "deliverable": "a stage-gated production roadmap"
+        }
+      ]
+    },
+    "/economy/": {
+      "title": "Economic Analysis — Markets and Decision Quality",
+      "images": [
+        "economy",
+        "research",
+        "marketplace",
+        "industry",
+        "agriculture",
+        "services",
+        "ai",
+        "knowledge",
+        "store",
+        "weather"
+      ],
+      "items": [
+        {
+          "title": "Understanding a market mechanism",
+          "method": "trace supply, demand and institutional constraints before forecasting",
+          "deliverable": "a transparent market map"
+        },
+        {
+          "title": "Production cost and gross-margin modeling",
+          "method": "separate fixed and variable inputs and timing",
+          "deliverable": "an enterprise budget with assumptions"
+        },
+        {
+          "title": "Volatility and scenario planning",
+          "method": "compare plausible futures without guaranteed outcomes",
+          "deliverable": "a multi-scenario decision table"
+        },
+        {
+          "title": "Supply chains and landed-cost logic",
+          "method": "account for logistics, quality losses and delivery risk",
+          "deliverable": "a full-cost comparison"
+        },
+        {
+          "title": "Evidence-based business benchmarking",
+          "method": "compare units, dates and population definitions",
+          "deliverable": "a reproducible benchmark sheet"
+        },
+        {
+          "title": "Cash-flow resilience under uncertainty",
+          "method": "stress-test delayed revenue and changing input prices",
+          "deliverable": "a liquidity contingency outline"
+        },
+        {
+          "title": "Interpreting inflation and real purchasing power",
+          "method": "distinguish nominal values from inflation-adjusted effects",
+          "deliverable": "a plain-language economic brief"
+        },
+        {
+          "title": "Trade risk and contract transparency",
+          "method": "document counterparty, currency and fulfillment exposure",
+          "deliverable": "a commercial risk checklist"
+        },
+        {
+          "title": "Decision-support dashboards and analytics",
+          "method": "surface informative indicators with source timestamps",
+          "deliverable": "an auditable dashboard specification"
+        },
+        {
+          "title": "Ethical economic communication",
+          "method": "distinguish explanation from financial or investment advice",
+          "deliverable": "a balanced public analysis"
+        }
+      ]
+    },
+    "/studio/": {
+      "title": "Creative Studio — Games and Interactive Storytelling",
+      "images": [
+        "game-studio",
+        "ai",
+        "research",
+        "knowledge",
+        "education-detail",
+        "market",
+        "industry",
+        "platform-home",
+        "services",
+        "blog"
+      ],
+      "items": [
+        {
+          "title": "Designing a compelling core game loop",
+          "method": "link player action, consequence and feedback",
+          "deliverable": "a playable minute-by-minute loop sketch"
+        },
+        {
+          "title": "Prototyping for learning, not decoration",
+          "method": "test controls before polishing visual assets",
+          "deliverable": "a focused prototype acceptance test"
+        },
+        {
+          "title": "Character and narrative coherence",
+          "method": "give each character consistent motivations and constraints",
+          "deliverable": "a narrative continuity guide"
+        },
+        {
+          "title": "Accessible menus and interactions",
+          "method": "offer readable text, focus visibility and alternative controls",
+          "deliverable": "an inclusive interaction checklist"
+        },
+        {
+          "title": "Level balance and iterative difficulty",
+          "method": "observe completion and frustration without manipulation",
+          "deliverable": "a calibrated progression outline"
+        },
+        {
+          "title": "Visual direction and original artwork",
+          "method": "connect aesthetic choices to the game's mechanics",
+          "deliverable": "an art-direction style sheet"
+        },
+        {
+          "title": "Technical performance on mobile devices",
+          "method": "budget texture size, memory and animation complexity",
+          "deliverable": "a measured performance target"
+        },
+        {
+          "title": "Player research and user testing",
+          "method": "learn from real decisions rather than only opinions",
+          "deliverable": "a playtest observation log"
+        },
+        {
+          "title": "Ethical monetization in digital games",
+          "method": "describe purchases, limitations and age-appropriate design clearly",
+          "deliverable": "a consumer-protection checklist"
+        },
+        {
+          "title": "Release readiness and long-term support",
+          "method": "coordinate QA, store claims and defect handling",
+          "deliverable": "a release-and-support plan"
+        }
+      ]
+    },
+    "/market/": {
+      "title": "Digital Market — Discoverability and Delivery",
+      "images": [
+        "marketplace",
+        "store",
+        "ai",
+        "economy",
+        "services",
+        "knowledge",
+        "industry",
+        "research",
+        "game-studio",
+        "education-detail"
+      ],
+      "items": [
+        {
+          "title": "Catalog taxonomy and findability",
+          "method": "group offerings by customer task instead of internal jargon",
+          "deliverable": "a user-tested navigation plan"
+        },
+        {
+          "title": "Writing transparent product descriptions",
+          "method": "show actual scope, format and system requirements",
+          "deliverable": "a verified product factsheet"
+        },
+        {
+          "title": "Digital fulfillment and customer entitlement",
+          "method": "define how access is granted and recovered",
+          "deliverable": "an entitlement lifecycle diagram"
+        },
+        {
+          "title": "Pricing clarity and product comparisons",
+          "method": "separate fees, conditions and value propositions",
+          "deliverable": "a consumer-friendly price table"
+        },
+        {
+          "title": "Accessible purchasing information",
+          "method": "make policies legible across small screens",
+          "deliverable": "an accessibility and disclosure audit"
+        },
+        {
+          "title": "Trust signals rooted in evidence",
+          "method": "use authentic reviews and demonstrable results only",
+          "deliverable": "a verifiable trust checklist"
+        },
+        {
+          "title": "Privacy-aware customer analytics",
+          "method": "measure funnel friction without excessive tracking",
+          "deliverable": "a minimal analytics plan"
+        },
+        {
+          "title": "Refunds, delivery failures and support",
+          "method": "map exceptions before publishing an offer",
+          "deliverable": "a support escalation policy"
+        },
+        {
+          "title": "Protecting commercial transactions",
+          "method": "test authentication and repeat payment events",
+          "deliverable": "a safe payment state model"
+        },
+        {
+          "title": "Maintaining catalog accuracy",
+          "method": "review availability, pricing and ownership regularly",
+          "deliverable": "a product content review schedule"
+        }
+      ]
+    },
+    "/agents/": {
+      "title": "Applied AI and Agents — Reliable Systems",
+      "images": [
+        "ai",
+        "research",
+        "knowledge",
+        "industry",
+        "laboratory",
+        "services",
+        "economy",
+        "education-detail",
+        "market",
+        "game-studio"
+      ],
+      "items": [
+        {
+          "title": "Start with a bounded agent mission",
+          "method": "define allowed actions and forbidden operations first",
+          "deliverable": "an agent capability and risk contract"
+        },
+        {
+          "title": "Retrieval grounded in source documents",
+          "method": "distinguish citations from generated interpretation",
+          "deliverable": "a source-attributed answer workflow"
+        },
+        {
+          "title": "Measuring factual reliability",
+          "method": "use held-out tests for accuracy and refusal behavior",
+          "deliverable": "a repeatable model evaluation dataset"
+        },
+        {
+          "title": "Human approval for consequential steps",
+          "method": "reserve payment or irreversible actions for governed workflows",
+          "deliverable": "an explicit control and audit matrix"
+        },
+        {
+          "title": "Prompt injection and tool boundaries",
+          "method": "treat external documents as untrusted data",
+          "deliverable": "a security test plan"
+        },
+        {
+          "title": "Agent memory with privacy boundaries",
+          "method": "store only necessary context under retention rules",
+          "deliverable": "a data minimization policy"
+        },
+        {
+          "title": "Multi-agent orchestration without chaos",
+          "method": "assign ownership of tasks, budgets and stopping conditions",
+          "deliverable": "a monitored execution graph"
+        },
+        {
+          "title": "Responsible model selection and costs",
+          "method": "compare accuracy, latency and operating expense",
+          "deliverable": "a cost-quality benchmark table"
+        },
+        {
+          "title": "Explaining model uncertainty to users",
+          "method": "communicate unsupported assertions clearly",
+          "deliverable": "a calibrated confidence guidance sheet"
+        },
+        {
+          "title": "Production monitoring and rollback",
+          "method": "track failure rates, drift and incident response",
+          "deliverable": "a live operations runbook"
+        }
+      ]
+    },
+    "/ventures/agriculture/": {
+      "title": "Agriculture and Agro-Industry — Research and Markets",
+      "images": [
+        "agriculture",
+        "smart-agriculture",
+        "genetics",
+        "laboratory",
+        "weather",
+        "research",
+        "economy",
+        "industry",
+        "marketplace",
+        "services"
+      ],
+      "items": [
+        {
+          "title": "Farm enterprise budgets and resource tradeoffs",
+          "method": "compare labor, land, water and capital under realistic constraints",
+          "deliverable": "a seasonal operating plan"
+        },
+        {
+          "title": "Soil fertility and sampling integrity",
+          "method": "organize representative sampling before nutrient decisions",
+          "deliverable": "a reliable soil-data protocol"
+        },
+        {
+          "title": "Water stewardship and irrigation scheduling",
+          "method": "monitor demand, losses and local water restrictions",
+          "deliverable": "a water-use decision framework"
+        },
+        {
+          "title": "Crop choice and climate uncertainty",
+          "method": "compare varietal traits and planting windows",
+          "deliverable": "an adaptive crop plan"
+        },
+        {
+          "title": "Integrated pest management fundamentals",
+          "method": "prioritize scouting, thresholds and safe practice",
+          "deliverable": "a pest monitoring register"
+        },
+        {
+          "title": "Postharvest handling and loss prevention",
+          "method": "account for grading, storage and spoilage",
+          "deliverable": "a postharvest process map"
+        },
+        {
+          "title": "Responsible digital agronomy",
+          "method": "calibrate sensors and imagery to field observations",
+          "deliverable": "a site-specific evidence layer"
+        },
+        {
+          "title": "Agricultural production risk modeling",
+          "method": "stress-test yield and price scenarios",
+          "deliverable": "a farm risk sensitivity table"
+        },
+        {
+          "title": "Traceability across agricultural value chains",
+          "method": "record batch identity and quality checks",
+          "deliverable": "a harvest-to-market trace map"
+        },
+        {
+          "title": "Agri-industry investment feasibility",
+          "method": "compare operational needs with realistic demand",
+          "deliverable": "a phase-by-phase business case"
+        }
+      ]
+    },
+    "/ventures/cafe-restaurant/": {
+      "title": "Café and Restaurant Concepts — Service Science",
+      "images": [
+        "marketplace",
+        "services",
+        "knowledge",
+        "economy",
+        "industry",
+        "research",
+        "store",
+        "education-detail",
+        "ai",
+        "platform-home",
+        "laboratory"
+      ],
+      "items": [
+        {
+          "title": "Menu engineering with honest ingredient costs",
+          "method": "calculate contribution margin by serving size",
+          "deliverable": "a recipe and cost card"
+        },
+        {
+          "title": "Safe food preparation workflows",
+          "method": "map contamination and temperature control points",
+          "deliverable": "a HACCP-informed checklist"
+        },
+        {
+          "title": "Customer journey and service blueprinting",
+          "method": "follow the guest experience from discovery to feedback",
+          "deliverable": "a hospitality journey map"
+        },
+        {
+          "title": "Supplier reliability and raw material quality",
+          "method": "define acceptance criteria for deliveries",
+          "deliverable": "a receiving inspection log"
+        },
+        {
+          "title": "Kitchen workflow and service bottlenecks",
+          "method": "compare prep time and peak demand capacity",
+          "deliverable": "a production-flow improvement plan"
+        },
+        {
+          "title": "Food allergens and consumer transparency",
+          "method": "document ingredients and cross-contact controls",
+          "deliverable": "a menu allergen matrix"
+        },
+        {
+          "title": "Responsible online menus and ordering",
+          "method": "keep advertised items aligned with actual availability",
+          "deliverable": "a digital menu specification"
+        },
+        {
+          "title": "Energy and food waste reduction",
+          "method": "measure waste by preparation stage",
+          "deliverable": "a practical waste-reduction baseline"
+        },
+        {
+          "title": "Training and operational consistency",
+          "method": "standardize recipes and service handoffs",
+          "deliverable": "an employee process guide"
+        },
+        {
+          "title": "Restaurant feasibility and regulatory readiness",
+          "method": "separate concept plans from licensed operations",
+          "deliverable": "a compliance-aware launch plan"
+        }
+      ]
+    },
+    "/ventures/fuel-station/": {
+      "title": "Fuel Stations and Mobility — Regulated Service Design",
+      "images": [
+        "industry",
+        "services",
+        "economy",
+        "marketplace",
+        "weather",
+        "research",
+        "ai",
+        "store",
+        "platform-home",
+        "laboratory"
+      ],
+      "items": [
+        {
+          "title": "Responsible location feasibility",
+          "method": "evaluate transport demand and safe site access",
+          "deliverable": "a transparent site-selection assessment"
+        },
+        {
+          "title": "Forecourt hazard identification",
+          "method": "map fire, environmental and operational risks",
+          "deliverable": "a preliminary safety register"
+        },
+        {
+          "title": "Tank integrity and environmental stewardship",
+          "method": "consider spill prevention and monitoring obligations",
+          "deliverable": "an environmental compliance framework"
+        },
+        {
+          "title": "Retail convenience and customer needs",
+          "method": "connect roadside services with realistic traffic patterns",
+          "deliverable": "a service mix feasibility sheet"
+        },
+        {
+          "title": "Queue and throughput analysis",
+          "method": "compare pump or service capacity with demand peaks",
+          "deliverable": "a congestion model"
+        },
+        {
+          "title": "Workforce and emergency preparedness",
+          "method": "define appropriate training and escalation pathways",
+          "deliverable": "an emergency response checklist"
+        },
+        {
+          "title": "Fuel pricing communication and transparency",
+          "method": "separate reference prices from site quotations",
+          "deliverable": "a consumer information standard"
+        },
+        {
+          "title": "EV mobility options and infrastructure",
+          "method": "assess power supply and expected dwell time",
+          "deliverable": "a charging feasibility concept"
+        },
+        {
+          "title": "Maintenance and equipment reliability",
+          "method": "schedule safety-critical inspections",
+          "deliverable": "a preventive maintenance plan"
+        },
+        {
+          "title": "Permissions and commercial financial planning",
+          "method": "identify licensing and financing dependencies",
+          "deliverable": "a stage-gated opening roadmap"
+        }
+      ]
+    },
+    "/ventures/jewelry-gold/": {
+      "title": "Jewelry and Gold — Material Quality and Design",
+      "images": [
+        "marketplace",
+        "industry",
+        "research",
+        "economy",
+        "laboratory",
+        "knowledge",
+        "services",
+        "store",
+        "platform-home",
+        "education-detail"
+      ],
+      "items": [
+        {
+          "title": "Understanding fineness and contained metal",
+          "method": "explain karat and mass with consistent units",
+          "deliverable": "a transparent valuation worksheet"
+        },
+        {
+          "title": "Gemstone identification and limitations",
+          "method": "separate observation from authenticated grading",
+          "deliverable": "a condition and disclosure record"
+        },
+        {
+          "title": "Designing jewelry for durability",
+          "method": "evaluate setting security and daily wear",
+          "deliverable": "a product design checklist"
+        },
+        {
+          "title": "Metal fabrication and finishing workflows",
+          "method": "link tolerances and workmanship to quality",
+          "deliverable": "a production inspection sequence"
+        },
+        {
+          "title": "Responsible sourcing and provenance",
+          "method": "document material and supplier information",
+          "deliverable": "a traceable provenance dossier"
+        },
+        {
+          "title": "Transparent jewelry price components",
+          "method": "separate metal value from labor and fees",
+          "deliverable": "an itemized example quotation"
+        },
+        {
+          "title": "Photographing pieces accurately",
+          "method": "use controlled light without misleading retouching",
+          "deliverable": "an evidence-aware product gallery"
+        },
+        {
+          "title": "Care instructions and customer support",
+          "method": "explain cleaning and handling by material",
+          "deliverable": "a useful ownership guide"
+        },
+        {
+          "title": "Online product authenticity controls",
+          "method": "connect each description to its supporting evidence",
+          "deliverable": "a catalog verification checklist"
+        },
+        {
+          "title": "Responsible commerce and local permissions",
+          "method": "avoid unsupported claims of licensed trading or appraisal",
+          "deliverable": "a regulatory-readiness assessment"
+        }
+      ]
+    },
+    "/ventures/carpets/": {
+      "title": "Carpets and Textiles — Craft and Conservation",
+      "images": [
+        "knowledge",
+        "research",
+        "industry",
+        "marketplace",
+        "economy",
+        "agriculture",
+        "services",
+        "laboratory",
+        "store",
+        "platform-home"
+      ],
+      "items": [
+        {
+          "title": "Weaving structures and regional traditions",
+          "method": "document knot and foundation features carefully",
+          "deliverable": "a comparative craftsmanship guide"
+        },
+        {
+          "title": "Fiber content and material quality",
+          "method": "check wool, silk and blends with appropriate methods",
+          "deliverable": "a material-description protocol"
+        },
+        {
+          "title": "Colors, dyes and responsible classification",
+          "method": "separate palette impressions from proven origin",
+          "deliverable": "a color and attribution record"
+        },
+        {
+          "title": "Carpet condition and conservation",
+          "method": "identify wear before suggesting treatment",
+          "deliverable": "a condition reporting checklist"
+        },
+        {
+          "title": "Documentation of makers and provenance",
+          "method": "respect attribution and available historical evidence",
+          "deliverable": "a provenance statement"
+        },
+        {
+          "title": "Design storytelling without stereotypes",
+          "method": "explain motifs through sourced cultural context",
+          "deliverable": "an educational design card"
+        },
+        {
+          "title": "Measurements and catalog consistency",
+          "method": "publish dimensions with clear tolerances",
+          "deliverable": "a verified catalog specification"
+        },
+        {
+          "title": "Repair planning and durability",
+          "method": "distinguish reversible conservation from invasive changes",
+          "deliverable": "a risk-based care plan"
+        },
+        {
+          "title": "Digital collections and fair marketing",
+          "method": "present distinct items with honest condition images",
+          "deliverable": "an accessible online collection"
+        },
+        {
+          "title": "Textile commerce and logistics",
+          "method": "plan packaging, handling and destination restrictions",
+          "deliverable": "a safe fulfillment outline"
+        }
+      ]
+    },
+    "/ventures/currency-crypto/": {
+      "title": "Currency and Digital Assets — Critical Literacy",
+      "images": [
+        "economy",
+        "ai",
+        "research",
+        "knowledge",
+        "services",
+        "marketplace",
+        "industry",
+        "laboratory",
+        "store",
+        "platform-home"
+      ],
+      "items": [
+        {
+          "title": "Exchange-rate basics without forecasts",
+          "method": "explain how different quoting conventions work",
+          "deliverable": "a transparent conversion example"
+        },
+        {
+          "title": "Understanding volatility and liquidity",
+          "method": "distinguish market depth from price history",
+          "deliverable": "a risk literacy guide"
+        },
+        {
+          "title": "Blockchain settlement fundamentals",
+          "method": "describe transactions, signatures and network finality",
+          "deliverable": "a conceptual payment flow"
+        },
+        {
+          "title": "Wallet custody and private key security",
+          "method": "identify recovery and impersonation threats",
+          "deliverable": "a custody threat checklist"
+        },
+        {
+          "title": "Comparing payment rails honestly",
+          "method": "assess cost, finality and dispute limits",
+          "deliverable": "a settlement-system comparison"
+        },
+        {
+          "title": "Smart contract risk and testing",
+          "method": "separate documented code behavior from marketing promises",
+          "deliverable": "an audit readiness outline"
+        },
+        {
+          "title": "Fraud, scams and social engineering",
+          "method": "recognize unrealistic returns and false identities",
+          "deliverable": "a customer-safety briefing"
+        },
+        {
+          "title": "Source dates and real-time price display",
+          "method": "label reference rates with freshness and units",
+          "deliverable": "a properly qualified market widget"
+        },
+        {
+          "title": "Transaction reconciliation and records",
+          "method": "align wallet events with invoices where applicable",
+          "deliverable": "an accounting control map"
+        },
+        {
+          "title": "Legal boundaries and financial education",
+          "method": "distinguish explanations from licensed advice or custody",
+          "deliverable": "a jurisdictional scope notice"
+        }
+      ]
+    },
+    "/ventures/ecommerce/": {
+      "title": "E-Commerce and Virtual Goods — Customer Trust",
+      "images": [
+        "store",
+        "marketplace",
+        "services",
+        "ai",
+        "knowledge",
+        "industry",
+        "research",
+        "economy",
+        "game-studio",
+        "platform-home"
+      ],
+      "items": [
+        {
+          "title": "Digital storefront information architecture",
+          "method": "help buyers find relevant formats and licenses",
+          "deliverable": "a task-oriented catalog layout"
+        },
+        {
+          "title": "Product details that eliminate surprises",
+          "method": "specify file type, language, access duration and limits",
+          "deliverable": "an honest product specification"
+        },
+        {
+          "title": "Cart and checkout exception handling",
+          "method": "model failed payments and duplicate callbacks",
+          "deliverable": "a recoverable payment workflow"
+        },
+        {
+          "title": "Digital downloads and access control",
+          "method": "avoid exposing private purchase links publicly",
+          "deliverable": "an entitlement design"
+        },
+        {
+          "title": "Customer service and dispute readiness",
+          "method": "record a documented response to delivery failures",
+          "deliverable": "a service incident checklist"
+        },
+        {
+          "title": "Subscription transparency and consent",
+          "method": "explain renewal and cancellation ahead of payment",
+          "deliverable": "a consumer consent policy"
+        },
+        {
+          "title": "Mobile-first product discovery",
+          "method": "test narrow screens and readable controls",
+          "deliverable": "an inclusive browsing checklist"
+        },
+        {
+          "title": "Fraud reduction and account protection",
+          "method": "review suspicious transactions without profiling claims",
+          "deliverable": "a proportionate control plan"
+        },
+        {
+          "title": "Performance budgets for commerce images",
+          "method": "use compressed thumbnails and deferred media loading",
+          "deliverable": "a loading and layout stability benchmark"
+        },
+        {
+          "title": "Operations, analytics and governance",
+          "method": "measure fulfillment accuracy and customer outcomes",
+          "deliverable": "an audit-ready commerce dashboard"
+        }
+      ]
+    },
+    "/ventures/hospitality/": {
+      "title": "Hospitality and Services — Quality Design",
+      "images": [
+        "services",
+        "marketplace",
+        "knowledge",
+        "economy",
+        "industry",
+        "research",
+        "ai",
+        "store",
+        "platform-home",
+        "academy"
+      ],
+      "items": [
+        {
+          "title": "Mapping the guest journey",
+          "method": "identify friction from first inquiry through aftercare",
+          "deliverable": "a measurable guest-experience blueprint"
+        },
+        {
+          "title": "Service expectations and accessibility",
+          "method": "provide understandable options and useful accommodations",
+          "deliverable": "an inclusive service checklist"
+        },
+        {
+          "title": "Capacity and appointment scheduling",
+          "method": "align promise times with staffing and operations",
+          "deliverable": "a service-capacity model"
+        },
+        {
+          "title": "Service recovery and complaint handling",
+          "method": "respond consistently to missed expectations",
+          "deliverable": "a documented resolution pathway"
+        },
+        {
+          "title": "Quality systems for hospitality teams",
+          "method": "turn repeat tasks into reviewable procedures",
+          "deliverable": "a practical operating checklist"
+        },
+        {
+          "title": "Ethical loyalty and customer privacy",
+          "method": "seek consent before collecting preference histories",
+          "deliverable": "a minimal-data loyalty outline"
+        },
+        {
+          "title": "Planning a digital booking interface",
+          "method": "distinguish a prototype from actual confirmed reservations",
+          "deliverable": "an honest booking specification"
+        },
+        {
+          "title": "Supplier and service partner evaluation",
+          "method": "test reliability and safety requirements",
+          "deliverable": "a partner qualification scorecard"
+        },
+        {
+          "title": "Operating economics and resource use",
+          "method": "compare occupancy, labor and energy costs",
+          "deliverable": "a sensitivity-based operating budget"
+        },
+        {
+          "title": "Truthful hospitality marketing",
+          "method": "avoid unsupported claims about live locations and opening hours",
+          "deliverable": "a verified publication standard"
+        }
+      ]
+    },
+    "/services/": {
+      "title": "Professional Services — From Inquiry to Verified Delivery",
+      "images": [
+        "services",
+        "industry",
+        "research",
+        "ai",
+        "knowledge",
+        "marketplace",
+        "platform-home",
+        "laboratory",
+        "economy",
+        "store"
+      ],
+      "items": [
+        {
+          "title": "Discovery conversations that define the need",
+          "method": "ask for success metrics before proposing solutions",
+          "deliverable": "a concise problem statement"
+        },
+        {
+          "title": "Scoping digital and research projects",
+          "method": "separate essentials from optional features",
+          "deliverable": "an auditable statement of work"
+        },
+        {
+          "title": "Testing feasibility before making promises",
+          "method": "review dependencies and legal constraints early",
+          "deliverable": "a preliminary risk assessment"
+        },
+        {
+          "title": "Designing collaborative workflows",
+          "method": "clarify ownership, handoffs and approval points",
+          "deliverable": "a responsibility matrix"
+        },
+        {
+          "title": "Prototype-based client feedback",
+          "method": "show a working sample before large commitment",
+          "deliverable": "a testable proof of concept"
+        },
+        {
+          "title": "Information security in client work",
+          "method": "apply appropriate access and confidential data controls",
+          "deliverable": "a project data-handling plan"
+        },
+        {
+          "title": "Accessible design and quality assurance",
+          "method": "test core tasks across relevant devices",
+          "deliverable": "a practical acceptance checklist"
+        },
+        {
+          "title": "Communication and status reporting",
+          "method": "record decisions and blockers at milestones",
+          "deliverable": "a readable progress summary"
+        },
+        {
+          "title": "Delivery and user training",
+          "method": "include documentation and realistic support expectations",
+          "deliverable": "a client handover pack"
+        },
+        {
+          "title": "Post-launch measurement and improvement",
+          "method": "compare observed outcomes with initial goals",
+          "deliverable": "a continuous improvement report"
+        }
+      ]
+    },
+    "/about/": {
+      "title": "About MojPlayWin — Research and Economic Portfolio",
+      "images": [
+        "research",
+        "services",
+        "ai",
+        "knowledge",
+        "industry",
+        "game-studio",
+        "economy",
+        "agriculture",
+        "laboratory",
+        "marketplace"
+      ],
+      "items": [
+        {
+          "title": "Evidence behind the company profile",
+          "method": "separate documented operations from proposed ventures",
+          "deliverable": "a clearly qualified capabilities summary"
+        },
+        {
+          "title": "How the scientific focus is structured",
+          "method": "organize related research domains without claiming certification",
+          "deliverable": "a research focus map"
+        },
+        {
+          "title": "Founder's cross-disciplinary perspective",
+          "method": "connect economics, research and technology without inventing degrees",
+          "deliverable": "a traceable leadership overview"
+        },
+        {
+          "title": "The planned digital 80 percent",
+          "method": "explain the strategic emphasis rather than claiming audited allocation",
+          "deliverable": "a transparent portfolio statement"
+        },
+        {
+          "title": "The complementary industry 20 percent",
+          "method": "describe sector knowledge and development opportunities honestly",
+          "deliverable": "a venture readiness overview"
+        },
+        {
+          "title": "Scientific and commercial governance",
+          "method": "connect research quality with user and customer needs",
+          "deliverable": "a shared decision framework"
+        },
+        {
+          "title": "Responsibility in AI and digital products",
+          "method": "state verification and human oversight expectations",
+          "deliverable": "a responsible technology checklist"
+        },
+        {
+          "title": "Trustworthy communication of credentials",
+          "method": "attribute qualifications to their published sources",
+          "deliverable": "an evidence status note"
+        },
+        {
+          "title": "Long-term collaboration and research needs",
+          "method": "formulate measurable milestones and constraints",
+          "deliverable": "a collaboration roadmap"
+        },
+        {
+          "title": "Keeping the public record accurate",
+          "method": "date updates and explain changes to important claims",
+          "deliverable": "a versioned organizational profile"
+        }
+      ]
+    },
+    "/about/mojtaba-rozegar/": {
+      "title": "Mojtaba Roozegar — Academic and Executive Biography",
+      "images": [
+        "research",
+        "economy",
+        "agriculture",
+        "knowledge",
+        "laboratory",
+        "ai",
+        "services",
+        "industry",
+        "platform-home",
+        "education-detail"
+      ],
+      "items": [
+        {
+          "title": "Doctoral specialization and its applications",
+          "method": "explain production economics and farm management through analytical examples",
+          "deliverable": "a readable academic-field overview"
+        },
+        {
+          "title": "Farm decisions under uncertainty",
+          "method": "compare resource allocation against yield and price risk",
+          "deliverable": "a scenario-based decision note"
+        },
+        {
+          "title": "Research methodology in practice",
+          "method": "connect hypotheses, measurement and careful inference",
+          "deliverable": "an evidence protocol"
+        },
+        {
+          "title": "Leading research-oriented organizations",
+          "method": "distinguish proposed projects from verified operating teams",
+          "deliverable": "a governance and responsibility map"
+        },
+        {
+          "title": "Entrepreneurship across different sectors",
+          "method": "explain lessons without claiming unsupported licenses or assets",
+          "deliverable": "a transparent experience summary"
+        },
+        {
+          "title": "Scientific writing and education",
+          "method": "develop technical explanations that can be checked",
+          "deliverable": "a source-aware publishing method"
+        },
+        {
+          "title": "Digital systems and intelligent websites",
+          "method": "connect user needs to validation and security criteria",
+          "deliverable": "an engineering practice statement"
+        },
+        {
+          "title": "AI for organized knowledge work",
+          "method": "use evidence retrieval with explicit limits",
+          "deliverable": "a human-reviewed AI workflow"
+        },
+        {
+          "title": "Responsible international collaboration",
+          "method": "discuss Vancouver-oriented work as prospective unless contracted",
+          "deliverable": "a documented partnership scope"
+        },
+        {
+          "title": "Biography accuracy and credential provenance",
+          "method": "present self-reported qualifications with clear verification status",
+          "deliverable": "an honest public biographical record"
+        }
+      ]
+    },
+    "/store/": {
+      "title": "Digital Store — Learning Products and Customer Clarity",
+      "images": [
+        "store",
+        "marketplace",
+        "knowledge",
+        "education-detail",
+        "game-studio",
+        "ai",
+        "research",
+        "industry",
+        "services",
+        "economy"
+      ],
+      "items": [
+        {
+          "title": "Understanding the learning product format",
+          "method": "check whether an item is a book, download or course",
+          "deliverable": "a clearly labeled catalog entry"
+        },
+        {
+          "title": "Previewing content before purchase",
+          "method": "show an accurate outline and intended audience",
+          "deliverable": "a representative learning preview"
+        },
+        {
+          "title": "Technical access requirements",
+          "method": "describe compatible devices and file formats",
+          "deliverable": "a buyer readiness checklist"
+        },
+        {
+          "title": "Knowing what support covers",
+          "method": "separate included guidance from additional services",
+          "deliverable": "a transparent product support scope"
+        },
+        {
+          "title": "Digital licensing and permissible use",
+          "method": "state access rights and redistribution limits",
+          "deliverable": "an understandable license summary"
+        },
+        {
+          "title": "Trusted payment and receipt handling",
+          "method": "explain transaction steps without publishing sensitive payment data",
+          "deliverable": "an order confirmation guide"
+        },
+        {
+          "title": "Failure recovery and customer contact",
+          "method": "outline how interrupted purchases are addressed",
+          "deliverable": "a practical assistance path"
+        },
+        {
+          "title": "Educational quality and references",
+          "method": "review technical content against established sources",
+          "deliverable": "a quality-reviewed resource description"
+        },
+        {
+          "title": "Privacy and account controls",
+          "method": "collect only data necessary to fulfill legitimate orders",
+          "deliverable": "a customer-data checklist"
+        },
+        {
+          "title": "Evaluating product outcomes",
+          "method": "invite evidence-based feedback and documented corrections",
+          "deliverable": "a post-purchase improvement process"
+        }
+      ]
+    }
+  }
+}
