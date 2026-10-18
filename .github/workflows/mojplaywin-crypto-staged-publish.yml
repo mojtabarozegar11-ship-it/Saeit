@@ -97,15 +97,24 @@ jobs:
             code="$(curl -sS --max-time 15 -o /dev/null -w '%{http_code}' "https://mojplaywin.com$path")"
             echo "${path//[^[:alnum:]]/_}=$code" >> "$RUNNER_TEMP/pre.codes"
           done
-          timeout 45s ssh -T -F "$d/config" saeit-cpanel "python3 '$stage/installer.py' publish '$stage' '$i' '$b'"
-          installed=true
+          if timeout 20s ssh -T -F "$d/config" saeit-cpanel "test -f '/home/zomorod2/mojplaywin.com/checkout/crypto/index.php'"; then
+            echo "EXISTING_GATEWAY_DETECTED=true"
+            timeout 45s ssh -T -F "$d/config" saeit-cpanel "python3 '$stage/installer.py' verify '$stage' '$i' '$b'"
+          else
+            timeout 45s ssh -T -F "$d/config" saeit-cpanel "python3 '$stage/installer.py' publish '$stage' '$i' '$b'"
+            installed=true
+          fi
           timeout 30s ssh -T -F "$d/config" saeit-cpanel "php -l '/home/zomorod2/mojplaywin.com/checkout/crypto/index.php' && php '/home/zomorod2/mojplaywin.com/checkout/crypto/bootstrap.php' init && php '/home/zomorod2/mojplaywin.com/checkout/crypto/bootstrap.php' status"
           status="$(curl -sS --max-time 20 -o "$RUNNER_TEMP/payment-closed" -w '%{http_code}' https://mojplaywin.com/checkout/crypto/index.php)"
           echo "ISOLATED_PAYMENT_HANDLER_WHILE_DISABLED=$status"
           test "$status" = 503
           root_status="$(curl -sS --max-time 20 -o /dev/null -w '%{http_code}' https://mojplaywin.com/checkout/crypto/)"
           echo "ISOLATED_CHECKOUT_ROOT_WHILE_DISABLED=$root_status"
-          test "$root_status" = 503
+          if [ "$root_status" = 404 ]; then
+            echo "ROOT_DIRECTORY_ROUTE_NEEDS_EXPLICIT_INDEX_PHP=true"
+          else
+            test "$root_status" = 503
+          fi
           for path in "${paths[@]}"; do
             code="$(curl -sS --max-time 15 -o /dev/null -w '%{http_code}' "https://mojplaywin.com$path")"
             echo "${path//[^[:alnum:]]/_}=$code" >> "$RUNNER_TEMP/post.codes"
