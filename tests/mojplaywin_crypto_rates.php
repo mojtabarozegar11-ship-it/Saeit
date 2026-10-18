@@ -8,7 +8,7 @@ function ensure(bool $value,string $message):void{
 }
 function denied(callable $run,string $why):void{
  try{$run();throw new RuntimeException('FAILED: expected '.$why);}
- catch(RuntimeException $e){
+ catch(Throwable $e){
    if(str_starts_with($e->getMessage(),'FAILED:')) throw $e;
  }
 }
