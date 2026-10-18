@@ -66,11 +66,26 @@ def venture(request, slug):
  item=next((entry for entry in VENTURES if entry["slug"] == slug), None)
  if item is None:
   raise Http404
- return render(request,"mojplaywin/section.html",{"section_title":item["title"],"section_lead":item["lead"],"section_image":item["image"],"cards":item["cards"],"section_note":item["note"],"ventures":VENTURES,"active_venture":slug})
+ return render(request,"mojplaywin/section.html",{"section_title":item["title"],"section_lead":item["lead"],"section_image":item["image"],"cards":item["cards"],"section_note":item["note"],"ventures":VENTURES,"active_venture":slug,"related_url":"/research/","related_label":"Explore supporting research"})
+
+
+# Route each section to a relevant real main-site destination, not the same store card.
+RELATED_SECTION_LINKS = {
+    "research": ("/knowledge/", "Read the knowledge library"),
+    "knowledge": ("/research/", "Explore scientific research"),
+    "company": ("/about/", "Read our company profile"),
+    "industry": ("/services/", "Explore professional services"),
+    "agents": ("/ai/", "Explore AI resources"),
+    "market": ("/store/", "Browse the digital store"),
+    "economy": ("/research/", "Explore research"),
+    "studio": ("/games/", "Explore original games"),
+    "agriculture": ("/ventures/agriculture/", "Explore agriculture"),
+}
 
 def platform_section(request, section):
  data=SECTIONS.get(section)
  if data is None:
   data=("Explore MojPlayWin","Explore research, learning, games, and useful digital projects.","site/heroes/platform-home.webp",[("Discover","Explore the work and ideas behind MojPlayWin."),("Learn","Find practical learning resources and guides."),("Get in touch","Discuss a research or digital project.")])
  title,lead,image,cards=data
- return render(request,"mojplaywin/section.html",{"section_title":title,"section_lead":lead,"section_image":image,"cards":cards,"ventures":VENTURES})
+ related_url, related_label = RELATED_SECTION_LINKS.get(section, ("/store/", "Browse related resources"))
+ return render(request,"mojplaywin/section.html",{"section_title":title,"section_lead":lead,"section_image":image,"cards":cards,"ventures":VENTURES,"related_url":related_url,"related_label":related_label})
