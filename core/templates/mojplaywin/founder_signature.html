@@ -1,0 +1,60 @@
+{# Reusable main-domain footer ornament; not included by independent child sites. #}
+<style id="mpw-founder-plaque-design">
+  .mpw-founder-plaque{
+    box-sizing:border-box;
+    grid-column:1 / -1;
+    justify-self:stretch;
+    position:relative;
+    isolation:isolate;
+    width:min(1400px,calc(100% - 40px));
+    margin:10px auto 12px;
+    padding:22px 18px 24px;
+    text-align:center;
+    border-top:1px solid rgba(239,190,102,.48);
+    border-bottom:1px solid rgba(239,190,102,.28);
+    background:radial-gradient(ellipse 42% 100% at 50% 50%,rgba(224,164,66,.12),transparent 82%);
+  }
+  .mpw-founder-plaque::before,
+  .mpw-founder-plaque::after{
+    content:"✦";
+    display:inline-block;
+    vertical-align:middle;
+    margin:0 clamp(7px,2vw,23px);
+    color:#dbb66b;
+    font-size:clamp(.65rem,1.1vw,.85rem);
+    text-shadow:0 0 10px rgba(232,181,90,.35);
+  }
+  .mpw-founder-name{
+    display:inline-block;
+    vertical-align:middle;
+    max-width:100%;
+    font-family:Georgia,"Times New Roman",serif;
+    font-size:clamp(1.45rem,3.1vw,2.65rem);
+    font-weight:900;
+    line-height:1.35;
+    letter-spacing:.045em;
+    white-space:normal;
+    color:#ffe1a0;
+    -webkit-text-stroke:.3px #ffe9b3;
+    text-shadow:
+      0 1px 0 #dba74f,
+      0 2px 0 #a97c35,
+      0 3px 0 #86571e,
+      0 4px 0 #67461d,
+      0 5px 0 #422c15,
+      0 8px 10px rgba(0,0,0,.78),
+      0 0 22px rgba(249,186,73,.35);
+  }
+  @media(max-width:540px){
+    .mpw-founder-plaque{width:calc(100% - 22px);padding:17px 8px 19px}
+    .mpw-founder-plaque::before,.mpw-founder-plaque::after{margin-inline:5px;font-size:.6rem}
+    .mpw-founder-name{font-size:clamp(1.3rem,6.15vw,1.85rem);letter-spacing:.008em}
+  }
+  @media(forced-colors:active){
+    .mpw-founder-name{color:CanvasText;-webkit-text-stroke:0;text-shadow:none}
+    .mpw-founder-plaque{border-color:CanvasText}
+  }
+</style>
+<div class="mpw-founder-plaque" aria-label="Moj Play Win founder signature">
+  <span class="mpw-founder-name">Mojtaba Roozegar</span>
+</div>
