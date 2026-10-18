@@ -1,0 +1,135 @@
+name: Archive one obsolete isolated admin smoke test, retain full recovery
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/zomorod-archive-old-admin-smoke-one.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-archive-smoke-single
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - name: Tar and verify one historical isolated smoke working copy before pruning
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib,os,tarfile,subprocess,shutil
+          h=Path.home()
+          assert h==Path("/home/zomorod2")
+          root=h/"Saeit-staging/admin-smoke"
+          src=root/"e080ccba83cf-38487506021"
+          keep=root/"ab090d03f5bc-38498776878"
+          dest=root/"e080ccba83cf-38487506021.tar.gz"
+          temp=root/".e080ccba83cf-38487506021.tar.gz.tmp"
+          assert src.is_dir() and not src.is_symlink() and keep.is_dir()
+          assert (src/"isolated-smoke.sqlite3").is_file() and (src/"manage.py").is_file()
+          assert not dest.exists() and not temp.exists()
+          assert (h/"Saeit-staging/mojplaywin.sqlite3").is_file()
+          cron=subprocess.run(["crontab","-l"],capture_output=True,text=True,timeout=9)
+          proc=subprocess.run(["ps","-u","zomorod2","-o","args="],capture_output=True,text=True,timeout=9)
+          assert str(src) not in cron.stdout and str(src) not in proc.stdout
+          original={}
+          for here,dirs,files in os.walk(src,followlinks=False):
+              for name in dirs+files:
+                  assert not (Path(here)/name).is_symlink()
+              for name in files:
+                  p=Path(here)/name
+                  d=hashlib.sha256()
+                  with p.open("rb") as stream:
+                      for block in iter(lambda:stream.read(1024*1024),b""):d.update(block)
+                  original[str(p.relative_to(src))]=d.hexdigest()
+          assert len(original)>10
+          with tarfile.open(temp,"w:gz",compresslevel=1) as tar:
+              tar.add(src,arcname=src.name,recursive=True)
+          with temp.open("rb") as fd:os.fsync(fd.fileno())
+          with tarfile.open(temp,"r:gz") as tar:
+              check={}
+              for entry in tar:
+                  if not entry.isfile():continue
+                  d=hashlib.sha256()
+                  stream=tar.extractfile(entry)
+                  assert stream is not None
+                  for block in iter(lambda:stream.read(1024*1024),b""):d.update(block)
+                  check[str(Path(entry.name).relative_to(src.name))]=d.hexdigest()
+          assert original==check
+          os.replace(temp,dest)
+          assert tarfile.is_tarfile(dest)
+          raw=int(subprocess.run(["du","-sk",str(src)],capture_output=True,text=True,timeout=25,check=True).stdout.split()[0])*1024
+          packed=dest.stat().st_size
+          shutil.rmtree(src)
+          assert not src.exists() and dest.is_file()
+          print("OLD_SMOKE_SNAPSHOT_PRESERVED_AS_ARCHIVE="+str(dest.relative_to(h)))
+          print("OLD_SMOKE_FILE_COUNT="+str(len(original)))
+          print("OLD_SMOKE_SPACE_SAVED_BYTES="+str(raw-packed))
+          print("LIVE_SITE_AND_COMMERCE_DATA_UNMODIFIED=yes")
+          PY
+          REMOTE
+      - name: Check sites after obsolete isolated test cleanup
+        shell: bash
+        run: |
+          for url in "https://zomorodmelal.ir/" "https://mojplaywin.com/"; do
+            code="$(curl --max-time 15 -sS -o /dev/null -w '%{http_code}' "$url" || true)"
+            echo "SMOKE_ARCHIVE_POST_SITE=$url:$code"
+            test "$code" = 200
+          done
+      - name: Remove runner identities
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
