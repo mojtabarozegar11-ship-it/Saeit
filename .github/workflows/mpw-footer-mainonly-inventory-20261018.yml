@@ -1,4 +1,4 @@
-name: MojPlayWin footer main-only live inventory
+name: MojPlayWin footer main-only live inventory (refreshed)
 on:
   push:
     branches: [main]
