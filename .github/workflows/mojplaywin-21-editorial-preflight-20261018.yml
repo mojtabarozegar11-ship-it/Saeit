@@ -1,0 +1,55 @@
+name: MojPlayWin twenty-one public content paths safe-release preflight
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/mojplaywin-21-editorial-preflight-20261018.yml"
+permissions:
+  contents: read
+jobs:
+  read-only-21-paths:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check 21 canonical paths, original forms and landmarks without mutations
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,urllib.request,urllib.error,html.parser,re
+          from pathlib import Path
+          data=json.loads(Path("content/mojplaywin_ten_illustrated_articles_per_page_20261018.json").read_text())
+          class Audit(html.parser.HTMLParser):
+            def __init__(self):
+              super().__init__();self.main=0;self.endmain=0;self.forms=0;self.submit=0;self.iframes=0;self.scripts=0;self.has_passed_csrf=False
+            def handle_starttag(self,t,a):
+              d=dict(a)
+              if t=="main":self.main+=1
+              elif t=="form":self.forms+=1
+              elif t=="button" and d.get("type")=="submit":self.submit+=1
+              elif t=="iframe":self.iframes+=1
+              elif t=="script":self.scripts+=1
+          for path in data["pages"]:
+            url="https://mojplaywin.com"+path
+            try:
+              req=urllib.request.Request(url,headers={"User-Agent":"MojPlayWin21ReadOnlyAudit/1.0","Cache-Control":"no-cache"})
+              with urllib.request.urlopen(req,timeout=18) as res:
+                status=res.status
+                raw=res.read(1200000).decode("utf-8","replace")
+                content_type=res.headers.get("Content-Type","")
+              au=Audit();au.feed(raw)
+              result={"path":path,"status":status,"chars":len(raw),"main_count":au.main,
+                 "main_end_count":len(re.findall(r"</main\\s*>",raw,re.I)),
+                 "forms":au.forms,"buttons_submit":au.submit,"iframes":au.iframes,
+                 "scripts":au.scripts,"content_type":content_type,
+                 "existing_dossier":"SPECIALISM 28" in raw,
+                 "existing_ten":"mpw-home-ten-guides" in raw,
+                 "existing_payment":bool(re.search(r'payment[-_]?gateway|crypto_checkout|checkout_session|payment-form',raw,re.I))}
+              result["eligible_for_static_content_only"]=(status==200 and "text/html" in content_type and au.main==1 and result["main_end_count"]==1 and au.forms==0 and au.submit==0 and not result["existing_payment"] and path!="/store/")
+              print("MPW_ILLUSTRATED_PREFLIGHT="+json.dumps(result,sort_keys=True))
+            except Exception as ex:
+              print("MPW_ILLUSTRATED_PREFLIGHT="+json.dumps({"path":path,"error_type":type(ex).__name__,"eligible_for_static_content_only":False}))
+          PY
