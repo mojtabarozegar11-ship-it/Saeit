@@ -1,0 +1,231 @@
+name: Zomorod V91 selective agent copy, isolated and no activation
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/zomorod-v91-selective-agent-import-20261018.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-v91-selective-agent-import-20261018
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - name: Audit V91 and copy only missing agent source files to isolated Zomorod directory
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          test "$HOME" = "/home/zomorod2"
+          test -f "$HOME/Saeit/manage.py" && test -f "$HOME/Saeit/core/models.py"
+          test -d "$HOME/saeit_v91" && test ! -L "$HOME/saeit_v91"
+          test -d "$HOME/Saeit" && test ! -L "$HOME/Saeit"
+          PYTHONDONTWRITEBYTECODE=1 python3 - <<'PY'
+          import ast
+          import hashlib
+          import json
+          import os
+          import re
+          import time
+          from pathlib import Path
+
+          home = Path.home()
+          source = home / "saeit_v91"
+          active = home / "Saeit"
+          target = active / "agent_imports" / "v91"
+          refuse = {"mojplaywin", "mojplaywin_site", "picm", "saman", "farnaz",
+                    "zahra", "taniya", "raha", "studio", "mohammad", "tala",
+                    "commerce", "shop", "payment", "wallet", "crypto",
+                    "private", "secrets", "credentials", "backup", "backups",
+                    "venv", ".venv", "virtualenv", "site-packages", ".git",
+                    "__pycache__", "node_modules", "tests", "test", "migrations",
+                    "static", "media", "templates", "data", "logs", "log"}
+          signals = ("agent", "master", "evol", "mutation", "orchestrat", "robot", "bot")
+          dirs = {"agents", "agent", "bots", "robots", "master_agent",
+                  "evolution", "mutation", "orchestrator"}
+          candidates = []
+          invalid = []
+          skipped_scoped = 0
+          inspected = 0
+          for root, subdirs, files in os.walk(source, followlinks=False):
+              rel_dir = Path(root).relative_to(source)
+              depth = len(rel_dir.parts)
+              subdirs[:] = [d for d in subdirs if not (d.lower() in refuse or
+                            Path(root, d).is_symlink() or depth >= 7)]
+              for name in files:
+                  if not name.endswith(".py") or name == "__init__.py":
+                      continue
+                  inspected += 1
+                  rel = rel_dir / name
+                  if any(p.lower() in refuse for p in rel.parts):
+                      skipped_scoped += 1
+                      continue
+                  if not (any(s in name.lower() for s in signals) or
+                          any(p.lower() in dirs for p in rel.parts[:-1])):
+                      continue
+                  p = source / rel
+                  if p.is_symlink() or not p.is_file() or p.stat().st_size > 200_000:
+                      continue
+                  try:
+                      content = p.read_bytes()
+                      code = content.decode("utf-8-sig")
+                      tree = ast.parse(code, filename=str(rel))
+                      compile(tree, str(rel), "exec")
+                      if not any(isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) for n in tree.body):
+                          continue
+                      secret_pattern = re.compile(r"(?i)(secret_key|private_key|api_key|password|access_token|auth_token)")
+                      if any(isinstance(n, (ast.Assign, ast.AnnAssign)) and
+                             any(secret_pattern.search(t.id) for t in (
+                                 n.targets if isinstance(n, ast.Assign) else [n.target])
+                                 if isinstance(t, ast.Name)) and
+                             isinstance(n.value, ast.Constant) and isinstance(n.value.value, str) and len(n.value.value) > 8
+                             for n in ast.walk(tree)):
+                          invalid.append(str(rel) + ":embedded_secret")
+                          continue
+                      candidates.append((rel, content, hashlib.sha256(content).hexdigest()))
+                  except (SyntaxError, UnicodeDecodeError, ValueError, OSError) as error:
+                      invalid.append(str(rel) + ":" + type(error).__name__)
+          existing_names = set()
+          existing_hashes = set()
+          for root, subdirs, files in os.walk(active, followlinks=False):
+              rel_dir = Path(root).relative_to(active)
+              depth = len(rel_dir.parts)
+              subdirs[:] = [d for d in subdirs if d.lower() not in refuse and
+                            d not in {"agent_imports", "node_modules"} and
+                            not Path(root,d).is_symlink() and depth < 9]
+              for name in files:
+                  if name.endswith(".py"):
+                      existing_names.add(name.casefold())
+                      p = Path(root) / name
+                      try:
+                          if p.is_file() and not p.is_symlink() and p.stat().st_size < 200_000:
+                              existing_hashes.add(hashlib.sha256(p.read_bytes()).hexdigest())
+                      except OSError:
+                          pass
+          missing = []
+          duplicates = []
+          for rel, content, digest in sorted(candidates, key=lambda x:str(x[0])):
+              if digest in existing_hashes or rel.name.casefold() in existing_names:
+                  duplicates.append(str(rel))
+              else:
+                  missing.append((rel, content, digest))
+          print("AUDIT_SOURCE=" + str(source))
+          print("AUDIT_TARGET=" + str(target))
+          print("AUDIT_PY_FILES_INSPECTED=" + str(inspected))
+          print("AUDIT_AGENT_CANDIDATES=" + str(len(candidates)))
+          print("AUDIT_DUPLICATE_OR_SAME_NAME=" + str(len(duplicates)))
+          print("AUDIT_MISSING_CANDIDATES=" + str(len(missing)))
+          print("AUDIT_REJECTED_SOURCES=" + str(len(invalid)))
+          for entry in invalid[:25]:
+              print("AUDIT_REJECTED=" + entry)
+          for entry in duplicates[:40]:
+              print("AUDIT_SKIPPED_EXISTING=" + entry)
+          if len(missing) > 80:
+              raise SystemExit("TRANSFER_HALTED_TOO_MANY_UNREVIEWED_CANDIDATES")
+          if target.exists() and (target.is_symlink() or not target.is_dir()):
+              raise SystemExit("TRANSFER_HALTED_UNSAFE_TARGET")
+          copied = []
+          preexisting = []
+          if missing:
+              target.mkdir(parents=True,exist_ok=True,mode=0o700)
+              if target.resolve() != (active.resolve() / "agent_imports" / "v91"):
+                  raise SystemExit("TRANSFER_HALTED_DESTINATION_RESOLVE")
+          for rel, content, digest in missing:
+              out = target / rel
+              out.parent.mkdir(parents=True,exist_ok=True,mode=0o700)
+              if out.parent.is_symlink() or out.is_symlink():
+                  raise SystemExit("TRANSFER_HALTED_SYMLINK")
+              if out.exists():
+                  preexisting.append(str(rel))
+                  continue
+              with out.open("xb") as handle:
+                  handle.write(content)
+                  handle.flush()
+                  os.fsync(handle.fileno())
+              os.chmod(out,0o600)
+              actual = hashlib.sha256(out.read_bytes()).hexdigest()
+              if actual != digest:
+                  out.unlink()
+                  raise SystemExit("TRANSFER_HALTED_HASH_MISMATCH")
+              copied.append({"path":str(rel),"sha256":digest,"bytes":len(content)})
+              print("TRANSFER_COPIED=" + str(rel) + " sha256=" + digest)
+          summary = {"source":str(source),"destination":str(target),
+                     "agent_candidates":len(candidates),"duplicates":duplicates,
+                     "copied":copied,"preexisting_in_import_folder":preexisting,
+                     "rejected":invalid,
+                     "activation":False,"source_untouched":True}
+          if missing and target.is_dir():
+              manifest = target / ("transfer_manifest_" + str(int(time.time())) + ".json")
+              with manifest.open("x",encoding="utf-8") as file:
+                  json.dump(summary,file,ensure_ascii=False,indent=2)
+              os.chmod(manifest,0o600)
+              print("TRANSFER_MANIFEST=" + str(manifest))
+          print("TRANSFER_COPIED_COUNT=" + str(len(copied)))
+          print("TRANSFER_STATUS=isolated_copy_only_no_activation")
+          print("SOURCE_V91_PRESERVED=yes")
+          PY
+          REMOTE
+      - name: Site public smoke checks (read-only)
+        shell: bash
+        run: |
+          for path in / /agents/ /admin/login/; do
+            status="$(curl -sS --max-time 12 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir$path" || true)"
+            echo "PUBLIC_HEALTH path=$path status=$status"
+          done
+      - name: Remove temporary SSH relay material
+        if: always()
+        shell: bash
+        run: rm -rf -- "$RUNNER_TEMP/zomorod-baseline-inventory"
