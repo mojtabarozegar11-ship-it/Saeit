@@ -1,0 +1,196 @@
+name: MojPlayWin professor five-to-three personal image selection only
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/mojplaywin-professor-five-to-three-20261018.yml"
+permissions:
+  contents: read
+concurrency:
+  group: mojplaywin-about-exact-static-prod
+  cancel-in-progress: false
+jobs:
+  release-selected-professor-portraits:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && github.event_name == 'push' && contains(github.event.head_commit.message, '[approved-professor-five-to-three-20261018]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 13
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify source includes precisely selected personal-site photo, no five old cards
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mojplaywin_professor_replace_five_with_three_20261018.py
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('core/templates/mojplaywin/leadership_executive_cv_20261018.html').read_text('utf-8')
+          assert 'id="mpw-sport-white-selection-20261018"' in p
+          assert 'class="mpw-exec-gallery"' not in p
+          assert 'class="mpw-exec-gallery-item"' not in p
+          assert p.count('class="mpw-sport-white-card ')==3
+          assert p.count('owner_gallery_20261015_b/photo-09.7a4e0222fb28.png')==3
+          for value in ('Casual sport portrait','Outdoor sport-jacket portrait',
+              'White-shirt portrait','Professor Mojtaba Roozegar',
+              'Universiti Putra Malaysia','Production Economics and Farm Management'):
+              assert value in p,value
+          print('PROFESSOR_FIVE_TO_THREE_SOURCE_VALIDATED=yes')
+          PY
+      - name: Verify original personal composite still exists with successful HTTP 200
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import urllib.request
+          url='https://mojplaywin.com/mojtaba.roozegar/assets/personal_site/owner_gallery_20261015_b/photo-09.7a4e0222fb28.png'
+          with urllib.request.urlopen(urllib.request.Request(url,headers={'User-Agent':'MojPlayWinProfessorImageMove/1.0'}),timeout=20) as r:
+              content_type=r.headers.get('Content-Type','');status=r.status
+              first=r.read(32)
+          if status!=200 or 'image/png' not in content_type or len(first)<8:
+              raise SystemExit('OFFICIAL_PERSONAL_IMAGE_NOT_AVAILABLE')
+          print('ORIGINAL_SELECTED_PERSONAL_PORTRAIT_AVAILABLE=yes')
+          PY
+      - name: Capture unchanged site and commercial endpoints before publication
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,os,urllib.request,urllib.error
+          paths=[
+            'https://mojplaywin.com/','https://mojplaywin.com/store/',
+            'https://mojplaywin.com/about/','https://mojplaywin.com/mojtaba.roozegar/',
+            'https://mojplaywin.com/mojtaba.roozegar/about/',
+            'https://mojplaywin.com/mojtaba.roozegar/gallery/',
+            'https://mojplaywin.com/mojtaba.roozegar/resume/',
+            'https://mojplaywin.com/farnaz/','https://mojplaywin.com/saman/',
+            'https://mojplaywin.com/picm/','https://zomorodmelal.ir/'
+          ]
+          result={}
+          for url in paths:
+            req=urllib.request.Request(url,headers={'User-Agent':'MojPlayWinProfessorSelectHealth/1.0','Cache-Control':'no-cache'})
+            try:
+              with urllib.request.urlopen(req,timeout=18) as r:status=r.status
+            except urllib.error.HTTPError as e:status=e.code
+            result[url]=status
+            print('PROFESSOR_MOVE_BEFORE='+url+' '+str(status))
+            if status!=200:raise SystemExit('PROTECTED_BASELINE_NOT_200 '+url)
+          with open(os.environ['RUNNER_TEMP']+'/professor_move_before.json','w') as f:json.dump(result,f)
+          PY
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Transfer updated vetted professor CV source to private staging path only
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          scp -q -F "$d/config" core/templates/mojplaywin/leadership_executive_cv_20261018.html \
+            "saeit-cpanel:/home/zomorod2/.mpw-professor-selected-20261018-$GITHUB_RUN_ID.source.html"
+      - name: Replace five old portraits with exactly three selected ones, preserving rollback
+        id: install
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 55s ssh -T -F "$d/config" saeit-cpanel \
+            "python3 - install '$GITHUB_RUN_ID'" \
+            < scripts/mojplaywin_professor_replace_five_with_three_20261018.py
+      - name: Verify public professor About and all protected routes
+        id: smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,os,re,time,urllib.request,urllib.error
+          names=('Casual sport portrait','Outdoor sport-jacket portrait','White-shirt portrait')
+          old=('photo-01.fca592043631.jpg','photo-03.6d2d8fc0fd95.jpg','photo-05.ebefd3379857.jpg','photo-06.b25d2c5bf84f.jpg','photo-09.47d0c6608e88.jpg')
+          found=False
+          for i in range(1,6):
+            try:
+              req=urllib.request.Request('https://mojplaywin.com/about/mojtaba-rozegar/?_five_to_three='+os.environ['GITHUB_RUN_ID']+'-'+str(i),headers={'User-Agent':'MojPlayWinProfessorImageMove/1.0','Cache-Control':'no-cache'})
+              with urllib.request.urlopen(req,timeout=20) as response:
+                code=response.status; html=response.read(160000).decode('utf-8','replace')
+              found=(code==200
+                and 'mpw-sport-white-selection-20261018' in html
+                and all(n in html for n in names)
+                and html.count('class="mpw-sport-white-card ')==3
+                and html.count('owner_gallery_20261015_b/photo-09.7a4e0222fb28.png')==3
+                and all(name not in html for name in old)
+                and 'mpw-exec-gallery-item' not in html
+                and 'mpw-professor-gallery-20261018' not in html
+                and all(k in html for k in ('Professor Mojtaba Roozegar','Universiti Putra Malaysia','Production Economics and Farm Management','official_profile_20261016/portrait.2935ce8cb70d.webp'))
+                and len(re.findall(r'<h1\b',html,re.I))==1)
+              print('PROFESSOR_SELECTED_LIVE_ATTEMPT='+str(i)+' success='+str(found)+' status='+str(code))
+              if found:break
+            except Exception as err:print('PROFESSOR_SELECTED_RETRY='+type(err).__name__)
+            time.sleep(4)
+          if not found:raise SystemExit('PROFESSOR_PHOTOS_NOT_LIVE: ROLLBACK')
+          original=json.load(open(os.environ['RUNNER_TEMP']+'/professor_move_before.json'))
+          for url,old_code in original.items():
+            req=urllib.request.Request(url,headers={'User-Agent':'MojPlayWinProfessorSelectHealth/1.0','Cache-Control':'no-cache'})
+            try:
+              with urllib.request.urlopen(req,timeout=19) as r:code=r.status
+            except urllib.error.HTTPError as e:code=e.code
+            print('PROFESSOR_SELECTED_PROTECTED='+url+' '+str(code))
+            if code!=old_code:raise SystemExit('PROTECTED_ROUTE_CHANGED '+url)
+          print('PROFESSOR_SELECTED_SPORT_WHITE_LIVE_VERIFIED=yes')
+          PY
+      - name: Restore prior professor page upon failed verification
+        if: failure() && steps.install.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 55s ssh -T -F "$d/config" saeit-cpanel \
+            "python3 - rollback '$GITHUB_RUN_ID'" \
+            < scripts/mojplaywin_professor_replace_five_with_three_20261018.py
+      - name: Remove only private temporary editorial source
+        if: always()
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          if test -f "$d/config"; then
+            ssh -T -F "$d/config" -o ConnectTimeout=10 saeit-cpanel \
+              "test ! -L /home/zomorod2/.mpw-professor-selected-20261018-$GITHUB_RUN_ID.source.html && rm -f -- /home/zomorod2/.mpw-professor-selected-20261018-$GITHUB_RUN_ID.source.html" || true
+          fi
