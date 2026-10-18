@@ -1,0 +1,191 @@
+name: Publish ten MojPlayWin store educational cards without checkout changes
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/mojplaywin-store-ten-guides-isolated-live.yml"
+permissions: {contents: read}
+concurrency:
+  group: mojplaywin-only-store-content-template
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && github.event_name == 'push' && contains(github.event.head_commit.message, '[approved-mpw-store-guides-only-20261018]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify unmodified catalog and ten individually compressed illustrations
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mojplaywin_store_ten_guides_isolated_install_20261018.py
+          python3 - <<'PY'
+          from pathlib import Path
+          import sys
+          sys.path.insert(0,"scripts")
+          import mojplaywin_store_ten_guides_isolated_install_20261018 as app
+          raw=Path("core/templates/mojplaywin/store.html").read_bytes()
+          fragment=Path("core/templates/mojplaywin/store_ten_buyer_guides_20261018.html").read_bytes()
+          app.inspect_source(raw,fragment)
+          assert app.APP.as_posix()=="/home/zomorod2/Saeit-staging"
+          assert len(fragment)<24000
+          assert raw.count(b'{% for product in products %}')==1
+          assert fragment.count(b'class="mpw-store-guide"')==10
+          print("MPW_STORE_CONTENT_ONLY_SOURCE_QA_PASS=true")
+          PY
+      - name: Protect current store and sensitive sites before edit
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json,os,urllib.request,urllib.error
+          paths=[
+            "https://mojplaywin.com/store/",
+            "https://mojplaywin.com/",
+            "https://mojplaywin.com/about/",
+            "https://mojplaywin.com/about/mojtaba-rozegar/",
+            "https://mojplaywin.com/mojtaba.roozegar/",
+            "https://mojplaywin.com/mojtaba.roozegar/about/",
+            "https://mojplaywin.com/farnaz/",
+            "https://mojplaywin.com/saman/",
+            "https://mojplaywin.com/taniya/",
+            "https://zomorodmelal.ir/"]
+          results={}
+          for uri in paths:
+            request=urllib.request.Request(uri,headers={"User-Agent":"MojPlayWinStoreContentSafe/1.0","Cache-Control":"no-cache"})
+            try:
+              with urllib.request.urlopen(request,timeout=19) as r:
+                code=r.status
+                html=r.read(220000).decode("utf8","replace") if uri.endswith("/store/") else ""
+            except urllib.error.HTTPError as exc:code=exc.code;html=""
+            results[uri]=code
+            print("MPW_STORE_GUIDES_BEFORE="+uri+" status="+str(code))
+            if code!=200:raise SystemExit("PRE_RELEASE_SITE_UNHEALTHY "+uri)
+            if uri.endswith("/store/"):
+              if 'id="catalog"' not in html or 'INITIAL COLLECTION' not in html:
+                raise SystemExit("PRE_RELEASE_STORE_CATALOG_NOT_PRESENT")
+              if 'id="mpw-store-ten-guides"' in html:
+                raise SystemExit("GUIDES_ALREADY_LIVE")
+          with open(os.environ['RUNNER_TEMP']+'/mpw-store-ten-baseline.json','w') as f:json.dump(results,f)
+          PY
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Stage only 2 store template files in a private cPanel directory
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          remote="/home/zomorod2/.mpw-store-guides-stage-$GITHUB_RUN_ID"
+          timeout 30s ssh -T -F "$d/config" saeit-cpanel "test ! -e '$remote' && install -d -m 700 '$remote'"
+          timeout 50s scp -q -F "$d/config" core/templates/mojplaywin/store.html \
+            "saeit-cpanel:$remote/store.html"
+          timeout 50s scp -q -F "$d/config" core/templates/mojplaywin/store_ten_buyer_guides_20261018.html \
+            "saeit-cpanel:$remote/store_ten_buyer_guides_20261018.html"
+      - name: Atomically install 10 buyer guides in isolated MojPlayWin template only
+        id: install
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 60s ssh -T -F "$d/config" saeit-cpanel \
+            "python3 - install '$GITHUB_RUN_ID'" \
+            < scripts/mojplaywin_store_ten_guides_isolated_install_20261018.py
+      - name: Verify live ten articles, ten WebP files, catalog and protected URLs
+        id: smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,os,time,urllib.request,urllib.error
+          url="https://mojplaywin.com/store/"
+          good=False
+          for attempt in range(1,6):
+            req=urllib.request.Request(url+"?__guide_release="+os.environ['GITHUB_RUN_ID']+"-"+str(attempt),
+                 headers={"User-Agent":"MojPlayWinStoreContentVerify/1.0","Cache-Control":"no-cache"})
+            try:
+              with urllib.request.urlopen(req,timeout=21) as r:
+                body=r.read(300000).decode('utf8','replace')
+                status=r.status
+              good=(status==200 and body.count('class="mpw-store-guide"')==10
+                 and body.count('id="mpw-store-ten-guides"')==1
+                 and 'id="catalog"' in body and 'INITIAL COLLECTION' in body
+                 and all('/design-preview-20261017/mpw-ten-editorials-20261018/images/market-%02d.webp'%i in body for i in range(1,11)))
+              print("MPW_STORE_TEN_LIVE_ATTEMPT="+str(attempt)+" code="+str(status)+" verified="+str(good))
+              if good:break
+            except Exception as exc:
+              print("MPW_STORE_TEN_LIVE_RETRY="+type(exc).__name__)
+            time.sleep(4)
+          if not good:raise SystemExit("TEN_STORE_GUIDES_NOT_VISIBLE_ROLLBACK")
+          before=json.load(open(os.environ['RUNNER_TEMP']+'/mpw-store-ten-baseline.json'))
+          for uri,old_status in before.items():
+            req=urllib.request.Request(uri,headers={"User-Agent":"MojPlayWinStoreContentSafe/1.0","Cache-Control":"no-cache"})
+            try:
+              with urllib.request.urlopen(req,timeout=18) as r:code=r.status
+            except urllib.error.HTTPError as exc:code=exc.code
+            print("MPW_STORE_GUIDES_AFTER="+uri+" status="+str(code))
+            if code!=old_status:raise SystemExit("PROTECTED_SITE_STATUS_CHANGED "+uri)
+          print("MPW_STORE_TEN_LIGHT_GUIDES_LIVE_VERIFIED=yes")
+          PY
+      - name: Restore original store template on any postinstall smoke failure
+        if: failure() && steps.install.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 50s ssh -T -F "$d/config" saeit-cpanel \
+            "python3 - rollback '$GITHUB_RUN_ID'" \
+            < scripts/mojplaywin_store_ten_guides_isolated_install_20261018.py
+      - name: Remove only source stage, keep restoration backup
+        if: always()
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          remote="/home/zomorod2/.mpw-store-guides-stage-$GITHUB_RUN_ID"
+          if test -f "$d/config"; then
+            ssh -T -F "$d/config" saeit-cpanel \
+              "test -d '$remote' && test ! -L '$remote' && rm -f '$remote/store.html' '$remote/store_ten_buyer_guides_20261018.html' && rmdir '$remote'" || true
+          fi
