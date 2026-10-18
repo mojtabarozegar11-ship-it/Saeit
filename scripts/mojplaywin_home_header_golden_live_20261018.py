@@ -122,7 +122,7 @@ def build(original: str) -> str:
         raise RuntimeError("Footer or trailing content changed")
     if changed.count(TAG) != 1 or changed.count('action="/search/"') != 1:
         raise RuntimeError("Search form verification failed")
-    anchor_pattern = r'<a\\b[^>]*href="/store/"'
+    anchor_pattern = r'<a\b[^>]*href="/store/"'
     if len(re.findall(anchor_pattern, changed)) != len(re.findall(anchor_pattern, original)):
         raise RuntimeError("Existing store targets changed")
     return changed
