@@ -66,7 +66,7 @@ def main(identifier):
         raise RuntimeError("Cannot verify the current cron without changes.")
     if now!=before:
         raise RuntimeError("Concurrent cron edit detected; original unchanged.")
-    new=before.rstrip("\n")+"\n"+line+"\n"
+    new=before+("" if not before or before.endswith("\n") else "\n")+line+"\n"
     result=run([exe,"-"],new)
     if result.returncode!=0:
         raise RuntimeError("Scheduler rejected the MojPlayWin-only additional cron line.")
