@@ -109,6 +109,12 @@ jobs:
           d="$RUNNER_TEMP/mojplaywin-crypto-preflight-ssh"
           timeout 40s ssh -T -F "$d/config" saeit-vps python3 - vps < scripts/mojplaywin_backup_vps_destination_readonly.py
           timeout 40s ssh -T -F "$d/config" saeit-vps python3 - < scripts/mojplaywin_backup_vps_failure_readonly.py
+      - name: Independently inspect GPGv2 backup and manifest file metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-crypto-preflight-ssh"
+          timeout 35s ssh -T -F "$d/config" saeit-vps python3 - < scripts/mojplaywin_gpgv2_state_readonly.py
       - name: Inspect VPS isolated restore capabilities without server writes
         shell: bash
         run: |
