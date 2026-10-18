@@ -152,12 +152,12 @@ def transform(source:str)->str:
       'id="zm-topics-top-icon-20261018"',
       'id="zm-gold-search-toolbar-20261018"',
       '<footer class="footer" id="site-footer"',
-      'ZOMOROD_ORBIT_DATA','<main id="content">'
+      '<main id="content">'
     )
     for marker in required:
         if source.count(marker)!=1:
             raise RuntimeError('Original page feature missing or duplicated: '+marker)
-    if source.count('</head>')!=1 or source.count('</body>')!=1 or len(source)<2200000:
+    if 'ZOMOROD_ORBIT_DATA' not in source or source.count('</head>')!=1 or source.count('</body>')!=1 or len(source)<2200000:
         raise RuntimeError('Unexpected homepage or head')
     if not (source.index('</head>')<source.index('<header class="topbar wrap"')<source.index('<main id="content">')<source.index('<footer class="footer" id="site-footer"')):
         raise RuntimeError('Original page hierarchy changed')
