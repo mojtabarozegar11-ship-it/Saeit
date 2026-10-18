@@ -32,15 +32,16 @@ sys.path.insert(0,str(base))
 started=time.monotonic()
 try:
     from portal.agent_engine import build_output
-    long_body=("This is a synthetic agriculture operations test about planning water use, verifying field records, "
-               "monitoring irrigation performance, comparing costs and reporting uncertainty. ")*9
-    src=[{"title":"Synthetic example source","url":"https://example.org/"}]
-    for kind in ("article","guide","education"):
+    long_body=("این فقط متن ساختگی آزمون برای بررسی گردآوری محتوای پژوهشی در زمینه اقتصاد کشاورزی و مدیریت آبیاری است. "
+               "تمام اطلاعات ارائه شده نمونه فرضی هستند و برای انتشار یا استفاده عملی نیستند. ")*9
+    src=["https://example.org/"]
+    for kind in ("research_digest",):
         try:
-            output=build_output(kind,"Synthetic test: agricultural planning",
-                                "Synthetic test summary for field economics.",long_body,src,"en")
+            output=build_output(kind,"آزمون ساختگی مدیریت اقتصادی آبیاری",
+                                "این خلاصه فقط برای آزمون آفلاین موتور ایجنت‌ها تهیه شده و هیچ ادعای علمی یا تجاری واقعی ندارد.",long_body,src,"fa")
             print(json.dumps({"stage":"V91_AGENT_CONTENT_ENGINE","status":"OK","output_kind":kind,
                               "result_type":type(output).__name__,
+                              "verified_result":isinstance(output,dict) and bool(output.get("body")) and output.get("provenance")=="published_site_article",
                               "elapsed_ms":int((time.monotonic()-started)*1000),
                               "live_content_created":False,
                               "persisted":False}))
