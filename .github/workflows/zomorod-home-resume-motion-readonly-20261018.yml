@@ -1,0 +1,54 @@
+name: Verify homepage offscreen motion resumes when shelves scroll into view
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/zomorod-home-resume-motion-readonly-20261018.yml]
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - name: Read-only dynamic shelf scroll and animation check
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/home-shelf-motion"
+          cd "$RUNNER_TEMP/home-shelf-motion"
+          npm --silent init -y >/dev/null
+          npm --silent install --no-save playwright@1.55.0
+          npx playwright install chromium
+          cat > check.cjs <<'JS'
+          const {chromium}=require('playwright');
+          (async()=>{
+            const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
+            for(const w of [390,1024,1440]){
+              const ctx=await browser.newContext({viewport:{width:w,height:900}});
+              const page=await ctx.newPage();
+              await page.goto('https://zomorodmelal.ir/?__motion_resume='+w,{waitUntil:'domcontentloaded',timeout:50000});
+              await page.locator('.orbit-shelf').first().waitFor({timeout:25000});
+              const get=()=>page.evaluate(()=>{
+               const shelves=[...document.querySelectorAll('.orbit-shelf')];
+               const item=shelves[12],card=item?.querySelector('.topic-card');
+               const r=item?.getBoundingClientRect();
+               return {len:shelves.length,top:r?.top,bottom:r?.bottom,paused:item?.classList.contains('zm-home-shelf-offscreen'),
+                 animation:card&&getComputedStyle(card).animationName,playState:card&&getComputedStyle(card).animationPlayState,
+                 viewport:innerWidth,overflow:Math.max(document.body.scrollWidth,document.documentElement.scrollWidth)-innerWidth};
+              });
+              await page.waitForTimeout(600);
+              const before=await get();
+              await page.locator('.orbit-shelf').nth(12).scrollIntoViewIfNeeded({timeout:30000});
+              await page.waitForTimeout(850);
+              const during=await get();
+              await page.evaluate(()=>scrollTo(0,0));await page.waitForTimeout(850);
+              const after=await get();
+              console.log('HOME_OFFSCREEN_MOTION='+JSON.stringify({w,before,during,after}));
+              if(before.len!==29||!before.paused||during.paused||during.playState==='paused'||!after.paused||after.playState!=='paused'||during.overflow>0)
+                throw Error('Motion resume/pause or overflow regression '+w);
+              await ctx.close();
+            }
+            await browser.close();console.log('MOTION_SCROLL_INVIEW_RESUME_ALL_PASS=yes');
+          })().catch(e=>{console.error(e.stack);process.exit(1)});
+          JS
+          node check.cjs
