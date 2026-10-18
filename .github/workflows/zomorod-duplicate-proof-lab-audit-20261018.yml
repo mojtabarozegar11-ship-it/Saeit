@@ -1,0 +1,124 @@
+name: Zomorod archival duplicate proof and lab details
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/zomorod-duplicate-proof-lab-audit-20261018.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-duplicate-proof-20261018
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - name: Verify duplicate snapshot trees and classify robot lab data
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          test "$HOME" = /home/zomorod2
+          PYTHONDONTWRITEBYTECODE=1 python3 - <<'PY'
+          from pathlib import Path
+          import os,hashlib,subprocess,json,re
+          H=Path.home()
+          source=H/"Saeit/backups"
+          mirror=H/"Saeit-staging/zomorod_json_admin_stage/backups"
+          assert source.is_dir() and mirror.is_dir()
+          names=["communication-core-20261005-051054","pre_phase19_cleanup_20261004-124041","zomorodmelal-live-theme-20261011T015315Z.zip","zomorodmelal-current-original-theme-20261011.zip"]
+          def files_of(base):
+              if base.is_file() and not base.is_symlink():
+                  yield ("@",base)
+              else:
+                  for root,dirs,files in os.walk(base,followlinks=False):
+                      dirs[:]=sorted(d for d in dirs if not (Path(root)/d).is_symlink())
+                      for f in sorted(files):
+                          p=Path(root)/f
+                          if p.is_file() and not p.is_symlink():yield (str(p.relative_to(base)),p)
+          def digest(p):
+              h=hashlib.sha256()
+              with p.open("rb") as f:
+                  for chunk in iter(lambda:f.read(1024*1024),b""):h.update(chunk)
+              return h.hexdigest()
+          for name in names:
+              a=source/name;b=mirror/name
+              if not a.exists() or not b.exists():continue
+              fa=dict(files_of(a));fb=dict(files_of(b))
+              common=set(fa)&set(fb)
+              same=0
+              mismatches=0
+              for k in sorted(common):
+                  sa=fa[k].stat().st_size;sb=fb[k].stat().st_size
+                  if sa==sb and digest(fa[k])==digest(fb[k]):same+=1
+                  else:mismatches+=1
+              print("DUPLICATE_PROOF="+json.dumps({"name":name,"source_files":len(fa),"staging_files":len(fb),"same_hash":same,"mismatched":mismatches,"source_only":len(set(fa)-set(fb)),"staging_only":len(set(fb)-set(fa)),"fully_identical":len(fa)==len(fb)==same},ensure_ascii=False))
+          lab=H/"Saeit/var/mother_robot/lab"
+          entries=sorted((p for p in lab.iterdir() if p.is_dir() and not p.is_symlink()),key=lambda p:p.name)
+          for p in [entries[0],entries[-1]] if entries else []:
+              print("LAB_EXAMPLE="+p.name)
+              res=subprocess.run(["du","-sk","--",str(p)],capture_output=True,text=True,timeout=35)
+              print("LAB_EXAMPLE_KB="+(res.stdout.strip().split()[0] if res.stdout.strip() else "NA"))
+              for child in p.iterdir():
+                  if child.is_dir() and not child.is_symlink():
+                      q=subprocess.run(["du","-sk","--",str(child)],capture_output=True,text=True,timeout=35)
+                      print("LAB_CHILD="+json.dumps({"generation":p.name,"path":child.name,"kilobytes":int(q.stdout.split()[0]) if q.stdout.strip() else -1}))
+                  elif child.is_file():print("LAB_FILE="+json.dumps({"generation":p.name,"name":child.name,"bytes":child.stat().st_size}))
+          print("RESEARCH_DUPLICATE_AUDIT_COMPLETE=yes")
+          PY
+          REMOTE
+      - name: Cleanup temp credentials
+        if: always()
+        shell: bash
+        run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
