@@ -1,0 +1,214 @@
+name: MojPlayWin Senior Advisory Board exact About-only publication
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/mojplaywin-senior-advisory-live-20261018.yml'
+permissions:
+  contents: read
+concurrency:
+  group: mojplaywin-about-exact-static-prod
+  cancel-in-progress: false
+jobs:
+  publish-advisory-about-only:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.ref == 'refs/heads/main' &&
+      github.event_name == 'push' &&
+      contains(github.event.head_commit.message, '[approved-mpw-senior-advisory-20261018]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify isolated photo, non-deceptive profile captions, and reversible patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_senior_advisory_atomic_20261018.py
+          python3 - <<'PY'
+          from pathlib import Path
+          import importlib.util, hashlib
+          script='scripts/mpw_senior_advisory_atomic_20261018.py'
+          spec=importlib.util.spec_from_file_location('advisory',script)
+          m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
+          photo=Path('assets/mpw-senior-advisory-20261018.webp').read_bytes()
+          assert len(photo)==396644
+          assert hashlib.sha256(photo).hexdigest()==m.SHA_IMAGE
+          assert photo[:4]==b'RIFF' and photo[8:12]==b'WEBP'
+          section=m.validate_snippet(Path('content/mpw_senior_advisory_board_20261018.html').read_bytes())
+          assert len(section)<16000
+          original='<html><main><h1>About MojPlayWin</h1><section id="mpw-meet-team-20261018">'+' '.join(m.PRESENT_MARKERS)+''.join('<li class="mpw-team-card"><h3>'+n+'</h3></li>' for n in m.STAFF)+'</section></main></html>'
+          new=m.compose(original,section)
+          assert new.count('class="mpw-advisory-card"')==10
+          assert new.count('class="mpw-team-card"')==10
+          assert new.count('<h1')==1
+          assert new.replace('\n<!-- '+m.MARKER+' -->\n'+section+'\n','',1)==original
+          assert 'not independently verified' in new
+          print('ADVISORY_SCOPE_REVERSIBILITY_TEST=PASS')
+          PY
+      - name: Capture current protected public route health
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,os
+          from urllib.request import Request,urlopen
+          from urllib.error import HTTPError
+          root='https://mojplaywin.com'
+          paths=['/','/about/','/store/','/about/mojtaba-rozegar/',
+                 '/mojtaba.roozegar/','/mojtaba.roozegar/about/',
+                 '/farnaz/','/saman/','/picm/','/taniya/','/zahra/']
+          baseline={}
+          for path in paths:
+            url=root+path
+            request=Request(url,headers={'User-Agent':'MPWAdvisoryBaseline/1.0','Cache-Control':'no-cache'})
+            try:
+              with urlopen(request,timeout=18) as response:code=response.status
+            except HTTPError as err:code=err.code
+            except Exception as ex:raise SystemExit('BASELINE_NETWORK_ERROR '+url+' '+type(ex).__name__)
+            baseline[url]=code
+            print('ADVISORY_BEFORE='+url+' '+str(code))
+          for path in ('/','/about/','/store/','/mojtaba.roozegar/','/farnaz/'):
+            if baseline[root+path]!=200:raise SystemExit('BASELINE_NOT_HEALTHY '+path)
+          with open(os.environ['RUNNER_TEMP']+'/mpw-advisory-baseline.json','w') as fh:json.dump(baseline,fh)
+          PY
+      - name: Configure authenticated pinned VPS relay to exact cPanel account
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-advisory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Stage only original advisor section and approved WebP in private account home
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-advisory-ssh"
+          scp -q -F "$d/config" content/mpw_senior_advisory_board_20261018.html \
+            "saeit-cpanel:/home/zomorod2/.mpw-advisory-section-$GITHUB_RUN_ID.html"
+          scp -q -F "$d/config" assets/mpw-senior-advisory-20261018.webp \
+            "saeit-cpanel:/home/zomorod2/.mpw-advisory-image-$GITHUB_RUN_ID.webp"
+      - name: Append advisor board and image to About only with transactional rollback
+        id: install
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-advisory-ssh"
+          digest=$(sha256sum content/mpw_senior_advisory_board_20261018.html | awk '{print $1}')
+          asset_digest=$(sha256sum assets/mpw-senior-advisory-20261018.webp | awk '{print $1}')
+          timeout 65s ssh -T -F "$d/config" saeit-cpanel \
+            "python3 - install '$GITHUB_RUN_ID' '$digest' '$asset_digest'" \
+            < scripts/mpw_senior_advisory_atomic_20261018.py
+      - name: Verify new section live, download exact image, and check protected URLs
+        id: smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib,json,os,re,time
+          from urllib.request import Request,urlopen
+          from urllib.error import HTTPError
+          root='https://mojplaywin.com'
+          page=root+'/about/'
+          photo=root+'/design-preview-20261017/mpw-ten-editorials-20261018/pages/mpw-senior-advisory-20261018.webp'
+          baseline=json.load(open(os.environ['RUNNER_TEMP']+'/mpw-advisory-baseline.json'))
+          expected=('mpw-senior-advisory-20261018','MPW_SENIOR_ADVISORY_ADDON_20261018',
+                    'not independently verified','Senior Advisory Board',
+                    'Dr. Margaret Wilson','Prof. Thomas Bennett','Dr. Susan Clarke',
+                    'Prof. James Anderson','Dr. Helen Morris','Prof. Robert Hughes',
+                    'Dr. Patricia Moore','Prof. William Carter','Dr. Linda Foster',
+                    'Prof. Richard Taylor','MPW_ABOUT_RESEARCH_80_20_V1',
+                    'COMPLEMENTARY SPECIALISM 30','Original by Default',
+                    'mpw-meet-team-20261018','mpw-team-gallery-hq-20261018.webp')
+          ok=False
+          for i in range(1,6):
+            try:
+              req=Request(page+'?__advisory='+os.environ['GITHUB_RUN_ID']+'-'+str(i),headers={'User-Agent':'MPWAdvisoryLiveQA/1.0','Cache-Control':'no-cache'})
+              with urlopen(req,timeout=22) as resp:
+                html=resp.read(1800000).decode('utf-8','replace');code=resp.status
+              ok=(code==200 and all(x in html for x in expected)
+                  and html.count('class="mpw-advisory-card"')==10
+                  and html.count('class="mpw-team-card"')==10
+                  and len(re.findall(r'<h1\b',html,re.I))==1)
+              print('ADVISORY_LIVE_ATTEMPT='+str(i)+' ok='+str(ok))
+              if ok:break
+            except Exception as exc:print('ADVISORY_LIVE_RETRY='+type(exc).__name__)
+            time.sleep(3)
+          if not ok:raise RuntimeError('ADVISORY_NOT_VISIBLE_WITH_TEAM_PRESERVED')
+          req=Request(photo+'?run='+os.environ['GITHUB_RUN_ID'],headers={'User-Agent':'MPWAdvisoryLiveQA/1.0','Cache-Control':'no-cache'})
+          with urlopen(req,timeout=22) as resp:
+            image=resp.read(800000);code=resp.status;mime=resp.headers.get('Content-Type','')
+          digest=hashlib.sha256(image).hexdigest()
+          print('ADVISORY_PUBLIC_WEBP='+str(code)+' bytes='+str(len(image))+' type='+mime+' sha='+digest)
+          if code!=200 or digest!='1d8b4f232e7938064142b51d07b40345a079a205e9381c05cbcc366b073be70e' or not image.startswith(b'RIFF'):
+            raise RuntimeError('ADVISORY_IMAGE_NOT_PUBLIC_OR_MISMATCH')
+          for url,previous in baseline.items():
+            req=Request(url,headers={'User-Agent':'MPWAdvisoryLiveQA/1.0','Cache-Control':'no-cache'})
+            try:
+              with urlopen(req,timeout=19) as resp:now=resp.status
+            except HTTPError as e:now=e.code
+            if now!=previous:raise RuntimeError('PROTECTED_URL_STATUS_CHANGED '+url)
+            print('ADVISORY_PROTECTED_UNCHANGED '+url+' '+str(now))
+          print('MPW_SENIOR_ADVISORY_LIVE_VERIFIED=YES')
+          PY
+          d="$RUNNER_TEMP/mpw-advisory-ssh"
+          timeout 30s ssh -T -F "$d/config" saeit-cpanel \
+            "python3 - status '$GITHUB_RUN_ID'" \
+            < scripts/mpw_senior_advisory_atomic_20261018.py
+      - name: Roll back only added advisory section and image if live QA fails
+        if: failure() && steps.install.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-advisory-ssh"
+          timeout 55s ssh -T -F "$d/config" saeit-cpanel \
+            "python3 - rollback '$GITHUB_RUN_ID'" \
+            < scripts/mpw_senior_advisory_atomic_20261018.py
+      - name: Clean only private temporary advisory staging assets
+        if: always()
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/mpw-advisory-ssh"
+          if test -f "$d/config"; then
+            ssh -T -F "$d/config" -o ConnectTimeout=10 saeit-cpanel \
+              "test ! -L /home/zomorod2/.mpw-advisory-section-$GITHUB_RUN_ID.html && test ! -L /home/zomorod2/.mpw-advisory-image-$GITHUB_RUN_ID.webp && rm -f -- /home/zomorod2/.mpw-advisory-section-$GITHUB_RUN_ID.html /home/zomorod2/.mpw-advisory-image-$GITHUB_RUN_ID.webp" || true
+          fi
