@@ -1,6 +1,8 @@
 from django.contrib import admin
 from django.contrib.admin import ModelAdmin
-from django.http import HttpResponseRedirect
+from django.http import HttpResponseRedirect, Http404
+from django.core.exceptions import PermissionDenied
+from mpw_v91_port.runtime import valid_main_host
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
 
@@ -94,7 +96,6 @@ admin.site.register([
     Evidence,
     Finding,
     Report,
-    Agent,
     AgentCapability,
     AgentTask,
     ChatMessage,
@@ -104,6 +105,52 @@ admin.site.register([
     Product,
     Order,
 ])
+
+
+@admin.register(Agent)
+class MojPlayWinAwareAgentAdmin(ModelAdmin):
+    """Preserve existing Agent CRUD; add isolated main-site performance view."""
+
+    list_display = ("code", "name", "active", "risk_level")
+    list_filter = ("active", "risk_level")
+    search_fields = ("code", "name", "mission")
+    change_list_template = "admin/core/agent/change_list.html"
+
+    def get_urls(self):
+        return [
+            path(
+                "mojplaywin-v91-performance/",
+                self.admin_site.admin_view(self.mpw_v91_performance),
+                name="core_agent_mpw_v91_performance",
+            )
+        ] + super().get_urls()
+
+    def changelist_view(self, request, extra_context=None):
+        return super().changelist_view(
+            request,
+            extra_context={
+                **(extra_context or {}),
+                "mpw_agents_visible": valid_main_host(request.get_host()),
+            },
+        )
+
+    def mpw_v91_performance(self, request):
+        if not valid_main_host(request.get_host()):
+            raise Http404
+        if not self.has_view_or_change_permission(request):
+            raise PermissionDenied
+        context={
+            **self.admin_site.each_context(request),
+            "title": "مدیریت و نمودار عملکرد ایجنت‌های MojPlayWin",
+            "opts": self.model._meta,
+            "has_view_permission": True,
+        }
+        response=TemplateResponse(
+            request,"admin/core/agent/mpw_v91_performance.html",context,
+        )
+        response["Cache-Control"]="private, no-store, max-age=0"
+        response["X-Robots-Tag"]="noindex, nofollow, noarchive"
+        return response
 
 @admin.register(EducationTrack)
 class EducationTrackAdmin(ModelAdmin):
