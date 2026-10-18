@@ -58,7 +58,14 @@ def branded_store_dispatch(request):
  return branded_store(request)
 
 def store(request):
- return render(request,"mojplaywin/store.html",{"products":PRODUCTS})
+ from .mojplaywin_crypto_gateway import available_offers, DENOMINATORS
+ from decimal import Decimal
+ offers = [
+  {"id": x.pk, "title": x.product.title, "asset": x.asset,
+   "amount": f"{Decimal(x.atomic_amount) / DENOMINATORS[x.asset]:f}"}
+  for x in available_offers()
+ ]
+ return render(request,"mojplaywin/store.html",{"products":PRODUCTS, "crypto_offers":offers})
 
 def venture(request, slug):
  if not _is_mojplaywin(request):
