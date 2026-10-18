@@ -1,0 +1,107 @@
+name: Prune unused Node compile cache from CloudLinux temp
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/zomorod-remove-old-node-compile-cache.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-node-compile-cache-clean
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - name: Remove only rebuildable Node compile cache after live-dependency check
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 - <<'PY'
+          from pathlib import Path
+          import os,subprocess,shutil,time
+          H=Path.home()
+          assert H==Path("/home/zomorod2")
+          root=H/".cagefs/tmp/node-compile-cache"
+          assert root.is_dir() and not root.is_symlink()
+          assert (H/"Saeit/manage.py").is_file() and (H/"Saeit-staging/manage.py").is_file()
+          assert time.time()-root.stat().st_mtime>86400
+          p=subprocess.run(["ps","-u","zomorod2","-o","args="],capture_output=True,text=True,timeout=10)
+          c=subprocess.run(["crontab","-l"],capture_output=True,text=True,timeout=10)
+          assert str(root) not in p.stdout and str(root) not in c.stdout
+          for here,ds,fs in os.walk(root,followlinks=False):
+              for name in ds+fs:assert not (Path(here)/name).is_symlink()
+          r=subprocess.run(["du","-sk",str(root)],capture_output=True,text=True,timeout=25,check=True)
+          size=int(r.stdout.split()[0])*1024
+          assert 2_000_000<size<10_000_000
+          shutil.rmtree(root)
+          assert not root.exists()
+          print("TRANSIENT_NODE_COMPILE_CACHE_REMOVED=yes")
+          print("TRANSIENT_NODE_COMPILE_CACHE_SAVED="+str(size))
+          print("WEB_APPS_AND_NODE_SOURCE_PRESERVED=yes")
+          PY
+          REMOTE
+      - name: Verify protected live domains
+        shell: bash
+        run: |
+          set -euo pipefail
+          for url in "https://zomorodmelal.ir/" "https://zomorodmelal.ir/agents/" "https://mojplaywin.com/"; do
+            code="$(curl -sS --max-time 15 -o /dev/null -w '%{http_code}' "$url" || true)"
+            echo "NODE_CACHE_CLEAN_SITE=$url:$code"
+            test "$code" = 200
+          done
+      - name: Clean runner credentials
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
