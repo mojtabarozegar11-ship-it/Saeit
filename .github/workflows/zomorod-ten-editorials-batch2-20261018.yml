@@ -84,7 +84,7 @@ jobs:
             assert b.count('zm-ten-specialists-photo-editorials-batch2-20261018')==1
             assert b.startswith(a.split('</main>')[0])
             assert b.endswith('</main>'+a.split('</main>')[1])
-            assert b.count('<img src="/static/site/zomorod-ten-editorials-batch2-batch2/')==1
+            assert b.count('<img src="/static/site/zomorod-ten-editorials-batch2/')==1
             assert b.count('<h1>')==1
             assert len(b)>len(a)+1250
           print('ALL_TEN_ORIGINALS_PRESERVED_BYTE_FOR_BYTE=yes')
@@ -296,7 +296,7 @@ jobs:
             assert asset.is_file() and hashlib.sha256(asset.read_bytes()).hexdigest()==p['sha256']
           print('ALL_TEN_DISTINCT_LOCAL_PHOTOS_SHA_VERIFIED=yes')
           PY
-          code="$(curl -LsS --max-time 25 -o "$backup/image-check.webp" -w '%{http_code}' "https://zomorodmelal.ir/static/site/zomorod-ten-editorials-batch2-batch2/wheat.webp?media=$sha" || true)"
+          code="$(curl -LsS --max-time 25 -o "$backup/image-check.webp" -w '%{http_code}' "https://zomorodmelal.ir/static/site/zomorod-ten-editorials-batch2/wheat.webp?media=$sha" || true)"
           echo LIVE_PUBLISHED_PHOTO_HTTP="$code"
           test "$code" = 200
           test "$(wc -c < "$backup/image-check.webp")" -gt 15000
