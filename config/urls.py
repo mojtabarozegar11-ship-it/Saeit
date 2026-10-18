@@ -7,7 +7,6 @@ from command_center.views import dashboard as staff_dashboard
 
 from core.views import home, platform_page, taniya_studio
 from core.mojplaywin_views import venture
-from core.mojplaywin_v91_agent_views import mojplaywin_v91_agent_preview
 from core.commerce_views import store_home, auctions_home
 from core.seo_views import site_search, robots_txt, sitemap_xml
 from core.weather_views import weather
@@ -41,7 +40,6 @@ urlpatterns = [
     path("economy/", lambda request: platform_page(request, "economy"), name="economy"),
     path("studio/", lambda request: platform_page(request, "studio"), name="studio"),
     path("taniya/", taniya_studio, name="taniya_studio"),
-    path("agents/v91/review/", mojplaywin_v91_agent_preview, name="mojplaywin_v91_review"),
     path("agents/", lambda request: platform_page(request, "agents"), name="agents"),
     path("search/", site_search, name="site_search"),
     path("robots.txt", robots_txt, name="robots_txt"),
