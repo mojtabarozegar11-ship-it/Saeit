@@ -206,8 +206,15 @@ def agent_robot(crontab):
     require(report.get("active_private_generation")==65 and
             report.get("status")=="gen65_operational_private",
             "GEN65_RUNTIME_OFFLINE")
-    require(modules.get("modules_import_executed")==77,
-            "ORIGINAL_77_MODULES_NOT_IMPORTED")
+    require(modules.get("modules_import_executed")==77
+            and modules.get("capability_namespaces_active")==77
+            and modules.get("functional_probes_executed",0)>=14
+            and isinstance(modules.get("per_module_capability_registry"),list)
+            and len(modules["per_module_capability_registry"])==77
+            and all(row.get("loaded") is True
+                    and row.get("safe_scope")=="read_only_private"
+                    for row in modules["per_module_capability_registry"]),
+            "ORIGINAL_77_MODULES_NOT_FUNCTIONALLY_AVAILABLE")
     require(site.get("total_agents")==11 and len(site.get("runs",[]))==11,
             "ELEVEN_AUDIT_ROLES_NOT_PRESENT")
     now=datetime.now(timezone.utc)
@@ -216,7 +223,10 @@ def agent_robot(crontab):
     return {"name":"agent_runtime_watch","status":"ok" if not issues else "warning",
             "expected_schedules":len(required),"schedule_mismatches":issues,
             "gen65_age_seconds":int(age),"v11_roles":11,
-            "legacy_modules_loaded":77,"mutations":0}
+            "legacy_modules_loaded":77,
+            "legacy_modules_active_capabilities":77,
+            "legacy_module_functional_contracts":modules["functional_probes_executed"],
+            "mutations":0}
 
 def cycle():
     require(private(PRIVATE) and private(EVO) and private(STAGE),"ROBOT_PRIVATE_CYCLE_SCOPE")
