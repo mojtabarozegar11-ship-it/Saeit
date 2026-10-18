@@ -115,6 +115,19 @@ jobs:
           set -euo pipefail
           d="$RUNNER_TEMP/mojplaywin-crypto-preflight-ssh"
           timeout 40s ssh -T -F "$d/config" saeit-vps python3 - < scripts/mojplaywin_isolated_restore_capabilities_readonly.py
+      - name: Test cPanel-to-VPS simultaneous SSH pipe with synthetic 64KiB only
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-crypto-preflight-ssh"
+          outcome="$(
+            timeout 45s ssh -T -F "$d/config" saeit-cpanel "python3 -c 'import sys; sys.stdout.buffer.write(b\"A\" * 65536)'" |
+            timeout 45s ssh -T -F "$d/config" saeit-vps "python3 -c 'import sys; b=sys.stdin.buffer.read(); print(\"SYNTHETIC_STREAM_PASS=\" + str(len(b)==65536 and b==b\"A\"*65536))'"
+          )"
+          test "$outcome" = "SYNTHETIC_STREAM_PASS=True"
+          echo "$outcome"
+          echo "SOURCE_DATA_READ=false"
+          echo "BACKUP_WRITTEN=false"
       - name: Diagnose AES-GCM using synthetic data solely in VPS memory
         shell: bash
         run: |
