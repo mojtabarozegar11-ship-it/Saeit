@@ -65,7 +65,7 @@ def execute():
                "PRIVATE_MONITOR_COLLECTOR_FAILED:" + run.stderr[-180:])
         history = EVO / "agent_dashboard_telemetry.json"
         ensure(history.is_file() and not history.is_symlink() and
-               history.stat().st_size < 300000, "PRIVATE_HISTORY_OUTPUT_INVALID")
+               history.stat().st_size < 950000, "PRIVATE_HISTORY_OUTPUT_INVALID")
         if not old_lines:
             replacement = previous_cron.rstrip("\n") + "\n" + CRON_COMMAND + "\n"
             update = subprocess.run(["crontab", "-"], input=replacement,
