@@ -1,0 +1,207 @@
+name: MojPlayWin seven original images directly after Senior Advisory Board
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/mojplaywin-seven-gallery-after-advisors-20261019.yml'
+permissions:
+  contents: read
+concurrency:
+  group: mojplaywin-about-exact-static-prod
+  cancel-in-progress: false
+jobs:
+  publish-seven-after-advisors-only:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.ref == 'refs/heads/main' &&
+      github.event_name == 'push' &&
+      contains(github.event.head_commit.message, '[approved-mpw-gallery-seven-20261019]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 17
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify seven source images and reversible insertion directly after advisors
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_seven_gallery_atomic_20261019.py
+          python3 - <<'PY'
+          import hashlib,importlib.util
+          from pathlib import Path
+          p='scripts/mpw_seven_gallery_atomic_20261019.py'
+          spec=importlib.util.spec_from_file_location('gallery7',p)
+          m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
+          snippet=m.check_section(Path('content/mpw_seven_team_gallery_20261019.html').read_bytes())
+          assert len(m.FILES)==7
+          assert len({x[1] for x in m.FILES})==7
+          for name,sha,size in m.FILES:
+            data=Path('assets/'+name).read_bytes()
+            assert len(data)==size
+            assert hashlib.sha256(data).hexdigest()==sha
+            assert data[:4]==b'RIFF' and data[8:12]==b'WEBP'
+          old='<html><main><h1>About</h1>'+m.FOUNDER+'<div id="mpw-meet-team-20261018"></div>'+'class="mpw-team-card"'*10+'\n'+m.ADVISOR+'\n<section id="mpw-senior-advisory-20261018">'+'class="mpw-advisory-card"'*10+'</section>\n'+m.BEFORE+'<div id="mpw-international-team-20261018"></div>'+'class="mpw-intl-card"'*10+'</main></html>'
+          new=m.compose(old,snippet).decode()
+          marker='\n<!-- '+m.MARKER+' -->\n'+snippet+'\n'
+          assert new.replace(marker,'',1)==old
+          assert new.count('class="mpw-seven-item"')==7
+          assert new.index(m.ADVISOR)<new.index(m.MARKER)<new.index(m.BEFORE)
+          print('SEVEN_ORIGINAL_GALLERY_IMAGES_UNIQUE_AND_POSITIONED_AFTER_ADVISORS_PREFLIGHT=PASS')
+          PY
+      - name: Collect public baseline on main domain and protected subsite routes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,os
+          from urllib.request import Request,urlopen
+          from urllib.error import HTTPError
+          base='https://mojplaywin.com'
+          paths=['/','/about/','/store/','/about/mojtaba-rozegar/',
+                 '/mojtaba.roozegar/','/mojtaba.roozegar/about/',
+                 '/farnaz/','/saman/','/picm/','/taniya/','/zahra/']
+          seen={}
+          for path in paths:
+            url=base+path
+            try:
+              with urlopen(Request(url,headers={'User-Agent':'MPWSevenGalleryBaseline/1.0','Cache-Control':'no-cache'}),timeout=17) as r:status=r.status
+            except HTTPError as e:status=e.code
+            seen[url]=status
+            print('SEVEN_GALLERY_BEFORE '+url+' '+str(status))
+          for path in ('/','/about/','/store/','/mojtaba.roozegar/','/farnaz/'):
+            if seen[base+path]!=200:raise SystemExit('CRITICAL_BASELINE_NOT_200 '+path)
+          with open(os.environ['RUNNER_TEMP']+'/mpw-seven-gallery-baseline.json','w') as f:json.dump(seen,f)
+          PY
+      - name: Establish trusted host-key checked GitHub to VPS to cPanel relay
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-gallery7-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Stage one gallery HTML file and seven WebPs in private home only
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-gallery7-ssh"
+          scp -q -F "$d/config" content/mpw_seven_team_gallery_20261019.html \
+            "saeit-cpanel:/home/zomorod2/.mpw-seven-stage-$GITHUB_RUN_ID.html"
+          for i in 01 02 03 04 05 06 07; do
+            timeout 38s scp -q -F "$d/config" "assets/mpw-team-gallery-seven-$i-20261019.webp" \
+              "saeit-cpanel:/home/zomorod2/.mpw-seven-stage-$GITHUB_RUN_ID-$i.webp"
+          done
+      - name: Publish seven images after advisors with exact atomic backup and rollback
+        id: install
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-gallery7-ssh"
+          html_sha=$(sha256sum content/mpw_seven_team_gallery_20261019.html | awk '{print $1}')
+          timeout 80s ssh -T -F "$d/config" saeit-cpanel \
+            "python3 - install '$GITHUB_RUN_ID' '$html_sha'" \
+            < scripts/mpw_seven_gallery_atomic_20261019.py
+      - name: Verify live position, all seven assets, founder and 30 profiles, and all protected URLs
+        id: smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib,json,os,re,time
+          from urllib.request import Request,urlopen
+          from urllib.error import HTTPError
+          root='https://mojplaywin.com'
+          base=root+'/design-preview-20261017/mpw-ten-editorials-20261018/pages/'
+          baseline=json.load(open(os.environ['RUNNER_TEMP']+'/mpw-seven-gallery-baseline.json'))
+          files=[('01','287e58749c39a6152997137a91167e9c6651a38006f21841fc2ae49a4fd32b24',227418),
+            ('02','522fa3c5a6de725b1fe0660fac4263c5c4f7a37a4bc5c24169a183ab521d11d1',267264),
+            ('03','5fc80738105abd63ad43e01d5fe599d49c7de8a4ab9c776f9acb34734555bc57',246978),
+            ('04','e2ddcc071906d54188e506cb183749db09787f1ffba0df5921ef8e3a55f10e27',216460),
+            ('05','5cebb8279a8fe033ee121fb444f823274255fc7cb6d1597d63e0b1faae6dfcc5',241834),
+            ('06','7d288e2e1d0f4e352245b4d42f018243fb1d869e49d28d6534c8fbb2e9cdff58',226494),
+            ('07','48c09f3b7d7588a80b9fed379ea00a008faf8af2f0999b2bafa23f9ad2dd3937',249136)]
+          ok=False
+          for attempt in range(1,6):
+            try:
+              request=Request(root+'/about/?_mpw_gallery7='+os.environ['GITHUB_RUN_ID']+'-'+str(attempt),headers={'User-Agent':'MPWSevenGalleryLiveAudit/1.0','Cache-Control':'no-cache'})
+              with urlopen(request,timeout=21) as r:html=r.read(1700000).decode('utf8','replace');status=r.status
+              assert status==200
+              pos=[html.index(s) for s in ('mpw-founder-spotlight-20261019','mpw-meet-team-20261018','mpw-senior-advisory-20261018','MPW_SEVEN_IMAGES_AFTER_ADVISORS_20261019','mpw-international-team-20261018')]
+              ok=(pos==sorted(pos) and html.count('class="mpw-seven-item"')==7 and html.count('class="mpw-team-card"')==10 and html.count('class="mpw-advisory-card"')==10 and html.count('class="mpw-intl-card"')==10 and len(re.findall(r'<h1\b',html,re.I))==1)
+              for i,_,_ in files:ok=ok and html.count('mpw-team-gallery-seven-'+i+'-20261019.webp')==2
+              print('MPW_GALLERY7_PUBLIC_ATTEMPT='+str(attempt)+' verified='+str(ok))
+              if ok:break
+            except Exception as e:print('MPW_GALLERY7_PUBLIC_RETRY='+type(e).__name__)
+            time.sleep(3)
+          if not ok:raise RuntimeError('SEVEN_IMAGES_NOT_PRESENT_AFTER_ADVISORS_WITH_ALL_30_PROFILES')
+          for i,digest,size in files:
+            req=Request(base+'mpw-team-gallery-seven-'+i+'-20261019.webp?_run='+os.environ['GITHUB_RUN_ID'],headers={'User-Agent':'MPWSevenGalleryLiveAudit/1.0','Cache-Control':'no-cache'})
+            with urlopen(req,timeout=22) as r:data=r.read(350000);status=r.status;typ=r.headers.get('Content-Type','')
+            verified=status==200 and len(data)==size and hashlib.sha256(data).hexdigest()==digest and data[:4]==b'RIFF' and typ.startswith('image/')
+            print('MPW_GALLERY7_IMAGE_'+i+'='+str(status)+' bytes='+str(len(data))+' verified='+str(verified))
+            if not verified:raise RuntimeError('GALLERY_IMAGE_NOT_PUBLIC_'+i)
+          for u,before in baseline.items():
+            req=Request(u,headers={'User-Agent':'MPWSevenGalleryLiveAudit/1.0','Cache-Control':'no-cache'})
+            try:
+              with urlopen(req,timeout=18) as r:now=r.status
+            except HTTPError as e:now=e.code
+            if now!=before:raise RuntimeError('PROTECTED_PATH_CHANGED '+u)
+            print('MPW_GALLERY7_PROTECTED_UNCHANGED '+u+' '+str(now))
+          print('MPW_SEVEN_GALLERY_LIVE_VERIFIED=YES')
+          PY
+          timeout 32s ssh -T -F "$RUNNER_TEMP/mpw-gallery7-ssh/config" saeit-cpanel \
+            "python3 - status '$GITHUB_RUN_ID'" \
+            < scripts/mpw_seven_gallery_atomic_20261019.py
+      - name: Roll back only seven image gallery if install or live smoke fails
+        if: failure() && steps.install.outcome == 'success'
+        shell: bash
+        run: |
+          timeout 70s ssh -T -F "$RUNNER_TEMP/mpw-gallery7-ssh/config" saeit-cpanel \
+            "python3 - rollback '$GITHUB_RUN_ID'" < scripts/mpw_seven_gallery_atomic_20261019.py
+      - name: Remove only uniquely named private staged assets for this run
+        if: always()
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/mpw-gallery7-ssh"
+          if test -f "$d/config"; then
+            timeout 45s ssh -T -F "$d/config" saeit-cpanel \
+              "python3 -c 'from pathlib import Path;h=Path(\"/home/zomorod2\");r=\"$GITHUB_RUN_ID\";paths=[h/f\".mpw-seven-stage-{r}.html\"]+[h/f\".mpw-seven-stage-{r}-{i:02}.webp\" for i in range(1,8)];[(p.unlink() if p.is_file() and not p.is_symlink() else None) for p in paths]'" || true
+          fi
+          rm -rf -- "$RUNNER_TEMP/mpw-gallery7-ssh"
