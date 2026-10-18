@@ -19,7 +19,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-          ref: 2ed7ac6ec6009402c5e847842871b6e8c655e646
+          ref: f2894133675429e874293cf8add19bb2570deb3a
       - name: Prove guarded static article publishing and package pinned private files
         shell: bash
         run: |
@@ -126,10 +126,10 @@ jobs:
               except Exception as error:
                   print("PHYSICAL_STATIC_READBACK",static_path,type(error).__name__)
           expected={
-            "/mpw-editorial/":"Knowledge &amp; Insights",
-            "/mpw-editorial/agents/":"AI &amp; Agent Systems",
-            "/mpw-editorial/agents/ai-evaluation-before-deployment/":"An AI Evaluation Plan Before Deployment",
-            "/mpw-editorial/agents/documenting-ai-assisted-decisions/":"Documenting AI-Assisted Decisions Without Losing Accountability"}
+            "/mpw-editorial/index.html":"Knowledge &amp; Insights",
+            "/mpw-editorial/agents/index.html":"AI &amp; Agent Systems",
+            "/mpw-editorial/agents/ai-evaluation-before-deployment/index.html":"An AI Evaluation Plan Before Deployment",
+            "/mpw-editorial/agents/documenting-ai-assisted-decisions/index.html":"Documenting AI-Assisted Decisions Without Losing Accountability"}
           for path,marker in expected.items():
               passed=False
               for attempt in range(8):
