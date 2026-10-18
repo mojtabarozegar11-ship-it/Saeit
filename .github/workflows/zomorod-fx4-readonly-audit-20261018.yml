@@ -86,6 +86,23 @@ jobs:
             for m in list(re.finditer(re.escape(kw),s,re.I))[:2]:
               print('FX4_ANIMATION '+kw+' '+s[m.start():m.start()+210].replace('\n',' ')[:210])
           PY
+      - name: Read only exact card CSS selectors and dynamic DOM class names
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 45s ssh -T -F "$RUNNER_TEMP/zomorod-baseline-inventory/config" saeit-cpanel 'python3 -' <<'PY'
+          from pathlib import Path
+          from collections import Counter
+          import re
+          s=Path('/home/zomorod2/public_html/index.html').read_text('utf8')
+          patterns=['card','tile','row','icon','orbital','satellite','rail']
+          for stem in patterns:
+            found=re.findall(r'(?<![\w.-])\.([a-zA-Z][\w-]*'+stem+r'[\w-]*)\s*(?::[\w-]+)?\s*[{,:>\s]',s)
+            filtered=[v for v in found if len(v)<65]
+            print('FX4_CARD_CLASS_FAMILY='+stem+' '+repr(Counter(filtered).most_common(35)))
+          for word in ['createElement(\'button\')','createElement("button")','className =','className=','orbit-card','topic-card','topic-tile','data-topic']:
+            print('FX4_JS_KEY '+word+' found='+str(s.find(word)))
+          PY
       - name: Cleanup SSH keys
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/zomorod-baseline-inventory"
