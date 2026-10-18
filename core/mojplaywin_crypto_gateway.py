@@ -69,7 +69,7 @@ def _private_file(offer):
 def available_offers():
     if not getattr(settings, "MOJPLAYWIN_CRYPTO_ENABLED", False):
         return []
-    offers = MojCryptoOffer.objects.select_related("product").filter(active=True, product__active=True)
+    offers = MojCryptoOffer.objects.select_related("product").filter(active=True, product__active=True, product__knowledge_article__published=True)
     return [x for x in offers if configured(x.asset) and _file_ready(x)]
 
 
@@ -113,7 +113,7 @@ def buy(request, offer_id):
         return auth
     offer = get_object_or_404(
         MojCryptoOffer.objects.select_related("product"),
-        pk=offer_id, active=True, product__active=True,
+        pk=offer_id, active=True, product__active=True, product__knowledge_article__published=True,
     )
     destination = _address(offer.asset)
     _private_file(offer)  # Never sell a missing digital download.
