@@ -1,4 +1,5 @@
 name: MojPlayWin cPanel Passenger inventory (read only)
+# Read-only verification rerun for scoped /about/ publication assessment, 2026-10-18. No host writes.
 on:
   push:
     branches: [main]
