@@ -42,6 +42,19 @@ for label,p in (("htaccess",ROOT/".htaccess"),("shared_urlconf",SHARED/"config"/
         "excluded_subsite_prefixes":[x for x in prefixes[2:] if re.search(re.escape(x),s,re.I)],
     }
     result[label]={"status":"read_ok","sha256_prefix":hashlib.sha256(s.encode()).hexdigest()[:16],**patterns}
+# Classify rewrite bypass for real directories without disclosing raw rules.
+ht=ROOT/".htaccess"
+if ht.is_file() and not ht.is_symlink() and ht.stat().st_size<100000:
+    ht_lines=ht.read_text(encoding="utf8",errors="replace").splitlines()
+    meaningful=[ln.strip() for ln in ht_lines if ln.strip() and not ln.lstrip().startswith("#")]
+    result["rewrite_policy"]={
+        "request_file_negative_condition":sum(bool(re.search(r"RewriteCond.*REQUEST_FILENAME.*!-f",ln,re.I)) for ln in meaningful),
+        "request_dir_negative_condition":sum(bool(re.search(r"RewriteCond.*REQUEST_FILENAME.*!-d",ln,re.I)) for ln in meaningful),
+        "rewrite_rule_count":sum(bool(re.match(r"(?i)^RewriteRule\\b",ln)) for ln in meaningful),
+        "rewrite_engine_count":sum(bool(re.match(r"(?i)^RewriteEngine\\b",ln)) for ln in meaningful),
+        "rewrite_flag_last_count":sum(bool(re.search(r"\\[(?:[^]]*,)?L(?:,|\\])",ln,re.I)) for ln in meaningful),
+        "rewrite_policy_unknown":True,
+    }
 result["safe_isolated_live_route_proven"]=False
 result["shared_passenger_restart_permitted"]=False
 result["backup_restore_verified"]=False
