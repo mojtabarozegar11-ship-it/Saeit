@@ -17,7 +17,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-          ref: dfa5d9ba1be103fe006d1329e8498a35659f08f8
+          ref: efc14442fd9782b039088d19b50edf5cfb3ca6b2
       - name: Offline safety and functional tests for five robots
         shell: bash
         run: |
