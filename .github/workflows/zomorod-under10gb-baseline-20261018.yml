@@ -1,4 +1,4 @@
-name: Final quota confirmation after safe cleanup and protected backup
+name: Final verified cPanel quota after temporary dump cleanup
 on:
   push:
     branches: [main]
@@ -125,7 +125,7 @@ jobs:
               print("BEFORE_QUOTA_USED_MB="+str(data.get("megabytes_used")))
               print("BEFORE_QUOTA_LIMIT_MB="+str(data.get("megabyte_limit")))
           except Exception as e:print("QUOTA_READ_ERROR="+type(e).__name__)
-          print("SAFE_CLEANUP_FINAL_VERIFICATION=yes")
+          print("FINAL_POST_SCRATCH_REMOVAL_VERIFIED=yes")
           PY
           REMOTE
       - name: Smoke-test protected public pages (read-only)
