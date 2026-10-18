@@ -1,0 +1,127 @@
+name: Remove only transient unneeded SQL backup after rejected DDL
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/zomorod-remove-uncalled-precompression-backup.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-delete-unused-sql-scratch
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - name: Prove schema unchanged and existing restores preserved, delete only temporary precompression dump
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 - <<'PY'
+          import hashlib,json,os,subprocess
+          from pathlib import Path
+          h=Path.home()
+          assert h==Path("/home/zomorod2")
+          bak=h/".backups/mysql-precompression-20261018.sql.gz"
+          manifest=h/".backups/mysql-precompression-20261018.manifest.json"
+          assert bak.is_file() and not bak.is_symlink()
+          assert manifest.is_file() and not manifest.is_symlink()
+          m=json.loads(manifest.read_text())
+          assert m["database"]=="zomorod2_sites_main" and m["gzip_crc_verified"]
+          assert m["filename"]==bak.name and m["compressed_bytes"]==696986289
+          assert bak.stat().st_size==696986289
+          assert (h/"Saeit/manage.py").is_file()
+          assert (h/"Saeit/agent_imports/v91_genomes/generation64_dependency_manifest.json").is_file()
+          assert (h/".backups/zomorodmelal-app").is_dir()
+          assert (h/".backups/zomorodmelal-db-recovery-validation").is_dir()
+          assert (h/".mpw-private-db-backups/20261015T001740Z-c35f249a/mysql-full.sql.gz").is_file()
+          assert (h/".mpw-proof-backups/20261014T105551Z/full-mysql-before-wallet-page.sql.gz").is_file()
+          # Verify previous non-changing ALTER attempt did not update any source table.
+          import urllib.parse,tempfile
+          env=h/"Saeit-staging/.env"
+          raw=next(line.split("=",1)[1].strip().strip("'\"") for line in env.read_text().splitlines() if line.startswith("DATABASE_URL="))
+          parsed=urllib.parse.urlsplit(raw)
+          assert parsed.path.strip("/")=="zomorod2_sites_main"
+          opts={"user":urllib.parse.unquote(parsed.username or ""),"password":urllib.parse.unquote(parsed.password or ""),"host":parsed.hostname or "localhost","port":str(parsed.port or 3306)}
+          with tempfile.TemporaryDirectory(prefix=".sql-clean-check-",dir=str(h/".cagefs/tmp")) as t:
+              c=Path(t)/"my.cnf"
+              def esc(x):return '"'+str(x).replace("\\","\\\\").replace('"','\\"')+'"'
+              c.write_text("[client]\n"+"".join(key+"="+esc(val)+"\n" for key,val in opts.items()))
+              c.chmod(0o600)
+              sql="SELECT TABLE_NAME,ROW_FORMAT FROM information_schema.TABLES WHERE TABLE_SCHEMA='zomorod2_sites_main' AND TABLE_NAME IN ('core_report','core_factoryevidence','core_agenttask') ORDER BY TABLE_NAME"
+              r=subprocess.run(["mysql","--defaults-extra-file="+str(c),"--batch","--skip-column-names",parsed.path.strip("/"),"--execute",sql],capture_output=True,text=True,timeout=20,check=True)
+              rows={x.split("\t")[0]:x.split("\t")[1] for x in r.stdout.strip().splitlines()}
+              assert len(rows)==3 and all(x.lower()=="dynamic" for x in rows.values())
+          bak.unlink()
+          manifest.unlink()
+          assert not bak.exists() and not manifest.exists()
+          print("ONLY_TRANSIENT_PRECOMPRESSION_SQL_ARCHIVE_REMOVED=yes")
+          print("TEMP_ARCHIVE_SPACE_FREED=696986289")
+          print("LIVE_DATABASE_ROW_FORMAT_UNCHANGED=yes")
+          print("OLDER_RESTORE_POINTS_PRESERVED=yes")
+          PY
+          REMOTE
+      - name: Verify websites and agency
+        shell: bash
+        run: |
+          set -euo pipefail
+          for site in "https://zomorodmelal.ir/" "https://zomorodmelal.ir/agents/" "https://mojplaywin.com/"; do
+            code="$(curl -sS --max-time 15 -o /dev/null -w '%{http_code}' "$site" || true)"
+            echo "SCRATCH_BACKUP_CLEAN_HEALTH=$site:$code"
+            test "$code" = 200
+          done
+      - name: Clear runner secret keys
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
