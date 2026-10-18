@@ -17,7 +17,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-          ref: e9c8822f169516f4fbb877eec043adcd37f3e042
+          ref: 90bf2c6559900271355ed9afc472710d443d1858
       - name: Offline safety and functional tests for five robots
         shell: bash
         run: |
@@ -68,6 +68,12 @@ jobs:
           timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
           test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
           mv "$d/host.candidate" "$d/host.known"
+      - name: Run extended robots offline tests and syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_mpw_main_extended_robots.py -v
+          python3 -m py_compile scripts/mpw_main_extended_robots.py
       - name: Package pinned, private-only robot source
         shell: bash
         run: |
