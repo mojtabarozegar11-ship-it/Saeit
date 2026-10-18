@@ -1,0 +1,132 @@
+name: Activate all 77 V91 inherited MojPlayWin Python modules privately
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/mpw-77-original-modules-private.yml]
+permissions:
+  contents: read
+concurrency:
+  group: mpw-main-isolated-77-modules
+  cancel-in-progress: false
+jobs:
+  verify-and-activate:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          ref: 1a37caaa81787993ffd49aff5b5387f43188d58f
+      - name: Verify and really import-run 77 SHA-pinned modules offline
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_mpw_77_module_runner.py -v
+          PYTHONDONTWRITEBYTECODE=1 python3 -I -B scripts/mpw_77_modules_private_runner.py --once
+          python3 -m py_compile scripts/mpw_77_modules_private_runner.py scripts/mpw_install_77_modules_private_cpanel.py
+          python3 - <<'PY'
+          import hashlib,io,json,tarfile
+          from pathlib import Path
+          runner=Path("scripts/mpw_77_modules_private_runner.py").read_bytes()
+          assert 8000<len(runner)<23000
+          manifest=json.dumps({"tenant":"mojplaywin-main",
+            "scope":"mpw_existing_77_original_modules_readonly_import",
+            "runner_sha256":hashlib.sha256(runner).hexdigest()},sort_keys=True).encode()
+          with tarfile.open("/tmp/mpw-private-77-originals.tgz","w:gz") as archive:
+              for name,raw in (("runner.py",runner),("manifest.json",manifest)):
+                  member=tarfile.TarInfo(name)
+                  member.size=len(raw);member.mode=0o600;member.mtime=0
+                  archive.addfile(member,io.BytesIO(raw))
+          assert Path("/tmp/mpw-private-77-originals.tgz").stat().st_size<40000
+          print("ALL_77_VERIFIED_PURE_OFFLINE_MODULES_LOADED=true")
+          PY
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Install and activate all 77 original modules exclusively in private cPanel
+        shell: bash
+        run: |
+          set -euo pipefail
+          controller="$(base64 -w0 scripts/mpw_install_77_modules_private_cpanel.py)"
+          timeout 120s ssh -T -F "$RUNNER_TEMP/mojplaywin-inventory-ssh/config" saeit-cpanel "python3 -c 'import base64;exec(base64.b64decode(\"$controller\"))'" < /tmp/mpw-private-77-originals.tgz
+      - name: Independently prove exact 77 runtime and all existing tenant crons
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 50s ssh -T -F "$RUNNER_TEMP/mojplaywin-inventory-ssh/config" saeit-cpanel 'python3 -' <<'PY'
+          from pathlib import Path
+          import json,subprocess
+          root=Path("/home/zomorod2/.private_mojplaywin_main_agents")
+          evo=root/"evolution_runtime_20261018"
+          record=json.loads((evo/"all_77_modules_last_run.json").read_text())
+          assert record["tenant"]=="mojplaywin-main"
+          assert record["status"]=="77_verified_original_modules_exercised_privately"
+          assert record["modules_hash_verified"]==77
+          assert record["modules_import_executed"]==77
+          assert record["public_site_modified"] is False
+          assert record["financial_authority"] is False
+          cron=subprocess.run(["crontab","-l"],capture_output=True,text=True,check=True,timeout=12).stdout
+          markers=("MPW_V91_MAIN_ONLY_20261018",
+                   "MPW_V11_MAIN_ONLY_SITE_HEALTH_20261018",
+                   "MPW_ZOMOROD_QUALITY_REVIEW_MAIN_ONLY_20261018",
+                   "MPW_ZOMOROD_MANAGEMENT_INTELLIGENCE_MAIN_ONLY_20261018",
+                   "MPW_PRIVATE_EVOLUTION_MAIN_ONLY_20261018",
+                   "MPW_77_MODULES_MAIN_ONLY_20261018")
+          for marker in markers:
+              assert sum(marker in x for x in cron.splitlines())==1, marker
+          expected=[line for line in cron.splitlines() if "MPW_77_MODULES_MAIN_ONLY_20261018" in line][0]
+          assert expected.startswith("43 * * * * ")
+          print("ALL_77_V91_MODULES_RUNNING_AS_PRIVATE_HOURLY_IMPORT_CHECK=true")
+          print("SHA256_ORIGINALS_PASS=77")
+          print("ACTUALLY_IMPORTED_ON_CPANEL=77")
+          print("MAIN_PRIVATE_CRONS_PRESERVED=true")
+          print("SITE_AND_SIBLINGS_UNCHANGED=true")
+          PY
+      - name: Clean ephemeral runner identity material
+        if: always()
+        shell: bash
+        run: |
+          rm -rf -- "$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          rm -f -- /tmp/mpw-private-77-originals.tgz
