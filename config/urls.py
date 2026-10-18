@@ -6,7 +6,7 @@ from django.views.generic import RedirectView
 from command_center.views import dashboard as staff_dashboard
 
 from core.views import home, platform_page, taniya_studio
-from core.mojplaywin_views import venture
+from core.mojplaywin_views import venture, about as mojplaywin_about
 from core.commerce_views import store_home, auctions_home
 from core.seo_views import site_search, robots_txt, sitemap_xml
 from core.weather_views import weather
@@ -50,7 +50,7 @@ urlpatterns = [
     path("company-content/<slug:slug>/", company_content_feed, name="company_content_feed"),
     path("company/", lambda request: company_portal_home(request) if request.method == "POST" else platform_page(request, "company"), name="company"),
     path("company/<slug:slug>/", lambda request, slug: platform_page(request, "company"), name="company_detail"),
-    path("about/", RedirectView.as_view(pattern_name="company", permanent=True), name="about"),
+    path("about/", mojplaywin_about, name="about"),
     path("contact/", RedirectView.as_view(pattern_name="company", permanent=True), name="contact"),
     path("weather/", weather, name="weather"),
     # Canonical education platform under the requested company path.
