@@ -131,7 +131,7 @@ def selftest():
             return {"symbol":symbol,"currency":"USD","price":3110.34768,
                     "updatedAt":"2026-10-18T04:59:00Z"}
         if "coingecko" in url:
-            return {coin:{"usd":100,"last_updated_at":1792303140} for coin in COINS.values()}
+            return {coin:{"usd":100,"last_updated_at":1792299540} for coin in COINS.values()}
         return {"result":"success","base_code":"USD",
                 "time_last_update_unix":1792281751,
                 "rates":{k:2 for k in FX}}
