@@ -13,5 +13,26 @@
 <form action="{% url 'moj_crypto_verify' token=invoice.token %}" method="post">{% csrf_token %}
 <label for="tx_hash">Blockchain transaction hash</label><input id="tx_hash" name="tx_hash" maxlength="66" required>
 <button type="submit">Check transaction and confirm payment</button></form>
-<p>Unconfirmed transfers never unlock files. You may recheck after the required network confirmations.</p>
+<p id="crypto-status-update" aria-live="polite">Unconfirmed transfers never unlock files. You may recheck after the required network confirmations.</p>
+{% if invoice.status == 'confirming' %}
+<script>
+(function () {
+  var url = "{% url 'moj_crypto_status' token=invoice.token %}";
+  var message = document.getElementById("crypto-status-update");
+  var timer = window.setInterval(function () {
+    fetch(url, {credentials: "same-origin", cache: "no-store", headers: {"Accept": "application/json"}})
+      .then(function (response) { if (!response.ok) throw new Error("Pending"); return response.json(); })
+      .then(function (data) {
+        if (data.paid) {
+          window.clearInterval(timer);
+          window.location.reload();
+        } else if (data.status === "confirming") {
+          message.textContent = "Transfer recorded. Waiting for final network confirmations...";
+        }
+      }).catch(function () { message.textContent = "Could not refresh automatically. You may check again manually."; });
+  }, 20000);
+  window.addEventListener("pagehide", function () { window.clearInterval(timer); }, {once: true});
+}());
+</script>
+{% endif %}
 {% endif %}<p><a href="/store/">Return to store</a></p></main>{% endblock %}
