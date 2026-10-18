@@ -372,6 +372,9 @@ def build(source, homefile, output):
         if r["id"] not in FIELDS and r["index"]<=26:raise ValueError("Missing editorial framework")
         if not re.fullmatch(r'ZM-R\d{2}',r["id"]):raise ValueError('Invalid group id')
     newroot=output/"topics";newroot.mkdir(parents=True,exist_ok=False)
+    # Existing /research/ is served statically only because it disables Passenger.
+    # Apply the same route-local rule without touching the root cPanel configuration.
+    (newroot/".htaccess").write_text("PassengerEnabled off\nDirectoryIndex index.html\nOptions -Indexes\n",encoding="ascii")
     existing_groups=[r for r in rows if r["index"]<=26]
     original_cards=[json.dumps(c,ensure_ascii=False,sort_keys=True) for r in existing_groups for c in r["cards"]]
     original_newresearch=[json.dumps(r,ensure_ascii=False,sort_keys=True) for r in rows if r["index"]>26]
