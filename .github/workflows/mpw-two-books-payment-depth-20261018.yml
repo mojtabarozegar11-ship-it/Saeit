@@ -1,0 +1,103 @@
+name: MojPlayWin two book payment delivery code deep read only
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/mpw-two-books-payment-depth-20261018.yml"]
+permissions: {contents: read}
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Inspect delivery preconditions and simulate memory-only product metadata
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 145s ssh -T -F "$d/config" saeit-cpanel bash -s <<'BASH'
+          set -euo pipefail
+          /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - <<'PY'
+          import os,sys,json,ast,pathlib,copy,inspect
+          H=pathlib.Path('/home/zomorod2'); app=H/'Saeit-staging'
+          os.chdir(app);sys.path.insert(0,str(app));os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          import django;django.setup()
+          from core.models import Product
+          from django.urls import resolve,reverse
+          from core.cryptopay_checkout import product_delivery_ready,_file_for
+          for id in (72,225):
+           p=Product.objects.get(pk=id);m=p.metadata if isinstance(p.metadata,dict) else {}
+           public={k:('PRIVATE_PATH_PRESENT' if any(t in k.lower() for t in ('path','ref','file','archive','hash','sha','recipient','secret','wallet')) else (v if isinstance(v,(bool,int,float,str)) and len(str(v))<140 else type(v).__name__)) for k,v in m.items()}
+           print('MPW_PRODUCT_META_'+str(id)+'='+json.dumps(public,ensure_ascii=False))
+           for kind in ('original','set_active','set_active_checkout','set_active_and_path'):
+            q=copy.copy(p);q.metadata=m.copy()
+            if kind != 'original':q.active=True
+            if kind in ('set_active_checkout','set_active_and_path'):q.metadata['checkout_enabled']=True
+            if kind=='set_active_and_path':
+             dest=H/'MojPlayWin_Private_Assets/store/chess-improvement/MojPlayWin_Chess_Grandmaster_Final_Covered_2026.pdf' if id==72 else H/'MojPlayWin_Private_Assets/taniya-little-baker-worms/Taniya_and_the_Little_Baker_Worms.pdf'
+             for key in ('private_pdf_path','delivery_file','delivery_path'):q.metadata[key]=str(dest)
+            try:
+             result={'delivery_ready':bool(product_delivery_ready(q)),'file_for_type':type(_file_for(q)).__name__}
+            except Exception as e:result={'error_type':type(e).__name__}
+            print('MPW_PRODUCT_INMEMORY='+json.dumps({'id':id,'simulation':kind,**result}))
+          for path in ('/store/product/72/','/store/product/72/checkout/','/store/product/225/','/store/product/225/checkout/','/merchant-wallet/'):
+           try:r=resolve(path);val={'name':r.url_name,'module':r.func.__module__}
+           except Exception as e:val={'error':type(e).__name__}
+           print('MPW_BOOK_ROUTE='+json.dumps({'path':path,**val}))
+          for modpath,names in [('core/cryptopay_checkout.py',('_file_for','product_delivery_ready','checkout','private_download')),('mpw_native_checkout/autopay_worker.py',()),('mpw_native_checkout/entitlements.py',()),('mpw_native_checkout/settlement.py',())]:
+           s=(app/modpath).read_text('utf8','replace');t=ast.parse(s)
+           functions=[]
+           for node in ast.walk(t):
+            if not isinstance(node,(ast.FunctionDef,ast.AsyncFunctionDef)):continue
+            if names and node.name not in names:continue
+            attrs=sorted({n.attr for n in ast.walk(node) if isinstance(n,ast.Attribute) and n.attr not in ('get','filter','objects','save','create','select_for_update','get_object_or_404','order_by')})
+            strings=sorted({n.value for n in ast.walk(node) if isinstance(n,ast.Constant) and isinstance(n.value,str) and (n.value in ('private_pdf_path','final_pdf_filename','checkout_enabled','payment_live','rights_cleared','publication_approved','fulfillment_status','paid','active','USD','TRX','ETH','STAGING ONLY') or (len(n.value)<50 and n.value.isidentifier()))})
+            functions.append({'name':node.name,'args':[a.arg for a in node.args.args],'attributes':attrs[:60],'constants':strings[:60],'line_count':node.end_lineno-node.lineno+1})
+           print('MPW_BOOK_FUNC_SCHEMA='+json.dumps({'file':modpath,'functions':functions[:25]}))
+
+          PY
+          BASH
