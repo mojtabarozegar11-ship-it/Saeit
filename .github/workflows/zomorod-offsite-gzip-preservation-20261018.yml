@@ -1,0 +1,162 @@
+name: Preserve V91 and archives compressed offsite with SHA256 verification
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/zomorod-offsite-gzip-preservation-20261018.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-offsite-compressed-20261018
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - name: Prepare verified offsite destination and source list, never touch live website
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          cat > "$d/archive-paths.txt" <<'FILES'
+          .backups/zomorodmelal-complete
+          saeit_v91
+          Saeit/var/mother_robot/lab
+          Saeit/backups
+          Saeit-staging/var/factory/astra-backups
+          Saeit-staging/zomorod_json_admin_stage/backups
+          FILES
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          test "$HOME" = /home/zomorod2
+          for rel in .backups/zomorodmelal-complete saeit_v91 Saeit/var/mother_robot/lab Saeit/backups Saeit-staging/var/factory/astra-backups Saeit-staging/zomorod_json_admin_stage/backups; do
+            test -d "$HOME/$rel" && test ! -L "$HOME/$rel"
+          done
+          test -f "$HOME/Saeit/manage.py"
+          test -f "$HOME/Saeit/agent_imports/v91_genomes/generation64_dependency_manifest.json"
+          test -f "$HOME/Saeit/agent_imports/v91_genomes/site_master/vendor/master_gen64/controller.py"
+          echo OFFSITE_SOURCE_PRECHECK=passed
+          REMOTE
+          ssh -F "$d/config" saeit-vps bash -se <<'REMOTE'
+          set -euo pipefail
+          test "$HOME" = "/home/githubops"
+          base="$HOME/offsite-zomorod-20261018-gzip"
+          if test -e "$base" || test -L "$base"; then echo "OFFSITE_DESTINATION_ALREADY_EXISTS" >&2; exit 8; fi
+          mkdir -m 700 "$base"
+          mkdir -m 700 "$base/archive"
+          echo OFFSITE_DESTINATION_NEW=created
+          df -B1 --output=avail "$HOME" | tail -1 | sed 's/^/VPS_FREE_BYTES_BEFORE=/'
+          REMOTE
+      - name: Stream the selected archive trees to VPS with no temporary copy on cPanel
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          timeout 2100s ssh -F "$d/config" saeit-cpanel \
+            'tar -C "$HOME" --use-compress-program="gzip -1" -cf - .backups/zomorodmelal-complete saeit_v91 Saeit/var/mother_robot/lab Saeit/backups Saeit-staging/var/factory/astra-backups Saeit-staging/zomorod_json_admin_stage/backups' \
+            | timeout 2150s ssh -F "$d/config" saeit-vps \
+              'tar -C "$HOME/offsite-zomorod-20261018-gzip/archive" -xzf -'
+          echo OFFSITE_STREAM_COMPLETED=yes
+      - name: Verify every source and destination file hash and metadata before any deletion
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          cat > "$d/verify.py" <<'PY'
+          import hashlib,os,sys,stat
+          from pathlib import Path
+          root=Path(sys.argv[1])
+          listed=[
+              ".backups/zomorodmelal-complete",
+              "saeit_v91",
+              "Saeit/var/mother_robot/lab",
+              "Saeit/backups",
+              "Saeit-staging/var/factory/astra-backups",
+              "Saeit-staging/zomorod_json_admin_stage/backups"
+          ]
+          assert root.is_dir() and not root.is_symlink()
+          d=hashlib.sha256()
+          total=0; count=0;links=0
+          for relroot in listed:
+              p=root/relroot
+              assert p.is_dir() and not p.is_symlink(), relroot
+              for dirpath,dirs,files in os.walk(p,followlinks=False):
+                  dirs.sort()
+                  files.sort()
+                  for name in dirs+files:
+                      obj=Path(dirpath)/name
+                      s=obj.lstat()
+                      rel=str(obj.relative_to(root))
+                      if stat.S_ISLNK(s.st_mode):
+                          val=os.readlink(obj)
+                          d.update(("LINK|"+rel+"|"+val+"\n").encode("utf-8","surrogateescape"))
+                          links+=1
+                      elif stat.S_ISREG(s.st_mode):
+                          h=hashlib.sha256()
+                          with obj.open("rb") as inp:
+                              for buf in iter(lambda:inp.read(2*1024*1024),b""):
+                                  h.update(buf)
+                          d.update(("FILE|"+rel+"|"+str(s.st_size)+"|"+h.hexdigest()+"\n").encode("utf-8","surrogateescape"))
+                          total+=s.st_size;count+=1
+          print(f"FILES={count} BYTES={total} LINKS={links} FINGERPRINT={d.hexdigest()}")
+          PY
+          ssh -F "$d/config" saeit-cpanel 'python3 - "$HOME"' < "$d/verify.py" > "$d/source.txt"
+          ssh -F "$d/config" saeit-vps 'python3 - "$HOME/offsite-zomorod-20261018-gzip/archive"' < "$d/verify.py" > "$d/copy.txt"
+          echo "OFFSITE_SOURCE_$(cat "$d/source.txt")"
+          echo "OFFSITE_COPY_$(cat "$d/copy.txt")"
+          diff -u "$d/source.txt" "$d/copy.txt"
+          echo OFFSITE_SHA256_FILE_TREE_VERIFIED=yes
+          ssh -F "$d/config" saeit-vps 'df -B1 --output=avail "$HOME" | tail -1 | sed "s/^/VPS_FREE_BYTES_AFTER=/"'
+      - name: Delete no hosting files and clean GitHub runner credentials
+        if: always()
+        shell: bash
+        run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
