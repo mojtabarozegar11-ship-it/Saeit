@@ -76,7 +76,7 @@ class MainSiteThemeBoundaryTests(unittest.TestCase):
             settings.configure(STATIC_URL="/static/")
         engine = Engine(
             dirs=[str(ROOT / "core/templates")],
-            libraries={"mpw_shell": "core.templatetags.mpw_shell"},
+            libraries={"mpw_shell": "core.templatetags.mpw_shell", "static": "django.templatetags.static"},
         )
         base = engine.get_template("base.html")
         brand = engine.get_template("brands/mojplaywin/base.html")
