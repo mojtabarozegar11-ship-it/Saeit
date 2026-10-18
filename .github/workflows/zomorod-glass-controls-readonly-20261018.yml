@@ -1,0 +1,76 @@
+name: Zomorod glass motion switch and keyboard read only validation
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/zomorod-glass-controls-readonly-20261018.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 13
+    steps:
+      - name: Run Chrome desktop and mobile control checks with no uploads
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/glass-controls";cd "$RUNNER_TEMP/glass-controls"
+          npm --silent init -y >/dev/null
+          npm --silent install --no-save playwright@1.55.0
+          npx playwright install chromium
+          cat > qa.cjs <<'JS'
+          const {chromium}=require('playwright');
+          (async()=>{
+            const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
+            for(const width of [1440,390]){
+              const page=await browser.newPage({viewport:{width,height:860},hasTouch:width<500,isMobile:width<500});
+              const pageErrors=[];
+              page.on('pageerror',e=>pageErrors.push(String(e)));
+              await page.goto('https://zomorodmelal.ir/?__glass_controls='+width,{waitUntil:'domcontentloaded',timeout:45000});
+              await page.locator('.topic-card').first().waitFor({timeout:20000});
+              const out=await page.evaluate(async()=>{
+                const cards=[...document.querySelectorAll('.topic-card')],first=cards[0];
+                const controls=[...document.querySelectorAll('button,[role=button],input[type=checkbox]')];
+                const matching=controls.filter(e=>/motion|pause|animation|توقف|حرکت|انیمیشن|مکث/i
+                  .test([e.textContent||'',e.title||'',e.id||'',e.getAttribute('aria-label')||'',
+                  e.className||''].join(' ')));
+                const descriptors=matching.slice(0,10).map(e=>({
+                  tag:e.tagName,id:e.id,cls:typeof e.className==='string'?e.className:'',
+                  text:e.textContent?.trim().slice(0,65),aria:e.getAttribute('aria-label'),
+                  checked:e.checked,pressed:e.getAttribute('aria-pressed')
+                }));
+                const before=getComputedStyle(first).animationPlayState;
+                const originalBody=document.body.className;
+                const originalHTML=document.documentElement.className;
+                let clicked=null,after=null,bodyAfter=null,htmlAfter=null;
+                if(matching.length){
+                  const e=matching.find(el=>el.tagName==='BUTTON')||matching[0];
+                  clicked=e.id||e.className||e.textContent?.slice(0,50);
+                  e.click();
+                  await new Promise(r=>setTimeout(r,90));
+                  after=getComputedStyle(first).animationPlayState;
+                  bodyAfter=document.body.className;htmlAfter=document.documentElement.className;
+                  e.click();
+                }
+                first.focus();
+                const focus=getComputedStyle(first);
+                return {
+                  cards:cards.length,rows:document.querySelectorAll('.card-track').length,
+                  controls:descriptors,clicked,before,after,
+                  originalBody,originalHTML,bodyAfter,htmlAfter,
+                  focusOutline:[focus.outlineWidth,focus.outlineStyle,focus.outlineColor],
+                  href: first.getAttribute('href'),focusMatches:document.activeElement===first,
+                  reducedPolicy:document.getElementById('zm-glass-floating-cards-20261018')?.textContent.includes('prefers-reduced-motion')
+                };
+              });
+              console.log('GLASS_CONTROLS_QA='+JSON.stringify({width,...out,errors:pageErrors}));
+              if(out.cards!==605||out.rows!==29||!out.reducedPolicy||!out.focusMatches||
+                 !out.href||pageErrors.length>0)throw Error('Controls regression '+width);
+              await page.close();
+            }
+            await browser.close();
+            console.log('GLASS_CONTROL_AUDIT_COMPLETE=yes');
+          })().catch(e=>{console.error(e.stack);process.exit(1)});
+          JS
+          node qa.cjs
