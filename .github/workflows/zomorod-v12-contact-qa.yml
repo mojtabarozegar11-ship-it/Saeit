@@ -31,7 +31,7 @@ jobs:
           for name in ["index.html","contact/index.html","company/index.html","about/index.html"]:
             p=root/name
             content='''<!doctype html><html lang="fa"><head><title>زمرد ملل</title></head><body><main><article><p>متن قدیمی را کامل نگهداری کنید</p></article></main><footer>حقوق شرکت</footer></body></html>'''
-            p.write_text(content*1,encoding='utf-8')
+            p.write_text(content.replace('</main>', '<p>'+('کارکرد واقعی شرکت و فعالیت علمی '*80)+'</p></main>'),encoding='utf-8')
           PY
           python3 content/zomorod-v12/patch_contacts.py "$SOURCE" "$TARGET"
           python3 - <<'PY'
@@ -42,7 +42,7 @@ jobs:
           assert len(manifest)==4
           for v in manifest:
             name=v["path"]; old=(a/name).read_text(); new=(b/name).read_text()
-            assert '09022048691' in new and 'گل‌یخ' in new
+            assert '۰۹۰۲۲۰۴۸۶۹۱' in new and 'گل‌یخ' in new
             assert 'متن قدیمی را کامل نگهداری کنید' in new
             assert new.count("zm-official-contact-details-20261018")==1
             assert hashlib.sha256(old.encode()).hexdigest()==v["original_sha256"]
