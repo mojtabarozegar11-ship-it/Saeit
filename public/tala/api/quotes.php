@@ -42,6 +42,24 @@ function database():PDO {
             updated_at TEXT NOT NULL,
             updated_by INTEGER NOT NULL REFERENCES users(id)
         )");
+        // Added categories live in separate tables: existing gold quote constraints and data stay untouched.
+        $db->exec("CREATE TABLE IF NOT EXISTS tala_market_quotes(
+            symbol TEXT PRIMARY KEY,
+            amount_rial INTEGER NOT NULL CHECK(amount_rial>0),
+            source_name TEXT NOT NULL,
+            observed_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            updated_by INTEGER NOT NULL REFERENCES users(id)
+        )");
+        $db->exec("CREATE TABLE IF NOT EXISTS tala_market_quote_history(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            symbol TEXT NOT NULL,
+            amount_rial INTEGER NOT NULL CHECK(amount_rial>0),
+            source_name TEXT NOT NULL,
+            observed_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            updated_by INTEGER NOT NULL REFERENCES users(id)
+        )");
         @chmod($file,0600);
         return $db;
     } catch(Throwable $e){
@@ -71,6 +89,25 @@ function manager(PDO $db):array {
         error_out(403,'نشست یا کد امنیتی معتبر نیست.');
     return [$user,$request];
 }
+// Approved symbols, fixed valuation unit and age thresholds; no client-defined symbols or units.
+const TALA_MARKET_SYMBOLS = [
+    'silver999'=>['unit'=>'گرم نقره ۹۹۹','group'=>'metals','max_age'=>3600],
+    'silver925'=>['unit'=>'گرم نقره ۹۲۵','group'=>'metals','max_age'=>3600],
+    'platinum'=>['unit'=>'گرم پلاتین','group'=>'metals','max_age'=>3600],
+    'palladium'=>['unit'=>'گرم پالادیوم','group'=>'metals','max_age'=>3600],
+    'usd'=>['unit'=>'یک دلار آمریکا','group'=>'forex','max_age'=>3600],
+    'eur'=>['unit'=>'یک یورو','group'=>'forex','max_age'=>3600],
+    'gbp'=>['unit'=>'یک پوند بریتانیا','group'=>'forex','max_age'=>3600],
+    'aed'=>['unit'=>'یک درهم امارات','group'=>'forex','max_age'=>3600],
+    'try'=>['unit'=>'یک لیر ترکیه','group'=>'forex','max_age'=>3600],
+    'cad'=>['unit'=>'یک دلار کانادا','group'=>'forex','max_age'=>3600],
+    'btc'=>['unit'=>'یک BTC','group'=>'crypto','max_age'=>900],
+    'eth'=>['unit'=>'یک ETH','group'=>'crypto','max_age'=>900],
+    'usdt'=>['unit'=>'یک USDT','group'=>'crypto','max_age'=>900],
+    'trx'=>['unit'=>'یک TRX','group'=>'crypto','max_age'=>900],
+    'bnb'=>['unit'=>'یک BNB','group'=>'crypto','max_age'=>900],
+    'sol'=>['unit'=>'یک SOL','group'=>'crypto','max_age'=>900]
+];
 $method=$_SERVER['REQUEST_METHOD']??'GET';
 if($method!=='GET'&&$method!=='POST')error_out(405,'روش درخواست مجاز نیست.');
 if($method==='POST'&&is_file(__DIR__.'/.tala-maintenance'))error_out(503,'تابلو در حال به‌روزرسانی است.');
@@ -89,22 +126,45 @@ if($method==='GET'){
             'stale'=>$age>3600
         ];
     }
+    foreach($db->query('SELECT symbol,amount_rial,source_name,observed_at,updated_at FROM tala_market_quotes') as $row){
+        $symbol=(string)$row['symbol'];
+        if(!isset(TALA_MARKET_SYMBOLS[$symbol]))continue;
+        $definition=TALA_MARKET_SYMBOLS[$symbol];
+        $timestamp=strtotime((string)$row['observed_at']);
+        $age=$timestamp===false?PHP_INT_MAX:max(0,$now-$timestamp);
+        $data[$symbol]=[
+            'amount_rial'=>(int)$row['amount_rial'],
+            'source'=>(string)$row['source_name'],
+            'observed_at'=>$row['observed_at'],
+            'updated_at'=>$row['updated_at'],
+            'stale'=>$age>$definition['max_age'],
+            'unit'=>$definition['unit'],
+            'group'=>$definition['group']
+        ];
+    }
     answer(['ok'=>true,'scope'=>'tala','mode'=>'manager_verified','currency'=>'IRR','quotes'=>$data,'updated_automatically'=>false]);
 }
 [$user,$body]=manager($db);
 $symbol=(string)($body['symbol']??'');
-if(!in_array($symbol,['gold18','gold24','melted','coin'],true))error_out(422,'نماد نرخ پشتیبانی نمی‌شود.');
+$legacy=in_array($symbol,['gold18','gold24','melted','coin'],true);
+$extended=isset(TALA_MARKET_SYMBOLS[$symbol]);
+if(!$legacy&&!$extended)error_out(422,'نماد نرخ پشتیبانی نمی‌شود.');
 $amount=(string)($body['amount_rial']??'');
-if(!preg_match('/^[1-9][0-9]{0,11}$/D',$amount))error_out(422,'نرخ باید عدد صحیح ریالی معتبر باشد.');
+// Extended rates such as BTC/IRR require more than twelve digits; keep legacy gold validation unchanged.
+$maxDigits=$legacy?12:15;
+if(!preg_match('/^[1-9][0-9]{0,'.($maxDigits-1).'}$/D',$amount))error_out(422,'نرخ باید عدد صحیح ریالی معتبر باشد.');
 $source=trim((string)($body['source']??''));
 if(strlen($source)<3||strlen($source)>140||preg_match('/[\x00-\x1F\x7F]/',$source))error_out(422,'مرجع نرخ باید نام مشخص و معتبر داشته باشد.');
 // The timestamp is server time. "Source" is operator attestation, not a licensed automatic feed.
 $now=gmdate('Y-m-d\TH:i:s\Z');
 try {
     $db->exec('BEGIN IMMEDIATE');
-    $q=$db->prepare('INSERT INTO tala_quote_history(symbol,amount_rial,source_name,observed_at,updated_at,updated_by) VALUES(?,?,?,?,?,?)');
+    $historyTable=$legacy?'tala_quote_history':'tala_market_quote_history';
+    $quoteTable=$legacy?'tala_quotes':'tala_market_quotes';
+    // Identifiers below are chosen from fixed server-side literals, never the request.
+    $q=$db->prepare('INSERT INTO '.$historyTable.'(symbol,amount_rial,source_name,observed_at,updated_at,updated_by) VALUES(?,?,?,?,?,?)');
     $q->execute([$symbol,(int)$amount,$source,$now,$now,(int)$user['id']]);
-    $q=$db->prepare('INSERT INTO tala_quotes(symbol,amount_rial,source_name,observed_at,updated_at,updated_by) VALUES(?,?,?,?,?,?) ON CONFLICT(symbol) DO UPDATE SET amount_rial=excluded.amount_rial,source_name=excluded.source_name,observed_at=excluded.observed_at,updated_at=excluded.updated_at,updated_by=excluded.updated_by');
+    $q=$db->prepare('INSERT INTO '.$quoteTable.'(symbol,amount_rial,source_name,observed_at,updated_at,updated_by) VALUES(?,?,?,?,?,?) ON CONFLICT(symbol) DO UPDATE SET amount_rial=excluded.amount_rial,source_name=excluded.source_name,observed_at=excluded.observed_at,updated_at=excluded.updated_at,updated_by=excluded.updated_by');
     $q->execute([$symbol,(int)$amount,$source,$now,$now,(int)$user['id']]);
     $db->commit();
 } catch(Throwable $e){
