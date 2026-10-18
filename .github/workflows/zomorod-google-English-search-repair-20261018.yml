@@ -1,0 +1,223 @@
+name: Zomorod repair Google English 503 and search
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/zomorod-google-English-search-repair-20261018.yml"
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-English-google-repair-atomic
+  cancel-in-progress: false
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - uses: actions/checkout@v4
+      - name: Validate reconstruction source and listed Google URLs before any changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile content/zomorod-stale-google-en/repair.py
+          python3 - <<'PY'
+          import json
+          x=json.load(open('content/zomorod-stale-google-en/indexed_english_pages.json'))
+          pages=x['pages']
+          paths={x['path'] for x in pages}
+          assert len(pages)==len(paths)==47
+          assert {'/en/','/en/about/','/en/blog/','/en/guides/market/','/en/authors/mojtaba-rozegar/'}<=paths
+          assert all(p.startswith('/en/') and '..' not in p for p in paths)
+          print('INDEXED_ENGLISH_SOURCE=verified',len(paths))
+          PY
+      - name: Confirm production baseline and copy source only to private backup stage
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1";web="$HOME/public_html";b="$HOME/.backups/zomorod-stale-google-en/$sha"
+          test ! -e "$b" && test ! -e "$web/en" && test ! -L "$web/en"
+          test -s "$web/search/index.html" && test -s "$web/search/index.json" && test -s "$web/sitemap.xml"
+          test -f "$web/search/.htaccess" && test -s "$web/index.html" && test -s "$web/.htaccess"
+          for f in "$web/sitemap.xml" "$web/search/index.html" "$web/search/index.json" "$web/.htaccess";do test ! -L "$f";done
+          mkdir -p "$(dirname "$b")";mkdir -m 700 "$b";mkdir -m 700 "$b/source"
+          for rel in sitemap.xml search/index.html search/index.json;do
+            mkdir -p "$b/original/$(dirname "$rel")"
+            cp -p "$web/$rel" "$b/original/$rel"
+            cmp -s "$web/$rel" "$b/original/$rel"
+          done
+          for p in "$web/index.html" "$web/.htaccess" "$web/search/.htaccess" "$web/static/site/zomorod-v7/company-logo.webp";do sha256sum "$p";done > "$b/protected.sha256"
+          for sub in mohammad ghanadi amozeshgah tala business education site-heritage company about research agriculture;do
+            for name in index.html index.php;do
+              f="$web/$sub/$name"
+              if test -f "$f";then sha256sum "$f" >> "$b/protected.sha256";fi
+            done
+          done
+          echo BEFORE_CHANGES_PROTECTED=yes
+          REMOTE
+          tar -cf - -C content/zomorod-stale-google-en repair.py indexed_english_pages.json |
+            ssh -F "$d/config" saeit-cpanel "tar -xf - -C /home/zomorod2/.backups/zomorod-stale-google-en/$GITHUB_SHA/source"
+      - name: Stage real English public pages, refresh sitemap and entire search catalog
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1";web="$HOME/public_html";b="$HOME/.backups/zomorod-stale-google-en/$sha"
+          python3 "$b/source/repair.py" "$web" "$b/candidate" "$b/source/indexed_english_pages.json" | tee "$b/staging.log"
+          python3 - "$b/candidate" <<'PY'
+          import json,sys
+          from pathlib import Path
+          b=Path(sys.argv[1])
+          manifest=json.loads((b/'manifest.json').read_text())
+          assert manifest['new_english_pages']==47
+          assert manifest['total_canonicals']==139
+          assert manifest['search_results_for_zomorod_melal']>=2
+          assert len(list((b/'en').rglob('index.html')))==47
+          assert (b/'en/.htaccess').is_file() and (b/'sitemap.xml').is_file()
+          data=json.loads((b/'search/index.json').read_text())
+          assert len(data['pages'])==139 and data['count']==139
+          print('SITEMAP_AND_SEARCH_139=verified')
+          PY
+          for rel in sitemap.xml search/index.html search/index.json;do
+            test -s "$b/candidate/$rel" && cmp -s "$b/original/$rel" "$web/$rel"
+          done
+          sha256sum -c --status "$b/protected.sha256"
+          echo READY_FOR_PROTECTED_RELEASE=1
+          REMOTE
+      - name: Publish only new en folder and three files; rollback if any verification fails
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1";web="$HOME/public_html";b="$HOME/.backups/zomorod-stale-google-en/$sha"
+          test ! -e "$web/en" && test ! -L "$web/en"
+          for rel in sitemap.xml search/index.html search/index.json;do cmp -s "$web/$rel" "$b/original/$rel";done
+          sha256sum -c --status "$b/protected.sha256"
+          rollback(){
+            set +e
+            for rel in sitemap.xml search/index.html search/index.json;do
+              cp -p "$b/original/$rel" "$web/$rel.zm-rollback-$sha"
+              mv -f "$web/$rel.zm-rollback-$sha" "$web/$rel"
+            done
+            if test -d "$web/en" && test -f "$web/en/.htaccess";then mv "$web/en" "$b/failed-en";fi
+            sha256sum -c --status "$b/protected.sha256"
+            echo GOOGLE_ENGLISH_ROLLBACK=restored
+          }
+          active=1
+          trap 'rc=$?;trap - EXIT;if test "$active" = 1;then rollback;fi;exit "$rc"' EXIT
+          cp -a "$b/candidate/en" "$web/en.next-$sha"
+          test -f "$web/en.next-$sha/.htaccess" && test -f "$web/en.next-$sha/about/index.html"
+          chmod 755 "$web/en.next-$sha"
+          find "$web/en.next-$sha" -type d -exec chmod 755 {} +
+          find "$web/en.next-$sha" -type f -exec chmod 644 {} +
+          mv -T "$web/en.next-$sha" "$web/en"
+          for rel in sitemap.xml search/index.html search/index.json;do
+            temp="$web/$rel.zm-next-$sha"
+            cp -p "$b/candidate/$rel" "$temp";chmod --reference="$web/$rel" "$temp"
+            mv -f "$temp" "$web/$rel"
+          done
+          python3 - "$b/candidate/manifest.json" <<'PY'
+          import json,sys
+          m=json.load(open(sys.argv[1]))
+          assert len(m['english_routes'])==47
+          assert all(route.startswith('/en/') for route in m['english_routes'])
+          print('ENGLISH_SCOPE_CONFIRMED=47')
+          PY
+          python3 - "$b/candidate/manifest.json" "$b/urls.txt" <<'PY'
+          import json,sys
+          from pathlib import Path
+          m=json.load(open(sys.argv[1]))
+          Path(sys.argv[2]).write_text('\n'.join(m['english_routes'])+'\n',encoding='utf-8')
+          PY
+          while IFS= read -r path;do
+            code="$(curl -sS -L --connect-timeout 6 --max-time 15 -o "$b/check.html" -w '%{http_code}' "https://zomorodmelal.ir$path?release=$sha" || true)"
+            echo ENGLISH_GOOGLE_URL="$path" HTTP="$code"
+            test "$code" = 200
+            grep -Fq 'lang="en"' "$b/check.html"
+            grep -Fq 'class="site-header"' "$b/check.html"
+            grep -Fq 'href="https://zomorodmelal.ir'"$path"'"' "$b/check.html"
+          done < "$b/urls.txt"
+          for path in /search/?q=zomorod_melal /search/index.json /sitemap.xml / /company/ /research/ /tala/ /mohammad/;do
+            result="$(curl -sS -L --connect-timeout 8 --max-time 24 -o "$b/check.html" -w '%{http_code}' "https://zomorodmelal.ir$path" || true)"
+            echo POST_PUBLIC_CHECK="$path" HTTP="$result"
+            test "$result" = 200
+          done
+          python3 - "$web" "$b/candidate" <<'PY'
+          import json,sys,hashlib
+          from pathlib import Path
+          live=Path(sys.argv[1]);staged=Path(sys.argv[2])
+          for rel in ('search/index.html','search/index.json','sitemap.xml'):
+              assert (live/rel).read_bytes()==(staged/rel).read_bytes(),rel
+          s=(live/'search/index.html').read_text('utf-8')
+          assert ".replace(/[_-]+/g,' ')" in s
+          j=json.loads((live/'search/index.json').read_text('utf-8'))
+          assert j['count']==139
+          m=json.loads((staged/'manifest.json').read_text('utf-8'))
+          assert len(m['english_routes'])==47
+          print('SEARCH_FIXED_ALIASES=verified')
+          print('NEW_ENGLISH_PAGES=47')
+          print('SITEMAP_TOTAL=139')
+          PY
+          sha256sum -c --status "$b/protected.sha256"
+          active=0;trap - EXIT
+          echo STALE_GOOGLE_503_REPAIRED=yes
+          echo ROOT_AND_SUBSITES_SHA_UNCHANGED=yes
+          echo REPAIR_RECOVERY="$b/original/"
+          REMOTE
+      - name: Securely remove temporary credentials
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
