@@ -108,6 +108,44 @@ const TALA_MARKET_SYMBOLS = [
     'bnb'=>['unit'=>'یک BNB','group'=>'crypto','max_age'=>900],
     'sol'=>['unit'=>'یک SOL','group'=>'crypto','max_age'=>900]
 ];
+
+function live_prices():array {
+    // Atomic snapshot written by an isolated GitHub Actions job over pinned SSH.
+    // Never obtain untrusted API URLs from the user or modify the ledger here.
+    $file=__DIR__ . '/../../../.tala-secure/tala_live_prices.json';
+    if(is_link($file)||!is_file($file)||filesize($file)>65000) return ['quotes'=>[],'fx_reference'=>null,'collected_at'=>null];
+    $data=json_decode((string)@file_get_contents($file),true);
+    if(!is_array($data)||($data['scope']??'')!=='tala'||($data['schema']??0)!==1||!is_array($data['quotes']??null))
+        return ['quotes'=>[],'fx_reference'=>null,'collected_at'=>null];
+    $known=['gold18','gold24','silver999','silver925','platinum','palladium',
+        'usd','eur','gbp','aed','try','cad','btc','eth','usdt','trx','bnb','sol'];
+    $allowed=array_fill_keys($known,true);
+    $output=[];
+    $clock=time();
+    foreach($data['quotes'] as $symbol=>$item){
+        if(!isset($allowed[$symbol])||!is_array($item))continue;
+        $price=$item['usd']??null;
+        $timestamp=strtotime((string)($item['observed_at']??''));
+        if(!is_numeric($price)||!is_finite((float)$price)||(float)$price<=0||$timestamp===false||$timestamp>$clock+180)continue;
+        $group=(string)($item['group']??'');
+        $ttl=$group==='forex'?172800:($group==='crypto'?1200:3600);
+        $output[$symbol]=[
+            'usd'=>(float)$price,
+            'unit'=>(string)($item['unit']??''),
+            'group'=>$group,
+            'source'=>(string)($item['source']??''),
+            'observed_at'=>$item['observed_at'],
+            'stale'=>($clock-$timestamp)>$ttl
+        ];
+    }
+    $fx=is_array($data['fx_reference']??null)?$data['fx_reference']:null;
+    if($fx!==null){
+        $time=strtotime((string)($fx['observed_at']??''));
+        $rate=$fx['usd_irr']??0;
+        if(!is_numeric($rate)||!is_finite((float)$rate)||(float)$rate<=0||$time===false||($clock-$time)>172800||$time>$clock+180||($fx['is_iran_free_market']??null)!==false) $fx=null;
+    }
+    return ['quotes'=>$output,'fx_reference'=>$fx,'collected_at'=>$data['collected_at']??null];
+}
 $method=$_SERVER['REQUEST_METHOD']??'GET';
 if($method!=='GET'&&$method!=='POST')error_out(405,'روش درخواست مجاز نیست.');
 if($method==='POST'&&is_file(__DIR__.'/.tala-maintenance'))error_out(503,'تابلو در حال به‌روزرسانی است.');
@@ -142,7 +180,12 @@ if($method==='GET'){
             'group'=>$definition['group']
         ];
     }
-    answer(['ok'=>true,'scope'=>'tala','mode'=>'manager_verified','currency'=>'IRR','quotes'=>$data,'updated_automatically'=>false]);
+    $live=live_prices();
+    answer(['ok'=>true,'scope'=>'tala','mode'=>'manager_verified','currency'=>'IRR',
+        'quotes'=>$data,'live_quotes'=>$live['quotes'],
+        'fx_reference'=>$live['fx_reference'],
+        'live_collected_at'=>$live['collected_at'],
+        'updated_automatically'=>count($live['quotes'])>0]);
 }
 [$user,$body]=manager($db);
 $symbol=(string)($body['symbol']??'');
