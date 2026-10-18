@@ -1,0 +1,154 @@
+name: MojPlayWin two books same owner narrow record correction
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/mpw-two-books-owner-align-20261018.yml"]
+permissions: {contents: read}
+concurrency:
+  group: mpw-two-books-owner-align-prod
+  cancel-in-progress: false
+jobs:
+  owner-only:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Check public protected-route baseline
+        run: |
+          python3 - <<'PY'
+          import json,os
+          from urllib.request import urlopen,Request
+          from urllib.error import HTTPError
+          base="https://mojplaywin.com"
+          names=("/","/store/","/taniya/","/farnaz/","/saman/","/picm/")
+          result={}
+          for name in names:
+              try:
+                  with urlopen(Request(base+name,headers={"Cache-Control":"no-cache"}),timeout=20) as req:status=req.status
+              except HTTPError as e:status=e.code
+              result[name]=status
+          if any(value!=200 for value in result.values()):raise RuntimeError("Protected-site baseline unavailable")
+          with open(os.environ["RUNNER_TEMP"]+"/mpw-owner-route-baseline.json","w") as f:json.dump(result,f)
+          print("PROTECTED_BASELINE_OK="+json.dumps(result))
+          PY
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Link Taniya only to the existing chess owner record (no payment or publishing changes)
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 115s ssh -T -F "$d/config" saeit-cpanel bash -s <<'BASH'
+          set -euo pipefail
+          /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - <<'PY'
+          import os,sys,json
+          from django.db import transaction
+          HOME='/home/zomorod2/Saeit-staging'
+          os.chdir(HOME)
+          sys.path.insert(0,HOME)
+          os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          import django
+          django.setup()
+          from core.models import Product
+          from core.cryptopay_checkout import product_delivery_ready
+
+          def check(p,code,price):
+           m=p.metadata if isinstance(p.metadata,dict) else {}
+           if p.pk!=code or m.get('product_id')!={72:'mojplaywin-chess-improvement-2026',225:'mojplaywin-taniya-little-baker-worms'}[code]:
+            raise RuntimeError('Product identity mismatch')
+           if p.active or p.currency!='USD' or str(p.price)!=price or m.get('checkout_enabled') is not False or m.get('payment_live') is True:
+            raise RuntimeError('Book commercial safety guard changed')
+           if not product_delivery_ready(p):
+            raise RuntimeError('Book delivery is not proven ready')
+           return m
+
+          with transaction.atomic():
+           records={p.pk:p for p in Product.objects.select_for_update().filter(pk__in=(72,225))}
+           if set(records)!={72,225}:
+            raise RuntimeError('The expected books are missing')
+           chess=records[72]
+           taniya=records[225]
+           left=check(chess,72,'7.50')
+           right=check(taniya,225,'4.00')
+           if not chess.owner_id:
+            raise RuntimeError('Chess admin ownership is not recorded')
+           author_a=' '.join(str(left.get('author','')).casefold().split())
+           author_b=' '.join(str(right.get('author','')).casefold().split())
+           if not author_a or author_a!=author_b or 'mojtaba' not in author_a or 'roozegar' not in author_a:
+            raise RuntimeError('Declared authorship differs between products')
+           if taniya.owner_id is not None and taniya.owner_id!=chess.owner_id:
+            raise RuntimeError('Taniya has a different owner: refuse replacement')
+           changed=taniya.owner_id is None
+           if changed:
+            taniya.owner_id=chess.owner_id
+            taniya.save(update_fields=['owner','updated_at'])
+           if Product.objects.get(pk=225).owner_id!=chess.owner_id:
+            raise RuntimeError('Owner link did not persist')
+           print('MPW_TWO_BOOKS_SAME_OWNER_CONFIRMED='+json.dumps({
+             'id_a':72,'id_b':225,'author_name_consistent':True,'shared_owner':True,
+             'taniya_owner_link_updated':changed,'products_remain_inactive':True,
+             'checkout_unchanged':True,'money_received':False
+           }))
+
+          PY
+          BASH
+      - name: Recheck public protected routes
+        run: |
+          python3 - <<'PY'
+          import json,os
+          from urllib.request import urlopen,Request
+          from urllib.error import HTTPError
+          with open(os.environ["RUNNER_TEMP"]+"/mpw-owner-route-baseline.json") as f:baseline=json.load(f)
+          after={}
+          for name in baseline:
+              try:
+                  with urlopen(Request("https://mojplaywin.com"+name,headers={"Cache-Control":"no-cache"}),timeout=20) as req:status=req.status
+              except HTTPError as e:status=e.code
+              after[name]=status
+          if baseline!=after:raise RuntimeError("Protected pages changed status")
+          print("PROTECTED_AFTER_OK="+json.dumps(after))
+          PY
