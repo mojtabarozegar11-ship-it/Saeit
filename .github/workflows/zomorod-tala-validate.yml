@@ -71,6 +71,11 @@ jobs:
           for item in ('password_hash(', 'hash_equals(', 'HTTP_X_TALA_REQUEST', 'audit_log', "/../../../.tala-secure/tala.sqlite3", 'BEGIN IMMEDIATE'):
               if item not in backend: raise SystemExit('TALA_BACKEND_CONTROL_MISSING='+item)
           if 'TALA_BOOTSTRAP_TOKEN_SHA256' not in backend: raise SystemExit('TALA_BOOTSTRAP_GATE=missing')
+          quote=(root/'api/quotes.php').read_text(encoding='utf-8')
+          for x in ("TALA_SESSION","hash_equals(","'role'","CREATE TABLE IF NOT EXISTS tala_quote_history","mode'=>'manager_verified'","updated_automatically"):
+              if x not in quote: raise SystemExit('TALA_PRICE_BOARD_CONTROL_MISSING='+x)
+          if 'assets/tala-calculator.js' not in source or 'id="gold-calculator"' not in source or 'id="jewelry-calculator"' not in source:
+              raise SystemExit('TALA_PRICE_CALCULATOR_UI=missing')
           health=(root/'api/health.php').read_text(encoding='utf-8')
           if '/../../../.tala-secure' not in health: raise SystemExit('TALA_HEALTH_EXTERNAL_DB_CHECK=missing')
           if "/.private/tala.sqlite3" in backend: raise SystemExit('TALA_LEGACY_PUBLIC_DB_PATH=unsafe')
@@ -85,4 +90,7 @@ jobs:
           node --check /tmp/tala-inline.js
           node --check /tmp/tala-admin.js
           node --check public/tala/sw.js
+          node --check public/tala/assets/tala-calculator.js
+          node .github/scripts/tala_quote_calc_test.cjs
+          if command -v php >/dev/null 2>&1; then php -l public/tala/api/quotes.php; fi
           python3 .github/scripts/tala_storage.py selftest
