@@ -1,0 +1,40 @@
+name: MojPlayWin chunked backup synthetic CI (no production data)
+on:
+  push:
+    branches:
+      - feature/mojplaywin-crypto-gateway-20261018
+    paths:
+      - scripts/mojplaywin_chunked_encrypted_snapshot.py
+      - tests/test_mojplaywin_chunked_encrypted_snapshot.py
+      - .github/workflows/mojplaywin-chunked-backup-synthetic-ci.yml
+  pull_request:
+    paths:
+      - scripts/mojplaywin_chunked_encrypted_snapshot.py
+      - tests/test_mojplaywin_chunked_encrypted_snapshot.py
+      - .github/workflows/mojplaywin-chunked-backup-synthetic-ci.yml
+permissions:
+  contents: read
+jobs:
+  verify-offline-crypto-resume:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install authenticated encryption provider (no merchant secrets)
+        run: python -m pip install 'cryptography>=43,<48'
+      - name: Check isolated utility syntax
+        run: python -m py_compile scripts/mojplaywin_chunked_encrypted_snapshot.py tests/test_mojplaywin_chunked_encrypted_snapshot.py
+      - name: Synthetic backup, resume, tamper, and restore tests
+        run: python -m unittest discover -s tests -p 'test_mojplaywin_chunked_encrypted_snapshot.py' -v
+      - name: Confirm this is NOT a production backup
+        run: |
+          echo "OFFLINE_SYNTHETIC_SNAPSHOT_TEST=passed"
+          echo "PRODUCTION_DATABASE_READ=false"
+          echo "PRODUCTION_FILES_READ=false"
+          echo "REAL_ENCRYPTED_BACKUP_CREATED=false"
+          echo "PRODUCTION_RELEASE_PERMITTED=false"
