@@ -11,6 +11,7 @@ class MojCryptoOffer(T):
     asset = models.CharField(max_length=3, choices=[("ETH", "ETH (Ethereum)"), ("TRX", "TRX (TRON)")])
     atomic_amount = models.CharField(max_length=40, validators=[RegexValidator(regex=r"^[1-9][0-9]{0,39}$")])
     active = models.BooleanField(default=False)
+    fulfillment_mode = models.CharField(max_length=12, choices=[("download", "Private digital download"), ("service", "Service / manually fulfilled")], default="download")
     # Files live OUTSIDE any served webroot; this is an optional relative path inside the private folder.
     private_file = models.CharField(max_length=300, blank=True, default="")
 
