@@ -1,0 +1,141 @@
+name: Zomorod V91 gen64 non-production runtime proof
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/zomorod-v91-generation64-safe-benchmark-20261018.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-v91-gen64-safe-benchmark
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - name: Execute isolated bounded generation64 self-loop test, no live access
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 - <<'PY'
+          import ast,sys,json,os,subprocess,tempfile,hashlib
+          from pathlib import Path
+          root=Path.home()/"Saeit"/"agent_imports"/"v91_genomes"
+          bundle=root/"site_master"
+          assert bundle.is_dir()
+          report=json.loads((root/"generation64_dependency_manifest.json").read_text())
+          sha=report["sha256_by_relative_path"]
+          assert len(sha)==73
+          for rel,digest in sha.items():
+              path=bundle/rel
+              assert path.is_file() and not path.is_symlink()
+              assert hashlib.sha256(path.read_bytes()).hexdigest()==digest
+              tree=ast.parse(path.read_text("utf-8-sig"))
+              compile(tree,str(path),"exec")
+          script=r'''import sys,time,socket,subprocess
+          from pathlib import Path
+          def forbidden(*a,**kw): raise RuntimeError("NETWORK_OR_PROCESS_USE_FORBIDDEN")
+          socket.create_connection=forbidden
+          socket.socket.connect=forbidden
+          subprocess.Popen=forbidden
+          root=Path(sys.argv[1])
+          sys.path[:0]=[str(root),str(root/"site_master"/"vendor")]
+          from site_master.vendor.master_gen64.controller import Generation64Controller
+          from site_master.vendor.master_gen56.learning import OutcomeLearner
+          from site_master.vendor.master_gen56.risk import RiskAwareSelector
+          c=Generation64Controller()
+          assert callable(c.run) and callable(c.awaken) and callable(c.sleep)
+          counters={"internal":0,"external":0}
+          def internal(): counters["internal"]+=1
+          def external(): counters["external"]+=1
+          # Explicit callbacks only; no production state, no network and bounded CPU time.
+          c.awaken(internal,external,internal_seconds=0.08,external_seconds=0.12,run_immediately=True)
+          time.sleep(0.32)
+          c.sleep()
+          print("GEN64_BOUNDED_INTERNAL="+str(counters["internal"]))
+          print("GEN64_BOUNDED_EXTERNAL="+str(counters["external"]))
+          assert 1<=counters["internal"]<=20
+          assert 1<=counters["external"]<=20
+          learner=OutcomeLearner()
+          learner.observe("shadow_agent",0.80)
+          assert learner.estimate("shadow_agent") is not None
+          print("GEN56_LEARNING_SYNTHETIC=passed")
+          selector=RiskAwareSelector()
+          chosen=selector.select(["shadow_agent","backup_agent"],quality={"shadow_agent":0.8,"backup_agent":0.5},
+                                  failure_rate={"shadow_agent":0.03,"backup_agent":0.15},
+                                  latency_ms={"shadow_agent":55,"backup_agent":120},
+                                  costs={"shadow_agent":0.01,"backup_agent":0.02},limit=1)
+          assert chosen is not None
+          print("GEN56_RISK_SELECTION_SYNTHETIC=passed")
+          print("GEN64_SHADOW_TEST=passed")
+          '''
+          with tempfile.TemporaryDirectory(prefix="genome-bounded-smoke-") as td:
+              env={"PATH":"/usr/bin:/bin","HOME":td,"PYTHONDONTWRITEBYTECODE":"1"}
+              proc=subprocess.run([sys.executable,"-B","-c",script,str(root)],
+                  env=env,cwd=td,stdout=subprocess.PIPE,stderr=subprocess.PIPE,
+                  text=True,check=False,timeout=20)
+              print(proc.stdout)
+              if proc.returncode:
+                  print("SHADOW_TEST_FAILURE="+proc.stderr[-2500:].replace("\n"," | "))
+                  raise SystemExit("GENOME_SHADOW_BENCHMARK_FAILED")
+          print("BUNDLE_INTEGRITY=73/73_verified")
+          print("PRODUCTION_TASKS_TRIGGERED=0")
+          print("PRODUCTION_CODE_CHANGED=no")
+          PY
+          REMOTE
+      - name: Remove temporary SSH relay material
+        if: always()
+        shell: bash
+        run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
