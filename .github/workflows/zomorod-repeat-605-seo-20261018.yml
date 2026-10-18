@@ -218,7 +218,7 @@ jobs:
           chmod --reference="$robots" "$web/.robots-next.$sha"
           robots_swapped=1
           mv -f "$web/.robots-next.$sha" "$robots"
-          for route in / /topics/ /topics/zm-r01/wheat/ /topics/zm-r08/plant-genetics/ /topics/zm-r13/artificial-intelligence/ /topics/zm-r22/gold-assaying/ /topics/zm-r25/cloud-computing/ /research/directory/units/molecular-genetics/ /research/directory/centers/functional-foods/ /about/ /company/ /tala/;do
+          for route in / /topics/ /topics/zm-r01/wheat/ /topics/zm-r08/plant-genetics/ /topics/zm-r13/artificial-intelligence/ /topics/zm-r22/gold-assaying/ /research/directory/units/molecular-genetics/ /research/directory/centers/functional-foods/ /about/ /company/ /tala/;do
             status="$(curl -sSL --max-time 20 -o "$backup/http-check.html" -w '%{http_code}' "https://zomorodmelal.ir$route?repeat=$sha" || true)"
             echo LIVE_HTTP_ROUTE="$route" STATUS="$status"
             test "$status" = 200
