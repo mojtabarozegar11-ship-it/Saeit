@@ -1,0 +1,91 @@
+name: MojPlayWin store active Django template map read only
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/mojplaywin-store-active-template-map-20261018.yml"]
+permissions: {contents: read}
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Inventory limited Django roots, active store HTML and release choice, no mutations
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 75s ssh -T -F "$d/config" saeit-cpanel python3 - <<'PY'
+          import json,hashlib,os,re
+          from pathlib import Path
+          home=Path('/home/zomorod2')
+          roots=[home/'Saeit',home/'mojplaywin.com',home/'django_app',home/'apps',home/'mojplaywin_main']
+          for root in roots:
+            if not root.is_dir() or root.is_symlink():continue
+            for f in [root/'passenger_wsgi.py',root/'config/settings.py',root/'core/mojplaywin_views.py']:
+              if f.is_file() and not f.is_symlink():
+                lines=f.read_text('utf-8','replace').splitlines()
+                important=[]
+                for row in lines:
+                  if any(k in row for k in ['DJANGO_SETTINGS_MODULE','sys.path','APP_ROOT','BASE_DIR','TEMPLATES', 'DIRS','core/templates','store.html','def store','def brand_store','template_name']):
+                    line=row.strip()[:240]
+                    line=re.sub(r'(["\x27])[A-Za-z0-9_]{30,}\1','[redacted]',line)
+                    important.append(line)
+                print('MPW_RENDER_ROOT_CONTEXT='+json.dumps({'path':str(f),'sha':hashlib.sha256(f.read_bytes()).hexdigest(),'evidence':important[:25]}))
+            targets=[]
+            for base in [root/'core/templates',root/'templates',root/'core']:
+              if not base.is_dir() or base.is_symlink():continue
+              for pattern in ('**/store.html','**/store_ten_buyer_guides_20261018.html','**/*mojplaywin*'):
+                try:
+                  for p in list(base.glob(pattern))[:55]:
+                    if p.is_file() and not p.is_symlink() and p.suffix in ('.html','.py'):
+                      b=p.read_bytes()
+                      targets.append({'path':str(p),'sha':hashlib.sha256(b).hexdigest(),'size':len(b),'contains_catalog':b'id="catalog"' in b,'contains_store_guides':b'mpw-store-ten-guides' in b,'has_include':b'store_ten_buyer_guides_20261018' in b})
+                except Exception:pass
+            print('MPW_STORE_TEMPLATE_CANDIDATES='+json.dumps({'root':str(root),'items':targets[:90]}))
+          PY
