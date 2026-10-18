@@ -22,7 +22,7 @@ jobs:
           set -euo pipefail
           php -l isolated_crypto_gateway/index.php
           python3 -m py_compile scripts/mojplaywin_crypto_update_existing_entrypoint.py
-          git cat-file -e d118204875428005a7252e2a05934cdbc86f4615:isolated_crypto_gateway/index.php
+          git cat-file -e cabe3cd1d3040d:isolated_crypto_gateway/index.php
       - name: Set up host-fingerprint-pinned read-only relay
         shell: bash
         env:
@@ -76,7 +76,7 @@ jobs:
           set -euo pipefail
           d="$RUNNER_TEMP/mojplaywin-crypto-preflight-ssh"
           src="/home/zomorod2/.mojplaywin-crypto-update-$GITHUB_RUN_ID"
-          sha_old="$(git show d118204875428005a7252e2a05934cdbc86f4615:isolated_crypto_gateway/index.php | sha256sum | awk '{print $1}')"
+          sha_old="$(git show cabe3cd1d3040d:isolated_crypto_gateway/index.php | sha256sum | awk '{print $1}')"
           sha_new="$(sha256sum isolated_crypto_gateway/index.php | awk '{print $1}')"
           ssh -T -F "$d/config" saeit-cpanel "test ! -e '$src' && test ! -L '$src' && install -d -m 700 '$src'"
           ssh -T -F "$d/config" saeit-cpanel "umask 077; cat > '$src/index.php'" < isolated_crypto_gateway/index.php
