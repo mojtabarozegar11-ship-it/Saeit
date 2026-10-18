@@ -47,10 +47,10 @@ def main():
         cc=lic.lower().replace("-","").replace(" ","")
         if not (("publicdomain" in cc) or ("cc0" in cc) or ("pdm" in cc)):
             raise ValueError(f"Non-PD/CC0 image {name}: {lic}")
-        imageurl=info.get("thumburl")
+        imageurl=info.get("thumburl") or info.get("url")
         if not imageurl or not imageurl.startswith("https://upload.wikimedia.org/"):
-            raise ValueError("No safe Wikimedia 1280px rendition for "+name)
-        raw=retrieve(imageurl)
+            raise ValueError(f"No safe Wikimedia image URL for {name}; origin={str(imageurl)[:140]}")
+        raw=retrieve(imageurl,limit=6000000)
         im=Image.open(io.BytesIO(raw))
         im.verify()
         im=Image.open(io.BytesIO(raw))
