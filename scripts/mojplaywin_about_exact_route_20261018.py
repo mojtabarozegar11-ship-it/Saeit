@@ -59,7 +59,7 @@ def install(runid,sha):
     if backup.exists() or backup.is_symlink():die("Rollback directory already exists")
     inserted = original.replace(b"RewriteEngine On",b"RewriteEngine On\n"+RULE.encode(),1)
     if inserted==original or inserted.count(RULE_MARKER.encode())!=1:die("Could not create exactly one rule")
-    if inserted.replace(RULE.encode(),b"",1)!=original:die("Exact patch reversibility check failed")
+    if inserted.replace(b"\n"+RULE.encode(),b"",1)!=original:die("Exact patch reversibility check failed")
     # Verify rule does not match /about/mojtaba-rozegar/, any child path,
     # any other request method, or any protected prefix.
     regex=re.compile(r"^/about/$")
