@@ -1,4 +1,5 @@
 name: MojPlayWin 19 pages 190 illustrated articles production-safe publication
+# Retry with verified exact REQUEST_URI rewrite checks and Apache-readable 0755 public asset directories.
 on:
   push:
     branches: [main]
