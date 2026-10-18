@@ -1,0 +1,90 @@
+name: MojPlayWin autopay worker safety and readiness read-only
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/mojplaywin-autopay-readiness-safety.yml"]
+permissions: {contents: read}
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Read-only inspect auto settlement controls and merchant wallets
+        run: |
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 80s ssh -T -F "$d/config" saeit-cpanel python3 - <<'PY'
+          import re,json,hashlib
+          from pathlib import Path
+          p=Path('/home/zomorod2/Saeit-staging/mpw_native_checkout')
+          modules=['autopay_worker.py','settlement.py','models.py','wallet_ownership.py','entitlements.py','crypto_subprocess_verify.py']
+          for name in modules:
+            file=p/name
+            if not file.is_file() or file.is_symlink():continue
+            raw=file.read_text('utf8','replace')
+            out=[]
+            for n,line in enumerate(raw.splitlines(),1):
+              s=line.strip()
+              if not s or s.startswith('#'):continue
+              if re.search(r'(secret|token|password|mnemonic|private_key|address|wallet_|seed|api_key)',s,re.I):
+                if s.startswith(('def ','class ','from ','import ','@')):out.append(f'{n}:{s[:150]}')
+                else:out.append(f'{n}:[wallet-or-key-related-operation-redacted]')
+              elif re.search(r'(def |class |payment|due|ready|confirm|duplicate|transaction|atomic|watch|receipt|mainnet|provider|settle|time|status|monitor|amount|ledger|tx_hash|cron|TRC20|USDT|withdraw|idempotent|approval|run)',s,re.I):
+                s=re.sub(r'(0x[0-9a-fA-F]{30,}|T[1-9A-HJ-NP-Za-km-z]{33})','[public-address]',s)
+                out.append(f'{n}:{s[:180]}')
+            print('MPW_AUTOPAY_MODULE='+json.dumps({'file':name,'size':len(raw),'sha':hashlib.sha256(raw.encode()).hexdigest(),'lines':out[:120]}))
+          # Wallet ownership and readiness existence only, no addresses.
+          root=Path('/home/zomorod2/Saeit-staging')
+          matching=[]
+          for d in [root/'mpw_native_checkout',root/'core/management/commands']:
+            if d.is_dir():
+              for f in d.glob('*.py'):
+                if any(x in f.name.lower() for x in ('autopay','settlement','reconcile','wallet','crypto')):
+                  matching.append(f.relative_to(root).as_posix())
+          print('MPW_AUTOPAY_COMMAND_CANDIDATES='+json.dumps(matching))
+          PY
