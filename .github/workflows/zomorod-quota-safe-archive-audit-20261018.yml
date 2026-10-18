@@ -1,0 +1,118 @@
+name: Production quota and safe archive candidates audit 20261018
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/zomorod-quota-safe-archive-audit-20261018.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-safe-archive-audit-20261018
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - name: Inspect safe recovery candidates and MySQL client availability without edits
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          python3 - <<'PY'
+          import os,subprocess,json,stat,shutil,time,re,importlib.util
+          from pathlib import Path
+          H=Path.home()
+          assert H==Path("/home/zomorod2")
+          def size(p):
+              if p.is_file():return p.stat().st_size
+              if p.is_dir():
+                  r=subprocess.run(["du","-sk","--",str(p)],text=True,capture_output=True,timeout=75)
+                  return int(r.stdout.split()[0])*1024 if r.returncode==0 and r.stdout else -1
+              return -1
+          print("READONLY_MYSQL_BINARIES="+json.dumps({c:shutil.which(c) for c in ("mysql","mariadb","php","mysqldump","gzip","tar")}))
+          for module in ("pymysql","MySQLdb","mysql.connector","mariadb"):
+              try:
+                  spec=importlib.util.find_spec(module.split(".")[0])
+                  print("READONLY_PYTHON_LIB="+module+":"+str(spec is not None))
+              except Exception:pass
+          try:
+              q=subprocess.run(["php","-m"],capture_output=True,text=True,timeout=12)
+              print("READONLY_PHP_MYSQL="+str(["mysqli" in q.stdout,"pdo_mysql" in q.stdout.lower()]))
+          except Exception:pass
+          env=H/"Saeit-staging/.env"
+          if env.is_file():
+              print("READONLY_ENV_DATABASE_KEYS="+json.dumps([line.split("=",1)[0] for line in env.read_text(errors="ignore").splitlines() if line.startswith(("DATABASE_URL=","DB_","MYSQL_"))]))
+          for root in ("Saeit","Saeit/var","Saeit/media",".backups",".backups/zomorodmelal-complete","Saeit-staging/admin-smoke",".mpw-proof-backups",".mpw-private-db-backups","mojtaba_personal/models",".cagefs/tmp",".gradle/wrapper"):
+              p=H/root
+              if not p.is_dir():continue
+              kids=[]
+              for q in p.iterdir():
+                  if q.is_symlink():continue
+                  try:kids.append({"name":q.name,"bytes":size(q),"type":"dir" if q.is_dir() else "file","age_days":round((time.time()-q.stat().st_mtime)/86400,1)})
+                  except Exception:pass
+              print("CATEGORY_TOTAL="+root+" "+str(size(p)))
+              for e in sorted(kids,key=lambda x:x["bytes"],reverse=True)[:16]:
+                  print("CATEGORY_CHILD="+json.dumps({"root":root,**e},ensure_ascii=False))
+          try:
+              p=subprocess.run(["uapi","--output=json","Quota","get_quota_info"],capture_output=True,text=True,timeout=15)
+              q=json.loads(p.stdout)["result"]["data"]
+              print("QUOTA_USED_MB="+str(q.get("megabytes_used")))
+          except Exception as e:print("QUOTA_ERROR="+type(e).__name__)
+          print("READONLY_SAFE_INVENTORY=complete")
+          PY
+          REMOTE
+      - name: Clear SSH credentials
+        if: always()
+        shell: bash
+        run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
