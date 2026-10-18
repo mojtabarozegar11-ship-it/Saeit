@@ -84,6 +84,10 @@ jobs:
           code=$(curl -sS -o "$RUNNER_TEMP/invoice" -w '%{http_code}' "http://127.0.0.1:8585/?id=$token" -H 'Host: mojplaywin.com')
           test "$code" = 200
           grep -q 'THFNU1iEXHd71WjEgjqUksd2UnMg2pUi73' "$RUNNER_TEMP/invoice"
+          code=$(curl -sS -o "$RUNNER_TEMP/admin-denied" -w '%{http_code}' "http://127.0.0.1:8585/bootstrap.php" -H 'Host: mojplaywin.com')
+          test "$code" = 404
+          test ! -s "$RUNNER_TEMP/admin-denied"
+          echo "ADMIN_BOOTSTRAP_WEB_ACCESS_DENIED=true"
           code=$(curl -sS -o "$RUNNER_TEMP/host-denied" -w '%{http_code}' "http://127.0.0.1:8585/?id=$token" -H 'Host: other.example')
           test "$code" = 404
           code=$(curl -sS -o "$RUNNER_TEMP/unknown" -w '%{http_code}' "http://127.0.0.1:8585/?id=incorrect" -H 'Host: mojplaywin.com')
