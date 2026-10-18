@@ -64,7 +64,7 @@ class Handler(BaseHTTPRequestHandler):
                 out = {"jsonrpc": "2.0", "id": 1, "result": fixtures[method]}
             else:
                 method = self.path.split("/")[-1]
-                token = arg.get("value", "")
+                token = arg.get("value", "") if isinstance(arg, dict) else ""
                 destination = (
                     TRX_RECIPIENT_HEX if token == TRX_TX else ("41" + "0" * 40)
                 )
