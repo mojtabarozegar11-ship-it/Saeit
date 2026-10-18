@@ -1,0 +1,46 @@
+name: MojPlayWin About team routing source diagnostic (read-only)
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/mojplaywin-about-team-readonly-diagnostic-20261018.yml"
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compare public About to precisely rolled back production page hash
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from urllib.request import Request,urlopen
+          import hashlib,re,json,time
+          from pathlib import Path
+          expected='5d7338c2ef1438f60248865f064f258458bb807dca9d06711eebbd856dc4cef7'
+          snippets=Path('content/mojplaywin_about_team_section_20261018.html').read_text('utf-8')
+          for i in range(3):
+            url='https://mojplaywin.com/about/?_team_routing_diagnostic='+str(time.time_ns())+'-'+str(i)
+            req=Request(url,headers={'User-Agent':'MojPlayWinExactReadOnlyDiagnostics/1.0','Cache-Control':'no-cache'})
+            with urlopen(req,timeout=23) as r:
+              data=r.read(1500000)
+              status=r.status
+              cache_headers={k:v for k,v in r.headers.items() if k.lower() in ('age','cache-control','cf-cache-status','etag','content-type')}
+            html=data.decode('utf-8','replace')
+            terms=['MPW_ABOUT_RESEARCH_80_20_V1','SPECIALISM 28','COMPLEMENTARY SPECIALISM 30','Original by Default',
+                   'Mojtaba Roozegar','mpw-meet-team-20261018','data:image/avif;base64,']
+            print('TEAM_ABOUT_READONLY_DIAG='+json.dumps({'status':status,'length':len(data),'sha256':hashlib.sha256(data).hexdigest(),
+             'matches_expected_rolled_back_static':hashlib.sha256(data).hexdigest()==expected,
+             'h1_count':len(re.findall(r'<h1\b',html,re.I)),
+             'main_count':len(re.findall(r'<main\b',html,re.I)),
+             'headings':[re.sub(r'<[^>]*>',' ',h).strip()[:80] for h in re.findall(r'<h1\b[^>]*>(.*?)</h1>',html,re.I|re.S)[:3]],
+             'markers':{t:html.count(t) for t in terms},
+             'headers':cache_headers}))
+            if i==0 and html.lower().count('</main>')==1:
+              candidate=html.replace('</main>','<!-- MPW_TEAM_ADDON_V1 -->\n'+snippets+'\n</main>',1)
+              print('CANDIDATE_EXPECTATIONS='+json.dumps({'team_id':candidate.count('id="mpw-meet-team-20261018"'),
+                   'cards':candidate.count('class="mpw-team-card"'),'image':candidate.count('data:image/avif;base64,'),
+                   'h1':len(re.findall(r'<h1\b',candidate,re.I)),'candidate_bytes':len(candidate.encode('utf-8'))}))
+          PY
