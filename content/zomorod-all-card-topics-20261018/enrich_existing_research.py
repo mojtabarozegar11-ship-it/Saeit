@@ -69,6 +69,7 @@ def enrich(page,kind,slug,title,summary):
       {"@type":"ListItem","position":1,"name":"خانه","item":BASE+"/"},
       {"@type":"ListItem","position":2,"name":"مراکز و واحدهای تحقیقات","item":BASE+"/topics/"},
       {"@type":"ListItem","position":3,"name":title,"item":canon}]}]
+    schema_text=json.dumps(struct,ensure_ascii=False).replace("</", "<\\/")
     head=(f'<meta property="og:type" content="article">'
       f'<meta property="og:site_name" content="زمرد ملل">'
       f'<meta property="og:title" content="{esc(title)} | زمرد ملل">'
@@ -77,7 +78,7 @@ def enrich(page,kind,slug,title,summary):
       f'<meta property="og:image" content="{BASE}/static/site/zomorod-v7/company-logo.webp">'
       f'<meta name="twitter:card" content="summary">'
       f'<meta name="twitter:title" content="{esc(title)}">'
-      f'<script type="application/ld+json">{json.dumps(struct,ensure_ascii=False).replace("</","<\\/")}</script>')
+      f'<script type="application/ld+json">{schema_text}</script>')
     question,scope=make_detail(kind,title,summary)
     blocks=[
       ("پرسش محوری و دامنه تخصص",f"{question} موضوع محوری این صفحه، {scope} است. برای پاسخ معتبر، تعریف جمعیت مطالعه، شرایط آزمون و محدوده تعمیم باید دقیق باشد."),
