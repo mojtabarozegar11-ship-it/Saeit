@@ -470,4 +470,7 @@ class EducationCertificate(T):
     issued_at = models.DateTimeField(auto_now_add=True)
 
 # Main-site-only manufacturing intake ledger; separate from customer Order/Product.
-from .mojplaywin_production_models import MojPlayWinOpportunitySignal, MojPlayWinManufacturingOrder
+from .mojplaywin_production_models import (
+    MojPlayWinOpportunitySignal, MojPlayWinManufacturingOrder,
+    MojPlayWinQAReview, MojPlayWinQADefect, MojPlayWinReworkCycle,
+)
