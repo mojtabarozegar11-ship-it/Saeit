@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths:
       - .github/workflows/mojplaywin-header-gold-live-20261018.yml
+      - scripts/mojplaywin_home_header_golden_live_20261018.py
   workflow_dispatch:
 permissions:
   contents: read
