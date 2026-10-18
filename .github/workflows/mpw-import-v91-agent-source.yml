@@ -27,7 +27,7 @@ jobs:
       - name: Establish pinned read-only VPS SSH transport
         shell: bash
         env:
-          VPS_KEY: {{ secrets.VPS_SSH_PRIVATE_KEY }}
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
         run: |
           set -euo pipefail
           umask 077
