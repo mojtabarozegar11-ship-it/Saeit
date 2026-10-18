@@ -1,0 +1,101 @@
+name: MojPlayWin real crypto activation readiness and merchant proof audit
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/mojplaywin-activation-gate-audit-20261018.yml"
+permissions:
+  contents: read
+jobs:
+  readonly-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Check live app readiness and merchant proof metadata without secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 100s ssh -T -F "$d/config" saeit-cpanel python3 - <<'PY'
+          from pathlib import Path
+          import os,json,re,hashlib,sys,subprocess
+          a=Path('/home/zomorod2/Saeit-staging')
+          if not a.is_dir() or a.is_symlink():raise SystemExit("UNEXPECTED_APPLICATION_PATH")
+          root=Path('/home/zomorod2')
+          checks={}
+          checks['wsgi_root_matches']="APP='/home/zomorod2/Saeit-staging'" in (root/'mojplaywin.com/passenger_wsgi.py').read_text('utf8','replace')
+          checks['mainnet_eth_safe_disabled'] = 'MAINNET_ENABLED = False' in (a/'core/cryptopay_mainnet_config.py').read_text('utf8','replace')
+          checks['mainnet_tron_safe_disabled'] = 'MAINNET_ENABLED = False' in (a/'core/cryptopay_tron_config.py').read_text('utf8','replace')
+          checks['native_autopay_has_single_product_filter'] = 'product_id=72' in (a/'mpw_native_checkout/autopay_worker.py').read_text('utf8','replace')
+          checks['native_worker_external_scheduler_required'] = 'Must be called by a trusted scheduler' in (a/'mpw_native_checkout/autopay_worker.py').read_text('utf8','replace')
+          checks['native_settlement_staging_notice'] = 'STAGING ONLY' in (a/'mpw_native_checkout/settlement.py').read_text('utf8','replace')
+          checks['proofs_supported'] = 'def proven_assets(' in (a/'mpw_native_checkout/wallet_ownership.py').read_text('utf8','replace')
+          checks['wallet_ownership_page_exists']=(a/'mpw_native_checkout/merchant_wallet_views.py').is_file()
+          checks['download_delivery_has_blockchain_proof'] = 'can_download_paid_native_order' in (a/'mpw_native_checkout/entitlements.py').read_text('utf8','replace')
+          # Python process of the active Passenger app. Return interpreter candidates only, no env values.
+          f=(root/'mojplaywin.com/passenger_wsgi.py').read_text('utf8','replace')
+          checks['wsgi_lines']=[line.strip()[:170] for line in f.splitlines() if any(token in line for token in ('sys.path','APP=','APP =','activate_this','DJANGO_SETTINGS_MODULE','get_wsgi_application')) and not any(token in line.lower() for token in ('secret','password','token','key'))][:15]
+          for basedir in [root/'virtualenv',root/'.virtualenvs',a,root/'python-envs',root/'venv']:
+            if not basedir.is_dir() or basedir.is_symlink():continue
+            choices=[]
+            for glob in ('*/bin/python','*/bin/python3','*/*/bin/python','bin/python','bin/python3'):
+              choices += [str(v) for v in list(basedir.glob(glob))[:12] if v.is_file() or v.is_symlink()]
+            if choices:checks.setdefault('python_candidates',[]).extend(choices[:12])
+          for name in ('mpw_native_checkout/migrations','core/migrations','core/management/commands'):
+            d=a/name
+            checks[name+'_file_count']=len(list(d.glob('*.py'))) if d.is_dir() else 0
+          checks['payment_provider_public_paths_configured'] = 'store/product/<int:pk>/checkout/' in (a/'config/urls.py').read_text('utf8','replace')
+          checks['merchant_wallet_routes_connected'] = 'merchant_wallet_urls' in (a/'config/urls.py').read_text('utf8','replace')
+          checks['app_flags_non_sensitive'] = {name:bool(os.environ.get(name)) for name in ('DJANGO_SETTINGS_MODULE','DATABASE_URL','CRYPTO_PAYMENT_ENABLED','PAYMENT_LIVE_ENABLED')}
+          print("MPW_ACTIVATION_CONTROL_READINESS="+json.dumps(checks))
+          # Database readonly: inspect SQLite availability without opening or exposing contents.
+          for name in ('db.sqlite3','db.sqlite3-wal','db.sqlite3-shm'):
+            p=a/name
+            print("MPW_DB_BACKING_FILE="+json.dumps({'name':name,'exists':p.exists(),'size':p.stat().st_size if p.is_file() else None}))
+          PY
