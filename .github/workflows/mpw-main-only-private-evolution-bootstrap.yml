@@ -19,7 +19,7 @@ jobs:
         with:
           persist-credentials: false
           # Exact isolated feature source; do not deploy default-branch Django code.
-          ref: 102c5f7540ef442d1ac2b61073423a7184d2e839
+          ref: 9ca7117b5ffb4ef4f833c592ebba65b316ca7ee7
       - name: Test bounded evidence-driven evolution and package SHA-verified code
         shell: bash
         run: |
