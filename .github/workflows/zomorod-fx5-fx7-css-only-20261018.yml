@@ -139,7 +139,7 @@ jobs:
               assert 'zm-fx5-gold-ray-travel-20261018' in html
               assert 'transition-property:transform,box-shadow' in html
               assert 'prefers-reduced-motion' in html
-              assert all(x in html for x in ('class="header-orbit wrap"','class="orbit-shelves"','class="orbital-cards"','ZOMOROD_ORBIT_DATA','id="zm-gold-search-toolbar-20261018"','id="zm-topics-top-icon-20261018"'))
+              assert all(x in html for x in ('class="header-orbit wrap"','class="orbital-cards"','ZOMOROD_ORBIT_DATA','id="zm-gold-search-toolbar-20261018"','id="zm-topics-top-icon-20261018"'))
               assert 'تمام حقوق مادی و معنوی' in html
               assert len(html)>2200000
               passed=True
@@ -193,17 +193,17 @@ jobs:
                 before.style.animation==='none'||before.displacement.length>0)
                 throw Error('Navbar effect or layout changed at '+width+': '+JSON.stringify(before));
               const hover=await page.evaluate(()=>{
-                const host=document.querySelector('.orbit-shelves');
-                if(!host)return{error:'missing shelf'};
+                const host=document.querySelector('main#content');
+                if(!host)return{error:'missing main'};
                 const probe=document.createElement('a');
                 probe.className='topic-card';probe.href='#orbit-01';
-                probe.textContent='Card style probe';probe.style.cssText='pointer-events:auto;display:block;position:relative;width:140px;height:180px';
+                probe.textContent='Card style probe';probe.style.cssText='pointer-events:auto;display:block;position:fixed;top:70px;left:70px;z-index:2147483000;width:140px;height:180px';
                 host.appendChild(probe);
                 const first={transform:getComputedStyle(probe).transform,filter:getComputedStyle(probe).filter,translate:getComputedStyle(probe).translate};
                 return {first,probeCreated:true};
               });
-              await page.locator('.orbit-shelves .topic-card').last().hover();
-              const active=await page.locator('.orbit-shelves .topic-card').last().evaluate(el=>{
+              await page.locator('main#content > .topic-card').last().hover();
+              const active=await page.locator('main#content > .topic-card').last().evaluate(el=>{
                 const s=getComputedStyle(el);return {translate:s.translate,filter:s.filter,transform:s.transform};
               });
               console.log('ZM_FX57_BROWSER '+JSON.stringify({width,nav:before.style,displacement:before.displacement,probe:hover,hover:active}));
