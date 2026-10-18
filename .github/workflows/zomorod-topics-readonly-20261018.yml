@@ -1,0 +1,86 @@
+name: Zomorod topics directory routing and rollback read-only audit
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/zomorod-topics-readonly-20261018.yml"
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare verified pinned SSH relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/topic-audit";mkdir -p -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.known"
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+      - name: Read-only path permissions and rewrite diagnostics
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/topic-audit"
+          ssh -F "$d/config" saeit-cpanel bash -s <<'REMOTE'
+          set -eu
+          web="$HOME/public_html"
+          echo "WEBSITE_READONLY_PATH_DIAGNOSTIC"
+          for path in "$web" "$web/index.html" "$web/.htaccess" "$web/about" "$web/research" "$web/research/directory" "$web/research/directory/units" "$web/research/directory/units/molecular-genetics" "$web/topics";do
+            if test -e "$path";then stat -c 'MODE=%a OWNER=%U GROUP=%G TYPE=%F PATH=%n' "$path";else echo "NOT_PRESENT=$path";fi
+          done
+          for route in topics topics/index.html topics/zm-r01/wheat/index.html research/directory/units/molecular-genetics/index.html;do
+            if test -e "$web/$route";then stat -c 'ROUTE_MODE=%a %n' "$web/$route";fi
+          done
+          echo "ROOT_INDEX_PREVIOUS_VERSION:"
+          grep -Fq 'zm-all-cards-dedicated-topics-20261018' "$web/index.html" && echo new_605 || echo old_29
+          echo "RESEARCH_ROLLBACK:"
+          grep -Fq 'zm-existing-research-expert-enrichment-20261018' "$web/research/directory/units/molecular-genetics/index.html" && echo upgraded_60 || echo original_60
+          echo "HTACCESS_REWRITE_AND_PASSENGER_LINES:"
+          grep -nE '^(RewriteEngine|RewriteRule|RewriteCond|DirectoryIndex|Options|Passenger|FallbackResource|ErrorDocument|SetHandler|AddHandler)' "$web/.htaccess" | cut -c 1-230 || true
+          for route in / /topics/ /topics/index.html /research/directory/units/molecular-genetics/ /research/directory/units/molecular-genetics/index.html;do
+            status="$(curl -sSL --max-time 17 -o /dev/null -w '%{http_code}|%{content_type}' "https://zomorodmelal.ir$route" || true)"
+            echo "AUDIT_HTTP_ROUTE=$route STATUS=$status"
+          done
+          REMOTE
+      - name: Remove credentials
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/topic-audit"
