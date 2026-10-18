@@ -73,7 +73,7 @@ jobs:
           import pathlib,re,sys,sqlite3
           p=pathlib.Path(sys.argv[1])
           headers=(p/'create.headers').read_text()
-          token=re.search(r'Location: https://mojplaywin.com/checkout/crypto/\?id=([a-f0-9]{48})',headers,re.I)
+          token=re.search(r'Location: https://mojplaywin.com/checkout/crypto/index\.php\?id=([a-f0-9]{48})',headers,re.I)
           assert token, 'No unique private payment invoice issued'
           (p/'token').write_text(token.group(1))
           db=sqlite3.connect('/home/zomorod2/.mojplaywin-crypto-payments-v1/payments.sqlite3')
