@@ -1,0 +1,119 @@
+name: MojPlayWin checkout isolated directory route validation (DISABLED)
+on:
+  push:
+    branches: [feature/mojplaywin-crypto-gateway-20261018]
+    paths:
+      - .github/workflows/mojplaywin-crypto-directory-route.yml
+permissions:
+  contents: read
+concurrency:
+  group: mojplaywin-crypto-isolated-route-publish
+  cancel-in-progress: false
+jobs:
+  test-directory-index:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/feature/mojplaywin-crypto-gateway-20261018'
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Validate scoped payment route guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mojplaywin_crypto_checkout_directory_index.py
+          grep -Fqx 'DirectoryIndex index.php' isolated_crypto_gateway/.htaccess
+          grep -Fqx 'Options -Indexes' isolated_crypto_gateway/.htaccess
+          grep -Fq 'RewriteRule ^$ index.php [END]' isolated_crypto_gateway/.htaccess
+          echo "MAIN_DOMAIN_SHARED_REWRITE_MODIFICATIONS=false"
+      - name: Set up host-fingerprint-pinned read-only relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-crypto-preflight-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+          echo "PINNED_READONLY_RELAY=connected"
+
+
+      - name: Test isolated directory index while payment collection is off
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-crypto-preflight-ssh"
+          stage="/home/zomorod2/.mjwp-crypto-htindex-$GITHUB_RUN_ID"
+          digest="$(sha256sum isolated_crypto_gateway/.htaccess | cut -d' ' -f1)"
+          test "$(curl -sS --max-time 15 -o /dev/null -w '%{http_code}' https://mojplaywin.com/checkout/crypto/index.php)" = "503"
+          routes=(/ /store/ /farnaz/ /taniya/ /mojtaba.roozegar/ /saman/)
+          for route in "${routes[@]}"; do
+            code="$(curl -sS --max-time 15 -o /dev/null -w '%{http_code}' "https://mojplaywin.com$route")"
+            echo "${route//[^[:alnum:]]/_}=$code" >> "$RUNNER_TEMP/before"
+          done
+          ssh -T -F "$d/config" saeit-cpanel "test ! -e '$stage' && test ! -L '$stage' && install -d -m 700 '$stage'"
+          staged=false
+          cleanup() {
+            if [ "$staged" = true ]; then
+              timeout 35s ssh -T -F "$d/config" saeit-cpanel "python3 '$stage/install.py' cleanup '$stage/.htaccess' '$digest'" || true
+            fi
+            ssh -T -F "$d/config" saeit-cpanel "test -d '$stage' && rm -f -- '$stage/.htaccess' '$stage/install.py' && rmdir -- '$stage'" || true
+          }
+          trap cleanup EXIT
+          ssh -T -F "$d/config" saeit-cpanel "umask 077; cat > '$stage/.htaccess'" < isolated_crypto_gateway/.htaccess
+          ssh -T -F "$d/config" saeit-cpanel "umask 077; cat > '$stage/install.py'" < scripts/mojplaywin_crypto_checkout_directory_index.py
+          staged=true
+          timeout 40s ssh -T -F "$d/config" saeit-cpanel "python3 '$stage/install.py' stage '$stage/.htaccess' '$digest'"
+          root="$(curl -sS --max-time 20 -o "$RUNNER_TEMP/root-body" -w '%{http_code}' https://mojplaywin.com/checkout/crypto/)"
+          php="$(curl -sS --max-time 20 -o "$RUNNER_TEMP/direct-body" -w '%{http_code}' https://mojplaywin.com/checkout/crypto/index.php)"
+          echo "GATEWAY_DIRECTORY_HTTP=$root"
+          echo "GATEWAY_DIRECT_PHP_HTTP=$php"
+          if [ "$root" != "503" ] || [ "$php" != "503" ]; then
+            echo "ISOLATED_DIRECTORY_MAPPING_UNSUPPORTED=true"
+            exit 42
+          fi
+          for route in "${routes[@]}"; do
+            code="$(curl -sS --max-time 15 -o /dev/null -w '%{http_code}' "https://mojplaywin.com$route")"
+            echo "${route//[^[:alnum:]]/_}=$code" >> "$RUNNER_TEMP/after"
+          done
+          diff -u "$RUNNER_TEMP/before" "$RUNNER_TEMP/after"
+          timeout 30s ssh -T -F "$d/config" saeit-cpanel "python3 '$stage/install.py' verify '$stage/.htaccess' '$digest'"
+          staged=false
+          echo "CHECKOUT_ROOT_RESOLVES_SAFE_DISABLED_GATEWAY=true"
+          echo "PAYMENT_COLLECTION_ENABLED=false"
+          echo "PROTECTED_SITES_UNCHANGED=true"

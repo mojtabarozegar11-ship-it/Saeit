@@ -1,0 +1,120 @@
+name: MojPlayWin gateway automatic finality worker install (DISABLED)
+on:
+  push:
+    branches: [feature/mojplaywin-crypto-gateway-20261018]
+    paths: [.github/workflows/mojplaywin-crypto-cron-code-install.yml]
+permissions:
+  contents: read
+concurrency:
+  group: mojplaywin-crypto-isolated-route-publish
+  cancel-in-progress: false
+jobs:
+  install-worker-code:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/feature/mojplaywin-crypto-gateway-20261018'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Prove reviewed change is only a CLI worker and PHP is valid
+        shell: bash
+        run: |
+          set -euo pipefail
+          oldref="fbe93c566de37a47a8789de60ee4fab81d35fbb0"
+          git show "$oldref:isolated_crypto_gateway/index.php" > "$RUNNER_TEMP/old-index.php"
+          git show "$oldref:isolated_crypto_gateway/bootstrap.php" > "$RUNNER_TEMP/old-bootstrap.php"
+          python3 - <<'PY'
+          from pathlib import Path
+          import os
+          old=Path(os.environ["RUNNER_TEMP"]+"/old-index.php").read_text()
+          new=Path("isolated_crypto_gateway/index.php").read_text()
+          anchor="header('Cache-Control: private, no-store');"
+          assert anchor in old and anchor in new
+          assert old.split(anchor,1)[0] == new.split(anchor,1)[0].split("/**\n * Called only by a dedicated on-host scheduler",1)[0]
+          assert old.split(anchor,1)[1] == new.split(anchor,1)[1]
+          assert "MOJPLAYWIN_AUTORECONCILE" in new
+          assert Path(os.environ["RUNNER_TEMP"]+"/old-bootstrap.php").read_bytes() == Path("isolated_crypto_gateway/bootstrap.php").read_bytes()
+          print("ISOLATED_CLI_WORKER_CHANGE_ONLY=verified")
+          PY
+          php -l isolated_crypto_gateway/index.php
+          python3 -m py_compile scripts/mojplaywin_crypto_disabled_hotfix.py
+      - name: Set up host-fingerprint-pinned read-only relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-crypto-preflight-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+          echo "PINNED_READONLY_RELAY=connected"
+
+
+      - name: Publish isolated CLI worker code while real payments are disabled
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-crypto-preflight-ssh"
+          stage="/home/zomorod2/.mojplaywin-crypto-worker-$GITHUB_RUN_ID"
+          ssh -T -F "$d/config" saeit-cpanel "test ! -e '$stage' && test ! -L '$stage' && install -d -m 700 '$stage'"
+          cleanup() {
+            ssh -T -F "$d/config" saeit-cpanel "test -d '$stage' && rm -f -- '$stage/index.php' '$stage/bootstrap.php' '$stage/old_index.php' '$stage/old_bootstrap.php' '$stage/hotfix.py' && rmdir -- '$stage'" || true
+          }
+          trap cleanup EXIT
+          for file in index.php bootstrap.php; do
+            ssh -T -F "$d/config" saeit-cpanel "umask 077; cat > '$stage/$file'" < "isolated_crypto_gateway/$file"
+            ssh -T -F "$d/config" saeit-cpanel "umask 077; cat > '$stage/old_$file'" < "$RUNNER_TEMP/old-$file"
+          done
+          ssh -T -F "$d/config" saeit-cpanel "umask 077; cat > '$stage/hotfix.py'" < scripts/mojplaywin_crypto_disabled_hotfix.py
+          timeout 45s ssh -T -F "$d/config" saeit-cpanel "python3 '$stage/hotfix.py' '$stage' '$GITHUB_RUN_ID'"
+          timeout 30s ssh -T -F "$d/config" saeit-cpanel "php -l /home/zomorod2/mojplaywin.com/checkout/crypto/index.php && php /home/zomorod2/mojplaywin.com/checkout/crypto/index.php reconcile && php /home/zomorod2/mojplaywin.com/checkout/crypto/bootstrap.php status"
+          status="$(curl -sS --max-time 20 -o "$RUNNER_TEMP/gateway-closed" -w '%{http_code}' https://mojplaywin.com/checkout/crypto/index.php)"
+          echo "HTTP_WHILE_PAYMENTS_DISABLED=$status"
+          test "$status" = 503
+          for route in / /store/ /farnaz/ /taniya/ /mojtaba.roozegar/ /saman/; do
+            status="$(curl -sS --max-time 15 -o /dev/null -w '%{http_code}' "https://mojplaywin.com$route")"
+            echo "SITE_ROUTE_${route//[^[:alnum:]]/_}=$status"
+            test "$status" != 500
+            test "$status" != 502
+            test "$status" != 503
+          done
+          echo "SERVER_AUTORECONCILIATION_CODE_INSTALLED=true"
+          echo "SERVER_AUTORECONCILIATION_SCHEDULED=false"
+          echo "FUNDS_COLLECTION_ENABLED=false"

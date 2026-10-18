@@ -1,0 +1,138 @@
+name: MojPlayWin activate native ETH TRX CUSTOM SERVICE payments
+on:
+  push:
+    branches: [feature/mojplaywin-crypto-gateway-20261018]
+    paths: [.github/workflows/mojplaywin-crypto-activate-custom-services.yml]
+permissions:
+  contents: read
+concurrency:
+  group: mojplaywin-crypto-isolated-route-publish
+  cancel-in-progress: false
+jobs:
+  enable-after-live-readiness:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/feature/mojplaywin-crypto-gateway-20261018'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Check executable content and operator change script
+        run: |
+          set -euo pipefail
+          php -l isolated_crypto_gateway/index.php
+          python3 -m py_compile scripts/mojplaywin_crypto_activate_custom_service.py
+      - name: Set up host-fingerprint-pinned read-only relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-crypto-preflight-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+          echo "PINNED_READONLY_RELAY=connected"
+
+
+      - name: Verify merchant-only deployment; activate and conduct NO-FUNDS purchase-path rehearsal
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-crypto-preflight-ssh"
+          stage="/home/zomorod2/.mojplaywin-activation-$GITHUB_RUN_ID"
+          expected="$(sha256sum isolated_crypto_gateway/index.php | cut -d' ' -f1)"
+          base="https://mojplaywin.com/checkout/crypto/index.php"
+          target="/home/zomorod2/mojplaywin.com/checkout/crypto/index.php"
+          test "$(curl -sS --max-time 15 -o /dev/null -w '%{http_code}' "$base")" = 503
+          for path in / /store/ /farnaz/ /taniya/ /mojtaba.roozegar/ /saman/; do
+            curl -sS -o /dev/null --max-time 15 -w "$path %{http_code}\n" "https://mojplaywin.com$path" >> "$RUNNER_TEMP/health.before"
+          done
+          test "$(awk '$1=="/"{print $2}' "$RUNNER_TEMP/health.before")" = 200
+          test "$(awk '$1=="/store/"{print $2}' "$RUNNER_TEMP/health.before")" = 200
+          test "$(awk '$1=="/farnaz/"{print $2}' "$RUNNER_TEMP/health.before")" = 200
+          ssh -T -F "$d/config" saeit-cpanel "test ! -e '$stage' && test ! -L '$stage' && install -d -m 700 '$stage'"
+          enabled=false
+          clean() {
+            if [ "$enabled" = true ]; then
+              echo "ACTIVATION_SMOKE_FAILED_DISABLING_NEW_CHECKOUT=true"
+              timeout 40s ssh -T -F "$d/config" saeit-cpanel "python3 '$stage/activation.py' disable '$expected'" || echo "WARNING_FAILED_TO_VERIFY_PAYMENT_DISABLE"
+            fi
+            timeout 25s ssh -T -F "$d/config" saeit-cpanel "rm -f -- '$stage/activation.py' && rmdir -- '$stage'" || true
+          }
+          trap clean EXIT
+          ssh -T -F "$d/config" saeit-cpanel "umask 077; cat > '$stage/activation.py'" < scripts/mojplaywin_crypto_activate_custom_service.py
+          timeout 50s ssh -T -F "$d/config" saeit-cpanel "python3 '$stage/activation.py' activate '$expected'"
+          enabled=true
+          code="$(curl -sS --max-time 18 -c "$RUNNER_TEMP/cookies" -b "$RUNNER_TEMP/cookies" -o "$RUNNER_TEMP/page.html" -w '%{http_code}' "$base")"
+          echo "LIVE_CUSTOM_PAYMENT_LANDING_HTTP=$code"
+          test "$code" = 200
+          grep -q 'MojPlayWin secure payments' "$RUNNER_TEMP/page.html"
+          csrf="$(python3 - "$RUNNER_TEMP/page.html" <<'PY'
+          import re,sys
+          s=open(sys.argv[1],encoding="utf-8").read()
+          m=re.search(r'name="csrf" value="([a-f0-9]{48})"',s)
+          if not m: raise SystemExit("Production CSRF form missing")
+          print(m.group(1))
+          PY
+          )"
+          code="$(curl -sS --max-time 20 -c "$RUNNER_TEMP/cookies" -b "$RUNNER_TEMP/cookies" -D "$RUNNER_TEMP/created.headers" -o "$RUNNER_TEMP/created.body" -w '%{http_code}' "$base" --data-urlencode "csrf=$csrf" --data-urlencode action=create --data-urlencode asset=TRX --data-urlencode amount=1 --data-urlencode "reference=Internal readiness only do not send funds")"
+          echo "LIVE_NO_FUNDS_INVOICE_CREATED_HTTP=$code"
+          test "$code" = 303
+          token="$(python3 - "$RUNNER_TEMP/created.headers" <<'PY'
+          import re,sys
+          s=open(sys.argv[1],encoding="utf-8").read()
+          m=re.search(r'^Location:\s*https://mojplaywin.com/checkout/crypto/index\.php\?id=([a-f0-9]{48})',s,re.I|re.M)
+          if not m:raise SystemExit("Checkout did not redirect to installed PHP entrypoint")
+          print(m.group(1))
+          PY
+          )"
+          code="$(curl -sS --max-time 18 -o "$RUNNER_TEMP/unpaid.html" -w '%{http_code}' "$base?id=$token")"
+          echo "LIVE_NO_FUNDS_INVOICE_PAGE_HTTP=$code"
+          test "$code" = 200
+          grep -q "awaiting_payment" "$RUNNER_TEMP/unpaid.html"
+          grep -q "THFNU1iEXHd71WjEgjqUksd2UnMg2pUi73" "$RUNNER_TEMP/unpaid.html"
+          timeout 35s ssh -T -F "$d/config" saeit-cpanel "php '$target' reconcile"
+          for path in / /store/ /farnaz/ /taniya/ /mojtaba.roozegar/ /saman/; do
+            curl -sS -o /dev/null --max-time 15 -w "$path %{http_code}\n" "https://mojplaywin.com$path" >> "$RUNNER_TEMP/health.after"
+          done
+          diff -u "$RUNNER_TEMP/health.before" "$RUNNER_TEMP/health.after"
+          enabled=false
+          echo "CUSTOM_SERVICE_ETH_TRX_PAYMENT_GATEWAY_PUBLIC=true"
+          echo "AUTOMATIC_SETTLEMENT_JOB_PRESENT=true"
+          echo "REAL_TEST_TRANSFERS_SENT=false"
+          echo "PRODUCT_CATALOG_PRICED_AND_CONNECTED=false"
+          echo "OTHER_SITE_FILES_OR_DB_MODIFIED=false"

@@ -1,0 +1,103 @@
+name: MojPlayWin gateway standalone PHP route smoke (TEMP ONLY)
+on:
+  push:
+    branches: [feature/mojplaywin-crypto-gateway-20261018]
+    paths: [.github/workflows/mojplaywin-crypto-route-probe.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: mojplaywin-crypto-temp-route-probe
+  cancel-in-progress: false
+jobs:
+  standalone-php-route-smoke:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/feature/mojplaywin-crypto-gateway-20261018'
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate isolated reversible route probe syntax
+        run: python3 -m py_compile scripts/mojplaywin_crypto_route_probe.py
+      - name: Set up host-fingerprint-pinned read-only relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-crypto-preflight-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+          echo "PINNED_READONLY_RELAY=connected"
+
+
+      - name: Verify live routes, perform bounded ephemeral PHP probe, and remove
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-crypto-preflight-ssh"
+          probe="https://mojplaywin.com/checkout/crypto/__moj_gateway_probe_20261018.php"
+          for url in https://mojplaywin.com/ https://mojplaywin.com/store/ https://mojplaywin.com/farnaz/; do
+            test "$(curl -L -s -o /dev/null -w '%{http_code}' --max-time 15 "$url")" = "200" || exit 40
+          done
+          staged=false
+          cleanup() {
+            if [ "$staged" = true ]; then
+              timeout 40s ssh -T -F "$d/config" saeit-cpanel python3 - cleanup < scripts/mojplaywin_crypto_route_probe.py || true
+            fi
+          }
+          trap cleanup EXIT
+          staged=true
+          timeout 40s ssh -T -F "$d/config" saeit-cpanel python3 - stage < scripts/mojplaywin_crypto_route_probe.py
+          status="$(curl -sS -o "$RUNNER_TEMP/mojplaywin-php-health" -w '%{http_code}' --max-time 20 "$probe")"
+          echo "PAYMENT_ISOLATED_PHP_PROBE_HTTP_STATUS=$status"
+          if [ "$status" = "200" ] && grep -Fxq "MOJPLAYWIN-PHP-ROUTE-ISOLATION-20261018-v1" "$RUNNER_TEMP/mojplaywin-php-health"; then
+            echo "ISOLATED_PHP_HANDLER_PROVEN=true"
+          else
+            echo "ISOLATED_PHP_HANDLER_PROVEN=false"
+            exit 41
+          fi
+          timeout 40s ssh -T -F "$d/config" saeit-cpanel python3 - cleanup < scripts/mojplaywin_crypto_route_probe.py
+          staged=false
+          test "$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "$probe")" = "404" || exit 42
+          for url in https://mojplaywin.com/ https://mojplaywin.com/store/ https://mojplaywin.com/farnaz/; do
+            test "$(curl -L -s -o /dev/null -w '%{http_code}' --max-time 15 "$url")" = "200" || exit 43
+          done
+          echo "CHILD_SITE_HEALTH_CHECK_AFTER=passed"
+          echo "DYNAMIC_PAYMENTS_ENABLED=false"

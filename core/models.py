@@ -468,3 +468,7 @@ class EducationCertificate(T):
     title = models.CharField(max_length=300)
     verification_note = models.TextField(blank=True)
     issued_at = models.DateTimeField(auto_now_add=True)
+
+
+# Separate native-asset offer/invoice tables for MojPlayWin only.
+from .mojplaywin_crypto_models import MojCryptoOffer, MojCryptoInvoice, MojCryptoThrottle  # noqa: E402,F401

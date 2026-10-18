@@ -365,6 +365,9 @@ class PaymentWebhookViewSet(viewsets.ViewSet):
         provider = str(request.headers.get("X-Payment-Provider", "")).strip()
         event_id = str(request.headers.get("X-Payment-Event-Id", "")).strip()
         signature = str(request.headers.get("X-Payment-Signature", "")).strip()
+        # Native-chain settlement must never trust a generic HMAC callback.
+        if provider.startswith("onchain-"):
+            return Response({"detail": "On-chain payments require blockchain verification."}, status=status.HTTP_403_FORBIDDEN)
         secret = str(getattr(settings, "PAYMENT_WEBHOOK_SECRET", "") or "")
         if not provider or not event_id or not signature or not secret:
             return Response({"detail": "Webhook authentication headers are required."}, status=status.HTTP_401_UNAUTHORIZED)

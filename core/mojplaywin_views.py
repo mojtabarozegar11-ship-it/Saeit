@@ -20,8 +20,8 @@ VENTURES = [
  {"slug":"hospitality","title":"Hospitality & Services","text":"Guest services, experience design, and digital operations across hospitality.","url":"/ventures/hospitality/","image":"site/heroes/platform-home.webp","lead":"Connect hospitality experience with practical service design, useful information, and digital customer tools.","cards":[("Service design","Make services easier to understand, access, and deliver consistently."),("Guest communication","Organize useful information, inquiries, reservations, and follow-up."),("Digital operations","Explore tools that support teams, customer journeys, and service quality.")],"note":"Project details are published only when confirmed by the responsible business."},
 ]
 PRODUCTS = [
- {"title":"The Science and Practice of Chess Improvement","text":"A structured chess study resource with lessons, analysis, and exercises.","image":"site/heroes/education-detail.webp","category":"BOOK · LEARNING","url":"/store/"},
- {"title":"Taniya and the Little Baker Worms","text":"A rhythmic illustrated story created for young readers and families.","image":"site/heroes/game-studio.webp","category":"CHILDREN'S BOOK","url":"/taniya/"},
+ {"title":"The Science and Practice of Chess Improvement","text":"A structured chess study resource with lessons, analysis, and exercises.","image":"site/heroes/education-detail.webp","category":"BOOK · LEARNING","url":"/store/","regular_price_usd":"30.00","sale_price_usd":"7.50","discount_usd":"22.50","discount_percent":75},
+ {"title":"Taniya and the Little Baker Worms","text":"A rhythmic illustrated story created for young readers and families.","image":"site/heroes/game-studio.webp","category":"CHILDREN'S BOOK","url":"/taniya/","regular_price_usd":"20.00","sale_price_usd":"2.00","discount_usd":"18.00","discount_percent":90},
  {"title":"Farm Enterprise Economics Toolkit","text":"A practical digital toolkit for farm planning and enterprise economics.","image":"site/heroes/agriculture.webp","category":"AGRICULTURE · TOOLKIT","url":"/ventures/agriculture/"},
  {"title":"Applied AI Learning Path","text":"A step-by-step route from foundational AI ideas to practical applications.","image":"site/heroes/ai.webp","category":"COURSE · TECHNOLOGY","url":"/knowledge/"},
  {"title":"Original Browser Games","text":"A growing collection of playful digital game experiences.","image":"site/heroes/game-studio.webp","category":"GAMES · DIGITAL","url":"/studio/"},
@@ -58,7 +58,43 @@ def branded_store_dispatch(request):
  return branded_store(request)
 
 def store(request):
- return render(request,"mojplaywin/store.html",{"products":PRODUCTS})
+ from .mojplaywin_crypto_gateway import available_offers, DENOMINATORS
+ from decimal import Decimal
+ # Payment choices are built from every ACTIVE AND PRICED Django store product,
+ # not from six promotional cards. No buyer can set their own quote.
+ items = {}
+ for offer in available_offers():
+  product = offer.product
+  if product.pk not in items:
+   items[product.pk] = {
+    "id": product.pk, "title": product.title,
+    "price": product.price, "currency": product.currency,
+    "fulfillment_mode": offer.fulfillment_mode, "payments": [],
+   }
+  items[product.pk]["payments"].append({
+   "id": offer.pk, "asset": offer.asset,
+   "amount": f"{Decimal(offer.atomic_amount) / DENOMINATORS[offer.asset]:f}",
+  })
+ # Sale badges remain attached to the original two book cards, and verified
+ # checkout choices appear right there only after backend payment readiness.
+ catalog_by_title = {}
+ for entry in items.values():
+  catalog_by_title.setdefault(entry["title"], []).append(entry)
+ enriched_products = []
+ promoted_ids = set()
+ for promo in PRODUCTS:
+  card = dict(promo)
+  matching = catalog_by_title.get(card["title"], [])
+  if card.get("sale_price_usd") and len(matching) == 1:
+   offer = matching[0]
+   if offer["currency"] == "USD" and Decimal(offer["price"]) == Decimal(card["sale_price_usd"]):
+    card["payments"] = offer["payments"]
+    promoted_ids.add(offer["id"])
+  enriched_products.append(card)
+ return render(request, "mojplaywin/store.html", {
+  "products": enriched_products,
+  "crypto_catalog": [p for p in items.values() if p["id"] not in promoted_ids],
+ })
 
 def venture(request, slug):
  if not _is_mojplaywin(request):

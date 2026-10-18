@@ -1,0 +1,318 @@
+"""Host isolation, fail-closed checkout and no fake-settlement tests."""
+from decimal import Decimal
+from unittest.mock import patch
+from pathlib import Path
+import pytest
+from django.test import override_settings
+from core.models import LedgerEntry, Order, PaymentIntent, Product, KnowledgeArticle
+from core.mojplaywin_crypto_models import MojCryptoOffer, MojCryptoInvoice
+from core.mojplaywin_chain_verify import Proof, VerificationError
+from core.mojplaywin_crypto_gateway import settle
+
+
+@pytest.fixture
+def buyer(django_user_model):
+    return django_user_model.objects.create_user(username="crypto-buyer", password="safe-test-password")
+
+
+@pytest.fixture
+def priced_offer(django_user_model, tmp_path):
+    owner = django_user_model.objects.create_user(username="crypto-owner", password="safe-test-password")
+    (tmp_path / "sample.pdf").write_bytes(b"%PDF-1.4 test file")
+    article = KnowledgeArticle.objects.create(title="Published checkout content", slug="crypto-approved-checkout", content="book content", published=True)
+    product = Product.objects.create(
+        title="Approved chess study", product_type="ebook", price="9.00",
+        currency="USD", active=True, owner=owner, knowledge_article=article,
+    )
+    offer = MojCryptoOffer.objects.create(
+        product=product, asset="ETH", atomic_amount=Decimal("10000000000000000"),
+        active=True, private_file="sample.pdf",
+    )
+    return offer, tmp_path
+
+
+@pytest.mark.django_db
+def test_gateway_disabled_and_other_hosts_rejected(client, buyer, priced_offer):
+    offer, folder = priced_offer
+    client.force_login(buyer)
+    with override_settings(ALLOWED_HOSTS=["testserver", "mojplaywin.com", "zomorodmelal.ir"], MOJPLAYWIN_CRYPTO_ENABLED=False):
+        assert client.post(f"/checkout/crypto/buy/{offer.pk}/", HTTP_HOST="mojplaywin.com").status_code == 404
+    with override_settings(
+        ALLOWED_HOSTS=["testserver", "mojplaywin.com", "zomorodmelal.ir"],
+        MOJPLAYWIN_CRYPTO_ENABLED=True,
+        MOJPLAYWIN_PRIVATE_ASSET_ROOT=str(folder),
+        MOJPLAYWIN_ETH_ADDRESS="0x" + "1" * 40,
+        MOJPLAYWIN_ETH_RPC_URL="https://eth.example.org",
+    ):
+        assert client.post(f"/checkout/crypto/buy/{offer.pk}/", HTTP_HOST="zomorodmelal.ir").status_code == 404
+    assert Order.objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_invoice_created_from_server_price_and_owned_by_customer(client, buyer, priced_offer):
+    offer, folder = priced_offer
+    with override_settings(
+        ALLOWED_HOSTS=["mojplaywin.com"],
+        MOJPLAYWIN_CRYPTO_ENABLED=True,
+        MOJPLAYWIN_PRIVATE_ASSET_ROOT=str(folder),
+        MOJPLAYWIN_ETH_ADDRESS="0x" + "1" * 40,
+        MOJPLAYWIN_ETH_RPC_URL="https://eth.example.org",
+    ):
+        client.force_login(buyer)
+        response = client.post(
+            f"/checkout/crypto/buy/{offer.pk}/",
+            {"amount": "0", "status": "paid", "destination": "attacker"},
+            HTTP_HOST="mojplaywin.com",
+        )
+        assert response.status_code == 302
+        invoice = MojCryptoInvoice.objects.get()
+        assert invoice.order.customer == buyer
+        assert invoice.status == "awaiting_payment"
+        assert invoice.order.status == "pending"
+        assert invoice.order.total == Decimal("9.00")
+        assert str(invoice.merchant_address) == "0x" + "1" * 40
+        assert int(invoice.atomic_amount) > int(offer.atomic_amount)
+        assert PaymentIntent.objects.get(order=invoice.order).status == "gateway_pending"
+        denied = client.get(
+            f"/checkout/crypto/invoice/{invoice.token}/download/",
+            HTTP_HOST="mojplaywin.com",
+        )
+        assert denied.status_code == 404
+
+
+@pytest.mark.django_db
+def test_forged_chain_event_does_not_credit_customer(client, buyer, priced_offer):
+    offer, folder = priced_offer
+    with override_settings(
+        ALLOWED_HOSTS=["mojplaywin.com"], MOJPLAYWIN_CRYPTO_ENABLED=True,
+        MOJPLAYWIN_PRIVATE_ASSET_ROOT=str(folder),
+        MOJPLAYWIN_ETH_ADDRESS="0x" + "1" * 40,
+        MOJPLAYWIN_ETH_RPC_URL="https://eth.example.org",
+    ):
+        client.force_login(buyer)
+        client.post(f"/checkout/crypto/buy/{offer.pk}/", HTTP_HOST="mojplaywin.com")
+        invoice = MojCryptoInvoice.objects.get()
+        response = client.post(
+            "/api/payment-webhooks/",
+            {},
+            content_type="application/json",
+            HTTP_HOST="mojplaywin.com",
+            HTTP_X_PAYMENT_PROVIDER="onchain-eth",
+        )
+        assert response.status_code == 403
+        invoice.order.refresh_from_db()
+        assert invoice.order.status == "pending"
+
+
+@pytest.mark.django_db
+def test_chain_verified_payment_unlocks_once_and_replay_is_safe(client, buyer, priced_offer):
+    offer, folder = priced_offer
+    with override_settings(
+        ALLOWED_HOSTS=["mojplaywin.com"],
+        MOJPLAYWIN_CRYPTO_ENABLED=True,
+        MOJPLAYWIN_PRIVATE_ASSET_ROOT=str(folder),
+        MOJPLAYWIN_ETH_ADDRESS="0x" + "1" * 40,
+        MOJPLAYWIN_ETH_RPC_URL="https://eth.example.org",
+        MOJPLAYWIN_ETH_CONFIRMATIONS=12,
+    ):
+        client.force_login(buyer)
+        client.post(f"/checkout/crypto/buy/{offer.pk}/", HTTP_HOST="mojplaywin.com")
+        invoice = MojCryptoInvoice.objects.get()
+        tx = "0x" + "a" * 64
+        with patch("core.mojplaywin_crypto_gateway._verify_invoice", return_value=Proof(123456, 20, int(invoice.created_at.timestamp() * 1000))):
+            first = settle(invoice.pk, tx)
+            second = settle(invoice.pk, tx)
+        assert first.status == "paid" and second.status == "paid"
+        invoice.order.refresh_from_db()
+        assert invoice.order.status == "paid"
+        assert LedgerEntry.objects.filter(order=invoice.order).count() == 1
+        response = client.get(
+            f"/checkout/crypto/invoice/{invoice.token}/download/",
+            HTTP_HOST="mojplaywin.com",
+        )
+        assert response.status_code == 200
+
+
+@pytest.mark.django_db
+def test_invalid_payment_proof_never_unlocks(client, buyer, priced_offer):
+    offer, folder = priced_offer
+    with override_settings(
+        ALLOWED_HOSTS=["mojplaywin.com"],
+        MOJPLAYWIN_CRYPTO_ENABLED=True,
+        MOJPLAYWIN_PRIVATE_ASSET_ROOT=str(folder),
+        MOJPLAYWIN_ETH_ADDRESS="0x" + "1" * 40,
+        MOJPLAYWIN_ETH_RPC_URL="https://eth.example.org",
+    ):
+        client.force_login(buyer)
+        client.post(f"/checkout/crypto/buy/{offer.pk}/", HTTP_HOST="mojplaywin.com")
+        invoice = MojCryptoInvoice.objects.get()
+        with patch("core.mojplaywin_crypto_gateway._verify_invoice", side_effect=VerificationError("wrong recipient")):
+            response = client.post(
+                f"/checkout/crypto/invoice/{invoice.token}/verify/",
+                {"tx_hash": "0x" + "b" * 64}, HTTP_HOST="mojplaywin.com",
+            )
+        assert response.status_code == 409
+        invoice.refresh_from_db()
+        assert invoice.status == "awaiting_payment"
+        assert LedgerEntry.objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_old_transaction_cannot_pay_new_invoice(client, buyer, priced_offer):
+    from datetime import timedelta
+    offer, folder = priced_offer
+    with override_settings(
+        ALLOWED_HOSTS=["mojplaywin.com"], MOJPLAYWIN_CRYPTO_ENABLED=True,
+        MOJPLAYWIN_PRIVATE_ASSET_ROOT=str(folder),
+        MOJPLAYWIN_ETH_ADDRESS="0x" + "1" * 40,
+        MOJPLAYWIN_ETH_RPC_URL="https://eth.example.org",
+    ):
+        client.force_login(buyer)
+        assert client.post(f"/checkout/crypto/buy/{offer.pk}/", HTTP_HOST="mojplaywin.com").status_code == 302
+        invoice = MojCryptoInvoice.objects.get()
+        old = int((invoice.created_at - timedelta(days=2)).timestamp() * 1000)
+        with patch("core.mojplaywin_crypto_gateway._verify_invoice", return_value=Proof(123456, 100, old)):
+            with pytest.raises(VerificationError, match="invoice payment window"):
+                settle(invoice.pk, "0x" + "a" * 64)
+        invoice.refresh_from_db()
+        assert invoice.status == "awaiting_payment"
+        assert LedgerEntry.objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_timely_chain_payment_can_be_verified_after_expiry(client, buyer, priced_offer):
+    from datetime import timedelta
+    from django.utils import timezone
+    offer, folder = priced_offer
+    with override_settings(
+        ALLOWED_HOSTS=["mojplaywin.com"], MOJPLAYWIN_CRYPTO_ENABLED=True,
+        MOJPLAYWIN_PRIVATE_ASSET_ROOT=str(folder),
+        MOJPLAYWIN_ETH_ADDRESS="0x" + "1" * 40,
+        MOJPLAYWIN_ETH_RPC_URL="https://eth.example.org",
+    ):
+        client.force_login(buyer)
+        client.post(f"/checkout/crypto/buy/{offer.pk}/", HTTP_HOST="mojplaywin.com")
+        invoice = MojCryptoInvoice.objects.get()
+        proof_time = int(invoice.created_at.timestamp() * 1000)
+        invoice.expires_at = timezone.now() - timedelta(minutes=1)
+        invoice.save(update_fields=["expires_at"])
+        with patch("core.mojplaywin_crypto_gateway._verify_invoice", return_value=Proof(123456, 20, proof_time)):
+            assert settle(invoice.pk, "0x" + "c" * 64).status == "paid"
+        assert LedgerEntry.objects.count() == 1
+
+
+
+@pytest.mark.django_db
+def test_invoice_status_is_private_and_does_not_mark_payment(client, buyer, priced_offer, django_user_model):
+    offer, folder = priced_offer
+    with override_settings(
+        ALLOWED_HOSTS=["mojplaywin.com", "zomorodmelal.ir"],
+        MOJPLAYWIN_CRYPTO_ENABLED=True,
+        MOJPLAYWIN_PRIVATE_ASSET_ROOT=str(folder),
+        MOJPLAYWIN_ETH_ADDRESS="0x" + "1" * 40,
+        MOJPLAYWIN_ETH_RPC_URL="https://eth.example.org",
+    ):
+        client.force_login(buyer)
+        response = client.post(f"/checkout/crypto/buy/{offer.pk}/", HTTP_HOST="mojplaywin.com")
+        assert response.status_code == 302
+        invoice = MojCryptoInvoice.objects.get()
+        url = f"/checkout/crypto/invoice/{invoice.token}/status/"
+        visible = client.get(url, HTTP_HOST="mojplaywin.com")
+        assert visible.status_code == 200
+        assert visible.json()["paid"] is False
+        assert visible.json()["status"] == "awaiting_payment"
+        assert visible["Cache-Control"] == "private, no-store"
+        assert "merchant_address" not in visible.json()
+        stranger = django_user_model.objects.create_user(username="stranger-buyer", password="safe-test-password")
+        client.force_login(stranger)
+        assert client.get(url, HTTP_HOST="mojplaywin.com").status_code == 404
+        assert client.get(url, HTTP_HOST="zomorodmelal.ir").status_code == 404
+        assert LedgerEntry.objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_gateway_landing_requires_live_enablement(client):
+    with override_settings(ALLOWED_HOSTS=["mojplaywin.com"], MOJPLAYWIN_CRYPTO_ENABLED=False):
+        assert client.get("/checkout/crypto/", HTTP_HOST="mojplaywin.com").status_code == 404
+    with override_settings(ALLOWED_HOSTS=["mojplaywin.com"], MOJPLAYWIN_CRYPTO_ENABLED=True):
+        res = client.get("/checkout/crypto/", HTTP_HOST="mojplaywin.com")
+        assert res.status_code == 302
+        assert res["Location"] == "/store/#verified-crypto-offers"
+
+
+
+@pytest.mark.django_db
+def test_whole_store_lists_all_priced_approved_products_and_service_checkouts(client, buyer, priced_offer):
+    offer, folder = priced_offer
+    service = Product.objects.create(
+        title="Research consulting service", product_type="service", price=Decimal("125.00"),
+        currency="USD", active=True, owner=buyer,
+    )
+    active_service = MojCryptoOffer.objects.create(
+        product=service, asset="TRX", atomic_amount="10000000",
+        fulfillment_mode="service", active=True,
+    )
+    # An inactive/no-price product must never be sold or quoted.
+    fake = Product.objects.create(
+        title="Unapproved promotional card", product_type="service",
+        price=0, currency="USD", active=True, owner=buyer,
+    )
+    MojCryptoOffer.objects.create(
+        product=fake, asset="TRX", atomic_amount="10000000",
+        fulfillment_mode="service", active=True,
+    )
+    with override_settings(
+        ALLOWED_HOSTS=["mojplaywin.com"],
+        MOJPLAYWIN_CRYPTO_ENABLED=True, MOJPLAYWIN_PRIVATE_ASSET_ROOT=str(folder),
+        MOJPLAYWIN_ETH_ADDRESS="0x" + "1" * 40,
+        MOJPLAYWIN_ETH_RPC_URL="https://eth.example.org",
+        MOJPLAYWIN_TRX_ADDRESS="THFNU1iEXHd71WjEgjqUksd2UnMg2pUi73",
+        MOJPLAYWIN_TRONGRID_API_KEY="",
+        MOJPLAYWIN_TRX_CONFIRMATIONS=20,
+    ):
+        store = client.get("/store/", HTTP_HOST="mojplaywin.com")
+        assert store.status_code == 200
+        assert b"Research consulting service" in store.content
+        assert b"Approved chess study" in store.content
+        assert b"Unapproved promotional card" not in store.content
+        assert f"/checkout/crypto/buy/{active_service.pk}/".encode() in store.content
+        client.force_login(buyer)
+        res = client.post(f"/checkout/crypto/buy/{active_service.pk}/", HTTP_HOST="mojplaywin.com")
+        assert res.status_code == 302
+        invoice = MojCryptoInvoice.objects.get(offer=active_service)
+        assert invoice.status == "awaiting_payment"
+        assert invoice.order.total == Decimal("125.00")
+        # A fake confirmation without chain proof never succeeds.
+        with patch("core.mojplaywin_crypto_gateway._verify_invoice", side_effect=VerificationError("chain mismatch")):
+            assert client.post(
+                f"/checkout/crypto/invoice/{invoice.token}/verify/",
+                {"tx_hash": "f" * 64}, HTTP_HOST="mojplaywin.com",
+            ).status_code == 409
+        invoice.refresh_from_db()
+        assert invoice.status == "awaiting_payment"
+        with patch("core.mojplaywin_crypto_gateway._verify_invoice", return_value=Proof(456789, 35, int(invoice.created_at.timestamp() * 1000))):
+            assert settle(invoice.pk, "f" * 64).status == "paid"
+        assert client.get(f"/checkout/crypto/invoice/{invoice.token}/", HTTP_HOST="mojplaywin.com").status_code == 200
+        assert client.get(f"/checkout/crypto/invoice/{invoice.token}/download/", HTTP_HOST="mojplaywin.com").status_code == 404
+        invoice.order.refresh_from_db()
+        assert invoice.order.status == "paid"
+        assert LedgerEntry.objects.filter(order=invoice.order).count() == 1
+
+
+@pytest.mark.django_db
+def test_service_checkout_inactive_or_no_price_never_creates_order(client, buyer):
+    product = Product.objects.create(
+        title="Not priced yet", product_type="service", price=Decimal("0"),
+        currency="USD", active=True, owner=buyer,
+    )
+    offer = MojCryptoOffer.objects.create(
+        product=product, asset="TRX", atomic_amount="1000000",
+        fulfillment_mode="service", active=True,
+    )
+    with override_settings(
+        ALLOWED_HOSTS=["mojplaywin.com"], MOJPLAYWIN_CRYPTO_ENABLED=True,
+        MOJPLAYWIN_TRX_ADDRESS="THFNU1iEXHd71WjEgjqUksd2UnMg2pUi73",
+    ):
+        client.force_login(buyer)
+        assert client.post(f"/checkout/crypto/buy/{offer.pk}/", HTTP_HOST="mojplaywin.com").status_code == 404
+        assert Order.objects.count() == 0

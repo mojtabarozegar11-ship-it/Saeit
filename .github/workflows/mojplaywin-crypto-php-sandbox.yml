@@ -1,0 +1,175 @@
+name: MojPlayWin standalone ETH TRX payment sandbox (NO FUNDS)
+on:
+  push:
+    branches: [feature/mojplaywin-crypto-gateway-20261018]
+    paths:
+      - isolated_crypto_gateway/**
+      - tests/mojplaywin_crypto_chain_mock_e2e.py
+      - scripts/mojplaywin_crypto_safe_upgrade.py
+      - tests/test_mojplaywin_crypto_safe_upgrade.py
+      - .github/workflows/mojplaywin-crypto-php-sandbox.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  php-private-sandbox:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Exercise strictly guarded payment-source upgrade and rollback (offline only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mojplaywin_crypto_safe_upgrade.py
+          python3 -m unittest discover -s tests -p 'test_mojplaywin_crypto_safe_upgrade.py' -v
+          echo "PAYMENT_SOURCE_UPGRADE_GUARDS_TESTED=true"
+          echo "PRODUCTION_FILES_CHANGED=false"
+      - name: Prepare offline private payment sandbox on runner only
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq php8.3-sqlite3 php8.3-curl >/dev/null
+          php -l isolated_crypto_gateway/index.php
+          php -l isolated_crypto_gateway/bootstrap.php
+          sudo install -d -o "$(id -u)" -g "$(id -g)" -m 0700 /home/zomorod2
+          php isolated_crypto_gateway/bootstrap.php init
+          test -f /home/zomorod2/.mojplaywin-crypto-payments-v1/payments.sqlite3
+          test ! -f /home/zomorod2/.mojplaywin-crypto-payments-v1/enabled.flag
+          php isolated_crypto_gateway/index.php reconcile | grep -q "MOJPLAYWIN_AUTORECONCILE_ENABLED=false"
+          echo "CLI_AUTORECONCILE_FAIL_CLOSED=passed"
+          echo "PAYMENT_CONFIG_IS_FAIL_CLOSED=true"
+      - name: Validate Ethereum and native TRON automatic settlements with loopback-only chain data
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile tests/mojplaywin_crypto_chain_mock_e2e.py
+          python3 tests/mojplaywin_crypto_chain_mock_e2e.py
+          echo "REAL_FUNDS_OR_WALLET_KEYS_ACCESSED=false"
+      - name: Test disabled-on-arrival HTTP and fake local invoice flow
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/payment_test_https.php" <<'PHP'
+          <?php $_SERVER['HTTPS']='on';
+          PHP
+          php -d auto_prepend_file="$RUNNER_TEMP/payment_test_https.php" -S 127.0.0.1:8585 -t isolated_crypto_gateway > "$RUNNER_TEMP/test-http.log" 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for n in $(seq 1 12); do
+            probe="$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8585/ -H 'Host: mojplaywin.com' || true)"
+            if [ "$probe" != 000 ]; then break; fi
+            sleep 1
+          done
+          echo "INITIAL_HTTP_STATUS=$probe"
+          code=$(curl -sS -o "$RUNNER_TEMP/disabled" -w '%{http_code}' http://127.0.0.1:8585/ -H 'Host: mojplaywin.com')
+          echo "DISABLED_GATEWAY_HTTP_STATUS=$code"
+          test "$code" = 503
+          touch /home/zomorod2/.mojplaywin-crypto-payments-v1/enabled.flag
+          code=$(curl -sS -D "$RUNNER_TEMP/get.headers" -o "$RUNNER_TEMP/home" -w '%{http_code}' http://127.0.0.1:8585/ -H 'Host: mojplaywin.com')
+          echo "ENABLED_SANDBOX_GATEWAY_HTTP_STATUS=$code"
+          test "$code" = 200
+          grep -q 'MojPlayWin secure payments' "$RUNNER_TEMP/home"
+          python3 - "$RUNNER_TEMP" <<'PY'
+          import re, pathlib, sys
+          p=pathlib.Path(sys.argv[1])
+          html=(p/'home').read_text()
+          headers=(p/'get.headers').read_text()
+          csrf=re.search(r'name="csrf" value="([a-f0-9]{48})"',html)
+          cookie=re.search(r'Set-Cookie: (MOJCRYPTO=[^;]+)',headers,re.I)
+          assert csrf and cookie, "Sandbox session and CSRF token missing"
+          (p/'csrf').write_text(csrf.group(1))
+          (p/'cookie').write_text(cookie.group(1))
+          PY
+          csrf="$(cat "$RUNNER_TEMP/csrf")"; cookie="$(cat "$RUNNER_TEMP/cookie")"
+          code=$(curl -sS -D "$RUNNER_TEMP/create.headers" -o "$RUNNER_TEMP/create.html" -w '%{http_code}' http://127.0.0.1:8585/ -H 'Host: mojplaywin.com' -H "Cookie: $cookie" --data-urlencode "csrf=$csrf" --data-urlencode action=create --data-urlencode asset=TRX --data-urlencode amount=10 --data-urlencode reference=Consulting)
+          echo "CREATED_INVOICE_HTTP_STATUS=$code"
+          test "$code" = 303
+          python3 - "$RUNNER_TEMP" <<'PY'
+          import pathlib,re,sys,sqlite3
+          p=pathlib.Path(sys.argv[1])
+          headers=(p/'create.headers').read_text()
+          token=re.search(r'Location: https://mojplaywin.com/checkout/crypto/index\.php\?id=([a-f0-9]{48})',headers,re.I)
+          assert token, 'No unique private payment invoice issued'
+          (p/'token').write_text(token.group(1))
+          db=sqlite3.connect('/home/zomorod2/.mojplaywin-crypto-payments-v1/payments.sqlite3')
+          row=db.execute('SELECT asset,base,quote,status FROM invoices WHERE token=?',(token.group(1),)).fetchone()
+          assert row and row[0]=='TRX' and row[1]==10000000 and row[2]>row[1] and row[2]<=row[1]+9999 and row[3]=='awaiting_payment',row
+          PY
+          token="$(cat "$RUNNER_TEMP/token")"
+          code=$(curl -sS -o "$RUNNER_TEMP/invoice" -w '%{http_code}' "http://127.0.0.1:8585/?id=$token" -H 'Host: mojplaywin.com')
+          test "$code" = 200
+          grep -q 'THFNU1iEXHd71WjEgjqUksd2UnMg2pUi73' "$RUNNER_TEMP/invoice"
+          code=$(curl -sS -o "$RUNNER_TEMP/admin-denied" -w '%{http_code}' "http://127.0.0.1:8585/bootstrap.php" -H 'Host: mojplaywin.com')
+          test "$code" = 404
+          test ! -s "$RUNNER_TEMP/admin-denied"
+          echo "ADMIN_BOOTSTRAP_WEB_ACCESS_DENIED=true"
+          code=$(curl -sS -o "$RUNNER_TEMP/host-denied" -w '%{http_code}' "http://127.0.0.1:8585/?id=$token" -H 'Host: other.example')
+          test "$code" = 404
+          code=$(curl -sS -o "$RUNNER_TEMP/unknown" -w '%{http_code}' "http://127.0.0.1:8585/?id=incorrect" -H 'Host: mojplaywin.com')
+          test "$code" = 404
+          python3 - "$RUNNER_TEMP/token" <<'PY'
+          import sqlite3,sys
+          db=sqlite3.connect('/home/zomorod2/.mojplaywin-crypto-payments-v1/payments.sqlite3')
+          token=open(sys.argv[1]).read().strip()
+          assert db.execute('SELECT status,tx_hash FROM invoices WHERE token=?',(token,)).fetchone()==('awaiting_payment',None)
+          print('MOJPLAYWIN_OFFLINE_PAYMENT_INVOICE_TEST=passed')
+          PY
+          php isolated_crypto_gateway/index.php reconcile | grep -q "MOJPLAYWIN_AUTORECONCILE_CHECKED=0"
+          python3 - "$RUNNER_TEMP/token" <<'PY'
+          import sqlite3, sys
+          db=sqlite3.connect('/home/zomorod2/.mojplaywin-crypto-payments-v1/payments.sqlite3')
+          with db:
+              db.execute("UPDATE invoices SET status='confirming',tx_hash=? WHERE token=?",('x'*64,open(sys.argv[1]).read().strip()))
+          PY
+          cron_output="$(php isolated_crypto_gateway/index.php reconcile)"
+          printf '%s\n' "$cron_output"
+          grep -qx 'MOJPLAYWIN_AUTORECONCILE_PAID=0' <<< "$cron_output"
+          grep -qx 'MOJPLAYWIN_AUTORECONCILE_ERRORS=1' <<< "$cron_output"
+          python3 - "$RUNNER_TEMP/token" <<'PY'
+          import sqlite3, sys
+          db=sqlite3.connect('/home/zomorod2/.mojplaywin-crypto-payments-v1/payments.sqlite3')
+          row=db.execute('SELECT status,paid_at FROM invoices WHERE token=?',(open(sys.argv[1]).read().strip(),)).fetchone()
+          assert row == ('confirming', None), row
+          print('FALSE_PAYMENT_NEVER_SETTLED_BY_CRON=true')
+          PY
+          # Both native networks must create exact server-controlled invoices.
+          # No real transfers; only a disposable GitHub runner SQLite database.
+          code=$(curl -sS -D "$RUNNER_TEMP/eth.headers" -o "$RUNNER_TEMP/eth.body" -w '%{http_code}' http://127.0.0.1:8585/ -H 'Host: mojplaywin.com' -H "Cookie: $cookie" --data-urlencode "csrf=$csrf" --data-urlencode action=create --data-urlencode asset=ETH --data-urlencode amount=0.01 --data-urlencode reference="Digital consulting")
+          echo "ETH_TEST_INVOICE_HTTP_STATUS=$code"
+          test "$code" = 303
+          code=$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:8585/ -H 'Host: mojplaywin.com' -H "Cookie: $cookie" --data-urlencode "csrf=00000" --data-urlencode action=create --data-urlencode asset=TRX --data-urlencode amount=15 --data-urlencode reference=Consulting)
+          echo "BAD_CSRF_HTTP_STATUS=$code"
+          test "$code" = 403
+          code=$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:8585/ -H 'Host: mojplaywin.com' -H "Cookie: $cookie" --data-urlencode "csrf=$csrf" --data-urlencode action=create --data-urlencode asset=TRX --data-urlencode amount=0 --data-urlencode reference=Consulting)
+          echo "ZERO_PAYMENT_HTTP_STATUS=$code"
+          test "$code" = 400
+          # Reject ETH quantities that would overflow PHP integers and
+          # any TRX quantity exceeding the configured sale limit.
+          code=$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:8585/ -H 'Host: mojplaywin.com' -H "Cookie: $cookie" --data-urlencode "csrf=$csrf" --data-urlencode action=create --data-urlencode asset=ETH --data-urlencode amount=999999 --data-urlencode reference=Overflow)
+          echo "OVERFLOW_ETH_PAYMENT_HTTP_STATUS=$code"
+          test "$code" = 400
+          code=$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:8585/ -H 'Host: mojplaywin.com' -H "Cookie: $cookie" --data-urlencode "csrf=$csrf" --data-urlencode action=create --data-urlencode asset=TRX --data-urlencode amount=10001 --data-urlencode reference=Excessive)
+          echo "EXCESSIVE_TRX_PAYMENT_HTTP_STATUS=$code"
+          test "$code" = 400
+          python3 - "$RUNNER_TEMP/eth.headers" <<'PY'
+          import re,sqlite3,sys
+          content=open(sys.argv[1]).read()
+          token=re.search(r'Location: https://mojplaywin.com/checkout/crypto/index\.php\?id=([a-f0-9]{48})',content,re.I)
+          assert token,'ETH invoice is not routed to live PHP path'
+          db=sqlite3.connect('/home/zomorod2/.mojplaywin-crypto-payments-v1/payments.sqlite3')
+          row=db.execute('SELECT asset,base,quote,status FROM invoices WHERE token=?',(token.group(1),)).fetchone()
+          assert row and row[0]=='ETH' and row[1]==10000000000000000 and row[1]<row[2]<=row[1]+9999 and row[3]=='awaiting_payment',row
+          assert db.execute("SELECT COUNT(*) FROM invoices WHERE status='paid'").fetchone()[0] == 0
+          assert db.execute('SELECT COUNT(*) FROM invoices').fetchone()[0] == 2
+          print('BOTH_NATIVE_NETWORK_INVOICES_VALIDATED=true')
+          print('ZERO_AND_CSRF_INVALID_REQUESTS_BLOCKED=true')
+          print('NO_FAKE_TRANSACTIONS_SETTLED=true')
+          PY
+          echo "REAL_PAYMENTS_SENT=false"
+          echo "LIVE_SERVER_CHANGED=false"
+          echo "WALLET_PRIVATE_KEYS_READ=false"

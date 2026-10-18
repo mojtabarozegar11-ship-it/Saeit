@@ -277,3 +277,40 @@ class CompanyInquiryAdmin(admin.ModelAdmin):
     search_fields = ("name", "organization", "email", "subject", "message")
     readonly_fields = ("created_at", "updated_at")
     fieldsets = (("درخواست", {"fields": ("kind", "name", "organization", "email", "phone", "subject", "message")}), ("مدیریت", {"fields": ("status", "internal_note", "created_at", "updated_at")}))
+
+# Native MojPlayWin checkout is managed only from MojPlayWin, never child-site admin.
+from .mojplaywin_crypto_models import MojCryptoOffer, MojCryptoInvoice
+
+
+class MojCryptoAdminOnly(ModelAdmin):
+    def _correct_host(self, request):
+        return request.get_host().split(":")[0].lower() in {"mojplaywin.com", "www.mojplaywin.com"}
+
+    def has_module_permission(self, request):
+        return self._correct_host(request) and super().has_module_permission(request)
+
+    def has_view_permission(self, request, obj=None):
+        return self._correct_host(request) and super().has_view_permission(request, obj)
+
+    def has_add_permission(self, request):
+        return self._correct_host(request) and super().has_add_permission(request)
+
+    def has_change_permission(self, request, obj=None):
+        return self._correct_host(request) and super().has_change_permission(request, obj)
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(MojCryptoOffer)
+class MojCryptoOfferAdmin(MojCryptoAdminOnly):
+    list_display = ("id", "product", "asset", "atomic_amount", "active")
+    list_filter = ("asset", "active")
+    search_fields = ("product__title",)
+
+
+@admin.register(MojCryptoInvoice)
+class MojCryptoInvoiceAdmin(MojCryptoAdminOnly):
+    list_display = ("id", "order", "asset", "status", "created_at", "verified_at")
+    list_filter = ("asset", "status")
+    readonly_fields = [field.name for field in MojCryptoInvoice._meta.fields]

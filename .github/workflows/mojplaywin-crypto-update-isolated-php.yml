@@ -1,0 +1,113 @@
+name: MojPlayWin update standalone crypto entrypoint only (DISABLED)
+on:
+  push:
+    branches: [feature/mojplaywin-crypto-gateway-20261018]
+    paths: [.github/workflows/mojplaywin-crypto-update-isolated-php.yml]
+permissions:
+  contents: read
+concurrency:
+  group: mojplaywin-crypto-isolated-route-publish
+  cancel-in-progress: false
+jobs:
+  update-only:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/feature/mojplaywin-crypto-gateway-20261018'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false, fetch-depth: 0}
+      - name: Assert two exact PHP versions and checker syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          php -l isolated_crypto_gateway/index.php
+          python3 -m py_compile scripts/mojplaywin_crypto_update_existing_entrypoint.py
+          git cat-file -e cabe3cd1d3040d:isolated_crypto_gateway/index.php
+      - name: Set up host-fingerprint-pinned read-only relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-crypto-preflight-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+          echo "PINNED_READONLY_RELAY=connected"
+
+
+      - name: Atomically update only installed MojPlayWin crypto PHP script
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-crypto-preflight-ssh"
+          src="/home/zomorod2/.mojplaywin-crypto-update-$GITHUB_RUN_ID"
+          sha_old="$(git show cabe3cd1d3040d:isolated_crypto_gateway/index.php | sha256sum | awk '{print $1}')"
+          sha_new="$(sha256sum isolated_crypto_gateway/index.php | awk '{print $1}')"
+          ssh -T -F "$d/config" saeit-cpanel "test ! -e '$src' && test ! -L '$src' && install -d -m 700 '$src'"
+          ssh -T -F "$d/config" saeit-cpanel "umask 077; cat > '$src/index.php'" < isolated_crypto_gateway/index.php
+          ssh -T -F "$d/config" saeit-cpanel "umask 077; cat > '$src/update.py'" < scripts/mojplaywin_crypto_update_existing_entrypoint.py
+          changed=false
+          clean() {
+            if [ "$changed" = true ]; then
+              echo "Gateway smoke failed; attempting guarded rollback of gateway PHP only"
+              timeout 50s ssh -T -F "$d/config" saeit-cpanel "python3 '$src/update.py' rollback '$src/index.php' '$sha_old' '$sha_new'" || echo "ROLLBACK_NOT_VERIFIED"
+            fi
+            timeout 30s ssh -T -F "$d/config" saeit-cpanel "rm -f -- '$src/index.php' '$src/update.py'; rmdir -- '$src'" || true
+          }
+          trap clean EXIT
+          for path in / /store/ /farnaz/ /taniya/ /mojtaba.roozegar/ /saman/; do
+            code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 18 "https://mojplaywin.com$path")"
+            echo "$path $code" >> "$RUNNER_TEMP/health.before"
+          done
+          test "$(awk '$1=="/"{print $2}' "$RUNNER_TEMP/health.before")" = 200
+          test "$(awk '$1=="/store/"{print $2}' "$RUNNER_TEMP/health.before")" = 200
+          test "$(awk '$1=="/farnaz/"{print $2}' "$RUNNER_TEMP/health.before")" = 200
+          timeout 30s ssh -T -F "$d/config" saeit-cpanel "php -l '$src/index.php' && test ! -e '/home/zomorod2/.mojplaywin-crypto-payments-v1/enabled.flag'"
+          timeout 40s ssh -T -F "$d/config" saeit-cpanel "python3 '$src/update.py' apply '$src/index.php' '$sha_old' '$sha_new'"
+          changed=true
+          test "$(curl -sS --max-time 18 -o /dev/null -w '%{http_code}' https://mojplaywin.com/checkout/crypto/index.php)" = 503
+          test "$(curl -sS --max-time 18 -o /dev/null -w '%{http_code}' https://mojplaywin.com/checkout/crypto/bootstrap.php)" = 404
+          for path in / /store/ /farnaz/ /taniya/ /mojtaba.roozegar/ /saman/; do
+            code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 18 "https://mojplaywin.com$path")"
+            echo "$path $code" >> "$RUNNER_TEMP/health.after"
+          done
+          diff -u "$RUNNER_TEMP/health.before" "$RUNNER_TEMP/health.after"
+          changed=false
+          echo "ONLY_MAIN_GATEWAY_UPDATED=true"
+          echo "STORE_AND_CHILD_SITE_HEALTH_UNCHANGED=true"
+          echo "PAYMENT_RECEIVING_STILL_DISABLED=true"
