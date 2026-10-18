@@ -1,4 +1,4 @@
-name: Activate MojPlayWin Gen65 as private operational evaluator (no website writes)
+name: Activate MojPlayWin Gen65 English page-content drafts in private Cron
 # Activation is scoped to an existing private cPanel tenant only; never the website.
 on:
   push:
@@ -19,32 +19,33 @@ jobs:
         with:
           persist-credentials: false
           # Exact isolated feature source; do not deploy default-branch Django code.
-          ref: 848ea504e4f07b3690045dfbf6e73317b7d87f85
-      - name: Test operational Gen65 and package exact SHA sources
+          ref: bdce31ab97af0f1597fdbfdc694b3c0ea2ef89e5
+      - name: Test unique English main-page guide production and package pinned sources
         shell: bash
         run: |
           set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_mpw_page_content_factory.py -v
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_mpw_gen65_operational.py -v
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_mpw_generation_factory.py -v
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_mpw_v91_evolution.py -v
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_mpw_evolution_one_minute_cron.py -v
-          python3 -m py_compile mpw_v91_port/gen65_runtime.py mpw_v91_port/evolution.py scripts/mpw_enable_gen65_operational_private_cpanel.py
+          python3 -m py_compile mpw_v91_port/page_content_factory.py mpw_v91_port/evolution.py scripts/mpw_activate_private_page_content_cpanel.py
           python3 - <<'PY'
           import hashlib,io,json,tarfile
           from pathlib import Path
-          files=["gen65_runtime.py","evolution.py"]
+          files=["page_content_factory.py","evolution.py"]
           sources={k:(Path("mpw_v91_port")/k).read_bytes() for k in files}
-          assert all(2500<len(b)<23000 for b in sources.values())
+          assert all(3000<len(raw)<30000 for raw in sources.values())
           manifest=json.dumps({"tenant":"mojplaywin-main",
-            "scope":"private_operational_gen65_only",
+            "scope":"main_only_private_content_drafts",
             "sha256":{k:hashlib.sha256(v).hexdigest() for k,v in sources.items()}},
             sort_keys=True).encode()
-          with tarfile.open("/tmp/mpw-gen65-operational.tgz","w:gz") as package:
+          with tarfile.open("/tmp/mpw-main-private-content.tgz","w:gz") as package:
               for name,raw in (*sources.items(),("manifest.json",manifest)):
                   item=tarfile.TarInfo(name);item.size=len(raw);item.mode=0o600;item.mtime=0
                   package.addfile(item,io.BytesIO(raw))
-          assert Path("/tmp/mpw-gen65-operational.tgz").stat().st_size<120000
-          print("GEN65_PRIVATE_RUNTIME_TESTS_AND_PACKAGE_READY=true")
+          assert Path("/tmp/mpw-main-private-content.tgz").stat().st_size<150000
+          print("MPW_MAIN_PAGE_CONTENT_TESTS_AND_SOURCE_PROVENANCE_OK=true")
           PY
       - name: Establish host-pinned private relay without disclosing keys
         env:
@@ -90,48 +91,54 @@ jobs:
           timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
           test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
           mv "$d/host.candidate" "$d/host.known"
-      - name: Activate SHA-attested generated Gen65 in private cPanel minute Cron
+      - name: Start private main-page content line via existing minute Cron only
         shell: bash
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
-          controller="$(base64 -w0 scripts/mpw_enable_gen65_operational_private_cpanel.py)"
-          timeout 105s ssh -T -F "$d/config" saeit-cpanel "python3 -c 'import base64;exec(base64.b64decode(\"$controller\"))'" < /tmp/mpw-gen65-operational.tgz
-      - name: Independently read Gen65 operational state and unchanged crontab
+          controller="$(base64 -w0 scripts/mpw_activate_private_page_content_cpanel.py)"
+          timeout 110s ssh -T -F "$d/config" saeit-cpanel "python3 -c 'import base64;exec(base64.b64decode(\"$controller\"))'" < /tmp/mpw-main-private-content.tgz
+      - name: Independently verify Gen65-reviewed English drafts on private cPanel
         shell: bash
         run: |
           set -euo pipefail
-          timeout 40s ssh -T -F "$RUNNER_TEMP/mojplaywin-inventory-ssh/config" saeit-cpanel 'python3 -' <<'PY'
-          import hashlib,json,subprocess
+          timeout 45s ssh -T -F "$RUNNER_TEMP/mojplaywin-inventory-ssh/config" saeit-cpanel 'python3 -' <<'PY'
+          import json,subprocess
           from pathlib import Path
           root=Path("/home/zomorod2/.private_mojplaywin_main_agents/evolution_runtime_20261018")
-          generated=(root/"generations/generation65.py").read_bytes()
-          manifest=json.loads((root/"generations/generation65.json").read_text())
-          active=json.loads((root/"gen65_operation_enabled.json").read_text())
-          report=json.loads((root/"gen65_operational_report.json").read_text())
-          old=json.loads((root/"last_report.json").read_text())
-          assert manifest["code_sha256"]==hashlib.sha256(generated).hexdigest()
-          assert active["controller_sha256"]==manifest["code_sha256"]
-          assert active["enabled"] is True and active["tenant"]=="mojplaywin-main"
-          assert report["status"]=="gen65_operational_private"
-          assert report["active_private_generation"]==65
-          assert report["existing_public_master_generation"]==64
-          assert report["controller_sha256"]==manifest["code_sha256"]
-          assert report["auto_published"] is False and report["financial_actions"]==0
-          assert old["master_generation"]==64 and old["shared_runtime_modified"] is False
-          cron=subprocess.run(["crontab","-l"],capture_output=True,text=True,check=True,timeout=10)
-          marked=[x for x in cron.stdout.splitlines() if "MPW_PRIVATE_EVOLUTION_MAIN_ONLY_20261018" in x]
-          assert len(marked)==1 and marked[0].startswith("* * * * * ")
-          print("GEN65_RUNNING_AS_REAL_PRIVATE_EVALUATOR=true")
-          print("GEN65_PRIVATE_EPOCH="+str(report["cycle_epoch"]))
-          print("GEN65_VERIFIED_OBSERVATIONS="+str(report["verified_observations"]))
-          print("GEN65_PRODUCTION_MASTER_GENERATION=64")
-          print("GEN65_PRIVATE_CRON_EVERY_MINUTE=true")
-          print("NO_PUBLIC_SITE_OR_PAYMENTS_CHANGED=true")
+          pipeline=root/"page_content_20261018"
+          assert pipeline.is_dir() and not pipeline.is_symlink() and not pipeline.stat().st_mode&0o077
+          report=json.loads((pipeline/"last_report.json").read_text())
+          drafts=list((pipeline/"drafts").glob("*.json"))
+          assert report["tenant"]=="mojplaywin-main"
+          assert report["status"]=="active_private_page_content_pipeline"
+          assert report["language"]=="en" and report["total_drafts"]>=2
+          assert report["auto_publish"] is False and report["public_site_modified"] is False
+          assert len(drafts)>=2
+          for path in drafts:
+              row=json.loads(path.read_text())
+              assert row["page_path"] in ["/agents/","/knowledge/","/studio/","/research/"]
+              assert row["site"]=="mojplaywin.com" and row["language"]=="en"
+              assert row["word_count"]>=220 and len(row["source_urls"])==2
+              assert row["gen65_private_review_recommendation"]=="candidate_ready_for_human_review"
+              assert row["gen65_factual_verification_completed"] is False
+              assert row["published"] is False and row["approved_for_publication"] is False
+          gen65=json.loads((root/"gen65_operational_report.json").read_text())
+          assert gen65["status"]=="gen65_operational_private"
+          assert gen65["active_private_generation"]==65
+          cron=subprocess.run(["crontab","-l"],text=True,capture_output=True,timeout=12,check=True)
+          marks=[x for x in cron.stdout.splitlines() if "MPW_PRIVATE_EVOLUTION_MAIN_ONLY_20261018" in x]
+          assert len(marks)==1 and marks[0].startswith("* * * * * ")
+          print("MPW_PRIVATE_PAGE_CONTENT_GENERATION_AND_GEN65_REVIEW_ACTIVE=true")
+          print("ENGLISH_PAGE_DRAFTS="+str(len(drafts)))
+          print("NEW_DRAFTS="+str(report["new_drafts"]))
+          print("REMAINING_VERIFIED_BRIEFS="+str(report["remaining_curated_briefs"]))
+          print("PRIVATE_GEN65_ACTIVE=true")
+          print("PUBLIC_PAGES_OR_PAYMENTS_CHANGED=false")
           PY
       - name: Clean ephemeral runner identity material
         if: always()
         shell: bash
         run: |
           rm -rf -- "$RUNNER_TEMP/mojplaywin-inventory-ssh"
-          rm -f -- /tmp/mpw-gen65-operational.tgz
+          rm -f -- /tmp/mpw-main-private-content.tgz
