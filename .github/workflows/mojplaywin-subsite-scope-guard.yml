@@ -1,0 +1,43 @@
+name: MojPlayWin independent subsite source isolation
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  protect-all-independent-subsites:
+    if: startsWith(github.head_ref, 'design/mojplaywin-')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout candidate without write credentials
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Fetch exact PR base and branch head
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin "$BASE_SHA" "$HEAD_SHA"
+      - name: Reject edits to shared app, all known and unknown child sites, or deletions
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          python3 scripts/mojplaywin_subsite_scope_guard.py \
+            --base "$BASE_SHA" --head "$HEAD_SHA" \
+            --output mojplaywin-subsite-source-isolation-report.json
+      - name: Prove default-deny rules reject even undiscovered sites
+        run: python3 -m unittest discover -s tests -p 'test_mojplaywin_subsite_scope_guard.py'
+      - name: Archive read-only scope audit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mojplaywin-independent-subsites-protected
+          path: mojplaywin-subsite-source-isolation-report.json
+          if-no-files-found: warn
+          retention-days: 30

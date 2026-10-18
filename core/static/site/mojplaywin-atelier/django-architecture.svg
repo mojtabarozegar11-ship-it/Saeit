@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 450" width="720" height="450" role="img" aria-labelledby="title desc">
+<title id="title">Original Django backend architecture illustration</title><desc id="desc">Illustrated gold and teal modular backend service architecture, with data, secure API and administration nodes connected by luminous pathways.</desc>
+<defs><linearGradient id="bg" x2="1" y2="1"><stop stop-color="#101620"/><stop offset="1" stop-color="#070a10"/></linearGradient><linearGradient id="metal" x2="1" y2="1"><stop stop-color="#fff1bb"/><stop offset=".6" stop-color="#c39246"/><stop offset="1" stop-color="#76522b"/></linearGradient><linearGradient id="node" x2="1" y2="1"><stop stop-color="#263641"/><stop offset="1" stop-color="#10171d"/></linearGradient></defs>
+<rect width="720" height="450" fill="url(#bg)"/>
+<g stroke="#d6ad67" stroke-opacity=".14"><path d="M72 30V418 M170 30V418 M268 30V418 M366 30V418 M464 30V418 M562 30V418 M660 30V418 M0 75H720 M0 175H720 M0 275H720 M0 375H720" fill="none"/></g>
+<g fill="none" stroke="#d6b879" stroke-width="5" stroke-linecap="round"><path d="M355 214L177 111 M355 214L540 111 M355 214L177 334 M355 214L540 334"/><path d="M177 111V334 M540 111V334" stroke-opacity=".23" stroke-width="2" stroke-dasharray="10 17"/></g>
+<g transform="translate(267 121)">
+<rect width="181" height="181" rx="40" fill="#0c161e" stroke="url(#metal)" stroke-width="8"/>
+<rect x="32" y="29" width="117" height="120" rx="26" fill="#203943" stroke="#7fb9ba" stroke-opacity=".7"/>
+<path d="M63 73h30m-30 24h54m-54 24h32" stroke="#eac98f" stroke-width="8" stroke-linecap="round"/>
+<circle cx="129" cy="66" r="9" fill="#e8cb91"/>
+</g>
+<g fill="url(#node)" stroke="#e7c88f" stroke-opacity=".76" stroke-width="4">
+<rect x="89" y="59" width="175" height="103" rx="23"/><rect x="458" y="59" width="175" height="103" rx="23"/>
+<rect x="89" y="282" width="175" height="103" rx="23"/><rect x="458" y="282" width="175" height="103" rx="23"/>
+</g>
+<g stroke="#eaca8d" stroke-width="6" stroke-linecap="round">
+<path d="M119 103h56m-56 19h106 M488 104h55m-55 19h114 M119 328h97m-97 20h63 M488 328h102m-102 20h67"/>
+</g>
+<g fill="#edcc8f"><circle cx="358" cy="214" r="9"/><circle cx="179" cy="111" r="8"/><circle cx="543" cy="111" r="8"/><circle cx="179" cy="334" r="8"/><circle cx="543" cy="334" r="8"/></g>
+<g fill="#9ccece"><circle cx="240" cy="97" r="6"/><circle cx="613" cy="95" r="6"/><circle cx="240" cy="320" r="6"/><circle cx="613" cy="320" r="6"/></g>
+</svg>
