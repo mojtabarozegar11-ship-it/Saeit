@@ -78,8 +78,18 @@ def check_page(doc: Path, card: dict):
     if not match or title not in html.unescape(match.group(1)):
         raise ValueError('Unrelated SEO title: '+str(doc))
     meta = re.search(r'<meta\s+name="description"\s+content="([^"]+)"',raw,re.I)
-    if not meta or title not in html.unescape(meta.group(1)):
-        raise ValueError('Missing unique topic description: '+str(doc))
+    if not meta:
+        raise ValueError('Missing topic meta description: '+str(doc))
+    if title not in html.unescape(meta.group(1)):
+        # Some original research-directory pages describe the scientific subject
+        # without naming it in the meta description. Prefix its exact H1/card name.
+        old_desc=html.unescape(meta.group(1))
+        improved=f'{title}؛ {old_desc}'
+        if len(improved)>190:
+            improved=improved[:185].rstrip(' ،.؛')+'…'
+        raw=raw[:meta.start(1)]+h(improved)+raw[meta.end(1):]
+        meta=re.search(r'<meta\\s+name="description"\\s+content="([^"]+)"',raw,re.I)
+        assert meta and title in html.unescape(meta.group(1))
     canonical = re.search(r'<link\s+rel="canonical"\s+href="([^"]+)"',raw,re.I)
     if not canonical or canonical.group(1) != canon:
         raise ValueError('Missing canonical matching linked URL: '+str(doc))
