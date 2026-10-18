@@ -1,0 +1,109 @@
+name: Publish exact Zomorod Mell company favicon
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/zomorod-exact-favicon-deploy.yml"
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-exact-root-favicon-only
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify exact logo artwork and rollback script
+        run: |
+          set -euo pipefail
+          python3 -m py_compile content/zomorod-seo-brand/deploy_exact_favicon.py
+          python3 - <<'PY'
+          from pathlib import Path
+          import base64
+          d=Path('content/zomorod-seo-brand')
+          for n,magic in [('favicon.ico',b'\0\0\1\0'),('icon-180.png',b'\x89PNG\r\n\x1a\n'),('icon-192.png',b'\x89PNG\r\n\x1a\n')]:
+              raw=base64.b64decode((d/(n+'.b64')).read_text(),validate=True)
+              assert raw.startswith(magic) and len(raw)>5000
+              print('FAVICON_VERIFIED',n,len(raw))
+          assert 'ZOMOROD_FAVICON_ROLLBACK=restored' in (d/'deploy_exact_favicon.py').read_text()
+          PY
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - name: Transfer favicon files only to a private server backup staging directory
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          root="$HOME/.backups/zomorod-brand-exact/$1"
+          test ! -e "$root"
+          mkdir -p "$(dirname "$root")"
+          mkdir -m 700 "$root"
+          mkdir -m 700 "$root/staging"
+          test -s "$HOME/public_html/index.html"
+          test -s "$HOME/public_html/favicon.ico"
+          echo FAVICON_BACKUP_STAGING=ready
+          REMOTE
+          tar -cf - -C content/zomorod-seo-brand deploy_exact_favicon.py favicon.ico.b64 icon-180.png.b64 icon-192.png.b64 |
+            ssh -F "$d/config" saeit-cpanel "tar -xf - -C /home/zomorod2/.backups/zomorod-brand-exact/$GITHUB_SHA/staging"
+      - name: Publish only root favicon and icon metadata; preserve all other files
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          stage="$HOME/.backups/zomorod-brand-exact/$1/staging"
+          test -s "$stage/deploy_exact_favicon.py"
+          python3 "$stage/deploy_exact_favicon.py" "$stage"
+          REMOTE
+      - name: Remove temporary runner SSH keys
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
