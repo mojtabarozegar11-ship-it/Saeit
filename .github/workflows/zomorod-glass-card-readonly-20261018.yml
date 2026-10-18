@@ -49,4 +49,13 @@ jobs:
               print('CSS_'+css.replace(' ','_')+'_MATCHES=',len(matches))
               for m in matches[:8]:print('CSS_RULE=',re.sub(r'\s+',' ',m)[:850])
           print('ROOT_HIERARCHY_VALID=',all(k in s for k in ('id="solar-stage"','id="orbital-cards"','id="site-footer"','ZOMOROD_ORBIT_DATA')))
+          print('CSS_ROW_OR_TRACK=',[
+              re.sub(r'\\s+',' ',x)[:550] for x in re.findall(r'[^{}]{0,110}(?:\\.row|\\.track|\\.rail|\\.marquee|\\.lane|\\.belt|\\.strip|\\.topic-card::after)[^{}]{0,130}\\{[^{}]{0,700}\\}',s,flags=re.I)[:30]
+          ])
+          print('DYNAMIC_TOPIC_CARD_CONTEXT=',[
+              re.sub(r'\\s+',' ',s[max(0,m.start()-300):m.end()+450])[:950] for m in list(re.finditer('topic-card',s))[-12:]
+          ])
+          print('DYNAMIC_ROW_CONTEXT=',[
+              re.sub(r'\\s+',' ',s[max(0,m.start()-120):m.end()+380])[:650] for m in list(re.finditer('createElement.*row|row.*createElement|appendChild\\(.*row',s,flags=re.I))[-6:]
+          ])
           PY
