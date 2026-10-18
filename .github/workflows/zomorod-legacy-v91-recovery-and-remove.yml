@@ -1,0 +1,147 @@
+name: Preserve legacy V91 snapshot and remove unused source folder
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/zomorod-legacy-v91-recovery-and-remove.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-legacy-v91-archive-remove
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - name: Verify V91 no longer used, save recoverable tarball and remove retired source tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          python3 - <<'PY'
+          import os,subprocess,shutil,hashlib,tarfile,json
+          from pathlib import Path
+          home=Path.home()
+          assert home==Path("/home/zomorod2")
+          source=home/"saeit_v91"
+          stage=home/"saeit_v91_runtime_stage_20261012"
+          genome=home/"Saeit/agent_imports/v91_genomes"
+          archive=home/".backups/legacy-v91-source-20261018.tar.gz"
+          partial=home/".backups/.legacy-v91-source-20261018.partial"
+          assert source.is_dir() and not source.is_symlink()
+          assert stage.is_dir() and not stage.is_symlink()
+          assert (home/"Saeit/manage.py").is_file()
+          assert (home/"Saeit-staging/mojplaywin.sqlite3").is_file()
+          assert not archive.exists() and not partial.exists()
+          m=json.loads((genome/"generation64_dependency_manifest.json").read_text())
+          assert len(m["sha256_by_relative_path"])==73
+          for rel,sha in m["sha256_by_relative_path"].items():
+              p=genome/"site_master"/rel
+              assert p.is_file() and hashlib.sha256(p.read_bytes()).hexdigest()==sha
+          builder=(home/"Saeit/moj/site_builder.py").read_text()
+          assert str(stage/"zomorodmelal") in builder
+          p=subprocess.run(["ps","-u","zomorod2","-o","args="],capture_output=True,text=True,timeout=12)
+          cr=subprocess.run(["crontab","-l"],capture_output=True,text=True,timeout=12)
+          assert not any(str(source)+"/" in x and "bash -se" not in x for x in p.stdout.splitlines())
+          assert str(source)+"/" not in cr.stdout
+          original={}
+          for here,dirs,files in os.walk(source,followlinks=False):
+              for child in dirs+files: assert not (Path(here)/child).is_symlink()
+              for name in files:
+                  p=Path(here)/name
+                  d=hashlib.sha256()
+                  with p.open("rb") as stream:
+                      for chunk in iter(lambda:stream.read(1024*1024),b""):d.update(chunk)
+                  original[str(p.relative_to(source))]=d.hexdigest()
+          assert len(original)>300
+          with tarfile.open(partial,"w:gz",compresslevel=1) as tar:
+              tar.add(source,arcname=source.name,recursive=True)
+          with partial.open("rb") as f:os.fsync(f.fileno())
+          check={}
+          with tarfile.open(partial,"r:gz") as tar:
+              for item in tar:
+                  if not item.isfile():continue
+                  d=hashlib.sha256()
+                  reader=tar.extractfile(item)
+                  assert reader is not None
+                  for chunk in iter(lambda:reader.read(1024*1024),b""):d.update(chunk)
+                  check[str(Path(item.name).relative_to(source.name))]=d.hexdigest()
+          assert check==original
+          os.replace(partial,archive)
+          assert tarfile.is_tarfile(archive)
+          before=int(subprocess.run(["du","-sk",str(source)],capture_output=True,text=True,timeout=65,check=True).stdout.split()[0])*1024
+          compressed=archive.stat().st_size
+          shutil.rmtree(source)
+          assert not source.exists() and archive.is_file()
+          assert (genome/"site_master/vendor/master_gen64/controller.py").is_file()
+          assert stage.is_dir()
+          print("LEGACY_V91_FOLDER_REMOVED=yes")
+          print("LEGACY_V91_RECOVERY_ARCHIVE="+str(archive))
+          print("LEGACY_V91_RECOVERY_FILES="+str(len(original)))
+          print("LEGACY_V91_SAVED_BYTES="+str(before-compressed))
+          print("PRODUCTION_RUNTIME_AND_73_GENOMES_PRESERVED=yes")
+          PY
+          REMOTE
+      - name: Verify both domains and agent portal
+        shell: bash
+        run: |
+          set -euo pipefail
+          for u in "https://zomorodmelal.ir/" "https://zomorodmelal.ir/agents/" "https://mojplaywin.com/"; do
+            code="$(curl -sS --max-time 15 -o /dev/null -w '%{http_code}' "$u" || true)"
+            echo "V91_ARCHIVE_SITE_HEALTH=$u:$code"
+            test "$code" = 200
+          done
+      - name: Clear runner SSH material
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
