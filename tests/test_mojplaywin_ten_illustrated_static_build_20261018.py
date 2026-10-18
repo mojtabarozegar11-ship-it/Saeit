@@ -26,6 +26,7 @@ class MojPlayWinTenIllustratedPageTests(unittest.TestCase):
             self.assertIn('id="mpw-ten-illustrated-20261018"',section)
     def test_preserves_every_existing_page_character(self):
         old='<!doctype html><html><head><title>Original title</title></head><body><main><p id="old">Original user-facing content</p></main><footer>Payments and products unchanged</footer></body></html>'
+        old=old.replace('</main>', '<p>This historic introduction includes the original research context, citations, policies, responsibilities and related opportunities; it must stay fully intact in the published output.</p>'*2+'</main>')
         html=render(old,self.data,"/research/")
         self.assertIn('<title>Original title</title>',html)
         self.assertIn('<p id="old">Original user-facing content</p>',html)
