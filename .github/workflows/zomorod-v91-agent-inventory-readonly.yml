@@ -1,4 +1,4 @@
-name: Zomorod V91 agent side-effect audit (read only)
+name: Zomorod V91 agent entrypoint side-effect audit (read only)
 on:
   push:
     branches: ["audit/zomorod-v91-agent-extraction-20261018"]
