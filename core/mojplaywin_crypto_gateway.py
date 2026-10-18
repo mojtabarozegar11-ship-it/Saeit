@@ -19,6 +19,7 @@ from .models import LedgerEntry, Order, OrderItem, PaymentIntent
 from .mojplaywin_crypto_models import MojCryptoInvoice, MojCryptoOffer
 from .mojplaywin_chain_verify import VerificationError, _tron_address_hex, verify_eth, verify_trx
 from .mojplaywin_crypto_throttle import check_limit
+from .mojplaywin_discount_books import DISCOUNT_BOOKS
 
 
 HOSTS = {"mojplaywin.com", "www.mojplaywin.com"}
@@ -68,6 +69,22 @@ def _private_file(offer):
     return path
 
 
+_BOOK_SALES_BY_TITLE = {entry["title"]: entry for entry in DISCOUNT_BOOKS}
+
+
+def _sale_book_matches_approved_offer(offer):
+    """Avoid a full-price/wrong-PDF checkout for advertised discounted ebooks."""
+    sale = _BOOK_SALES_BY_TITLE.get(offer.product.title)
+    if sale is None:
+        return True
+    return (
+        offer.product.currency == "USD"
+        and offer.product.price == sale["sale_usd"]
+        and offer.fulfillment_mode == "download"
+        and offer.private_file == sale["private_pdf"]
+    )
+
+
 def available_offers():
     if not getattr(settings, "MOJPLAYWIN_CRYPTO_ENABLED", False):
         return []
@@ -75,7 +92,7 @@ def available_offers():
         Q(product__knowledge_article__isnull=True) | Q(product__knowledge_article__published=True),
         active=True, product__active=True, product__price__gt=0,
     )
-    return [x for x in offers if configured(x.asset) and _fulfillment_ready(x)]
+    return [x for x in offers if configured(x.asset) and _fulfillment_ready(x) and _sale_book_matches_approved_offer(x)]
 
 
 def _file_ready(offer):
@@ -139,8 +156,8 @@ def buy(request, offer_id):
         pk=offer_id, active=True, product__active=True, product__price__gt=0,
     )
     destination = _address(offer.asset)
-    if not _fulfillment_ready(offer):
-        raise Http404("Offer fulfillment is not configured.")
+    if not _fulfillment_ready(offer) or not _sale_book_matches_approved_offer(offer):
+        raise Http404("Offer pricing or private delivery is not configured.")
     if request.method == "GET":
         return render(request, "mojplaywin/crypto_buy.html", {
             "offer": offer, "amount": f"{int(offer.atomic_amount) / DENOMINATORS[offer.asset]:f}",
