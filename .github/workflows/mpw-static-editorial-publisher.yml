@@ -19,7 +19,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-          ref: f2894133675429e874293cf8add19bb2570deb3a
+          ref: 87b3d721cd763458ac06cc2bd4ee453249cc3c7d
       - name: Prove guarded static article publishing and package pinned private files
         shell: bash
         run: |
