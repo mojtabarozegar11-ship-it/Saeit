@@ -1,0 +1,223 @@
+name: MojPlayWin 19 pages 190 illustrated articles production-safe publication
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/mojplaywin-190-illustrated-live-release-20261018.yml"
+permissions:
+  contents: read
+concurrency:
+  group: mojplaywin-about-exact-static-prod
+  cancel-in-progress: false
+jobs:
+  publish-only-vetted-main-pages:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && github.event_name == 'push' && contains(github.event.head_commit.message, '[approved-mpw-190-editorial-20261018]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 19
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify package generator and route isolation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet Pillow==11.3.0
+          python3 -m py_compile scripts/mojplaywin_ten_illustrated_static_build_20261018.py scripts/mojplaywin_ten_editorials_scope_release_20261018.py
+          python3 -m unittest discover -s tests -p test_mojplaywin_ten_illustrated_static_build_20261018.py -v
+          python3 - <<'PY'
+          import sys
+          sys.path.insert(0,"scripts")
+          import mojplaywin_ten_editorials_scope_release_20261018 as pub
+          assert len(pub.PATHS)==19
+          assert not any(path.startswith(('/store','/checkout','/payment','/admin','/api','/mojtaba.roozegar','/picm','/farnaz','/saman')) for path in pub.PATHS)
+          assert '/about/' in pub.PATHS
+          assert '/about/mojtaba-rozegar/' in pub.PATHS
+          assert pub.rules().count(b'RewriteRule')==19
+          assert 'RewriteCond %{REQUEST_METHOD} ^GET$' in pub.rules().decode('ascii')
+          assert 'mojplaywin' in pub.rules().decode('ascii')
+          print('SCOPE_ONLY_NINETEEN_EXACT_GET_ROUTES_TESTED=yes')
+          PY
+      - name: Capture protected live baseline before writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,os,urllib.request,urllib.error
+          urls=[
+            "https://mojplaywin.com/",
+            "https://mojplaywin.com/store/",
+            "https://mojplaywin.com/checkout/",
+            "https://mojplaywin.com/mojtaba.roozegar/",
+            "https://mojplaywin.com/mojtaba.roozegar/about/",
+            "https://mojplaywin.com/mojtaba.roozegar/resume/",
+            "https://mojplaywin.com/farnaz/",
+            "https://mojplaywin.com/saman/",
+            "https://mojplaywin.com/picm/",
+            "https://mojplaywin.com/taniya/",
+            "https://zomorodmelal.ir/"
+          ]
+          statuses={}
+          for url in urls:
+            req=urllib.request.Request(url,headers={"Cache-Control":"no-cache","User-Agent":"MojPlayWin190SafeReleaseBaseline/1.0"})
+            try:
+              with urllib.request.urlopen(req,timeout=22) as r:code=r.status
+            except urllib.error.HTTPError as e:code=e.code
+            statuses[url]=code
+            print("190_EDITORIAL_PROTECTED_BEFORE="+url+" status="+str(code))
+          for url in (urls[0],urls[1],urls[3],urls[4],urls[6],urls[-1]):
+            if statuses[url]!=200:raise SystemExit("PROTECTED_CRITICAL_PATH_NOT_200 "+url)
+          with open(os.environ["RUNNER_TEMP"]+"/mpw-190-protected-baseline.json","w") as f:json.dump(statuses,f)
+          PY
+      - name: Build nineteen real public HTML snapshots and 190 tiny locally cropped WebPs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/mojplaywin_ten_illustrated_static_build_20261018.py \
+            --public --output /tmp/mpw-ten-illustrated-20261018
+          python3 - <<'PY'
+          from pathlib import Path
+          import json,hashlib
+          root=Path("/tmp/mpw-ten-illustrated-20261018")
+          m=json.loads((root/"manifest.json").read_text())
+          assert len(m["paths"])==19
+          images=list((root/"images").glob("*.webp"))
+          assert len(images)==190
+          assert all(0<x.stat().st_size<=36000 for x in images)
+          for path,item in m["paths"].items():
+            blob=(root/item["file"]).read_bytes()
+            assert hashlib.sha256(blob).hexdigest()==item["sha256"]
+            assert blob.count(b'class="mpw-ten-card"')==10
+          print("REAL_SITE_CONTENT_PACKAGE_QA=19PAGES_190ARTICLES_190_WEBP_PASS")
+          PY
+          tar -czf "$RUNNER_TEMP/mojplaywin-190-editorial-20261018.tar.gz" \
+            -C /tmp/mpw-ten-illustrated-20261018 .
+          test "$(wc -c < "$RUNNER_TEMP/mojplaywin-190-editorial-20261018.tar.gz")" -lt 10000000
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Transfer only isolated new editorial package into private cPanel staging
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          scp -q -F "$d/config" "$RUNNER_TEMP/mojplaywin-190-editorial-20261018.tar.gz" \
+            "saeit-cpanel:/home/zomorod2/.mpw-190-content-$GITHUB_RUN_ID.tar.gz"
+      - name: Install only nineteen exact GET rewrites with byte-exact rollback file
+        id: install
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 85s ssh -T -F "$d/config" saeit-cpanel \
+            "python3 - install '$GITHUB_RUN_ID'" \
+            < scripts/mojplaywin_ten_editorials_scope_release_20261018.py
+      - name: Verify 190 notes, image loading and all protected sites after publication
+        id: smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,os,re,time,urllib.request,urllib.error,sys
+          from pathlib import Path
+          sys.path.insert(0,'scripts')
+          import mojplaywin_ten_editorials_scope_release_20261018 as pub
+          for route in pub.PATHS:
+              succeeded=False
+              for attempt in range(1,5):
+                  try:
+                      url='https://mojplaywin.com'+route+'?__ten_light_notes='+os.environ['GITHUB_RUN_ID']+'-'+str(attempt)
+                      req=urllib.request.Request(url,headers={'User-Agent':'MojPlayWin190PostPublication/1.0','Cache-Control':'no-cache'})
+                      with urllib.request.urlopen(req,timeout=22) as res:
+                          body=res.read(900000).decode('utf-8','replace');code=res.status
+                      succeeded=(code==200 and body.count('class="mpw-ten-card"')==10
+                        and body.count('id="mpw-ten-illustrated-20261018"')==1
+                        and len(re.findall(r'/design-preview-20261017/mpw-ten-editorials-20261018/images/[^"\s]+\.webp',body))==10)
+                      if route=='/about/':
+                          succeeded=succeeded and 'COMPLEMENTARY SPECIALISM 30' in body
+                      if route=='/about/mojtaba-rozegar/':
+                          succeeded=succeeded and 'Professor Mojtaba Roozegar' in body
+                      print('190_EDITORIAL_LIVE='+route+' attempt='+str(attempt)+' status='+str(code)+' verified='+str(succeeded))
+                      if succeeded:break
+                  except Exception as e:
+                      print('190_EDITORIAL_LIVE_RETRY='+route+' '+type(e).__name__)
+                  time.sleep(3)
+              if not succeeded:raise SystemExit('EDITORIAL_ROUTE_CONTENT_NOT_VISIBLE '+route)
+          samples=('company-01.webp','research-04.webp','ventures-carpets-10.webp','about-mojtaba-rozegar-03.webp')
+          for name in samples:
+              uri='https://mojplaywin.com/design-preview-20261017/mpw-ten-editorials-20261018/images/'+name
+              req=urllib.request.Request(uri,headers={'User-Agent':'MojPlayWin190MediaCheck/1.0'})
+              with urllib.request.urlopen(req,timeout=18) as r:
+                  sample=r.read(80);mime=r.headers.get('Content-Type','')
+                  if r.status!=200 or 'image/webp' not in mime or not sample:
+                      raise SystemExit('IMAGE_NOT_LOADED '+name)
+              print('190_EDITORIAL_WEBP_PUBLIC='+name+' verified')
+          before=json.load(open(os.environ['RUNNER_TEMP']+'/mpw-190-protected-baseline.json'))
+          for uri,baseline in before.items():
+              req=urllib.request.Request(uri,headers={'User-Agent':'MojPlayWin190SafeReleaseBaseline/1.0','Cache-Control':'no-cache'})
+              try:
+                  with urllib.request.urlopen(req,timeout=20) as r:status=r.status
+              except urllib.error.HTTPError as e:status=e.code
+              print('190_EDITORIAL_PROTECTED_AFTER='+uri+' status='+str(status)+' baseline='+str(baseline))
+              if status!=baseline:raise SystemExit('PROTECTED_PATH_REGRESSION '+uri)
+          print('MOJPLAYWIN_19_PUBLIC_PAGES_190_ILLUSTRATED_GUIDES_VERIFIED=yes')
+          PY
+      - name: Roll back root exact GET rules and all new isolated assets if smoke fails
+        if: failure() && steps.install.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 70s ssh -T -F "$d/config" saeit-cpanel \
+            "python3 - rollback '$GITHUB_RUN_ID'" \
+            < scripts/mojplaywin_ten_editorials_scope_release_20261018.py
+      - name: Remove only private transfer archive; preserve recovery metadata
+        if: always()
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          if test -f "$d/config"; then
+            ssh -T -F "$d/config" -o ConnectTimeout=10 saeit-cpanel \
+              "test ! -L /home/zomorod2/.mpw-190-content-$GITHUB_RUN_ID.tar.gz && rm -f -- /home/zomorod2/.mpw-190-content-$GITHUB_RUN_ID.tar.gz" || true
+          fi
