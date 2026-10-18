@@ -1,0 +1,142 @@
+name: Lossless compression of old Astra staging backup databases
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/zomorod-astra-staging-db-compress.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-astra-staging-db-compress
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - name: Archive one historical database with verified lossless compression, never touching live DBs
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib,gzip,os,subprocess,sqlite3
+          h=Path.home()
+          assert h==Path("/home/zomorod2")
+          root=h/"Saeit-staging/var/factory/astra-backups"
+          assert root.is_dir() and not root.is_symlink()
+          assert (h/"Saeit/manage.py").is_file()
+          assert (h/"Saeit/var/mother_robot/lab").is_dir()
+          cr=subprocess.run(["crontab","-l"],capture_output=True,text=True,timeout=10)
+          ps=subprocess.run(["ps","-u","zomorod2","-o","args="],capture_output=True,text=True,timeout=10)
+          assert "/mother_robot/lab/" not in cr.stdout
+          names=sorted(p for p in root.iterdir() if p.is_dir() and not p.is_symlink() and (p/"mojplaywin.sqlite3").is_file())
+          assert 10<=len(names)<=17
+          kept=0
+          saved=0
+          def digest(path,decode=False):
+              d=hashlib.sha256()
+              op=gzip.open if decode else open
+              with op(path,"rb") as stream:
+                  for block in iter(lambda:stream.read(2*1024*1024),b""):d.update(block)
+              return d.hexdigest()
+          for gen in names:
+              assert gen.name.startswith(("stage","validation","capacity","evidence","daily-probe","legacy","retry"))
+              p=gen/"mojplaywin.sqlite3"
+              gz=p.with_name("mojplaywin.sqlite3.gz")
+              tmp=p.with_name(".mojplaywin.sqlite3.gz.partial")
+              assert not p.is_symlink() and not gz.is_symlink() and not tmp.exists()
+              assert not any(str(p) in line and "python3 - " not in line for line in ps.stdout.splitlines())
+              if gz.is_file():
+                  assert not p.exists()
+                  kept+=1
+                  print("HISTORICAL_DB_PREVIOUSLY_COMPRESSED="+gen.name)
+                  continue
+              assert p.is_file() and 10_000_000<p.stat().st_size<80_000_000
+              before=p.stat().st_size
+              original_sha=digest(p)
+              try:
+                  with p.open("rb") as src, gzip.open(tmp,"wb",compresslevel=1) as dest:
+                      for chunk in iter(lambda:src.read(2*1024*1024),b""):dest.write(chunk)
+                  with tmp.open("rb") as fd:os.fsync(fd.fileno())
+                  assert digest(tmp,True)==original_sha
+                  assert digest(p)==original_sha
+                  os.replace(tmp,gz)
+                  assert digest(gz,True)==original_sha
+                  after=gz.stat().st_size
+                  p.unlink()
+                  assert not p.exists()
+                  kept+=1
+                  saved+=before-after
+                  print("HISTORICAL_DB_ARCHIVED="+gen.name+" original="+str(before)+" compressed="+str(after))
+              finally:
+                  if tmp.exists():tmp.unlink()
+          assert kept==len(names)
+          print("ASTRA_SNAPSHOTS_RECOVERABLE="+str(kept))
+          print("ASTRA_OLD_SNAPSHOT_SAVED_BYTES="+str(saved))
+          print("MOJPLAYWIN_LIVE_AND_STAGING_DATABASES_UNMODIFIED=yes")
+          PY
+          REMOTE
+      - name: Public site safety check
+        shell: bash
+        run: |
+          set -euo pipefail
+          for site in "https://zomorodmelal.ir/" "https://zomorodmelal.ir/agents/" "https://mojplaywin.com/"; do
+            code="$(curl --max-time 16 -sS -o /dev/null -w '%{http_code}' "$site" || true)"
+            echo "AFTER_DB_ARCHIVE_SITE=$site:$code"
+            test "$code" = 200
+          done
+      - name: Clean SSH material
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
