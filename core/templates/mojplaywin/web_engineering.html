@@ -1,0 +1,152 @@
+{% extends "mojplaywin/base.html" %}
+{% load static %}
+{% block title %}Web Design & Django Engineering for Canada and the USA | MojPlayWin{% endblock %}
+{% block meta_description %}Explore research-led web engineering, professional UX, Django applications, digital commerce architecture and responsible AI integration for North American B2B teams.{% endblock %}
+{% block body_class %}mojplaywin-section{% endblock %}
+{% block content %}
+{% include "mojplaywin/theme.html" %}
+<style id="mpw-web-engineering-only">
+.mpw-web{--we-line:rgba(237,197,126,.35);--we-cream:#f6f0e3;--we-gold:#e5bf7a;color:var(--we-cream);width:min(1390px,calc(100% - 32px));margin:22px auto 55px}
+.mpw-web *{box-sizing:border-box}
+.mpw-web :is(h1,h2,h3,p){margin-top:0}
+.mpw-web :is(h1,h2,h3){letter-spacing:-.044em;line-height:1.12}
+.mpw-web p{color:#c9c3b8;line-height:1.8}
+.mpw-web a:focus-visible,.mpw-web button:focus-visible{outline:3px solid #f7dc9e;outline-offset:4px}
+.mpw-web-kicker{font-weight:800;font-size:.7rem;letter-spacing:.18em;text-transform:uppercase;color:#eac890}
+.mpw-web-hero{position:relative;display:grid;grid-template-columns:1.03fr .97fr;gap:clamp(18px,4vw,54px);align-items:center;background:linear-gradient(134deg,#101319,#0a0c12 70%);
+border:1px solid var(--we-line);border-radius:25px;padding:clamp(25px,5.2vw,70px);overflow:hidden}
+.mpw-web-hero h1{max-width:16ch;font-size:clamp(2.35rem,5.3vw,5.45rem);margin:18px 0 21px;font-weight:800;color:#fffaf1}
+.mpw-web-hero h1 em{font-style:normal;color:var(--we-gold)}
+.mpw-web-hero p{max-width:59ch;font-size:1rem}
+.mpw-web-hero-media{position:relative;aspect-ratio:1.28;border-radius:24px;overflow:hidden;border:1px solid rgba(228,186,113,.33)}
+.mpw-web-hero-media img{display:block;width:100%;height:100%;object-fit:cover}
+.mpw-web-hero-media::after{content:"";position:absolute;inset:0;pointer-events:none;background:linear-gradient(0deg,rgba(7,9,14,.65),transparent 50%)}
+.mpw-web-hero-media span{position:absolute;bottom:22px;left:20px;z-index:1;font-size:.77rem;color:#f9e4b7;letter-spacing:.12em}
+.mpw-web-actions{display:flex;flex-wrap:wrap;gap:12px;margin:27px 0 0}
+.mpw-web-cta{display:inline-flex;align-items:center;justify-content:center;gap:10px;min-height:48px;padding:12px 18px;border-radius:12px;border:1px solid #caa76d;color:#f8dfa6!important;text-decoration:none!important;background:#171a1e;font-size:.86rem;font-weight:750}
+.mpw-web-cta.primary{background:#ecd09a;color:#17150f!important}
+.mpw-web-disclosure{font-size:.76rem;margin:20px 0 0;color:#aba89f!important}
+.mpw-web-section{padding:clamp(28px,5vw,64px) clamp(8px,2vw,28px)}
+.mpw-web-section-head{max-width:870px;margin-bottom:24px}
+.mpw-web-section h2{color:#f9e6ba;font-size:clamp(1.8rem,3.3vw,3.35rem);margin:12px 0}
+.mpw-web-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:13px}
+.mpw-web-card{border:1px solid rgba(225,189,126,.28);border-radius:18px;background:linear-gradient(160deg,#171b20,#0d1117);padding:24px;min-width:0}
+.mpw-web-card b{display:inline-flex;border:1px solid rgba(226,184,117,.3);color:#ecc98c;padding:7px 10px;border-radius:50px;font-size:.7rem;letter-spacing:.08em;margin-bottom:20px}
+.mpw-web-card h3{font-size:1.22rem;color:#f8ebd0;margin:0 0 11px}
+.mpw-web-card p{font-size:.85rem}
+.mpw-web-card ul,.mpw-web-flow ul{padding-left:21px;color:#c7c1b3;line-height:1.8;font-size:.83rem}
+.mpw-web-card li+li{margin-top:6px}
+.mpw-web-flow{border:1px solid var(--we-line);border-radius:22px;padding:clamp(18px,3vw,35px);background:radial-gradient(ellipse at 80% 5%,rgba(221,178,92,.1),transparent 45%),#11141a;display:grid;grid-template-columns:1fr 1fr;gap:24px}
+.mpw-web-step{border-bottom:1px solid rgba(234,197,128,.24);padding:16px 0;display:grid;grid-template-columns:46px 1fr;gap:9px}
+.mpw-web-step:last-child{border-bottom:0}
+.mpw-web-step>strong{color:#eccc8b;font-size:1.1rem}
+.mpw-web-step h3{margin:0 0 6px;font-size:1.03rem}
+.mpw-web-step p{font-size:.8rem;margin-bottom:0}
+.mpw-web-code{border-radius:18px;border:1px solid #4c4638;background:#0b1016;padding:22px;overflow:hidden}
+.mpw-web-code pre{white-space:pre-wrap;overflow-wrap:anywhere;color:#e8d4ac;font-size:.75rem;line-height:1.8;margin:0;font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
+.mpw-web-code p{font-size:.79rem;margin:17px 0 0}
+.mpw-web-standards{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.mpw-web-standards article{background:#14171d;border:1px solid rgba(232,195,128,.28);padding:18px;border-radius:14px}
+.mpw-web-standards b{display:block;font-size:.88rem;color:#f4d596;margin-bottom:8px}
+.mpw-web-standards p{font-size:.78rem;margin:0}
+.mpw-web-faq details{border-bottom:1px solid rgba(227,195,135,.3);padding:17px 0}
+.mpw-web-faq summary{cursor:pointer;color:#f4dda7;font-weight:760;line-height:1.5}
+.mpw-web-faq details p{margin:10px 0 0;font-size:.88rem}
+.mpw-web-outro{border:1px solid #d0a969;border-radius:21px;padding:clamp(24px,5vw,48px);background:radial-gradient(ellipse at 95% 5%,rgba(210,161,77,.14),transparent 62%),#111319}
+.mpw-web-outro h2{font-size:clamp(1.8rem,3vw,3.2rem)}
+.mpw-web-outro p{max-width:74ch}
+@media(max-width:880px){.mpw-web-hero,.mpw-web-flow{grid-template-columns:1fr}.mpw-web-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.mpw-web-standards{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:570px){.mpw-web{width:calc(100% - 18px);margin-top:12px}.mpw-web-hero{padding:21px;gap:22px}.mpw-web-hero h1{font-size:2.35rem}.mpw-web-hero-media{aspect-ratio:1.45}.mpw-web-grid,.mpw-web-standards{grid-template-columns:1fr}.mpw-web-card{padding:20px}.mpw-web-cta{width:100%}}
+@media(prefers-reduced-motion:reduce){.mpw-web *{scroll-behavior:auto!important;animation:none!important;transition:none!important}}
+</style>
+<div class="mpw-web" id="mpw-web-engineering" aria-labelledby="mpw-web-title">
+  <section class="mpw-web-hero">
+    <div><span class="mpw-web-kicker">MOJPLAYWIN · CANADA & USA · B2B DIGITAL ENGINEERING</span>
+      <h1 id="mpw-web-title">Web experiences that demonstrate <em>engineering excellence.</em></h1>
+      <p>Thoughtful visual design must be matched by robust application behavior. Our service approach combines information architecture, responsive user experience, modern Django engineering, performance optimization and measurable technical acceptance—built for projects with clear objectives and accountable delivery.</p>
+      <p>For teams in Canada and the United States, the starting point is a focused discovery conversation: the business need, target customers, data responsibilities, integrations, budget assumptions, timeline and measurable success conditions.</p>
+      <div class="mpw-web-actions">
+        <a class="mpw-web-cta primary" href="/company/">Explore collaboration details <span aria-hidden="true">↗</span></a>
+        <a class="mpw-web-cta" href="/research/">Review research approach <span aria-hidden="true">→</span></a>
+      </div>
+      <p class="mpw-web-disclosure">This page describes a professional service framework, not a claim of completed client contracts, guaranteed business outcomes, or a live quotation submission form.</p>
+    </div>
+    <div class="mpw-web-hero-media">
+      <img src="{% static 'site/heroes/services.webp' %}" alt="Visual illustration for modern technical web services" width="1080" height="720" fetchpriority="high" decoding="async">
+      <span>DESIGN SYSTEMS · ENGINEERING · DELIVERY</span>
+    </div>
+  </section>
+
+  <section class="mpw-web-section" aria-labelledby="mpw-web-services">
+    <div class="mpw-web-section-head"><span class="mpw-web-kicker">01 · CAPABILITIES</span><h2 id="mpw-web-services">Built around real business needs</h2><p>A project may require just one focused service or a well-defined combination. Deliverables are specified before development; what is not implemented is never presented as operational.</p></div>
+    <div class="mpw-web-grid">
+      <article class="mpw-web-card"><b>WEB · 01</b><h3>Premium website design</h3><p>A visually distinctive brand experience with readable hierarchy, responsive layouts and accessible navigation.</p><ul><li>Discovery and sitemap</li><li>Reusable design tokens and component library</li><li>Desktop and mobile prototypes</li><li>Visual acceptance criteria</li></ul></article>
+      <article class="mpw-web-card"><b>DJANGO · 02</b><h3>Web application engineering</h3><p>Maintainable Django projects with appropriate data models, staff workflows and role-based permissions.</p><ul><li>Architecture and schema review</li><li>Secure administration and form validation</li><li>API interfaces and integration boundaries</li><li>Unit and integration test coverage</li></ul></article>
+      <article class="mpw-web-card"><b>COMMERCE · 03</b><h3>Digital commerce systems</h3><p>Product experiences that prioritize catalog integrity, explain pricing clearly and preserve dependable order fulfillment.</p><ul><li>Product identity and content requirements</li><li>Payment-provider selection and sandbox tests</li><li>Orders, downloads, license controls</li><li>Reconciliation and rollback rules</li></ul></article>
+      <article class="mpw-web-card"><b>AI · 04</b><h3>AI-enabled user experiences</h3><p>Useful AI-assisted workflows should remain traceable, permission-bound and evaluated against meaningful benchmarks.</p><ul><li>Task and data-boundary assessment</li><li>Human review and failure handling</li><li>Retrieval and evidence design</li><li>Model-output quality evaluation</li></ul></article>
+      <article class="mpw-web-card"><b>PERFORMANCE · 05</b><h3>Speed, accessibility and SEO</h3><p>Technical quality is measured, not described with unsupported scores.</p><ul><li>Core Web Vitals and real-device testing</li><li>WCAG-aligned interaction patterns</li><li>Metadata, canonical URLs and structured data</li><li>Regression checks before release</li></ul></article>
+      <article class="mpw-web-card"><b>ENGINEERING · 06</b><h3>Recovery and long-term support</h3><p>Deployment processes should account for existing content, business records, permissions and restoration.</p><ul><li>Full dependency and ownership audit</li><li>Versioned releases and safe staging</li><li>Verified restorable backups</li><li>Monitoring and incident documentation</li></ul></article>
+    </div>
+  </section>
+
+  <section class="mpw-web-section" aria-labelledby="mpw-web-process">
+    <div class="mpw-web-section-head"><span class="mpw-web-kicker">02 · PROCESS</span><h2 id="mpw-web-process">A clear path from discovery to reliable delivery</h2><p>Every engagement should make decisions visible. We favor explicit specifications, measured acceptance tests and a documented handover over impressive screenshots without functioning systems.</p></div>
+    <div class="mpw-web-flow">
+      <div>
+        <div class="mpw-web-step"><strong>01</strong><div><h3>Research and project definition</h3><p>Map users, business requirements, current assets, privacy considerations and known integration constraints.</p></div></div>
+        <div class="mpw-web-step"><strong>02</strong><div><h3>Design and technical specification</h3><p>Define visual direction, information architecture, accessibility requirements and data boundaries.</p></div></div>
+        <div class="mpw-web-step"><strong>03</strong><div><h3>Build and iterate</h3><p>Deliver in reviewable increments with clear acceptance criteria, tests and version control.</p></div></div>
+        <div class="mpw-web-step"><strong>04</strong><div><h3>Verify, launch and support</h3><p>Rehearse recovery, validate end-to-end journeys and check production against the approved baseline.</p></div></div>
+      </div>
+      <div class="mpw-web-code" aria-label="Representative project acceptance checklist">
+        <span class="mpw-web-kicker">ENGINEERING REVIEW · EXAMPLE</span>
+        <pre>PROJECT / WEBSITE ENGINEERING
+
+[ ] Confirm domain and page ownership
+[ ] Preserve every existing public URL
+[ ] Verify forms, catalog and access rights
+[ ] Review security boundaries and secrets
+[ ] Test mobile, desktop and keyboard
+[ ] Measure performance and search health
+[ ] Back up database and all media
+[ ] Rehearse recovery before launch
+[ ] Record production acceptance evidence
+
+STATUS: illustration, not a live report</pre>
+        <p>Scope, schedule, tools and acceptance thresholds are selected to match the actual project rather than copied from a generic template.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="mpw-web-section" aria-labelledby="mpw-web-standards">
+    <div class="mpw-web-section-head"><span class="mpw-web-kicker">03 · QUALITY</span><h2 id="mpw-web-standards">Quality you can inspect</h2><p>Beautiful pages are not complete unless they remain useful, secure, accessible and easy to maintain. We recommend independent evidence for every agreed acceptance condition.</p></div>
+    <div class="mpw-web-standards">
+      <article><b>Responsive & accessible</b><p>Keyboard access, contrast, readable typography, reduced motion, focus order and real-device behavior.</p></article>
+      <article><b>Secure by design</b><p>Authorization, CSRF protection, least privilege, safe configuration, dependency checks and incident planning.</p></article>
+      <article><b>Search discoverability</b><p>Information architecture, crawlability, metadata, canonical ownership and meaningful original copy.</p></article>
+      <article><b>Operational reliability</b><p>Tested deploy procedures, observability, backups, migration safeguards and reversible changes.</p></article>
+    </div>
+  </section>
+
+  <section class="mpw-web-section mpw-web-faq" aria-labelledby="mpw-web-faq-title">
+    <div class="mpw-web-section-head"><span class="mpw-web-kicker">04 · QUESTIONS</span><h2 id="mpw-web-faq-title">Practical answers before commissioning a project</h2></div>
+    <details><summary>Can you work with an existing website rather than starting over?</summary><p>A safe redesign begins with the current URL inventory, content, media, customer flows and deployment boundaries. When a project contains protected applications or integrations, changes must be isolated and verified before publication.</p></details>
+    <details><summary>Do you build Django administration and business workflows?</summary><p>Django supports custom admin interfaces, permissions, data modeling and API-driven workflows. The precise features depend on a project specification, user roles and an agreed security review.</p></details>
+    <details><summary>Can existing payment and product records be preserved?</summary><p>Preservation should be a written acceptance condition. Before editing commerce code, inventory products, prices, files, order records and provider settings; take recoverable backups and compare record fingerprints before and after deployment.</p></details>
+    <details><summary>How are AI features evaluated before public release?</summary><p>Set explicit data boundaries and quality criteria, test realistic failure scenarios, keep humans responsible for sensitive decisions and clearly distinguish prototypes from production-ready services.</p></details>
+    <details><summary>How do we estimate budget and timeline?</summary><p>Estimate only after reviewing scope, existing systems, assets, accessibility goals, dependencies and integration uncertainty. A phased discovery deliverable reduces ambiguity before a larger build is authorized.</p></details>
+    <details><summary>Do you guarantee perfect scores or commercial results?</summary><p>We set measurable targets and publish verified evidence, but performance varies with production hosting, content, devices and third-party dependencies. No untested score, ranking, sales figure or integration is guaranteed.</p></details>
+  </section>
+
+  <section class="mpw-web-outro" aria-labelledby="mpw-web-start">
+    <span class="mpw-web-kicker">05 · NEXT STEP</span><h2 id="mpw-web-start">Start with a precise project brief.</h2>
+    <p>Useful preparation includes your target audiences, current website or design reference, must-preserve content, required features, expected timeline, compliance considerations and examples of the user journeys that matter most. This makes initial review more productive for teams across Canada and the United States.</p>
+    <div class="mpw-web-actions">
+      <a href="/company/" class="mpw-web-cta primary">View company and collaboration details <span aria-hidden="true">↗</span></a>
+      <a href="/research/" class="mpw-web-cta">Explore our research approach <span aria-hidden="true">→</span></a>
+    </div>
+    <p class="mpw-web-disclosure">The destination pages are informational. Contact forms, project acceptance and active service availability are independently verified before any public sales claims.</p>
+  </section>
+</div>
+{% include "mojplaywin/footer.html" %}
+{% endblock %}

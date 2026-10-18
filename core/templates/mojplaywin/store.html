@@ -1,6 +1,45 @@
-{% extends "base.html" %}
+{% extends "mojplaywin/base.html" %}
 {% load static %}
 {% block title %}Digital Store | MojPlayWin{% endblock %}
 {% block meta_description %}Explore MojPlayWin books, learning resources, original games, and practical digital tools.{% endblock %}
 {% block body_class %}mojplaywin-store{% endblock %}
-{% block content %}{% include "mojplaywin/theme.html" %}<div class="mw-shell"><section class="mw-hero"><div><span class="mw-kicker">MOJPLAYWIN · DIGITAL STORE</span><h1>Useful ideas, made to explore.</h1><p>A curated starting catalog of books, courses, games, research tools, and professional services. Product pages and checkout options are shown only when available.</p><a class="mw-button primary" href="#catalog">Browse the catalog</a></div><img src="{% static 'site/heroes/store.webp' %}" alt="MojPlayWin digital catalog"></section><section class="mw-section" id="catalog"><span class="mw-kicker">INITIAL COLLECTION · {{ products|length }} PICKS</span><h2>Books, learning, games & tools</h2><div class="mw-grid">{% for product in products %}<article class="mw-card"><img src="{% static product.image %}" alt="{{ product.title }}"><div class="mw-card-copy"><span class="mw-kicker">{{ product.category }}</span><h3>{{ product.title }}</h3><p>{{ product.text }}</p><a href="{{ product.url }}">Explore this collection ↗</a></div></article>{% endfor %}</div></section><p class="mw-note">Catalog links lead to the relevant MojPlayWin section. A purchase button appears only for an item with a verified active checkout.</p></div>{% include "mojplaywin/footer.html" %}{% endblock %}
+{% block content %}
+{% include "mojplaywin/theme.html" %}
+<div class="mw-shell" data-design="mojplaywin-atelier-v4">
+  <section class="mpx-page-hero" aria-labelledby="mpx-store-title">
+    <div class="mpx-page-hero-copy">
+      <div class="mpx-breadcrumb"><a href="/">Home</a><span aria-hidden="true">/</span> Digital Store</div>
+      <span class="mpx-kicker" style="margin-top:32px">MOJPLAYWIN · DIGITAL STORE</span>
+      <h1 id="mpx-store-title">Useful ideas, <em>made to explore.</em></h1>
+      <p>A curated starting catalog of books, courses, games, research tools, and professional services. Product pages and checkout options are shown only when available.</p>
+      <div class="mpx-actions"><a class="mw-button primary" href="#catalog">Browse the catalog <span aria-hidden="true">↗</span></a>
+        <a class="mw-button" href="/services/">Explore services <span aria-hidden="true">→</span></a></div>
+    </div>
+    <div class="mpx-page-hero-art">
+      <img src="{% static 'site/mojplaywin-atelier/digital-products.svg' %}" alt="Illustration of digital books, software, games and AI learning products" width="900" height="640" fetchpriority="high" loading="eager" decoding="async">
+      <span>DIGITAL GOODS · KNOWLEDGE · TOOLS</span>
+    </div>
+  </section>
+  <div class="mpx-signal" aria-label="Catalog categories"><span>BOOKS & GUIDES</span><span>ORIGINAL GAMES</span><span>DIGITAL TOOLS</span><span>EDUCATION</span></div>
+  <section class="mpx-section" id="catalog" aria-labelledby="mpx-catalog-title">
+    <div class="mpx-section-head"><div><span class="mpx-kicker">INITIAL COLLECTION · {{ products|length }} PICKS</span>
+      <h2 id="mpx-catalog-title">Books, learning, games & tools</h2>
+      <p>Browse the existing MojPlayWin catalog without changing product data, prices, orders or checkout.</p>
+    </div></div>
+    <div class="mpx-catalog">
+      {% for product in products %}
+      <article class="mpx-product">
+        <img src="{% static product.image %}" alt="{{ product.title }}" width="640" height="430" loading="lazy" decoding="async">
+        <div class="mpx-card-copy">
+          <span class="mw-kicker">{{ product.category }}</span>
+          <h3>{{ product.title }}</h3><p>{{ product.text }}</p>
+          <a href="{{ product.url }}">Explore this collection <span aria-hidden="true">↗</span></a>
+        </div>
+      </article>
+      {% endfor %}
+    </div>
+    <p class="mw-note">Catalog links lead to the relevant MojPlayWin section. A purchase button appears only for an item with a verified active checkout.</p>
+  </section>
+</div>
+{% include "mojplaywin/footer.html" %}
+{% endblock %}

@@ -1,0 +1,174 @@
+{
+  "site": "MojPlayWin MAIN ONLY",
+  "candidate_pr": 390,
+  "quality_standard": "Each mandatory gate must individually pass; never average or round.",
+  "release_status": "BLOCKED_UNTIL_ALL_EVIDENCE_PASSES",
+  "environment": "draft_branch_only",
+  "protected": [
+    "/mojtaba.roozegar/",
+    "/picm/",
+    "/studio.Roham/",
+    "/saman/",
+    "/zahra$$/",
+    "/farnaz/",
+    "/taniya/",
+    "ALL OTHER UNKNOWN INDEPENDENT CHILD SITES BY DEFAULT",
+    "zomorodmelal.ir AND ALL ITS CHILD SITES",
+    "ETH and TRX gateways",
+    "every real product, order and license"
+  ],
+  "gates": [
+    {
+      "id": "approved_orbital_design",
+      "title": "Exact approved orbital identity",
+      "criteria": "Deep-black and luminous gold, central technology globe, official emblem, three separately controllable orbital rows, no old-theme CSS; reference screenshot approval by owner",
+      "status": "not_verified",
+      "evidence": [],
+      "verified_at_utc": null
+    },
+    {
+      "id": "responsive_interactions",
+      "title": "Mobile and desktop functionality",
+      "criteria": "All three rings use real links and work with touch, mouse, keyboard and accessible controls; no horizontal overflow, broken links or motion accessibility failures",
+      "status": "not_verified",
+      "evidence": [],
+      "verified_at_utc": null
+    },
+    {
+      "id": "content_and_pages",
+      "title": "All pages and original text",
+      "criteria": "100% parity of legacy+current URL inventory, titles, articles, 10 homepage guides, meaningful distinct original content on each page; no placeholders or lost routes",
+      "status": "not_verified",
+      "evidence": [],
+      "verified_at_utc": null
+    },
+    {
+      "id": "visual_media",
+      "title": "All images and logo",
+      "criteria": "Owner-supplied official MojPlayWin logo matches reference; media/alt checked; no broken, missing or improperly substituted original images; license and sources verified",
+      "status": "not_verified",
+      "evidence": [],
+      "verified_at_utc": null
+    },
+    {
+      "id": "performance_mobile",
+      "title": "Every mobile page Lighthouse Performance=100",
+      "criteria": "Lighthouse full 1.00 score for EVERY inventoried main-site page in repeatable mobile testing, not only a sample or rounded mean",
+      "status": "not_verified",
+      "evidence": [],
+      "verified_at_utc": null
+    },
+    {
+      "id": "performance_desktop",
+      "title": "Every desktop page Lighthouse Performance=100",
+      "criteria": "Lighthouse full 1.00 score for EVERY inventoried main-site page in repeatable desktop testing",
+      "status": "not_verified",
+      "evidence": [],
+      "verified_at_utc": null
+    },
+    {
+      "id": "accessibility",
+      "title": "Full accessible operation and Lighthouse=100",
+      "criteria": "WCAG 2.2 AA checked on all primary flows, keyboard, focus, contrast, semantics, reduced-motion, screen readers; Lighthouse accessibility=1.00 for all routes/devices",
+      "status": "not_verified",
+      "evidence": [],
+      "verified_at_utc": null
+    },
+    {
+      "id": "technical_best_practices",
+      "title": "Best Practices 100",
+      "criteria": "Lighthouse best-practices=1.00 on all routes/devices; no console/runtime errors, mixed content or vulnerabilities found in configured checks",
+      "status": "not_verified",
+      "evidence": [],
+      "verified_at_utc": null
+    },
+    {
+      "id": "seo_and_indexing",
+      "title": "SEO 100 and correct canonicals",
+      "criteria": "Lighthouse SEO=1.00 on all routes/devices, correct self-canonicals, sitemap, robots, metadata, structured data, language and canonical domain checks",
+      "status": "not_verified",
+      "evidence": [],
+      "verified_at_utc": null
+    },
+    {
+      "id": "products_inventory",
+      "title": "Every existing real product intact",
+      "criteria": "Verified PRE and POST production Product inventory snapshots and hashes, identities, prices, currencies, discounts, stock state, owner, links, files, image and licenses match exactly",
+      "status": "not_verified",
+      "evidence": [],
+      "verified_at_utc": null
+    },
+    {
+      "id": "crypto_payment_integrity",
+      "title": "Existing ETH and TRX gateways intact",
+      "criteria": "Wallet destinations, gateways, invoice/order/callback, S2S verification, idempotency, settlement and delivery untouched; tested with authorized non-charging sandbox/record-based smoke checks",
+      "status": "not_verified",
+      "evidence": [],
+      "verified_at_utc": null
+    },
+    {
+      "id": "django_admin",
+      "title": "Django admin completely healthy",
+      "criteria": "Staff authentication and permissions, product/order/agent admin CRUD read-only smoke coverage; no production schema/model/settings migration",
+      "status": "not_verified",
+      "evidence": [],
+      "verified_at_utc": null
+    },
+    {
+      "id": "agents_runtime",
+      "title": "Agents genuinely operational",
+      "criteria": "Staff-only view reflects verified heartbeat, queues, errors and success; agent ownership scoped to main MojPlayWin; no cross-site mutation or invented active status",
+      "status": "not_verified",
+      "evidence": [],
+      "verified_at_utc": null
+    },
+    {
+      "id": "security_privacy",
+      "title": "Security and privacy checks passed",
+      "criteria": "HTTPS/TLS headers, authorization, protected files, secret non-disclosure, XSS/CSRF, privacy notices and zero unresolved blocker-level security findings",
+      "status": "not_verified",
+      "evidence": [],
+      "verified_at_utc": null
+    },
+    {
+      "id": "protected_subsites",
+      "title": "All protected sites unchanged",
+      "criteria": "All known AND unknown independent MojPlayWin subsites, including /mojtaba.roozegar/, /picm/, /studio.Roham/, /saman/, /zahra$$/, /farnaz/, /taniya/ and any unlisted child, must have verified intact routes, content, accounts, DB, images, forms, SEO, uptime and backups before and after publication. A shared Passenger restart or unproven isolation blocks release.",
+      "status": "not_verified",
+      "evidence": [],
+      "verified_at_utc": null
+    },
+    {
+      "id": "backup_and_rollback",
+      "title": "Recovery and deployment fully isolated",
+      "criteria": "Validated restorable database, assets and application backup; tested rollback; deploy isolation prevents shared Passenger restart affecting protected sites",
+      "status": "not_verified",
+      "evidence": [],
+      "verified_at_utc": null
+    },
+    {
+      "id": "support_forms",
+      "title": "Real service flows, support and contact",
+      "criteria": "All supported contact/support forms work, validated post-submit behavior and error states; no mock buttons or unsupported checkout claims",
+      "status": "not_verified",
+      "evidence": [],
+      "verified_at_utc": null
+    },
+    {
+      "id": "legal_footer",
+      "title": "Exact footer copyright year 2022",
+      "criteria": "Main-site footers read © 2022 MojPlayWin. All rights reserved.; separate Zomorod/personal site footers unchanged",
+      "status": "not_verified",
+      "evidence": [],
+      "verified_at_utc": null
+    },
+    {
+      "id": "approved_release",
+      "title": "Owner-verified final live release",
+      "criteria": "Owner visual approval, independent live production smoke tests, full evidence package, every prior gate passed and deployment authorization",
+      "status": "not_verified",
+      "evidence": [],
+      "verified_at_utc": null
+    }
+  ]
+}

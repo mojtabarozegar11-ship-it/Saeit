@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 450" width="720" height="450" role="img" aria-labelledby="title desc">
+<title id="title">Original responsive website design illustration</title><desc id="desc">Elegant gold-on-obsidian architectural web interface on a large desktop window and floating mobile viewport.</desc>
+<defs><linearGradient id="bg" x2="1" y2="1"><stop stop-color="#111b26"/><stop offset="1" stop-color="#070b10"/></linearGradient><linearGradient id="metal" x2=".9" y2="1"><stop stop-color="#fff1bf"/><stop offset=".49" stop-color="#d0a45f"/><stop offset="1" stop-color="#89602d"/></linearGradient><linearGradient id="deep" x2="1" y2="1"><stop stop-color="#232d37"/><stop offset="1" stop-color="#11161e"/></linearGradient></defs>
+<rect width="720" height="450" fill="url(#bg)"/>
+<g stroke="#b98b52" stroke-opacity=".15" fill="none"><path d="M0 80H720 M0 180H720 M0 280H720 M0 380H720 M80 0V450 M180 0V450 M280 0V450 M380 0V450 M480 0V450 M580 0V450 M680 0V450"/></g>
+<path d="M50 330L200 78L550 78L669 330" fill="none" stroke="#f9dc91" stroke-opacity=".24" stroke-width="3"/>
+<g transform="translate(92 68)">
+<rect width="467" height="300" rx="25" fill="#121a23" stroke="url(#metal)" stroke-width="6"/>
+<rect x="17" y="18" width="433" height="261" rx="15" fill="url(#deep)" stroke="#5b5545" stroke-opacity=".9"/>
+<path d="M18 63H449" stroke="#b28b53" stroke-opacity=".65" stroke-width="2"/>
+<circle cx="42" cy="40" r="6" fill="#eccc91"/><circle cx="64" cy="40" r="6" fill="#75674d"/><circle cx="86" cy="40" r="6" fill="#665d4e"/>
+<rect x="40" y="89" width="190" height="17" rx="8" fill="#edc987"/>
+<rect x="40" y="122" width="167" height="11" rx="5" fill="#8d97a5"/>
+<rect x="40" y="146" width="182" height="11" rx="5" fill="#69737f"/>
+<rect x="40" y="194" width="94" height="33" rx="9" fill="url(#metal)"/>
+<path d="M265 218L326 118L372 178L418 102" fill="none" stroke="#cba56b" stroke-width="4" stroke-linecap="round"/>
+<circle cx="326" cy="118" r="9" fill="#efce99"/>
+<circle cx="418" cy="102" r="9" fill="#efce99"/>
+<rect x="165" y="294" width="137" height="13" rx="6" fill="#7f6c4d"/>
+</g>
+<g transform="translate(492 156) rotate(10)">
+<rect width="151" height="248" rx="27" fill="#0b1017" stroke="url(#metal)" stroke-width="8"/>
+<rect x="12" y="23" width="127" height="206" rx="15" fill="#20252a"/>
+<rect x="26" y="51" width="90" height="14" rx="6" fill="#f2d398"/>
+<rect x="26" y="76" width="71" height="7" rx="3" fill="#88959d"/>
+<rect x="26" y="93" width="80" height="7" rx="3" fill="#88959d"/>
+<rect x="26" y="128" width="101" height="70" rx="12" fill="#172f3a" stroke="#e0b66f" stroke-opacity=".74"/>
+<circle cx="75" cy="161" r="20" fill="none" stroke="#e2c181" stroke-width="4"/>
+</g>
+<g fill="#fce5aa"><circle cx="57" cy="130" r="5"/><circle cx="662" cy="76" r="4"/><circle cx="633" cy="365" r="6"/></g>
+</svg>

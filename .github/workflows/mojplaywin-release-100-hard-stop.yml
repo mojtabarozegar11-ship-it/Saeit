@@ -1,0 +1,39 @@
+name: MojPlayWin all-dimensions 100 release NO-GO
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/mojplaywin-release-100-hard-stop.yml"
+      - "quality/mojplaywin-acceptance-100.json"
+      - "scripts/mojplaywin_release_100_gate.py"
+      - "tests/test_mojplaywin_release_100_gate.py"
+      - "core/templates/mojplaywin/**"
+      - "core/templates/brands/mojplaywin/**"
+      - "core/static/site/mojplaywin-atelier/**"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  acceptance-blocker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify that release quality gate itself cannot accept partial scores
+        run: python3 -m unittest discover -s tests -p 'test_mojplaywin_release_100_gate.py'
+      - name: Refuse any release without nineteen independently evidenced passed checks
+        run: |
+          python3 scripts/mojplaywin_release_100_gate.py \
+            --manifest quality/mojplaywin-acceptance-100.json \
+            --output mojplaywin-release-100-result.json \
+            --require-ready
+      - name: Preserve no-go and acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mojplaywin-100-release-decision
+          path: mojplaywin-release-100-result.json
+          if-no-files-found: warn
+          retention-days: 30
