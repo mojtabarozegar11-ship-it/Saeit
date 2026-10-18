@@ -1,0 +1,126 @@
+name: MojPlayWin store template actual-site preflight read only
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/mojplaywin-store-guides-preflight-20261018.yml"]
+permissions:
+  contents: read
+jobs:
+  investigate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Read-only targeted store template paths and Passenger isolation
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 70s ssh -T -F "$d/config" saeit-cpanel python3 - <<'PY'
+          from pathlib import Path
+          import hashlib,json
+          home=Path('/home/zomorod2')
+          candidates=[
+            home/'mojplaywin.com',
+            home/'mojplaywin.com/app',
+            home/'mojplaywin.com/saeit',
+            home/'mojplaywin.com/core',
+            home/'mojplaywin_django',
+            home/'mojplaywin',
+            home/'Saeit',
+            home/'public_html',
+          ]
+          rels=['core/templates/mojplaywin/store.html',
+             'templates/mojplaywin/store.html',
+             'core/templates/mojplaywin/store_ten_buyer_guides_20261018.html',
+             'core/templates/base.html','manage.py','passenger_wsgi.py']
+          for root in candidates:
+            if not root.is_dir() or root.is_symlink():continue
+            item={'root':str(root),'files':[]}
+            for name in rels:
+              p=root/name
+              if p.is_file() and not p.is_symlink():
+                raw=p.read_bytes()
+                item['files'].append({'relative':name,'sha':hashlib.sha256(raw).hexdigest(),
+                   'bytes':len(raw),'guide_include':b'store_ten_buyer_guides_20261018' in raw,
+                   'active_guide_id':b'mpw-store-ten-guides' in raw})
+            print('MPW_STORE_TEMPLATE_CANDIDATE='+json.dumps(item))
+          root=home/'mojplaywin.com'
+          ht=root/'.htaccess'
+          if ht.is_file():
+            t=ht.read_bytes()
+            print('MPW_STORE_APACHE_SCOPING='+json.dumps({'ht_sha':hashlib.sha256(t).hexdigest(),
+              'passenger_route_present':b'PassengerAppRoot' in t,
+              'published_190_route_marker':b'MPW_ILLUSTRATED_TEN_PER_PAGE_20261018_BEGIN' in t,
+              'store_rewrite_present':b'RewriteRule ^store' in t,
+              'root_dir_mode':oct(root.stat().st_mode&0o777)}))
+          PY
+      - name: Check all ten store media URLs and live store catalog (no changes)
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import urllib.request,urllib.error,json
+          base='https://mojplaywin.com'
+          for num in (1,2,3,4,5,6,7,8,9,10):
+            url=base+'/design-preview-20261017/mpw-ten-editorials-20261018/images/market-%02d.webp'%num
+            try:
+              req=urllib.request.Request(url,headers={'User-Agent':'MojPlayWinStoreImageAudit/1.0'})
+              with urllib.request.urlopen(req,timeout=18) as r:
+                info={'n':num,'status':r.status,'mime':r.headers.get('content-type',''),
+                  'size_header':r.headers.get('content-length',''), 'magic':r.read(4).decode('latin-1')}
+            except Exception as exc:info={'n':num,'error':type(exc).__name__}
+            print('MPW_STORE_GUIDE_IMAGE='+json.dumps(info))
+          req=urllib.request.Request(base+'/store/?__store_preflight=20261018',headers={'Cache-Control':'no-cache','User-Agent':'MojPlayWinStoreImageAudit/1.0'})
+          with urllib.request.urlopen(req,timeout=22) as r:
+            raw=r.read(800000).decode('utf-8','replace')
+            print('MPW_STORE_GUIDE_LIVE='+json.dumps({'status':r.status,'bytes':len(raw),
+              'has_ten_guides':'id="mpw-store-ten-guides"' in raw,
+              'catalog_present':'id="catalog"' in raw,
+              'products':'INITIAL COLLECTION' in raw,
+              'form_present':'<form' in raw.lower(),'scripts_count':raw.lower().count('<script')}))
+          PY
