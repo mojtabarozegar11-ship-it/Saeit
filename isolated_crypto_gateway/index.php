@@ -3,7 +3,7 @@
  * No shared Django files/DB, no wallet private keys, no automatic product claims.
  */
 declare(strict_types=1);
-const ROOT='https://mojplaywin.com/checkout/crypto/';
+const ROOT='https://mojplaywin.com/checkout/crypto/index.php';
 const DATA='/home/zomorod2/.mojplaywin-crypto-payments-v1';
 const ETH_TO='0x89149b01f59115B86553561F12438D2ADF517E75';
 const TRX_TO='THFNU1iEXHd71WjEgjqUksd2UnMg2pUi73';
