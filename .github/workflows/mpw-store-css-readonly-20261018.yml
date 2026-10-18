@@ -1,0 +1,28 @@
+name: MojPlayWin store styles direct delivery audit
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/mpw-store-css-readonly-20261018.yml"]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Read public CSS payload hashes and cache headers
+        run: |
+          python3 - <<'PY'
+          import urllib.request,hashlib
+          base='https://mojplaywin.com/static/site/'
+          names=['mojplaywin.0044ba34e437.css','site-standard-v2.69714b9b949e.css','main.55db389feb64.css','luxury-pages.a1587ddcb800.css','site-polish-v3.cc1a03accbde.css','page-themes.2052296cc3f0.css','hero-images-v1.cc79016c1986.css']
+          for name in names:
+              for suffix in ('','?mpw_footer_audit=20261018'):
+                  url=base+name+suffix
+                  try:
+                      req=urllib.request.Request(url,headers={'Accept-Encoding':'identity','Cache-Control':'no-cache','User-Agent':'MPWStoreCSSAudit/1.0'})
+                      with urllib.request.urlopen(req,timeout=18) as response:
+                          data=response.read(300000)
+                          print('PUBLIC_ASSET '+name+suffix+' status='+str(response.status)+' SHA='+hashlib.sha256(data).hexdigest()+' bytes='+str(len(data))+' cache='+str(response.headers.get('Cache-Control'))+' etag='+str(response.headers.get('ETag'))+' encoding='+str(response.headers.get('Content-Encoding')),flush=True)
+                  except Exception as e:print('PUBLIC_ASSET_ERROR '+name+suffix+' '+type(e).__name__,flush=True)
+          PY
