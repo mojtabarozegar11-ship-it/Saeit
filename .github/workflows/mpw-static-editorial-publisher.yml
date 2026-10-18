@@ -127,7 +127,8 @@ jobs:
                           page=response.read(200000).decode("utf8","replace")
                           if response.status==200 and marker in page and "MojPlayWin" in page and "zomorodmelal.ir" not in page:
                               passed=True;break
-                  except Exception:pass
+                  except Exception as e:
+                      print("STATIC_SMOKE_DIAGNOSTIC",path,type(e).__name__,str(e)[:140])
                   time.sleep(3)
               if not passed:
                   raise SystemExit("PUBLIC_EDITORIAL_SMOKE_FAILED:"+path)
