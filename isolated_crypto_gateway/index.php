@@ -13,6 +13,52 @@ const TRX_RPC='https://api.trongrid.io/walletsolidity/';
 const MAX_ETH=1000000000000000000;
 const MAX_TRX=10000000000;
 
+/**
+ * Called only by a dedicated on-host scheduler. The buyer submits a transfer
+ * hash once; this worker finishes confirmations without any merchant approval
+ * or requirement for the buyer to keep the invoice page open.
+ */
+if (PHP_SAPI === 'cli') {
+    if (($argv[1] ?? '') !== 'reconcile') {
+        fwrite(STDERR, "Usage: php index.php reconcile\n");
+        exit(2);
+    }
+    if (!is_file(DATA.'/enabled.flag')) {
+        echo "MOJPLAYWIN_AUTORECONCILE_ENABLED=false\n";
+        exit(0);
+    }
+    $checked = 0;
+    $settled = 0;
+    $incomplete = 0;
+    $errors = 0;
+    try {
+        $pdo = db();
+        $q = $pdo->query("SELECT * FROM invoices WHERE status='confirming' AND tx_hash IS NOT NULL ORDER BY created_at LIMIT 12");
+        foreach ($q as $row) {
+            if ($checked >= 12) break;
+            $checked++;
+            try {
+                $outcome = reconcile($pdo, $row, (string)$row['tx_hash']);
+                if ($outcome === 'paid') $settled++;
+                else $incomplete++;
+            } catch (Throwable $e) {
+                $errors++;
+                // Never print wallet IDs, order references, payment hashes, or secrets.
+                error_log("MOJPLAYWIN_CRYPTO_RECONCILE_FAILED ".get_class($e));
+            }
+        }
+        echo "MOJPLAYWIN_AUTORECONCILE_CHECKED=".$checked."\n";
+        echo "MOJPLAYWIN_AUTORECONCILE_PAID=".$settled."\n";
+        echo "MOJPLAYWIN_AUTORECONCILE_CONFIRMING=".$incomplete."\n";
+        echo "MOJPLAYWIN_AUTORECONCILE_ERRORS=".$errors."\n";
+    } catch (Throwable $e) {
+        error_log("MOJPLAYWIN_CRYPTO_RECONCILE_START_FAILED ".get_class($e));
+        exit(1);
+    }
+    exit(0);
+}
+
+
 header('Cache-Control: private, no-store');
 header('Referrer-Policy: no-referrer');
 header('X-Content-Type-Options: nosniff');
