@@ -90,7 +90,7 @@ def _buyer(request):
 @require_http_methods(["GET", "POST"])
 def signin(request):
     _guard(request)
-    return LoginView.as_view(template_name="mojplaywin/crypto_login.html", redirect_authenticated_user=True)(request)
+    return LoginView.as_view(template_name="mojplaywin/crypto_login.html", redirect_authenticated_user=True, next_page="/store/")(request)
 
 
 @require_http_methods(["GET", "POST"])
@@ -141,6 +141,7 @@ def buy(request, offer_id):
             status__in=["awaiting_payment", "confirming"],
             expires_at__gt=timezone.now(),
         ).exists():
+            transaction.set_rollback(True)
             return HttpResponse("Checkout collision. Try again later.", status=409)
         invoice = MojCryptoInvoice.objects.create(
             order=order, offer=offer, asset=offer.asset,
@@ -182,13 +183,13 @@ def _verify_invoice(invoice, tx_hash):
         return verify_eth(
             tx_hash, invoice.merchant_address, invoice.atomic_amount,
             settings.MOJPLAYWIN_ETH_RPC_URL,
-            min_conf=settings.MOJPLAYWIN_ETH_CONFIRMATIONS,
+            min_conf=1,
         )
     if invoice.asset == "TRX":
         return verify_trx(
             tx_hash, invoice.merchant_address, invoice.atomic_amount,
             api_key=settings.MOJPLAYWIN_TRONGRID_API_KEY,
-            min_conf=settings.MOJPLAYWIN_TRX_CONFIRMATIONS,
+            min_conf=1,
         )
     raise VerificationError("Unsupported payment asset.")
 
@@ -215,10 +216,21 @@ def settle(invoice_id, tx_hash):
             raise VerificationError("Order already settled.")
         if invoice.tx_hash and invoice.tx_hash != canonical:
             raise VerificationError("Transaction changed.")
-        if timezone.now() > invoice.expires_at:
+        if timezone.now() > invoice.expires_at and invoice.status != "confirming":
             raise VerificationError("Invoice expired. Contact support for late transfers.")
         if MojCryptoInvoice.objects.filter(tx_hash=canonical).exclude(pk=invoice.pk).exists():
             raise VerificationError("This transfer was already used.")
+        required = (
+            settings.MOJPLAYWIN_ETH_CONFIRMATIONS if invoice.asset == "ETH"
+            else settings.MOJPLAYWIN_TRX_CONFIRMATIONS
+        )
+        if proof.confirmations < required:
+            invoice.tx_hash = canonical
+            invoice.status = "confirming"
+            invoice.confirmed_block = proof.height
+            invoice.last_error = "Awaiting additional network confirmations."
+            invoice.save(update_fields=["tx_hash", "status", "confirmed_block", "last_error", "updated_at"])
+            return invoice
         invoice.tx_hash = canonical
         invoice.status = "paid"
         invoice.verified_at = timezone.now()
