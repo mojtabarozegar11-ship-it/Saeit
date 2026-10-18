@@ -1,0 +1,208 @@
+name: MojPlayWin founder portrait first above all About team groups
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/mojplaywin-founder-spotlight-live-20261019.yml']
+permissions:
+  contents: read
+concurrency:
+  group: mojplaywin-about-exact-static-prod
+  cancel-in-progress: false
+jobs:
+  founder-above-all-team-groups:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.ref == 'refs/heads/main' &&
+      github.event_name == 'push' &&
+      contains(github.event.head_commit.message, '[approved-mpw-founder-spotlight-20261019]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify portrait source, biography scope and exact reversible team-first placement
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_founder_spotlight_atomic_20261019.py
+          python3 - <<'PY'
+          from pathlib import Path
+          import importlib.util,hashlib
+          path='scripts/mpw_founder_spotlight_atomic_20261019.py'
+          spec=importlib.util.spec_from_file_location('founder',path)
+          m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
+          pic=Path('assets/mpw-founder-portrait-20261019.webp').read_bytes()
+          assert len(pic)==m.IMG_LENGTH and hashlib.sha256(pic).hexdigest()==m.IMG_SHA
+          assert pic[:4]==b'RIFF' and pic[8:12]==b'WEBP'
+          snippet=m.validate_snippet(Path('content/mpw_founder_spotlight_20261019.html').read_bytes())
+          old=('<html><main><h1>About MojPlayWin</h1>'+' '.join(m.PRESERVE)
+              +''.join(('<li class="'+s+'">Existing</li>')*10 for s in ('mpw-team-card','mpw-advisory-card','mpw-intl-card'))
+              +m.INSERT_BEFORE+'<section id="mpw-meet-team-20261018">Existing team</section></main></html>')
+          updated=m.compose(old,snippet)
+          addon='\n<!-- '+m.MARKER+' -->\n'+snippet+'\n'
+          assert updated.replace(addon,'',1)==old
+          assert updated.count(m.IMG_PUBLIC)==1
+          assert updated.index('<section id="'+m.SECTION_ID+'"')<updated.index('<section id="mpw-meet-team-20261018"')
+          for s in ('mpw-team-card','mpw-advisory-card','mpw-intl-card'):
+            assert updated.count('class="'+s+'"')==10
+          assert not any(x in snippet for x in ('Age: 45','Iran – Tehran','Professor','Doctor'))
+          print('FOUNDER_ONE_IMAGE_TEAM_FIRST_REVERSIBLE_PREFLIGHT=PASS')
+          PY
+      - name: Capture baseline status of protected site paths before release
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from urllib.request import Request,urlopen
+          from urllib.error import HTTPError
+          import json,os
+          base='https://mojplaywin.com'
+          paths=['/','/about/','/store/','/about/mojtaba-rozegar/',
+                 '/mojtaba.roozegar/','/mojtaba.roozegar/about/',
+                 '/farnaz/','/saman/','/picm/','/taniya/','/zahra/']
+          baseline={}
+          for path in paths:
+            url=base+path
+            req=Request(url,headers={'User-Agent':'MPWFounderBaseline/1.0','Cache-Control':'no-cache'})
+            try:
+              with urlopen(req,timeout=20) as res:code=res.status
+            except HTTPError as exc:code=exc.code
+            except Exception as exc:raise SystemExit('PROTECTED_BASELINE_UNAVAILABLE '+url+' '+type(exc).__name__)
+            baseline[url]=code
+            print('FOUNDER_PROTECTED_BEFORE='+url+' '+str(code))
+          for p in ('/','/about/','/store/','/mojtaba.roozegar/','/farnaz/'):
+            if baseline[base+p]!=200:raise SystemExit('CRITICAL_BASELINE_UNHEALTHY '+p)
+          with open(os.environ['RUNNER_TEMP']+'/mpw-founder-before.json','w') as f:json.dump(baseline,f)
+          PY
+      - name: Establish locked SSH relay via VPS to the existing cPanel account
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-founder-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Stage exactly one founder section and one WebP in private home
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-founder-ssh"
+          scp -q -F "$d/config" content/mpw_founder_spotlight_20261019.html \
+            "saeit-cpanel:/home/zomorod2/.mpw-founder-section-$GITHUB_RUN_ID.html"
+          scp -q -F "$d/config" assets/mpw-founder-portrait-20261019.webp \
+            "saeit-cpanel:/home/zomorod2/.mpw-founder-image-$GITHUB_RUN_ID.webp"
+      - name: Atomically insert new portrait above all team groups without replacing old content
+        id: install
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-founder-ssh"
+          section_digest=$(sha256sum content/mpw_founder_spotlight_20261019.html | awk '{print $1}')
+          photo_digest=$(sha256sum assets/mpw-founder-portrait-20261019.webp | awk '{print $1}')
+          timeout 65s ssh -T -F "$d/config" saeit-cpanel \
+            "python3 - install '$GITHUB_RUN_ID' '$section_digest' '$photo_digest'" \
+            < scripts/mpw_founder_spotlight_atomic_20261019.py
+      - name: Verify founder card first, single public portrait, 30 profiles, and protected routes
+        id: smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from urllib.request import Request,urlopen
+          from urllib.error import HTTPError
+          import json,os,time,re,hashlib
+          base='https://mojplaywin.com'
+          page=base+'/about/'
+          photo=(base+'/design-preview-20261017/mpw-ten-editorials-20261018/'
+                 'pages/mpw-founder-portrait-20261019.webp')
+          baseline=json.load(open(os.environ['RUNNER_TEMP']+'/mpw-founder-before.json'))
+          markers=('MPW_FOUNDER_SPOTLIGHT_ADDON_20261019','mpw-founder-spotlight-20261019',
+                   'Mojtaba Roozegar','mpw-meet-team-20261018','mpw-senior-advisory-20261018',
+                   'mpw-international-team-20261018','Original by Default')
+          ok=False
+          for i in range(1,6):
+            try:
+              req=Request(page+'?founder_first='+os.environ['GITHUB_RUN_ID']+'-'+str(i),headers={'User-Agent':'MPWFounderPostRelease/1.0','Cache-Control':'no-cache'})
+              with urlopen(req,timeout=23) as res:code=res.status;html=res.read(1800000).decode('utf-8','replace')
+              ok=(code==200 and all(x in html for x in markers)
+                  and html.count('id="mpw-founder-spotlight-20261019"')==1
+                  and html.count('src="/design-preview-20261017/mpw-ten-editorials-20261018/pages/mpw-founder-portrait-20261019.webp"')==1
+                  and html.index('<section id="mpw-founder-spotlight-20261019"')<html.index('<section id="mpw-meet-team-20261018"')
+                  and all(html.count('class="'+c+'"')==10 for c in ('mpw-team-card','mpw-advisory-card','mpw-intl-card'))
+                  and len(re.findall(r'<h1\b',html,re.I))==1)
+              print('FOUNDER_LIVE_ATTEMPT='+str(i)+' ok='+str(ok))
+              if ok:break
+            except Exception as e:print('FOUNDER_LIVE_RETRY='+type(e).__name__)
+            time.sleep(3)
+          if not ok:raise RuntimeError('FOUNDER_NOT_FIRST_OR_EXISTING_PROFILES_CHANGED')
+          req=Request(photo+'?run='+os.environ['GITHUB_RUN_ID'],headers={'User-Agent':'MPWFounderPostRelease/1.0','Cache-Control':'no-cache'})
+          with urlopen(req,timeout=22) as res:code=res.status;raw=res.read(300000);mime=res.headers.get('Content-Type','')
+          sha=hashlib.sha256(raw).hexdigest()
+          print('FOUNDER_PUBLIC_PORTRAIT='+str(code)+' bytes='+str(len(raw))+' mime='+mime+' sha='+sha)
+          if code!=200 or sha!='df59ff545bc45af59141488a40132c8df384b5ceb6b134e1c6000645f2ddfc3a' or not raw.startswith(b'RIFF'):
+            raise RuntimeError('PORTRAIT_NOT_PUBLIC_OR_BYTES_MISMATCH')
+          for url,previous in baseline.items():
+            req=Request(url,headers={'User-Agent':'MPWFounderPostRelease/1.0','Cache-Control':'no-cache'})
+            try:
+              with urlopen(req,timeout=20) as res:now=res.status
+            except HTTPError as e:now=e.code
+            if now!=previous:raise RuntimeError('PROTECTED_PATH_STATUS_CHANGED '+url)
+            print('FOUNDER_PROTECTED_UNCHANGED '+url+' '+str(now))
+          print('MPW_FOUNDER_ABOVE_ALL_TEAMS_LIVE_VERIFIED=YES')
+          PY
+          d="$RUNNER_TEMP/mpw-founder-ssh"
+          timeout 30s ssh -T -F "$d/config" saeit-cpanel \
+            "python3 - status '$GITHUB_RUN_ID'" < scripts/mpw_founder_spotlight_atomic_20261019.py
+      - name: Restore only founder insertion if public smoke fails
+        if: failure() && steps.install.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 55s ssh -T -F "$RUNNER_TEMP/mpw-founder-ssh/config" saeit-cpanel \
+            "python3 - rollback '$GITHUB_RUN_ID'" < scripts/mpw_founder_spotlight_atomic_20261019.py
+      - name: Remove private temporary founder staging sources
+        if: always()
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/mpw-founder-ssh"
+          if test -f "$d/config"; then
+            timeout 28s ssh -T -F "$d/config" saeit-cpanel \
+              "test ! -L /home/zomorod2/.mpw-founder-section-$GITHUB_RUN_ID.html && test ! -L /home/zomorod2/.mpw-founder-image-$GITHUB_RUN_ID.webp && rm -f -- /home/zomorod2/.mpw-founder-section-$GITHUB_RUN_ID.html /home/zomorod2/.mpw-founder-image-$GITHUB_RUN_ID.webp" || true
+          fi
