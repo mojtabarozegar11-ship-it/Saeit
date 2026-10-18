@@ -1,0 +1,335 @@
+name: Zomorod scientific specialties batch two content and licensed photographs
+on:
+  pull_request:
+    paths:
+      - "content/zomorod-ten-editorials-batch2-20261018/**"
+      - ".github/workflows/zomorod-ten-editorials-batch2-20261018.yml"
+  push:
+    branches: [main]
+    paths:
+      - "content/zomorod-ten-editorials-batch2-20261018/**"
+      - ".github/workflows/zomorod-ten-editorials-batch2-20261018.yml"
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-ten-independent-editorials-batch2-cache
+  cancel-in-progress: false
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 19
+    steps:
+      - uses: actions/checkout@v4
+      - name: Confirm scientific text, target paths and distinct media provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile content/zomorod-ten-editorials-batch2-20261018/*.py
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          items=json.loads(Path('content/zomorod-ten-editorials-batch2-20261018/pages.json').read_text(encoding='utf8'))['pages']
+          expect=['topics/zm-r01/wheat/index.html','topics/zm-r08/plant-genetics/index.html',
+          'research/directory/units/quantitative-genetics/index.html',
+          'research/directory/units/animal-breeding/index.html',
+          'research/directory/units/poultry-genetics/index.html',
+          'research/directory/units/aquatic-genetics/index.html',
+          'research/directory/units/soil-sciences/index.html',
+          'research/directory/units/plant-physiology/index.html',
+          'research/directory/units/microbiology/index.html',
+          'research/directory/units/bioinformatics/index.html']
+          assert [p['path'] for p in items]==expect
+          assert len({p['file'] for p in items})==10
+          assert len({p['credit'] for p in items})>=7
+          assert all(len(p['sections'])==3 and all(len(text)>160 for _,text in p['sections']) for p in items)
+          assert all('نیست' in p['caption'] or 'آرشیوی' in p['caption'] or 'آموزشی' in p['caption'] or 'نمونه' in p['caption'] for p in items)
+          print('TEN_DETAILED_SCIENTIFIC_TOPICS=verified')
+          PY
+      - name: Install image conversion dependency
+        run: python3 -m pip install --quiet Pillow==11.3.0
+      - name: Fetch and verify ten real openly licensed photographs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 content/zomorod-ten-editorials-batch2-20261018/prepare_ten_photos.py \
+            --catalog content/zomorod-ten-editorials-batch2-20261018/pages.json \
+            --assets "$RUNNER_TEMP/zm-ten-batch2-images"
+          test "$(find "$RUNNER_TEMP/zm-ten-batch2-images" -name '*.webp' -type f | wc -l)" -eq 10
+      - name: Retain verified media exactly once per GitHub run
+        uses: actions/upload-artifact@v4
+        with:
+          name: zm-ten-batch2-validated-images
+          path: ${{ runner.temp }}/zm-ten-batch2-images/
+          retention-days: 2
+          if-no-files-found: error
+      - name: Test byte-preserving insertion against ten sample original pages
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          base=Path('/tmp/zm-ten-qa-originals')
+          rows=json.loads(Path('content/zomorod-ten-editorials-batch2-20261018/pages.json').read_text(encoding='utf8'))['pages']
+          for p in rows:
+            x=base/p['path']
+            x.parent.mkdir(parents=True,exist_ok=True)
+            x.write_text('<!doctype html><html lang="fa"><head><title>زمرد ملل</title></head><body><main><h1>زمرد ملل</h1><p>'+ ('محتوای قدیمی حفظ می‌شود. '*85)+'</p></main></body></html>',encoding='utf8')
+          PY
+          python3 content/zomorod-ten-editorials-batch2-20261018/add_ten_editorials.py \
+            --originals /tmp/zm-ten-qa-originals \
+            --output /tmp/zm-ten-qa-candidates \
+            --catalog content/zomorod-ten-editorials-batch2-20261018/pages.json \
+            --media "$RUNNER_TEMP/zm-ten-batch2-images"
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          rows=json.loads(Path('content/zomorod-ten-editorials-batch2-20261018/pages.json').read_text(encoding='utf8'))['pages']
+          for p in rows:
+            a=(Path('/tmp/zm-ten-qa-originals')/p['path']).read_text(encoding='utf8')
+            b=(Path('/tmp/zm-ten-qa-candidates')/p['path']).read_text(encoding='utf8')
+            assert b.count('zm-ten-specialists-photo-editorials-batch2-20261018')==1
+            assert b.startswith(a.split('</main>')[0])
+            assert b.endswith('</main>'+a.split('</main>')[1])
+            assert b.count('<img src="/static/site/zomorod-ten-editorials-batch2/')==1
+            assert b.count('<h1>')==1
+            assert len(b)>len(a)+1250
+          print('ALL_TEN_ORIGINALS_PRESERVED_BYTE_FOR_BYTE=yes')
+          PY
+  publish:
+    needs: validate
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 29
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reuse exact images verified in this GitHub run
+        uses: actions/download-artifact@v4
+        with:
+          name: zm-ten-batch2-validated-images
+          path: ${{ runner.temp }}/zm-ten-batch2-images/
+      - name: Verify photo integrity and pack for protected deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,hashlib,os
+          from pathlib import Path
+          root=Path(os.environ['RUNNER_TEMP'])/'zm-ten-batch2-images'
+          x=json.loads((root/'photo-manifest.json').read_text(encoding='utf-8'))
+          assert len(x)==10 and len({r['sha256'] for r in x})==10
+          for item in x:
+            p=root/(item['id']+'.webp')
+            raw=p.read_bytes()
+            assert raw.startswith(b'RIFF') and raw[8:12]==b'WEBP'
+            assert hashlib.sha256(raw).hexdigest()==item['sha256']
+          print('VERIFIED_MEDIA_DOWNLOAD_FROM_SAME_RUN=yes')
+          PY
+          tar -czf "$RUNNER_TEMP/zm-ten-batch2-image-assets.tgz" -C "$RUNNER_TEMP" zm-ten-batch2-images
+      - name: Establish pinned authenticated VPS-to-cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zm-ten-batch2-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.known"
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+      - name: Back up ten exact source pages and fingerprint protected routes
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-ten-batch2-ssh"
+          ssh -F "$d/config" saeit-cpanel bash -s -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1";web="$HOME/public_html";backup="$HOME/.backups/zomorod-ten-science-photo-pages-batch2/$sha"
+          test ! -e "$backup"
+          test ! -e "$web/static/site/zomorod-ten-editorials-batch2"
+          mkdir -p "$(dirname "$backup")"
+          mkdir -m 700 "$backup"
+          mkdir -m 700 "$backup/stage" "$backup/originals"
+          for path in topics/zm-r01/wheat/index.html topics/zm-r08/plant-genetics/index.html \
+            research/directory/units/quantitative-genetics/index.html \
+            research/directory/units/animal-breeding/index.html \
+            research/directory/units/poultry-genetics/index.html \
+            research/directory/units/aquatic-genetics/index.html \
+            research/directory/units/soil-sciences/index.html \
+            research/directory/units/plant-physiology/index.html \
+            research/directory/units/microbiology/index.html \
+            research/directory/units/bioinformatics/index.html;do
+            file="$web/$path"
+            test -s "$file" && test ! -L "$file"
+            ! grep -Fq "zm-ten-specialists-photo-editorials-batch2-20261018" "$file"
+            mkdir -p "$backup/originals/$(dirname "$path")"
+            cp -p "$file" "$backup/originals/$path"
+            cmp -s "$file" "$backup/originals/$path"
+          done
+          (cd "$web";for p in .htaccess index.html robots.txt about/index.html company/index.html research/index.html agriculture/index.html industry/index.html services/index.html agriculture/genetics/index.html tala/index.html mohammad/index.html ghanadi/index.html amozeshgah/index.html;do
+            if test -f "$p";then sha256sum "$p";fi
+          done) > "$backup/protected.sha256"
+          echo TEN_EXISTING_PAGES_BACKED_UP=verified
+          REMOTE
+          scp -F "$d/config" content/zomorod-ten-editorials-batch2-20261018/pages.json \
+            "saeit-cpanel:/home/zomorod2/.backups/zomorod-ten-science-photo-pages-batch2/$GITHUB_SHA/stage/pages.json"
+          scp -F "$d/config" content/zomorod-ten-editorials-batch2-20261018/add_ten_editorials.py \
+            "saeit-cpanel:/home/zomorod2/.backups/zomorod-ten-science-photo-pages-batch2/$GITHUB_SHA/stage/add_ten_editorials.py"
+          scp -F "$d/config" "$RUNNER_TEMP/zm-ten-batch2-image-assets.tgz" \
+            "saeit-cpanel:/home/zomorod2/.backups/zomorod-ten-science-photo-pages-batch2/$GITHUB_SHA/stage/images.tgz"
+      - name: Validate live-HTML compatibility and all photo files in isolated staging
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-ten-batch2-ssh"
+          ssh -F "$d/config" saeit-cpanel bash -s -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1";web="$HOME/public_html";backup="$HOME/.backups/zomorod-ten-science-photo-pages-batch2/$sha"
+          tar -xzf "$backup/stage/images.tgz" -C "$backup/stage" --no-same-owner
+          test "$(find "$backup/stage/zm-ten-batch2-images" -type f -name '*.webp' | wc -l)" -eq 10
+          python3 -m py_compile "$backup/stage/add_ten_editorials.py"
+          python3 "$backup/stage/add_ten_editorials.py" --originals "$backup/originals" \
+            --output "$backup/stage/candidates" \
+            --catalog "$backup/stage/pages.json" --media "$backup/stage/zm-ten-batch2-images"
+          python3 - "$backup" <<'PY'
+          from pathlib import Path
+          import json,sys
+          root=Path(sys.argv[1])
+          rows=json.loads((root/'stage/pages.json').read_text(encoding='utf8'))['pages']
+          for p in rows:
+            a=(root/'originals'/p['path']).read_text(encoding='utf8')
+            b=(root/'stage/candidates'/p['path']).read_text(encoding='utf8')
+            before,after=a.split('</main>')
+            assert b.startswith(before) and b.endswith('</main>'+after)
+            assert b.count('zm-ten-specialists-photo-editorials-batch2-20261018')==1
+            assert p['title'] in b
+          print('TEN_REAL_SITE_CANDIDATES_FULLY_VALIDATED=yes')
+          PY
+          (cd "$web";sha256sum -c --status "$backup/protected.sha256")
+          test ! -e "$web/static/site/zomorod-ten-editorials-batch2"
+          REMOTE
+      - name: Publish ten photos and ten sections with rollback and live verification
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-ten-batch2-ssh"
+          ssh -F "$d/config" saeit-cpanel bash -s -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1";web="$HOME/public_html";backup="$HOME/.backups/zomorod-ten-science-photo-pages-batch2/$sha"
+          dir="$web/static/site/zomorod-ten-editorials-batch2"
+          mkdir -p "$backup/applied"
+          test ! -e "$dir"
+          (cd "$web";sha256sum -c --status "$backup/protected.sha256")
+          rollback() {
+            set +e
+            if test -f "$backup/applied/pages.txt";then
+              while IFS= read -r path;do
+                source="$backup/originals/$path"
+                target="$web/$path"
+                if test -s "$source";then
+                  cp -p "$source" "$web/$(dirname "$path")/.zomorod-rollback.$sha.html"
+                  mv -f "$web/$(dirname "$path")/.zomorod-rollback.$sha.html" "$target"
+                fi
+              done < "$backup/applied/pages.txt"
+            fi
+            if test -d "$dir" && test -f "$dir/photo-manifest.json";then
+              mv "$dir" "$backup/photo-directory-rolled-back"
+            fi
+            echo TEN_EDITORIAL_ROLLBACK=attempted
+          }
+          trap 'rc=$?;trap - EXIT;rollback;exit "$rc"' EXIT
+          cp -a "$backup/stage/zm-ten-batch2-images" "$web/static/site/.zomorod-ten-editorials-batch2.$sha"
+          find "$web/static/site/.zomorod-ten-editorials-batch2.$sha" -type f -exec chmod 644 {} \;
+          find "$web/static/site/.zomorod-ten-editorials-batch2.$sha" -type d -exec chmod 755 {} \;
+          mv "$web/static/site/.zomorod-ten-editorials-batch2.$sha" "$dir"
+          : > "$backup/applied/pages.txt"
+          python3 - "$backup" <<'PY' > "$backup/stage/path-list.txt"
+          from pathlib import Path
+          import json,sys
+          rows=json.loads((Path(sys.argv[1])/'stage/pages.json').read_text(encoding='utf8'))['pages']
+          for p in rows:print(p['path'])
+          PY
+          while IFS= read -r path;do
+            original="$backup/originals/$path"
+            dest="$web/$path"
+            cmp -s "$original" "$dest"
+            cp -p "$backup/stage/candidates/$path" "$web/$(dirname "$path")/.zomorod-ten-next.$sha.html"
+            chmod --reference="$dest" "$web/$(dirname "$path")/.zomorod-ten-next.$sha.html"
+            printf '%s\n' "$path" >> "$backup/applied/pages.txt"
+            mv -f "$web/$(dirname "$path")/.zomorod-ten-next.$sha.html" "$dest"
+          done < "$backup/stage/path-list.txt"
+          for route in /topics/zm-r01/wheat/ /topics/zm-r08/plant-genetics/ \
+            /research/directory/units/quantitative-genetics/ \
+            /research/directory/units/animal-breeding/ \
+            /research/directory/units/poultry-genetics/ \
+            /research/directory/units/aquatic-genetics/ \
+            /research/directory/units/soil-sciences/ \
+            /research/directory/units/plant-physiology/ \
+            /research/directory/units/microbiology/ \
+            /research/directory/units/bioinformatics/;do
+            code="$(curl -LsS --max-time 25 -o "$backup/live-check.html" -w '%{http_code}' "https://zomorodmelal.ir$route?editorial=$sha" || true)"
+            echo VERIFIED_EDITORIAL_ROUTE="$route" HTTP="$code"
+            test "$code" = 200
+            grep -Fq 'zm-ten-specialists-photo-editorials-batch2-20261018' "$backup/live-check.html"
+          done
+          python3 - "$backup" <<'PY'
+          from pathlib import Path
+          import json,sys
+          import hashlib
+          root=Path(sys.argv[1]);items=json.loads((root/'stage/zm-ten-batch2-images/photo-manifest.json').read_text(encoding='utf8'))
+          assert len(items)==10 and len({x['sha256'] for x in items})==10
+          for p in items:
+            asset=Path('/home/zomorod2/public_html')/p['url'].lstrip('/')
+            assert asset.is_file() and hashlib.sha256(asset.read_bytes()).hexdigest()==p['sha256']
+          print('ALL_TEN_DISTINCT_LOCAL_PHOTOS_SHA_VERIFIED=yes')
+          PY
+          code="$(curl -LsS --max-time 25 -o "$backup/image-check.webp" -w '%{http_code}' "https://zomorodmelal.ir/static/site/zomorod-ten-editorials-batch2/wheat.webp?media=$sha" || true)"
+          echo LIVE_PUBLISHED_PHOTO_HTTP="$code"
+          test "$code" = 200
+          test "$(wc -c < "$backup/image-check.webp")" -gt 15000
+          (cd "$web";sha256sum -c --status "$backup/protected.sha256")
+          trap - EXIT
+          echo TEN_NEW_CONTENT_SECTIONS=published
+          echo TEN_UNIQUE_SCIENTIFIC_PHOTOS=published
+          echo SITE_OLD_CONTENT_ALL_PRESERVED=yes
+          echo OTHER_SITES_UNCHANGED=yes
+          echo DEPLOY_COMPLETE=yes
+          REMOTE
+      - name: Remove ephemeral runner keys and photo files
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/zm-ten-batch2-ssh" "$RUNNER_TEMP/zm-ten-batch2-images" "$RUNNER_TEMP/zm-ten-batch2-image-assets.tgz"
