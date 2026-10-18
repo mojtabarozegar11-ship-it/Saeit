@@ -1,0 +1,237 @@
+name: Zomorod V11 isolated search store and site-agent release
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/zomorod-v11-release.yml"]
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-v11-publish
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify Python and PHP source syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile content/zomorod-v11/search_build.py
+          php -l content/zomorod-v11/site_agents.php
+          php -l content/zomorod-v11/site_store.php
+          php -l content/zomorod-v11/store_index.php
+          php -l content/zomorod-business/app.php
+          grep -Fq 'agent_center' content/zomorod-business/app.php
+          grep -Fq 'store_manager' content/zomorod-business/app.php
+          grep -Fq 'not_configured' content/zomorod-v11/site_store.php
+          ! grep -Fq 'password=' content/zomorod-v11/site_agents.php
+          echo V11_SOURCE_SYNTAX=passed
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - name: Preflight paths and snapshot previous root and private business code
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          run="$1";web="$HOME/public_html";private="$HOME/.private/zomorod-business"
+          backup="$HOME/.backups/zomorod-v11/$run"
+          test -s "$web/index.html" && test ! -L "$web/index.html"
+          test -s "$private/app.php" && test ! -L "$private/app.php"
+          test -s "$web/.htaccess" && test ! -L "$web/.htaccess"
+          test ! -e "$web/search" && test ! -L "$web/search"
+          test ! -e "$web/store" && test ! -L "$web/store"
+          test ! -e "$private/site_agents.php" && test ! -e "$private/site_store.php"
+          test ! -e "$backup"
+          mkdir -p "$(dirname "$backup")"
+          mkdir -m 700 "$backup"
+          mkdir -m 700 "$backup/stage"
+          cp -p "$web/index.html" "$backup/index.original.html"
+          cp -p "$private/app.php" "$backup/app.original.php"
+          cmp -s "$web/index.html" "$backup/index.original.html"
+          cmp -s "$private/app.php" "$backup/app.original.php"
+          sha256sum "$web/index.html" "$private/app.php" "$web/.htaccess" > "$backup/root-before.sha256"
+          for path in company about agriculture research industry knowledge services mohammad ghanadi amozeshgah tala business; do
+            for page in index.html index.php; do
+              if test -f "$web/$path/$page"; then sha256sum "$web/$path/$page" >> "$backup/protected.sha256"; fi
+            done
+          done
+          echo V11_EXISTING_CONTENT_BACKUP=verified
+          REMOTE
+          tar -cf - -C content/zomorod-v11 search_build.py site_agents.php site_store.php store_index.php |
+            ssh -F "$d/config" saeit-cpanel "tar -xf - -C /home/zomorod2/.backups/zomorod-v11/$GITHUB_SHA/stage"
+          tar -cf - -C content/zomorod-business app.php |
+            ssh -F "$d/config" saeit-cpanel "tar -xf - -C /home/zomorod2/.backups/zomorod-v11/$GITHUB_SHA/stage"
+      - name: Build the public search index privately and validate PHP compatibility
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          run="$1";web="$HOME/public_html";b="$HOME/.backups/zomorod-v11/$run"
+          python3 "$b/stage/search_build.py" "$web" "$b/search-candidate"
+          test -s "$b/search-candidate/index.json" && test -s "$b/search-candidate/index.html"
+          python3 - "$b/search-candidate/index.json" <<'PY'
+          import json,sys
+          data=json.load(open(sys.argv[1]))
+          urls={r['url'] for r in data['pages']}
+          assert data['count']>=34 and len(urls)==data['count']
+          assert '/company/' in urls and '/about/' in urls and '/' in urls
+          assert not any(p.startswith(('/business/','/tala/','/mohammad/','/ghanadi/','/amozeshgah/')) for p in urls)
+          print('SEARCH_INDEX_REAL_PAGES='+str(data['count']))
+          PY
+          bin="$(command -v php || true)"
+          if test -z "$bin"; then bin=/opt/cpanel/ea-php82/root/usr/bin/php; fi
+          "$bin" -l "$b/stage/site_agents.php"
+          "$bin" -l "$b/stage/site_store.php"
+          "$bin" -l "$b/stage/store_index.php"
+          "$bin" -l "$b/stage/app.php"
+          "$bin" -r 'exit(extension_loaded("pdo_sqlite")?0:1);'
+          echo V11_PRIVATE_PREFLIGHT=passed
+          REMOTE
+      - name: Deploy only new main-site routes and add protected admin modules
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1";web="$HOME/public_html";private="$HOME/.private/zomorod-business"
+          b="$HOME/.backups/zomorod-v11/$sha"
+          active=0
+          rollback(){
+            set +e
+            if test "$active" -eq 1; then
+              cp -p "$b/index.original.html" "$web/index.html.v11-rollback"
+              mv -f "$web/index.html.v11-rollback" "$web/index.html"
+              cp -p "$b/app.original.php" "$private/app.php.v11-rollback"
+              mv -f "$private/app.php.v11-rollback" "$private/app.php"
+              for name in store search; do
+                if test -d "$web/$name"; then mv "$web/$name" "$b/failed-$name"; fi
+              done
+              for module in site_agents.php site_store.php; do
+                if test -f "$private/$module"; then mv "$private/$module" "$b/failed-$module"; fi
+              done
+              echo V11_AUTO_ROLLBACK=original_site_restored
+            fi
+          }
+          trap 'rc=$?;trap - EXIT;rollback;exit "$rc"' EXIT
+          (cd "$web" && sha256sum -c --status "$b/root-before.sha256")
+          test ! -e "$web/search" && test ! -e "$web/store"
+          test ! -e "$private/site_agents.php" && test ! -e "$private/site_store.php"
+          active=1
+          mkdir -m 755 "$web/search" "$web/store"
+          cp -p "$b/search-candidate/index.html" "$web/search/index.html"
+          cp -p "$b/search-candidate/index.json" "$web/search/index.json"
+          cat > "$web/search/.htaccess" <<'HT'
+          PassengerEnabled off
+          DirectoryIndex index.html
+          Options -Indexes
+          HT
+          cp -p "$b/stage/store_index.php" "$web/store/index.php"
+          cat > "$web/store/.htaccess" <<'HT'
+          PassengerEnabled off
+          DirectoryIndex index.php
+          Options -Indexes
+          HT
+          chmod 644 "$web/search/"* "$web/store/"*
+          cp -p "$b/stage/site_agents.php" "$private/site_agents.php"
+          cp -p "$b/stage/site_store.php" "$private/site_store.php"
+          chmod 600 "$private/site_agents.php" "$private/site_store.php"
+          cp -p "$b/stage/app.php" "$private/app.php.v11-next"
+          chmod 600 "$private/app.php.v11-next"
+          mv -f "$private/app.php.v11-next" "$private/app.php"
+          python3 - "$b/index.original.html" "$web/index.html.v11-next" <<'PY'
+          from pathlib import Path
+          import sys
+          orig=Path(sys.argv[1]).read_text('utf-8')
+          assert 'zm-v11-site-links' not in orig and '</footer>' in orig
+          link='<nav class="zm-v11-site-links" aria-label="جست‌وجو و فروشگاه" style="display:flex;flex-wrap:wrap;gap:16px;align-items:center;margin:12px 0"><a href="/search/" style="color:#f7d78a">⌕ جست‌وجوی سایت</a><a href="/store/" style="color:#f7d78a">◈ فروشگاه زمرد ملل</a><form method="get" action="/search/" role="search"><input type="search" name="q" placeholder="جست‌وجو در سایت" aria-label="جست‌وجو" maxlength="100"><button>جست‌وجو</button></form></nav><!-- zm-v11-site-links -->'
+          updated=orig.replace('</footer>',link+'</footer>',1)
+          assert updated.replace(link,'',1)==orig
+          Path(sys.argv[2]).write_text(updated,encoding='utf-8')
+          PY
+          chmod --reference="$web/index.html" "$web/index.html.v11-next"
+          mv -f "$web/index.html.v11-next" "$web/index.html"
+          bin="$(command -v php || true)"
+          if test -z "$bin"; then bin=/opt/cpanel/ea-php82/root/usr/bin/php; fi
+          "$bin" -r 'require "'$private'/site_agents.php";$db=zmAgentDb("'$private'"); echo "AGENTS_SEEDED=".$db->query("SELECT COUNT(*) FROM agents")->fetchColumn()."\n";zmAgentCycle($db,"master");'
+          "$bin" -r 'require "'$private'/site_store.php";$db=zmStoreDb("'$private'");echo "STORE_GATEWAY_STATE=".$db->query("SELECT state FROM payment_state WHERE id=1")->fetchColumn()."\n";'
+          for route in /search/ /store/ /business/ /; do
+            code="$(curl -sS -L --max-time 25 -o "$b/served.html" -w '%{http_code}' "https://zomorodmelal.ir$route?v11=$sha" || true)"
+            echo V11_ROUTE="$route" HTTP="$code"
+            test "$code" = 200
+            case "$route" in
+              /search/) grep -Fq 'جست‌وجو در مطالب زمرد ملل' "$b/served.html";;
+              /store/) grep -Fq 'بانک شهر' "$b/served.html";;
+              /business/) grep -Fq 'میز مدیریت' "$b/served.html";;
+              /) grep -Fq 'zm-v11-site-links' "$b/served.html";;
+            esac
+          done
+          code="$(curl -sS --max-time 20 -o "$b/search.json" -w '%{http_code}' 'https://zomorodmelal.ir/search/index.json' || true)"
+          test "$code" = 200
+          python3 - "$b/search.json" <<'PY'
+          import json,sys
+          o=json.load(open(sys.argv[1]));assert o['count']>=34
+          print('V11_LIVE_SEARCH_ENTRIES='+str(o['count']))
+          PY
+          (cd "$web" && sha256sum -c --status "$b/protected.sha256")
+          test "$(sha256sum "$web/.htaccess" | cut -d' ' -f1)" = "$(grep '/public_html/.htaccess' "$b/root-before.sha256" | cut -d' ' -f1)"
+          active=0;trap - EXIT
+          echo V11_PUBLISHED_SEARCH_STORE_AGENT_CONTROL=yes
+          echo BANK_SHAHR_LIVE_PAYMENTS=no
+          echo EXISTING_ROOT_SUBSITES_AND_FINANCE=preserved
+          REMOTE
+      - name: Destroy temporary SSH runner keys
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
