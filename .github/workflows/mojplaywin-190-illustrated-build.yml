@@ -1,0 +1,51 @@
+name: Build 190 lightweight illustrated MojPlayWin field notes
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/mojplaywin-190-illustrated-build.yml"
+permissions:
+  contents: read
+jobs:
+  build-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install Pillow
+        run: python3 -m pip install --quiet Pillow==11.3.0
+      - name: Validate editorial data and generator
+        run: |
+          python3 -m py_compile scripts/mojplaywin_ten_illustrated_static_build_20261018.py
+          python3 -m unittest discover -s tests -p test_mojplaywin_ten_illustrated_static_build_20261018.py -v
+      - name: Build snapshot HTML and image thumbnails without deployment
+        run: python3 scripts/mojplaywin_ten_illustrated_static_build_20261018.py --public --output /tmp/mpw-ten-illustrated-20261018
+      - name: Verify nineteen routes and 190 small WebP images
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import json,hashlib
+          root=Path('/tmp/mpw-ten-illustrated-20261018')
+          m=json.loads((root/'manifest.json').read_text())
+          assert len(m['paths'])==19
+          images=list((root/'images').glob('*.webp'))
+          assert len(images)==190
+          assert all(0<x.stat().st_size<=36000 and x.read_bytes()[:4]==b'RIFF' for x in images)
+          for path,item in m['paths'].items():
+              raw=(root/item['file']).read_bytes()
+              assert hashlib.sha256(raw).hexdigest()==item['sha256']
+              html=raw.decode('utf8')
+              assert html.count('class="mpw-ten-card"')==10
+              assert '<form' not in html.lower()
+              assert html.count('id="mpw-ten-illustrated-20261018"')==1
+              print('EDITORIAL_ROUTE_VERIFIED='+path)
+          print('MOJPLAYWIN_19_PAGES_190_PHOTOS_BUILD_VALIDATED=yes')
+          PY
+      - name: Upload preview package only
+        uses: actions/upload-artifact@v4
+        with:
+          name: mojplaywin-19-pages-190-light-webps
+          path: /tmp/mpw-ten-illustrated-20261018/
+          retention-days: 7
