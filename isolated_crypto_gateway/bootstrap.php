@@ -26,6 +26,7 @@ if($action==='init'){
         status TEXT NOT NULL CHECK(status IN ("awaiting_payment","confirming","paid")),
         tx_hash TEXT UNIQUE, block_height INTEGER, paid_at INTEGER
     )');
+    $db->exec('CREATE UNIQUE INDEX IF NOT EXISTS unique_merchant_quote ON invoices(merchant,quote)');
     $db->exec('CREATE INDEX IF NOT EXISTS idx_payment_quote ON invoices(merchant,quote,expires_at,status)');
     $db->exec('CREATE TABLE IF NOT EXISTS throttle (
         action TEXT NOT NULL, who TEXT NOT NULL, bucket INTEGER NOT NULL,
