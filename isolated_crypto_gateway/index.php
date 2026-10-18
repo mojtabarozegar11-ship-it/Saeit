@@ -40,8 +40,8 @@ function limit(PDO $db,string $action,int $max):void{
  $ip=hash_hmac('sha256',$action.':'.($_SERVER['REMOTE_ADDR']??''),file_get_contents(DATA.'/rate.key'));
  $db->exec('BEGIN IMMEDIATE');
  try{$q=$db->prepare('INSERT INTO throttle(action,who,bucket,n) VALUES(?,?,?,1) ON CONFLICT(action,who,bucket) DO UPDATE SET n=n+1');$q->execute([$action,$ip,$bucket]);
- $q=$db->prepare('SELECT n FROM throttle WHERE action=? AND who=? AND bucket=?');$q->execute([$action,$ip,$bucket]);$tooMany=(int)$q->fetchColumn()>$max;$db->commit();
- }catch(Throwable $x){$db->rollBack();throw $x;}
+ $q=$db->prepare('SELECT n FROM throttle WHERE action=? AND who=? AND bucket=?');$q->execute([$action,$ip,$bucket]);$tooMany=(int)$q->fetchColumn()>$max;$db->exec('COMMIT');
+ }catch(Throwable $x){$db->exec('ROLLBACK');throw $x;}
  if($tooMany)bad('Too many attempts. Please try later.',429);
 }
 function atomic(string $s,string $asset):int{
@@ -108,12 +108,12 @@ function reconcile(PDO $db,array $invoice,string $tx):string{
  try{
   $q=$db->prepare('SELECT status,tx_hash FROM invoices WHERE token=?');$q->execute([$invoice['token']]);$latest=$q->fetch();
   if(!$latest)throw new RuntimeException('Invoice no longer exists.');
-  if($latest['status']==='paid'){$db->commit();return 'paid';}
+  if($latest['status']==='paid'){$db->exec('COMMIT');return 'paid';}
   if($latest['tx_hash']!==null&&$latest['tx_hash']!==$proof['hash'])throw new RuntimeException('Changed transaction claim.');
   $q=$db->prepare('UPDATE invoices SET status=?,tx_hash=?,block_height=?,paid_at=? WHERE token=?');
   $q->execute([$status,$proof['hash'],$proof['height'],$status==='paid'?time():null,$invoice['token']]);
-  $db->commit();return $status;
- }catch(Throwable $x){$db->rollBack();throw $x;}
+  $db->exec('COMMIT');return $status;
+ }catch(Throwable $x){$db->exec('ROLLBACK');throw $x;}
 }
 function csrf():string{return '<input type="hidden" name="csrf" value="'.e($_SESSION['csrf']).'">';}
 function invoice_screen(array $i,string $msg=''):never{
