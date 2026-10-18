@@ -13,12 +13,17 @@ jobs:
         with:
           persist-credentials: false
           ref: 6a2b5cb7f60665ca2fcb7f6f4fe552cd77603493
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Prepare ephemeral test-only Python dependencies
+        run: python -m pip install --disable-pip-version-check pytest==8.3.5
       - name: Verify pinned isolated preparer with local synthetic tests
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "6a2b5cb7f60665ca2fcb7f6f4fe552cd77603493"
-          python3 -m py_compile scripts/mpw_two_books_private_file_prepare.py
-          python3 -m pytest -q tests/test_mpw_two_books_private_file_prepare.py
+          python -m py_compile scripts/mpw_two_books_private_file_prepare.py
+          python -m pytest -q tests/test_mpw_two_books_private_file_prepare.py
       - name: Establish host-pinned private relay without disclosing keys
         env:
           VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
