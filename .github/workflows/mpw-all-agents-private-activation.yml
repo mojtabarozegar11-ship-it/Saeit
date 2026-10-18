@@ -305,6 +305,46 @@ jobs:
           print("REVIEW_TASK_QUEUE_ITEMS="+str(len(queue["items"])))
           print("PUBLIC_SITE_AND_PAYMENTS_UNCHANGED=true")
           PY
+      - name: Independently verify all eleven actual robots
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 45s ssh -T -F "$RUNNER_TEMP/mojplaywin-inventory-ssh/config" saeit-cpanel 'python3 -' <<'PY'
+          import json,subprocess
+          from pathlib import Path
+          from datetime import datetime,timezone
+          root=Path("/home/zomorod2/.private_mojplaywin_main_agents/evolution_runtime_20261018")
+          def read(name):
+              p=root/name
+              assert p.is_file() and not p.is_symlink()
+              obj=json.loads(p.read_text())
+              assert obj.get("tenant")=="mojplaywin-main"
+              return obj
+          old=read("robots_execution_20261018.json")
+          extra=read("extended_robots_status_20261018.json")
+          review=read("extended_robots_pending_release_20261018.json")
+          gen=read("gen65_operational_report.json")
+          modules=read("all_77_modules_last_run.json")
+          assert old["robot_count"]==old["successful"]==5 and old["warnings"]==0
+          assert extra["robot_count"]==extra["healthy"]==6 and extra["warnings"]==0
+          assert not extra["public_site_modified"] and not extra["sibling_sites_modified"] and not extra["finance_executed"]
+          assert review["automatic_publication"] is False
+          assert gen["active_private_generation"]==65 and gen["status"]=="gen65_operational_private"
+          assert modules["modules_import_executed"]==modules["modules_hash_verified"]==77
+          latest=datetime.fromisoformat(extra["observed_utc"].replace("Z","+00:00"))
+          assert 0<=(datetime.now(timezone.utc)-latest).total_seconds()<600
+          cron=subprocess.run(["crontab","-l"],text=True,capture_output=True,check=True,timeout=15).stdout
+          tags=["MPW_V91_MAIN_ONLY_20261018","MPW_V11_MAIN_ONLY_SITE_HEALTH_20261018","MPW_ZOMOROD_QUALITY_REVIEW_MAIN_ONLY_20261018","MPW_ZOMOROD_MANAGEMENT_INTELLIGENCE_MAIN_ONLY_20261018","MPW_PRIVATE_EVOLUTION_MAIN_ONLY_20261018","MPW_77_MODULES_MAIN_ONLY_20261018","MPW_MAIN_PRIVATE_EXECUTION_ROBOTS_20261018","MPW_MAIN_EXTENDED_ROBOTS_20261018"]
+          for tag in tags:
+              lines=[x for x in cron.splitlines() if tag in x and not x.lstrip().startswith("#")]
+              assert len(lines)==1,tag
+          assert any(x.startswith("32 * * * * ") for x in cron.splitlines() if "MPW_MAIN_EXTENDED_ROBOTS_20261018" in x)
+          print("ALL_11_MOJPLAYWIN_MAIN_ROBOTS_CONFIRMED=true")
+          print("ALL_11_ROBOTS_HEALTHY=true")
+          print("ALL_8_PRIVATE_AGENT_AND_ROBOT_CRONS_PRESENT=true")
+          print("GEN65_AND_77_SOURCE_MODULES_RUNNING_IN_PRIVATE=true")
+          print("NO_CROSS_SITE_OR_FINANCIAL_MUTATIONS=true")
+          PY
       - name: Clean ephemeral runner identity material
         if: always()
         shell: bash
