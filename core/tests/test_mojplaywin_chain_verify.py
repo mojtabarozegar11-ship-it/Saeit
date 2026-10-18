@@ -49,3 +49,63 @@ def test_eth_rejects_inconsistent_canonical_block_hash():
     with patch("core.mojplaywin_chain_verify._rpc", side_effect=lambda url, method, params: data[method]):
         with pytest.raises(VerificationError, match="block hash mismatch"):
             verify_eth(txid, wallet, 100, "https://rpc.example.org")
+
+
+def test_native_trx_finalized_receipt_without_contract_result_is_valid():
+    # A normal native transfer receipt can contain only bandwidth/fee data.
+    merchant = "THFNU1iEXHd71WjEgjqUksd2UnMg2pUi73"
+    txid = "d" * 64
+    transfer = {
+        "txID": txid,
+        "raw_data": {"contract": [{
+            "type": "TransferContract",
+            "parameter": {"value": {
+                "to_address": _tron_address_hex(merchant),
+                "amount": 10000000,
+            }},
+        }]},
+        "ret": [{"contractRet": "SUCCESS"}],
+    }
+    info = {
+        "id": txid, "blockNumber": 500,
+        "blockTimeStamp": 1780000000000,
+        "receipt": {"net_fee": 2790},
+    }
+    tip = {"block_header": {"raw_data": {"number": 522}}}
+    def solid_response(url, payload, headers=None):
+        assert "/walletsolidity/" in url
+        method = url.rsplit("/", 1)[-1]
+        return {"gettransactionbyid": transfer, "gettransactioninfobyid": info, "getnowblock": tip}[method]
+
+    with patch("core.mojplaywin_chain_verify._post", side_effect=solid_response):
+        proof = verify_trx(txid, merchant, 10000000, min_conf=20)
+        assert proof.confirmations == 23
+        assert proof.timestamp_ms == 1780000000000
+
+
+def test_trx_rejects_failed_execution_and_immature_inclusion():
+    merchant = "THFNU1iEXHd71WjEgjqUksd2UnMg2pUi73"
+    txid = "e" * 64
+    transfer = {
+        "txID": txid,
+        "raw_data": {"contract": [{
+            "type": "TransferContract",
+            "parameter": {"value": {
+                "to_address": _tron_address_hex(merchant), "amount": 100,
+            }},
+        }]},
+    }
+    info = {"id": txid, "blockNumber": 100, "blockTimeStamp": 1780000000000, "receipt": {}}
+    tip = {"block_header": {"raw_data": {"number": 101}}}
+    responses = {"gettransactionbyid": transfer, "gettransactioninfobyid": info, "getnowblock": tip}
+
+    with patch("core.mojplaywin_chain_verify._post", side_effect=lambda url,payload,headers=None: responses[url.rsplit("/",1)[-1]]):
+        with pytest.raises(VerificationError, match="finalized TRX confirmations"):
+            verify_trx(txid, merchant, 100, min_conf=20)
+        info["result"] = "FAILED"
+        with pytest.raises(VerificationError, match="unsuccessful"):
+            verify_trx(txid, merchant, 100, min_conf=1)
+        info.pop("result")
+        transfer["raw_data"]["contract"][0]["parameter"]["value"]["amount"] = 99
+        with pytest.raises(VerificationError, match="amount"):
+            verify_trx(txid, merchant, 100, min_conf=1)
