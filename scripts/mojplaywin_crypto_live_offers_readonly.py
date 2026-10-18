@@ -15,7 +15,7 @@ for f in [app/".env",app/".env.production",app/".env.local",doc/".env"]:
     if f.is_file() and not f.is_symlink() and f.stat().st_size<=65536:
         for line in f.read_text(encoding="utf-8",errors="replace").splitlines():
             m=re.match(r'^\s*(?:export\s+)?DATABASE_URL\s*=\s*(.*?)\s*$',line)
-            if m: urls.append(urlsplit(m.group(1).strip().strip('"'')))
+            if m: urls.append(urlsplit(m.group(1).strip().strip(chr(34)+chr(39))))
 result={"classification":"MOJPLAYWIN_CRYPTO_PRODUCT_READINESS_READONLY",
         "connection_valid":False,"model_product_table":False,"crypto_offer_table":False,
         "active_priced_products":None,"active_crypto_offers":None,
