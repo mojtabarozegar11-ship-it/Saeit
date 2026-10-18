@@ -37,3 +37,18 @@ class MojCryptoInvoice(T):
 
     def __str__(self):
         return f"MojPlayWin #{self.order_id} ({self.asset})"
+
+
+class MojCryptoThrottle(T):
+    """Hashed, bounded-rate counters across all web worker processes."""
+    action = models.CharField(max_length=36)
+    identity_hash = models.CharField(max_length=64)
+    bucket = models.BigIntegerField()
+    attempts = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["action", "identity_hash", "bucket"], name="moj_crypto_throttle_bucket"
+            ),
+        ]
