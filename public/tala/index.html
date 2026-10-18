@@ -23,6 +23,17 @@
 .calc-line:last-child{border:0}.calc-line b{color:var(--gold);font-weight:600;direction:ltr;text-align:left}
 .calc-line.total{font-size:15px;color:var(--cream)}
 .calc-warning{color:#d5a190}
+
+.market-groups{display:grid;gap:25px;margin:26px 0}
+.market-subsection{padding:18px 19px;border:1px solid var(--line);border-radius:18px;background:#191a16}
+.market-subsection h3{font-size:17px;color:var(--gold);font-weight:500;margin:0}
+.market-subsection p{font-size:11px;color:var(--muted);margin:2px 0 14px}
+.market-extra{grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.market-extra .ticker-card{background:#151611;border:1px solid var(--line);border-radius:12px;min-width:0;padding:13px}
+.market-extra .ticker-card strong{display:block;font-size:clamp(12px,1.6vw,18px);overflow-wrap:anywhere;line-height:1.65}
+.market-extra .ticker-card em{display:block;overflow-wrap:anywhere}
+@media(max-width:850px){.market-extra{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:560px){.market-extra{grid-template-columns:repeat(2,minmax(0,1fr))}.market-subsection{padding:14px 12px}}
 </style>
 <!-- tala-isolated-site-v1 -->
 </head>
@@ -34,6 +45,11 @@
 <section class="ticker" id="market"><div class="wrap">
 <div class="section-head" style="margin:12px 0"><div><div class="eyebrow">TALA · PRICE BOARD</div><h2 style="font-size:25px">تابلوی قیمت طلا و سکه</h2></div><button class="btn" type="button" onclick="loadTalaQuotes()">دریافت آخرین نرخ ثبت‌شده ↻</button></div>
 <div class="ticker-row"><div class="ticker-card"><small>طلای ۱۸ عیار · هر گرم</small><strong id="q-gold18">در انتظار اتصال منبع</strong><em id="q-gold18-meta">قیمت زنده هنوز متصل نشده</em></div><div class="ticker-card"><small>طلای ۲۴ عیار · هر گرم</small><strong id="q-gold24">در انتظار نرخ</strong><em id="q-gold24-meta">نرخ مدیریت‌شده</em></div><div class="ticker-card"><small>طلای آب‌شده · مظنه</small><strong id="q-melted">در انتظار نرخ</strong><em id="q-melted-meta">مبنای مظنه را از مرجع کنترل کنید</em></div><div class="ticker-card"><small>سکهٔ تمام · هر قطعه</small><strong id="q-coin">در انتظار نرخ</strong><em id="q-coin-meta">نوع و شرایط سکه نیازمند تأیید</em></div></div>
+<div class="market-groups" aria-label="تابلوی نرخ فلزات گران‌بها، ارز و ارز دیجیتال">
+<section class="market-subsection" id="silver-board"><h3>نقره و فلزات گران‌بها</h3><p>قیمت هر گرم فلز در عیار مشخص؛ به ریال</p><div class="ticker-row market-extra" id="market-metals-grid" aria-live="polite"></div></section>
+<section class="market-subsection" id="forex-board"><h3>ارزهای اصلی</h3><p>نرخ ریالی یک واحد ارز؛ نوع نرخ، بازار و مرجع در توضیح مدیر تعیین می‌شود</p><div class="ticker-row market-extra" id="market-forex-grid" aria-live="polite"></div></section>
+<section class="market-subsection" id="crypto-board"><h3>ارزهای دیجیتال</h3><p>نرخ ریالی یک واحد از هر رمزارز؛ شبکه یا صرافی مرجع در توضیحات نرخ مشخص می‌شود</p><div class="ticker-row market-extra" id="market-crypto-grid" aria-live="polite"></div></section>
+</div>
 <div class="notice"><strong id="board-status">در انتظار اتصال منبع و ثبت نرخ تأییدشده</strong> · قیمت‌های این تابلو در صورت ثبت، دستی و توسط مدیر تأیید می‌شوند؛ به معنی نرخ لحظه‌ای یا پیشنهاد قطعی معامله نیستند. <span id="board-updated">برای مشاهدهٔ زمان و مرجع هر نرخ به زیر آن توجه کنید.</span></div>
 </div></section>
 <section class="section tools" id="calculators"><div class="wrap">
@@ -119,6 +135,48 @@ document.getElementById('search-input').addEventListener('input',e=>renderSearch
 function tick(){document.getElementById('clock').textContent=new Intl.DateTimeFormat('fa-IR',{dateStyle:'medium',timeStyle:'short',timeZone:'Asia/Tehran'}).format(new Date())}tick();setInterval(tick,60000);updateInquiryCount();
 if('serviceWorker' in navigator && location.protocol==='https:'){navigator.serviceWorker.register('/tala/sw.js').catch(()=>{})}
 
+const talaExtendedGroups=[
+ {element:'market-metals-grid',items:[
+   {id:'silver999',label:'نقره ۹۹۹ · هر گرم'},
+   {id:'silver925',label:'نقره ۹۲۵ · هر گرم'},
+   {id:'platinum',label:'پلاتین · هر گرم'},
+   {id:'palladium',label:'پالادیوم · هر گرم'}]},
+ {element:'market-forex-grid',items:[
+   {id:'usd',label:'دلار آمریکا · USD'},
+   {id:'eur',label:'یورو · EUR'},
+   {id:'gbp',label:'پوند بریتانیا · GBP'},
+   {id:'aed',label:'درهم امارات · AED'},
+   {id:'try',label:'لیر ترکیه · TRY'},
+   {id:'cad',label:'دلار کانادا · CAD'}]},
+ {element:'market-crypto-grid',items:[
+   {id:'btc',label:'بیت‌کوین · BTC'},
+   {id:'eth',label:'اتریوم · ETH'},
+   {id:'usdt',label:'تتر · USDT'},
+   {id:'trx',label:'ترون · TRX'},
+   {id:'bnb',label:'بایننس‌کوین · BNB'},
+   {id:'sol',label:'سولانا · SOL'}]}
+];
+function renderTalaExtendedBoard(quotes){
+ let count=0;
+ for(const group of talaExtendedGroups){
+  const root=document.getElementById(group.element);root.replaceChildren();
+  for(const item of group.items){
+   const q=quotes[item.id],card=document.createElement('div');card.className='ticker-card';
+   const label=document.createElement('small');label.textContent=item.label;
+   const value=document.createElement('strong'),meta=document.createElement('em');
+   if(q&&Number.isSafeInteger(q.amount_rial)&&q.amount_rial>0){
+     count++;
+     value.textContent=TalaCalc.fmt(q.amount_rial)+' ریال';
+     const stamp=new Date(q.observed_at);
+     const when=Number.isFinite(stamp.getTime())?new Intl.DateTimeFormat('fa-IR',{dateStyle:'short',timeStyle:'short',timeZone:'Asia/Tehran'}).format(stamp):'زمان نامشخص';
+     meta.textContent=(q.stale?'نرخ قدیمی':'ثبت مدیر')+' · '+String(q.source||'نامشخص')+' · '+when;
+   }else{value.textContent='نرخ ثبت نشده';meta.textContent='در انتظار مرجع و نرخ تأییدشده'}
+   card.append(label,value,meta);root.append(card);
+  }
+ }
+ return count;
+}
+renderTalaExtendedBoard({});
 /* Never treat unverified/manual quotes as live transaction prices. */
 let talaQuoteState={};
 async function loadTalaQuotes(){
@@ -147,9 +205,11 @@ async function loadTalaQuotes(){
         if(!input.dataset.touched)input.value=String(gold.amount_rial);
       }
     }
+    active+=renderTalaExtendedBoard(talaQuoteState);
     status.textContent=active?'تابلوی قیمت فعال · '+active+' نرخ ثبت‌شده':'در انتظار اتصال منبع و ثبت نرخ تأییدشده';
     document.getElementById('board-updated').textContent='دریافت از دفتر نرخ مدیریت؛ تازه‌بودن هر نماد مستقل بررسی می‌شود.';
   }catch(error){
+    renderTalaExtendedBoard({});
     status.textContent='ارتباط تابلوی نرخ برقرار نشد';
     document.getElementById('board-updated').textContent=error.message;
   }

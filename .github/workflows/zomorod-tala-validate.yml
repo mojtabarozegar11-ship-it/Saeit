@@ -76,6 +76,17 @@ jobs:
               if x not in quote: raise SystemExit('TALA_PRICE_BOARD_CONTROL_MISSING='+x)
           if 'assets/tala-calculator.js' not in source or 'id="gold-calculator"' not in source or 'id="jewelry-calculator"' not in source:
               raise SystemExit('TALA_PRICE_CALCULATOR_UI=missing')
+          for marker in ('market-metals-grid','market-forex-grid','market-crypto-grid','renderTalaExtendedBoard'):
+              if marker not in source: raise SystemExit('TALA_MARKET_GROUP_MISSING='+marker)
+          symbols=('silver999','silver925','platinum','palladium','usd','eur','gbp','aed','try','cad','btc','eth','usdt','trx','bnb','sol')
+          admin_page=(root/'admin/index.html').read_text(encoding='utf-8')
+          for symbol in symbols:
+              if "'"+symbol+"'=>" not in quote or 'value="'+symbol+'"' not in admin_page:
+                  raise SystemExit('TALA_MARKET_SYMBOL_MISSING='+symbol)
+          for marker in ('CREATE TABLE IF NOT EXISTS tala_market_quotes','CREATE TABLE IF NOT EXISTS tala_market_quote_history',"'max_age'=>900","'max_age'=>3600"):
+              if marker not in quote: raise SystemExit('TALA_MARKET_STORAGE_POLICY_MISSING='+marker)
+          if 'CREATE TABLE IF NOT EXISTS tala_quotes(' not in quote: raise SystemExit('TALA_LEGACY_GOLD_DATA_MUST_REMAIN')
+
           health=(root/'api/health.php').read_text(encoding='utf-8')
           if '/../../../.tala-secure' not in health: raise SystemExit('TALA_HEALTH_EXTERNAL_DB_CHECK=missing')
           if "/.private/tala.sqlite3" in backend: raise SystemExit('TALA_LEGACY_PUBLIC_DB_PATH=unsafe')
