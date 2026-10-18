@@ -163,6 +163,11 @@ jobs:
           from pathlib import Path
           sys.path.insert(0,'scripts')
           import mojplaywin_ten_editorials_scope_release_20261018 as pub
+          direct='https://mojplaywin.com/design-preview-20261017/mpw-ten-editorials-20261018/pages/company.html'
+          with urllib.request.urlopen(direct,timeout=20) as rr:
+              html_direct=rr.read(150000).decode('utf-8','replace')
+              print('STATIC_COMPANY_DIRECT_STATUS='+str(rr.status)+' cards='+str(html_direct.count('class="mpw-ten-card"')))
+              assert rr.status==200 and html_direct.count('class="mpw-ten-card"')==10
           for route in pub.PATHS:
               succeeded=False
               for attempt in range(1,5):
