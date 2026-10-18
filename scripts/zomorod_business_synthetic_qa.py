@@ -41,6 +41,10 @@ token=(private/'setup.token').read_text().strip()
 assert len(token)==64
 request('POST',post={'csrf':csrf,'setup_token':token,'username':'TestOnlyAdmin','password':'SyntheticOnlyPassword2026!'})
 assert not (private/'setup.token').exists()
+previous='SyntheticOnlyPassword2026!'
+updated='SyntheticNewPassword2026!Changing'
+changed=request('POST','security',{'csrf':csrf,'action':'password_change','previous_password':previous,'new_password':updated,'new_password_confirmation':updated})
+assert not 'درخواست انجام نشد' in changed
 dashboard=request('GET','dashboard')
 assert 'اسناد حسابداری' in dashboard
 request('POST','parties',{'csrf':csrf,'action':'party','name':'Synthetic Counterparty','kind':'customer'})
@@ -60,8 +64,10 @@ entries=db.execute('SELECT entry_id,currency,SUM(debit),SUM(credit) FROM journal
 assert len(entries)==3
 assert all(dr==cr and dr>0 for _,_,dr,cr in entries)
 assert db.execute('PRAGMA integrity_check').fetchone()[0]=='ok'
+assert db.execute('SELECT length(password_hash) FROM users').fetchone()[0]>40
 print('ZOMOROD_ACCOUNTING_SYNTHETIC_QA=PASS')
 print('TEST_USERS=1 PARTIES=1 INVOICES=1 PAYMENTS=1 JOURNALS=3')
 print('BALANCED_ENTRIES=3')
+print('PASSWORD_CHANGE_TEST=PASS')
 print('UNBALANCED_ENTRY_REJECTED=yes')
 print('PRODUCTION_DATABASE_TOUCHED=no')
