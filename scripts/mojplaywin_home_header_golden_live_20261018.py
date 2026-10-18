@@ -195,7 +195,7 @@ def selftest() -> None:
              '<span>Mojtaba Roozegar</span></footer></body></html>')
     changed = build(dummy)
     assert changed.count(TAG) == 1
-    assert changed.count('href="/store/"') == 1
+    assert len(re.findall(r'<a\b[^>]*href="/store/"', changed)) == 1
     assert changed.endswith(dummy[dummy.index('<footer class="mw-site-footer"'):])
     print("MPW_STATIC_HOME_PATCH_SELFTEST_OK=true")
 
