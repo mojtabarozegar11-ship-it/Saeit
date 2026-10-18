@@ -257,7 +257,7 @@ def selftest():
         '<script>ZOMOROD_ORBIT_DATA</script></body></html>'
     )
     out=patch(sample)
-    assert out.count(NEW_ID)==1
+    assert out.count('id="'+NEW_ID+'"')==1
     assert out.find(NEW_ID)<out.find('<main id="content">')
     assert out.find(NEW_ID)<out.find('<footer')
     assert '<b>Legal content</b>' in out
