@@ -1,7 +1,43 @@
 {% extends "base.html" %}
-{% block title %}{% if q %}جستجو: {{ q }}{% else %}جستجوی سایت{% endif %} — Zomorodmelal{% endblock %}
+{% block title %}{% if q %}جستجو: {{ q }}{% else %}جستجوی سایت{% endif %} — Zomorodmelal{% endif %}
+{% endblock %}
 {% block meta_description %}موتور جستجوی محتوای شرکت کشت و صنعت زمرد ملل؛ خبرنامه، دانش، محصولات و صفحات رسمی.{% endblock %}
 {% block content %}
+{% if request.get_host == "mojplaywin.com" or request.get_host == "www.mojplaywin.com" %}
+<section class="mpw-search-page" aria-labelledby="mpw-search-heading">
+<style>
+.mpw-search-page{--gold:#d6ad55;--bright:#f0cf82;--cream:#f5f0e4;max-width:1160px;margin:24px auto 64px;padding:clamp(24px,5vw,60px);border:1px solid rgba(214,173,85,.42);border-radius:22px;background:linear-gradient(150deg,#17140d,#0b0b09);color:var(--cream);box-shadow:0 20px 70px rgba(0,0,0,.22)}
+.mpw-search-page .mpw-search-kicker{color:var(--bright);font-size:.72rem;font-weight:800;letter-spacing:.2em}
+.mpw-search-page h1{margin:18px 0;color:var(--cream);font-size:clamp(2.2rem,5vw,4rem)}
+.mpw-search-page p{color:#d5cbb6;line-height:1.8}
+.mpw-search-page form{display:flex;gap:10px;flex-wrap:wrap;margin:26px 0}
+.mpw-search-page input[type="search"]{box-sizing:border-box;flex:1 1 220px;min-width:0;padding:15px 18px;border:1px solid var(--gold);border-radius:12px;background:#0d0c0a;color:var(--cream);font:inherit}
+.mpw-search-page input[type="search"]:focus-visible{outline:3px solid var(--bright);outline-offset:2px}
+.mpw-search-page button{padding:14px 25px;border:1px solid var(--bright);border-radius:12px;background:linear-gradient(135deg,#f3d589,#c99e4c);color:#151009;font:inherit;font-weight:800;cursor:pointer}
+.mpw-search-page .mpw-search-results{display:grid;gap:14px;margin-top:28px}
+.mpw-search-page .mpw-search-result{padding:20px 23px;border:1px solid rgba(214,173,85,.3);border-radius:14px;background:#18150f;color:var(--cream);text-decoration:none}
+.mpw-search-page .mpw-search-result:hover,.mpw-search-page .mpw-search-result:focus-visible{border-color:var(--bright);outline-offset:2px}
+.mpw-search-page .mpw-search-result small{color:var(--bright)}
+.mpw-search-page .mpw-search-result h2{margin:9px 0;color:var(--cream);font-size:1.22rem}
+</style>
+<span class="mpw-search-kicker">MOJ PLAY WIN · SITE SEARCH</span>
+<h1 id="mpw-search-heading">Search MojPlayWin</h1>
+<p>Explore games, research, AI, learning resources and digital products.</p>
+<form method="get" action="/search/" role="search">
+<label for="mpw-q" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0">Search phrase</label>
+<input id="mpw-q" type="search" name="q" value="{{ q }}" placeholder="What would you like to find?" required>
+<button type="submit">Search ↗</button>
+</form>
+{% if q %}<p>{{ results|length }} result(s) for “{{ q }}”</p>{% endif %}
+<div class="mpw-search-results">
+{% for item in results %}
+<a class="mpw-search-result" href="{{ item.url }}"><small>{{ item.type }}</small><h2>{{ item.title }}</h2><p>{{ item.summary }}</p></a>
+{% empty %}
+{% if q %}<p>No matching results. Try another keyword.</p>{% else %}<p>Enter a keyword to begin searching.</p>{% endif %}
+{% endfor %}
+</div>
+</section>
+{% else %}
 <div style="padding:70px 6vw;min-height:70vh;background:#f4efe3">
   <span style="letter-spacing:.16em;color:#96783d">SITE SEARCH / CONTENT INDEX</span>
   <h1 style="font-size:clamp(2.4rem,6vw,5rem);margin:.5rem 0">جستجوی دقیق محتوای سایت</h1>
