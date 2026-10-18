@@ -1,0 +1,95 @@
+name: Zomorod coordinated P0-P3 release preflight inventory read only
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/zomorod-p0p3-preflight-20261019.yml]
+permissions:
+  contents: read
+jobs:
+  inventory:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Prepare verified VPS to cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zm-glass-headers-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.known"
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          echo PINNED_HOST_AND_RELAY_VERIFIED=yes
+      - name: Read required live templates and HTTP configuration without secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -T -F "$RUNNER_TEMP/zm-glass-headers-ssh/config" saeit-cpanel 'python3 -' <<'PY'
+          import re,json,hashlib,os
+          from pathlib import Path
+          root=Path('/home/zomorod2/public_html')
+          names=['index.html','about/index.html','research/index.html','knowledge/index.html','agriculture/index.html','search/index.html','topics/index.html','store/index.html','store/index.php','tala/index.html','tala/index.php','business/index.php','.htaccess','en/market/index.html','en/auctions/index.html']
+          for name in names:
+              p=root/name
+              if not p.is_file() or p.is_symlink():
+                  print('ROOT_FILE='+json.dumps({'path':name,'exists':False}));continue
+              s=p.read_text(encoding='utf-8',errors='replace')
+              row={'path':name,'exists':True,'size':p.stat().st_size,'sha':hashlib.sha256(p.read_bytes()).hexdigest(),'h1_open':len(re.findall(r'<h1\b',s,re.I)),'head':s.count('</head>'),'body':s.count('</body>'),'main':len(re.findall(r'<main\b',s,re.I)),'meta_desc':len(re.findall(r'<meta[^>]*name=[\x22\x27]description',s,re.I)),'canonical':len(re.findall(r'rel=[\x22\x27]canonical',s,re.I)),'form':len(re.findall(r'<form\b',s,re.I)),'skip':len(re.findall(r'<a[^>]*href=[\x22\x27]#main',s,re.I))}
+              if name in ('agriculture/index.html','search/index.html'):
+                  row['main_tags']=re.findall(r'<main\b[^>]*>',s,re.I)[:2]
+                  row['skip_tags']=re.findall(r'<a\b[^>]*href=[\x22\x27]#main[^>]*>[^<]*</a>',s,re.I)[:2]
+              if name in ('about/index.html','knowledge/index.html'):
+                  row['h1_tags']=re.findall(r'<h1\b[^>]*>.*?</h1>',s,re.I|re.S)[:3]
+                  row['h1_tags']=[z[:300] for z in row['h1_tags']]
+              if name in ('en/market/index.html','en/auctions/index.html'):
+                  row['desc_tag']=re.findall(r'<meta[^>]+name=[\x22\x27]description[^>]*>',s,re.I)[:1]
+              if name=='.htaccess':
+                  row['size']=len(s)
+                  row['contains_modheaders']='mod_headers' in s
+                  row['contains_passenger']='Passenger' in s
+                  row['head_safe']=s[:1300]
+              print('ROOT_FILE='+json.dumps(row,ensure_ascii=False))
+          p=Path('/home/zomorod2/.private/zomorod-business/app.php')
+          print('PRIVATE_APP='+json.dumps({'exists':p.is_file() and not p.is_symlink(),'size':p.stat().st_size if p.is_file() else 0,'has_setup_fields': all(x in p.read_text(encoding='utf-8') for x in ['name="setup_token"','name="username"','name="password"']) if p.is_file() else False}))
+          PY
+      - name: Remove credentials
+        if: always()
+        shell: bash
+        run: rm -rf "$RUNNER_TEMP/zm-glass-headers-ssh"
