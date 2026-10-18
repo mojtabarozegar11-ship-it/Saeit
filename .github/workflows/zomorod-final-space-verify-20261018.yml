@@ -1,4 +1,4 @@
-name: Verify cPanel disk usage after removing redundant backups
+name: Verify cPanel disk usage after V91 package and duplicate cleanup
 on:
   push:
     branches: [main]
@@ -81,6 +81,7 @@ jobs:
             uapi --output=json Quota get_quota_info 2>/dev/null | python3 -c 'import json,sys; d=json.load(sys.stdin).get("result",{}).get("data",{});print("QUOTA_REPORTED_MB_USED="+str(d.get("megabytes_used")));print("QUOTA_LIMIT_MB="+str(d.get("megabyte_limit")));print("QUOTA_REMAIN_MB="+str(d.get("megabytes_remain")))' || true
           fi
           echo FINAL_DISK_INSPECTION=done
+          echo RECHECK_AFTER_V91_ZIP_REMOVAL=yes
           REMOTE
       - name: Public health check
         shell: bash
