@@ -1,0 +1,8 @@
+# MojPlayWin independent checkout route only.
+# Do not modify the shared Passenger/Django document-root routing.
+DirectoryIndex index.php
+Options -Indexes
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteRule ^$ index.php [END]
+</IfModule>
