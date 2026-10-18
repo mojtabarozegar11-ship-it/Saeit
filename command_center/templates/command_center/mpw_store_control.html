@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>وضعیت واقعی فروشگاه | MojPlayWin</title>
+<style>
+:root{font-family:Tahoma,Arial,sans-serif;background:#0e1218;color:#f2f4f8;color-scheme:dark}
+*{box-sizing:border-box}body{margin:auto;max-width:1080px;padding:25px 16px 50px}
+a{color:#deb975}h1{font-size:clamp(24px,4vw,36px);margin:0 0 10px}
+p{line-height:1.9;color:#c4cbd5}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:15px}
+article{padding:20px;background:#19222d;border:1px solid #455164;border-radius:14px}
+strong{display:block;font-size:30px;color:#f0cb86;font-variant-numeric:tabular-nums}
+small{color:#b9c7da}h2{margin:35px 0 15px;font-size:19px}
+.note{padding:15px;background:#202832;border-right:3px solid #dbad62;border-radius:8px}
+nav{margin-bottom:25px}nav a{margin-left:15px}
+</style></head><body>
+<nav><a href="/staff/command-center/">بازگشت به مدیریت</a><a href="/admin/core/product/">ویرایش محصولات در Django Admin</a><a href="/store/">نمای فروشگاه</a></nav>
+<h1>مرکز وضعیت فروشگاه MojPlayWin</h1>
+<p>گزارش فقط‌خواندنی از پایگاه داده عملیاتی؛ این صفحه هیچ محصول یا درگاه پرداختی را فعال نمی‌کند.</p>
+<h2>آمار محصولات با برچسب صریح MojPlayWin</h2>
+<section class="grid">
+<article><strong>{{ counts.mpw_explicitly_tagged }}</strong><small>محصول منتسب به MojPlayWin</small></article>
+<article><strong>{{ counts.mpw_active }}</strong><small>وضعیت فعال در پایگاه داده</small></article>
+<article><strong>{{ counts.mpw_priced }}</strong><small>محصول دارای قیمت مثبت</small></article>
+<article><strong>{{ counts.mpw_checkout_candidates_unverified }}</strong><small>نامزد بررسی خرید؛ هنوز تأییدنشده</small></article>
+</section>
+<h2>آمار جدول مشترک سایت‌ها (نه صرفاً MojPlayWin)</h2>
+<section class="grid">
+<article><strong>{{ counts.shared_products }}</strong><small>کل محصولات جدول مشترک</small></article>
+<article><strong>{{ counts.shared_active }}</strong><small>محصول با پرچم فعال</small></article>
+<article><strong>{{ counts.shared_priced }}</strong><small>محصول قیمت‌گذاری‌شده</small></article>
+<article><strong>{{ counts.products_without_explicit_mpw_scope }}</strong><small>محصول بدون انتساب صریح به MojPlayWin</small></article>
+<article><strong>{{ counts.shared_orders_total }}</strong><small>کل سفارش‌های جدول مشترک</small></article>
+<article><strong>{{ counts.shared_paid_orders }}</strong><small>سفارش با وضعیت paid در جدول مشترک</small></article>
+<article><strong>{{ counts.shared_payment_intents }}</strong><small>کل نیت‌های پرداخت ثبت‌شده در جدول مشترک</small></article>
+<article><strong>{{ counts.shared_payment_live_flag }}</strong><small>محصول دارای پرچم payment_live</small></article>
+</section>
+<h2>گام‌های لازم برای فروش واقعی</h2>
+<p class="note">ابتدا انتساب محصولات به سایت در داده‌ها را بررسی کنید. سپس فایل تحویل، قیمت، مالکیت و پوشش کیف‌پول، تأیید پرداخت واقعی، کنترل تکرار تراکنش و تحویل فایل آزمایش شود. تا اثبات همه این مراحل، هیچ محصولی از این پنل به‌طور خودکار برای فروش فعال نمی‌شود.</p>
+<p><a href="/staff/command-center/api/mpw-store/">گزارش JSON وضعیت</a></p>
+</body></html>
