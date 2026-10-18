@@ -1,0 +1,181 @@
+name: Zomorod V12 official company office contact release
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/zomorod-v12-contact-release.yml"]
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-v12-official-contact
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate source files and official company contact data
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile content/zomorod-v12/patch_contacts.py
+          php -l content/zomorod-v11/store_index.php
+          grep -Fq '09022048691' content/zomorod-v12/patch_contacts.py
+          grep -Fq 'گل‌یخ' content/zomorod-v12/patch_contacts.py
+          grep -Fq 'zm-company-official-contacts' content/zomorod-v11/store_index.php
+          echo V12_SOURCE_READY=yes
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - name: Preserve all originals and stage only main-site public contacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1";web="$HOME/public_html";backup="$HOME/.backups/zomorod-v12-contact/$sha"
+          test ! -e "$backup"
+          for p in index.html contact/index.html company/index.html about/index.html store/index.php; do
+            test -s "$web/$p" && test ! -L "$web/$p"
+          done
+          test -s "$web/.htaccess" && test ! -L "$web/.htaccess"
+          test ! -e "$web/.v12-contact-next"
+          mkdir -p "$(dirname "$backup")"
+          mkdir -m 700 "$backup"
+          mkdir -m 700 "$backup/source"
+          printf '%s\n' index.html contact/index.html company/index.html about/index.html store/index.php > "$backup/pages.txt"
+          (cd "$web" && tar -cf "$backup/previous-contacts.tar" -T "$backup/pages.txt")
+          (cd "$web" && sha256sum -- $(cat "$backup/pages.txt")) > "$backup/pages.sha256"
+          (cd "$web" && sha256sum -c --status "$backup/pages.sha256")
+          sha256sum "$web/.htaccess" "$web/favicon.ico" "$web/business/index.php" "$web/search/index.json" > "$backup/protected.sha256"
+          for sub in mohammad ghanadi amozeshgah tala;do
+            for p in index.html index.php;do
+              if test -f "$web/$sub/$p";then sha256sum "$web/$sub/$p" >> "$backup/protected.sha256";fi
+            done
+          done
+          echo V12_OFFICIAL_CONTACT_BACKUP=verified
+          REMOTE
+          tar -cf - -C content/zomorod-v12 patch_contacts.py |
+            ssh -F "$d/config" saeit-cpanel "tar -xf - -C /home/zomorod2/.backups/zomorod-v12-contact/$GITHUB_SHA/source"
+          tar -cf - -C content/zomorod-v11 store_index.php |
+            ssh -F "$d/config" saeit-cpanel "tar -xf - -C /home/zomorod2/.backups/zomorod-v12-contact/$GITHUB_SHA/source"
+      - name: Prepare candidate pages and validate preservation without live edits
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1";web="$HOME/public_html";backup="$HOME/.backups/zomorod-v12-contact/$sha"
+          (cd "$web" && sha256sum -c --status "$backup/pages.sha256")
+          python3 "$backup/source/patch_contacts.py" "$web" "$backup/candidate"
+          python3 - "$backup/candidate/manifest.json" <<'PY'
+          import json,sys,hashlib
+          from pathlib import Path
+          data=json.loads(Path(sys.argv[1]).read_text())
+          assert len(data)==4 and set(x['path'] for x in data)=={'index.html','contact/index.html','company/index.html','about/index.html'}
+          for o in data:
+            txt=(Path(sys.argv[1]).parent/o['path']).read_text()
+            assert txt.count('zm-official-contact-details-20261018')==1
+            assert 'tel:+989022048691' in txt and 'گل‌یخ' in txt
+            assert hashlib.sha256(txt.encode()).hexdigest()==o['changed_sha256']
+          print('V12_PRIVATE_CANDIDATES=verified')
+          PY
+          phpbin="$(command -v php || true)"
+          if test -z "$phpbin";then phpbin=/opt/cpanel/ea-php82/root/usr/bin/php;fi
+          "$phpbin" -l "$backup/source/store_index.php"
+          grep -Fq 'zm-company-official-contacts' "$backup/source/store_index.php"
+          ! grep -Fq 'zm-company-official-contacts' "$web/store/index.php"
+          echo V12_SNAPSHOT_AND_PHP_VALIDATED=yes
+          REMOTE
+      - name: Publish only 4 public HTML and 1 store template with full rollback
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1";web="$HOME/public_html";backup="$HOME/.backups/zomorod-v12-contact/$sha"
+          (cd "$web" && sha256sum -c --status "$backup/pages.sha256")
+          rollback(){
+            set +e
+            (cd "$web" && tar -xf "$backup/previous-contacts.tar")
+            (cd "$web" && sha256sum -c --status "$backup/pages.sha256")
+            echo V12_ROLLBACK=original_pages_restored
+          }
+          active=1
+          trap 'rc=$?;trap - EXIT;if test "$active" = 1;then rollback;fi;exit "$rc"' EXIT
+          for p in index.html contact/index.html company/index.html about/index.html;do
+            test -s "$backup/candidate/$p"
+            test ! -e "$web/$p.zm-v12-next"
+            cp -p "$backup/candidate/$p" "$web/$p.zm-v12-next"
+            chmod --reference="$web/$p" "$web/$p.zm-v12-next"
+            mv -f "$web/$p.zm-v12-next" "$web/$p"
+          done
+          test ! -e "$web/store/index.php.zm-v12-next"
+          cp -p "$backup/source/store_index.php" "$web/store/index.php.zm-v12-next"
+          chmod --reference="$web/store/index.php" "$web/store/index.php.zm-v12-next"
+          mv -f "$web/store/index.php.zm-v12-next" "$web/store/index.php"
+          for route in / /contact/ /about/ /company/ /store/;do
+            out="$backup/verify.html"
+            code="$(curl -sS -L --max-time 22 -H 'Cache-Control: no-cache' -o "$out" -w '%{http_code}' "https://zomorodmelal.ir$route?contact=$sha" || true)"
+            echo V12_PUBLIC_CONTACT_ROUTE="$route" HTTP="$code"
+            test "$code" = 200
+            grep -Fq 'tel:+989022048691' "$out"
+            grep -Fq 'گل‌یخ' "$out"
+          done
+          grep -Fq 'zm-official-contact-details-20261018' "$backup/verify.html" || grep -Fq 'zm-company-official-contacts' "$backup/verify.html"
+          (cd "$web" && sha256sum -c --status "$backup/protected.sha256")
+          active=0;trap - EXIT
+          echo V12_OFFICIAL_COMPANY_CONTACT=published
+          echo V12_PROTECTED_FINANCIAL_AND_CHILD_SITES=unchanged
+          REMOTE
+      - name: Clear runner SSH credentials
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"

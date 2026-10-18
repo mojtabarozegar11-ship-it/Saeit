@@ -1,0 +1,52 @@
+name: Zomorod V12 official company contact QA
+on:
+  push:
+    branches: [release/zomorod-v12-office-contact-20261018]
+  pull_request:
+    branches: [main]
+    paths:
+      - "content/zomorod-v12/**"
+      - "content/zomorod-v11/store_index.php"
+      - ".github/workflows/zomorod-v12-contact-qa.yml"
+permissions:
+  contents: read
+jobs:
+  qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate main site contact updater and store syntax without writing production
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile content/zomorod-v12/patch_contacts.py
+          php -l content/zomorod-v11/store_index.php
+          export SOURCE="$RUNNER_TEMP/website" TARGET="$RUNNER_TEMP/prepared"
+          mkdir -p "$SOURCE"/{contact,company,about}
+          python3 - <<'PY'
+          from pathlib import Path
+          import os
+          root=Path(os.environ["SOURCE"])
+          for name in ["index.html","contact/index.html","company/index.html","about/index.html"]:
+            p=root/name
+            content='''<!doctype html><html lang="fa"><head><title>زمرد ملل</title></head><body><main><article><p>متن قدیمی را کامل نگهداری کنید</p></article></main><footer>حقوق شرکت</footer></body></html>'''
+            p.write_text(content.replace('</main>', '<p>'+('کارکرد واقعی شرکت و فعالیت علمی '*80)+'</p></main>'),encoding='utf-8')
+          PY
+          python3 content/zomorod-v12/patch_contacts.py "$SOURCE" "$TARGET"
+          python3 - <<'PY'
+          import os,json,hashlib
+          from pathlib import Path
+          a=Path(os.environ["SOURCE"]); b=Path(os.environ["TARGET"])
+          manifest=json.loads((b/"manifest.json").read_text())
+          assert len(manifest)==4
+          for v in manifest:
+            name=v["path"]; old=(a/name).read_text(); new=(b/name).read_text()
+            assert '۰۹۰۲۲۰۴۸۶۹۱' in new and 'گل‌یخ' in new
+            assert 'متن قدیمی را کامل نگهداری کنید' in new
+            assert new.count("zm-official-contact-details-20261018")==1
+            assert hashlib.sha256(old.encode()).hexdigest()==v["original_sha256"]
+            assert new.index("zm-official-contact-details-20261018")<new.index("<footer>")
+            if name=="index.html":assert 'PostalAddress' in new
+          print("OFFICIAL_CONTACT_QA=passed")
+          PY
