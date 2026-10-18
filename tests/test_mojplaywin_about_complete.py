@@ -71,3 +71,38 @@ class MojPlayWinAboutTests(SimpleTestCase):
             self.assertContains(response, domain)
         self.assertContains(response, "do not certify")
         self.assertContains(response, "not evidence")
+
+    def test_complementary_20_percent_contains_ten_industries_and_thirty_disciplines(self):
+        response = self.client.get("/about/", HTTP_HOST="mojplaywin.com")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "The complementary 20%")
+        self.assertContains(response, "not an audited portion")
+        self.assertContains(response, "distinct brands")
+        for phrase in (
+            "Agriculture, crop production and agro-industry",
+            "Livestock, poultry, aquaculture",
+            "Food science, processing and functional nutrition",
+            "Precious metals, jewelry, gemstones",
+            "Handwoven carpets, textiles",
+            "Hospitality, restaurants",
+            "International trade, distribution",
+            "Industrial production, manufacturing",
+            "Fuel stations, mobility",
+            "Currency literacy, market research",
+            "HACCP",
+        ):
+            self.assertContains(response, phrase)
+        self.assertContains(response, "FAIR")
+        self.assertContains(response, "responsible financing")
+        for sector in range(1, 11):
+            self.assertContains(response, 'id="sector-%02d"' % sector)
+        for specialty in range(1, 31):
+            self.assertContains(response, "COMPLEMENTARY SPECIALISM %02d" % specialty)
+        for source in ("fao.org", "iso.org", "cibjo.org"):
+            self.assertContains(response, source)
+        self.assertContains(response, "not evidence of a licensed fuel station")
+
+    def test_complementary_industries_do_not_break_other_host_about(self):
+        response = self.client.get("/about/", HTTP_HOST="zomorodmelal.ir")
+        self.assertEqual(response.status_code, 301)
+        self.assertEqual(response["Location"], "/company/")
