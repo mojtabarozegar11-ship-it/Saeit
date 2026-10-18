@@ -1,4 +1,4 @@
-name: MojPlayWin V91 live activation routing audit (read-only)
+name: MojPlayWin V91 live directory routing verification (read-only)
 on:
   push:
     branches: ["feat/mpw-v91-agent-port-isolated-20261018"]
