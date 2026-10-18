@@ -142,7 +142,7 @@ def main():
                 ("a" * 48, "ETH", ETH_QUOTE, ETH_TX),
                 ("b" * 48, "TRX", TRX_QUOTE, TRX_TX),
                 ("c" * 48, "TRX", TRX_QUOTE + 1, WRONG_TRX_TX),
-                ("d" * 48, "ETH", ETH_QUOTE, WRONG_ETH_TX),
+                ("d" * 48, "ETH", ETH_QUOTE + 2, WRONG_ETH_TX),
             ]
             for token, asset, quote, txid in entries:
                 db.execute(
