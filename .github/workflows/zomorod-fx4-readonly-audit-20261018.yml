@@ -103,6 +103,22 @@ jobs:
           for word in ['createElement(\'button\')','createElement("button")','className =','className=','orbit-card','topic-card','topic-tile','data-topic']:
             print('FX4_JS_KEY '+word+' found='+str(s.find(word)))
           PY
+      - name: Inspect card hover and orbital production behavior without writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 45s ssh -T -F "$RUNNER_TEMP/zomorod-baseline-inventory/config" saeit-cpanel 'python3 -' <<'PY'
+          from pathlib import Path
+          import re,hashlib
+          source=Path('/home/zomorod2/public_html/index.html').read_text('utf8')
+          print('FX57_HASH='+hashlib.sha256(source.encode()).hexdigest(),flush=True)
+          for token in ('.topic-card{','.topic-card:hover','.topic-card:focus','className="topic-card"','className=','"topic-card"','orbit-band','card-track','card-row','.header-orbit::before','.header-orbit::after','.topbar::after'):
+            found=list(re.finditer(re.escape(token),source))
+            print('FX57_FIND='+token+' COUNT='+str(len(found))+' OFFSETS='+str([m.start() for m in found[:3]]),flush=True)
+            for m in found[:2]:
+              v=source[max(0,m.start()-90):m.start()+380].replace(chr(10),' ')
+              print('FX57_EXCERPT='+token+' '+v[:420],flush=True)
+          PY
       - name: Cleanup SSH keys
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/zomorod-baseline-inventory"
