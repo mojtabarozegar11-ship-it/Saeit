@@ -14,6 +14,7 @@ body.zm-unified-v7 #main a.zm-link:not(.zm-link-ghost):is(:hover,:focus-visible)
 }
 body.zm-unified-v7 #main a[href]{
   display:inline-flex;align-items:center;min-height:44px;
+  max-width:100%;min-width:0;white-space:normal;overflow-wrap:anywhere;
 }
 body.zm-unified-v7 .zm-v7-chain a{min-height:44px}
 body.zm-unified-v7 #main a:focus-visible{
@@ -21,6 +22,8 @@ body.zm-unified-v7 #main a:focus-visible{
 }
 .zm-company-skip-landmark{position:static;margin:0;padding:0}
 @media(max-width:700px){
+ body.zm-unified-v7 #main .zm-history-actions{display:flex;flex-wrap:wrap;gap:6px;}
+ body.zm-unified-v7 #main a[href]{max-width:100%;}
  body.zm-unified-v7 #main :is(.zm-card,.zm-article,.zm-history-card,.zm-section-head,.zm-history-topic>summary){
    -webkit-backdrop-filter:blur(2px) saturate(1.09);
    backdrop-filter:blur(2px) saturate(1.09);
