@@ -68,6 +68,55 @@ class MainSiteThemeBoundaryTests(unittest.TestCase):
             self.assertIn('{% include "mojplaywin/footer.html" %}', body)
             self.assertIn("{% block content %}", body)
 
+    def test_actual_django_template_compilation_and_host_isolation(self):
+        # Real Django template rendering (not only textual CSS/file checks).
+        from django.conf import settings
+        from django.template import Context, Engine
+        if not settings.configured:
+            settings.configure(STATIC_URL="/static/")
+        engine = Engine(
+            dirs=[str(ROOT / "core/templates")],
+            libraries={"mpw_shell": "core.templatetags.mpw_shell"},
+        )
+        base = engine.get_template("base.html")
+        brand = engine.get_template("brands/mojplaywin/base.html")
+
+        class Request:
+            def __init__(self, host, path):
+                self.host = host
+                self.path = path
+
+            def get_host(self):
+                return self.host
+
+        class User:
+            is_authenticated = False
+
+        def render(host, path):
+            return base.render(Context({"request": Request(host, path), "user": User()}))
+
+        internal = render("mojplaywin.com", "/search/")
+        self.assertIn("mpw-unified-main", internal)
+        self.assertIn('class="mw-site-nav"', internal)
+        self.assertIn('class="mw-site-footer"', internal)
+        self.assertIn("mojplaywin-inner-unified.css", internal)
+
+        already_branded = render("mojplaywin.com", "/store/")
+        self.assertNotIn("mpw-unified-main", already_branded)
+        self.assertNotIn('class="mw-site-nav"', already_branded)
+
+        for host, path in (("zomorodmelal.ir", "/search/"),
+                           ("mojplaywin.com", "/farnaz/"),
+                           ("mojplaywin.com", "/api/payments/")):
+            with self.subTest(host=host, path=path):
+                rendered = render(host, path)
+                self.assertNotIn('class="mw-site-nav"', rendered)
+                self.assertNotIn("mpw-unified-main", rendered)
+
+        brand_html = brand.render(Context({"request": Request("mojplaywin.com", "/products/")}))
+        self.assertIn("mpw-unified-legacy", brand_html)
+        self.assertIn("mojplaywin-inner-unified.css", brand_html)
+
     def test_no_payment_selector_or_checkout_override_in_unified_css(self):
         css = (ROOT / "core/static/site/mojplaywin-inner-unified.css").read_text(encoding="utf-8")
         self.assertIn("body.mpw-unified-legacy", css)
