@@ -1,0 +1,115 @@
+name: Zomorod stale Google English and search inventory
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/zomorod-stale-google-search-readonly-20261018.yml"
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - name: Find preserved English files and determine why indexed results fail
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel python3 - <<'PY'
+          import os,re,json
+          from pathlib import Path
+          home=Path.home()
+          root=home/'public_html'
+          print('MAIN_EN_EXISTS',(root/'en').exists(),'EN_IS_LINK',(root/'en').is_symlink())
+          for name in ('en','ru','ar','fr','tr','de','es','search'):
+              p=root/name
+              print('ROOT_LANGUAGE_DIR',name,'exists',p.exists(),'isdir',p.is_dir(),'is_link',p.is_symlink())
+              if p.is_dir() and not p.is_symlink():
+                  for f in list(p.glob('**/index.html'))[:35]:
+                      print('ROOT_EN_PAGE',str(f.relative_to(root)),f.stat().st_size)
+          for parent in (root/'site-heritage',home/'.backups'):
+              if not parent.exists():continue
+              print('ARCHIVE_ROOT',str(parent))
+              scanned=0;hits=0
+              for dp,dirs,files in os.walk(parent,followlinks=False):
+                  here=Path(dp);depth=len(here.relative_to(parent).parts)
+                  if depth>6:dirs[:]=[];continue
+                  dirs[:]=[d for d in dirs if not d.startswith('.') and not (here/d).is_symlink()]
+                  for file in files:
+                      p=here/file;scanned+=1
+                      if file=='index.html' and ('en' in p.parts or 'english' in str(p).lower()):
+                          print('EN_ARCHIVE_HTML',str(p),p.stat().st_size);hits+=1
+                      if file.endswith(('.tar','.tar.gz','.tgz','.zip')) and ('en' in file.lower() or 'backup' in file.lower() or 'archive' in file.lower()):
+                          print('CANDIDATE_ARCHIVE',str(p),'bytes',p.stat().st_size);hits+=1
+                      if scanned>=30000:break
+                  if scanned>=30000:break
+              print('ARCHIVE_SCAN',str(parent),'scanned',scanned,'hits',hits)
+          search=root/'search/index.html'
+          if search.exists():
+              s=search.read_text(encoding='utf-8',errors='replace')
+              print('SEARCH_HTML_SIZE',len(s),'SEARCH_SCRIPTS',re.findall(r'<script\b[^>]*src=["\x27]([^"\x27]+)',s,re.I))
+              print('SEARCH_FETCH_TARGETS',re.findall(r'(?:fetch|XMLHttpRequest)\s*\(\s*["\x27]([^"\x27]+)',s,re.I))
+              print('SEARCH_HINTS',re.findall(r'[\w./-]*(?:index|search|catalog|manifest)[\w./-]*\.(?:json|js)',s,re.I)[:30])
+              print('SEARCH_FORM',re.findall(r'<form\b[^>]*>',s,re.I)[:3])
+              print('SEARCH_JS_SNIPPET',s[-4000:].replace('\n',' ')[:3500])
+          print('AUDIT_EN_READONLY_COMPLETE=1')
+          PY
+      - name: Confirm indexed English response classes from site origin
+        shell: bash
+        run: |
+          for path in /en/ /en/about/ /en/blog/ /en/guides/market/ /en/research/ /en/authors/mojtaba-rozegar/ /search/?q=zomorod_melal /robots.txt /sitemap.xml;do
+            code="$(curl -sS -L --connect-timeout 5 --max-time 12 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir$path" || true)"
+            echo "STALE_GOOGLE_HTTP $path $code"
+          done
+      - name: Clear ephemeral relay keys
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
