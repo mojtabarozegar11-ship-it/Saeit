@@ -16,7 +16,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from scripts.mojplaywin_chunked_encrypted_snapshot import stage, verify, restore
+from mojplaywin_chunked_encrypted_snapshot import stage, verify, restore
 
 CHUNK = 1024 * 1024
 FIXTURE = 2 * CHUNK + 287
