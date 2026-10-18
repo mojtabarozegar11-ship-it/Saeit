@@ -20,6 +20,7 @@ class VerificationError(Exception):
 class Proof:
     height: int
     confirmations: int
+    timestamp_ms: int
 
 
 def _post(url, payload, headers=None):
@@ -79,11 +80,22 @@ def verify_eth(tx_hash, merchant, atomic_amount, rpc_url, min_conf=12):
     block = _to_int(transaction.get("blockNumber"))
     if block != _to_int(receipt.get("blockNumber")):
         raise VerificationError("Ethereum block data mismatch.")
+    header = _rpc(rpc_url, "eth_getBlockByNumber", [hex(block), False])
+    if not isinstance(header, dict) or _to_int(header.get("number")) != block:
+        raise VerificationError("Ethereum block header mismatch.")
+    if not all(
+        isinstance(value, str) and re.fullmatch(r"0x[0-9a-fA-F]{64}", value)
+        for value in (header.get("hash"), transaction.get("blockHash"), receipt.get("blockHash"))
+    ) or len({header["hash"].lower(), transaction["blockHash"].lower(), receipt["blockHash"].lower()}) != 1:
+        raise VerificationError("Ethereum block hash mismatch.")
+    if str(transaction.get("hash", "")).lower() != txid.lower() or str(receipt.get("transactionHash", "")).lower() != txid.lower():
+        raise VerificationError("Ethereum transaction reference mismatch.")
+    block_timestamp_ms = _to_int(header.get("timestamp")) * 1000
     head = _to_int(_rpc(rpc_url, "eth_blockNumber", []))
     confirmations = head - block + 1
     if confirmations < min_conf:
         raise VerificationError("Awaiting additional ETH confirmations.")
-    return Proof(block, confirmations)
+    return Proof(block, confirmations, block_timestamp_ms)
 
 
 _B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
@@ -139,4 +151,7 @@ def verify_trx(tx_hash, merchant, atomic_amount, api_key="", min_conf=20):
     confirmations = tip_height - block + 1
     if confirmations < min_conf:
         raise VerificationError("Awaiting additional TRX confirmations.")
-    return Proof(block, confirmations)
+    block_timestamp_ms = _to_int(receipt.get("blockTimeStamp"))
+    if block_timestamp_ms < 1000000000000:  # TRON timestamps are milliseconds
+        raise VerificationError("Invalid TRON block timestamp.")
+    return Proof(block, confirmations, block_timestamp_ms)
