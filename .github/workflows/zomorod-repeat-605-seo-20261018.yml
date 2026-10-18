@@ -1,0 +1,249 @@
+name: Zomorod repeat all 605 card link and SEO quality pass
+on:
+  pull_request:
+    paths:
+      - "content/zomorod-605-repeat-qa-20261018/**"
+      - ".github/workflows/zomorod-repeat-605-seo-20261018.yml"
+  push:
+    branches: [main]
+    paths:
+      - "content/zomorod-605-repeat-qa-20261018/**"
+      - ".github/workflows/zomorod-repeat-605-seo-20261018.yml"
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-repeat-605-seo-20261018
+  cancel-in-progress: false
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify Python and reconstruct prior published V9+29 row baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile content/zomorod-605-repeat-qa-20261018/repeat_links_and_seo.py
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('content/zomorod-v6-20261018/index.html').read_text(encoding='utf8')
+          assert 'window.ZOMOROD_ORBIT_DATA=' in s
+          logo='<a class="zm-v7-home-logo" href="/company/" aria-label="معرفی شرکت زمرد ملل"><img src="/static/site/zomorod-v7/company-logo.webp" alt="لوگو"></a>'
+          s=s.replace('<body>','<body><!-- zm-unified-v7-20261018 -->'+logo,1)
+          Path('/tmp/z-repeat-base.html').write_text(s,encoding='utf8')
+          Path('/tmp/z-repeat-robots.txt').write_text('User-agent: *\nDisallow: /admin/\nSitemap: https://zomorodmelal.ir/sitemap.xml\n',encoding='utf8')
+          PY
+          python3 content/zomorod-v8/zomorod_v8_rows_and_logo.py /tmp/z-repeat-base.html --output /tmp/z-repeat-v8.html
+          python3 content/zomorod-v9/zomorod_v9_link_real_pages.py /tmp/z-repeat-v8.html --output /tmp/z-repeat-v9.html
+          python3 content/zomorod-three-research-shelves/zomorod_three_shelves.py /tmp/z-repeat-v9.html \
+            --output /tmp/z-repeat-29.html --pages-root /tmp/z-repeat-research
+          python3 content/zomorod-all-card-topics-20261018/build_expert_topic_pages.py /tmp/z-repeat-29.html \
+            --output /tmp/z-repeat-605.html --stage-root /tmp/z-repeat-output
+          python3 content/zomorod-all-card-topics-20261018/enrich_existing_research.py \
+            --pages-root /tmp/z-repeat-research --definitions content/zomorod-three-research-shelves/zomorod_three_shelves.py
+      - name: Audit every page, verify metadata and create safe additive SEO changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 content/zomorod-605-repeat-qa-20261018/repeat_links_and_seo.py \
+            --home /tmp/z-repeat-605.html --topics /tmp/z-repeat-output/topics \
+            --research /tmp/z-repeat-research --robots /tmp/z-repeat-robots.txt \
+            --robots-output /tmp/z-repeat-robots-next.txt
+          python3 - <<'PY'
+          from pathlib import Path
+          import re,json
+          articles=list(Path('/tmp/z-repeat-output/topics').rglob('index.html'))+list(Path('/tmp/z-repeat-research').rglob('index.html'))
+          target=[p for p in articles if p.parent.name!='topics']
+          assert len(target)==605
+          assert all(p.read_text(encoding='utf8').count('zm-card-repeat-audit-related-20261018')==1 for p in target)
+          robots=Path('/tmp/z-repeat-robots-next.txt').read_text(encoding='utf8')
+          assert robots.count('Sitemap: https://zomorodmelal.ir/topics/sitemap.xml')==1
+          assert robots.count('Sitemap: https://zomorodmelal.ir/sitemap.xml')==1
+          print('REPEATED_FULL_CARD_AUDIT=605_PASS')
+          print('DIRECT_RELATIONSHIP_NAVIGATION=605_PASS')
+          print('GOOGLE_SITEMAP_DISCOVERY=2_SITEMAPS')
+          PY
+  publish:
+    needs: validate
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 26
+    steps:
+      - uses: actions/checkout@v4
+      - name: Connect to verified pinned VPS and cPanel
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/repeat-seo"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.known"
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          echo PINNED_HOP_IDENTITIES=verified
+      - name: Capture immutable original snapshots of only selected files
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/repeat-seo"
+          ssh -F "$d/config" saeit-cpanel bash -s -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1"; web="$HOME/public_html"; backup="$HOME/.backups/zomorod-repeat-605-seo/$sha"
+          test ! -e "$backup"
+          test -s "$web/index.html" && test -s "$web/robots.txt"
+          test -d "$web/topics" && test -d "$web/research/directory"
+          test ! -L "$web/topics" && test ! -L "$web/research/directory"
+          test -f "$web/topics/.htaccess"
+          grep -Fxq "PassengerEnabled off" "$web/topics/.htaccess"
+          grep -Fq "zm-all-cards-dedicated-topics-20261018" "$web/index.html"
+          ! grep -Fq "Sitemap: https://zomorodmelal.ir/topics/sitemap.xml" "$web/robots.txt"
+          test "$(find "$web/topics" -type f -name index.html | wc -l)" -eq 546
+          test "$(find "$web/research/directory" -type f -name index.html | wc -l)" -eq 60
+          mkdir -p "$(dirname "$backup")"
+          mkdir -m 700 "$backup"
+          mkdir -m 700 "$backup/stage"
+          cp -p "$web/robots.txt" "$backup/robots.original.txt"
+          cp -a "$web/topics" "$backup/topics.original"
+          cp -a "$web/research/directory" "$backup/research.original"
+          cmp -s "$web/robots.txt" "$backup/robots.original.txt"
+          (cd "$web"; for p in .htaccess index.html about/index.html company/index.html research/index.html agriculture/index.html industry/index.html services/index.html tala/index.html mohammad/index.html ghanadi/index.html amozeshgah/index.html; do
+            if test -f "$p"; then sha256sum "$p"; fi
+          done) > "$backup/protected.sha256"
+          echo REPEAT_BACKUPS_THREE_SCOPED_TARGETS=ready
+          REMOTE
+          scp -F "$d/config" content/zomorod-605-repeat-qa-20261018/repeat_links_and_seo.py \
+            "saeit-cpanel:/home/zomorod2/.backups/zomorod-repeat-605-seo/$GITHUB_SHA/stage/repeat_links_and_seo.py"
+      - name: Build and inspect all 605 revised pages privately
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/repeat-seo"
+          ssh -F "$d/config" saeit-cpanel bash -s -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1"; web="$HOME/public_html"; backup="$HOME/.backups/zomorod-repeat-605-seo/$sha"
+          cp -a "$backup/topics.original" "$backup/stage/topics.candidate"
+          cp -a "$backup/research.original" "$backup/stage/research.candidate"
+          python3 -m py_compile "$backup/stage/repeat_links_and_seo.py"
+          python3 "$backup/stage/repeat_links_and_seo.py" \
+            --home "$web/index.html" \
+            --topics "$backup/stage/topics.candidate" \
+            --research "$backup/stage/research.candidate" \
+            --robots "$backup/robots.original.txt" --robots-output "$backup/stage/robots.candidate.txt"
+          test "$(find "$backup/stage/topics.candidate" -type f -name index.html | wc -l)" -eq 546
+          test "$(find "$backup/stage/research.candidate" -type f -name index.html | wc -l)" -eq 60
+          diff -u "$backup/robots.original.txt" "$backup/stage/robots.candidate.txt" | tail -12 || test "$?" -eq 1
+          (cd "$web";sha256sum -c --status "$backup/protected.sha256")
+          echo ALL_605_PAGE_CONTENT_METADATA_LINKS_AUDITED=yes
+          REMOTE
+      - name: Swap scoped HTML and robots with live HTTP verification and full rollback
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/repeat-seo"
+          ssh -F "$d/config" saeit-cpanel bash -s -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1"; web="$HOME/public_html"; backup="$HOME/.backups/zomorod-repeat-605-seo/$sha"
+          topics="$web/topics"; research="$web/research/directory"; robots="$web/robots.txt"
+          test -d "$topics" && test -d "$research" && test -f "$robots"
+          cmp -s "$robots" "$backup/robots.original.txt"
+          (cd "$web";sha256sum -c --status "$backup/protected.sha256")
+          t_moved=0;t_new=0;r_moved=0;r_new=0;robots_swapped=0
+          rollback() {
+            set +e
+            if test "$robots_swapped" = 1;then
+              cp -p "$backup/robots.original.txt" "$web/.robots-rollback.$sha"
+              mv -f "$web/.robots-rollback.$sha" "$robots"
+            fi
+            if test "$r_new" = 1 && test -d "$research";then
+              mv "$research" "$backup/research-failed.$sha"
+            fi
+            if test "$r_moved" = 1 && test -d "$backup/research-live-original";then
+              mv "$backup/research-live-original" "$research"
+            fi
+            if test "$t_new" = 1 && test -d "$topics";then
+              mv "$topics" "$backup/topics-failed.$sha"
+            fi
+            if test "$t_moved" = 1 && test -d "$backup/topics-live-original";then
+              mv "$backup/topics-live-original" "$topics"
+            fi
+            echo REPEAT_SEO_ROLLBACK=attempted
+          }
+          trap 'rc=$?;trap - EXIT;rollback;exit "$rc"' EXIT
+          t_moved=1
+          mv "$topics" "$backup/topics-live-original"
+          t_new=1
+          mv "$backup/stage/topics.candidate" "$topics"
+          r_moved=1
+          mv "$research" "$backup/research-live-original"
+          r_new=1
+          mv "$backup/stage/research.candidate" "$research"
+          cp -p "$backup/stage/robots.candidate.txt" "$web/.robots-next.$sha"
+          chmod --reference="$robots" "$web/.robots-next.$sha"
+          robots_swapped=1
+          mv -f "$web/.robots-next.$sha" "$robots"
+          for route in / /topics/ /topics/zm-r01/wheat/ /topics/zm-r08/plant-genetics/ /topics/zm-r13/artificial-intelligence/ /topics/zm-r22/gold-assaying/ /research/directory/units/molecular-genetics/ /research/directory/centers/functional-foods/ /about/ /company/ /tala/;do
+            status="$(curl -sSL --max-time 20 -o "$backup/http-check.html" -w '%{http_code}' "https://zomorodmelal.ir$route?repeat=$sha" || true)"
+            echo LIVE_HTTP_ROUTE="$route" STATUS="$status"
+            test "$status" = 200
+            case "$route" in
+              /topics/zm-r*/*/|/research/directory/*/*/)
+                grep -Fq "zm-card-repeat-audit-related-20261018" "$backup/http-check.html"
+                grep -Fq 'application/ld+json' "$backup/http-check.html"
+                ;;
+            esac
+          done
+          code="$(curl -sSL --max-time 20 -o "$backup/live-robots.txt" -w '%{http_code}' "https://zomorodmelal.ir/robots.txt?repeat=$sha" || true)"
+          test "$code" = 200
+          grep -Fxq 'Sitemap: https://zomorodmelal.ir/topics/sitemap.xml' "$backup/live-robots.txt"
+          grep -Fxq 'Sitemap: https://zomorodmelal.ir/sitemap.xml' "$backup/live-robots.txt"
+          (cd "$web";sha256sum -c --status "$backup/protected.sha256")
+          test "$(find "$topics" -type f -name index.html | wc -l)" -eq 546
+          test "$(find "$research" -type f -name index.html | wc -l)" -eq 60
+          trap - EXIT
+          echo ALL_605_CARD_DESTINATIONS=preserved
+          echo ALL_605_SEO_SCHEMAS_AND_METAS=verified
+          echo ALL_605_PAGES_INTERLINKED=published
+          echo ROBOTS_ANNOUNCES_BOTH_SITEMAPS=yes
+          echo SUBSITES_AND_HOMEPAGE_UNCHANGED=yes
+          echo REPEAT_MISSION_SUCCESS=yes
+          REMOTE
+      - name: Remove transient connection material
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/repeat-seo"
