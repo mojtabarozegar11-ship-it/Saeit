@@ -1,0 +1,200 @@
+name: Repair Zomorod indexed pages and canonical SEO (protected)
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/zomorod-index-repair-v1-20261018.yml"
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-20261018-index-repair-atomic
+  cancel-in-progress: false
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - uses: actions/checkout@v4
+      - name: Verify safe source locally before remote access
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile content/zomorod-index-repair-v1/repair.py content/zomorod-v7/apply_skin.py
+          grep -Fq "assert len(targets)==60" content/zomorod-index-repair-v1/repair.py
+          grep -Fq 'ORIGINAL_BYTES_PRESERVED=1' content/zomorod-index-repair-v1/repair.py
+          grep -Fq "'tala'" content/zomorod-index-repair-v1/repair.py
+          echo REPAIR_SOURCE_PREFLIGHT=passed
+      - name: Stage repair scripts privately and verify protected baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1";web="$HOME/public_html";backup="$HOME/.backups/zomorod-index-repair-v1/$sha"
+          test -s "$web/index.html" && test -s "$web/.htaccess"
+          test ! -L "$web" && test ! -L "$web/index.html" && test ! -L "$web/.htaccess"
+          test ! -e "$web/robots.txt" && test ! -e "$web/sitemap.xml"
+          test ! -L "$web/robots.txt" && test ! -L "$web/sitemap.xml"
+          test ! -e "$backup"
+          mkdir -p "$(dirname "$backup")"
+          mkdir -m 700 "$backup"
+          mkdir -m 700 "$backup/source"
+          echo UNTOUCHED_PRODUCTION_PRECHECK=passed
+          REMOTE
+          tar -cf - -C content/zomorod-index-repair-v1 repair.py |
+            ssh -F "$d/config" saeit-cpanel "tar -xf - -C /home/zomorod2/.backups/zomorod-index-repair-v1/$GITHUB_SHA/source"
+          tar -cf - -C content/zomorod-v7 apply_skin.py |
+            ssh -F "$d/config" saeit-cpanel "tar -xf - -C /home/zomorod2/.backups/zomorod-index-repair-v1/$GITHUB_SHA/source"
+      - name: Stage 61 pages, robots and sitemap; make byte-exact backup
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1";web="$HOME/public_html";b="$HOME/.backups/zomorod-index-repair-v1/$sha"
+          python3 -m py_compile "$b/source/repair.py" "$b/source/apply_skin.py"
+          python3 "$b/source/repair.py" "$web" "$b/candidate" "$b/source/apply_skin.py" | tee "$b/prepare.log"
+          python3 - "$b/candidate/manifest.json" "$b/paths.txt" <<'PY'
+          import json,sys
+          from pathlib import Path
+          manifest=json.loads(Path(sys.argv[1]).read_text(encoding='utf-8'))
+          paths=[r['path'] for r in manifest['pages']]
+          assert len(paths)==61 and len(set(paths))==61
+          assert sum(p.startswith('research/directory/') for p in paths)==60
+          assert set(p for p in paths if not p.startswith('research/directory/'))=={'search/index.html'}
+          assert 85 <= manifest['sitemap_count'] <= 120
+          Path(sys.argv[2]).write_text('\n'.join(paths)+'\n',encoding='utf-8')
+          print('STRICT_OWNERSHIP_AND_SEO_PREFLIGHT=passed',len(paths))
+          PY
+          (cd "$web" && tar -cf "$b/original-pages.tar" -T "$b/paths.txt")
+          test -s "$b/original-pages.tar"
+          (cd "$web" && sha256sum $(cat "$b/paths.txt")) > "$b/original-pages.sha256"
+          (cd "$web" && sha256sum -c --status "$b/original-pages.sha256")
+          for file in "$web/index.html" "$web/.htaccess" "$web/about/index.html" "$web/company/index.html" "$web/agriculture/index.html" "$web/research/index.html";do sha256sum "$file";done > "$b/protected.sha256"
+          for sub in mohammad ghanadi amozeshgah tala business education site-heritage; do
+            for file in "$web/$sub/index.html" "$web/$sub/index.php";do
+              if test -f "$file";then sha256sum "$file" >> "$b/protected.sha256";fi
+            done
+          done
+          echo BACKUP_AND_CANDIDATE=validated
+          REMOTE
+      - name: Atomically publish strictly scoped changes and rollback on errors
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1";web="$HOME/public_html";b="$HOME/.backups/zomorod-index-repair-v1/$sha"
+          test -s "$b/original-pages.tar" && test -s "$b/candidate/manifest.json"
+          (cd "$web" && sha256sum -c --status "$b/original-pages.sha256")
+          sha256sum -c --status "$b/protected.sha256"
+          test ! -e "$web/sitemap.xml" && test ! -e "$web/robots.txt"
+          rollback(){
+            set +e
+            (cd "$web" && tar -xf "$b/original-pages.tar")
+            (cd "$web" && sha256sum -c --status "$b/original-pages.sha256")
+            for name in robots.txt sitemap.xml;do
+              if cmp -s "$web/$name" "$b/candidate/$name";then rm -f "$web/$name";fi
+            done
+            echo REPAIR_AUTO_ROLLBACK=original_html_restored
+          }
+          active=1
+          trap 'rc=$?;trap - EXIT;if test "$active" = 1;then rollback;fi;exit "$rc"' EXIT
+          while IFS= read -r rel;do
+            test -n "$rel"
+            old="$web/$rel";new="$b/candidate/$rel";temp="$web/$rel.zm-next-$sha"
+            test -f "$old" && test -s "$new" && test ! -e "$temp"
+            cp -p "$new" "$temp"
+            chmod --reference="$old" "$temp"
+            mv -f "$temp" "$old"
+          done < "$b/paths.txt"
+          for name in robots.txt sitemap.xml;do
+            temp="$web/.$name.next-$sha"
+            test ! -e "$temp" && test ! -e "$web/$name"
+            cp "$b/candidate/$name" "$temp"
+            chmod 644 "$temp"
+            mv -T "$temp" "$web/$name"
+          done
+          for path in / /about/ /company/ /research/ /research/directory/laboratories/molecular-genetics/ /research/directory/centers/genetics/ /search/ /robots.txt /sitemap.xml;do
+            file="$b/smoke.html"
+            code="$(curl -sS -L --connect-timeout 8 --max-time 30 -H 'Cache-Control: no-cache' -o "$file" -w '%{http_code}' "https://zomorodmelal.ir$path?release=$sha" || true)"
+            echo REPAIR_PUBLIC_HTTP="$path" CODE="$code"
+            test "$code" = 200
+            if [ "$path" = /robots.txt ];then grep -Fq 'Sitemap: https://zomorodmelal.ir/sitemap.xml' "$file";fi
+            if [ "$path" = /sitemap.xml ];then grep -Fq '<urlset' "$file";fi
+            if [ "$path" = /research/directory/laboratories/molecular-genetics/ ];then
+              grep -Fq 'zm-v7-header' "$file"
+              grep -Fq 'data-zm-v10="shared-theme"' "$file"
+            fi
+          done
+          sha256sum -c --status "$b/protected.sha256"
+          python3 - "$web" "$b/candidate/manifest.json" <<'PY'
+          import json,sys,hashlib
+          from pathlib import Path
+          web=Path(sys.argv[1]);m=json.loads(Path(sys.argv[2]).read_text())
+          for row in m['pages']:
+              target=web/row['path'];s=target.read_bytes()
+              assert hashlib.sha256(s).hexdigest()==row['new_sha256'],row['path']
+              assert b'zm-v7-header' in s and b'data-zm-v10="shared-theme"' in s
+          print('ALL_PATCHED_FILES_BYTE_VERIFIED',len(m['pages']))
+          print('SITEMAP_CANONICAL_PAGE_COUNT',m['sitemap_count'])
+          PY
+          active=0;trap - EXIT
+          echo REPAIR_PUBLISHED_AND_VERIFIED=yes
+          echo INDEPENDENT_SUBSITES_UNCHANGED=yes
+          echo REPAIR_BACKUP="$b/original-pages.tar"
+          REMOTE
+      - name: Clean temporary keys
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
