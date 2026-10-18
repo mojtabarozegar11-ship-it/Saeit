@@ -34,6 +34,8 @@ jobs:
           p='scripts/mojplaywin_about_team_isolated_patch_20261018.py'
           spec=importlib.util.spec_from_file_location('mpw',p)
           mpw=importlib.util.module_from_spec(spec);spec.loader.exec_module(mpw)
+          assert str(mpw.PAGE).endswith('/mpw-ten-editorials-20261018/pages/about.html')
+          assert mpw.EXPECTED_ACTIVE_SHA == 'd4bde18b261d87b288d75e91d72cd525c73bdcc9609aebce05a22096e6f9edb5'
           snippet=Path('content/mojplaywin_about_team_section_20261018.html').read_text('utf-8')
           assert len(snippet.encode())>=22000
           assert snippet.count('class="mpw-team-card"')==10
@@ -126,7 +128,7 @@ jobs:
           d="$RUNNER_TEMP/mojplaywin-team-ssh"
           scp -q -F "$d/config" content/mojplaywin_about_team_section_20261018.html \
             "saeit-cpanel:/home/zomorod2/.mpw-team-stage-$GITHUB_RUN_ID.html"
-      - name: Add team information only to existing exact About asset, with rollback snapshot
+      - name: Add team only to priority-routed About HTML asset with rollback snapshot
         id: install
         shell: bash
         run: |
