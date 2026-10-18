@@ -106,7 +106,13 @@ jobs:
           "$python_path" -c 'import django, environ, rest_framework, whitenoise'
           cd "$app"
           "$python_path" manage.py check
-          "$python_path" manage.py migrate --check
+          if ! "$python_path" manage.py migrate --check; then
+            echo "SITE_AGENT_MIGRATIONS_PENDING=yes"
+            "$python_path" manage.py showmigrations --plan | tail -n 60
+            echo "SITE_AGENT_CYCLE_HALTED_NO_DATABASE_WRITES=yes"
+            exit 1
+          fi
+          echo "SITE_AGENT_MIGRATIONS_PENDING=no"
           echo "SITE_AGENT_RUNTIME=ready"
           REMOTE
       - name: Run one bounded, approval-gated site cycle
