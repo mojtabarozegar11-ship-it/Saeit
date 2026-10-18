@@ -9,7 +9,8 @@ from pathlib import Path
 import hashlib, json, os, re, stat, sys, tempfile
 
 ROOT=Path('/home/zomorod2/mojplaywin.com')
-PAGE=ROOT/'design-preview-20261017/complete-about-20261018.html'
+PAGE=ROOT/'design-preview-20261017/mpw-ten-editorials-20261018/pages/about.html'
+EXPECTED_ACTIVE_SHA='d4bde18b261d87b288d75e91d72cd525c73bdcc9609aebce05a22096e6f9edb5'
 HTACCESS=ROOT/'.htaccess'
 SECTION_MARKER='mpw-meet-team-20261018'
 EXISTING_MARKERS=('Original by Default','MPW_ABOUT_RESEARCH_80_20_V1',
@@ -43,12 +44,18 @@ def guard():
         die('About production file does not match known isolated layout')
     if not HTACCESS.is_file() or HTACCESS.is_symlink():die('Routing file absent or unsafe')
     rules=HTACCESS.read_text('utf-8',errors='replace')
-    if not all(x in rules for x in (
-        'MPW_EXACT_ABOUT_80_20_20261018',
-        'RewriteCond %{REQUEST_URI} ^/about/$',
-        'RewriteRule ^about/$ /design-preview-20261017/complete-about-20261018.html')):
-        die('Existing About route no longer points to exact isolated file')
+    active_cond='RewriteCond %{REQUEST_URI} ^/about/$'
+    active_rule='RewriteRule ^.*$ /design-preview-20261017/mpw-ten-editorials-20261018/pages/about.html [END,QSD]'
+    legacy_rule='RewriteRule ^about/$ /design-preview-20261017/complete-about-20261018.html [END,QSD]'
+    if not all(x in rules for x in ('MPW_ILLUSTRATED_TEN_PER_PAGE_20261018',active_cond,active_rule,legacy_rule)):
+        die('About routing no longer matches checked live publication priority')
+    if not (rules.index(active_cond)<rules.index(active_rule)<rules.index(legacy_rule)):
+        die('About rewrite precedence differs from read-only evidence')
+    if any(path.is_symlink() for path in (PAGE.parent,PAGE.parent.parent,PAGE.parent.parent.parent)):
+        die('Unexpected symlink parent for About target')
     original=PAGE.read_bytes()
+    if sha(original)!=EXPECTED_ACTIVE_SHA:
+        die('Active About file has changed from verified public baseline: do not overwrite')
     if not 50_000<=len(original)<=1_500_000:die('About content size outside safety bounds')
     old=original.decode('utf-8')
     for mark in EXISTING_MARKERS:
