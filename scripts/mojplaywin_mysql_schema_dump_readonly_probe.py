@@ -47,6 +47,10 @@ def check():
         "classification": "READ_ONLY_SCHEMA_DUMP_SOURCE_PREFLIGHT",
         "single_mysql_url": False,
         "schema_dumper_present": shutil.which("mariadb-dump") is not None and shutil.which("timeout") is not None,
+        "table_count": None,
+        "estimated_data_bytes": None,
+        "estimated_index_bytes": None,
+        "non_innodb_tables": None,
         "schema_dump_exit_ok": False,
         "bytes_drained_only_in_memory": 0,
         "elapsed_seconds": None,
@@ -65,6 +69,29 @@ def check():
     password = unquote(parsed.password or "")
     if not db or not user or not password:
         return result
+    if shutil.which("mariadb"):
+        query_args = [
+            "mariadb", "--no-defaults", "--batch", "--skip-column-names",
+            "--host=" + (parsed.hostname or "localhost"), "--user=" + user,
+            "--database=" + db, "--connect-timeout=8",
+            "--execute=SELECT COUNT(*), COALESCE(SUM(DATA_LENGTH),0), COALESCE(SUM(INDEX_LENGTH),0), COALESCE(SUM(ENGINE <> 'InnoDB'),0) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_TYPE='BASE TABLE'",
+        ]
+        if parsed.port:
+            query_args.append("--port=" + str(parsed.port))
+        try:
+            p = subprocess.run(
+                ["timeout", "15s", *query_args], capture_output=True,
+                env=dict(os.environ, MYSQL_PWD=password), timeout=18, check=False,
+            )
+            if p.returncode == 0 and len(p.stdout) < 200:
+                vals = [int(v) for v in p.stdout.decode("ascii").split()]
+                if len(vals) == 4 and all(v >= 0 for v in vals):
+                    result.update(dict(zip(
+                        ("table_count", "estimated_data_bytes", "estimated_index_bytes", "non_innodb_tables"),
+                        vals,
+                    )))
+        except (OSError, ValueError, UnicodeError, subprocess.TimeoutExpired):
+            pass
     args = ["mariadb-dump", "--no-defaults", "--no-data",
             "--single-transaction", "--quick", "--skip-lock-tables",
             "--default-character-set=utf8mb4", "--hex-blob",
