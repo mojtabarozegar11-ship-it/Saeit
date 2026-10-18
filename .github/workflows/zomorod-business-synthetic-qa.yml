@@ -2,7 +2,10 @@ name: Synthetic QA for Zomorod business accounting
 on:
   push:
     branches: [main]
-    paths: [".github/workflows/zomorod-business-synthetic-qa.yml"]
+    paths:
+      - ".github/workflows/zomorod-business-synthetic-qa.yml"
+      - "content/zomorod-business/app.php"
+      - "scripts/zomorod_business_synthetic_qa.py"
 permissions:
   contents: read
 jobs:
