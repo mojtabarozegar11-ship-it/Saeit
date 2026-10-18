@@ -23,6 +23,10 @@ on:
       - "scripts/mojplaywin_backup_vps_failure_readonly.py"
       - "tests/test_mojplaywin_backup_vps_failure_readonly.py"
       - "scripts/mojplaywin_isolated_restore_capabilities_readonly.py"
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/mojplaywin-crypto-activation-preflight-readonly-20261018.yml"
   workflow_dispatch:
 permissions:
   contents: read
@@ -31,7 +35,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   inspect-no-server-writes:
-    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/work/mojplaywin-main-store-readiness-20261018'
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && (github.ref == 'refs/heads/work/mojplaywin-main-store-readiness-20261018' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'work/mojplaywin-main-store-readiness-20261018'))
     runs-on: ubuntu-latest
     timeout-minutes: 6
     steps:
