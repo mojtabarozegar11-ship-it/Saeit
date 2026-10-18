@@ -1,0 +1,199 @@
+name: MojPlayWin team photo & profiles — exact About-only atomic release
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/mojplaywin-team-about-exact-release-20261018.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: mojplaywin-about-exact-static-prod
+  cancel-in-progress: false
+jobs:
+  add-team-to-about-only:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main' && github.event_name == 'push' && contains(github.event.head_commit.message, '[approved-mpw-team-about-20261018]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate isolated team payload and non-destructive atomic patcher
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mojplaywin_team_about_atomic_20261018.py
+          python3 - <<'PY'
+          from pathlib import Path
+          from importlib.machinery import SourceFileLoader
+          html=Path('content/mojplaywin_about_team_section_20261018.html').read_text('utf-8')
+          patcher=SourceFileLoader('mpw_team','scripts/mojplaywin_team_about_atomic_20261018.py').load_module()
+          assert html.count('data:image/avif;base64,')==1
+          assert html.count('class="mpw-team-card"')==10
+          assert 'AI-generated illustrations' in html
+          before='<!doctype html><html><main>Original by Default MPW_ABOUT_RESEARCH_80_20_V1 SPECIALISM 28 COMPLEMENTARY SPECIALISM 30 Mojtaba Roozegar</main></html>'
+          after=patcher.compose(before,html)
+          addon='\n<!-- MPW_TEAM_ADDON_V1 -->\n'+html+'\n'
+          assert after.decode('utf-8').replace(addon,'',1)==before
+          assert 'os.replace' in Path('scripts/mojplaywin_team_about_atomic_20261018.py').read_text()
+          print('TEAM_ADDON_SOURCE_AND_REVERSIBILITY_TEST=PASS')
+          PY
+      - name: Verify baseline About and protected subsite status before SSH
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from urllib.request import Request,urlopen
+          from urllib.error import HTTPError
+          import os,json
+          addresses=[
+            'https://mojplaywin.com/',
+            'https://mojplaywin.com/about/',
+            'https://mojplaywin.com/store/',
+            'https://mojplaywin.com/about/mojtaba-rozegar/',
+            'https://mojplaywin.com/mojtaba.roozegar/',
+            'https://mojplaywin.com/farnaz/',
+            'https://mojplaywin.com/saman/',
+            'https://mojplaywin.com/picm/']
+          result={}
+          for url in addresses:
+            req=Request(url,headers={'User-Agent':'MojPlayWinTeamSafeRelease/1.0','Cache-Control':'no-cache'})
+            try:
+              with urlopen(req,timeout=17) as r:
+                status=r.status
+                body=r.read(650000).decode('utf-8','replace') if url.endswith('/about/') else ''
+            except HTTPError as e:status=e.code;body=''
+            except Exception as e:raise SystemExit('BASELINE_UNAVAILABLE '+url+' '+type(e).__name__)
+            result[url]=status
+            print('BASELINE_ROUTE='+url+' '+str(status))
+            if status!=200:raise SystemExit('BASELINE_NOT_HEALTHY '+url)
+            if url.endswith('/about/'):
+              for marker in ('MPW_ABOUT_RESEARCH_80_20_V1','SPECIALISM 28','Original by Default'):
+                if marker not in body:raise SystemExit('ABOUT_BASELINE_EDITED '+marker)
+              if 'mpw-meet-team-20261018' in body:raise SystemExit('TEAM_ALREADY_PRESENT')
+          with open(os.environ['RUNNER_TEMP']+'/mpw-team-baseline.json','w') as f:json.dump(result,f)
+          PY
+      - name: Configure host-key-pinned private GitHub to VPS to cPanel relay
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-team-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Stage team HTML only in private account home
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-team-ssh"
+          scp -q -F "$d/config" content/mojplaywin_about_team_section_20261018.html \
+            "saeit-cpanel:/home/zomorod2/.mpw-team-stage-$GITHUB_RUN_ID.html"
+      - name: Atomically append and snapshot exactly one About HTML page
+        id: publish
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-team-ssh"
+          digest=$(sha256sum content/mojplaywin_about_team_section_20261018.html | awk '{print $1}')
+          timeout 60s ssh -T -F "$d/config" saeit-cpanel \
+            "python3 - install '$GITHUB_RUN_ID' '$digest'" \
+            < scripts/mojplaywin_team_about_atomic_20261018.py
+      - name: Verify public gallery, 10 profiles, company chapters and protected subsite status
+        id: smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from urllib.request import Request,urlopen
+          from urllib.error import HTTPError
+          import json,os,time,re
+          baseline=json.load(open(os.environ['RUNNER_TEMP']+'/mpw-team-baseline.json'))
+          url='https://mojplaywin.com/about/'
+          verified=False
+          for attempt in range(1,6):
+            try:
+              req=Request(url+'?_mpw_team='+os.environ['GITHUB_RUN_ID']+'-'+str(attempt),
+                          headers={'Cache-Control':'no-cache','User-Agent':'MojPlayWinTeamPostRelease/1.0'})
+              with urlopen(req,timeout=23) as r:
+                body=r.read(1500000).decode('utf-8','replace')
+                status=r.status
+              verified=(status==200 and
+                        body.count('id="mpw-meet-team-20261018"')==1 and
+                        body.count('class="mpw-team-card"')==10 and
+                        body.count('data:image/avif;base64,')==1 and
+                        all(x in body for x in ('MPW_ABOUT_RESEARCH_80_20_V1','SPECIALISM 28',
+                                               'COMPLEMENTARY SPECIALISM 30','Mojtaba Roozegar',
+                                               'Original by Default')) and
+                        len(re.findall(r'<h1\b',body,re.I))==1)
+              print('LIVE_TEAM_VERIFICATION_ATTEMPT='+str(attempt)+' success='+str(verified))
+              if verified:break
+            except Exception as e:print('LIVE_TEAM_RETRY='+type(e).__name__)
+            time.sleep(4)
+          if not verified:raise SystemExit('TEAM_ADDON_NOT_PUBLIC:ROLLBACK')
+          for url,old in baseline.items():
+            if url.endswith('/about/'):continue
+            req=Request(url,headers={'User-Agent':'MojPlayWinTeamSafeRelease/1.0','Cache-Control':'no-cache'})
+            try:
+              with urlopen(req,timeout=21) as r:status=r.status
+            except HTTPError as e:status=e.code
+            print('PROTECTED_SUBSITE='+url+' before='+str(old)+' after='+str(status))
+            if status!=old:raise SystemExit('PROTECTED_ROUTE_CHANGED '+url)
+          print('MPW_TEAM_PUBLICATION_AND_SUBSITE_SAFETY=VERIFIED')
+          PY
+          d="$RUNNER_TEMP/mpw-team-ssh"
+          timeout 35s ssh -T -F "$d/config" saeit-cpanel \
+            "python3 - status '$GITHUB_RUN_ID'" < scripts/mojplaywin_team_about_atomic_20261018.py
+      - name: Roll back only added About team section if smoke failed
+        if: failure() && steps.publish.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-team-ssh"
+          timeout 60s ssh -T -F "$d/config" saeit-cpanel \
+            "python3 - rollback '$GITHUB_RUN_ID'" < scripts/mojplaywin_team_about_atomic_20261018.py
+      - name: Remove only temporary team file from private staging
+        if: always()
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/mpw-team-ssh"
+          if test -f "$d/config"; then
+            timeout 25s ssh -T -F "$d/config" saeit-cpanel \
+              "test ! -L /home/zomorod2/.mpw-team-stage-$GITHUB_RUN_ID.html && rm -f -- /home/zomorod2/.mpw-team-stage-$GITHUB_RUN_ID.html" || true
+          fi
