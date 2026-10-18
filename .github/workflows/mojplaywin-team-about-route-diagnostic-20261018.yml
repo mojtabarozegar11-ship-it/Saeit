@@ -1,0 +1,107 @@
+name: MojPlayWin read-only diagnosis of About published route and cache
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/mojplaywin-team-about-route-diagnostic-20261018.yml'
+permissions:
+  contents: read
+jobs:
+  inspect:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compare public About route, direct static target and response cache headers
+        shell: bash
+        run: |
+          python3 - <<'PY2'
+          from urllib.request import Request,urlopen
+          from urllib.error import HTTPError
+          from hashlib import sha256
+          import json,time
+          origin='https://mojplaywin.com'
+          urls=['/about/','/about/?_team_probe=20261018-run-'+str(int(time.time())),
+                '/design-preview-20261017/complete-about-20261018.html',
+                '/design-preview-20261017/complete-about-20261018.html?_team_probe=uncached-'+str(int(time.time()))]
+          for path in urls:
+            try:
+              with urlopen(Request(origin+path,headers={'User-Agent':'MPWTeamRouteReadonly/1.0','Cache-Control':'no-cache','Pragma':'no-cache'}),timeout=25) as response:
+                body=response.read(1600000)
+                obj={'path':path,'status':response.status,'bytes':len(body),'sha256':sha256(body).hexdigest(),
+                     'about_marker':b'MPW_ABOUT_RESEARCH_80_20_V1' in body,'current_team_marker':b'mpw-meet-team-20261018' in body,
+                     'title_mpw':b'About MojPlayWin | Research, Technology, Games' in body,
+                     'headers':{k:response.headers.get(k) for k in ['Age','Cache-Control','ETag','Last-Modified','CF-Cache-Status','X-Cache','Server','Vary','Content-Type']}}
+                print('ROUTE_PUBLIC='+json.dumps(obj,sort_keys=True))
+            except Exception as e:print('ROUTE_PROBE_ERROR='+path+' '+type(e).__name__+':'+str(e)[:120])
+          PY2
+      - name: Establish locked host-key verified GitHub to VPS relay to cPanel
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-team-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          mv "$d/host.candidate" "$d/host.known"
+          echo 'PINNED_TEAM_RELAY_READY'
+      - name: Inspect only the exact known static asset and routing fingerprint on cPanel
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-team-ssh"
+          timeout 50s ssh -T -F "$d/config" saeit-cpanel python3 - <<'PY2'
+          from pathlib import Path
+          from hashlib import sha256
+          import json,re
+          root=Path('/home/zomorod2/mojplaywin.com')
+          for path in (root/'design-preview-20261017/complete-about-20261018.html',root/'.htaccess',root/'about',root/'about/index.html'):
+            info={'path':str(path),'is_file':path.is_file(),'is_dir':path.is_dir(),'is_symlink':path.is_symlink()}
+            if path.is_file() and not path.is_symlink():
+              raw=path.read_bytes()
+              info.update({'sha256':sha256(raw).hexdigest(),'size':len(raw)})
+              if path.name.endswith('.html'):
+                info.update({'team_present':b'mpw-meet-team-20261018' in raw,'research_present':b'MPW_ABOUT_RESEARCH_80_20_V1' in raw})
+              if path.name=='.htaccess':
+                src=raw.decode('utf-8','replace')
+                info['about_rewrite_directives']=[line.strip()[:260] for line in src.splitlines() if 'MPW_EXACT_ABOUT' in line or 'RewriteRule ^about/' in line or 'REQUEST_URI} ^/about/' in line]
+            print('ROUTE_DISK='+json.dumps(info,sort_keys=True))
+          PY2
