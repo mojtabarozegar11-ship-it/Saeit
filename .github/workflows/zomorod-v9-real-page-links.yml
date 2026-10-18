@@ -1,0 +1,207 @@
+name: Zomorod V9 unique real page links in specialist shelves
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/zomorod-v9-real-page-links.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-v9-homepage-only
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Python updater and V8 fixture without server changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile content/zomorod-v9/zomorod_v9_link_real_pages.py
+          test -s content/zomorod-v8/zomorod_v8_rows_and_logo.py
+          test -s content/zomorod-v6-20261018/index.html
+          python3 - <<'PY'
+          from pathlib import Path
+          import sys
+          source=Path('content/zomorod-v6-20261018/index.html').read_text()
+          assert source.lstrip().startswith('<!doctype html>')
+          assert 'window.ZOMOROD_ORBIT_DATA=' in source
+          add='<a class="zm-v7-home-logo" href="/company/" aria-label="معرفی شرکت زمرد ملل"><img src="/static/site/zomorod-v7/company-logo.webp" alt="لوگو"></a>'
+          source=source.replace('<body>','<body><!-- zm-unified-v7-20261018 -->'+add,1)
+          path=Path('/tmp/zomorod-v9-fixture.html')
+          path.write_text(source)
+          PY
+          python3 content/zomorod-v8/zomorod_v8_rows_and_logo.py /tmp/zomorod-v9-fixture.html --output /tmp/zomorod-v9-base.html
+          python3 content/zomorod-v9/zomorod_v9_link_real_pages.py /tmp/zomorod-v9-base.html --output /tmp/zomorod-v9-verified.html
+          grep -Fq 'V9_VALIDATED' /tmp/zomorod-v9-verified.html || test -s /tmp/zomorod-v9-verified.html
+          echo V9_REPO_TEST=passed
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - name: Backup live V8 root and fingerprint all protected existing pages
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1";web="$HOME/public_html"
+          backup="$HOME/.backups/zomorod-v9-real-pages/$sha"
+          test ! -e "$backup" && test -s "$web/index.html"
+          test ! -L "$web/index.html" && test -f "$web/.htaccess"
+          grep -Fq 'zm-v8-26-rows-single-official-logo-20261018' "$web/index.html"
+          ! grep -Fq 'zm-v9-real-pages-unique-links-20261018' "$web/index.html"
+          test -s "$web/static/site/zomorod-v7/company-logo.webp"
+          mkdir -p "$(dirname "$backup")"
+          mkdir -m 700 "$backup"
+          mkdir -m 700 "$backup/staging"
+          cp -p "$web/index.html" "$backup/index.v8.original.html"
+          cmp -s "$web/index.html" "$backup/index.v8.original.html"
+          sha256sum "$web/index.html" > "$backup/root-original.sha256"
+          sha256sum "$web/.htaccess" "$web/static/site/zomorod-v7/company-logo.webp" > "$backup/protected.sha256"
+          for sub in company about agriculture industry research knowledge services economy market studio agents contact blog news weather business tala mohammad ghanadi amozeshgah; do
+            if test -f "$web/$sub/index.html"; then sha256sum "$web/$sub/index.html" >> "$backup/protected.sha256"; fi
+            if test -f "$web/$sub/index.php"; then sha256sum "$web/$sub/index.php" >> "$backup/protected.sha256"; fi
+          done
+          echo V9_ORIGINAL_BACKUP=verified
+          REMOTE
+          tar -cf - -C content/zomorod-v9 zomorod_v9_link_real_pages.py |
+            ssh -F "$d/config" saeit-cpanel "tar -xf - -C /home/zomorod2/.backups/zomorod-v9-real-pages/$GITHUB_SHA/staging"
+      - name: Validate all links and render updated homepage privately
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1";web="$HOME/public_html";backup="$HOME/.backups/zomorod-v9-real-pages/$sha"
+          (cd "$web" && sha256sum -c --status "$backup/root-original.sha256")
+          python3 -m py_compile "$backup/staging/zomorod_v9_link_real_pages.py"
+          python3 "$backup/staging/zomorod_v9_link_real_pages.py" "$backup/index.v8.original.html" --output "$backup/index.v9.candidate.html" > "$backup/v9-verification.log"
+          grep -Fq 'V9_VALIDATED=26 rows; 38 unique real page links; 25 added cards; 545 total cards' "$backup/v9-verification.log"
+          python3 - "$backup/index.v9.candidate.html" <<'PY'
+          import sys,json,re
+          txt=open(sys.argv[1],encoding='utf-8').read()
+          doc=json.loads(re.search(r'window\.ZOMOROD_ORBIT_DATA=(\{.*?\});</script>',txt,re.S).group(1))
+          assert len(doc['rows'])==26
+          for slug,path in [('هواشناسی','/weather/'),('اقتصاد','/economy/'),('بازار','/market/'),('استودیو','/studio/')]:
+            hits=[c for r in doc['rows'] for c in r['cards'] if c['title']==slug and c.get('canonicalUrl')==path]
+            assert len(hits)==1,(slug,len(hits))
+          assert doc['rows'][-2]['title']=='شرکت، رسانه و ارتباطات'
+          assert doc['rows'][-1]['title']=='اخبار شرکت'
+          assert txt.count('src="/static/site/zomorod-v7/company-logo.webp"')==1
+          assert 'const a=el(' in txt and 'href:topic.canonicalUrl||dest' in txt
+          print('V9_STAGED_MANIFEST=validated')
+          PY
+          for p in /economy/ /market/ /studio/ /weather/ /business/ /company/ /about/; do
+            code="$(curl -sS -L --max-time 16 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir$p" || true)"
+            echo V9_REAL_DEST="$p" HTTP="$code"
+            test "$code" = 200
+          done
+          echo V9_PRIVATE_CANDIDATE=validated
+          REMOTE
+      - name: Atomically publish only homepage and roll back if any health check fails
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1";web="$HOME/public_html";backup="$HOME/.backups/zomorod-v9-real-pages/$sha"
+          (cd "$web" && sha256sum -c --status "$backup/root-original.sha256")
+          test -s "$backup/index.v9.candidate.html"
+          rollback(){
+            set +e
+            cp -p "$backup/index.v8.original.html" "$web/index.html.v9-rollback.$sha"
+            mv -f "$web/index.html.v9-rollback.$sha" "$web/index.html"
+            (cd "$web" && sha256sum -c --status "$backup/root-original.sha256")
+            echo V9_AUTO_ROLLBACK=original_home_restored
+          }
+          active=1
+          trap 'rc=$?;trap - EXIT;if test "$active" = 1;then rollback;fi;exit "$rc"' EXIT
+          cp -p "$backup/index.v9.candidate.html" "$web/index.html.v9-next.$sha"
+          chmod --reference="$web/index.html" "$web/index.html.v9-next.$sha"
+          mv -f "$web/index.html.v9-next.$sha" "$web/index.html"
+          code="$(curl -sS -L --max-time 35 -H 'Cache-Control: no-cache' -o "$backup/index.v9.live.html" -w '%{http_code}' "https://zomorodmelal.ir/?v9=$sha" || true)"
+          echo V9_ROOT_HTTP="$code"
+          test "$code" = 200
+          grep -Fq 'zm-v9-real-pages-unique-links-20261018' "$backup/index.v9.live.html"
+          grep -Fq 'href:topic.canonicalUrl||dest' "$backup/index.v9.live.html"
+          grep -Fq 'تمام حقوق مادی و معنوی سایت برای شرکت کشت و صنعت زمرد ملل محفوظ است' "$backup/index.v9.live.html"
+          python3 - "$backup/index.v9.live.html" <<'PY'
+          import json,re,sys
+          txt=open(sys.argv[1],encoding='utf-8').read()
+          d=json.loads(re.search(r'window\.ZOMOROD_ORBIT_DATA=(\{.*?\});</script>',txt,re.S).group(1))
+          rows=d['rows']
+          assert len(rows)==26 and sum(len(r['cards']) for r in rows)==545
+          urls=[c['canonicalUrl'] for r in rows for c in r['cards'] if c.get('canonicalUrl')]
+          assert len(urls)==len(set(urls))==38
+          for title,url in [('اقتصاد','/economy/'),('بازار','/market/'),('استودیو','/studio/'),('هواشناسی','/weather/')]:
+            hits=[c for r in rows for c in r['cards'] if c['title']==title and c.get('canonicalUrl')==url]
+            assert len(hits)==1
+          assert rows[-2]['title']=='شرکت، رسانه و ارتباطات'
+          print('V9_PUBLIC_LINKS_UNIQUE=38')
+          print('V9_PUBLIC_TOPICS=545')
+          PY
+          for path in /company/ /about/ /industry/ /agriculture/ /business/ /mohammad/ /ghanadi/ /amozeshgah/ /tala/; do
+            s="$(curl -sS -L --max-time 16 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir$path" || true)"
+            echo V9_PROTECTED_ROUTE="$path" HTTP="$s"
+            test "$s" = 200
+          done
+          (cd "$web" && sha256sum -c --status "$backup/protected.sha256")
+          active=0;trap - EXIT
+          echo V9_PUBLISHED=yes
+          echo V9_OTHER_SITES_UNCHANGED=yes
+          echo V9_BACKUP="$backup/index.v8.original.html"
+          REMOTE
+      - name: Purge runner SSH keys
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
