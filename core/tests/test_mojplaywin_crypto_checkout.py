@@ -199,3 +199,42 @@ def test_timely_chain_payment_can_be_verified_after_expiry(client, buyer, priced
         with patch("core.mojplaywin_crypto_gateway._verify_invoice", return_value=Proof(123456, 20, proof_time)):
             assert settle(invoice.pk, "0x" + "c" * 64).status == "paid"
         assert LedgerEntry.objects.count() == 1
+
+
+
+@pytest.mark.django_db
+def test_invoice_status_is_private_and_does_not_mark_payment(client, buyer, priced_offer, django_user_model):
+    offer, folder = priced_offer
+    with override_settings(
+        ALLOWED_HOSTS=["mojplaywin.com", "zomorodmelal.ir"],
+        MOJPLAYWIN_CRYPTO_ENABLED=True,
+        MOJPLAYWIN_PRIVATE_ASSET_ROOT=str(folder),
+        MOJPLAYWIN_ETH_ADDRESS="0x" + "1" * 40,
+        MOJPLAYWIN_ETH_RPC_URL="https://eth.example.org",
+    ):
+        client.force_login(buyer)
+        response = client.post(f"/checkout/crypto/buy/{offer.pk}/", HTTP_HOST="mojplaywin.com")
+        assert response.status_code == 302
+        invoice = MojCryptoInvoice.objects.get()
+        url = f"/checkout/crypto/invoice/{invoice.token}/status/"
+        visible = client.get(url, HTTP_HOST="mojplaywin.com")
+        assert visible.status_code == 200
+        assert visible.json()["paid"] is False
+        assert visible.json()["status"] == "awaiting_payment"
+        assert visible["Cache-Control"] == "private, no-store"
+        assert "merchant_address" not in visible.json()
+        stranger = django_user_model.objects.create_user(username="stranger-buyer", password="safe-test-password")
+        client.force_login(stranger)
+        assert client.get(url, HTTP_HOST="mojplaywin.com").status_code == 404
+        assert client.get(url, HTTP_HOST="zomorodmelal.ir").status_code == 404
+        assert LedgerEntry.objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_gateway_landing_requires_live_enablement(client):
+    with override_settings(ALLOWED_HOSTS=["mojplaywin.com"], MOJPLAYWIN_CRYPTO_ENABLED=False):
+        assert client.get("/checkout/crypto/", HTTP_HOST="mojplaywin.com").status_code == 404
+    with override_settings(ALLOWED_HOSTS=["mojplaywin.com"], MOJPLAYWIN_CRYPTO_ENABLED=True):
+        res = client.get("/checkout/crypto/", HTTP_HOST="mojplaywin.com")
+        assert res.status_code == 302
+        assert res["Location"] == "/store/#verified-crypto-offers"
