@@ -28,8 +28,8 @@ jobs:
           filenames=(
             "command_center/mpw_v91_agent_metrics.py",
             "command_center/mpw_v91_agent_views.py",
-    "command_center/mpw_v11_site_agent_charts.py",
-    "mpw_v91_port/site_health_v11.py",
+            "command_center/mpw_v11_site_agent_charts.py",
+            "mpw_v91_port/site_health_v11.py",
             "command_center/templates/command_center/mpw_v91_agent_performance.html",
             "command_center/templates/command_center/dashboard.html",
             "command_center/views.py",
