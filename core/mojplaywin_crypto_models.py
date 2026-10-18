@@ -1,6 +1,6 @@
 """MojPlayWin-only native-asset offers and immutable checkout quotations."""
 import uuid
-from django.core.validators import MinValueValidator
+from django.core.validators import RegexValidator
 from django.db import models
 from .models import T
 
@@ -9,7 +9,7 @@ class MojCryptoOffer(T):
     """Price explicitly set by the merchant in smallest on-chain units."""
     product = models.ForeignKey("core.Product", on_delete=models.PROTECT, related_name="moj_crypto_offers")
     asset = models.CharField(max_length=3, choices=[("ETH", "ETH (Ethereum)"), ("TRX", "TRX (TRON)")])
-    atomic_amount = models.DecimalField(max_digits=40, decimal_places=0, validators=[MinValueValidator(1)])
+    atomic_amount = models.CharField(max_length=40, validators=[RegexValidator(regex=r"^[1-9][0-9]{0,39}$")])
     active = models.BooleanField(default=False)
     # Files live OUTSIDE any served webroot; this is an optional relative path inside the private folder.
     private_file = models.CharField(max_length=300, blank=True, default="")
@@ -26,7 +26,7 @@ class MojCryptoInvoice(T):
     order = models.OneToOneField("core.Order", on_delete=models.PROTECT, related_name="moj_crypto_invoice")
     offer = models.ForeignKey(MojCryptoOffer, on_delete=models.PROTECT, related_name="invoices")
     asset = models.CharField(max_length=3)
-    atomic_amount = models.DecimalField(max_digits=40, decimal_places=0)
+    atomic_amount = models.CharField(max_length=40)
     merchant_address = models.CharField(max_length=100)
     status = models.CharField(max_length=24, default="awaiting_payment")
     tx_hash = models.CharField(max_length=66, null=True, blank=True, unique=True)
