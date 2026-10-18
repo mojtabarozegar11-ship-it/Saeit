@@ -5,6 +5,7 @@ from django.views.decorators.http import require_GET
 from mpw_v91_port.runtime import valid_main_host
 from .mpw_v91_agent_metrics import snapshot
 from .mpw_v11_site_agent_charts import site_agent_chart_rows
+from .mpw_quality_review_charts import quality_review_chart_rows
 
 @staff_member_required
 @require_GET
@@ -16,7 +17,9 @@ def private_mpw_agent_metrics(request):
     # remain tenant-isolated, but appear together only in the private panel.
     site_rows=site_agent_chart_rows()
     payload["agents"].extend(site_rows)
+    payload["agents"].extend(quality_review_chart_rows())
     payload["recovered_site_monitor_count"]=len(site_rows)
+    payload["editorial_quality_agent_count"]=1
     if payload["state"]=="unavailable" and any(row["history_available"] for row in site_rows):
         payload["state"]="site_monitoring_only"
     answer=JsonResponse(payload)
