@@ -1,0 +1,59 @@
+name: MojPlayWin header visual geometry (read only)
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/mojplaywin-header-visual-audit-20261018.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  browser-layout:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Install isolated browser automation dependency
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/mpw-browser"
+          cd "$RUNNER_TEMP/mpw-browser"
+          npm --silent init -y >/dev/null
+          npm --silent install --no-save playwright@1.55.0
+          npx playwright install chromium
+      - name: Check computed geometry at desktop and mobile widths without writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/mpw-browser"
+          cat > inspect.js <<'JS'
+          const { chromium } = require('playwright');
+          (async()=>{
+            const browser = await chromium.launch({headless:true, args:['--no-sandbox']});
+            for (const width of [1440,1024,768,390,320]) {
+              const page=await browser.newPage({viewport:{width,height:850},deviceScaleFactor:1});
+              await page.goto('https://mojplaywin.com/?__layout_check_20261018='+width,{waitUntil:'domcontentloaded',timeout:40000});
+              await page.waitForTimeout(700);
+              const data = await page.evaluate(()=>{
+                const names=['header.mw-site-nav','header.mw-site-nav nav','form.mpw-header-search-gold','form.mpw-header-search-gold input','a.mw-nav-cta[href="/store/"]','.mw-site-footer','main'];
+                const result={viewport:[innerWidth,innerHeight],documentWidth:document.documentElement.scrollWidth};
+                for(const s of names) {
+                  const el=document.querySelector(s);
+                  if(!el) {result[s]=null;continue;}
+                  const r=el.getBoundingClientRect(),c=getComputedStyle(el);
+                  result[s]={x:Math.round(r.x),y:Math.round(r.y),width:Math.round(r.width),height:Math.round(r.height),
+                    display:c.display,position:c.position,visibility:c.visibility,overflow:c.overflow,background:c.backgroundColor};
+                }
+                const a=result['form.mpw-header-search-gold'],f=result['.mw-site-footer'],h=result['header.mw-site-nav'];
+                result.searchIsAboveFooter=!!a&&!!f&&a.y+a.height <f.y;
+                result.searchIsInsideHeader=!!a&&!!h&&a.y>=h.y&&a.y+a.height<=h.y+h.height+2;
+                result.searchFitsViewport=!!a&&a.x>=-3&&a.x+a.width<=innerWidth+3;
+                return result;
+              });
+              console.log('MPW_BROWSER_LAYOUT '+JSON.stringify(data));
+              await page.close();
+            }
+            await browser.close();
+          })().catch(e=>{console.error('MPW_BROWSER_ERROR '+e.stack); process.exit(1)});
+          JS
+          node inspect.js
