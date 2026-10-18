@@ -1,0 +1,159 @@
+name: MojPlayWin two original digital books isolated live catalog publication
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/mpw-two-books-original-store-release-20261018.yml"]
+permissions: {contents: read}
+concurrency:
+  group: mojplaywin-only-two-book-store-template
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          ref: 523890d3da39c607a1f081a75c3d06e2e17df84e
+      - name: Test pinned isolated source and reversibility
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "523890d3da39c607a1f081a75c3d06e2e17df84e"
+          python3 -m py_compile scripts/mpw_two_books_main_store_isolated_publish_20261018.py
+          python3 - <<'PY'
+          import importlib.util
+          f='scripts/mpw_two_books_main_store_isolated_publish_20261018.py'
+          sp=importlib.util.spec_from_file_location('book_release',f)
+          m=importlib.util.module_from_spec(sp);sp.loader.exec_module(m)
+          existing=b'<div id="catalog">{{ products|length }}</div>{% include "mojplaywin/store_ten_buyer_guides_20261018.html" %}<p class="mw-note">Original catalog intact</p>'
+          revised=m.make(existing)
+          assert revised.count(b'id="mpw-sale-book72"')==1
+          assert revised.count(b'id="mpw-sale-book225"')==1
+          assert b'US $7.50' in revised and b'US $4.00' in revised
+          assert revised.replace((m.SNIPPET+'\n'+m.ANCHOR).encode(),m.ANCHOR.encode(),1)==existing
+          assert b'<form' not in m.SNIPPET.encode() and b'checkout/crypto' not in m.SNIPPET.encode()
+          try: m.make(revised)
+          except RuntimeError: pass
+          else: raise AssertionError('Duplicate publication was accepted')
+          assert m.STORE.as_posix().endswith('/Saeit-staging/core/templates/mojplaywin/store.html')
+          assert m.EXPECTED == '466dd7a61ebafb97d3f825e50134022092945dcb24c8d53c5411c0e941e64d26'
+          print('MPW_TWO_BOOKS_ISOLATED_TEMPLATE_TEST=PASS')
+          PY
+      - name: Check main store and child-site response baseline
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from urllib.request import Request,urlopen
+          from urllib.error import HTTPError
+          import json,os
+          base='https://mojplaywin.com'
+          paths=['/','/store/','/taniya/','/farnaz/','/saman/','/picm/','/zahra/','/mojtaba.roozegar/']
+          states={}
+          for path in paths:
+            req=Request(base+path,headers={'Cache-Control':'no-cache','User-Agent':'MPWTwoBooksExactRelease/1.0'})
+            try:
+              with urlopen(req,timeout=19) as r:code=r.status
+            except HTTPError as e:code=e.code
+            states[path]=code
+          for needed in ('/','/store/','/taniya/','/farnaz/','/saman/','/picm/'):
+            if states[needed]!=200:raise RuntimeError('Unhealthy protected site '+needed)
+          with open(os.environ['RUNNER_TEMP']+'/mpw-two-books-protected.json','w') as f:json.dump(states,f)
+          print('MPW_TWO_BOOKS_PROTECTED_BEFORE='+json.dumps(states))
+          PY
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Install exactly two book catalog cards in MojPlayWin main store only
+        id: install
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 120s ssh -T -F "$d/config" saeit-cpanel             "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - publish '$GITHUB_RUN_ID'"             < scripts/mpw_two_books_main_store_isolated_publish_20261018.py
+      - name: Verify public cards, correct prices, no checkout, and untouched child sites
+        id: smoke
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from urllib.request import Request,urlopen
+          from urllib.error import HTTPError
+          import json,os,time
+          root='https://mojplaywin.com'
+          ok=False
+          for i in range(5):
+            req=Request(root+'/store/?mpw_two_book_publication='+os.environ['GITHUB_RUN_ID']+'-'+str(i),
+                headers={'Cache-Control':'no-cache','Pragma':'no-cache','User-Agent':'MPWTwoBooksExactSmoke/1.0'})
+            with urlopen(req,timeout=25) as response:
+              body=response.read(900000).decode('utf8','replace')
+              status=response.status
+            ok=(status==200 and body.count('id="mpw-sale-book72"')==1
+                and body.count('id="mpw-sale-book225"')==1
+                and 'US $7.50' in body and 'US $4.00' in body
+                and 'Taniya and the Little Baker Worms' in body
+                and 'The Science and Practice of Chess Improvement' in body
+                and 'Payment is not open for these books yet.' in body
+                and 'id="catalog"' in body)
+            print('MPW_TWO_BOOKS_PUBLIC_SMOKE_ATTEMPT='+str(i+1)+' ok='+str(ok))
+            if ok:break
+            time.sleep(4)
+          if not ok:raise RuntimeError('Two book catalog was not verified live')
+          with open(os.environ['RUNNER_TEMP']+'/mpw-two-books-protected.json') as f:before=json.load(f)
+          after={}
+          for path in before:
+            req=Request(root+path,headers={'Cache-Control':'no-cache','User-Agent':'MPWTwoBooksExactRelease/1.0'})
+            try:
+              with urlopen(req,timeout=19) as r:status=r.status
+            except HTTPError as e:status=e.code
+            after[path]=status
+          if before!=after:raise RuntimeError('Protected-site response changed: '+str({k:[before[k],after[k]] for k in before if before[k]!=after[k]}))
+          print('MPW_TWO_BOOKS_PROTECTED_AFTER='+json.dumps(after))
+          print('MPW_TWO_BOOKS_CATALOG_VISIBLE_LIVE=yes;CRYPTO_CHECKOUT_ENABLED=no')
+          PY
+      - name: Revert book listing addition if live verification fails
+        if: failure() && steps.install.outcome == 'success'
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 110s ssh -T -F "$d/config" saeit-cpanel             "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - rollback '$GITHUB_RUN_ID'"             < scripts/mpw_two_books_main_store_isolated_publish_20261018.py
