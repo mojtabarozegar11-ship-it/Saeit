@@ -1,5 +1,5 @@
 from django.http import Http404
-from django.shortcuts import render
+from django.shortcuts import render, redirect
 
 FEATURES = [
  {"title":"Research & Innovation","text":"Evidence-led research, practical analysis, and ideas shaped into useful digital work.","image":"site/heroes/research.webp","url":"/research/"},
@@ -74,3 +74,10 @@ def platform_section(request, section):
   data=("Explore MojPlayWin","Explore research, learning, games, and useful digital projects.","site/heroes/platform-home.webp",[("Discover","Explore the work and ideas behind MojPlayWin."),("Learn","Find practical learning resources and guides."),("Get in touch","Discuss a research or digital project.")])
  title,lead,image,cards=data
  return render(request,"mojplaywin/section.html",{"section_title":title,"section_lead":lead,"section_image":image,"cards":cards,"ventures":VENTURES})
+
+
+def about(request):
+ """MojPlayWin-only About page; preserve the existing /about/ redirect on other hosts."""
+ if not _is_mojplaywin(request):
+  return redirect('company', permanent=True)
+ return render(request, 'mojplaywin/about.html')
