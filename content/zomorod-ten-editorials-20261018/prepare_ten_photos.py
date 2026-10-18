@@ -48,7 +48,7 @@ def main():
         if not (("publicdomain" in cc) or ("cc0" in cc) or ("pdm" in cc)):
             raise ValueError(f"Non-PD/CC0 image {name}: {lic}")
         imageurl=info.get("thumburl") or info.get("url")
-        if not imageurl or not imageurl.startswith("https://upload.wikimedia.org/"):
+        if not imageurl or not imageurl.startswith(("https://upload.wikimedia.org/","https://thumb.wikimedia.org/")):
             raise ValueError(f"No safe Wikimedia image URL for {name}; origin={str(imageurl)[:140]}")
         raw=retrieve(imageurl,limit=6000000)
         im=Image.open(io.BytesIO(raw))
