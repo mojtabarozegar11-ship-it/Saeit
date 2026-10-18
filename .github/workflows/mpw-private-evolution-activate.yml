@@ -1,4 +1,5 @@
 name: Activate MojPlayWin private continuous evolution (no public deployment)
+# Activation is scoped to an existing private cPanel tenant only; never the website.
 on:
   push:
     branches: ["feat/mpw-v91-agent-port-isolated-20261018"]
