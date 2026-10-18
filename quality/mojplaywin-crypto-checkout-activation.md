@@ -38,6 +38,22 @@ do not bypass it.
 8. USDT is NOT supported. It needs pinned token contracts, transfer-event decoding,
    decimals, double-spend and chain verification and separate merchant acceptance.
 
+## Read-only staging readiness command
+
+On the isolated staging clone, with environment variables injected securely, run:
+```sh
+python manage.py mojplaywin_crypto_preflight
+python manage.py mojplaywin_crypto_preflight --strict
+```
+This prints only booleans (not keys or wallet addresses), checking HTTPS settings,
+allowed hosts, minimum ETH/TRX confirmations, public address formatting, an HTTPS
+Ethereum RPC address, and a private download folder outside the project directory.
+
+**Important:** the result always returns `release_permitted=false` because static
+configuration cannot establish shared-site isolation, real recoverable backups,
+wallet ownership or successfully settled live transfers. Do not use a passing
+`--strict` check to skip those gates. The main deploy workflow remains stopped.
+
 ## Rate-limit controls added in PR #473
 
 Checkout security now uses atomic database-backed counters across worker processes:
