@@ -1,4 +1,4 @@
-name: Zomorod P0 to P3 ONE coordinated reversible production release
+name: Zomorod site-wide P0-P3 coordinated release v2
 on:
   push:
     branches: [main]
