@@ -1,0 +1,81 @@
+name: Zomorod glass card rows and click safety final read only QA
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/zomorod-glass-row-hit-test-20261018.yml]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 13
+    steps:
+      - name: Chromium inspect card rows separation, readability, click hit targets
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/glass-row-safety"
+          cd "$RUNNER_TEMP/glass-row-safety"
+          npm --silent init -y >/dev/null
+          npm --silent install --no-save playwright@1.55.0
+          npx playwright install chromium
+          cat > inspect.cjs <<'JS'
+          const {chromium}=require('playwright');
+          (async()=>{
+            const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
+            for(const width of [1440,768,390,320]){
+              const page=await browser.newPage({viewport:{width,height:900},deviceScaleFactor:1});
+              await page.goto('https://zomorodmelal.ir/?glass_rows_qa='+width,{waitUntil:'domcontentloaded',timeout:45000});
+              await page.locator('.topic-card').first().waitFor({timeout:18000});
+              await page.locator('.topic-card').first().scrollIntoViewIfNeeded({timeout:20000});
+              await page.waitForTimeout(450);
+              const metrics=await page.evaluate(()=>{
+                const rows=Array.from(document.querySelectorAll('.card-track'));
+                const shelves=Array.from(document.querySelectorAll('.orbit-shelf'));
+                const cards=Array.from(document.querySelectorAll('.topic-card'));
+                const first=cards[0];
+                const title=first.querySelector('.topic-name');
+                const r=first.getBoundingClientRect();
+                const t=title.getBoundingClientRect();
+                const x=Math.max(0,Math.min(innerWidth-1,t.left+t.width/2)),
+                  y=Math.max(0,Math.min(innerHeight-1,t.top+t.height/2));
+                const hit=document.elementFromPoint(x,y);
+                const hitCard=!!hit&&hit.closest('.topic-card')===first;
+                const rects=rows.map(e=>e.getBoundingClientRect());
+                const verticalGaps=[];
+                for(let i=1;i<rects.length;i++)
+                  verticalGaps.push(rects[i].top-rects[i-1].bottom);
+                const selected=first.matches('a[href]');
+                const screenshotSafe=!!title?.textContent?.trim();
+                const s=getComputedStyle(first),pseudo=getComputedStyle(first,'::after'),
+                  backdrop=getComputedStyle(document.body);
+                const validLinks=cards.every(c=>c.matches('a[href]')&&c.getAttribute('href'));
+                const horizontalTracks=rows.filter(e=>e.scrollWidth>e.clientWidth+20).length;
+                const protectedShell={
+                  orbit:!!document.getElementById('solar-stage'),
+                  logo:!!document.querySelector('.central-globe'),
+                  footer:!!document.getElementById('site-footer'),
+                  glass:!!document.getElementById('zm-glass-floating-cards-20261018'),
+                  fixed:!!document.getElementById('zm-fixed-scientific-background-20261018')
+                };
+                return {width:innerWidth,cardCount:cards.length,rowCount:rows.length,shelfCount:shelves.length,
+                  horizontalTracks,hitCard,hitTag:hit?.tagName,selected,screenshotSafe,
+                  validLinks,minRowGap:Math.min(...verticalGaps),maxRowGap:Math.max(...verticalGaps),
+                  firstCard:[r.width,r.height],titleBox:[t.width,t.height],
+                  afterPointer:pseudo.pointerEvents,afterContent:pseudo.content,
+                  cardAnimation:s.animationName,
+                  bodyFixed:backdrop.backgroundAttachment,protectedShell};
+              });
+              console.log('GLASS_ROW_HIT_TEST='+JSON.stringify(metrics));
+              if(metrics.cardCount!==605||metrics.rowCount!==29||metrics.shelfCount!==29||
+                metrics.horizontalTracks<20||metrics.minRowGap<-4||!metrics.hitCard||
+                !metrics.selected||!metrics.screenshotSafe||!metrics.validLinks||
+                metrics.afterPointer!=='none'||metrics.cardAnimation==='none'||
+                metrics.bodyFixed!=='fixed'||Object.values(metrics.protectedShell).some(v=>!v))
+                throw Error('Unacceptable row overlap/click target at '+width+': '+JSON.stringify(metrics));
+              await page.close();
+            }
+            await browser.close();
+            console.log('ROW_SPACING_CLICKABLE_READABLE_FIVE_MODES=passed');
+          })().catch(e=>{console.error(e.stack);process.exit(1)});
+          JS
+          node inspect.cjs
