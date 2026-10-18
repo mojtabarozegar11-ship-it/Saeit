@@ -1,0 +1,115 @@
+name: Zomorod bounded disposable package cache cleanup
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/zomorod-safe-package-cache-cleanup-20261018.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-safe-package-cache-cleanup
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - name: Delete disposable npm/pip/Gradle download caches only
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          test "$HOME" = /home/zomorod2
+          test -f "$HOME/Saeit/manage.py"
+          PYTHONDONTWRITEBYTECODE=1 python3 - <<'PY'
+          import os,stat,shutil,subprocess
+          from pathlib import Path
+          home=Path("/home/zomorod2")
+          paths=(".npm/_cacache",".npm/_npx",".cache/pip",".gradle/caches")
+          print("CLEANUP_KIND=disposable_download_caches_only")
+          total=0
+          for rel in paths:
+              p=home/rel
+              if not p.exists():
+                  print("CACHE_ABSENT="+rel)
+                  continue
+              assert p.is_dir() and not p.is_symlink()
+              assert p.resolve()==home/rel
+              assert all(not (home/".".join([])).is_symlink() for _ in ()) # no mutation outside allowlist
+              for ancestor in [p.parent, p]:
+                  if ancestor.is_symlink():
+                      raise RuntimeError("CACHE_COMPONENT_SYMLINK")
+              before=subprocess.run(["du","-sk",str(p)],capture_output=True,text=True,timeout=40,check=True)
+              kb=int(before.stdout.split()[0])
+              shutil.rmtree(p)
+              if p.exists():raise RuntimeError("CACHE_REMOVE_INCOMPLETE")
+              total+=kb*1024
+              print("CACHE_DELETED="+rel+" bytes_du="+str(kb*1024))
+          print("CACHE_FREED_ESTIMATE_BYTES="+str(total))
+          PY
+          echo 'POST_CACHE_CPANEL_QUOTA'
+          if command -v uapi >/dev/null 2>&1; then
+            uapi --output=json Quota get_quota_info 2>/dev/null | python3 -c 'import json,sys; j=json.load(sys.stdin).get("result",{}).get("data",{});print("POST_CACHE_MB_USED="+str(j.get("megabytes_used")));print("POST_CACHE_MB_LIMIT="+str(j.get("megabyte_limit")))' || true
+          fi
+          REMOTE
+      - name: Public smoke after cache cleanup
+        shell: bash
+        run: |
+          for path in / /agents/; do
+            status="$(curl -sS --max-time 16 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir$path" || true)"
+            echo "CACHE_POST_HEALTH=$path:$status"
+          done
+      - name: Remove runner SSH identities
+        if: always()
+        shell: bash
+        run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
