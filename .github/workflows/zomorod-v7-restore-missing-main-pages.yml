@@ -1,0 +1,152 @@
+name: Restore informational pages for Zomorod 503 routes with V7 skin
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/zomorod-v7-restore-missing-main-pages.yml"]
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-v7-static-route-rescue
+  cancel-in-progress: false
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate and render eight substantive static route pages
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile content/zomorod-v7/render_fallbacks.py
+          python3 content/zomorod-v7/render_fallbacks.py content/zomorod-v7/fallback-pages.json "$RUNNER_TEMP/zomorod-v7-static"
+          for r in economy market studio agents contact blog news weather; do
+            grep -Fq 'zm-unified-v7-20261018' "$RUNNER_TEMP/zomorod-v7-static/$r/index.html"
+            grep -Fq 'zm-v7-footer-copyright' "$RUNNER_TEMP/zomorod-v7-static/$r/index.html"
+          done
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - name: Refuse live directories and archive untouched site fingerprint
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          run="$1"; web="$HOME/public_html"
+          backup="$HOME/.backups/zomorod-v7-static-rescue/$run"
+          test ! -e "$backup" && test -s "$web/index.html"
+          mkdir -p "$(dirname "$backup")"
+          mkdir -m 700 "$backup"
+          for name in economy market studio agents contact blog news weather; do
+            test ! -e "$web/$name" && test ! -L "$web/$name"
+          done
+          sha256sum "$web/index.html" "$web/.htaccess" "$web/company/index.html" "$web/about/index.html" "$web/agriculture/index.html" "$web/business/index.php" > "$backup/protected.sha256"
+          for sub in mohammad ghanadi amozeshgah tala; do
+            if test -f "$web/$sub/index.html"; then sha256sum "$web/$sub/index.html" >> "$backup/protected.sha256"; fi
+          done
+          for route in economy market studio agents contact blog news weather; do
+            code="$(curl -sS -L --max-time 15 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir/$route/" || true)"
+            echo PREVIOUS_ROUTE="$route" STATUS="$code"
+            test "$code" = 503
+          done
+          echo V7_STATIC_PRECHECK=passed
+          REMOTE
+          tar -cf - -C "$RUNNER_TEMP/zomorod-v7-static" economy market studio agents contact blog news weather |
+            ssh -F "$d/config" saeit-cpanel "tar -xf - -C /home/zomorod2/.backups/zomorod-v7-static-rescue/$GITHUB_SHA"
+      - name: Publish informational routes only with automatic rollback
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          run="$1"; web="$HOME/public_html"
+          backup="$HOME/.backups/zomorod-v7-static-rescue/$run"
+          rollback(){
+            set +e
+            for route in economy market studio agents contact blog news weather; do
+              dir="$web/$route"
+              if test -f "$dir/index.html" && grep -Fq 'zm-unified-v7-20261018' "$dir/index.html"; then
+                rm -f "$dir/index.html" "$dir/.htaccess"
+                rmdir "$dir" 2>/dev/null || true
+              fi
+            done
+            echo V7_ROUTE_ROLLBACK=removed_only_new_routes
+          }
+          active=1
+          trap 'rc=$?; trap - EXIT; if test "$active" = 1; then rollback; fi; exit "$rc"' EXIT
+          for route in economy market studio agents contact blog news weather; do
+            test ! -e "$web/$route"
+            mkdir -m 755 "$web/$route"
+            cp -p "$backup/$route/index.html" "$web/$route/index.html"
+            chmod 644 "$web/$route/index.html"
+            cat > "$web/$route/.htaccess" <<'HT'
+          PassengerEnabled off
+          DirectoryIndex index.html
+          Options -Indexes
+          HT
+            chmod 644 "$web/$route/.htaccess"
+            cmp -s "$backup/$route/index.html" "$web/$route/index.html"
+          done
+          for route in economy market studio agents contact blog news weather; do
+            code="$(curl -sS -L --max-time 20 -o "$backup/check.html" -w '%{http_code}' "https://zomorodmelal.ir/$route/?v7=$run" || true)"
+            echo V7_RESTORED_ROUTE="$route" HTTP="$code"
+            test "$code" = 200
+            grep -Fq 'zm-unified-v7-20261018' "$backup/check.html"
+            grep -Fq 'company-logo.webp' "$backup/check.html"
+          done
+          sha256sum -c --status "$backup/protected.sha256"
+          trap - EXIT
+          echo V7_RESCUED_INFORMATION_PAGES=8
+          echo MAIN_AND_SUBSITES_SHA=preserved
+          REMOTE
+      - name: Erase temporary runner SSH keys
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
