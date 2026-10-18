@@ -1,0 +1,104 @@
+name: MojPlayWin header live source inspection (read-only)
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/mojplaywin-header-live-inspection-20261018.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - name: Verify pinned private relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/mpw-header-inspect"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+      - name: Inspect only MojPlayWin-owned file evidence (no server writes)
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 70s ssh -T -F "$RUNNER_TEMP/mpw-header-inspect/config" saeit-cpanel 'python3 -' <<'PY'
+          from pathlib import Path
+          import hashlib, os, re
+          root=Path('/home/zomorod2/Saeit-staging')
+          doc=Path('/home/zomorod2/mojplaywin.com')
+          assert root.is_dir() and not root.is_symlink()
+          assert doc.is_dir() and not doc.is_symlink()
+          entry=doc/'passenger_wsgi.py'
+          assert entry.is_file() and not entry.is_symlink()
+          assert 'Saeit-staging' in entry.read_text(errors='replace')
+          print('OWNER='+str(os.getuid())+' ENTRYPOINT_VERIFIED=true',flush=True)
+          paths=[
+            'core/templates/mojplaywin/theme.html',
+            'core/templates/mojplaywin/home.html',
+            'core/templates/mojplaywin/footer.html',
+            'core/templates/core/search.html',
+            'core/templates/base.html',
+            'core/templates/brands/mojplaywin/base.html',
+            'core/templates/brands/mojplaywin/home.html',
+          ]
+          markers=('atelier-v4','mw-site-nav','mw-search-form','mw-store-entry','Enter Store','Search Engine','Search','Digital Store','site-footer','</footer>','footer','data-design','mw-nav-cta')
+          for rel in paths:
+            p=root/rel
+            if not p.is_file() or p.is_symlink():
+              print('FILE='+rel+' MISSING',flush=True)
+              continue
+            s=p.read_text(encoding='utf8',errors='replace')
+            sha=hashlib.sha256(s.encode('utf8')).hexdigest()
+            print('FILE='+rel+' CHARS='+str(len(s))+' SHA256='+sha+' MTIME='+str(int(p.stat().st_mtime)),flush=True)
+            for marker in markers:
+              hits=list(re.finditer(re.escape(marker),s,re.I))
+              if not hits: continue
+              print('MARKER='+rel+' '+repr(marker)+' COUNT='+str(len(hits)),flush=True)
+              for match in hits[:2]:
+                left=max(0,match.start()-65);right=min(len(s),match.end()+95)
+                snippet=re.sub(r'\s+',' ',s[left:right])
+                snippet=re.sub(r'data:image/[^"\s]+','[EMBEDDED_IMAGE]',snippet)
+                print('CONTEXT='+str(match.start())+' '+snippet[:230],flush=True)
+          PY
+      - name: Remove key material
+        if: always()
+        shell: bash
+        run: rm -rf -- "$RUNNER_TEMP/mpw-header-inspect"
