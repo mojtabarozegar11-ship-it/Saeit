@@ -3,4 +3,52 @@
 {% block title %}{{ section_title }} | MojPlayWin{% endblock %}
 {% block meta_description %}{{ section_lead }}{% endblock %}
 {% block body_class %}mojplaywin-section{% endblock %}
-{% block content %}{% include "mojplaywin/theme.html" %}<div class="mw-shell"><section class="mw-page-hero"><span class="mw-kicker">MOJPLAYWIN · EXPLORE</span><h1>{{ section_title }}</h1><p>{{ section_lead }}</p><img src="{% static section_image %}" alt="{{ section_title }}"></section><section class="mw-section"><span class="mw-kicker">DISCOVER</span><h2>Ideas, resources, and next steps</h2><div class="mw-grid">{% for title,text in cards %}<article class="mw-card"><div class="mw-card-copy"><span class="mw-kicker">0{{ forloop.counter }}</span><h3>{{ title }}</h3><p>{{ text }}</p><a href="/store/">Explore related resources ↗</a></div></article>{% endfor %}</div>{% if section_note %}<p class="mw-note">{{ section_note }}</p>{% endif %}<div class="mw-links"><a href="/research/">Research</a><a href="/knowledge/">Learning</a><a href="/studio/">Games & Studio</a><a href="/store/">Digital Store</a></div></section>{% if active_venture %}<section class="mw-section"><span class="mw-kicker">OTHER VENTURES</span><h2>Explore connected fields</h2><div class="mw-grid">{% for item in ventures %}{% if item.slug != active_venture %}<article class="mw-card"><div class="mw-card-copy"><h3>{{ item.title }}</h3><p>{{ item.text }}</p><a href="{{ item.url }}">View page ↗</a></div></article>{% endif %}{% endfor %}</div></section>{% endif %}</div>{% include "mojplaywin/footer.html" %}{% endblock %}
+{% block content %}{% include "mojplaywin/theme.html" %}<div class="mw-shell"><section class="mw-page-hero mw-hero mw-unified-hero" aria-labelledby="mpw-page-title">
+  <div>
+    <nav class="mw-unified-crumbs" aria-label="Breadcrumb"><a href="/">Home</a><span class="mw-separator" aria-hidden="true">›</span>{% if active_venture %}<a href="/market/">Ventures</a><span class="mw-separator" aria-hidden="true">›</span>{% endif %}<span aria-current="page">{{ section_title }}</span></nav>
+    <span class="mw-kicker">MOJ PLAY WIN · EXPLORE</span>
+    <h1 id="mpw-page-title">{{ section_title }}</h1>
+    <p>{{ section_lead }}</p>
+    <div class="mw-actions">
+      <a class="mw-button primary" href="#mpw-discover">Explore this field</a>
+      {% if page_content %}<a class="mw-button" href="#mpw-page-guide">Read practical guide</a>{% else %}<a class="mw-button" href="/store/">Explore resources</a>{% endif %}
+    </div>
+  </div>
+  <img src="{% static section_image %}" alt="{{ section_title }}" width="960" height="600" decoding="async" fetchpriority="high">
+</section><section class="mw-section" id="mpw-discover" aria-labelledby="mpw-discover-title"><span class="mw-kicker">DISCOVER</span><h2 id="mpw-discover-title">Ideas, resources, and next steps</h2><div class="mw-grid">{% for title,text in cards %}<article class="mw-card"><div class="mw-card-copy"><span class="mw-kicker">0{{ forloop.counter }}</span><h3>{{ title }}</h3><p>{{ text }}</p><a href="{% if page_content %}#mpw-editorial-{{ forloop.counter }}{% else %}/store/{% endif %}">{% if page_content %}Read the practical guide ↗{% else %}Explore related resources ↗{% endif %}</a></div></article>{% endfor %}</div>{% if section_note %}<p class="mw-note">{{ section_note }}</p>{% endif %}<div class="mw-links"><a href="/research/">Research</a><a href="/knowledge/">Learning</a><a href="/studio/">Games & Studio</a><a href="/store/">Digital Store</a></div></section>{% if page_content %}
+<section class="mw-section" id="mpw-page-guide" aria-labelledby="mpw-guide-title">
+  <span class="mw-kicker">MOJ PLAY WIN · PRACTICAL FIELD GUIDE</span>
+  <h2 id="mpw-guide-title">Understand the field. Plan the next step.</h2>
+  <p>{{ page_content.intro }}</p>
+  <div class="mw-grid">
+    {% for chapter in page_content.chapters %}
+    <article class="mw-card" id="mpw-editorial-{{ forloop.counter }}">
+      <div class="mw-card-copy">
+        <span class="mw-kicker">FIELD GUIDE · 0{{ forloop.counter }}</span>
+        <h3>{{ chapter.title }}</h3>
+        <p>{{ chapter.text }}</p>
+        <h4>Practical checklist</h4>
+        <ol>
+          {% for step in chapter.steps %}<li>{{ step }}</li>{% endfor %}
+        </ol>
+      </div>
+    </article>
+    {% endfor %}
+  </div>
+</section>
+<section class="mw-section" aria-labelledby="mpw-faq-title">
+  <span class="mw-kicker">QUESTIONS · VERIFIED SCOPE</span>
+  <h2 id="mpw-faq-title">Questions people ask</h2>
+  {% for item in page_content.faqs %}
+  <details class="mw-note">
+    <summary><strong>{{ item.question }}</strong></summary>
+    <p>{{ item.answer }}</p>
+  </details>
+  {% endfor %}
+  <p class="mw-note">This guide is educational. Commercial availability, regulated services, prices and running systems require separate current verification.</p>
+</section>
+<section class="mw-section" aria-labelledby="mpw-links-title">
+  <span class="mw-kicker">KEEP EXPLORING</span>
+  <h2 id="mpw-links-title">Related areas and resources</h2>
+  <div class="mw-links">{% for link in page_content.links %}<a href="{{ link.url }}">{{ link.label }} ↗</a>{% endfor %}</div>
+</section>{% endif %}{% if active_venture %}<section class="mw-section"><span class="mw-kicker">OTHER VENTURES</span><h2>Explore connected fields</h2><div class="mw-grid">{% for item in ventures %}{% if item.slug != active_venture %}<article class="mw-card"><div class="mw-card-copy"><h3>{{ item.title }}</h3><p>{{ item.text }}</p><a href="{{ item.url }}">View page ↗</a></div></article>{% endif %}{% endfor %}</div></section>{% endif %}</div>{% include "mojplaywin/footer.html" %}{% endblock %}

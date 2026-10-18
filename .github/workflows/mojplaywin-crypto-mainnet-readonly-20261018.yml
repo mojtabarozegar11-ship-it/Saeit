@@ -1,0 +1,34 @@
+name: MojPlayWin Crypto Mainnet Readiness (read only)
+on:
+  # Scheduled checks are handled by the VPS watcher; this remains manual/CI only.
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/mojplaywin-crypto-mainnet-readonly-20261018.yml'
+  push:
+    branches: ["work/mojplaywin-main-store-readiness-20261018"]
+    paths:
+      - '.github/workflows/mojplaywin-crypto-mainnet-readonly-20261018.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: mojplaywin-mainnet-activation-readonly
+  cancel-in-progress: false
+jobs:
+  watch:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && (github.ref == 'refs/heads/work/mojplaywin-main-store-readiness-20261018' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'work/mojplaywin-main-store-readiness-20261018'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fa37cbba6d699ccd29fa9e83bb50cb8211dfc138
+          persist-credentials: false
+      - name: Public chain checks (no keys or payment changes)
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=scripts python3 scripts/mojplaywin_rpc_readiness.py
+          PYTHONPATH=scripts python3 scripts/mojplaywin_direct_wallet_discovery.py
+          echo 'READ_ONLY_SCAN_NO_PAYMENT_SETTLEMENT'
