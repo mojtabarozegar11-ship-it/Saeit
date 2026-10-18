@@ -40,7 +40,7 @@ JS=r'''<script id="zm-home-template-repairs-runtime-20261018">
 /* No data, images or HTML edits. Track only in-view shelf motion. */
 (()=>{'use strict';
  const start=()=>{
-  const shelves=document.querySelectorAll('#orbital-cards .orbit-shelf');
+  const shelves=document.querySelectorAll('.orbit-shelf');
   if(shelves.length!==29 || !('IntersectionObserver' in window)) return;
   const observer=new IntersectionObserver(entries=>{
    for(const entry of entries)entry.target.classList.toggle('zm-home-shelf-offscreen',!entry.isIntersecting);
