@@ -113,6 +113,18 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           import urllib.request,urllib.error,time
+          for static_path in ("/mpw-editorial/index.html","/mpw-editorial/style.css",
+                              "/mpw-editorial/agents/index.html",
+                              "/design-preview-20261017/production-home-20261017.html"):
+              try:
+                  with urllib.request.urlopen("https://mojplaywin.com"+static_path+"?diag="+str(time.time_ns()),timeout=15) as probe:
+                      page=probe.read(1500).decode("utf8","replace")
+                      print("PHYSICAL_STATIC_READBACK",static_path,probe.status,
+                            probe.headers.get("Content-Type"),"MojPlayWin" in page)
+              except urllib.error.HTTPError as error:
+                  print("PHYSICAL_STATIC_READBACK",static_path,error.code)
+              except Exception as error:
+                  print("PHYSICAL_STATIC_READBACK",static_path,type(error).__name__)
           expected={
             "/mpw-editorial/":"Knowledge &amp; Insights",
             "/mpw-editorial/agents/":"AI &amp; Agent Systems",
