@@ -109,7 +109,11 @@ class MojPlayWinProductionBankTests(TestCase):
             request.user = user
             self.assertTrue(admin_view.has_module_permission(request))
             self.assertTrue(admin_view.has_view_permission(request))
-            self.assertFalse(admin_view.has_add_permission(request))
+            if model is MojPlayWinManufacturingOrder:
+                # Three independently sourced briefs may be entered by the owner.
+                self.assertTrue(admin_view.has_add_permission(request))
+            else:
+                self.assertFalse(admin_view.has_add_permission(request))
             self.assertFalse(admin_view.has_delete_permission(request))
 
     def test_admin_never_allows_direct_quality_approval(self):
