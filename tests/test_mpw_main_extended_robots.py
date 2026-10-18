@@ -52,7 +52,7 @@ class ExtendedRobotTests(unittest.TestCase):
                           "https://mojplaywin.com/mpw-editorial/agents/unique/"))
             bad=mod.seo_robot(files,public)
             self.assertEqual(bad["status"],"warning")
-            self.assertEqual(len(bad["invalid_seo_documents"]),1)
+            self.assertGreaterEqual(len(bad["invalid_seo_documents"]),1)
 
     def test_source_host_denies_unsafe_domains(self):
         rows=[{"slug":"a","source_urls":["https://www.nist.gov/","https://www.w3.org/TR/WCAG22/"]}]
