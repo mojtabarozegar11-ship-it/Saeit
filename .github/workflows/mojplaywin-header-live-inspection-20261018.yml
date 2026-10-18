@@ -98,6 +98,49 @@ jobs:
                 snippet=re.sub(r'data:image/[^"\s]+','[EMBEDDED_IMAGE]',snippet)
                 print('CONTEXT='+str(match.start())+' '+snippet[:230],flush=True)
           PY
+      - name: Locate exact main-site atelier source without touching sub-sites
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 90s ssh -T -F "$RUNNER_TEMP/mpw-header-inspect/config" saeit-cpanel 'python3 -' <<'PY'
+          import hashlib,re
+          from pathlib import Path
+          home=Path('/home/zomorod2')
+          site=home/'mojplaywin.com'
+          app=home/'Saeit-staging'
+          assert site.is_dir() and not site.is_symlink()
+          roots=[app/'core/templates/mojplaywin',app/'core/templates/brands/mojplaywin',app/'core']
+          roots += [p for p in site.iterdir() if p.is_dir() and not p.is_symlink() and (p.name.startswith('design-preview-') or p.name.startswith('mpw-') or p.name.startswith('mojplaywin-'))]
+          print('SITE_ROOT_TOP_FILES='+repr([p.name for p in site.iterdir() if p.is_file() and p.suffix in ('.html','.php','.js','.css')][:25]))
+          print('POSSIBLE_MAIN_PREVIEW_ROOTS='+repr([str(x.relative_to(site)) for x in roots if x.is_relative_to(site)]))
+          markers=('atelier-v4','mpx-bottom-bar','data-mpw-copyright-founder','Search Engine','Enter Store','site search','mw-nav-cta','design-preview-20261017')
+          visited=set()
+          scanned=0
+          hits=0
+          for root in roots:
+            if not root.is_dir() or root.is_symlink(): continue
+            for p in root.rglob('*'):
+              if p in visited or not p.is_file() or p.is_symlink() or p.suffix.lower() not in {'.html','.css','.js','.py','.php','.json'}: continue
+              visited.add(p)
+              if any(part in {'__pycache__','node_modules','.git','migrations'} for part in p.parts): continue
+              if p.stat().st_size>600000:continue
+              scanned+=1
+              if scanned>12000: break
+              v=p.read_text(encoding='utf8',errors='replace')
+              seen=[x for x in markers if x.casefold() in v.casefold()]
+              if seen:
+                print('SOURCE_MATCH='+str(p.relative_to(home))+' HASH='+hashlib.sha256(v.encode()).hexdigest()+' SIZE='+str(len(v))+' MARKERS='+repr(seen))
+                for pat in ('atelier-v4','mpx-bottom-bar','Enter Store','Search Engine','search/'):
+                  idx=v.lower().find(pat.lower())
+                  if idx>=0:
+                    snippet=re.sub(r'\s+',' ',v[max(0,idx-70):idx+100])
+                    snippet=re.sub(r'data:image/[^"\s]+','[IMAGE]',snippet)
+                    print('MATCH_CONTEXT='+pat+' '+snippet[:185])
+                hits+=1
+                if hits>=45:break
+            if hits>=45:break
+          print('SCANNED_FILES='+str(scanned)+' MATCHED_FILES='+str(hits))
+          PY
       - name: Remove key material
         if: always()
         shell: bash
