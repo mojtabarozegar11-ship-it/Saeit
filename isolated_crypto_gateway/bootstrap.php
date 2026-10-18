@@ -1,8 +1,14 @@
 <?php
 /** CLI-only setup of a NEW private payment storage; never touches Django DB. */
 declare(strict_types=1);
-if (PHP_SAPI!=='cli' || !in_array($argv[1]??'', ['init','status','disable'],true)) {
-    fwrite(STDERR,"Usage: php bootstrap.php init|status|disable\n"); exit(2);
+if (PHP_SAPI !== 'cli') {
+    // Not a web route: return no CLI error, source details, or configuration.
+    http_response_code(404);
+    exit;
+}
+if (!in_array($argv[1]??'', ['init','status','disable'],true)) {
+    fwrite(STDERR, "Usage: php bootstrap.php init|status|disable\n");
+    exit(2);
 }
 $root='/home/zomorod2/.mojplaywin-crypto-payments-v1';
 $action=$argv[1];
