@@ -1,0 +1,208 @@
+name: Zomorod gen64 master shadow quality and risk, read-only
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/zomorod-v91-genome-shadow-health.yml"]
+  schedule:
+    - cron: "40 5 * * *"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-gen64-shadow-quality-20261018
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - name: Read site-local production agent observations and run gen56 risk/learning and gen64 cycle in shadow
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          test "$HOME" = /home/zomorod2
+          PYTHONDONTWRITEBYTECODE=1 python3 - <<'PY'
+          import ast,hashlib,os,json,sqlite3,time,tempfile,sys
+          from pathlib import Path
+          private=Path.home()/".private"/"zomorod-business"
+          db=private/"site_agents.sqlite3"
+          root=Path.home()/"Saeit"/"agent_imports"/"v91_genomes"
+          vendor=root/"site_master"/"vendor"
+          manifest=root/"generation64_dependency_manifest.json"
+          assert db.is_file() and not db.is_symlink(), "PRIVATE_SITE_AGENT_DB_MISSING"
+          assert root.is_dir() and not root.is_symlink()
+          assert manifest.is_file() and not manifest.is_symlink()
+          m=json.loads(manifest.read_text("utf-8"))
+          assert len(m["sha256_by_relative_path"])==73
+          for rel,sha in m["sha256_by_relative_path"].items():
+              path=root/"site_master"/rel
+              assert path.is_file() and not path.is_symlink()
+              assert hashlib.sha256(path.read_bytes()).hexdigest()==sha
+          sys.path[:0]=[str(root),str(vendor)]
+          from site_master.vendor.master_gen64.controller import Generation64Controller
+          from site_master.vendor.master_gen56.learning import OutcomeLearner
+          from site_master.vendor.master_gen56.risk import RiskAwareSelector
+
+          def connect():
+              con=sqlite3.connect(db.resolve().as_uri()+"?mode=ro",uri=True,timeout=7)
+              con.execute("PRAGMA query_only=ON")
+              return con
+
+          with connect() as con:
+              assert con.execute("SELECT count(*) FROM sqlite_master WHERE name='runs' and type='table'").fetchone()[0]==1,"PRIVATE_AGENT_RUNS_TABLE_MISSING"
+              cols={r[1] for r in con.execute("PRAGMA table_info(runs)").fetchall()}
+              codecol=next((k for k in ("code","agent_code","agent","agent_id") if k in cols),None)
+              statuscol=next((k for k in ("status","result","outcome") if k in cols),None)
+              if not codecol or not statuscol: raise RuntimeError("SHADOW_UNSUPPORTED_RUNS_SCHEMA")
+              rows=con.execute(f'SELECT "{codecol}", "{statuscol}", COUNT(*) FROM runs GROUP BY "{codecol}", "{statuscol}"').fetchall()
+              total=con.execute("SELECT count(*) FROM runs").fetchone()[0]
+          results={}
+          for code,status,count in rows:
+              name=str(code or "unknown")[:80]
+              if not name.isprintable(): continue
+              counters=results.setdefault(name,{"total":0,"success":0,"failed":0})
+              count=int(count)
+              counters["total"]+=count
+              if str(status or "").strip().lower() in {"ok","success","completed","healthy","passed"}:
+                  counters["success"]+=count
+              else:
+                  counters["failed"]+=count
+          learner=OutcomeLearner()
+          names=sorted(results)
+          qualities={}
+          rates={}
+          for name in names:
+              obs=results[name]
+              qualities[name]=round(obs["success"]/max(obs["total"],1),4)
+              rates[name]=round(obs["failed"]/max(obs["total"],1),4)
+              learner.observe(name,qualities[name])
+          chosen=[]
+          if names:
+              decision=RiskAwareSelector().select(names,quality=qualities,failure_rate=rates,
+                            latency_ms={name:0 for name in names},
+                            costs={name:0 for name in names},limit=min(3,len(names)))
+              # Preserve summary metadata only; do not expose any agent owner data.
+              chosen_str=str(decision)
+              chosen_type=type(decision).__name__
+          else:
+              chosen_type="no_observations"
+          readings={"internal":0,"external":0}
+          def internal():
+              with connect() as con:
+                  con.execute("SELECT count(*) FROM runs").fetchone()
+              readings["internal"]+=1
+          def external():
+              with connect() as con:
+                  con.execute("PRAGMA table_info(runs)").fetchall()
+              readings["external"]+=1
+          gen=Generation64Controller()
+          gen.awaken(internal,external,internal_seconds=0.13,
+                     external_seconds=0.17,run_immediately=True)
+          time.sleep(0.38)
+          gen.sleep()
+          if readings["internal"]<1 or readings["external"]<1:
+              raise RuntimeError("SHADOW_GENERATION64_CYCLES_NOT_EXECUTED")
+          report={
+            "schema":"zomorod.site_master.shadow.v1",
+            "recorded_utc":__import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat(),
+            "source":"private site agent run history / sqlite read-only",
+            "bundled_generations":[12,16,20,24,28,32,40,48,56,64],
+            "agent_count_with_history":len(names),
+            "recorded_runs":total,
+            "agent_quality":results,
+            "generation64_cycles":readings,
+            "generation56_learner_used":bool(names),
+            "generation56_risk_selector_result_type":chosen_type,
+            "shadow_only":True,
+            "task_dispatch_activated":False,
+            "financial_actions":False,
+            "publication":False,
+            "database_writes":False,
+            "source_v91_untouched":True
+          }
+          out=root/"site_master_shadow_quality.json"
+          if out.is_symlink():raise RuntimeError("UNSAFE_SHADOW_REPORT_LINK")
+          fd,tmp=tempfile.mkstemp(prefix=".shadow-quality-",dir=root)
+          try:
+              with os.fdopen(fd,"w",encoding="utf-8") as f:
+                  json.dump(report,f,ensure_ascii=False,sort_keys=True,indent=2)
+                  f.flush()
+                  os.fsync(f.fileno())
+              os.chmod(tmp,0o600)
+              os.replace(tmp,out)
+          finally:
+              if os.path.exists(tmp): os.unlink(tmp)
+          print("SITE_AGENT_RUN_HISTORY="+str(total))
+          print("SITE_AGENT_CODES_WITH_HISTORY="+str(len(names)))
+          print("SITE_AGENT_OBSERVATION_COLUMNS="+codecol+","+statuscol)
+          print("GEN56_LEARNING_REAL_HISTORY="+str(bool(names)))
+          print("GEN56_RISK_SELECTOR_SHADOW="+chosen_type)
+          print("GEN64_SHADOW_CYCLES_INTERNAL="+str(readings["internal"]))
+          print("GEN64_SHADOW_CYCLES_EXTERNAL="+str(readings["external"]))
+          print("SHADOW_REPORT_WRITTEN="+str(out))
+          print("LIVE_AGENT_DISPATCH_UNMODIFIED=yes")
+          print("SITE_DATABASE_READ_ONLY=yes")
+          PY
+          REMOTE
+      - name: Read-only public health after shadow evaluation
+        shell: bash
+        run: |
+          for path in / /agents/; do
+            status="$(curl -sS --max-time 16 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir$path" || true)"
+            echo "SITE_PUBLIC_SHADOW_HEALTH path=$path status=$status"
+          done
+      - name: Remove temporary SSH relay material
+        if: always()
+        shell: bash
+        run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
