@@ -12,7 +12,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: zomorod-ten-independent-editorials-batch2
+  group: zomorod-ten-independent-editorials-batch2-cache
   cancel-in-progress: false
 jobs:
   validate:
