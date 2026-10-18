@@ -1,0 +1,207 @@
+name: Zomorod V8 26 specialist rows and single official logo
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/zomorod-v8-26-rows-logo.yml"
+      - "content/zomorod-v8/zomorod_v8_rows_and_logo.py"
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-v8-root-only-atomic
+  cancel-in-progress: false
+jobs:
+  homepage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate V8 updater against existing repo homepage fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile content/zomorod-v8/zomorod_v8_rows_and_logo.py
+          test -s content/zomorod-v6-20261018/index.html
+          python3 - <<'PY'
+          from pathlib import Path
+          x=Path('content/zomorod-v6-20261018/index.html').read_text()
+          assert 'window.ZOMOROD_ORBIT_DATA=' in x
+          assert 'identity-mark' in x and '<body>' in x
+          x=x.replace('<body>','<body><!-- zm-unified-v7-20261018 --><a class="zm-v7-home-logo" href="/company/" aria-label="معرفی شرکت زمرد ملل"><img src="/static/site/zomorod-v7/company-logo.webp" width="64" height="64" alt="لوگوی زمرد ملل"></a>',1)
+          Path('/tmp/v8-fixture.html').write_text(x)
+          PY
+          python3 content/zomorod-v8/zomorod_v8_rows_and_logo.py /tmp/v8-fixture.html --output /tmp/v8-fixture-output.html
+          grep -Fq 'zm-v8-26-rows-single-official-logo-20261018' /tmp/v8-fixture-output.html
+          grep -Fq 'industries' content/zomorod-v8/zomorod_v8_rows_and_logo.py || true
+          echo V8_FIXTURE=passed
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - name: Snapshot immutable root and protected sub-sites before patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1";web="$HOME/public_html"
+          backup="$HOME/.backups/zomorod-v8-root-26/$sha"
+          test -s "$web/index.html" && test ! -L "$web/index.html"
+          test -f "$web/.htaccess" && test ! -L "$web/.htaccess"
+          test ! -e "$backup"
+          grep -Fq 'zm-unified-v7-20261018' "$web/index.html"
+          grep -Fq 'zm-v7-home-logo' "$web/index.html"
+          ! grep -Fq 'zm-v8-26-rows-single-official-logo-20261018' "$web/index.html"
+          test -s "$web/static/site/zomorod-v7/company-logo.webp"
+          mkdir -p "$(dirname "$backup")"
+          mkdir -m 700 "$backup"
+          mkdir -m 700 "$backup/stage"
+          cp -p "$web/index.html" "$backup/index.original.html"
+          cmp -s "$web/index.html" "$backup/index.original.html"
+          sha256sum "$web/index.html" > "$backup/root-original.sha256"
+          sha256sum "$web/.htaccess" "$web/static/site/zomorod-v7/company-logo.webp" > "$backup/protected.sha256"
+          for path in company about agriculture industry research services knowledge business mohammad ghanadi amozeshgah tala; do
+            if test -f "$web/$path/index.html"; then sha256sum "$web/$path/index.html" >> "$backup/protected.sha256"; fi
+            if test -f "$web/$path/index.php"; then sha256sum "$web/$path/index.php" >> "$backup/protected.sha256"; fi
+          done
+          echo V8_ROOT_BACKUP=byte_verified
+          REMOTE
+          tar -cf - -C content/zomorod-v8 zomorod_v8_rows_and_logo.py |
+            ssh -F "$d/config" saeit-cpanel "tar -xf - -C /home/zomorod2/.backups/zomorod-v8-root-26/$GITHUB_SHA/stage"
+      - name: Fully validate patched HTML in private staging
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1";web="$HOME/public_html";backup="$HOME/.backups/zomorod-v8-root-26/$sha"
+          (cd "$web" && sha256sum -c --status "$backup/root-original.sha256")
+          test -s "$backup/stage/zomorod_v8_rows_and_logo.py"
+          python3 -m py_compile "$backup/stage/zomorod_v8_rows_and_logo.py"
+          python3 "$backup/stage/zomorod_v8_rows_and_logo.py" "$backup/index.original.html" --output "$backup/index.preview.html"
+          test -s "$backup/index.preview.html"
+          python3 - "$backup/index.original.html" "$backup/index.preview.html" <<'PY'
+          import json,re,sys
+          from pathlib import Path
+          a=Path(sys.argv[1]).read_text()
+          b=Path(sys.argv[2]).read_text()
+          def rows(s):return json.loads(re.search(r'window\.ZOMOROD_ORBIT_DATA=(\{.*?\});</script>',s,re.S).group(1))['rows']
+          old,new=rows(a),rows(b)
+          assert len(old)==17 and len(new)==26
+          assert [r for r in new if r['index']<=17]==old,"Existing 340 topic data changed"
+          assert len([r for r in new if r['index']>17])==9
+          assert len(set(t['id'] for r in new for t in r['cards']))==520
+          assert 'zm-v7-home-logo" href=' not in b
+          assert b.count('src="/static/site/zomorod-v7/company-logo.webp"')==1
+          print("V8_PRESERVED_ORIGINAL_CARDS=340")
+          print("V8_NEW_TOPIC_CARDS=180")
+          print("V8_TOTAL_SHELVES=26")
+          PY
+          echo V8_PRIVATE_STAGE=verified
+          REMOTE
+      - name: Atomically publish V8 root alone and automatically restore on failure
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1";web="$HOME/public_html";backup="$HOME/.backups/zomorod-v8-root-26/$sha"
+          test -s "$backup/index.preview.html"
+          (cd "$web" && sha256sum -c --status "$backup/root-original.sha256")
+          rollback() {
+            set +e
+            cp -p "$backup/index.original.html" "$web/index.html.v8-rollback.$sha"
+            mv -f "$web/index.html.v8-rollback.$sha" "$web/index.html"
+            (cd "$web" && sha256sum -c --status "$backup/root-original.sha256")
+            echo V8_ROOT_ROLLBACK=restored_original
+          }
+          active=1
+          trap 'rc=$?;trap - EXIT;if test "$active" = 1;then rollback;fi;exit "$rc"' EXIT
+          cp -p "$backup/index.preview.html" "$web/index.html.v8-next.$sha"
+          chmod --reference="$web/index.html" "$web/index.html.v8-next.$sha"
+          mv -f "$web/index.html.v8-next.$sha" "$web/index.html"
+          sha256sum "$web/index.html" > "$backup/root.v8.sha256"
+          code="$(curl -sS -L --max-time 30 -H 'Cache-Control: no-cache' -o "$backup/live-v8.html" -w '%{http_code}' "https://zomorodmelal.ir/?v8=$sha" || true)"
+          echo V8_LIVE_HTTP="$code"
+          test "$code" = 200
+          grep -Fq 'zm-v8-26-rows-single-official-logo-20261018' "$backup/live-v8.html"
+          grep -Fq 'صنایع غذایی' "$backup/live-v8.html"
+          grep -Fq 'کارخانجات' "$backup/live-v8.html"
+          grep -Fq 'عمران و صنعت ساختمان' "$backup/live-v8.html"
+          grep -Fq 'فرش دستباف و صنایع دستی' "$backup/live-v8.html"
+          grep -Fq 'تمام حقوق مادی و معنوی سایت برای شرکت کشت و صنعت زمرد ملل محفوظ است' "$backup/live-v8.html"
+          python3 - "$backup/live-v8.html" <<'PY'
+          import re,json,sys
+          s=open(sys.argv[1]).read()
+          x=json.loads(re.search(r'window\.ZOMOROD_ORBIT_DATA=(\{.*?\});</script>',s,re.S).group(1))['rows']
+          assert len(x)==26 and sum(len(r['cards']) for r in x)==520
+          assert len([r for r in x if r['index']<=17])==17
+          assert s.count('class="identity-mark"')==1
+          assert s.count('src="/static/site/zomorod-v7/company-logo.webp"')==1
+          assert 'zm-v7-home-logo" href=' not in s
+          assert x[11]['title']=='صنایع غذایی' and x[12]['title']=='کارخانجات'
+          assert x[16]['title']=='خدمات، پروژه‌ها و بازرگانی'
+          assert x[17]['title']=='عمران و صنعت ساختمان'
+          print('V8_PUBLIC_MANIFEST=26x20_verified')
+          PY
+          for route in /company/ /about/ /industry/ /services/ /agriculture/ /tala/ /mohammad/ /ghanadi/ /amozeshgah/ /business/; do
+            result="$(curl -sS -L --max-time 18 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir$route" || true)"
+            echo V8_PROTECTED_ROUTE="$route" CODE="$result"
+            test "$result" = 200
+          done
+          (cd "$web" && sha256sum -c --status "$backup/protected.sha256")
+          active=0;trap - EXIT
+          echo V8_HOMEPAGE_PUBLISHED=yes
+          echo V8_ALL_PROTECTED_SITES_UNCHANGED=yes
+          echo V8_BACKUP="$backup/index.original.html"
+          REMOTE
+      - name: Remove ephemeral runner keys
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
