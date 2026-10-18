@@ -1,0 +1,130 @@
+name: MojPlayWin About English-only founder name exact release
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/mpw_about_english_only_name_patch_20261019.py"
+      - ".github/workflows/mpw-about-english-name-only-20261019.yml"
+permissions:
+  contents: read
+concurrency:
+  group: mojplaywin-about-exact-static-prod
+  cancel-in-progress: false
+jobs:
+  release:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event_name == 'push' && contains(github.event.head_commit.message, '[approved-mpw-about-name-english-only-20261019]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Verify surgical replacement and public page SHA baseline
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_about_english_only_name_patch_20261019.py
+          python3 scripts/mpw_about_english_only_name_patch_20261019.py selftest
+          python3 - <<'PY'
+          import urllib.request,hashlib,json,os
+          base='https://mojplaywin.com'
+          expected=b'Mojtaba Roozegar ('+'مجتبی روزگار'.encode('utf-8')+b')'
+          paths=['/','/about/','/store/','/games/','/about/mojtaba-rozegar/','/farnaz/','/saman/','/picm/']
+          baseline={}
+          for path in paths:
+              req=urllib.request.Request(base+path,headers={'User-Agent':'MPWAboutEnglishNameGate/1.0','Accept-Encoding':'identity','Cache-Control':'no-cache'})
+              with urllib.request.urlopen(req,timeout=22) as response:
+                  raw=response.read(1800000)
+                  baseline[path]=response.status
+                  if response.status!=200:raise SystemExit('HEALTH_PRECHECK_FAIL '+path)
+                  if path=='/about/':
+                      if raw.count(expected)!=1 or raw.count(b'Mojtaba Roozegar')<2:
+                          raise SystemExit('ONE_EXACT_PERSIAN_NAME_NOT_FOUND')
+                      open(os.environ['RUNNER_TEMP']+'/mpw-about-public-sha','w').write(hashlib.sha256(raw).hexdigest())
+                      print('ABOUT_PUBLIC_BASELINE_SHA='+hashlib.sha256(raw).hexdigest(),flush=True)
+                  print('HEALTH_PRECHECK '+path+' '+str(response.status),flush=True)
+          open(os.environ['RUNNER_TEMP']+'/mpw-about-baseline.json','w').write(json.dumps(baseline))
+          PY
+      - name: Set up pinned VPS and cPanel SSH
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-footer-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Confirm only owned About file matches exact live public HTML
+        run: |
+          set -euo pipefail
+          sha="$(cat "$RUNNER_TEMP/mpw-about-public-sha")"
+          timeout 45s ssh -T -F "$RUNNER_TEMP/mpw-footer-inventory/config" saeit-cpanel "python3 - audit '$sha'" < scripts/mpw_about_english_only_name_patch_20261019.py
+      - name: Remove only Persian founder parenthesis and preserve original backup
+        run: |
+          set -euo pipefail
+          sha="$(cat "$RUNNER_TEMP/mpw-about-public-sha")"
+          timeout 50s ssh -T -F "$RUNNER_TEMP/mpw-footer-inventory/config" saeit-cpanel "python3 - install '$GITHUB_RUN_ID' '$sha'" < scripts/mpw_about_english_only_name_patch_20261019.py
+      - name: Verify exact English-only name live and protected routes unchanged
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import urllib.request,hashlib,json,os
+          base='https://mojplaywin.com'
+          req=urllib.request.Request(base+'/about/',headers={'User-Agent':'MPWAboutEnglishNameVerify/1.0','Accept-Encoding':'identity','Cache-Control':'no-cache'})
+          with urllib.request.urlopen(req,timeout=25) as response:
+              raw=response.read(1800000)
+              if response.status!=200:raise SystemExit('ABOUT_NOT_AVAILABLE')
+          forbidden='مجتبی روزگار'.encode('utf-8')
+          if forbidden in raw or b'Mojtaba Roozegar ('+forbidden+b')' in raw:
+              raise SystemExit('PERSIAN_NAME_REMAINS_LIVE')
+          if raw.count(b'Mojtaba Roozegar')<2:
+              raise SystemExit('ENGLISH_NAME_MISSING_LIVE')
+          print('ABOUT_ENGLISH_NAME_ONLY_LIVE=PASS',flush=True)
+          before=json.load(open(os.environ['RUNNER_TEMP']+'/mpw-about-baseline.json'))
+          for path in ('/','/store/','/games/','/about/mojtaba-rozegar/','/farnaz/','/saman/','/picm/'):
+              with urllib.request.urlopen(urllib.request.Request(base+path,headers={'User-Agent':'MPWAboutEnglishNameVerify/1.0'}),timeout=20) as response:
+                  if response.status!=before[path]:raise SystemExit('PROTECTED_ROUTE_CHANGED '+path)
+              print('UNCHANGED_ROUTE_HEALTH='+path,flush=True)
+          PY
+      - name: Restore only original About file if verification failed
+        if: failure()
+        run: |
+          d="$RUNNER_TEMP/mpw-footer-inventory/config"
+          if test -f "$d" && test -f "$RUNNER_TEMP/mpw-about-public-sha"; then
+            timeout 45s ssh -T -F "$d" saeit-cpanel "python3 - rollback '$GITHUB_RUN_ID'" < scripts/mpw_about_english_only_name_patch_20261019.py || true
+          fi
+      - name: Remove SSH secrets and preserve off-webroot backup
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/mpw-footer-inventory"
