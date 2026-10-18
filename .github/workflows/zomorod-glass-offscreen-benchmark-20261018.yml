@@ -1,0 +1,76 @@
+name: Zomorod offscreen glass animation read only A/B benchmark
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/zomorod-glass-offscreen-benchmark-20261018.yml]
+permissions:
+  contents: read
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - name: Chromium experiment without changing the site
+        run: |
+          set -euo pipefail
+          dir="$RUNNER_TEMP/zm-glass-benchmark";mkdir -p "$dir";cd "$dir"
+          npm --silent init -y >/dev/null
+          npm --silent install --no-save playwright@1.55.0
+          npx playwright install chromium
+          cat > bench.cjs <<'JS'
+          const {chromium}=require('playwright');
+          (async()=>{
+            const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
+            for(const width of [1440,390]){
+              const page=await browser.newPage({viewport:{width,height:900}});
+              await page.goto('https://zomorodmelal.ir/?__glass_bench='+width,{waitUntil:'domcontentloaded',timeout:45000});
+              await page.locator('.topic-card').first().waitFor({timeout:20000});
+              await page.evaluate(()=>document.querySelector('.topic-card').scrollIntoView({block:'center',inline:'nearest',behavior:'instant'}));
+              await page.waitForTimeout(600);
+              const result=await page.evaluate(async()=>{
+                const cards=Array.from(document.querySelectorAll('.topic-card'));
+                const rows=Array.from(document.querySelectorAll('.card-track'));
+                const visible=(card)=>{
+                  const b=card.getBoundingClientRect();
+                  return b.right>0&&b.left<innerWidth&&b.bottom>0&&b.top<innerHeight;
+                };
+                const collect=async()=>{
+                  await new Promise(r=>requestAnimationFrame(r));
+                  const frames=[];
+                  let last=performance.now();
+                  await new Promise(resolve=>{
+                    let count=0;
+                    const tick=t=>{
+                      if(count++>=100){resolve();return}
+                      frames.push(t-last);last=t;requestAnimationFrame(tick)
+                    };requestAnimationFrame(tick);
+                  });
+                  const sorted=frames.filter(x=>x>0).sort((a,b)=>a-b);
+                  return {avg:frames.reduce((s,x)=>s+x,0)/frames.length,
+                    p95:sorted[Math.floor(sorted.length*.95)]||0,
+                    running:document.getAnimations().filter(a=>a.playState==='running').length,
+                    total:document.getAnimations().length,
+                    visible:cards.filter(visible).length};
+                };
+                const before=await collect();
+                const original=rows.slice(0,8).map(e=>[e.offsetWidth,e.offsetHeight,e.offsetLeft,e.offsetTop]);
+                const idle=cards.filter(c=>!visible(c));
+                idle.forEach(c=>c.style.animationName='none');
+                await new Promise(r=>setTimeout(r,250));
+                const after=await collect();
+                const updated=rows.slice(0,8).map(e=>[e.offsetWidth,e.offsetHeight,e.offsetLeft,e.offsetTop]);
+                const preserved=JSON.stringify(original)===JSON.stringify(updated);
+                return {before,after,idleCount:idle.length,cardCount:cards.length,rowCount:rows.length,preserved};
+              });
+              console.log('GLASS_OFFSCREEN_EXPERIMENT='+JSON.stringify({viewport:width,...result}));
+              if(!result.preserved||result.cardCount!==605||result.rowCount!==29||
+                result.before.visible<1||result.after.visible<1||
+                result.after.running>result.before.running)
+                throw Error('Experiment failed at '+width);
+              await page.close();
+            }
+            await browser.close();
+            console.log('EXPERIMENT_READ_ONLY_SUCCESS=yes');
+          })().catch(e=>{console.error(e.stack);process.exit(1)});
+          JS
+          node bench.cjs
