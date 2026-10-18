@@ -1,0 +1,81 @@
+name: MojPlayWin staging active store exact-template preflight
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/mojplaywin-store-staging-exact-preflight.yml"]
+permissions: {contents: read}
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Read only active staging store, site template loader and host-specific guards
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 55s ssh -T -F "$d/config" saeit-cpanel python3 - <<'PY'
+          import hashlib,json
+          from pathlib import Path
+          root=Path('/home/zomorod2/Saeit-staging')
+          for name in ('core/templates/mojplaywin/store.html','templates/mojplaywin/store.html',
+               'core/templates/mojplaywin/store_ten_buyer_guides_20261018.html',
+               'core/mojplaywin_views.py','config/settings.py','manage.py','tmp/restart.txt'):
+            p=root/name
+            if p.is_file() and not p.is_symlink():
+              raw=p.read_bytes()
+              result={'file':name,'sha':hashlib.sha256(raw).hexdigest(),
+                'size':len(raw),'contains_guides':b'mpw-store-ten-guides' in raw,
+                'has_include':b'store_ten_buyer_guides_20261018' in raw}
+              if name.endswith('/store.html'):result['template']=raw.decode('utf8','replace')[:3700]
+              elif name.endswith('/views.py'):result['lines']=[x[:180] for x in raw.decode('utf8','replace').splitlines() if 'def store' in x or 'mojplaywin/store.html' in x]
+              elif name=='config/settings.py':result['request_context_processor']=b'django.template.context_processors.request' in raw
+              print('MPW_STAGING_STORE_TEMPLATE='+json.dumps(result))
+            else:
+              print('MPW_STAGING_STORE_PATH_STATUS='+json.dumps({'path':name,'present':p.exists(),'symlink':p.is_symlink()}))
+          PY
