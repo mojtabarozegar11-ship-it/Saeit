@@ -1,0 +1,118 @@
+name: Assess lossless MySQL compression support and text ratios
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/zomorod-mysql-lossless-compression-assessment.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-mysql-compression-assessment
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - name: Read MySQL table sizes using temporary local client config with no leaked credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 - <<'PY'
+          from pathlib import Path
+          import subprocess,tempfile,os,re,json,urllib.parse
+          home=Path.home()
+          assert str(home)=="/home/zomorod2"
+          envfile=home/"Saeit-staging/.env"
+          assert envfile.is_file()
+          raw=next((line.split("=",1)[1].strip().strip("'\"") for line in envfile.read_text().splitlines() if line.startswith("DATABASE_URL=")),None)
+          assert raw and "mysql" in raw
+          parsed=urllib.parse.urlsplit(raw)
+          db=parsed.path.strip("/")
+          assert db=="zomorod2_sites_main"
+          opts={"user":urllib.parse.unquote(parsed.username or ""), "password":urllib.parse.unquote(parsed.password or ""), "host":parsed.hostname or "localhost", "port":str(parsed.port or 3306)}
+          assert opts["user"] and opts["password"]
+          with tempfile.TemporaryDirectory(prefix=".mysql-readonly-",dir=str(home/".cagefs/tmp")) as tmp:
+              optfile=Path(tmp)/"client.cnf"
+              def esc(v):return '"'+str(v).replace("\\","\\\\").replace('"','\\"')+'"'
+              optfile.write_text("[client]\n"+"".join(f"{k}={esc(v)}\n" for k,v in opts.items()))
+              optfile.chmod(0o600)
+              sqls=[
+                "SELECT VERSION(),@@version_comment,@@innodb_file_per_table,@@innodb_page_size,@@innodb_strict_mode",
+                "SELECT TABLE_NAME, ROW_FORMAT,DATA_LENGTH,INDEX_LENGTH,DATA_FREE,CREATE_OPTIONS FROM information_schema.TABLES WHERE TABLE_SCHEMA='zomorod2_sites_main' AND TABLE_NAME IN ('core_agenttask','core_factoryevidence')",
+                "SELECT TABLE_NAME,COLUMN_NAME,DATA_TYPE,CHARACTER_MAXIMUM_LENGTH FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='zomorod2_sites_main' AND TABLE_NAME IN ('core_agenttask','core_factoryevidence') ORDER BY TABLE_NAME,ORDINAL_POSITION"
+              ]
+              for i,sql in enumerate(sqls):
+                  result=subprocess.run(["mysql","--defaults-extra-file="+str(optfile),"--batch","--skip-column-names","--raw",db,"--execute",sql],capture_output=True,text=True,timeout=40)
+                  if result.returncode==0:
+                      print("MYSQL_READONLY_DETAIL_"+str(i)+"="+json.dumps([row.split("\t") for row in result.stdout.splitlines()])[:20000])
+                  else:print("MYSQL_READONLY_FAILED_"+str(i)+"="+("permissions" if "denied" in result.stderr.lower() else "configuration"))
+              for tbl in ("core_agenttask","core_factoryevidence"):
+                  r=subprocess.run(["mysql","--defaults-extra-file="+str(optfile),"--batch","--skip-column-names","--raw",db,"--execute","SELECT COLUMN_NAME,DATA_TYPE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='zomorod2_sites_main' AND TABLE_NAME='"+tbl+"'"],capture_output=True,text=True,timeout=35)
+                  if r.returncode!=0:continue
+                  names=[line.split("\t")[0] for line in r.stdout.splitlines() if line.split("\t")[-1] in ("longtext","mediumtext","text","json","blob","longblob","mediumblob")]
+                  names=[n for n in names if n.replace("_","").isalnum()][:8]
+                  if not names:continue
+                  expr=",".join("COALESCE(SUM(OCTET_LENGTH("+n+")),0),COALESCE(SUM(OCTET_LENGTH(COMPRESS("+n+"))),0)" for n in names)
+                  sql="SELECT "+expr+" FROM (SELECT "+",".join(names)+" FROM "+tbl+" LIMIT 30) AS samples"
+                  r=subprocess.run(["mysql","--defaults-extra-file="+str(optfile),"--batch","--skip-column-names","--raw",db,"--execute",sql],capture_output=True,text=True,timeout=65)
+                  if r.returncode==0:print("MYSQL_COLUMN_COMPRESSION="+json.dumps({"table":tbl,"columns":names,"sample30_size_stats":r.stdout.strip().split("\t")})[:3500])
+                  else:print("MYSQL_COLUMN_COMPRESSION_ERROR="+tbl)
+          print("MYSQL_COMPRESSION_AUDIT_COMPLETE=yes")
+          PY
+          REMOTE
+      - name: Delete SSH credentials
+        if: always()
+        shell: bash
+        run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
