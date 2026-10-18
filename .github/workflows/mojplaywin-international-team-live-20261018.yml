@@ -1,4 +1,5 @@
 name: MojPlayWin International Team exact About-only live publication
+# Retry: validate latest live content and append atomically without restoring a stale version.
 on:
   push:
     branches: [main]
