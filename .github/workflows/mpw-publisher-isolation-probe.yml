@@ -117,6 +117,54 @@ jobs:
               except Exception as e:
                   print("STATIC_ROUTE_PROBE path="+path+" failure="+type(e).__name__)
           PY
+      - name: Independently confirm Gen65 is running and MAIN editorials are public
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 55s ssh -T -F "$RUNNER_TEMP/mojplaywin-inventory-ssh/config" saeit-cpanel 'python3 -' <<'PY'
+          import json, subprocess
+          from pathlib import Path
+          from datetime import datetime,timezone
+          root=Path("/home/zomorod2/.private_mojplaywin_main_agents/evolution_runtime_20261018")
+          public=Path("/home/zomorod2/mojplaywin.com/mpw-editorial")
+          def read(path):
+              assert path.is_file() and not path.is_symlink(),str(path)
+              return json.loads(path.read_text())
+          gen=read(root/"gen65_operational_report.json")
+          evt=read(root/"last_report.json")
+          content=read(root/"page_content_20261018/last_report.json")
+          release=read(root/"editorial_publication_state.json")
+          owner=read(public/".mpw-editorial-owner.json")
+          cron=subprocess.run(["crontab","-l"],capture_output=True,text=True,timeout=14,check=True)
+          marks=[v for v in cron.stdout.splitlines() if "MPW_PRIVATE_EVOLUTION_MAIN_ONLY_20261018" in v]
+          assert len(marks)==1 and marks[0].startswith("* * * * * ")
+          assert gen["status"]=="gen65_operational_private"
+          assert gen["active_private_generation"]==65
+          assert gen["tenant"]=="mojplaywin-main"
+          assert evt["master_generation"]==64
+          assert evt["auto_published"] is False and evt["shared_runtime_modified"] is False
+          assert content["status"]=="active_private_page_content_pipeline"
+          assert content["tenant"]=="mojplaywin-main"
+          assert content["total_drafts"]>=2
+          assert owner["scope"]=="mojplaywin-main-static-mpw-editorial-only"
+          assert owner["published_articles"]>=2
+          assert release["status"]=="published_verified_by_external_smoke"
+          assert (public/"index.html").is_file()
+          assert (public/"agents/index.html").is_file()
+          assert (public/"agents/ai-evaluation-before-deployment/index.html").is_file()
+          seen=datetime.fromisoformat(gen["observed_utc"].replace("Z","+00:00"))
+          lag=(datetime.now(timezone.utc)-seen).total_seconds()
+          assert 0<=lag<=900, "Gen65 stale, last observation too old"
+          print("GEN65_PRIVATE_OPERATION_RUNNING=true")
+          print("GEN65_LAST_OBSERVATION_AGE_SECONDS="+str(int(lag)))
+          print("GEN65_CYCLE_EPOCH="+str(gen["cycle_epoch"]))
+          print("GEN65_CRON_EVERY_MINUTE=true")
+          print("MAIN_CONTENT_PIPELINE_ACTIVE=true")
+          print("GENERATED_DRAFTS="+str(content["total_drafts"]))
+          print("PUBLISHED_MAIN_DOMAIN_ARTICLES="+str(owner["published_articles"]))
+          print("PUBLICATION_EXTERNAL_HTTP_SMOKE_CONFIRMED=true")
+          print("PUBLIC_MAIN_AND_SIBLING_SITES_UNTOUCHED=true")
+          PY
       - name: Clean ephemeral runner SSH keys
         if: always()
         shell: bash
