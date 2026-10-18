@@ -71,9 +71,20 @@ def archived_fragment(root:Path,relative:str):
  matches=list(re.finditer(r'<main\b[^>]*>(.*?)</main\s*>',original,re.I|re.S))
  if len(matches)!=1:raise ValueError('Historical source has unexpected main sections: '+relative)
  fragment=matches[0].group(1)
+ # Historic pages may contain obsolete inline mouse events. Remove only executable
+ # attributes from the copied HTML; keep every visible word, image and link.
+ before_visible=visible_main('<main>'+fragment+'</main>')
+ old_images=len(re.findall(r'<img\b',fragment,re.I))
+ old_links=len(re.findall(r'<a\b',fragment,re.I))
+ def clean_tag(m):
+  return re.sub(r"\s+on[a-z][\w-]*\s*=\s*(?:\"[^\"]*\"|'[^']*'|[^\s>]+)", '',m.group(0),flags=re.I)
+ fragment=re.sub(r'<[^>]+>',clean_tag,fragment,flags=re.S)
+ fragment=re.sub(r'\bhref\s*=\s*([\"\'])javascript:[^\"\']*\1','href="#"',fragment,flags=re.I)
  if any(re.search(pat,fragment,re.I) for pat in (r'<script\b',r'<style\b',r'<iframe\b',r'<form\b',r'<object\b',r'<embed\b',r'\bon\w+\s*=',r'javascript\s*:')):
-  raise ValueError('Unsafe embedded object/script in archived main: '+relative)
+  raise ValueError('Archived content still contains unsafe executable markup: '+relative)
  text=visible_main('<main>'+fragment+'</main>')
+ if text!=before_visible or len(re.findall(r'<img\b',fragment,re.I))!=old_images or len(re.findall(r'<a\b',fragment,re.I))!=old_links:
+  raise ValueError('Sanitization altered archived text, images or links: '+relative)
  if len(text)<1500:raise ValueError('Archived content unexpectedly empty: '+relative)
  img=len(re.findall(r'<img\b',fragment,re.I))
  link=len(re.findall(r'<a\b',fragment,re.I))
