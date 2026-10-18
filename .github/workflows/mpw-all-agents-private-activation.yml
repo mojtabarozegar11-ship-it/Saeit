@@ -74,6 +74,23 @@ jobs:
           set -euo pipefail
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_mpw_main_extended_robots.py -v
           python3 -m py_compile scripts/mpw_main_extended_robots.py
+      - name: Package six additional private robots
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib,io,json,tarfile
+          from pathlib import Path
+          raw=Path("scripts/mpw_main_extended_robots.py").read_bytes()
+          manifest=json.dumps({"tenant":"mojplaywin-main","scope":"mpw_six_main_readonly_execution_robots","sha256":hashlib.sha256(raw).hexdigest()}).encode()
+          with tarfile.open("/tmp/mpw-six-private-robots.tgz","w:gz") as tar:
+              for name,body in (("runner.py",raw),("manifest.json",manifest)):
+                  member=tarfile.TarInfo(name)
+                  member.size=len(body)
+                  member.mode=0o600
+                  tar.addfile(member,io.BytesIO(body))
+          assert Path("/tmp/mpw-six-private-robots.tgz").stat().st_size < 37000
+          PY
       - name: Package pinned, private-only robot source
         shell: bash
         run: |
