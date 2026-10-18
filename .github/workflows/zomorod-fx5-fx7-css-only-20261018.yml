@@ -1,0 +1,253 @@
+name: Zomorod golden header streak and card hover depth only
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/zomorod-fx5-fx7-css-only-20261018.yml
+      - scripts/zomorod_fx5_fx7_additive_20261018.py
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-fx57-limited-20261018
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Lossless CSS-only implementation self-test
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/zomorod_fx5_fx7_additive_20261018.py
+          python3 scripts/zomorod_fx5_fx7_additive_20261018.py selftest
+      - name: Verify public original and protected live routes before release
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import hashlib
+          from urllib.request import urlopen,Request
+          for url in ('/','/topics/','/search/','/store/','/about/','/tala/'):
+            with urlopen(Request('https://zomorodmelal.ir'+url,headers={'User-Agent':'ZMFX57Audit/1','Cache-Control':'no-cache'}),timeout=25) as r:
+              body=r.read(3500000)
+              assert r.status==200 and len(body)>200,url
+            if url=='/':
+              assert hashlib.sha256(body).hexdigest()=='98d7912c08f2599015c422dab7f032618ae1dcab9ffc5a74d20d9926553f93c9','Live homepage changed'
+              assert b'zm-fx5-fx7-extra-css-20261018' not in body
+            print('ZM_FX57_PRECHECK='+url+' HTTP200',flush=True)
+          PY
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+
+      - name: Stage scoped patch in private temporary folder
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          stage="/home/zomorod2/.zm-fx57-stage-$GITHUB_RUN_ID"
+          timeout 35s ssh -T -F "$d/config" saeit-cpanel "test ! -e '$stage' && test ! -L '$stage' && install -d -m 700 '$stage'"
+          cat scripts/zomorod_fx5_fx7_additive_20261018.py | timeout 40s ssh -T -F "$d/config" saeit-cpanel "cat > '$stage/patch.py'"
+          timeout 32s ssh -T -F "$d/config" saeit-cpanel "test -s '$stage/patch.py' && python3 '$stage/patch.py' selftest"
+      - name: Record protected path checksum baseline on hosting
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          timeout 45s ssh -T -F "$d/config" saeit-cpanel 'python3 -' <<'PY' > "$RUNNER_TEMP/zm-fx57-protected-before.txt"
+          from pathlib import Path
+          import hashlib
+          root=Path('/home/zomorod2/public_html')
+          for name in ('.htaccess','search/index.html','store/index.php','topics/index.html','about/index.html','company/index.html','tala/index.php','business/index.php'):
+            file=root/name
+            if file.is_file() and not file.is_symlink():
+              print(name+' '+hashlib.sha256(file.read_bytes()).hexdigest())
+          PY
+          test -s "$RUNNER_TEMP/zm-fx57-protected-before.txt"
+      - name: Append CSS only to homepage with verified backup
+        id: install
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 65s ssh -T -F "$RUNNER_TEMP/zomorod-baseline-inventory/config" saeit-cpanel "python3 '/home/zomorod2/.zm-fx57-stage-$GITHUB_RUN_ID/patch.py' apply '$GITHUB_RUN_ID'"
+      - name: Public smoke confirms original content and exact added style
+        id: smoke
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os,time
+          from urllib.request import Request,urlopen
+          passed=False
+          for k in range(1,7):
+            try:
+              url='https://zomorodmelal.ir/?__fx57='+os.environ['GITHUB_RUN_ID']+'-'+str(k)
+              with urlopen(Request(url,headers={'Cache-Control':'no-cache,no-store','User-Agent':'ZMFX57Verifier/1'}),timeout=25) as r:
+                html=r.read(3500000).decode('utf8','replace')
+                assert r.status==200
+              assert html.count('id="zm-fx5-fx7-extra-css-20261018"')==1
+              assert html.count('id="zm-four-premium-fx-css-20261018"')==1
+              assert 'zm-fx5-gold-ray-travel-20261018' in html
+              assert 'transition-property:transform,box-shadow' in html
+              assert 'prefers-reduced-motion' in html
+              assert all(x in html for x in ('class="header-orbit wrap"','class="orbit-shelves"','class="orbital-cards"','ZOMOROD_ORBIT_DATA','id="zm-gold-search-toolbar-20261018"','id="zm-topics-top-icon-20261018"'))
+              assert 'تمام حقوق مادی و معنوی' in html
+              assert len(html)>2200000
+              passed=True
+              print('ZM_FX57_PUBLIC_HTML_VERIFIED=yes',flush=True)
+              break
+            except Exception as ex:
+              print('ZM_FX57_SMOKE_RETRY='+str(k)+' '+repr(ex)[:140],flush=True)
+              time.sleep(2)
+          if not passed:raise RuntimeError('Public release not verified')
+          for url in ('/topics/','/search/','/store/','/about/','/tala/'):
+            with urlopen(Request('https://zomorodmelal.ir'+url,headers={'User-Agent':'ZMFX57Verifier/1'}),timeout=22) as r:
+              assert r.status==200 and len(r.read(3500000))>200
+            print('ZM_FX57_PROTECTED_ROUTE_OK='+url,flush=True)
+          PY
+      - name: Real Chromium check CSS render and no layout displacement
+        id: visual
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/zm-fx57-browser"
+          cd "$RUNNER_TEMP/zm-fx57-browser"
+          npm --silent init -y >/dev/null
+          npm --silent install --no-save playwright@1.55.0
+          npx playwright install chromium
+          cat > inspect.cjs <<'JS'
+          const {chromium}=require('playwright');
+          (async()=>{
+            const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
+            for(const width of [1440,1024,768,390,320]){
+              const page=await browser.newPage({viewport:{width,height:890},deviceScaleFactor:1});
+              await page.goto('https://zomorodmelal.ir/?__fx57_visual_'+width,{waitUntil:'domcontentloaded',timeout:40000});
+              await page.waitForTimeout(550);
+              const before=await page.evaluate(()=>{
+                const sheet=document.getElementById('zm-fx5-fx7-extra-css-20261018');
+                function geo(q){const el=document.querySelector(q);if(!el)return null;const r=el.getBoundingClientRect();return{x:r.x,y:r.y,w:r.width,h:r.height}}
+                const nodes=['header.topbar','nav.header-orbit','#zm-gold-search-toolbar-20261018','#solar-stage','main#content','footer#site-footer'];
+                const a=Object.fromEntries(nodes.map(q=>[q,geo(q)]));
+                const nav=document.querySelector('nav.header-orbit');
+                const pseudo=getComputedStyle(nav,'::after');
+                const style={content:pseudo.content,animation:pseudo.animationName,height:pseudo.height,position:pseudo.position};
+                sheet.disabled=true;
+                const b=Object.fromEntries(nodes.map(q=>[q,geo(q)]));
+                sheet.disabled=false;
+                const displacement=nodes.map(q=>{
+                  if(!a[q]||!b[q])return {q,m:999};
+                  return{q,m:Math.max(...['x','y','w','h'].map(k=>Math.abs(a[q][k]-b[q][k])))};
+                }).filter(x=>x.m>3);
+                return {hasStyle:!!sheet,hasCardRule:sheet.textContent.includes('#content .topic-card:hover'),style,displacement};
+              });
+              if(!before.hasStyle||!before.hasCardRule||before.style.content==='none'||
+                before.style.animation==='none'||before.displacement.length>0)
+                throw Error('Navbar effect or layout changed at '+width+': '+JSON.stringify(before));
+              const hover=await page.evaluate(()=>{
+                const host=document.querySelector('.orbit-shelves');
+                if(!host)return{error:'missing shelf'};
+                const probe=document.createElement('a');
+                probe.className='topic-card';probe.href='#orbit-01';
+                probe.textContent='Card style probe';probe.style.cssText='pointer-events:auto;display:block;position:relative;width:140px;height:180px';
+                host.appendChild(probe);
+                const first={transform:getComputedStyle(probe).transform,filter:getComputedStyle(probe).filter,translate:getComputedStyle(probe).translate};
+                return {first,probeCreated:true};
+              });
+              await page.locator('.orbit-shelves .topic-card').last().hover();
+              const active=await page.locator('.orbit-shelves .topic-card').last().evaluate(el=>{
+                const s=getComputedStyle(el);return {translate:s.translate,filter:s.filter,transform:s.transform};
+              });
+              console.log('ZM_FX57_BROWSER '+JSON.stringify({width,nav:before.style,displacement:before.displacement,probe:hover,hover:active}));
+              if(!hover.probeCreated||active.filter==='none'||active.translate==='none')
+                throw Error('Card-hover enhancement not applied at '+width);
+              await page.close();
+            }
+            await browser.close();
+            console.log('ZM_FX57_FIVE_VIEWPORTS_VERIFIED=yes');
+          })().catch(e=>{console.error('ZM_FX57_BROWSER_ERROR '+e.stack);process.exit(1)});
+          JS
+          node inspect.cjs
+      - name: Confirm protected sites and routes have identical checksums
+        id: integrity
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          timeout 45s ssh -T -F "$d/config" saeit-cpanel 'python3 -' <<'PY' > "$RUNNER_TEMP/zm-fx57-protected-after.txt"
+          from pathlib import Path
+          import hashlib
+          root=Path('/home/zomorod2/public_html')
+          for name in ('.htaccess','search/index.html','store/index.php','topics/index.html','about/index.html','company/index.html','tala/index.php','business/index.php'):
+            file=root/name
+            if file.is_file() and not file.is_symlink():
+              print(name+' '+hashlib.sha256(file.read_bytes()).hexdigest())
+          PY
+          diff -u "$RUNNER_TEMP/zm-fx57-protected-before.txt" "$RUNNER_TEMP/zm-fx57-protected-after.txt"
+          echo ZM_FX57_PROTECTED_FILES_UNCHANGED=yes
+      - name: Automatic rollback only homepage on any failed post-publish verification
+        if: failure() && steps.install.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          timeout 60s ssh -T -F "$d/config" saeit-cpanel "python3 '/home/zomorod2/.zm-fx57-stage-$GITHUB_RUN_ID/patch.py' rollback '$GITHUB_RUN_ID'"
+      - name: Cleanup only temporary staging and SSH credentials
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          stage="/home/zomorod2/.zm-fx57-stage-$GITHUB_RUN_ID"
+          if test -f "$d/config"; then
+            timeout 30s ssh -T -F "$d/config" saeit-cpanel "rm -f '$stage/patch.py'; rmdir '$stage'" || true
+          fi
+          rm -rf -- "$d"
