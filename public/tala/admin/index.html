@@ -21,12 +21,19 @@
 <section id="dashboard" class="hidden">
 <div class="section-head"><div><h2>خلاصهٔ دفتر</h2><p class="sub" id="signed-in"></p></div><div class="actions"><button id="export" class="btn">دریافت CSV</button><button id="logout" class="btn">خروج</button></div></div>
 <div class="grid" id="summary"></div>
-<section id="tala-rates-panel" class="panel hidden"><h2>مدیریت تابلوی طلا و سکه</h2>
-<p class="sub">نرخ‌های نمایش‌داده‌شده در صفحهٔ اصلی دستی هستند، نه فید لحظه‌ای. هر نرخ به ریال ثبت می‌شود. قبل از انتشار، منبع و واحد اندازه‌گیری را مستقل تأیید کنید.</p>
+<section id="tala-rates-panel" class="panel hidden"><h2>مدیریت تابلوی طلا، نقره، ارز و رمزارز</h2>
+<p class="sub">نرخ‌های صفحهٔ اصلی دستی و تأییدشده توسط مدیر هستند، نه فید لحظه‌ای. نرخ نقره و سایر فلزات برای هر گرم، ارزها برای هر واحد و رمزارزها برای هر کوین یا توکن، همگی به ریال ثبت می‌شوند.</p>
 <form id="tala-rates-form" class="formgrid" style="margin-top:15px">
-<div class="field"><label for="rate-symbol">نوع نرخ</label><select id="rate-symbol"><option value="gold18">هر گرم طلای ۱۸ عیار</option><option value="gold24">هر گرم طلای ۲۴ عیار</option><option value="melted">مظنهٔ طلای آب‌شده</option><option value="coin">سکهٔ تمام (هر قطعه)</option></select></div>
-<div class="field"><label for="rate-price">قیمت تأییدشده به ریال</label><input id="rate-price" inputmode="numeric" autocomplete="off" placeholder="مثلاً ۱۰۰۰۰۰۰۰۰" required></div>
-<div class="field full"><label for="rate-source">نام منبع و شرح مبنا (مثلاً مرجع و نوع مظنه)</label><input id="rate-source" maxlength="140" placeholder="منبع قابل استناد و مبنای نرخ" required></div>
+<div class="field"><label for="rate-symbol">نوع نرخ</label><select id="rate-symbol"><option value="gold18">هر گرم طلای ۱۸ عیار</option><option value="gold24">هر گرم طلای ۲۴ عیار</option><option value="melted">مظنهٔ طلای آب‌شده</option><option value="coin">سکهٔ تمام (هر قطعه)</option>
+<optgroup label="نقره و سایر فلزات">
+<option value="silver999">نقره ۹۹۹ (هر گرم)</option><option value="silver925">نقره ۹۲۵ (هر گرم)</option><option value="platinum">پلاتین (هر گرم)</option><option value="palladium">پالادیوم (هر گرم)</option>
+</optgroup><optgroup label="ارزهای اصلی · هر واحد">
+<option value="usd">دلار آمریکا USD</option><option value="eur">یورو EUR</option><option value="gbp">پوند بریتانیا GBP</option><option value="aed">درهم امارات AED</option><option value="try">لیر ترکیه TRY</option><option value="cad">دلار کانادا CAD</option>
+</optgroup><optgroup label="ارزهای دیجیتال · هر توکن/کوین">
+<option value="btc">بیت‌کوین BTC</option><option value="eth">اتریوم ETH</option><option value="usdt">تتر USDT</option><option value="trx">ترون TRX</option><option value="bnb">BNB</option><option value="sol">سولانا SOL</option>
+</optgroup></select></div>
+<div class="field"><label for="rate-price">قیمت یک واحد از دارایی انتخابی، به ریال</label><input id="rate-price" inputmode="numeric" autocomplete="off" placeholder="مثلاً ۱۰۰۰۰۰۰۰۰" required></div>
+<div class="field full"><label for="rate-source">مرجع قابل استناد، بازار یا صرافی و شرح مبنای نرخ</label><input id="rate-source" maxlength="140" placeholder="منبع قابل استناد و مبنای نرخ" required></div>
 <div class="actions full"><button class="btn primary" type="submit">ثبت نرخ و نمایش در تابلو</button><a class="btn" href="/tala/#market" target="_blank" rel="noopener">مشاهدهٔ تابلو</a></div></form>
 <div class="message" id="rate-message" aria-live="polite"></div>
 <div id="tala-rate-current" class="list" aria-live="polite"></div>
@@ -85,7 +92,7 @@ async function loadTalaAdminRates(){
   const response=await fetch('/tala/api/quotes.php',{credentials:'same-origin',cache:'no-store'});
   if(!response.ok)throw new Error('تابلوی نرخ در دسترس نیست.');
   const data=await response.json();
-  const labels={gold18:'گرم ۱۸ عیار',gold24:'گرم ۲۴ عیار',melted:'مظنه آب‌شده',coin:'سکه تمام'};
+  const labels={gold18:'گرم ۱۸ عیار',gold24:'گرم ۲۴ عیار',melted:'مظنه آب‌شده',coin:'سکه تمام',silver999:'گرم نقره ۹۹۹',silver925:'گرم نقره ۹۲۵',platinum:'گرم پلاتین',palladium:'گرم پالادیوم',usd:'USD',eur:'EUR',gbp:'GBP',aed:'AED',try:'TRY',cad:'CAD',btc:'BTC',eth:'ETH',usdt:'USDT',trx:'TRX',bnb:'BNB',sol:'SOL'};
   for(const [symbol,label] of Object.entries(labels)){
    const q=data.quotes?.[symbol];
    const d=document.createElement('div');d.className='line';
