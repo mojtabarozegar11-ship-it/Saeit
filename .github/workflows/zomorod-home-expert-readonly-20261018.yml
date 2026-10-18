@@ -1,0 +1,44 @@
+name: Zomorod homepage comprehensive visual SEO accessibility and performance audit
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/zomorod-home-expert-readonly-20261018.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install isolated browser and accessibility audit tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          dir="$RUNNER_TEMP/zomorod-home-expert"
+          mkdir -p "$dir"
+          cd "$dir"
+          npm --silent init -y >/dev/null
+          npm --silent install --no-save playwright@1.55.0 @axe-core/playwright@4.10.2
+          npx playwright install chromium
+      - name: Read-only six-viewport audit of live homepage
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/zomorod-home-expert"
+          cp "$GITHUB_WORKSPACE/scripts/zomorod_home_visual_expert_readonly_20261018.cjs" ./audit.cjs
+          node audit.cjs
+      - name: Save comprehensive results and screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zomorod-homepage-expert-audit
+          path: |
+            ${{ runner.temp }}/zomorod-home-expert/home-audit.json
+            ${{ runner.temp }}/zomorod-home-expert/*.png
+          if-no-files-found: warn
+          retention-days: 14
