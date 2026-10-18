@@ -146,10 +146,16 @@ def activate():
                 "INSTALLED_EVOLUTION_SHA_MISMATCH")
         if not existing:
             backup = RUNTIME / "cron_before_evolution_20261018.txt"
-            require(not backup.exists() and not backup.is_symlink(), "CRON_BACKUP_ALREADY_EXISTS")
-            fd = os.open(str(backup), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
-            with os.fdopen(fd, "w") as f:
-                f.write(original_cron)
+            require(not backup.is_symlink(), "CRON_BACKUP_SYMLINK")
+            if backup.exists():
+                require(backup.is_file() and backup.stat().st_size <= 250000
+                        and not (backup.stat().st_mode & 0o077)
+                        and backup.read_text() == original_cron,
+                        "CRON_BACKUP_DIFFERS_FROM_CURRENT_JOBS")
+            else:
+                fd = os.open(str(backup), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+                with os.fdopen(fd, "w") as f:
+                    f.write(original_cron)
             require(read_crontab(cron) == original_cron, "CRON_CHANGED_DURING_PREFLIGHT")
             target = original_cron + ("" if original_cron.endswith("\n") else "\n") + entry + "\n"
             p = subprocess.run([cron, "-"], input=target, text=True,
@@ -178,7 +184,8 @@ def activate():
                 "EVOLUTION_SAFETY_INVARIANT_FAILED")
         actual = read_crontab(cron).splitlines()
         require(sum(MARK in line for line in actual) == 1, "EVOLUTION_SCHEDULE_UNVERIFIED")
-        require([line for line in actual if MARK not in line] == original_cron.splitlines(),
+        require([line for line in actual if MARK not in line] ==
+                [line for line in original_cron.splitlines() if MARK not in line],
                 "OTHER_CRON_JOBS_CHANGED")
         print(json.dumps({
             "status": "MPW_EVOLUTION_PRIVATE_LIVE_ACTIVE",
