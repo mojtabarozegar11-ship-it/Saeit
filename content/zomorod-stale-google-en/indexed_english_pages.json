@@ -1,0 +1,241 @@
+{
+  "version": 1,
+  "source": "public search index of previously published Zomorod Melal English URLs; snippets are not original full-page backups",
+  "pages": [
+    {
+      "path": "/en/",
+      "title": "Zomorod Melal",
+      "teaser": "Research, production and digital services in one connected ecosystem."
+    },
+    {
+      "path": "/en/about/",
+      "title": "About us",
+      "teaser": "Explore the company's scientific research, genetic studies, agriculture, and industry-related activities, with attention to documented capabilities and responsible communication."
+    },
+    {
+      "path": "/en/agents/",
+      "title": "AI and agents",
+      "teaser": "Explore intelligent workflows and recorded results. A connected agent is not proof of successful execution."
+    },
+    {
+      "path": "/en/agriculture/",
+      "title": "Agriculture",
+      "teaser": "Plan farming around land, water, crop history, equipment and measurable results."
+    },
+    {
+      "path": "/en/auctions/",
+      "title": "Tenders and opportunities",
+      "teaser": "This page introduces an area of work. It does not guarantee availability, delivery or project completion. Confirm the scope and terms before making a decision."
+    },
+    {
+      "path": "/en/authors/mojtaba-rozegar/",
+      "title": "Mojtaba Rozegar",
+      "teaser": "Mojtaba Rozegar (مجتبی روزگار) is a researcher and CEO of Zomorod Melal Agriculture & Industry Company."
+    },
+    {
+      "path": "/en/blog/",
+      "title": "Insights",
+      "teaser": "Practical writing about processes, quality, technology and development, centred on a clear problem and a useful next step."
+    },
+    {
+      "path": "/en/carpets/",
+      "title": "Carpets and crafts",
+      "teaser": "Document materials, dimensions, workmanship, condition and evidence of authenticity."
+    },
+    {
+      "path": "/en/chain-stores/",
+      "title": "Direct-supply chain stores",
+      "teaser": "A direct-supply model connecting producers and customers through transparent specifications and verified quality. Branch and stock details await confirmation."
+    },
+    {
+      "path": "/en/company-gallery/",
+      "title": "Brand gallery",
+      "teaser": "Brand images communicate identity; they are not evidence of completed projects or production facilities."
+    },
+    {
+      "path": "/en/company/",
+      "title": "Company",
+      "teaser": "Explore the company's described structure and areas of study. A listed unit or value chain does not establish current production or availability."
+    },
+    {
+      "path": "/en/contact/",
+      "title": "Contact and collaboration",
+      "teaser": "Describe your needs, timeframe and expected outcome. Submitting an enquiry does not create a delivery commitment."
+    },
+    {
+      "path": "/en/economy/",
+      "title": "Business economics",
+      "teaser": "Compare costs, revenue and operating assumptions on a consistent basis."
+    },
+    {
+      "path": "/en/education/",
+      "title": "Academy",
+      "teaser": "Learn through focused reading, practical exercises and small, reviewable outcomes. These guides do not award certificates."
+    },
+    {
+      "path": "/en/gold/",
+      "title": "Gold and jewellery",
+      "teaser": "Understand product specifications, evidence of authenticity and the components of a quoted price."
+    },
+    {
+      "path": "/en/guides/agents/",
+      "title": "Define the task before automating it",
+      "teaser": "An agent needs clear inputs, authority limits and acceptance criteria. 'Manage everything' cannot be evaluated without defined outputs and constraints."
+    },
+    {
+      "path": "/en/guides/agriculture/",
+      "title": "Start the farm record with its resources",
+      "teaser": "Before selecting a service or technology, record the plot, water access, crop history and available equipment. This helps distinguish different causes of ..."
+    },
+    {
+      "path": "/en/guides/auctions/",
+      "title": "Complete the opportunity file before deciding",
+      "teaser": "Read the invitation from its original source and keep the document. Clarify the subject, deadline, submission method and participation requirements."
+    },
+    {
+      "path": "/en/guides/blog/",
+      "title": "Make practical writing specific",
+      "teaser": "Make practical writing specific ... Limit the topic to one problem and identify the audience. Writing intended for everyone often provides no concrete action."
+    },
+    {
+      "path": "/en/guides/carpets/",
+      "title": "Create a record for a handmade piece",
+      "teaser": "Start with observable specifications: dimensions, materials, making technique and current condition. Mark uncertain information separately."
+    },
+    {
+      "path": "/en/guides/company-gallery/",
+      "title": "Distinguish brand artwork from project evidence",
+      "teaser": "Brand artwork presents an identity and may not show a real site or activity. Its caption should make this distinction clear."
+    },
+    {
+      "path": "/en/guides/company/",
+      "title": "Begin collaboration with a problem statement",
+      "teaser": "The company's areas of work are a starting point for discussion. Collaboration requires a clear need, timeframe, available resources and expected outcome."
+    },
+    {
+      "path": "/en/guides/economy/",
+      "title": "Compare costs and revenue consistently",
+      "teaser": "Use the same currency and period when comparing options. Separate upfront and recurring costs, and forecast revenue from realised revenue."
+    },
+    {
+      "path": "/en/guides/education/",
+      "title": "Learn through a small deliverable",
+      "teaser": "Compare the exercise with the original criteria. The goal is to perform a specific task more accurately and explain your choices, not merely finish reading."
+    },
+    {
+      "path": "/en/guides/gold/",
+      "title": "Compare products with equivalent specifications",
+      "teaser": "Research · Production · Digital services. Compare products with equivalent specifications. The final price alone is not enough to compare two pieces."
+    },
+    {
+      "path": "/en/guides/knowledge/",
+      "title": "Write a trustworthy note",
+      "teaser": "Give each note one clear question. Readers should know what it explains and what they should not expect from it."
+    },
+    {
+      "path": "/en/guides/market/",
+      "title": "Translate a real need into product specifications",
+      "teaser": "First state the problem the product should solve. Separate essential features from cosmetic preferences or less important functions."
+    },
+    {
+      "path": "/en/guides/news/",
+      "title": "Three questions for checking news",
+      "teaser": "Three questions for checking news ... Who published the report, when did the event happen, and where is the primary evidence? These are the starting questions."
+    },
+    {
+      "path": "/en/guides/real-estate/",
+      "title": "Make a site visit purposeful",
+      "teaser": "List the required use, access, facilities and essential constraints before visiting. This prevents decisions based solely on appearance."
+    },
+    {
+      "path": "/en/guides/research/",
+      "title": "From research question to useful output",
+      "teaser": "A sound study states the question and what falls outside its scope. Naming a field is not a substitute for defining the problem."
+    },
+    {
+      "path": "/en/guides/restaurant/",
+      "title": "Reduce waste through simple records",
+      "teaser": "Record purchases, consumption and waste separately. Combining them into one number hides the cause of loss."
+    },
+    {
+      "path": "/en/guides/studio/",
+      "title": "Prototype before full production",
+      "teaser": "Build a short prototype to test the key assumption, such as story clarity or understandable interaction. Develop final visual details afterwards. Turn feedback ..."
+    },
+    {
+      "path": "/en/guides/vehicles/",
+      "title": "Consider operating cost alongside price",
+      "teaser": "Define intended use, intensity and environmental conditions before choosing vehicles or machinery. More capacity is not always a better fit."
+    },
+    {
+      "path": "/en/guides/weather/",
+      "title": "Read a forecast in its operational context",
+      "teaser": "A forecast covers a particular location and period. Data from a nearby city may not represent a field or transport route accurately."
+    },
+    {
+      "path": "/en/industry/",
+      "title": "Industry",
+      "teaser": "Define production needs, improve processes and track maintenance and quality."
+    },
+    {
+      "path": "/en/knowledge/",
+      "title": "Knowledge library",
+      "teaser": "Practical guides for understanding a subject, collecting evidence and preparing your next step."
+    },
+    {
+      "path": "/en/market/",
+      "title": "Marketplace",
+      "teaser": "This page introduces an area of work. It does not guarantee availability, delivery or project completion. Confirm the scope and terms before making a decision."
+    },
+    {
+      "path": "/en/marketing/",
+      "title": "Marketing",
+      "teaser": "Build campaigns around real customer value, consent and measurable outcomes, using the shared communication core."
+    },
+    {
+      "path": "/en/news/",
+      "title": "News network",
+      "teaser": "Agriculture, science, industry and economic news require verified sources. News, analysis and opinion are clearly distinguished."
+    },
+    {
+      "path": "/en/newsletter/",
+      "title": "Company news and notices",
+      "teaser": "Official company updates, announcements and documented activity reports are published only after approval."
+    },
+    {
+      "path": "/en/real-estate/",
+      "title": "Property",
+      "teaser": "Prepare a property request through clear needs, site inspection and professional review of documents."
+    },
+    {
+      "path": "/en/research/",
+      "title": "Research",
+      "teaser": "Turn a specific question into a documented study with a method, evidence and useful output."
+    },
+    {
+      "path": "/en/restaurant/",
+      "title": "Food and hospitality",
+      "teaser": "Improve sourcing, inventory, menu preparation and customer experience through documented operations."
+    },
+    {
+      "path": "/en/signals/",
+      "title": "Indicator monitoring",
+      "teaser": "Read indicators with their source, timestamp and limitations. No live trading signals are offered here."
+    },
+    {
+      "path": "/en/studio/",
+      "title": "Creative studio",
+      "teaser": "Explore games, animation and digital storytelling through briefs, prototypes and user feedback."
+    },
+    {
+      "path": "/en/vehicles/",
+      "title": "Vehicles and machinery",
+      "teaser": "Compare equipment by actual use, maintenance, technical condition and access to parts."
+    },
+    {
+      "path": "/en/weather/",
+      "title": "Weather planning",
+      "teaser": "Prepare weather-dependent work using a location, timestamp, reliable source and contingency plan. This page is not a live forecast."
+    }
+  ]
+}
