@@ -186,6 +186,72 @@ jobs:
           print("GENOME_AUDIT_COMPLETE=read_only")
           PY
           REMOTE
+      - name: Validate generation 12 to 64 dependency graph and test inventory (read-only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 - <<'PY'
+          from pathlib import Path
+          from collections import Counter
+          import ast, hashlib, re, os, json
+          src=Path.home()/"saeit_v91"/"zomorodmelal"/"site_master"
+          app=Path.home()/"Saeit"
+          assert src.is_dir() and (src/"vendor"/"master_gen64").is_dir()
+          modules=list(sorted(src.rglob("*.py")))
+          assert len(modules)>=60
+          def names(tree):
+              result=[]
+              for n in ast.walk(tree):
+                  if isinstance(n,ast.Import):
+                      result += [a.name for a in n.names]
+                  elif isinstance(n,ast.ImportFrom):
+                      result += [("."+n.module if n.level and n.module else n.module or "") for a in n.names]
+              return sorted(set(result))
+          count=Counter()
+          python_ok=0
+          highrisk=[]
+          detail=[]
+          for p in modules:
+              rel=p.relative_to(src)
+              s=p.read_text(encoding="utf-8-sig")
+              tree=ast.parse(s,filename=str(p))
+              compile(tree,str(p),"exec")
+              python_ok+=1
+              imported=names(tree)
+              role=rel.parts[1] if len(rel.parts)>2 and rel.parts[0]=="vendor" else "support"
+              count[role]+=1
+              risks=[]
+              calls=[n.func for n in ast.walk(tree) if isinstance(n,ast.Call)]
+              call_names=[]
+              for n in calls:
+                  if isinstance(n,ast.Name):call_names.append(n.id)
+                  elif isinstance(n,ast.Attribute):call_names.append(n.attr)
+              for flag in ("eval","exec","system","popen","Popen","remove","unlink","rmtree","subprocess","connect","urlopen","requests","post","delete","replace"):
+                  if flag in call_names:risks.append(flag)
+              if risks:highrisk.append((str(rel),risks))
+              detail.append({"path":str(rel),"imports":imported[:14],"symbols":sorted({n.name for n in ast.walk(tree) if isinstance(n,(ast.ClassDef,ast.FunctionDef,ast.AsyncFunctionDef))})[:20]})
+          print("GENE_PYTHON_FILES_SYNTAX_OK="+str(python_ok))
+          print("GENE_GENERATIONS="+json.dumps(dict(count),sort_keys=True))
+          print("GENE_IMPORT_INVENTORY="+json.dumps(detail,ensure_ascii=False,separators=(",",":")))
+          print("GENE_STATIC_RISK_CALLS="+json.dumps(highrisk,separators=(",",":")))
+          testfiles=[]
+          for base in (Path.home()/"saeit_v91"/"zomorodmelal",Path.home()/"saeit_v91"):
+              for dirpath,dirs,files in os.walk(base,followlinks=False):
+                  depth=len(Path(dirpath).relative_to(base).parts)
+                  dirs[:]=[x for x in dirs if x.lower() not in ("venv",".venv","site-packages",".git","node_modules","__pycache__","mojplaywin_site","mojplaywin") and depth<6]
+                  for name in files:
+                      if name.endswith(".py") and ("test" in name.lower() or "test" in str(Path(dirpath).relative_to(base)).lower()) and re.search(r"master|gen\d+|agent|evol|proof",name+" "+dirpath,re.I):
+                          testfiles.append(str((Path(dirpath)/name).relative_to(Path.home()/"saeit_v91")))
+          print("GENE_TEST_FILE_PATHS="+json.dumps(sorted(set(testfiles))[:100],ensure_ascii=False))
+          for rel in ("site_master","portal/agent_engine.py","portal/management/commands/run_site_master.py"):
+              p=app/rel
+              print("ACTIVE_GENE_TARGET_EXIST="+rel+"="+str(p.exists()))
+          print("GENE_DEPENDENCY_AUDIT_COMPLETE=read_only")
+          PY
+          REMOTE
       - name: Check public site baseline without mutation
         shell: bash
         run: |
