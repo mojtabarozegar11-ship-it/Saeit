@@ -238,3 +238,81 @@ def test_gateway_landing_requires_live_enablement(client):
         res = client.get("/checkout/crypto/", HTTP_HOST="mojplaywin.com")
         assert res.status_code == 302
         assert res["Location"] == "/store/#verified-crypto-offers"
+
+
+
+@pytest.mark.django_db
+def test_whole_store_lists_all_priced_approved_products_and_service_checkouts(client, buyer, priced_offer):
+    offer, folder = priced_offer
+    service = Product.objects.create(
+        title="Research consulting service", product_type="service", price=Decimal("125.00"),
+        currency="USD", active=True, owner=buyer,
+    )
+    active_service = MojCryptoOffer.objects.create(
+        product=service, asset="TRX", atomic_amount="10000000",
+        fulfillment_mode="service", active=True,
+    )
+    # An inactive/no-price product must never be sold or quoted.
+    fake = Product.objects.create(
+        title="Unapproved promotional card", product_type="service",
+        price=0, currency="USD", active=True, owner=buyer,
+    )
+    MojCryptoOffer.objects.create(
+        product=fake, asset="TRX", atomic_amount="10000000",
+        fulfillment_mode="service", active=True,
+    )
+    with override_settings(
+        ALLOWED_HOSTS=["mojplaywin.com"],
+        MOJPLAYWIN_CRYPTO_ENABLED=True, MOJPLAYWIN_PRIVATE_ASSET_ROOT=str(folder),
+        MOJPLAYWIN_ETH_ADDRESS="0x" + "1" * 40,
+        MOJPLAYWIN_ETH_RPC_URL="https://eth.example.org",
+        MOJPLAYWIN_TRX_ADDRESS="THFNU1iEXHd71WjEgjqUksd2UnMg2pUi73",
+        MOJPLAYWIN_TRONGRID_API_KEY="",
+        MOJPLAYWIN_TRX_CONFIRMATIONS=20,
+    ):
+        store = client.get("/store/", HTTP_HOST="mojplaywin.com")
+        assert store.status_code == 200
+        assert b"Research consulting service" in store.content
+        assert b"Approved chess study" in store.content
+        assert b"Unapproved promotional card" not in store.content
+        assert f"/checkout/crypto/buy/{active_service.pk}/".encode() in store.content
+        client.force_login(buyer)
+        res = client.post(f"/checkout/crypto/buy/{active_service.pk}/", HTTP_HOST="mojplaywin.com")
+        assert res.status_code == 302
+        invoice = MojCryptoInvoice.objects.get(offer=active_service)
+        assert invoice.status == "awaiting_payment"
+        assert invoice.order.total == Decimal("125.00")
+        # A fake confirmation without chain proof never succeeds.
+        with patch("core.mojplaywin_crypto_gateway._verify_invoice", side_effect=VerificationError("chain mismatch")):
+            assert client.post(
+                f"/checkout/crypto/invoice/{invoice.token}/verify/",
+                {"tx_hash": "f" * 64}, HTTP_HOST="mojplaywin.com",
+            ).status_code == 409
+        invoice.refresh_from_db()
+        assert invoice.status == "awaiting_payment"
+        with patch("core.mojplaywin_crypto_gateway._verify_invoice", return_value=Proof(456789, 35, int(invoice.created_at.timestamp() * 1000))):
+            assert settle(invoice.pk, "f" * 64).status == "paid"
+        assert client.get(f"/checkout/crypto/invoice/{invoice.token}/", HTTP_HOST="mojplaywin.com").status_code == 200
+        assert client.get(f"/checkout/crypto/invoice/{invoice.token}/download/", HTTP_HOST="mojplaywin.com").status_code == 404
+        invoice.order.refresh_from_db()
+        assert invoice.order.status == "paid"
+        assert LedgerEntry.objects.filter(order=invoice.order).count() == 1
+
+
+@pytest.mark.django_db
+def test_service_checkout_inactive_or_no_price_never_creates_order(client, buyer):
+    product = Product.objects.create(
+        title="Not priced yet", product_type="service", price=Decimal("0"),
+        currency="USD", active=True, owner=buyer,
+    )
+    offer = MojCryptoOffer.objects.create(
+        product=product, asset="TRX", atomic_amount="1000000",
+        fulfillment_mode="service", active=True,
+    )
+    with override_settings(
+        ALLOWED_HOSTS=["mojplaywin.com"], MOJPLAYWIN_CRYPTO_ENABLED=True,
+        MOJPLAYWIN_TRX_ADDRESS="THFNU1iEXHd71WjEgjqUksd2UnMg2pUi73",
+    ):
+        client.force_login(buyer)
+        assert client.post(f"/checkout/crypto/buy/{offer.pk}/", HTTP_HOST="mojplaywin.com").status_code == 404
+        assert Order.objects.count() == 0
