@@ -1,0 +1,192 @@
+name: Restore historical company and about content without replacement
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/zomorod-historic-content-additive.yml"]
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-company-about-additive
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate complete historical source and additive fragments
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          base=Path('content/zomorod-company-history-20261018')
+          d=json.loads((base/'historical-structured-content.json').read_text())
+          c=d['company']; a=d['about']
+          assert d['source']['commit']=='1ae202ee8ba6e72b4eb8ad97c0a72c978c9f1586'
+          assert len(c['statutory_activities'])==18 and len(c['product_chains'])==55 and len(c['genetics_scopes'])==12
+          assert len(c['units'])==9 and len(c['departments'])==9 and len(a['items'])==3
+          for page,marker in [('company','zm-history-company-content-20261018'),('about','zm-history-about-content-20261018')]:
+              data=(base/f'{page}-extension.html').read_text()
+              assert marker in data
+              assert data.count('<style id="zm-history-theme">')==1
+              assert '<script' not in data.lower() and '<iframe' not in data.lower()
+              assert len(data)>1800
+              print("HISTORY_FRAGMENT_CHECK",page,"bytes",len(data.encode()))
+          PY
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - name: Snapshot exact live company and about pages and protected website files
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          run="$1"
+          web="$HOME/public_html"
+          stage="$HOME/.backups/zomorod-historical-company/$run"
+          test ! -e "$stage"
+          test -s "$web/company/index.html" && test ! -L "$web/company/index.html"
+          test -s "$web/about/index.html" && test ! -L "$web/about/index.html"
+          test -f "$web/.htaccess" && test -s "$web/index.html"
+          grep -Fq 'https://zomorodmelal.ir/company/' "$web/company/index.html"
+          grep -Fq 'https://zomorodmelal.ir/about/' "$web/about/index.html"
+          ! grep -Fq 'zm-history-company-content-20261018' "$web/company/index.html"
+          ! grep -Fq 'zm-history-about-content-20261018' "$web/about/index.html"
+          mkdir -p "$(dirname "$stage")"
+          mkdir -m 700 "$stage"
+          mkdir -m 700 "$stage/staging"
+          cp -p "$web/company/index.html" "$stage/company.before.html"
+          cp -p "$web/about/index.html" "$stage/about.before.html"
+          cmp -s "$web/company/index.html" "$stage/company.before.html"
+          cmp -s "$web/about/index.html" "$stage/about.before.html"
+          sha256sum "$web/index.html" "$web/.htaccess" > "$stage/immutable.sha256"
+          for site in mohammad ghanadi amozeshgah tala; do
+            test ! -L "$web/$site"
+            if test -f "$web/$site/index.html"; then sha256sum "$web/$site/index.html" >> "$stage/immutable.sha256"; fi
+          done
+          echo COMPANY_ABOUT_SOURCE_BACKUP=verified
+          REMOTE
+      - name: Transfer additive fragments into private stage
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          tar -cf - -C content/zomorod-company-history-20261018 historical-structured-content.json company-extension.html about-extension.html |
+             ssh -F "$d/config" saeit-cpanel "tar -xf - -C /home/zomorod2/.backups/zomorod-historical-company/$GITHUB_SHA/staging"
+      - name: Apply append-only edits atomically and rollback if any check fails
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          run="$1"; web="$HOME/public_html"
+          stage="$HOME/.backups/zomorod-historical-company/$run"
+          rollback() {
+            set +e
+            for kind in company about; do
+              before="$stage/$kind.before.html"
+              target="$web/$kind/index.html"
+              if test -s "$before"; then
+                cp -p "$before" "$target.back"
+                mv -f "$target.back" "$target"
+              fi
+            done
+            echo COMPANY_ABOUT_AUTO_ROLLBACK=restored
+          }
+          active=0
+          trap 'rc=$?; trap - EXIT; if test "$active" = 1; then rollback; fi; exit "$rc"' EXIT
+          python3 - "$stage" "$web" <<'PY'
+          from pathlib import Path
+          import sys,re
+          src=Path(sys.argv[1]);web=Path(sys.argv[2])
+          for kind in ('company','about'):
+              original=(src/(kind+'.before.html')).read_bytes()
+              fragment=(src/'staging'/(kind+'-extension.html')).read_bytes()
+              marker=b'zm-history-'+kind.encode()+b'-content-20261018'
+              assert marker not in original and marker in fragment
+              assert original.count(b'</head>')==1
+              assert original.count(b'</main>')==1
+              assert b'<style id="zm-history-theme">' in fragment and b'</style>' in fragment
+              left,cssright=fragment.split(b'<style id="zm-history-theme">',1)
+              css,tail=cssright.split(b'</style>',1)
+              assert not tail.strip()
+              style=b'<style id="zm-history-theme">'+css+b'</style>'
+              updated=original.replace(b'</head>',style+b'</head>',1).replace(b'</main>',left+b'</main>',1)
+              assert updated.replace(style,b'',1).replace(left,b'',1)==original
+              assert original.count(b'<footer')==updated.count(b'<footer')
+              assert len(updated)>len(original)+1000
+              dest=src/(kind+'.next.html')
+              dest.write_bytes(updated)
+              print('HISTORICAL_STAGE',kind,'before',len(original),'after',len(updated))
+          PY
+          for kind in company about; do
+            cp -p "$stage/$kind.next.html" "$web/$kind/index.html.history.$run"
+            chmod --reference="$web/$kind/index.html" "$web/$kind/index.html.history.$run"
+          done
+          active=1
+          for kind in company about; do
+            mv -f "$web/$kind/index.html.history.$run" "$web/$kind/index.html"
+          done
+          for kind in company about; do
+            status="$(curl -sS -L --max-time 25 -o "$stage/$kind.live.html" -w '%{http_code}' "https://zomorodmelal.ir/$kind/?historical=$run" || true)"
+            echo HISTORICAL_ROUTE="$kind" HTTP="$status"
+            test "$status" = 200
+            grep -Fq "zm-history-$kind-content-20261018" "$stage/$kind.live.html"
+            grep -Fq "zm-history-theme" "$stage/$kind.live.html"
+            grep -Fq "زمرد ملل" "$stage/$kind.live.html"
+          done
+          grep -Fq 'زنجیره ارزش محصولات' "$stage/company.live.html"
+          grep -Fq 'درباره شرکت کشت و صنعت زمرد ملل' "$stage/about.live.html"
+          sha256sum -c --status "$stage/immutable.sha256"
+          active=0;trap - EXIT
+          echo COMPANY_ABOUT_ADDITIVE_CONTENT=published_and_verified
+          REMOTE
+      - name: Clean SSH keys
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
