@@ -73,7 +73,9 @@ class MainSiteThemeBoundaryTests(unittest.TestCase):
         from django.conf import settings
         from django.template import Context, Engine
         if not settings.configured:
-            settings.configure(STATIC_URL="/static/")
+            settings.configure(STATIC_URL="/static/", INSTALLED_APPS=[])
+        import django
+        django.setup()
         engine = Engine(
             dirs=[str(ROOT / "core/templates")],
             libraries={"mpw_shell": "core.templatetags.mpw_shell", "static": "django.templatetags.static"},
