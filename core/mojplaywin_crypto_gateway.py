@@ -145,7 +145,7 @@ def buy(request, offer_id):
             return HttpResponse("Checkout collision. Try again later.", status=409)
         invoice = MojCryptoInvoice.objects.create(
             order=order, offer=offer, asset=offer.asset,
-            atomic_amount=quote, merchant_address=destination,
+            atomic_amount=str(quote), merchant_address=destination,
             expires_at=timezone.now() + timedelta(minutes=30),
         )
         PaymentIntent.objects.create(
