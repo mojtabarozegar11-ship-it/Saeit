@@ -86,6 +86,17 @@ jobs:
           source = home / "saeit_v91"
           active = home / "Saeit"
           target = active / "agent_imports" / "v91"
+          # Remove only the three test-file copies created by the previous isolated run.
+          cleanup = {
+              "zomorodmelal/tests_offline/test_agent_engine_v9.py": "547bb5111238835b80a2ef33cc7ca80ce4bd6c28ff0d3b82f2958ac0ee0c6d3a",
+              "zomorodmelal/tests_offline/test_phase17_agent_claims.py": "f15b34b778f87c77d5489c578b7c83aa972530d1c52c28174cffc96d67b2cfa9",
+              "zomorodmelal/tests_offline/test_v33_agent_singleflight.py": "7d975484a923cc29a201d6f38f4c474f3864ff4f3f4815619cd6b30debffb491",
+          }
+          for relpath, digest in cleanup.items():
+              p = target / relpath
+              if p.is_file() and not p.is_symlink() and hashlib.sha256(p.read_bytes()).hexdigest() == digest:
+                  p.unlink()
+                  print("CLEANUP_REMOVED_TEST_ONLY=" + relpath)
           refuse = {"mojplaywin", "mojplaywin_site", "picm", "saman", "farnaz",
                     "zahra", "taniya", "raha", "studio", "mohammad", "tala",
                     "commerce", "shop", "payment", "wallet", "crypto",
@@ -110,6 +121,8 @@ jobs:
                       continue
                   inspected += 1
                   rel = rel_dir / name
+                  if name.startswith("test_") or name.endswith("_test.py") or any(part.lower() in {"tests", "tests_offline", "test"} for part in rel.parts):
+                      continue
                   if any(p.lower() in refuse for p in rel.parts):
                       skipped_scoped += 1
                       continue
@@ -139,6 +152,7 @@ jobs:
                   except (SyntaxError, UnicodeDecodeError, ValueError, OSError) as error:
                       invalid.append(str(rel) + ":" + type(error).__name__)
           existing_names = set()
+          existing_by_name = {}
           existing_hashes = set()
           for root, subdirs, files in os.walk(active, followlinks=False):
               rel_dir = Path(root).relative_to(active)
@@ -149,12 +163,30 @@ jobs:
               for name in files:
                   if name.endswith(".py"):
                       existing_names.add(name.casefold())
+                      existing_by_name.setdefault(name.casefold(), []).append(Path(root) / name)
                       p = Path(root) / name
                       try:
                           if p.is_file() and not p.is_symlink() and p.stat().st_size < 200_000:
                               existing_hashes.add(hashlib.sha256(p.read_bytes()).hexdigest())
                       except OSError:
                           pass
+          for rel, content, digest in sorted(candidates,key=lambda c:str(c[0])):
+              for other in existing_by_name.get(rel.name.casefold(),[])[:5]:
+                  try:
+                      current = other.read_bytes()
+                      source_ast = ast.parse(content.decode("utf-8-sig"))
+                      current_ast = ast.parse(current.decode("utf-8-sig"))
+                      get_symbols = lambda tree: {n.name for n in ast.walk(tree) if isinstance(n,(ast.ClassDef,ast.FunctionDef,ast.AsyncFunctionDef))}
+                      src_symbols = get_symbols(source_ast)
+                      dst_symbols = get_symbols(current_ast)
+                      print("COMPARE_MODULE=" + str(rel) + " existing=" + str(other.relative_to(active)) +
+                            " identical=" + str(hashlib.sha256(current).hexdigest()==digest) +
+                            " source_symbols=" + str(len(src_symbols)) +
+                            " existing_symbols=" + str(len(dst_symbols)) +
+                            " source_only=" + ",".join(sorted(src_symbols-dst_symbols)[:20]) +
+                            " existing_only=" + ",".join(sorted(dst_symbols-src_symbols)[:20]))
+                  except (SyntaxError, UnicodeDecodeError, OSError, ValueError) as e:
+                      print("COMPARE_MODULE_UNREADABLE=" + str(rel) + " type=" + type(e).__name__)
           missing = []
           duplicates = []
           for rel, content, digest in sorted(candidates, key=lambda x:str(x[0])):
