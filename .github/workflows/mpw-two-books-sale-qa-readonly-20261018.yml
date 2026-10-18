@@ -1,0 +1,115 @@
+name: MojPlayWin two book live sale settlement and PDF quality evidence (READ ONLY)
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/mpw-two-books-sale-qa-readonly-20261018.yml"]
+permissions: {contents: read}
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Inspect only two books sales conditions and document quality without writes
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 155s ssh -T -F "$d/config" saeit-cpanel bash -s <<'BASH'
+          set -euo pipefail
+          /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - <<'PY'
+          import os,sys,json,pathlib,importlib.util,subprocess,ast,re
+          H=pathlib.Path('/home/zomorod2'); app=H/'Saeit-staging'
+          os.chdir(app);sys.path.insert(0,str(app));os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          import django;django.setup()
+          from core.models import Product
+          from django.urls import resolve
+          from mpw_native_checkout.models import NativeInvoice,NativeChainTransfer
+          from mpw_native_checkout.wallet_ownership import proven_assets
+          for id in (72,225):
+           p=Product.objects.get(pk=id);m=p.metadata or {}
+           print('MPW_SALE_PRODUCT='+json.dumps({'id':id,'price':str(p.price),'active':p.active,'owner_present':bool(p.owner_id),
+            'quality_approved':m.get('quality_approved'),'license_verified':m.get('license_verified'),
+            'publication_permission':m.get('factory_publication_permission'),'payment_live':m.get('payment_live'),
+            'checkout_enabled':m.get('checkout_enabled'),'delivery_prepared':m.get('mpw_private_file_prepared') is True}))
+          for model in (NativeInvoice,NativeChainTransfer):
+           print('MPW_PAYMENT_MODEL='+json.dumps({'name':model.__name__,'fields':[{'name':f.name,'required':not getattr(f,'null',False)} for f in model._meta.fields][:50]}))
+          for route in ('/store/','/store/product/72/checkout/','/store/product/225/checkout/','/merchant-wallet/','/checkout/crypto/'):
+           try:
+            r=resolve(route);print('MPW_PAYMENT_ROUTE='+json.dumps({'route':route,'name':r.url_name,'module':r.func.__module__}))
+           except Exception as e:print('MPW_PAYMENT_ROUTE='+json.dumps({'route':route,'error':type(e).__name__}))
+          assets=proven_assets()
+          print('MPW_WALLET_VERIFIED_ASSETS='+json.dumps({'types':sorted(assets) if isinstance(assets,dict) else None,'verified_count':len(assets)}))
+          for modulepath in ('mpw_native_checkout/autopay_worker.py','mpw_native_checkout/settlement.py','mpw_native_checkout/entitlements.py','core/cryptopay_checkout.py','core/brand_views.py'):
+           f=app/modulepath
+           if not f.is_file():continue
+           src=f.read_text('utf8','replace')
+           funcs=[n for n in ast.walk(ast.parse(src)) if isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef))]
+           labels=[{'fn':n.name,'lines':n.end_lineno-n.lineno+1,
+            'uses_product72':any(isinstance(k,ast.Constant) and k.value==72 for k in ast.walk(n)),
+            'uses_payment_live':any(isinstance(k,ast.Constant) and k.value=='payment_live' for k in ast.walk(n)),
+            'uses_checkout_enabled':any(isinstance(k,ast.Constant) and k.value=='checkout_enabled' for k in ast.walk(n)),
+            'uses_file_ready':any(isinstance(k,ast.Name) and k.id=='product_delivery_ready' for k in ast.walk(n)),
+            } for n in funcs if n.name in ('checkout','mpw_product','qualified_order','can_download_paid_native_order','settle_native_invoice','reconcile_once','_validate')]
+           print('MPW_GATE_FUNCTIONS='+json.dumps({'module':modulepath,'functions':labels}))
+          for rel in ('MojPlayWin_Private_Assets/store/chess-improvement/MojPlayWin_Chess_Grandmaster_Final_Covered_2026.pdf','MojPlayWin_Private_Assets/taniya-little-baker-worms/Taniya_and_the_Little_Baker_Worms.pdf'):
+           f=H/rel; out={'file':f.name,'bytes':f.stat().st_size}
+           for pkg in ('fitz','pypdf','PyPDF2'):
+            if importlib.util.find_spec(pkg):
+             try:
+              if pkg=='fitz':
+               import fitz
+               d=fitz.open(str(f));out['page_count']=len(d);out['encrypted']=d.is_encrypted;out['nonempty_text_pages']=sum(bool(p.get_text('text').strip()) for p in d);d.close()
+              else:
+               module=__import__(pkg);d=module.PdfReader(str(f));out['page_count']=len(d.pages);out['encrypted']=d.is_encrypted
+              out['parser']=pkg
+              break
+             except Exception as e:out['parse_error']=type(e).__name__
+           print('MPW_BOOK_PDF_QA='+json.dumps(out))
+
+          PY
+          BASH
