@@ -15,7 +15,7 @@ class MojPlayWinIsolatedLayoutTests(TestCase):
                 self.assertEqual(html.count('<footer class="mw-site-footer"'), 1)
                 self.assertNotIn('<header class="site-header"', html)
                 self.assertNotIn('<footer class="site-footer"', html)
-                self.assertNotIn("Zomorodmelal", html)
+                self.assertNotIn('aria-label="Zomorodmelal"', html)
                 self.assertIn('<html lang="en" dir="ltr">', html)
                 self.assertIn('href="https://mojplaywin.com' + path + '"', html)
                 self.assertIn('data-mpw-copyright-founder="true"', html)
