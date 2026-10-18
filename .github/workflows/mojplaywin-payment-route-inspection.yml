@@ -2,7 +2,7 @@ name: MojPlayWin payment-only isolated route check (READ ONLY)
 on:
   push:
     branches: [feature/mojplaywin-crypto-gateway-20261018]
-    paths: [.github/workflows/mojplaywin-payment-route-inspection.yml]
+    paths: [.github/workflows/mojplaywin-payment-route-inspection.yml, scripts/mojplaywin_payment_isolation_readonly.py]
   workflow_dispatch:
 permissions:
   contents: read
