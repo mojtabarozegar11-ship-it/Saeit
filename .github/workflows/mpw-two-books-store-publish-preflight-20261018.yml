@@ -1,0 +1,86 @@
+name: MojPlayWin only two books store template precise preflight
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/mpw-two-books-store-publish-preflight-20261018.yml"]
+permissions: {contents: read}
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Read active store template and exact publication anchor without modifications
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 90s ssh -T -F "$d/config" saeit-cpanel bash -s <<'BASH'
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib,json,re
+          H=Path('/home/zomorod2')
+          W=H/'mojplaywin.com/passenger_wsgi.py'
+          T=H/'Saeit-staging/core/templates/mojplaywin/store.html'
+          if not W.is_file() or W.is_symlink() or "APP='/home/zomorod2/Saeit-staging'" not in W.read_text('utf8','replace'):
+           raise RuntimeError('Passenger app no longer matches verified store')
+          if not T.is_file() or T.is_symlink():raise RuntimeError('Live store template not regular file')
+          raw=T.read_bytes();s=raw.decode('utf8')
+          print('MPW_STORE_ISOLATED_PUBLISH_PREFLIGHT='+json.dumps({
+           'store_sha256':hashlib.sha256(raw).hexdigest(),'bytes':len(raw),
+           'catalog_anchor':s.count('id="catalog"'),
+           'buyer_guides_partial':s.count('mojplaywin/store_ten_buyer_guides_20261018.html'),
+           'insert_anchor':s.count('<p class="mw-note">'),
+           'book72_marker':s.count('mpw-sale-book72'),
+           'book225_marker':s.count('mpw-sale-book225'),
+           'live_base_extends_site_base':'{% extends "mojplaywin/site_base.html" %}' in s,
+           'current_template_includes_checkout_form':'<form' in s.lower(),
+           'file_mode':oct(T.stat().st_mode & 0o777),
+           'subsites_not_modified':True}))
+          PY
+          BASH
