@@ -1,0 +1,199 @@
+name: V91 vs Zomorod agent genome and generation audit (read-only)
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/zomorod-v91-agent-genome-audit-20261018.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: v91-zomorod-genome-readonly-20261018
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - name: Compare agent generations, genetic mechanisms, capabilities and full code structure
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          test "$HOME" = /home/zomorod2
+          cd "$HOME/Saeit"
+          PYTHONDONTWRITEBYTECODE=1 python3 - <<'PY'
+          import ast, hashlib, os, re, json
+          from collections import Counter
+          from pathlib import Path
+          source=Path.home()/"saeit_v91"
+          active=Path.home()/"Saeit"
+          assert source.is_dir() and active.is_dir()
+          assert (active/"portal"/"agent_engine.py").is_file()
+          assert (source/"zomorodmelal"/"portal"/"agent_engine.py").is_file()
+          exclude={"mojplaywin","mojplaywin_site","picm","saman","farnaz","zahra","taniya","raha","studio","mohammad","tala","shop","payment","wallet","crypto","private","secrets","credentials","backup","backups","venv",".venv","virtualenv","site-packages",".git","__pycache__","node_modules","static","media","logs"}
+          tokens=("agent","master","robot","evol","mutation","genome","genetic","generation","gene","fitness","lineage","breed","learning","experiment","self_improv","capability","orchestrat","autonomous","policy","scheduler","task_queue","worker","ژن","نسل","تکامل","جهش")
+          signal=re.compile("|".join(re.escape(t) for t in tokens),re.I)
+          high_signal=re.compile(r"genom|genetic|generat|generation|evol|mutat|fitness|lineage|breed|ژن|نسل|تکامل|جهش",re.I)
+          def parse(path):
+              try:
+                  if path.stat().st_size>350000:return None
+                  b=path.read_bytes()
+                  s=b.decode("utf-8-sig")
+                  tree=ast.parse(s) if path.suffix==".py" else None
+                  return (b,s,tree)
+              except (UnicodeError,SyntaxError,ValueError,OSError):return None
+          def symbols(tree):
+              if tree is None:return set()
+              return {n.name for n in ast.walk(tree) if isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef,ast.ClassDef))}
+          def symbol_features(tree):
+              if tree is None:return {"classes":0,"functions":0,"async":0,"except":0,"tests":0,"imports":0}
+              nodes=list(ast.walk(tree))
+              return {
+                  "classes":sum(isinstance(n,ast.ClassDef) for n in nodes),
+                  "functions":sum(isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef)) for n in nodes),
+                  "async":sum(isinstance(n,ast.AsyncFunctionDef) for n in nodes),
+                  "except":sum(isinstance(n,ast.ExceptHandler) for n in nodes),
+                  "asserts":sum(isinstance(n,ast.Assert) for n in nodes),
+                  "imports":sum(isinstance(n,(ast.Import,ast.ImportFrom)) for n in nodes),
+              }
+          def safe_str(x,n=175):
+              return str(x).replace(chr(10)," ").replace(chr(13)," ")[:n]
+          print("GENOME_AUDIT_SOURCE="+str(source))
+          print("GENOME_AUDIT_TARGET="+str(active))
+          print("GENOME_SOURCE_ROOTS="+",".join(sorted(x.name for x in source.iterdir() if x.is_dir())[:40]))
+          vroot=source/"zomorodmelal"
+          if not vroot.is_dir():
+              raise SystemExit("EXPECTED_V91_ZOMOROD_SUBTREE_MISSING")
+          print("GENOME_TARGET_ROOTS="+",".join(sorted(x.name for x in active.iterdir() if x.is_dir())[:40]))
+          flagged=[]
+          source_files=0
+          old_total_bytes=0
+          categories=Counter()
+          for root,subdirs,files in os.walk(vroot,followlinks=False):
+              relative=Path(root).relative_to(vroot)
+              subdirs[:]=[x for x in subdirs if x.lower() not in exclude and not (Path(root)/x).is_symlink() and len(relative.parts)<9]
+              for name in files:
+                  p=Path(root)/name
+                  if p.is_symlink() or not p.is_file() or p.suffix.lower() not in {".py",".php",".json",".yaml",".yml",".sh",".md"}:continue
+                  source_files+=1
+                  if name.startswith("test_") or any(x.lower().startswith("test") for x in relative.parts):continue
+                  parsed=parse(p)
+                  if parsed is None:continue
+                  b,s,tree=parsed
+                  old_total_bytes+=len(b)
+                  matches=sorted(set(x.group(0).lower() for x in signal.finditer(s)))
+                  rel=p.relative_to(vroot)
+                  is_code=p.suffix.lower() in {".py",".php",".sh"}
+                  is_agent_path=bool(signal.search(str(rel)))
+                  if not matches and not is_agent_path:continue
+                  if not is_code and not high_signal.search(str(rel)):continue
+                  dst=active/rel
+                  a=parse(dst) if dst.is_file() and not dst.is_symlink() else None
+                  identical=a is not None and hashlib.sha256(a[0]).digest()==hashlib.sha256(b).digest()
+                  sf=symbols(tree)
+                  df=symbols(a[2]) if a is not None else set()
+                  features=symbol_features(tree)
+                  existing_features=symbol_features(a[2]) if a else {}
+                  high_hits=sorted(set(x.group(0).lower() for x in high_signal.finditer(s)))
+                  # Only identifiers, counts and flags are printed, never source or values.
+                  category=("identical" if identical else "different" if a is not None else "missing")
+                  categories[category]+=1
+                  record={"path":str(rel),"kind":p.suffix,"status":category,
+                          "old_bytes":len(b),"new_bytes":len(a[0]) if a else 0,
+                          "old_sha256":hashlib.sha256(b).hexdigest()[:16],
+                          "new_sha256":hashlib.sha256(a[0]).hexdigest()[:16] if a else None,
+                          "old_features":features,"new_features":existing_features,
+                          "old_symbols_only":sorted(sf-df)[:35],
+                          "new_symbols_only":sorted(df-sf)[:35],
+                          "gene_hits":high_hits[:18],
+                          "agent_related":is_agent_path}
+                  flagged.append(record)
+          print("GENOME_SOURCE_FILES_INSPECTED="+str(source_files))
+          print("GENOME_RELEVANT_MODULES="+str(len(flagged)))
+          print("GENOME_IDENTICAL="+str(categories["identical"]))
+          print("GENOME_DIFFERENT="+str(categories["different"]))
+          print("GENOME_MISSING="+str(categories["missing"]))
+          for item in flagged:
+              if item["agent_related"] or item["gene_hits"] or item["status"]!="identical":
+                  print("GENOME_MODULE="+json.dumps(item,ensure_ascii=False,separators=(",",":")))
+          print("GENOME_ACTIVE_INDEPENDENT_MODULES")
+          active_count=0
+          for rel in ["core/agent_registry.py","core/orchestrator.py","core/autonomous_brain.py","core/master_agent_capability_pack.py","core/task_runtime.py","core/worker_runner.py","core/queue_dispatcher.py","scripts/vps_master_evolution_cycle.py"]:
+              p=active/rel
+              a=parse(p) if p.is_file() else None
+              if not a:continue
+              active_count+=1
+              print("ACTIVE_INDEPENDENT_MODULE="+json.dumps({"path":rel,"bytes":len(a[0]),"symbols":sorted(symbols(a[2]))[:30],"version_markers":bool(re.search(r"version|generation|evolution|mutation|fitness",a[1],re.I))},separators=(",",":")))
+          print("ACTIVE_INDEPENDENT_MODULE_COUNT="+str(active_count))
+          for rel in ["portal/agent_engine.py","portal/agent_claims.py","portal/agent_run_lock.py","portal/agent_services.py","portal/management/commands/run_site_agents.py","portal/management/commands/run_site_master.py"]:
+              p=active/rel
+              o=vroot/rel
+              if p.is_file() and o.is_file():
+                  print("MAIN_AGENT_HASH_MATCH "+rel+"="+str(hashlib.sha256(p.read_bytes()).hexdigest()==hashlib.sha256(o.read_bytes()).hexdigest()))
+          private=Path.home()/".private"/"zomorod-business"
+          print("SITE_PRIVATE_AGENT_RUNNER_PRESENT="+str((private/"site_agents.php").is_file()))
+          print("SITE_PRIVATE_AGENT_DB_PRESENT="+str((private/"site_agents.sqlite3").is_file()))
+          print("GENOME_AUDIT_COMPLETE=read_only")
+          PY
+          REMOTE
+      - name: Check public site baseline without mutation
+        shell: bash
+        run: |
+          for path in / /agents/; do
+            status="$(curl -sS --max-time 16 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir$path" || true)"
+            echo "PUBLIC_HEALTH path=$path status=$status"
+          done
+      - name: Remove temporary SSH relay material
+        if: always()
+        shell: bash
+        run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
