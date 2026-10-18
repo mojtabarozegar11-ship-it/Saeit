@@ -1,0 +1,255 @@
+name: Zomorod official real owner photo - About only
+on:
+  pull_request:
+    paths:
+      - "content/zomorod-about-owner-photo-20261018/**"
+      - ".github/workflows/zomorod-about-real-owner-photo.yml"
+  push:
+    branches: [main]
+    paths:
+      - "content/zomorod-about-owner-photo-20261018/**"
+      - ".github/workflows/zomorod-about-real-owner-photo.yml"
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-about-official-photo-only
+  cancel-in-progress: false
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Authenticate original owner photo and validate HTML patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile content/zomorod-about-owner-photo-20261018/apply_official_owner_photo.py
+          python3 - <<'PY'
+          from pathlib import Path
+          import base64,io,zipfile,hashlib,json
+          raw=base64.b64decode(Path('content/mojtaba_primary_profile_source_20261016.b64').read_text(encoding='ascii'))
+          assert hashlib.sha256(raw).hexdigest()=='fa1923539c59fa55578787407169ad2dee4aaad2883dac0360eda19eb095a675'
+          with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+            assert set(archive.namelist())=={'avatar.webp','portrait.webp','manifest.json'}
+            info=json.loads(archive.read('manifest.json'))
+            assert info['source_uploaded_photo_sha256']=='50493b0e83f475b7f54405570e0cbce210bf6eb9e2520f024e316e999779e04a'
+            photo=archive.read('portrait.webp')
+            assert photo[:4]==b'RIFF' and photo[8:12]==b'WEBP'
+            assert hashlib.sha256(photo).hexdigest()=='482cad022c1739a464d17f0e023c69fcd6971d72bc67881f8ec24218bd2d8e41'
+          Path('/tmp/zm-official-ceo.webp').write_bytes(photo)
+          before=('<!doctype html><html lang="fa"><head><title>About</title></head>'
+          '<body><!-- zm-unified-v7-20261018 --><h1>ریشه در تجربه</h1>'
+          '<!-- zm-about-official-scientific-profile-20261018 -->'
+          '<section class="zm-about-official-20261018"><h2>شرکت کشت و صنعت زمرد ملل؛ مرکز تحقیقات علمی، آزمایشگاهی، ژنتیک و توسعه فناوری</h2>'
+          '<p>نزدیک به ۹۰ درصد فعالیت پژوهشی</p></section><footer>محتوای اصلی پیشین</footer></body></html>')
+          Path('/tmp/zm-official-about-before.html').write_text(before,encoding='utf-8')
+          PY
+          python3 content/zomorod-about-owner-photo-20261018/apply_official_owner_photo.py \
+            /tmp/zm-official-about-before.html --output /tmp/zm-official-about-after.html
+          python3 - <<'PY'
+          from pathlib import Path
+          import importlib.util
+          path='content/zomorod-about-owner-photo-20261018/apply_official_owner_photo.py'
+          spec=importlib.util.spec_from_file_location('p',path)
+          m=importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(m)
+          a=Path('/tmp/zm-official-about-before.html').read_text(encoding='utf-8')
+          b=Path('/tmp/zm-official-about-after.html').read_text(encoding='utf-8')
+          assert b.replace('\n'+m.FRAGMENT,'',1)==a
+          assert m.IMAGE in b and b.count(m.MARKER)==1
+          print('VERIFIED_ORIGINAL_OWNER_UPLOADED_PHOTO=yes')
+          print('ABOUT_PATCH_EXACT_ADDITIVE=yes')
+          PY
+  publish:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reconstruct owner-uploaded portrait from verified archived source
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import base64,hashlib,io,json,zipfile,os
+          source=Path('content/mojtaba_primary_profile_source_20261016.b64')
+          raw=base64.b64decode(source.read_text(encoding='ascii'))
+          assert hashlib.sha256(raw).hexdigest()=='fa1923539c59fa55578787407169ad2dee4aaad2883dac0360eda19eb095a675'
+          with zipfile.ZipFile(io.BytesIO(raw)) as z:
+            assert set(z.namelist())=={'avatar.webp','portrait.webp','manifest.json'}
+            meta=json.loads(z.read('manifest.json'))
+            assert meta['source_uploaded_photo_sha256']=='50493b0e83f475b7f54405570e0cbce210bf6eb9e2520f024e316e999779e04a'
+            picture=z.read('portrait.webp')
+          assert picture[:4]==b'RIFF' and picture[8:12]==b'WEBP'
+          assert hashlib.sha256(picture).hexdigest()=='482cad022c1739a464d17f0e023c69fcd6971d72bc67881f8ec24218bd2d8e41'
+          p=Path(os.environ['RUNNER_TEMP'])/'owner-portrait.webp'
+          p.write_bytes(picture)
+          print('OWNER_APPROVED_PROFILE_IMAGE_INTEGRITY=verified')
+          PY
+      - name: Connect using pinned VPS and cPanel host identities
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-owner-photo"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo PINNED_RELAY_VERIFIED=yes
+      - name: Backup original About and fingerprint protected pages
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-owner-photo"
+          ssh -F "$d/config" saeit-cpanel bash -s -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1";web="$HOME/public_html";backup="$HOME/.backups/zomorod-about-real-owner-photo/$sha"
+          target="$web/about/index.html"; img="$web/static/site/zomorod-about/ceo-mojtaba-rozegar.webp"
+          test -s "$target" && test ! -L "$target" && test ! -e "$img"
+          test -f "$web/.htaccess" && test ! -e "$backup"
+          grep -Fq 'zm-about-official-scientific-profile-20261018' "$target"
+          grep -Fq 'ریشه در تجربه' "$target"
+          ! grep -Fq 'zm-about-owner-real-photo-20261018' "$target"
+          mkdir -p "$(dirname "$backup")"
+          mkdir -m 700 "$backup"
+          mkdir -m 700 "$backup/stage"
+          cp -p "$target" "$backup/about.original.html"
+          cmp -s "$target" "$backup/about.original.html"
+          sha256sum "$target" > "$backup/original.sha256"
+          (cd "$web"; for p in .htaccess index.html company/index.html research/index.html agriculture/index.html industry/index.html services/index.html tala/index.html mohammad/index.html ghanadi/index.html amozeshgah/index.html; do
+            if test -f "$p"; then sha256sum "$p"; fi
+          done) > "$backup/protected.sha256"
+          echo IMMUTABLE_ABOUT_BACKUP=verified
+          REMOTE
+          scp -F "$d/config" "$RUNNER_TEMP/owner-portrait.webp" \
+            "saeit-cpanel:/home/zomorod2/.backups/zomorod-about-real-owner-photo/$GITHUB_SHA/stage/owner-portrait.webp"
+          scp -F "$d/config" content/zomorod-about-owner-photo-20261018/apply_official_owner_photo.py \
+            "saeit-cpanel:/home/zomorod2/.backups/zomorod-about-real-owner-photo/$GITHUB_SHA/stage/apply_official_owner_photo.py"
+      - name: Stage and test only About candidate with the authentic photo asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-owner-photo"
+          ssh -F "$d/config" saeit-cpanel bash -s -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1";web="$HOME/public_html";backup="$HOME/.backups/zomorod-about-real-owner-photo/$sha"
+          (cd "$web";sha256sum -c --status "$backup/protected.sha256")
+          sha256sum -c --status "$backup/original.sha256"
+          test "$(sha256sum "$backup/stage/owner-portrait.webp" | cut -d' ' -f1)" = "482cad022c1739a464d17f0e023c69fcd6971d72bc67881f8ec24218bd2d8e41"
+          python3 -m py_compile "$backup/stage/apply_official_owner_photo.py"
+          python3 "$backup/stage/apply_official_owner_photo.py" "$backup/about.original.html" \
+            --output "$backup/about.candidate.html"
+          python3 - "$backup" <<'PY'
+          import sys
+          from pathlib import Path
+          p=Path(sys.argv[1])
+          original=(p/'about.original.html').read_text(encoding='utf-8')
+          candidate=(p/'about.candidate.html').read_text(encoding='utf-8')
+          exec_source=(p/'stage/apply_official_owner_photo.py').read_text(encoding='utf-8')
+          # Use the actual insertion anchor; all surrounding original bytes are preserved.
+          anchor='<h2>شرکت کشت و صنعت زمرد ملل؛ مرکز تحقیقات علمی، آزمایشگاهی، ژنتیک و توسعه فناوری</h2>'
+          assert candidate.startswith(original.split(anchor)[0]+anchor)
+          assert candidate.endswith(original.split(anchor)[1])
+          assert candidate.count('zm-about-owner-real-photo-20261018')==1
+          assert '/static/site/zomorod-about/ceo-mojtaba-rozegar.webp' in candidate
+          print('STAGED_ABOUT_ONLY=byte-preserving')
+          PY
+          test ! -e "$web/static/site/zomorod-about/ceo-mojtaba-rozegar.webp"
+          echo VERIFIED_PRIVATE_STAGING=yes
+          REMOTE
+      - name: Publish About-only photo atomically; verify live image SHA and protected paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-owner-photo"
+          ssh -F "$d/config" saeit-cpanel bash -s -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1";web="$HOME/public_html";backup="$HOME/.backups/zomorod-about-real-owner-photo/$sha"
+          target="$web/about/index.html"
+          img="$web/static/site/zomorod-about/ceo-mojtaba-rozegar.webp"
+          sha256sum -c --status "$backup/original.sha256"
+          test ! -e "$img" && test -s "$backup/about.candidate.html"
+          moved=0;installed=0
+          rollback() {
+            set +e
+            if test "$installed" = 1; then
+              cp -p "$backup/about.original.html" "$web/about/.about-owner-rollback.$sha"
+              mv -f "$web/about/.about-owner-rollback.$sha" "$target"
+            fi
+            if test "$moved" = 1 && test -f "$img"; then
+              digest="$(sha256sum "$img" | cut -d' ' -f1)"
+              test "$digest" = "482cad022c1739a464d17f0e023c69fcd6971d72bc67881f8ec24218bd2d8e41" && rm -f "$img"
+            fi
+            echo ABOUT_IMAGE_PUBLICATION_ROLLBACK=applied
+          }
+          trap 'rc=$?;trap - EXIT;rollback;exit "$rc"' EXIT
+          mkdir -p "$web/static/site/zomorod-about"
+          cp -p "$backup/stage/owner-portrait.webp" "$img.tmp.$sha"
+          chmod 644 "$img.tmp.$sha"
+          moved=1
+          mv -f "$img.tmp.$sha" "$img"
+          cp -p "$backup/about.candidate.html" "$web/about/.index.owner-next.$sha"
+          chmod --reference="$target" "$web/about/.index.owner-next.$sha"
+          installed=1
+          mv -f "$web/about/.index.owner-next.$sha" "$target"
+          code="$(curl -sSL --max-time 35 -H 'Cache-Control: no-cache' -o "$backup/live-about.html" -w '%{http_code}' "https://zomorodmelal.ir/about/?owner_photo=$sha" || true)"
+          echo LIVE_ABOUT_HTTP="$code"
+          test "$code" = 200
+          grep -Fq 'zm-about-owner-real-photo-20261018' "$backup/live-about.html"
+          grep -Fq 'ceo-mojtaba-rozegar.webp' "$backup/live-about.html"
+          grep -Fq 'مجتبی روزگار' "$backup/live-about.html"
+          grep -Fq 'ریشه در تجربه' "$backup/live-about.html"
+          piccode="$(curl -sSL --max-time 35 -H 'Cache-Control: no-cache' -o "$backup/live-owner.webp" -w '%{http_code}' "https://zomorodmelal.ir/static/site/zomorod-about/ceo-mojtaba-rozegar.webp?photo=$sha" || true)"
+          echo LIVE_OWNER_IMAGE_HTTP="$piccode"
+          test "$piccode" = 200
+          test "$(sha256sum "$backup/live-owner.webp" | cut -d' ' -f1)" = "482cad022c1739a464d17f0e023c69fcd6971d72bc67881f8ec24218bd2d8e41"
+          (cd "$web";sha256sum -c --status "$backup/protected.sha256")
+          trap - EXIT
+          echo AUTHENTIC_OWNER_PHOTO_LIVE=verified
+          echo USER_PERSONAL_SITE_UNCHANGED=yes
+          echo ONLY_ABOUT_AND_NEW_PHOTO_PATH_CHANGED=yes
+          REMOTE
+      - name: Remove temporary SSH keys and private photo copy
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/zomorod-owner-photo" "$RUNNER_TEMP/owner-portrait.webp"
