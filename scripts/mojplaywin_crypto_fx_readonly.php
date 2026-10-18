@@ -28,6 +28,18 @@ function get_fx(string $url,string $provider): array {
     foreach(($j['result']??[]) as $ticker) { $eth=$ticker['c'][0]??null; break; }
  } elseif($provider==='kraken-trx'&&is_array($j)) {
     foreach(($j['result']??[]) as $ticker) { $trx=$ticker['c'][0]??null; break; }
+ } elseif($provider==='coinpaprika-eth'&&is_array($j)) {
+    $eth=$j['quotes']['USD']['price']??null;
+ } elseif($provider==='coinpaprika-trx'&&is_array($j)) {
+    $trx=$j['quotes']['USD']['price']??null;
+ } elseif($provider==='gemini-eth'&&is_array($j)) {
+    $eth=$j['last']??null;
+ } elseif($provider==='bitfinex'&&is_array($j)) {
+    foreach($j as $row) {
+        if(!is_array($row))continue;
+        if(($row[0]??null)==='tETHUSD')$eth=$row[7]??null;
+        if(($row[0]??null)==='tTRXUSD')$trx=$row[7]??null;
+    }
  }
  $valid=fn($v)=>is_numeric($v)&&(float)$v>0&&is_finite((float)$v);
  return ['provider'=>$provider,'http'=>$status,'connection_error'=>$errno!==0,
@@ -42,5 +54,9 @@ $result=[
     get_fx('https://min-api.cryptocompare.com/data/pricemulti?fsyms=ETH%2CTRX&tsyms=USD','cryptocompare'),
     get_fx('https://api.kraken.com/0/public/Ticker?pair=ETHUSD','kraken-eth'),
     get_fx('https://api.kraken.com/0/public/Ticker?pair=TRXUSD','kraken-trx'),
+    get_fx('https://api.coinpaprika.com/v1/tickers/eth-ethereum?quotes=USD','coinpaprika-eth'),
+    get_fx('https://api.coinpaprika.com/v1/tickers/trx-tron?quotes=USD','coinpaprika-trx'),
+    get_fx('https://api.gemini.com/v1/pubticker/ethusd','gemini-eth'),
+    get_fx('https://api-pub.bitfinex.com/v2/tickers?symbols=tETHUSD%2CtTRXUSD','bitfinex'),
 ];
 echo json_encode(['classification'=>'MOJPLAYWIN_CRYPTO_FX_READONLY','sources'=>$result,'transactions_created'=>false,'payments_enabled_by_probe'=>false],JSON_THROW_ON_ERROR),PHP_EOL;
