@@ -1,0 +1,138 @@
+name: MojPlayWin priced product VPS factory artifact crosscheck readonly
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/mojplaywin-vps-factory-product-crosscheck.yml"]
+permissions:
+  contents: read
+jobs:
+  compare-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Prepare pinned SSH identities
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/factory-store-preflight"
+          install -d -m 700 "$d"
+          for item in VPS_KEY HOST_KEY; do
+            key="$d/${item}.key"
+            printf '%s' "${!item}" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$key"
+            chmod 600 "$key"
+            ssh-keygen -y -P '' -f "$key" >/dev/null
+          done
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -i "$d/VPS_KEY.key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/vps.known" -o BatchMode=yes githubops@178.239.147.150 'ssh-keyscan -T 10 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/VPS_KEY.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/HOST_KEY.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 12
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+      - name: Search ZIP artifacts in VPS product factory private outputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/factory-store-preflight"
+          timeout 80s ssh -T -F "$d/config" saeit-vps python3 - <<'PY' > "$RUNNER_TEMP/mpw-vps-zip-fingerprints.json"
+          from pathlib import Path
+          import hashlib,json,zipfile
+          base=Path.home()/'factory-runtime/private/autonomous-product-cycle'
+          candidates=[]
+          directory=base/'digital-products'
+          if directory.is_dir() and not directory.is_symlink():
+              for f in directory.rglob('*.zip'):
+                  if len(candidates)>=500:break
+                  if not f.is_file() or f.is_symlink():continue
+                  st=f.stat()
+                  if st.st_size>120000000 or st.st_size<100:continue
+                  candidates.append({'name_sha':hashlib.sha256(f.name.encode('utf-8')).hexdigest(),
+                    'size':st.st_size,'valid_zip':zipfile.is_zipfile(f)})
+          state=base/'production-state.json'
+          state_values={}
+          if state.is_file() and not state.is_symlink():
+              raw=json.loads(state.read_text('utf-8'))
+              for k in ('built_product_count','artifact_qa_passed','publishable_product_count','store_distribution_state'):
+                  x=raw.get(k)
+                  if isinstance(x,(bool,int)) or x is None:state_values[k]=x
+                  elif isinstance(x,str):state_values[k]=x[:75]
+          print(json.dumps({'zip_fingerprints':candidates,'state':state_values,'zip_files_found':len(candidates)}))
+          PY
+      - name: Read cPanel priced draft ZIP basename fingerprints only
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/factory-store-preflight"
+          timeout 80s ssh -T -F "$d/config" saeit-cpanel bash -s <<'BASH' > "$RUNNER_TEMP/mpw-cpanel-zip-fingerprints.json"
+          cd /home/zomorod2/Saeit-staging
+          /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - <<'PY'
+          import os,json,hashlib,pathlib
+          os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          import django
+          django.setup()
+          from core.models import Product
+          values=[]
+          for p in Product.objects.filter(price__gt=0).order_by('pk'):
+              m=p.metadata if isinstance(p.metadata,dict) else {}
+              v=m.get('factory_inbox_relative_ref','')
+              name=pathlib.Path(v).name if isinstance(v,str) else ''
+              values.append({'id':p.pk,'reference_name_sha':hashlib.sha256(name.encode('utf-8')).hexdigest() if name else None,
+                  'rights_declared':m.get('owner_exclusive_rights_declared') is True,
+                  'permission':m.get('factory_publication_permission') is True,
+                  'third_party_clear':m.get('third_party_license_audit')=='passed'})
+          print(json.dumps({'priced_drafts':values}))
+          PY
+          BASH
+      - name: Compare fingerprints on runner without exposing private filenames
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os,json
+          from pathlib import Path
+          d=Path(os.environ['RUNNER_TEMP'])
+          v=json.loads((d/'mpw-vps-zip-fingerprints.json').read_text())
+          c=json.loads((d/'mpw-cpanel-zip-fingerprints.json').read_text())
+          by_name={x['name_sha']:x for x in v['zip_fingerprints']}
+          for x in c['priced_drafts']:
+              match=by_name.get(x['reference_name_sha'])
+              print('MPW_VPS_FACTORY_MATCH='+json.dumps({'id':x['id'],
+                  'factory_artifact_found':bool(match),'valid_zip':match['valid_zip'] if match else False,
+                  'size_bytes':match['size'] if match else None,
+                  'rights_declared':x['rights_declared'],'publication_permission':x['permission'],
+                  'third_party_cleared':x['third_party_clear']}))
+          print('MPW_VPS_FACTORY_SUMMARY='+json.dumps({
+              'vps_zip_candidates':v['zip_files_found'],'factory_production_state':v['state'],
+              'product_reference_matches':sum(1 for x in c['priced_drafts'] if x['reference_name_sha'] in by_name)}))
+          PY
+      - name: Remove private temporary manifests
+        if: always()
+        shell: bash
+        run: |
+          rm -f -- "$RUNNER_TEMP/mpw-vps-zip-fingerprints.json" "$RUNNER_TEMP/mpw-cpanel-zip-fingerprints.json"
+          rm -rf -- "$RUNNER_TEMP/factory-store-preflight"
