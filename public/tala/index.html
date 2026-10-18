@@ -62,7 +62,7 @@
 <div class="section-head"><div><div class="eyebrow">WORLD SPOT · LIVE FEEDS</div>
 <h2>تابلوی قیمت جهانی زنده</h2>
 <p>طلای جهانی، نقره، ارزهای اصلی و رمزارزها؛ دادهٔ مستقیم از ارائه‌دهندهٔ بازار، با امکان تأخیر در بعضی نمادها.</p></div>
-<a class="btn" href="#market">تابلوی نرخ‌های ریالی مدیر ←</a></div>
+<a class="btn" href="#market">نرخ‌های ریالی تأییدشدهٔ مدیر ←</a></div>
 <div class="live-spot-status" id="tala-world-spot-status" aria-live="polite">در حال دریافت نرخ‌های جهانی از منبع…</div>
 <div class="live-spot-grid">
 <div class="live-spot-card"><small>طلا · XAU / اونس تروا</small><strong id="spot-xau">در حال دریافت…</strong><em id="spot-xau-meta">دلار آمریکا / اونس؛ منبع Gold API</em></div>
@@ -91,7 +91,7 @@
 <div class="section-head"><div><div class="eyebrow">GLOBAL MARKETS · VERIFIED DATA</div><h2>قیمت‌های بین‌المللی به‌روز</h2><p>قیمت جهانی طلا و نقره، نرخ مرجع ارزها و رمزارزها با ذکر منبع و زمان داده. اعداد، نرخ بازار آزاد ایران نیستند.</p></div><button type="button" class="btn" onclick="loadTalaLivePrices()">به‌روزرسانی تابلو ↻</button></div>
 <div class="notice" role="status"><strong id="live-market-status">در حال بررسی منابع بین‌المللی…</strong> <span id="live-market-time"></span></div>
 <div class="market-groups">
-<section class="market-subsection"><h3>فلزات گران‌بها · قیمت جهانی دلاری</h3><p>قیمت نقدی جهانی برای هر گرم فلز خالص؛ معادل هر اونس تروا تقسیم بر ۳۱٫۱۰۳۴۷۶۸. اجرت، مالیات و نرخ ریال داخل کشور لحاظ نشده است.</p><div class="ticker-row market-extra" id="tala-live-metals" aria-live="polite"></div></section>
+<section class="market-subsection"><h3>فلزات گران‌بها · قیمت جهانی دلاری</h3><p>قیمت جهانی هر گرم فلز؛ نرخ‌های طلای ۱۸ عیار و نقرهٔ ۹۲۵/۹۹۹ به‌صورت نظری از نرخ فلز خالص محاسبه می‌شوند. اجرت، مالیات، حباب و نرخ بازار آزاد ایران لحاظ نشده است.</p><div class="ticker-row market-extra" id="tala-live-metals" aria-live="polite"></div></section>
 <section class="market-subsection"><h3>ارزهای دیجیتال · دلار آمریکا</h3><p>قیمت یک واحد از هر رمزارز به USD؛ بدون تبدیل به ریال و بدون تضمین قیمت اجرای سفارش</p><div class="ticker-row market-extra" id="tala-live-crypto" aria-live="polite"></div></section>
 <section class="market-subsection"><h3>نرخ‌های جهانی ارز · مرجع روزانه</h3><p>نسبت یک دلار آمریکا به ارز مقصد؛ USD/IRR صرفاً نرخ مرجع ارائه‌دهنده است و نرخ بازار آزاد ایران محسوب نمی‌شود.</p><div class="ticker-row market-extra" id="tala-live-forex" aria-live="polite"></div></section>
 </div>
@@ -224,7 +224,7 @@ function renderTalaExtendedBoard(quotes){
 renderTalaExtendedBoard({});
 /* Read-only international price snapshots, fully separate from the managerial IRR board. */
 const talaLiveSpec=[
- {target:'tala-live-metals',items:[['xau','طلا · هر گرم خالص'],['xag','نقره · هر گرم خالص'],['xpt','پلاتین · هر گرم خالص'],['xpd','پالادیوم · هر گرم خالص']]},
+ {target:'tala-live-metals',items:[['xau','طلا · هر گرم خالص'],['gold18_spot','طلای ۱۸ عیار · ارزش نظری هر گرم'],['gold24_spot','طلای ۲۴ عیار · ارزش نظری هر گرم'],['xag','نقره · هر گرم خالص'],['silver925_spot','نقرهٔ ۹۲۵ · ارزش نظری هر گرم'],['silver999_spot','نقرهٔ ۹۹۹ · ارزش نظری هر گرم'],['xpt','پلاتین · هر گرم خالص'],['xpd','پالادیوم · هر گرم خالص']]},
  {target:'tala-live-crypto',items:[['btc','BTC بیت‌کوین'],['eth','ETH اتریوم'],['usdt','USDT تتر'],['trx','TRX ترون'],['bnb','BNB'],['sol','SOL سولانا']]},
  {target:'tala-live-forex',items:[['usd_eur','EUR یورو'],['usd_gbp','GBP پوند'],['usd_aed','AED درهم'],['usd_try','TRY لیر'],['usd_cad','CAD دلار کانادا'],['usd_irr','IRR ریال · فقط مرجع']]}
 ];
