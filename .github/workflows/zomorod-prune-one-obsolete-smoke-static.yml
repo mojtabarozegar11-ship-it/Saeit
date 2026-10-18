@@ -1,0 +1,113 @@
+name: Prune one reproducible static bundle in retired isolated smoke test
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/zomorod-prune-one-obsolete-smoke-static.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-prune-one-static
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - name: Delete only generated assets from one old isolated admin test copy
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import subprocess,os,shutil
+          H=Path.home()
+          assert H==Path("/home/zomorod2")
+          root=H/"Saeit-staging/admin-smoke"
+          old=root/"ba380e0c4a46-38487712470"
+          live=root/"ab090d03f5bc-38498776878"
+          generated=old/"staticfiles"
+          assert root.is_dir() and not root.is_symlink()
+          assert old.is_dir() and not old.is_symlink()
+          assert (old/"manage.py").is_file() and (old/"isolated-smoke.sqlite3").is_file()
+          assert live.is_dir() and (live/"staticfiles").is_dir()
+          assert generated.is_dir() and not generated.is_symlink()
+          assert (H/"Saeit-staging/staticfiles").is_dir()
+          proc=subprocess.run(["ps","-u","zomorod2","-o","args="],capture_output=True,text=True,timeout=10)
+          cron=subprocess.run(["crontab","-l"],capture_output=True,text=True,timeout=10)
+          assert str(old) not in proc.stdout and str(old) not in cron.stdout
+          for d,dirs,files in os.walk(generated,followlinks=False):
+              for name in dirs+files: assert not (Path(d)/name).is_symlink()
+          r=subprocess.run(["du","-sk",str(generated)],capture_output=True,text=True,timeout=20,check=True)
+          before=int(r.stdout.split()[0])*1024
+          assert 19_000_000 < before < 23_000_000
+          shutil.rmtree(generated)
+          assert not generated.exists() and (old/"manage.py").is_file() and (old/"isolated-smoke.sqlite3").is_file()
+          print("ONE_OLD_SMOKE_GENERATED_ONLY_REMOVED=yes")
+          print("ONE_OLD_SMOKE_BYTES_FREED="+str(before))
+          print("LATEST_TEST_AND_LIVE_WEB_STATIC_UNCHANGED=yes")
+          PY
+          REMOTE
+      - name: Verify both live frontends
+        shell: bash
+        run: |
+          set -euo pipefail
+          for url in "https://zomorodmelal.ir/" "https://zomorodmelal.ir/agents/" "https://mojplaywin.com/"; do
+            code="$(curl -sS --max-time 15 -o /dev/null -w '%{http_code}' "$url" || true)"
+            echo "AFTER_SMOKE_STATIC_CLEAN=$url:$code"
+            test "$code" = 200
+          done
+      - name: Remove temporary credentials
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
