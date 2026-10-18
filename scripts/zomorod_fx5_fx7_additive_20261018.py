@@ -111,7 +111,6 @@ def change(s:str)->str:
         'class="header-orbit wrap"',
         'id="solar-stage"',
         'class="orbital-cards"',
-        'class="orbit-shelves"',
         'id="zm-gold-search-toolbar-20261018"',
         'id="zm-topics-top-icon-20261018"',
         'id="zm-four-premium-fx-css-20261018"',
