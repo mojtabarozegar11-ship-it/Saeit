@@ -1,0 +1,108 @@
+name: cPanel quota breakdown after sub-10GB filesystem cleanup
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/zomorod-cpanel-quota-breakdown-20261018.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-cpanel-quota-breakdown-20261018
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - name: Read cPanel disk usage categories and SQL database accounting, no modification
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import subprocess,json,os
+          h=Path.home()
+          assert str(h)=="/home/zomorod2"
+          requests=[("Quota","get_quota_info"),("DiskUsage","get_disk_usage"),("DiskUsage","get_disk_usage_info"),("Mysql","list_databases")]
+          for mod,func in requests:
+              try:
+                  x=subprocess.run(["uapi","--output=json",mod,func],capture_output=True,text=True,timeout=23)
+                  obj=json.loads(x.stdout)
+                  payload=obj.get("result",{})
+                  print("QUOTA_API="+mod+"."+func+" status="+str(payload.get("status"))+" errors="+str(bool(payload.get("errors"))))
+                  data=payload.get("data")
+                  if mod=="Mysql" and isinstance(data,list):
+                      print("MYSQL_DATABASE_COUNT="+str(len(data)))
+                      for db in data:
+                          if isinstance(db,dict):
+                              print("MYSQL_DATABASE_META="+json.dumps({k:v for k,v in db.items() if k in ("database","disk_usage","disk_usage_formatted","users","size","name")},ensure_ascii=False)[:600])
+                  elif mod=="DiskUsage":
+                      compact=json.dumps(data,ensure_ascii=False)
+                      print("DISK_USAGE_BREAKDOWN="+compact[:18500])
+                  elif mod=="Quota":
+                      print("QUOTA_INFORMATION="+json.dumps(data,ensure_ascii=False)[:3800])
+              except Exception as e:print("API_ERROR="+mod+"."+func+" type="+type(e).__name__)
+          for name in ("mysql","mail","public_html",".backups","Saeit"):
+              p=h/name
+              if not p.exists():continue
+              try:
+                  r=subprocess.run(["du","-sk",str(p)],capture_output=True,text=True,timeout=50)
+                  print("DIRECTORY_BASELINE="+name+" "+r.stdout.strip().split()[0])
+              except Exception:pass
+          print("BREAKDOWN_AUDIT_COMPLETE=yes")
+          PY
+          REMOTE
+      - name: Delete temporary runner SSH files
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
