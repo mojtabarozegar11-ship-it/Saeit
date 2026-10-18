@@ -38,6 +38,25 @@ do not bypass it.
 8. USDT is NOT supported. It needs pinned token contracts, transfer-event decoding,
    decimals, double-spend and chain verification and separate merchant acceptance.
 
+## Rate-limit controls added in PR #473
+
+Checkout security now uses atomic database-backed counters across worker processes:
+- `ten-register-ip`: 3 registration attempts per 10 minutes per REMOTE_ADDR;
+- `ten-login-ip`: 10 login attempts per 10 minutes per REMOTE_ADDR;
+- `ten-buy-user`: 5 invoices per 10 minutes per authenticated user;
+- `ten-buy-ip`: 20 invoices per 10 minutes per REMOTE_ADDR;
+- `min-invoice-verify`: 6 transaction-verification requests per invoice per minute;
+- `ten-user-verify`: 30 verification requests per user per 10 minutes.
+
+The application hashes request identity with the Django secret and never trusts
+`X-Forwarded-For` from arbitrary clients. The reverse proxy MUST provide the
+actual client address as `REMOTE_ADDR`; otherwise many customers share one
+bucket. Rate limits complement, but do not replace, an edge WAF, bot challenge,
+account protections and proper authentication/session hardening.
+
+The `mojplaywin_crypto_prune_throttle` command removes stale throttle rows
+on the isolated deployment. Do not schedule jobs on the shared Passenger stack.
+
 ## Merchant receiving wallets supplied 2026-10-18 (PUBLIC addresses ONLY)
 Owner supplied Trust Wallet receive-screen screenshots for both native assets.
 These **public receiving addresses** were transcribed and their address checks validated.
