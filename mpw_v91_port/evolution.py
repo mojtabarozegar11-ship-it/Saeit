@@ -25,6 +25,13 @@ try:
 except ImportError:  # Direct, isolated private Cron script.
     from gen65_runtime import operate as operate_gen65
 
+try:
+    from .page_content_factory import tick as create_page_content_drafts
+    from .gen65_runtime import _verified_class as verified_gen65_content_reviewer
+except ImportError:  # cPanel's verified direct script mode.
+    from page_content_factory import tick as create_page_content_drafts
+    from gen65_runtime import _verified_class as verified_gen65_content_reviewer
+
 PREFIX = Path("/home/zomorod2/.private_mojplaywin_main_agents")
 AGENT_STATE = PREFIX / "v91_verified_main_port_20261018" / "operator_state"
 HEALTH = PREFIX / "site_health_v11_port_20261018" / "last_scan.json"
@@ -225,6 +232,14 @@ def cycle() -> dict:
         # Execute SHA-attested Gen65 as a real but private read-only controller.
         # The owner enable flag controls operation; absent flags leave it disabled.
         gen65 = operate_gen65(EVOLUTION, rows, result["epoch"], result["observed_utc"])
+        # English educational drafts are private, review-only, limited to
+        # two new distinct source-annotated guides per UTC day.
+        if gen65["status"] == "gen65_operational_private":
+            reviewer = verified_gen65_content_reviewer(EVOLUTION / "generations")
+            content = create_page_content_drafts(EVOLUTION, result["observed_utc"], reviewer.classify)
+        else:
+            content = {"status": "content_factory_waiting_for_gen65",
+                       "new_drafts": 0, "total_drafts": 0}
         _atomic(EVOLUTION / "last_generation_report.json",
                 {"tenant": TENANT, "generated_by_master": 64,
                  "generation": generation["generation"],
@@ -240,7 +255,11 @@ def cycle() -> dict:
                 "generation_factory_status": generation["status"],
                 "generation_experimental_only": gen65["status"] != "gen65_operational_private",
                 "gen65_runtime_status": gen65["status"],
-                "gen65_active_private_generation": (65 if gen65["status"] == "gen65_operational_private" else None)}
+                "gen65_active_private_generation": (65 if gen65["status"] == "gen65_operational_private" else None),
+                "page_content_pipeline_status": content["status"],
+                "page_content_new_drafts": content["new_drafts"],
+                "page_content_total_drafts": content["total_drafts"],
+                "page_content_auto_published": False}
     finally:
         os.close(fd)
 
