@@ -1,0 +1,118 @@
+name: Zomorod precise orphaned generated assets and storage audit
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/zomorod-orphaned-generated-assets-audit-20261018.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-orphan-assets-audit
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - name: Inspect lab sandboxes, expired admin tests, safe caches and active site dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 - <<'PY'
+          import os,subprocess,json,time,stat,sqlite3
+          from pathlib import Path
+          H=Path.home()
+          assert H==Path("/home/zomorod2")
+          def sz(p):
+              try:
+                  q=subprocess.run(["du","-sk","--",str(p)],capture_output=True,text=True,timeout=65,check=True)
+                  return int(q.stdout.split()[0])*1024
+              except Exception:return -1
+          cr=subprocess.run(["crontab","-l"],capture_output=True,text=True,timeout=12).stdout
+          ps=subprocess.run(["ps","-u","zomorod2","-o","pid=,args="],capture_output=True,text=True,timeout=12).stdout
+          lab=H/"Saeit/var/mother_robot/lab"
+          if lab.is_dir():
+              print("LAB_TOTAL_BYTES="+str(sz(lab)))
+              for gen in sorted(lab.iterdir(),key=lambda x:x.name):
+                  if not gen.is_dir() or gen.is_symlink():continue
+                  if not gen.name.startswith(("module-g","upgrade-g")):continue
+                  project=gen/"project"
+                  subitems=[]
+                  if project.is_dir():
+                      for q in project.iterdir():
+                          if q.is_symlink():continue
+                          val=sz(q) if q.is_dir() else q.stat().st_size
+                          subitems.append((q.name,val,"dir" if q.is_dir() else "file"))
+                  print("LAB_GENERATION="+json.dumps({"name":gen.name,"total_bytes":sz(gen),"project_children":sorted(subitems,key=lambda x:-x[1])[:14],"staticfiles_exists":(project/"staticfiles").is_dir(),"public_static_exists":(project/"static").is_dir(),"cron_ref":str(gen) in cr,"ps_ref":str(gen) in ps},ensure_ascii=False))
+          root=H/"Saeit-staging/admin-smoke"
+          if root.is_dir():
+              dirs=sorted((p for p in root.iterdir() if p.is_dir() and not p.is_symlink()),key=lambda x:x.stat().st_mtime,reverse=True)
+              print("SMOKE_TOTAL="+str(sz(root))+" COUNT="+str(len(dirs)))
+              for p in dirs:
+                  if not (p/"manage.py").is_file() or not (p/"isolated-smoke.sqlite3").is_file():continue
+                  static=p/"staticfiles"
+                  print("SMOKE_COPY="+json.dumps({"name":p.name,"total_bytes":sz(p),"static_bytes":sz(static) if static.is_dir() else 0,"age_days":round((time.time()-p.stat().st_mtime)/86400,2),"ps_ref":str(p) in ps,"cron_ref":str(p) in cr}))
+          cache=H/".cagefs/tmp/jdk-17.0.20.1+1"
+          print("OLD_JDK_BYTES="+str(sz(cache))+" ACTIVE_PROCESS="+str(str(cache) in ps)+" CRON="+str(str(cache) in cr))
+          latest=H/"Saeit/backups"
+          print("RETAINED_SAEIT_BACKUPS_BYTES="+str(sz(latest)))
+          for path in [H/"Saeit",H/"Saeit-staging",H/".backups",H/".cagefs/tmp"]:
+              print("ROOT_CANDIDATE="+str(path.relative_to(H))+" bytes="+str(sz(path)))
+          print("ASSET_AUDIT_DONE=yes")
+          PY
+          REMOTE
+      - name: Remove transient connection credentials
+        if: always()
+        shell: bash
+        run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
