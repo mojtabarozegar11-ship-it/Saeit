@@ -117,8 +117,9 @@ def patch(s:str,rel:str,fragments:dict):
  assert original.count('<script')==s.count('<script')
  assert original.count('<main')==s.count('<main')
  assert original.count('</main>')==s.count('</main>')
- assert original.count('<footer')==s.count('<footer')
- assert original.count('<header')==s.count('<header')
+ extra=fragments[rel][0] if rel in fragments else ''
+ assert original.count('<footer')+extra.count('<footer')==s.count('<footer')
+ assert original.count('<header')+extra.count('<header')==s.count('<header')
  assert original.count('<img')+sum(x[2] for k,x in fragments.items() if k==rel)==s.count('<img')
  oldtext=visible_main(original)
  newtext=visible_main(s)
