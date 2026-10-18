@@ -1,6 +1,6 @@
 {% extends "base.html" %}
-{% block title %}{% if q %}جستجو: {{ q }}{% else %}جستجوی سایت{% endif %} — Zomorodmelal{% endblock %}
-{% block meta_description %}موتور جستجوی محتوای شرکت کشت و صنعت زمرد ملل؛ خبرنامه، دانش، محصولات و صفحات رسمی.{% endblock %}
+{% block title %}{% if request.get_host == "mojplaywin.com" or request.get_host == "www.mojplaywin.com" %}Search{% if q %}: {{ q }}{% endif %} | MojPlayWin{% else %}{% if q %}جستجو: {{ q }}{% else %}جستجوی سایت{% endif %} — Zomorodmelal{% endif %}{% endblock %}
+{% block meta_description %}{% if request.get_host == "mojplaywin.com" or request.get_host == "www.mojplaywin.com" %}Search MojPlayWin games, AI, research, education and digital products.{% else %}موتور جستجوی محتوای شرکت کشت و صنعت زمرد ملل؛ خبرنامه، دانش، محصولات و صفحات رسمی.{% endif %}{% endblock %}
 {% block content %}
 {% if request.get_host == "mojplaywin.com" or request.get_host == "www.mojplaywin.com" %}
 <section class="mpw-search-page" aria-labelledby="mpw-search-heading">
