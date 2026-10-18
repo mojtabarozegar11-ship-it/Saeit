@@ -47,8 +47,9 @@ try:
             raise SystemExit(0)
         except (ValueError,TypeError) as exc:
             failure=type(exc).__name__
+            reason=str(exc)[:180]
     print(json.dumps({"stage":"V91_AGENT_CONTENT_ENGINE","status":"INPUT_VALIDATION_REJECTED",
-                      "error_type":failure,"live_content_created":False,"persisted":False}))
+                      "error_type":failure,"validation_reason":reason,"live_content_created":False,"persisted":False}))
 except Exception as exc:
     print(json.dumps({"stage":"V91_AGENT_CONTENT_ENGINE","status":"NOT_READY",
                       "error_type":type(exc).__name__,"live_content_created":False,
