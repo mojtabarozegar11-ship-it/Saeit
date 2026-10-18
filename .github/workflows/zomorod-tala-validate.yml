@@ -80,6 +80,13 @@ jobs:
               raise SystemExit('TALA_OFFICIAL_MARKET_WIDGET=missing')
           if 'Gold API' not in source or 'نه قیمت بازار آزاد ایران' not in source or 'TradingView' not in source:
               raise SystemExit('TALA_LIVE_PRICE_ATTRIBUTION=missing')
+          livephp=(root/'api/live.php').read_text(encoding='utf-8')
+          if any(marker not in livephp for marker in ('international_reference','tala-live-market.json','approved','stale')):
+              raise SystemExit('TALA_LIVE_PHP_SERVER_GATE_MISSING')
+          for marker in ('id="live-global-prices"','tala-live-metals','tala-live-crypto','tala-live-forex','loadTalaLivePrices','قدیمی'):
+              if marker not in source: raise SystemExit('TALA_LIVE_UI_INCOMPLETE='+marker)
+          if '/api/live.php' not in source or '/api/quotes.php' not in source:
+              raise SystemExit('TALA_LIVE_QUOTES_MUST_BE_DISTINCT')
           if 'assets/tala-calculator.js' not in source or 'id="gold-calculator"' not in source or 'id="jewelry-calculator"' not in source:
               raise SystemExit('TALA_PRICE_CALCULATOR_UI=missing')
           for marker in ('market-metals-grid','market-forex-grid','market-crypto-grid','renderTalaExtendedBoard'):
@@ -112,4 +119,7 @@ jobs:
           node --check public/tala/assets/tala-live-spot.js
           node .github/scripts/tala_live_spot_test.cjs
           if command -v php >/dev/null 2>&1; then php -l public/tala/api/quotes.php; fi
+          python3 -m py_compile .github/scripts/tala_live_market.py
+          python3 .github/scripts/tala_live_market.py --selftest
+          if command -v php >/dev/null 2>&1; then php -l public/tala/api/live.php; fi
           python3 .github/scripts/tala_storage.py selftest
