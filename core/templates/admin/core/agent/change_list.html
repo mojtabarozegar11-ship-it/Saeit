@@ -1,0 +1,9 @@
+{% extends "admin/change_list.html" %}
+{% block content %}
+{% if mpw_agents_visible %}
+<p style="margin:0 0 18px 0">
+  <a class="button" href="{% url 'admin:core_agent_mpw_v91_performance' %}">مدیریت و نمودار عملکرد مستر ایجنت و ایجنت‌های MojPlayWin</a>
+</p>
+{% endif %}
+{{ block.super }}
+{% endblock %}
