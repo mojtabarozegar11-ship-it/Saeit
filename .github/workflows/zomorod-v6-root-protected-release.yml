@@ -1,0 +1,177 @@
+name: Publish Zomorod orbital V6 at homepage with protected archive
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/zomorod-v6-root-protected-release.yml"]
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-v6-root-atomic-release
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate V6 homepage, existing internal links and footer
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path("content/zomorod-v6-20261018/index.html").read_text()
+          assert len(s.encode())>1_500_000
+          for pattern in ('footer-grid','footer-copyright','window.ZOMOROD_ORBIT_DATA=','https://zomorodmelal.ir/company/','https://zomorodmelal.ir/about/','تمام حقوق مادی و معنوی سایت برای شرکت کشت و صنعت زمرد ملل محفوظ است . آبان ۱۳۹۸ مجتبی روزگار'):
+              assert pattern in s,pattern
+          assert s.startswith('<!doctype html>') and s.strip().endswith('</html>')
+          print("V6_PUBLIC_SOURCE=valid")
+          PY
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - name: Protect the root and existing pages before replacement
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1"
+          web="$HOME/public_html"
+          backup="$HOME/.backups/zomorod-v6-root-release/$sha"
+          archive="$web/site-heritage/home-before-v6-20261018"
+          test -s "$web/index.html" && test ! -L "$web/index.html"
+          test -f "$web/.htaccess" && test ! -L "$web/.htaccess"
+          test ! -e "$archive" && test ! -L "$archive"
+          test ! -e "$backup"
+          test -s "$web/company/index.html" && test -s "$web/about/index.html"
+          mkdir -p "$(dirname "$backup")"
+          mkdir -m 700 "$backup"
+          mkdir -m 700 "$backup/staging"
+          cp -p "$web/index.html" "$backup/root.original.html"
+          cmp -s "$web/index.html" "$backup/root.original.html"
+          sha256sum "$web/.htaccess" "$web/company/index.html" "$web/about/index.html" > "$backup/protected.sha256"
+          for child in mohammad ghanadi amozeshgah tala; do
+            test ! -L "$web/$child"
+            if test -f "$web/$child/index.html"; then sha256sum "$web/$child/index.html" >> "$backup/protected.sha256"; fi
+          done
+          sha256sum "$web/index.html" > "$backup/root-original.sha256"
+          echo V6_ROOT_ORIGINAL=sha256_backup_confirmed
+          REMOTE
+      - name: Transfer approved V6 source only into private staging
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          tar -cf - -C content/zomorod-v6-20261018 index.html |
+            ssh -F "$d/config" saeit-cpanel "tar -xf - -C /home/zomorod2/.backups/zomorod-v6-root-release/$GITHUB_SHA/staging"
+          echo V6_STAGING=complete
+      - name: Preserve current homepage in independent public archive and atomically promote V6
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1"; web="$HOME/public_html"
+          backup="$HOME/.backups/zomorod-v6-root-release/$sha"
+          stage="$backup/staging/index.html"
+          archive="$web/site-heritage/home-before-v6-20261018"
+          test -s "$stage"
+          grep -Fq 'footer-copyright' "$stage"
+          grep -Fq 'https://zomorodmelal.ir/company/' "$stage"
+          test ! -e "$archive"
+          sha256sum -c --status "$backup/root-original.sha256"
+          rollback(){
+            set +e
+            if test -s "$backup/root.original.html"; then
+              cp -p "$backup/root.original.html" "$web/index.html.rollback.$sha"
+              mv -f "$web/index.html.rollback.$sha" "$web/index.html"
+              echo V6_ROOT_AUTO_ROLLBACK=restored
+            fi
+          }
+          active=0
+          trap 'rc=$?; trap - EXIT; if test "$active" = 1; then rollback; fi; exit "$rc"' EXIT
+          mkdir -m 755 "$archive"
+          cp -p "$backup/root.original.html" "$archive/index.html"
+          cat > "$archive/.htaccess" <<'HT'
+          PassengerEnabled off
+          DirectoryIndex index.html
+          Options -Indexes
+          HT
+          chmod 644 "$archive/index.html" "$archive/.htaccess"
+          cmp -s "$archive/index.html" "$backup/root.original.html"
+          old_code="$(curl -L -sS --max-time 20 -o "$backup/archived.html" -w '%{http_code}' "https://zomorodmelal.ir/site-heritage/home-before-v6-20261018/?sha=$sha" || true)"
+          echo V6_ARCHIVE_HTTP="$old_code"
+          test "$old_code" = 200
+          cp -p "$stage" "$web/index.html.v6.$sha"
+          chmod --reference="$web/index.html" "$web/index.html.v6.$sha"
+          active=1
+          mv -f "$web/index.html.v6.$sha" "$web/index.html"
+          code="$(curl -sS -L --max-time 28 -H 'Cache-Control: no-cache' -o "$backup/v6-live.html" -w '%{http_code}' "https://zomorodmelal.ir/?v6release=$sha" || true)"
+          echo V6_ROOT_HTTP="$code"
+          test "$code" = 200
+          grep -Fq 'footer-grid' "$backup/v6-live.html"
+          grep -Fq 'footer-copyright' "$backup/v6-live.html"
+          grep -Fq 'تمام حقوق مادی و معنوی سایت برای شرکت کشت و صنعت زمرد ملل محفوظ است' "$backup/v6-live.html"
+          grep -Fq 'window.ZOMOROD_ORBIT_DATA=' "$backup/v6-live.html"
+          sha256sum -c --status "$backup/protected.sha256"
+          for path in /company/ /about/ /agriculture/ /agriculture/genetics/ /mohammad/ /ghanadi/ /amozeshgah/; do
+            status="$(curl -sS -L --max-time 20 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir$path" || true)"
+            echo "V6_PROTECTED_ROUTE=$path code=$status"
+            test "$status" = 200
+          done
+          cmp -s "$archive/index.html" "$backup/root.original.html"
+          active=0;trap - EXIT
+          echo V6_ROOT_RELEASE=verified_success
+          echo V6_ARCHIVED_PREVIOUS=https://zomorodmelal.ir/site-heritage/home-before-v6-20261018/
+          REMOTE
+      - name: Clean temporary keys
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
