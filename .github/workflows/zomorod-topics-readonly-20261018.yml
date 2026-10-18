@@ -79,6 +79,12 @@ jobs:
           grep -Fq 'zm-all-cards-dedicated-topics-20261018' "$web/index.html" && echo new_605 || echo old_29
           echo "RESEARCH_ROLLBACK:"
           grep -Fq 'zm-existing-research-expert-enrichment-20261018' "$web/research/directory/units/molecular-genetics/index.html" && echo upgraded_60 || echo original_60
+          echo "NESTED_HTACCESS_DIAGNOSTIC:"
+          for p in "$web/research/.htaccess" "$web/research/directory/.htaccess" "$web/research/directory/units/.htaccess" "$web/topics/.htaccess";do
+            if test -f "$p";then echo "HTACCESS_EXISTS=$p"; grep -nE '^(Passenger|Rewrite|DirectoryIndex|Options|SetHandler|AddHandler)' "$p" | cut -c1-230 || true;else echo "NO_NESTED_HTACCESS=$p";fi
+          done
+          echo "ROOT_HTACCESS_STRUCTURE_LINES:"
+          sed -n '1,32p' "$web/.htaccess" | sed -E 's/(SECRET|KEY|TOKEN|PASSWORD)[^ ]*/REDACTED/g' | cut -c 1-180
           echo "HTACCESS_REWRITE_AND_PASSENGER_LINES:"
           grep -nE '^(RewriteEngine|RewriteRule|RewriteCond|DirectoryIndex|Options|Passenger|FallbackResource|ErrorDocument|SetHandler|AddHandler)' "$web/.htaccess" | cut -c 1-230 || true
           for route in / /topics/ /topics/index.html /research/directory/units/molecular-genetics/ /research/directory/units/molecular-genetics/index.html;do
