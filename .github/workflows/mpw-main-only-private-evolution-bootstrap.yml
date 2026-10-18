@@ -1,4 +1,4 @@
-name: Bootstrap MojPlayWin verified private evolution on cPanel (no website deployment)
+name: Reschedule MojPlayWin private Gen64 evolution to each minute (no web deployment)
 # Activation is scoped to an existing private cPanel tenant only; never the website.
 on:
   push:
@@ -19,36 +19,16 @@ jobs:
         with:
           persist-credentials: false
           # Exact isolated feature source; do not deploy default-branch Django code.
-          ref: 9ca7117b5ffb4ef4f833c592ebba65b316ca7ee7
-      - name: Test bounded evidence-driven evolution and package SHA-verified code
+          ref: 6949cbd7caa396c053cb88ff418b34af489fd96c
+      - name: Verify private evolution source and one-minute cron surgical change
         shell: bash
         run: |
           set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_mpw_evolution_one_minute_cron.py -v
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_mpw_v91_evolution.py -v
-          python3 -m py_compile mpw_v91_port/evolution.py scripts/mpw_activate_private_evolution_cpanel.py
-          python3 - <<'PY'
-          import hashlib,io,json,tarfile
-          from pathlib import Path
-          source=Path("mpw_v91_port/evolution.py").read_bytes()
-          assert 2000<=len(source)<25000
-          target=Path("/tmp/mpw-evolution-main-activation.tar.gz")
-          with tarfile.open(target,"w:gz") as archive:
-              for name,raw in (
-                  ("evolution.py",source),
-                  ("manifest.json",json.dumps({
-                      "tenant":"mojplaywin-main",
-                      "deployment_scope":"private-only",
-                      "sha256":hashlib.sha256(source).hexdigest()
-                  },sort_keys=True).encode())
-              ):
-                  item=tarfile.TarInfo(name)
-                  item.mode=0o600
-                  item.size=len(raw)
-                  item.mtime=0
-                  archive.addfile(item,io.BytesIO(raw))
-          assert 0<target.stat().st_size<250000
-          print("MPW_EVOLUTION_TESTS_AND_PACKAGE_OK=true")
-          PY
+          python3 -m py_compile scripts/mpw_evolution_reschedule_one_minute_cpanel.py
+          test -f mpw_v91_port/evolution.py
+          echo MPW_MINUTELY_CRON_SURGERY_TESTS_OK=true
       - name: Establish host-pinned private relay without disclosing keys
         env:
           VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
@@ -93,38 +73,50 @@ jobs:
           timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
           test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
           mv "$d/host.candidate" "$d/host.known"
-      - name: Activate only private worker module and independent hourly cron
+      - name: Update only existing PRIVATE evolution Cron to every minute
+        id: reschedule
         shell: bash
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
-          controller="$(base64 -w0 scripts/mpw_activate_private_evolution_cpanel.py)"
-          timeout 105s ssh -T -F "$d/config" saeit-cpanel "python3 -c 'import base64;exec(base64.b64decode(\"$controller\"))'" < /tmp/mpw-evolution-main-activation.tar.gz
-      - name: Read back private evolution proof without altering any site
+          controller="$(base64 -w0 scripts/mpw_evolution_reschedule_one_minute_cpanel.py)"
+          result="$(timeout 70s ssh -T -F "$d/config" saeit-cpanel "python3 -c 'import base64;exec(base64.b64decode(\"$controller\"))'")"
+          printf '%s\n' "$result"
+          before_epoch="$(printf '%s\n' "$result" | python3 -c 'import json,sys;x=json.load(sys.stdin);assert x["status"]=="MPW_PRIVATE_EVOLUTION_EVERY_MINUTE_ACTIVE" and x["schedule"]=="* * * * *" and x["prior_cron_entries_preserved_exactly"] is True and x["no_public_site_or_payment_change"] is True and x["shared_passenger_restarted"] is False;print(int(x["evolution_epoch_before_next_cron"]))')"
+          printf '%s\n' "before_epoch=$before_epoch" >> "$GITHUB_OUTPUT"
+      - name: Verify that real one-minute cPanel Cron runs next cycle
+        env:
+          BEFORE_EPOCH: ${{ steps.reschedule.outputs.before_epoch }}
         shell: bash
         run: |
           set -euo pipefail
-          timeout 40s ssh -T -F "$RUNNER_TEMP/mojplaywin-inventory-ssh/config" saeit-cpanel 'python3 -' <<'PY'
-          import json,subprocess
+          sleep 72
+          before_epoch="$BEFORE_EPOCH"
+          timeout 45s ssh -T -F "$RUNNER_TEMP/mojplaywin-inventory-ssh/config" saeit-cpanel "python3 - '$before_epoch'" <<'PY'
+          import json,subprocess,sys
           from pathlib import Path
           root=Path("/home/zomorod2/.private_mojplaywin_main_agents/evolution_runtime_20261018")
+          report=root/"last_report.json"
           assert root.is_dir() and not root.is_symlink() and not root.stat().st_mode&0o077
-          path=root/"last_report.json"
-          assert path.is_file() and not path.is_symlink()
-          data=json.loads(path.read_text())
-          assert data["tenant"]=="mojplaywin-main"
-          assert data["status"]=="active_private_learning"
-          assert data["master_generation"]==64
-          assert data["auto_published"] is False and data["executed_financial_actions"]==0
-          assert data["self_modified_code"] is False and data["shared_runtime_modified"] is False
+          assert report.is_file() and not report.is_symlink()
+          row=json.loads(report.read_text())
+          assert row["tenant"]=="mojplaywin-main" and row["status"]=="active_private_learning"
+          assert row["master_generation"]==64
+          assert row["auto_published"] is False and row["self_modified_code"] is False
+          assert row["executed_financial_actions"]==0 and row["shared_runtime_modified"] is False
+          old=int(sys.argv[1]); current=int(row["epoch"])
+          assert current>old,(old,current)
           cron=subprocess.run(["crontab","-l"],capture_output=True,text=True,timeout=10,check=True)
-          marker="MPW_PRIVATE_EVOLUTION_MAIN_ONLY_20261018"
-          assert sum(marker in line for line in cron.stdout.splitlines())==1
-          print("PRIVATE_EVOLUTION_READBACK_VERIFIED=true")
-          print("PRIVATE_EVOLUTION_EPOCH="+str(data["epoch"]))
-          print("PRIVATE_EVOLUTION_POLICY="+data["active_policy"])
-          print("PRIVATE_EVOLUTION_VERIFIED_OUTCOMES="+str(data["verified_outcome_count"]))
-          print("NO_PUBLIC_SITE_OR_PAYMENT_MODIFICATION=true")
+          marked=[x for x in cron.stdout.splitlines() if "MPW_PRIVATE_EVOLUTION_MAIN_ONLY_20261018" in x]
+          assert len(marked)==1
+          assert marked[0].startswith("* * * * * ")
+          print("MPW_PRIVATE_EVOLUTION_EVERY_MINUTE_CRON_FIRED=true")
+          print("GENERATION=64")
+          print("EPOCH_BEFORE="+str(old))
+          print("EPOCH_AFTER="+str(current))
+          print("VERIFIED_OUTCOMES="+str(row["verified_outcome_count"]))
+          print("ACTIVE_POLICY="+str(row["active_policy"]))
+          print("NO_PUBLIC_SITE_OR_FINANCIAL_CHANGES=true")
           PY
       - name: Clean ephemeral runner identity material
         if: always()
