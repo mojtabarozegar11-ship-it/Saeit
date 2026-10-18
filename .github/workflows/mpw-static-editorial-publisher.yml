@@ -1,0 +1,159 @@
+name: Publish MojPlayWin MAIN original editorial content safely
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/mpw-static-editorial-publisher.yml]
+  schedule:
+    - cron: '17 * * * *'
+permissions:
+  contents: read
+concurrency:
+  group: mpw-main-static-editorial-isolated
+  cancel-in-progress: false
+jobs:
+  publish-static-main-only:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          ref: 2ed7ac6ec6009402c5e847842871b6e8c655e646
+      - name: Prove guarded static article publishing and package pinned private files
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_mpw_public_editorial_publisher.py -v
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_mpw_page_content_factory.py -v
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_mpw_gen65_operational.py -v
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p test_mojplaywin_shared_deploy_hard_stop.py -v
+          python3 -m py_compile mpw_v91_port/public_editorial_publisher.py scripts/mpw_static_editorial_release_control.py scripts/mpw_install_public_editorial_cpanel.py
+          python3 - <<'PY'
+          import hashlib,io,json,tarfile
+          from pathlib import Path
+          source={
+            "page_content_factory.py":Path("mpw_v91_port/page_content_factory.py").read_bytes(),
+            "public_editorial_publisher.py":Path("mpw_v91_port/public_editorial_publisher.py").read_bytes(),
+            "mpw_static_editorial_release_control.py":Path("scripts/mpw_static_editorial_release_control.py").read_bytes()}
+          assert all(3000<len(v)<31000 for v in source.values())
+          manifest=json.dumps({"tenant":"mojplaywin-main","scope":"main_mpw_editorial_only",
+                 "sha256":{k:hashlib.sha256(v).hexdigest() for k,v in source.items()}},sort_keys=True).encode()
+          with tarfile.open("/tmp/mpw-isolated-static-publisher.tgz","w:gz") as archive:
+              for name,data in (*source.items(),("manifest.json",manifest)):
+                  info=tarfile.TarInfo(name);info.size=len(data);info.mode=0o600;info.mtime=0
+                  archive.addfile(info,io.BytesIO(data))
+          assert Path("/tmp/mpw-isolated-static-publisher.tgz").stat().st_size<160000
+          print("PINNED_PUBLIC_EDITORIAL_TESTS_AND_PACKAGE_PASSED=true")
+          PY
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Install only privately scoped files and issue owned public STATIC release
+        id: stage
+        shell: bash
+        run: |
+          set -euo pipefail
+          remote="$RUNNER_TEMP/mojplaywin-inventory-ssh/config"
+          script="$(base64 -w0 scripts/mpw_install_public_editorial_cpanel.py)"
+          timeout 90s ssh -T -F "$remote" saeit-cpanel "python3 -c 'import base64;exec(base64.b64decode(\"$script\"))'" < /tmp/mpw-isolated-static-publisher.tgz
+          status="$(ssh -T -F "$remote" saeit-cpanel 'python3 -c "import json;from pathlib import Path;p=Path(\"/home/zomorod2/.private_mojplaywin_main_agents/evolution_runtime_20261018/editorial_publication_state.json\");print(json.loads(p.read_text())[\"status\"])"')"
+          if [ "$status" = 'published_standalone_awaiting_external_smoke' ]; then
+            echo "new_release=true" >> "$GITHUB_OUTPUT"
+          elif [ "$status" = 'published_verified_by_external_smoke' ]; then
+            echo "new_release=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "UNEXPECTED_PUBLICATION_STATUS=$status"; exit 1
+          fi
+      - name: Public HTTP article and original site smoke with rollback on failure
+        id: smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import urllib.request,urllib.error,time
+          expected={
+            "/mpw-editorial/":"Knowledge &amp; Insights",
+            "/mpw-editorial/agents/":"AI &amp; Agent Systems",
+            "/mpw-editorial/agents/ai-evaluation-before-deployment/":"An AI Evaluation Plan Before Deployment",
+            "/mpw-editorial/agents/documenting-ai-assisted-decisions/":"Documenting AI-Assisted Decisions Without Losing Accountability"}
+          for path,marker in expected.items():
+              passed=False
+              for attempt in range(8):
+                  url="https://mojplaywin.com"+path+"?__editorial_readback="+str(time.time_ns())
+                  try:
+                      with urllib.request.urlopen(urllib.request.Request(url,headers={"Cache-Control":"no-cache","User-Agent":"MojPlayWin-Editorial-Smoke"}),timeout=16) as response:
+                          page=response.read(200000).decode("utf8","replace")
+                          if response.status==200 and marker in page and "MojPlayWin" in page and "zomorodmelal.ir" not in page:
+                              passed=True;break
+                  except Exception:pass
+                  time.sleep(3)
+              if not passed:
+                  raise SystemExit("PUBLIC_EDITORIAL_SMOKE_FAILED:"+path)
+              print("PUBLIC_EDITORIAL_ROUTE_OK="+path)
+          for path in ("/","/agents/","/knowledge/"):
+              with urllib.request.urlopen("https://mojplaywin.com"+path+"?__editorial_health="+str(time.time_ns()),timeout=18) as response:
+                  if response.status!=200:raise SystemExit("EXISTING_ROUTE_WENT_UNHEALTHY:"+path)
+              print("UNCHANGED_MAIN_ROUTE_HEALTHY="+path)
+          print("MAIN_EDITORIAL_INDEPENDENT_PUBLICATION_SMOKE_PASS=true")
+          PY
+      - name: Restore only new static folder if public smoke failed
+        if: failure() && steps.stage.outputs.new_release == 'true'
+        shell: bash
+        run: |
+          timeout 30s ssh -T -F "$RUNNER_TEMP/mojplaywin-inventory-ssh/config" saeit-cpanel '/usr/bin/python3 -B /home/zomorod2/.private_mojplaywin_main_agents/v91_verified_main_port_20261018/scripts/mpw_static_editorial_release_control.py --rollback'
+      - name: Finalize HTTP-verified production release without touching Django
+        if: success() && steps.stage.outputs.new_release == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 30s ssh -T -F "$RUNNER_TEMP/mojplaywin-inventory-ssh/config" saeit-cpanel '/usr/bin/python3 -B /home/zomorod2/.private_mojplaywin_main_agents/v91_verified_main_port_20261018/scripts/mpw_static_editorial_release_control.py --finalize'
+          echo "MOJPLAYWIN_EDITORIAL_MAIN_PUBLICATION_LIVE=true"
+          echo "NO_SHARED_DJANGO_OR_PASSENGER_MUTATION=true"
+      - name: Clean ephemeral runner SSH keys
+        if: always()
+        shell: bash
+        run: |
+          rm -rf -- "$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          rm -f -- /tmp/mpw-isolated-static-publisher.tgz
