@@ -127,5 +127,7 @@ a:focus-visible,button:focus-visible,summary:focus-visible{outline:3px solid #d5
   <a style="color:inherit;text-decoration:none" href="/api/health/">آزمون سلامت API</a>
   <a style="color:#dfc38d;text-decoration:none" href="/">نمایش سایت ↗</a>
 </div>
+{% elif request.get_host == "mojplaywin.com" or request.get_host == "www.mojplaywin.com" %}
+<a href="{% url 'mpw_agent_monitor' %}" style="display:inline-block;margin:8px;padding:8px 14px;border:1px solid #517b9f;border-radius:8px;color:#eff5ff">پایش عملکرد ایجنت‌ها و ربات‌ها ↗</a>
 {% endif %}
 {% endblock %}

@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="fa" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>فرماندهی و پایش ایجنت‌ها | MojPlayWin</title>
+<style>
+:root{color-scheme:dark;font-family:Tahoma,Arial,sans-serif;background:#0b111d;color:#eff4ff}
+*{box-sizing:border-box}body{max-width:1450px;margin:auto;padding:20px}
+a{color:#86c7ff}h1{font-size:clamp(22px,3vw,34px)}h2{font-size:19px}p,small{color:#aec0d8}
+header{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap}
+button,select{background:#172e49;color:#eff4ff;border:1px solid #456684;border-radius:9px;padding:10px}
+button{cursor:pointer}button:focus-visible,select:focus-visible{outline:3px solid #a6d4ff}
+.stats,.grid{display:grid;gap:13px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+.stats{grid-template-columns:repeat(auto-fit,minmax(145px,1fr));margin:16px 0}
+.card{background:#162336;border:1px solid #324766;border-radius:15px;padding:16px;min-width:0}
+.count{font-size:27px;font-weight:bold}.muted{color:#b3c3d8}
+.controls{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin:16px 0}
+.state{font-size:12px;border-radius:6px;padding:4px 7px;background:#485266;color:#fff}
+.state.healthy{background:#135c48}.state.degraded{background:#78602a}
+.state.failed{background:#783136}.state.stale{background:#66532e}
+label{display:block;margin-bottom:5px}svg{display:block;width:100%;height:55px}
+.chart{margin-top:8px;min-height:66px;border-radius:8px;background:#0d1c2d;padding:7px}
+h3{font-size:15px;overflow-wrap:anywhere}
+.card small{display:block;margin-top:6px;overflow-wrap:anywhere}
+@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
+</style></head><body>
+<header><div><h1>مرکز فرماندهی و پایش ایجنت‌ها</h1>
+<p>MojPlayWin • فقط اطلاعات واقعی محیط خصوصی cPanel • مخصوص کارکنان مجاز</p></div>
+<div><a href="/staff/command-center/">بازگشت به پنل</a>　<button id="reload" type="button">به‌روزرسانی</button></div></header>
+<section id="intro" aria-live="polite"><p>در حال دریافت وضعیت واقعی...</p></section>
+<section class="stats" id="stats" aria-label="خلاصه سامانه"></section>
+<div class="controls"><label for="kind">نوع:</label><select id="kind">
+<option value="all">همه</option><option value="master">مستر ایجنت</option>
+<option value="agent">ایجنت‌ها و نقش‌ها</option><option value="robot">ربات‌ها</option>
+<option value="module">۷۷ ماژول</option></select>
+<label for="status">وضعیت:</label><select id="status">
+<option value="all">همه</option><option value="healthy">سالم</option>
+<option value="degraded">اختلال</option><option value="failed">خراب</option>
+<option value="stale">قدیمی</option><option value="unknown">نامشخص</option></select>
+</div>
+<section class="grid" id="cards" aria-label="گزارش هر ایجنت، ربات و ماژول"></section>
+<p class="muted">نمودارها از نمونه‌های واقعی ذخیره‌شده توسط جمع‌آور خصوصی ساخته می‌شوند؛ فقدان داده به معنی موفقیت نیست.
+این صفحه قابلیت اجرای دستور، انتشار محتوا یا انتقال وجه ندارد. بازخوانی خودکار هر ۶۰ ثانیه انجام می‌شود.</p>
+<script>
+"use strict";
+const endpoint="{% url 'mpw_agent_monitor_api' %}";
+const $=id=>document.getElementById(id);
+let rows=[];
+const states={healthy:"سالم",degraded:"اختلال",failed:"خطا",stale:"قدیمی",unknown:"نامشخص"};
+const kinds={master:"مستر",agent:"ایجنت",robot:"ربات",module:"کتابخانه"};
+function txt(el,value){el.textContent=String(value===null||value===undefined?"—":value);return el}
+function element(tag,cls,text){const n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)txt(n,text);return n}
+function sparkline(target,series){
+ target.replaceChildren();
+ const points=series.filter(x=>x&&Number.isFinite(x.value)&&(x.value===0||x.value===1));
+ if(!points.length){target.append(element("small","muted","تاریخچه واقعی هنوز ثبت نشده"));return}
+ const all=series.slice(-48),w=280,h=40,step=(w-8)/Math.max(1,all.length-1);
+ const svg=document.createElementNS("http://www.w3.org/2000/svg","svg");
+ svg.setAttribute("viewBox","0 0 280 46");svg.setAttribute("role","img");
+ svg.setAttribute("aria-label","روند نمونه‌های واقعی موفقیت اجرای این جزء");
+ let coords=[];
+ const flush=()=>{
+  if(coords.length){
+   const p=document.createElementNS("http://www.w3.org/2000/svg","polyline");
+   p.setAttribute("points",coords.join(" "));p.setAttribute("fill","none");
+   p.setAttribute("stroke","#6dcdb6");p.setAttribute("stroke-width","2.5");
+   p.setAttribute("stroke-linecap","round");p.setAttribute("stroke-linejoin","round");
+   svg.appendChild(p);coords=[]}
+ };
+ all.forEach((x,i)=>{if(x.value!==0&&x.value!==1){flush();return}
+  const xx=(4+step*i).toFixed(1),yy=x.value===1?9:36;coords.push(xx+","+yy);
+  const dot=document.createElementNS("http://www.w3.org/2000/svg","circle");
+  dot.setAttribute("cx",xx);dot.setAttribute("cy",String(yy));
+  dot.setAttribute("r","2.8");dot.setAttribute("fill",x.value===1?"#6dcdb6":"#ef8f77");
+  svg.appendChild(dot);
+ });
+ flush();
+ target.append(svg,element("small","muted",String(points.length)+" نمونه دارای نتیجه ثبت‌شده"));
+}
+function paint(){
+ const kind=$("kind").value,status=$("status").value;
+ const selected=rows.filter(x=>(kind==="all"||x.kind===kind)&&(status==="all"||x.state===status));
+ const cards=$("cards");cards.replaceChildren();
+ for(const item of selected){
+  const card=element("article","card");
+  const head=element("h3","",item.name),tag=element("span","state "+item.state,states[item.state]||"نامشخص");
+  const note=element("small","", (kinds[item.kind]||item.kind)+" | آخرین گزارش: "+(item.reported_at||"نامشخص"));
+  const chart=element("div","chart");sparkline(chart,item.history||[]);
+  card.append(head,tag,note,chart);
+  if(item.metrics&&Object.keys(item.metrics).length){
+   card.append(element("small","muted",Object.entries(item.metrics).map(([k,v])=>k+": "+v).join(" | ")))}
+  cards.append(card);
+ }
+ if(!selected.length)cards.append(element("p","muted","موردی با این فیلتر مشاهده نشد."));
+}
+async function load(){
+ try{
+  const r=await fetch(endpoint,{credentials:"same-origin",cache:"no-store"});
+  if(!r.ok)throw new Error("HTTP "+r.status);
+  const data=await r.json();rows=Array.isArray(data.items)?data.items:[];
+  const s=data.summary||{},stats=$("stats");stats.replaceChildren();
+  for(const [key,title] of [["total","کل موارد ثبت‌شده"],["healthy","سالم"],["stale","قدیمی"],["unknown","نامشخص"],["failed","خطا"],["degraded","اختلال"]]){
+   const box=element("article","card");box.append(element("div","count",s[key]||0),element("small","",title));stats.append(box);
+  }
+  const detail=data.source==="private_cpanel_unavailable"?"منبع خصوصی در این سرور در دسترس نیست؛ اتصالی تأیید نشده است.":
+   "داده خصوصی دریافت شد؛ هر جزء فقط با شواهد و زمان آخرین گزارش ارزیابی می‌شود.";
+  txt($("intro"),detail+" | زمان بررسی: "+(data.captured_at||"نامشخص"));
+  paint();
+ }catch(e){rows=[];txt($("intro"),"خطا در دریافت داده؛ سلامت هیچ جزء تأیید نشده است.");$("cards").replaceChildren();$("stats").replaceChildren();}
+}
+$("reload").addEventListener("click",load);
+$("kind").addEventListener("change",paint);$("status").addEventListener("change",paint);
+load();window.setInterval(load,60000);
+</script></body></html>
