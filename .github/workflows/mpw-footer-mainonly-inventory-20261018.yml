@@ -141,6 +141,23 @@ jobs:
                   body=resp.read(1400000).decode('utf8','replace')
                   print('DYNAMIC '+path+' STATUS='+str(resp.status)+' CHARSET='+str(resp.headers.get_content_charset())+' CSP='+repr(resp.headers.get('Content-Security-Policy'))+' ENCODING='+str(resp.headers.get('Content-Encoding'))+' END_BODY='+str('</body>' in body.lower())+' FOOTERS='+str(len(re.findall(r'<footer\\b',body,re.I)))+' FOUNDER='+str('Mojtaba Roozegar' in body),flush=True)
           PY
+      - name: Inspect two served stylesheet fingerprints only
+        run: |
+          set -euo pipefail
+          timeout 45s ssh -T -F "$RUNNER_TEMP/mpw-footer-inventory/config" saeit-cpanel python3 - <<'PY'
+          from pathlib import Path
+          import hashlib
+          root=Path('/home/zomorod2/Saeit-staging/staticfiles/site')
+          for f in ('mojplaywin.0044ba34e437.css','site-standard-v2.69714b9b949e.css'):
+              p=root/f
+              print('STYLESHEET '+f+' exists='+str(p.is_file())+' symlink='+str(p.is_symlink()),flush=True)
+              if p.is_file() and not p.is_symlink():
+                  data=p.read_bytes()
+                  print('CSS_SHA '+f+' '+hashlib.sha256(data).hexdigest()+' bytes='+str(len(data)),flush=True)
+                  for ext in ('.gz','.br'):
+                      q=Path(str(p)+ext)
+                      print('CSS_COMPRESSED '+q.name+' exists='+str(q.is_file()),flush=True)
+          PY
       - name: Remove relay material
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/mpw-footer-inventory"
