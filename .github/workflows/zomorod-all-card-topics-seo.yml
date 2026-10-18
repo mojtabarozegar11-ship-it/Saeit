@@ -1,0 +1,314 @@
+name: Zomorod 605 card destinations and research SEO
+on:
+  pull_request:
+    paths:
+      - "content/zomorod-all-card-topics-20261018/**"
+      - ".github/workflows/zomorod-all-card-topics-seo.yml"
+  push:
+    branches: [main]
+    paths:
+      - "content/zomorod-all-card-topics-20261018/**"
+      - ".github/workflows/zomorod-all-card-topics-seo.yml"
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-all-cards-seo-root-research-only
+  cancel-in-progress: false
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile and reconstruct verified prior homepage from committed sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile content/zomorod-all-card-topics-20261018/*.py
+          python3 - <<'PY'
+          from pathlib import Path
+          src=Path('content/zomorod-v6-20261018/index.html').read_text(encoding='utf-8')
+          assert 'window.ZOMOROD_ORBIT_DATA=' in src
+          logo='<a class="zm-v7-home-logo" href="/company/" aria-label="معرفی شرکت زمرد ملل"><img src="/static/site/zomorod-v7/company-logo.webp" alt="لوگو"></a>'
+          src=src.replace('<body>','<body><!-- zm-unified-v7-20261018 -->'+logo,1)
+          Path('/tmp/topics-v7.html').write_text(src,encoding='utf-8')
+          PY
+          python3 content/zomorod-v8/zomorod_v8_rows_and_logo.py /tmp/topics-v7.html --output /tmp/topics-v8.html
+          python3 content/zomorod-v9/zomorod_v9_link_real_pages.py /tmp/topics-v8.html --output /tmp/topics-v9.html
+          python3 content/zomorod-three-research-shelves/zomorod_three_shelves.py /tmp/topics-v9.html \
+            --output /tmp/topics-29.html --pages-root /tmp/topics-research-pages
+          python3 content/zomorod-all-card-topics-20261018/build_expert_topic_pages.py /tmp/topics-29.html \
+            --output /tmp/topics-605.html --stage-root /tmp/topics-generated
+          python3 content/zomorod-all-card-topics-20261018/enrich_existing_research.py \
+            --pages-root /tmp/topics-research-pages \
+            --definitions content/zomorod-three-research-shelves/zomorod_three_shelves.py
+      - name: Deep manifest, text, metadata, one-to-one URL, sitemap and rollback safety tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,re,xml.etree.ElementTree as ET
+          from pathlib import Path
+          def extract(path):
+            s=Path(path).read_text(encoding='utf8')
+            x=json.loads(re.search(r'window\.ZOMOROD_ORBIT_DATA=(\{.*?\});</script>',s,re.S).group(1))
+            return s,x['rows']
+          previous,old=extract('/tmp/topics-29.html')
+          content,updated=extract('/tmp/topics-605.html')
+          assert len(old)==len(updated)==29
+          assert sum(len(r['cards']) for r in old)==605
+          assert sum(len(r['cards']) for r in updated)==605
+          assert [r['id'] for r in old]==[r['id'] for r in updated]
+          assert [r['title'] for r in old]==[r['title'] for r in updated]
+          assert [r for r in updated if r['index']>26]==[r for r in old if r['index']>26]
+          oldcards=[c for r in old for c in r['cards']]
+          newcards=[c for r in updated for c in r['cards']]
+          assert len(oldcards)==len(newcards)==605
+          assert all((a['id'],a['title'],a['slug'],a['image'])==(b['id'],b['title'],b['slug'],b['image']) for a,b in zip(oldcards,newcards))
+          canonical=[c['canonicalUrl'] for c in newcards]
+          assert len(set(canonical))==605
+          assert all(c.startswith(('/topics/','/research/directory/')) for c in canonical)
+          assert sum(c.startswith('/topics/') for c in canonical)==545
+          assert sum(c.startswith('/research/directory/') for c in canonical)==60
+          n=Path('/tmp/topics-generated/topics')
+          assert len(list(n.rglob('index.html')))==546
+          assert len(list(Path('/tmp/topics-research-pages').rglob('index.html')))==60
+          assert len(list(n.glob('zm-r*')))==26
+          dirs=[n/p.lstrip('/')/'index.html' for p in canonical if p.startswith('/topics/')]
+          # remove leading topic segment because n itself is /topics
+          for url in canonical:
+            if url.startswith('/topics/'):
+              p=n/url.removeprefix('/topics/')/'index.html'
+              assert p.is_file() and p.stat().st_size>3400,p
+              s=p.read_text(encoding='utf8')
+              assert s.count('<h1>')==1
+              assert 'name="description"' in s and 'rel="canonical"' in s
+              assert 'property="og:title"' in s and 'name="twitter:title"' in s
+              assert 'application/ld+json' in s
+              for data in re.findall(r'<script type="application/ld\+json">(.*?)</script>',s,re.S):
+                schema=json.loads(data)
+                assert any(item['@type']=='WebPage' for item in schema)
+          assert 'zm-full-topics-index-link' in content and 'href="/topics/"' in content
+          sitemap=ET.fromstring((n/'sitemap.xml').read_text(encoding='utf8'))
+          nodes=sitemap.findall('{http://www.sitemaps.org/schemas/sitemap/0.9}url')
+          assert len(nodes)==606, len(nodes)
+          for p in Path('/tmp/topics-research-pages').rglob('index.html'):
+            s=p.read_text(encoding='utf8')
+            assert 'zm-existing-research-expert-enrichment-20261018' in s
+            assert 'application/ld+json' in s and 'property="og:title"' in s
+            assert s.count('<h1>')==1
+          print('VALIDATED_CARD_DESTINATIONS=605_unique')
+          print('VALIDATED_OLD_CARD_TITLES_IMAGES_ORDER=unchanged')
+          print('VALIDATED_COMPLETE_INDEPENDENT_DESTINATIONS=605')
+          print('VALIDATED_SEO_ENRICHMENTS=605')
+          print('VALIDATED_SITEMAP_URLS=606')
+          PY
+  publish:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 26
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify pinned VPS/cPanel SSH relay and prepare ephemeral keys
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-605"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo PINNED_RELAY_VERIFIED=yes
+      - name: Snapshot original homepage, 60 research pages and protected-route fingerprints
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-605"
+          ssh -F "$d/config" saeit-cpanel bash -s -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1";web="$HOME/public_html";backup="$HOME/.backups/zomorod-605-topic-pages/$sha"
+          test ! -e "$backup" && test ! -e "$web/topics"
+          test -s "$web/index.html" && test ! -L "$web/index.html"
+          test -d "$web/research/directory" && test ! -L "$web/research/directory"
+          grep -Fq 'zm-research-three-shelves-20261018' "$web/index.html"
+          ! grep -Fq 'zm-all-cards-dedicated-topics-20261018' "$web/index.html"
+          mkdir -p "$(dirname "$backup")"
+          mkdir -m 700 "$backup"
+          mkdir -m 700 "$backup/scripts"
+          cp -p "$web/index.html" "$backup/index.original.html"
+          cmp -s "$web/index.html" "$backup/index.original.html"
+          sha256sum "$web/index.html" > "$backup/root-original.sha256"
+          cp -a "$web/research/directory" "$backup/research-original"
+          test "$(find "$backup/research-original" -type f -name index.html | wc -l)" -eq 60
+          (cd "$web";for p in .htaccess about/index.html company/index.html research/index.html agriculture/index.html industry/index.html services/index.html tala/index.html mohammad/index.html ghanadi/index.html amozeshgah/index.html;do
+            if test -f "$p";then sha256sum "$p";fi
+          done) > "$backup/protected.sha256"
+          echo FULL_BACKUP_OLD_HOME_AND_SIXTY_RESEARCH_PAGES=verified
+          REMOTE
+          tar -cf - -C content/zomorod-all-card-topics-20261018 build_expert_topic_pages.py enrich_existing_research.py |
+            ssh -F "$d/config" saeit-cpanel "tar -xf - -C '/home/zomorod2/.backups/zomorod-605-topic-pages/$GITHUB_SHA/scripts'"
+          scp -F "$d/config" content/zomorod-three-research-shelves/zomorod_three_shelves.py \
+            "saeit-cpanel:/home/zomorod2/.backups/zomorod-605-topic-pages/$GITHUB_SHA/scripts/research_definitions.py"
+      - name: Build and audit all 605 pages in a private, isolated staging directory
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-605"
+          ssh -F "$d/config" saeit-cpanel bash -s -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1";web="$HOME/public_html";backup="$HOME/.backups/zomorod-605-topic-pages/$sha"
+          sha256sum -c --status "$backup/root-original.sha256"
+          (cd "$web";sha256sum -c --status "$backup/protected.sha256")
+          python3 -m py_compile "$backup/scripts/build_expert_topic_pages.py" "$backup/scripts/enrich_existing_research.py"
+          python3 "$backup/scripts/build_expert_topic_pages.py" "$backup/index.original.html" \
+            --output "$backup/index.candidate.html" --stage-root "$backup/generated"
+          cp -a "$backup/research-original" "$backup/research-candidate"
+          python3 "$backup/scripts/enrich_existing_research.py" \
+            --pages-root "$backup/research-candidate" --definitions "$backup/scripts/research_definitions.py"
+          test "$(find "$backup/generated/topics" -type f -name index.html | wc -l)" -eq 546
+          test "$(find "$backup/research-candidate" -type f -name index.html | wc -l)" -eq 60
+          python3 - "$backup" <<'PY'
+          from pathlib import Path
+          import re,json,sys,xml.etree.ElementTree as ET
+          root=Path(sys.argv[1])
+          old=(root/'index.original.html').read_text(encoding='utf8')
+          new=(root/'index.candidate.html').read_text(encoding='utf8')
+          def manifest(s):return json.loads(re.search(r'window\.ZOMOROD_ORBIT_DATA=(\{.*?\});</script>',s,re.S).group(1))
+          before=manifest(old)['rows'];after=manifest(new)['rows']
+          assert len(before)==len(after)==29
+          assert sum(len(r['cards']) for r in before)==605
+          assert sum(len(r['cards']) for r in after)==605
+          assert [(c['id'],c['title'],c['image']) for r in before for c in r['cards']]==[(c['id'],c['title'],c['image']) for r in after for c in r['cards']]
+          urls=[c['canonicalUrl'] for r in after for c in r['cards']]
+          assert len(urls)==len(set(urls))==605
+          sitemap=ET.parse(root/'generated/topics/sitemap.xml')
+          assert len(sitemap.getroot())==606
+          for p in (root/'generated/topics').rglob('index.html'):
+            if p.parent.name=='topics':continue
+            t=p.read_text(encoding='utf8')
+            assert '<h1>' in t and 'application/ld+json' in t and 'rel="canonical"' in t
+          for p in (root/'research-candidate').rglob('index.html'):
+            t=p.read_text(encoding='utf8')
+            assert 'zm-existing-research-expert-enrichment-20261018' in t
+            assert 'application/ld+json' in t and 'property="og:title"' in t
+          print('STAGE_605_DISTINCT_LINKS=verified')
+          print('STAGE_545_NEW_TOPIC_PAGES=verified')
+          print('STAGE_60_ENRICHED_PAGES=verified')
+          print('STAGE_ALL_ORIGINAL_TOPIC_IMAGES_AND_TITLES_PRESERVED=yes')
+          PY
+          REMOTE
+      - name: Root and research-only protected publication with automatic rollback
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-605"
+          ssh -F "$d/config" saeit-cpanel bash -s -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1";web="$HOME/public_html";backup="$HOME/.backups/zomorod-605-topic-pages/$sha"
+          target="$web/index.html"; catalog="$web/topics"; research="$web/research/directory"
+          test ! -e "$catalog" && test -d "$research"
+          sha256sum -c --status "$backup/root-original.sha256"
+          (cd "$web";sha256sum -c --status "$backup/protected.sha256")
+          test -s "$backup/index.candidate.html"
+          catalog_installed=0;original_moved=0;research_installed=0;root_changed=0
+          rollback() {
+            set +e
+            if test "$root_changed" = 1;then
+              cp -p "$backup/index.original.html" "$web/.index.topic-rollback.$sha"
+              mv -f "$web/.index.topic-rollback.$sha" "$target"
+            fi
+            if test "$research_installed" = 1 && test -d "$research";then
+              mv "$research" "$backup/research-failed.$sha"
+            fi
+            if test "$original_moved" = 1 && test -d "$backup/research-original-live";then
+              mv "$backup/research-original-live" "$research"
+            fi
+            if test "$catalog_installed" = 1 && test -f "$catalog/topic-manifest.json";then
+              grep -Fq 'zm-all-cards-dedicated-topics-20261018' "$catalog/topic-manifest.json" && mv "$catalog" "$backup/topics-failed.$sha"
+            fi
+            echo PROTECTED_TOPIC_DEPLOY_ROLLBACK=attempted
+          }
+          trap 'rc=$?;trap - EXIT;rollback;exit "$rc"' EXIT
+          catalog_installed=1
+          mv "$backup/generated/topics" "$catalog"
+          original_moved=1
+          mv "$research" "$backup/research-original-live"
+          research_installed=1
+          mv "$backup/research-candidate" "$research"
+          cp -p "$backup/index.candidate.html" "$web/.index.topic-next.$sha"
+          chmod --reference="$target" "$web/.index.topic-next.$sha"
+          root_changed=1
+          mv -f "$web/.index.topic-next.$sha" "$target"
+          for route in /topics/ /topics/zm-r01/wheat/ /topics/zm-r08/plant-genetics/ /topics/zm-r13/artificial-intelligence/ /topics/zm-r22/gold-assaying/ /research/directory/units/molecular-genetics/ /research/directory/centers/functional-foods/;do
+            code="$(curl -sSL --max-time 30 -H 'Cache-Control: no-cache' -o "$backup/last-live-check.html" -w '%{http_code}' "https://zomorodmelal.ir$route?topic_release=$sha" || true)"
+            echo CHECKED_PUBLIC_PATH="$route" HTTP="$code"
+            test "$code" = 200
+          done
+          for route in /topics/zm-r01/wheat/ /research/directory/units/molecular-genetics/;do
+            curl -sSL --max-time 25 "https://zomorodmelal.ir$route?seo_proof=$sha" | grep -Fq 'application/ld+json'
+          done
+          code="$(curl -sSL --max-time 25 -o "$backup/live-sitemap.xml" -w '%{http_code}' "https://zomorodmelal.ir/topics/sitemap.xml?sitemap=$sha" || true)"
+          test "$code" = 200
+          grep -Fq '/topics/zm-r01/wheat/' "$backup/live-sitemap.xml"
+          grep -Fq '/research/directory/centers/functional-foods/' "$backup/live-sitemap.xml"
+          code="$(curl -sSL --max-time 35 -H 'Cache-Control: no-cache' -o "$backup/live-index.html" -w '%{http_code}' "https://zomorodmelal.ir/?card_links=$sha" || true)"
+          test "$code" = 200
+          grep -Fq 'zm-all-cards-dedicated-topics-20261018' "$backup/live-index.html"
+          grep -Fq 'دانشنامه تخصصی زمرد ملل' "$backup/live-index.html"
+          for route in /about/ /company/ /research/ /agriculture/ /tala/ /mohammad/ /ghanadi/;do
+            code="$(curl -sSL --max-time 20 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir$route" || true)"
+            echo PRESERVED_ROUTE="$route" HTTP="$code"
+            test "$code" = 200
+          done
+          (cd "$web";sha256sum -c --status "$backup/protected.sha256")
+          test "$(find "$catalog" -type f -name index.html | wc -l)" -eq 546
+          test "$(find "$research" -type f -name index.html | wc -l)" -eq 60
+          trap - EXIT
+          echo NEW_DEDICATED_TOPICS=545
+          echo EXISTING_RESEARCH_TOPICS_SEO_UPGRADED=60
+          echo ALL_CARD_LINKS_UNIQUE=605
+          echo PROTECTED_SITES_UNCHANGED=yes
+          echo DEPLOY_VERIFIED=yes
+          REMOTE
+      - name: Remove ephemeral runner credentials
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/zomorod-605"
