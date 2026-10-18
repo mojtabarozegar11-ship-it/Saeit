@@ -127,12 +127,20 @@ def verify_trx(tx_hash, merchant, atomic_amount, api_key="", min_conf=20):
             raise VerificationError("Malformed TRON chain response.")
         return result
     txid = tx_hash.lower()
-    transaction = call("gettransactionbyid", {"value": txid})
-    receipt = call("gettransactioninfobyid", {"value": txid})
-    tip = call("getnowblock", {})
+    # A full-node receipt only proves that a transaction was included in a
+    # recent block. Check SolidityNode to require finalized canonical inclusion.
+    def solid(name, payload):
+        response = _post(base + "/walletsolidity/" + name, payload, headers)
+        if not isinstance(response, dict) or response.get("Error"):
+            raise VerificationError("Invalid finalized TRON node response.")
+        return response
+
+    transaction = solid("gettransactionbyid", {"value": txid})
+    receipt = solid("gettransactioninfobyid", {"value": txid})
+    tip = solid("getnowblock", {})
     contracts = transaction.get("raw_data", {}).get("contract", [])
-    if transaction.get("txID", "").lower() != txid or len(contracts) != 1:
-        raise VerificationError("TRON transfer was not found.")
+    if str(transaction.get("txID", "")).lower() != txid or len(contracts) != 1:
+        raise VerificationError("Finalized TRON transfer was not found.")
     transfer = contracts[0]
     if transfer.get("type") != "TransferContract":
         raise VerificationError("Only native TRX transfers are supported.")
@@ -141,17 +149,23 @@ def verify_trx(tx_hash, merchant, atomic_amount, api_key="", min_conf=20):
         raise VerificationError("Incorrect TRX recipient.")
     if _to_int(transfer_data.get("amount")) != int(atomic_amount):
         raise VerificationError("Incorrect TRX amount.")
-    ret = transaction.get("ret", [])
-    if not ret or ret[0].get("contractRet") != "SUCCESS":
-        raise VerificationError("TRON transaction unsuccessful.")
-    if receipt.get("id", "").lower() != txid or receipt.get("receipt", {}).get("result") != "SUCCESS":
-        raise VerificationError("TRON receipt unsuccessful.")
+    if str(receipt.get("id", "")).lower() != txid:
+        raise VerificationError("TRON finalized transaction receipt not found.")
+    # ResourceReceipt.result describes smart-contract execution. Native TRX
+    # transfers may have only a net_fee; never demand this optional field.
+    # But if any execution status exists, it MUST affirm success.
+    outcomes = [receipt.get("result"), (receipt.get("receipt") or {}).get("result")]
+    outcomes.extend((item or {}).get("contractRet") for item in transaction.get("ret", []))
+    if any(v not in (None, "SUCCESS") for v in outcomes):
+        raise VerificationError("TRON transfer execution was unsuccessful.")
     block = _to_int(receipt.get("blockNumber"))
+    if block <= 0:
+        raise VerificationError("Invalid finalized TRON block.")
     tip_height = _to_int(tip.get("block_header", {}).get("raw_data", {}).get("number"))
     confirmations = tip_height - block + 1
     if confirmations < min_conf:
-        raise VerificationError("Awaiting additional TRX confirmations.")
+        raise VerificationError("Awaiting additional finalized TRX confirmations.")
     block_timestamp_ms = _to_int(receipt.get("blockTimeStamp"))
-    if block_timestamp_ms < 1000000000000:  # TRON timestamps are milliseconds
+    if block_timestamp_ms < 1000000000000:
         raise VerificationError("Invalid TRON block timestamp.")
     return Proof(block, confirmations, block_timestamp_ms)
