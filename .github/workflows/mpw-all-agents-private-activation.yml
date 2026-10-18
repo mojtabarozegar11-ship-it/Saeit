@@ -68,6 +68,32 @@ jobs:
           timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
           test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
           mv "$d/host.candidate" "$d/host.known"
+      - name: Package pinned, private-only robot source
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib,io,json,tarfile
+          from pathlib import Path
+          source=Path("scripts/mpw_main_private_execution_robots.py").read_bytes()
+          manifest=json.dumps({"tenant":"mojplaywin-main",
+              "scope":"five_main_site_only_private_execution_robots",
+              "runner_sha256":hashlib.sha256(source).hexdigest()},sort_keys=True).encode()
+          with tarfile.open("/tmp/mpw-five-robots-private.tgz","w:gz") as output:
+              for name,raw in (("runner.py",source),("manifest.json",manifest)):
+                  part=tarfile.TarInfo(name)
+                  part.size=len(raw)
+                  part.mode=0o600
+                  part.mtime=0
+                  output.addfile(part,io.BytesIO(raw))
+          assert Path("/tmp/mpw-five-robots-private.tgz").stat().st_size<35000
+          PY
+      - name: Install and actually run all five execution robots on cPanel
+        shell: bash
+        run: |
+          set -euo pipefail
+          controller="$(base64 -w0 scripts/mpw_install_private_execution_robots_cpanel.py)"
+          timeout 155s ssh -T -F "$RUNNER_TEMP/mojplaywin-inventory-ssh/config" saeit-cpanel "python3 -c 'import base64;exec(base64.b64decode(\"$controller\"))'" < /tmp/mpw-five-robots-private.tgz
       - name: Execute actual safe MojPlayWin workers now under existing private locks
         shell: bash
         run: |
@@ -203,4 +229,6 @@ jobs:
       - name: Clean ephemeral runner identity material
         if: always()
         shell: bash
-        run: rm -rf -- "$RUNNER_TEMP/mojplaywin-inventory-ssh"
+        run: |
+          rm -rf -- "$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          rm -f -- /tmp/mpw-five-robots-private.tgz
