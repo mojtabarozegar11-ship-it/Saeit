@@ -230,7 +230,7 @@ def generate(repo, output, python=None):
         "code_mutation_scope": [x[0] for x in SAFE_FIXES],
         "code_edits_across_all_modules_claimed": False,
         "upgrade_policy": "tested_allowlisted_defect_rules_no_live_mutation",
-        "modules_without_proven_repair": len(modules) - len(candidates),
+        "modules_without_proven_repair": len(modules) - len(candidates) - len(already_protected),
     }
     atomic(out / "evolution-proof.json", state)
     return state
