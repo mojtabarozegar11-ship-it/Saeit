@@ -8,6 +8,15 @@ function zmStoreDb(string $private):PDO {
  $db->exec('CREATE TABLE IF NOT EXISTS products(id INTEGER PRIMARY KEY, sku TEXT NOT NULL UNIQUE, title TEXT NOT NULL, description TEXT NOT NULL, price_irr INTEGER NOT NULL CHECK(price_irr>0), enabled INTEGER NOT NULL DEFAULT 0 CHECK(enabled IN(0,1)), created_at TEXT DEFAULT CURRENT_TIMESTAMP)');
  $db->exec('CREATE TABLE IF NOT EXISTS payment_state (id INTEGER PRIMARY KEY CHECK(id=1), provider TEXT NOT NULL, state TEXT NOT NULL, note TEXT NOT NULL)');
  $db->exec("INSERT OR IGNORE INTO payment_state(id,provider,state,note) VALUES(1,'Bank Shahr','not_configured','No verified merchant agreement, test environment, signed callback or settlement evidence')");
+ // Free digital releases are separate from the bank/payment-bound paid catalog.
+ // Only a hash-verified, explicit release workflow can enable a free artifact.
+ $db->exec("CREATE TABLE IF NOT EXISTS free_digital_products (
+   id INTEGER PRIMARY KEY, sku TEXT NOT NULL UNIQUE, title TEXT NOT NULL,
+   description TEXT NOT NULL, download_path TEXT NOT NULL UNIQUE,
+   artifact_sha256 TEXT NOT NULL, license_text TEXT NOT NULL,
+   price_irr INTEGER NOT NULL DEFAULT 0 CHECK(price_irr=0),
+   enabled INTEGER NOT NULL DEFAULT 0 CHECK(enabled IN(0,1)),
+   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)");
  return $db;
 }
 function zmStoreHandle(PDO $db,string $action):void{
@@ -51,6 +60,11 @@ function zmStoreRender(PDO $db):void {
    echo '<tr><td>'.esc($p['sku']).'</td><td>'.esc($p['title']).'</td><td>'.number_format((int)$p['price_irr']).'</td><td>'.($p['enabled']?'فعال':'پیش‌نویس').'</td><td>';
    if(role()==='admin')echo '<form method="post">'.tokenInput().'<input type="hidden" name="product_id" value="'.(int)$p['id'].'"><button name="action" value="product_toggle">'.($p['enabled']?'پنهان‌کردن':'نمایش عمومی').'</button></form>';
    echo '</td></tr>';
+ }
+ echo '</table></div></section>';
+ echo '<section><h2>محصولات دیجیتال رایگان تأییدشده</h2><p>عرضه عمومی فقط پس از آزمون فایل، کنترل SHA-256 و ثبت مجوز انتشار انجام می‌شود. این بخش به درگاه پرداخت متصل نیست.</p><div class="scroll"><table><tr><th>شناسه</th><th>محصول</th><th>هش</th><th>مجوز</th><th>نمایش</th></tr>';
+ foreach($db->query("SELECT sku,title,artifact_sha256,license_text,enabled FROM free_digital_products ORDER BY id DESC LIMIT 150")->fetchAll() as $item){
+  echo '<tr><td>'.esc((string)$item['sku']).'</td><td>'.esc((string)$item['title']).'</td><td><code>'.esc((string)$item['artifact_sha256']).'</code></td><td>'.esc((string)$item['license_text']).'</td><td>'.($item['enabled']?'عمومی':'تأییدنشده').'</td></tr>';
  }
  echo '</table></div></section>';
  zmFactoryDraftsPanel($db);
