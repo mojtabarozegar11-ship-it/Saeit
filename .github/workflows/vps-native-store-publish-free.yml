@@ -124,13 +124,15 @@ jobs:
           import django;django.setup()
           from django.apps import apps
           Product=apps.get_model("core","Product")
-          products=Product.objects.filter(pk=131,active=False,price=0,currency="USD")
+          products=Product.objects.filter(pk=131,price=0,currency="USD")
           if products.count()!=1:
-              raise SystemExit("NATIVE_FACTORY_PRODUCT_NOT_EXACTLY_ONE_INACTIVE_FREE_DRAFT")
+              raise SystemExit("NATIVE_FACTORY_PRODUCT_NOT_EXACTLY_ONE_FREE_RECORD")
           product=products.get()
           metadata=product.metadata if isinstance(product.metadata,dict) else {}
           if metadata.get("factory_recipe")!="farm_enterprise_economics" or metadata.get("factory_software_qa")!="passed":
               raise SystemExit("NATIVE_FACTORY_PRODUCT_PROVENANCE_OR_QA_MISSING")
+          if product.active and (metadata.get("factory_status")!="published_free" or not product.knowledge_article_id):
+              raise SystemExit("ACTIVE_FACTORY_PRODUCT_RELEASE_RECORD_MISMATCH")
           try:Gate=apps.get_model("core","FactoryReleaseGate")
           except LookupError:
               raise SystemExit("RUNTIME_RELEASE_GATE_MODEL_MISSING_REFUSE_UNGUARDED_ACTIVATION")
