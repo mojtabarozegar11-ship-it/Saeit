@@ -1,4 +1,4 @@
-name: Factory all-site owner inventory read only
+name: Factory all-site owner inventory read only — refreshed operational audit
 on:
   push:
     branches: [main]
