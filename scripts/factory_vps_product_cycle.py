@@ -27,7 +27,8 @@ def load(name, path):
 SCRIPTS = Path(__file__).resolve().parent
 
 
-def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None):
+def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
+              enable_designer=False):
     root = Path(output).expanduser().resolve()
     root.mkdir(parents=True, exist_ok=True, mode=0o700)
     os.chmod(str(root), 0o700)
@@ -46,8 +47,22 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None):
         dossier = portfolio.build(database, str(root / "research-dossiers"), max_products)
         repair = load("saeit_factory_rework_cycle",
                       SCRIPTS / "factory_product_rework.py")
+        design_state = {"enabled": False, "new_recipes": 0}
+        if enable_designer:
+            designer = load("saeit_factory_recipe_designer", SCRIPTS / "factory_recipe_designer.py")
+            design_state = designer.cycle(root, seed_file=SCRIPTS.parent / "factory_config" / "design_opportunities.json",
+                                          database=database)
+            design_state["enabled"] = True
         admission_failures = []
         recipe_catalog = maker.discover_recipes(recipes, errors=admission_failures)
+        recipe_roots = {key: Path(recipes) for key in recipe_catalog}
+        generated_root = root / "generated-product-recipes"
+        if enable_designer and generated_root.is_dir():
+            generated = maker.discover_recipes(generated_root, errors=admission_failures)
+            if set(generated) & set(recipe_catalog):
+                raise RuntimeError("GENERATED_RECIPE_COLLIDES_WITH_STATIC_SOURCE")
+            recipe_catalog.update(generated)
+            recipe_roots.update({key: generated_root for key in generated})
         selected = sorted(recipe_catalog)
         # Persist rotation: bounded cycles must not starve later recipe names.
         cursor_file = root / "recipe-cursor.json"
@@ -63,12 +78,13 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None):
             raise RuntimeError("PRODUCT_RECIPE_DIRECTORY_MISSING")
         produced = []
         failures = []
+        source_recoveries = []
         for recipe in selected:
-            source = Path(recipes) / recipe
+            source = recipe_roots[recipe] / recipe
             # When an individual product fails, don't lose the prior verified
             # ZIP or prevent another unrelated recipe from being built.
             try:
-                result = maker.manufacture(recipe, recipes, root / "digital-products")
+                result = maker.manufacture(recipe, recipe_roots[recipe], root / "digital-products")
             except RuntimeError as failure:
                 # Unexpected runtime failures are not considered successful,
                 # and are not swallowed: only known QA/recipe failures enter
@@ -79,8 +95,18 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None):
                 recorded = repair.record_failure(
                     root, recipe, failure,
                     str(source) if source.is_dir() else "recipe_missing")
-                failures.append(recorded)
-                continue
+                if enable_designer and recipe_roots[recipe] == generated_root:
+                    try:
+                        recovered = designer.recover_recipe(recipe, generated_root)
+                        result = maker.manufacture(recipe, generated_root, root / "digital-products")
+                        source_recoveries.append(recovered)
+                    except (RuntimeError, ValueError, OSError) as recovery_error:
+                        recorded["recovery_error"] = str(recovery_error)[:200]
+                        failures.append(recorded)
+                        continue
+                else:
+                    failures.append(recorded)
+                    continue
             produced.append(result)
             manifest = root / "digital-products" / recipe / "manufacturing_manifest.json"
             if manifest.is_file():
@@ -102,6 +128,8 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None):
             "token_usage": 0,
             "build_policy": "all_registered_recipes_sequentially",
             "registered_recipe_count": len(recipe_catalog),
+            "recipe_designer": design_state,
+            "source_recoveries": source_recoveries,
             "recipe_admission_failures": admission_failures,
             "product_candidates_processed": dossier["processed_count"],
             "research_dossiers_updated": dossier["updated_count"],
@@ -139,6 +167,7 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None):
                 "new_artifacts": sum(bool(p.get("changed")) for p in produced),
                 "updated": dossier["updated_count"],
                 "failed": len(failures), "rework_queue": rework_counts,
+                "registered_recipes": len(recipe_catalog), "new_recipe_count": design_state["new_recipes"],
                 "research_rework_queue": research_rework_counts}
 
 
@@ -148,6 +177,7 @@ def main(argv=None):
     p.add_argument("--out", required=True)
     p.add_argument("--recipes", required=True)
     p.add_argument("--max-products", type=int, default=25)
+    p.add_argument("--enable-designer", action="store_true")
     p.add_argument(
         "--max-recipes", type=int, default=None,
         help="Optional positive limit; by default build every registered recipe.",
@@ -159,13 +189,13 @@ def main(argv=None):
         raise ValueError("BOUNDED_LIMIT_REQUIRED")
     result = run_cycle(options.db, options.out, options.recipes,
                        max_products=options.max_products,
-                       max_recipes=options.max_recipes)
+                       max_recipes=options.max_recipes, enable_designer=options.enable_designer)
     print("VPS_FACTORY_CYCLE_STATUS=" + result["status"])
     print("VPS_FACTORY_ORDERS_REQUIRED=false")
     print("VPS_FACTORY_PRIVATE_PRODUCT_PACKAGES=" + str(result["manufactured"]))
     print("VPS_FACTORY_ACTUALLY_NEW_PACKAGES=" + str(result.get("new_artifacts", 0)))
-    print("VPS_FACTORY_REGISTERED_BUILD_RECIPES=" + str(len(load(
-        "saeit_factory_status_maker", SCRIPTS / "factory_product_maker.py").discover_recipes(options.recipes, errors=[]))))
+    print("VPS_FACTORY_REGISTERED_BUILD_RECIPES=" + str(result.get("registered_recipes", 0)))
+    print("VPS_FACTORY_NEW_SYNTHESIZED_RECIPES=" + str(result.get("new_recipe_count", 0)))
     print("VPS_FACTORY_API_AND_TOKEN_USAGE=0")
     print("VPS_FACTORY_PRODUCT_CANDIDATES_SCANNED=" + str(result["processed"]))
     print("VPS_FACTORY_QA_REWORK_NEW_OR_OPEN=" + str(result.get("failed", 0)))

@@ -21,6 +21,8 @@ test -x "$python"
 test -d "$ops"
 test -d "$base/private"
 test -f "$repo/scripts/factory_product_maker.py"
+test -f "$repo/scripts/factory_recipe_designer.py"
+test -f "$repo/factory_config/design_opportunities.json"
 test -f "$repo/scripts/factory_autonomous_portfolio.py"
 test -f "$repo/scripts/factory_evidence_quality.py"
 test -f "$repo/scripts/factory_first_product_pilot.py"
@@ -67,9 +69,11 @@ chmod 700 "$stage" "$scripts" "$recipes" "$private"
 
 for f in factory_product_maker.py factory_autonomous_portfolio.py \
          factory_evidence_quality.py factory_first_product_pilot.py factory_vps_product_cycle.py \
-         factory_product_rework.py; do
+         factory_product_rework.py factory_recipe_designer.py; do
   install -m 600 "$repo/scripts/$f" "$scripts/$f"
 done
+install -d -m 700 "$stage/factory_config"
+install -m 600 "$repo/factory_config/design_opportunities.json" "$stage/factory_config/design_opportunities.json"
 # Build a complete replacement inventory. Preserve retired recipes privately;
 # never remove artifacts, defect ledgers, or locally retained previous sources.
 incoming="$(mktemp -d "$stage/.recipes-incoming.XXXXXX")"
@@ -92,13 +96,13 @@ incoming=""
 
 # Quality gate must exist and compile BEFORE any production cycle or cron change.
 "$python" -B -c 'import ast, pathlib, sys; [ast.parse(pathlib.Path(x).read_text(encoding="utf-8")) for x in sys.argv[1:]]' \
-  "$scripts/factory_evidence_quality.py" "$scripts/factory_autonomous_portfolio.py" "$scripts/factory_vps_product_cycle.py" "$scripts/factory_product_rework.py"
+  "$scripts/factory_recipe_designer.py" "$scripts/factory_evidence_quality.py" "$scripts/factory_autonomous_portfolio.py" "$scripts/factory_vps_product_cycle.py" "$scripts/factory_product_rework.py"
 
 # Product QA is mandatory BEFORE changes to the local scheduler.
 # The cycle discovers the complete catalog and runs each recipe's test_*.py suite.
 "$python" "$scripts/factory_vps_product_cycle.py" \
   --db "$db" --out "$private" --recipes "$recipes" \
-  --max-products 25
+  --max-products 25 --enable-designer
 test -s "$private/production-state.json"
 test "$(find "$private/digital-products" -type f -name "*-internal-qa.zip" -print -quit | wc -l)" -ge 1
 
@@ -111,7 +115,7 @@ flock -n 9 || exit 0
 exec >> "$ops/autonomous-product-cycle.log" 2>&1
 exec "$python" "$scripts/factory_vps_product_cycle.py" \\
   --db "$db" --out "$private" --recipes "$recipes" \\
-  --max-products 25
+  --max-products 25 --enable-designer
 EOF
 chmod 700 "$stage/run-local-cycle.sh"
 
