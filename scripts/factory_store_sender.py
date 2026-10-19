@@ -281,15 +281,30 @@ def sync(source, key, known, *, limit=3, dry_run=False):
             fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError as error:
             raise RuntimeError("STORE_SYNC_ALREADY_RUNNING") from error
-        selected = rotate_recipes(products, read_cursor(cursor_path), limit)
+        # Scan every recipe at most once per tick so one invalid QA package
+        # cannot starve the next healthy three. Failed packages remain blocked
+        # and eligible for retry after their source is repaired.
+        selected = rotate_recipes(products, read_cursor(cursor_path), len(products))
         results = []
+        eligible = 0
         for recipe in selected:
-            # A product that fails SHA/QA or receipt validation does not advance
-            # the durable checkpoint. Never skip failed private delivery silently.
+            manifest = root / recipe / "manufacturing_manifest.json"
+            archive = root / recipe / (recipe + "-internal-qa.zip")
+            try:
+                verify_source(manifest, archive, recipe)
+            except (ValueError, OSError) as error:
+                # Only product-local source validation may be isolated. Remote
+                # delivery/receipt errors still abort without advancing cursor.
+                results.append({"recipe": recipe, "status": "blocked_private_qa",
+                                "failure_type": type(error).__name__})
+                continue
             result = deliver(recipe, root, options, dry_run=dry_run)
             results.append(result)
+            eligible += 1
             if not dry_run:
                 save_cursor(cursor_path, recipe)
+            if eligible >= limit:
+                break
         return results
 
 
@@ -306,7 +321,12 @@ def main(argv=None):
     for item in results:
         print("FACTORY_STORE_PRODUCT=" + item["recipe"])
         print("FACTORY_STORE_DELIVERY=" + item["status"])
-    print("FACTORY_STORE_TRANSFER_COUNT=" + str(len(results)))
+    print("FACTORY_STORE_TRANSFER_COUNT=" + str(sum(
+        item["status"] in ("received_private", "already_received") for item in results)))
+    print("FACTORY_STORE_QA_BLOCKED_COUNT=" + str(sum(
+        item["status"] == "blocked_private_qa" for item in results)))
+    print("FACTORY_STORE_DRY_RUN_VERIFIED_COUNT=" + str(sum(
+        item["status"] == "dry_run_private_only" for item in results)))
     print("FACTORY_STORE_ORDERS_REQUIRED=false")
     print("FACTORY_STORE_PUBLIC_LISTING_ENABLED=false")
     return 0
