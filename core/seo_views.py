@@ -55,7 +55,7 @@ def site_search(request):
             results.append((_score(q, x.title, x.scientific_scope), {"type": "حوزه دانش", "title": x.title, "summary": x.scientific_scope[:280], "url": f"/knowledge/domain/{x.code}/"}))
         products = Product.objects.filter(active=True).filter(Q(title__icontains=q) | Q(product_type__icontains=q))[:50]
         for x in products:
-            results.append((_score(q, x.title, x.product_type), {"type": "فروشگاه", "title": x.title, "summary": f"{x.product_type} · {x.price} {x.currency}", "url": "/store/"}))
+            results.append((_score(q, x.title, x.product_type), {"type": "فروشگاه", "title": x.title, "summary": f"{x.product_type} · {x.price} {x.currency}", "url": f"/store/product/{x.pk}/"}))
         aliases = ("شرکت کشت و صنعت زمرد ملل", "زمرد ملل", "مجتبی روزگار", "محقق و پژوهشگر", "مدیرعامل", "مدیر عامل")
         if any(_norm(q) in _norm(alias) or _norm(alias) in _norm(q) for alias in aliases):
             results.append((100, {"type": "شرکت", "title": "شرکت کشت و صنعت زمرد ملل", "summary": "مجتبی روزگار — محقق و پژوهشگر / مدیرعامل شرکت کشت و صنعت زمرد ملل", "url": "/company/"}))
@@ -84,7 +84,7 @@ def sitemap_xml(request):
     urls += [f"/knowledge/book/{code}/" for code in books]
     domains = KnowledgeDomain.objects.filter(active=True).values_list("code", flat=True)
     urls += [f"/knowledge/domain/{code}/" for code in domains]
-    items = "".join(f"<url><loc>{xml_escape('https://zomorodmelal.ir' + u)}</loc></url>" for u in dict.fromkeys(urls))
+    urls += [f"/store/product/{pk}/" for pk in Product.objects.filter(active=True).values_list("pk",flat=True)]\n    items = "".join(f"<url><loc>{xml_escape('https://zomorodmelal.ir' + u)}</loc></url>" for u in dict.fromkeys(urls))
     return HttpResponse(f'<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{items}</urlset>', content_type="application/xml")
 
 
