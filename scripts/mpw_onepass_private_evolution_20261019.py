@@ -68,6 +68,83 @@ def checked_read(root, relative):
     return None
 
 
+def _private_worker_json(root, relative, now, ttl=7200):
+    """Read a fixed worker receipt with freshness and scope checks.
+
+    Legacy logs are 0644 but live under owner-only mode-0700 private
+    directories; never accept a symlink, foreign UID or unbounded report.
+    """
+    path = root
+    for token in Path(relative).parts:
+        if token in (".", "..") or not PART.fullmatch(token):
+            return None
+        path = path / token
+        if path.is_symlink():
+            return None
+    try:
+        parent = path.parent
+        if not private_dir(parent):
+            return None
+        stat = path.stat()
+        if (not path.is_file() or stat.st_uid != root.stat().st_uid
+                or stat.st_mode & 0o022 or not 0 < stat.st_size <= 100_000):
+            return None
+        age = (now.timestamp() - stat.st_mtime)
+        if not -60 <= age <= ttl:
+            return None
+        obj = json.loads(path.read_bytes())
+        return obj if isinstance(obj, dict) else None
+    except (OSError, ValueError, UnicodeError, TypeError):
+        return None
+
+
+def _worker_checks(root, now):
+    quality = _private_worker_json(
+        root, "quality_review_agent_20261018/last_review.log", now)
+    management_stdout = _private_worker_json(
+        root, "management_intelligence_20261018/last_run.log", now)
+    management_report = checked_read(
+        root, "management_intelligence_20261018/latest_company_operations.json")
+    report_recent = freshness(management_report, "observed_utc", 7200, now)
+    quality_ok = (
+        isinstance(quality, dict)
+        and quality.get("status") == "MPW_ZOMOROD_QUALITY_STANDARDS_USED_IN_PRIVATE_REVIEW"
+        and quality.get("source_hashes_verified") is True
+        and type(quality.get("actual_private_drafts_scored")) is int
+        and quality["actual_private_drafts_scored"] >= 0
+        and isinstance(quality.get("quality_review_results"), dict)
+        and quality.get("factory_or_zomorod_modified") is False
+        and quality.get("website_published") is False
+    )
+    management_ok = (
+        isinstance(management_stdout, dict)
+        and management_stdout.get("status") == "MPW_ZOMOROD_REPORTING_AND_ECONOMIC_POLICIES_IN_USE"
+        and type(management_stdout.get("source_modules_hash_verified")) is int
+        and management_stdout["source_modules_hash_verified"] >= 2
+        and type(management_stdout.get("validated_private_drafts")) is int
+        and management_stdout["validated_private_drafts"] >= 0
+        and management_stdout.get("shared_Django_changed") is False
+        and management_stdout.get("zomorod_or_factory_modified") is False
+        and management_stdout.get("financial_actions_executed") == 0
+        and isinstance(management_report, dict)
+        and report_recent == "recent"
+        and management_report.get("factory_connected") in (False, None)
+        and management_report.get("financial_account_data_consulted") is False
+    )
+    return {
+        "quality": {
+            "verified": bool(quality_ok),
+            "source": "private_quality_cron_stdout",
+            "real_drafts_scored": quality["actual_private_drafts_scored"] if quality_ok else None,
+        },
+        "management": {
+            "verified": bool(management_ok),
+            "source": "private_management_cron_and_tenant_json",
+            "drafts_validated": management_stdout["validated_private_drafts"] if management_ok else None,
+        },
+    }
+
+
 def as_time(raw):
     try:
         parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
@@ -148,9 +225,15 @@ def evaluate(root, now=None):
         component(items, "module_" + str(n + 1), status, report.get(field), "module",
                   {"module": name, "import_verified": imported, "function_verified": False})
         module_status.append(status)
-    # These two workers have unstructured logs, not trusted completion reports.
-    component(items, "worker_quality", "unknown")
-    component(items, "worker_management", "unknown")
+    # Original worker outputs are now verified by their fixed private receipts,
+    # rather than by scheduled Cron markers, log existence or name alone.
+    workers = _worker_checks(root, now)
+    component(items, "worker_quality",
+              "healthy" if workers["quality"]["verified"] else "unknown",
+              kind="agent", metrics=workers["quality"])
+    component(items, "worker_management",
+              "healthy" if workers["management"]["verified"] else "unknown",
+              kind="agent", metrics=workers["management"])
     assert len(items) == 103, "EXPECTED_103_PRIVATE_COMPONENTS"
     counts = {k: sum(item["state"] == k for item in items)
               for k in ("healthy", "loaded_only", "stale", "degraded", "failed", "unknown")}
@@ -161,7 +244,8 @@ def evaluate(root, now=None):
             "autonomous_master_dispatch_verified": False,
             "evolution_generation_promoted": False,
             "generation_promotion_reason": "no_compared_code_artifacts_or_regression_proof",
-            "components": items, "summary": {"total": 103, **counts},
+            "components": items, "worker_execution_evidence": workers,
+            "summary": {"total": 103, **counts},
             "module_hash_verified_count": module_hash_count,
             "module_import_count": sum(x == "loaded_only" for x in module_status),
             "module_independent_functional_proof_count": 0,
