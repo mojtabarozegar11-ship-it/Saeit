@@ -209,6 +209,45 @@ jobs:
                       print('HOME_CANDIDATE '+str(p.relative_to(root))+' SHA='+hashlib.sha256(p.read_bytes()).hexdigest()+' BYTES='+str(p.stat().st_size),flush=True)
               except Exception:pass
           PY
+      - name: Read-only inspect main-only HTML canonical PHP bridges and Django isolation
+        run: |
+          set -euo pipefail
+          timeout 90s ssh -T -F "$RUNNER_TEMP/mpw-footer-inventory/config" saeit-cpanel python3 - <<'PY'
+          from pathlib import Path
+          import re,hashlib,json
+          root=Path('/home/zomorod2/mojplaywin.com')
+          paths=['design-preview-20261017/_mpw_main_canonical_bridge_20261017.php','design-preview-20261017/_mpw_three_extra_canonical_20261017.php','design-preview-20261017/_mpw_sitemap_three_indexable_20261017.php']
+          for rel in paths:
+              p=root/rel
+              if not p.is_file() or p.is_symlink(): print('BRIDGE_ABSENT '+rel,flush=True);continue
+              body=p.read_text('utf8',errors='replace')
+              print('BRIDGE '+rel+' SHA='+hashlib.sha256(p.read_bytes()).hexdigest()+' BYTES='+str(len(body)),flush=True)
+              lines=body.splitlines()
+              for i,line in enumerate(lines):
+                  if any(x in line.lower() for x in ('secret','password','apikey','api_key','token=','private_key')):line='[REDACTED]'
+                  print('PHP_LINE '+rel+' '+str(i+1)+' '+line[:350],flush=True)
+                  if i>=180:break
+          h=(root/'.htaccess').read_text('utf8')
+          print('HTTP_ROUTING_SHA='+hashlib.sha256(h.encode('utf8')).hexdigest(),flush=True)
+          for idx,line in enumerate(h.splitlines()):
+              if idx>140:break
+              print('HT_LINE '+str(idx+1)+' '+line[:250],flush=True)
+          try:
+              from subprocess import run
+              cmd=run(['uapi','--output=json','PassengerApps','list_applications'],capture_output=True,text=True,timeout=15)
+              d=json.loads(cmd.stdout)
+              found=[]
+              def walk(obj):
+                  if isinstance(obj,dict):
+                      if any(k in obj for k in ('app_root','base_uri','domain')):
+                          found.append({k:obj[k] for k in ('domain','app_root','base_uri','app_type') if k in obj})
+                      for v in obj.values():walk(v)
+                  elif isinstance(obj,list):
+                      for v in obj:walk(v)
+              walk(d)
+              print('PASSENGER_APP_MAP '+json.dumps(found[:25]),flush=True)
+          except Exception as e:print('PASSENGER_MAP_UNAVAILABLE '+type(e).__name__,flush=True)
+          PY
       - name: Remove relay material
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/mpw-footer-inventory"
