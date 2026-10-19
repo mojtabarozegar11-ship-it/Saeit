@@ -55,6 +55,56 @@ class BridgeTests(unittest.TestCase):
  def test_wrong_cycle_or_unverified_family(self):
   with self.assertRaises(ValueError):bridge.orders_once(self.root,orders,self.families,"../../etc")
   with self.assertRaises(ValueError):bridge.registry(self.root/"missing")
+ def test_native_queue_300_full_stages_three_then_promotes_after_real_capacity(self):
+  area=self.root/"production-instructions"
+  queue=area/"orders"
+  for number in range(1,301):
+   ident=f"WO-{number:08d}"
+   (queue/(ident+".json")).write_text(json.dumps({
+       "schema":orders.SCHEMA,"id":ident,"status":"issued",
+       "fingerprint":"0"*64,"public_distribution_allowed":False
+   }))
+  day="2026-10-19-r39286724057"
+  manifest,created=bridge.stage_three_requests(self.root,orders,self.families,day)
+  self.assertTrue(created)
+  self.assertEqual(len(manifest["requests"]),3)
+  self.assertEqual({q["state"] for q in manifest["requests"]},{"awaiting_native_capacity"})
+  self.assertTrue(all(q["native_work_order"] is None for q in manifest["requests"]))
+  again,created=bridge.stage_three_requests(self.root,orders,self.families,day)
+  self.assertFalse(created)
+  self.assertEqual(again["requests"],manifest["requests"])
+  blocked=bridge.reconcile_site_intake(self.root,orders,self.families)
+  self.assertTrue(blocked["capacity_blocked"])
+  self.assertEqual(blocked["orders"],[])
+  self.assertEqual(len(list(queue.glob("WO-*.json"))),300)
+  # Native capacity is freed only by recorded completed work, not deletion.
+  for number in range(1,4):
+   p=queue/(f"WO-{number:08d}.json")
+   data=json.loads(p.read_text())
+   data["status"]="completed_verified"
+   p.write_text(json.dumps(data))
+  admitted=bridge.reconcile_site_intake(self.root,orders,self.families)
+  self.assertEqual(admitted["orders"],["WO-00000301","WO-00000302","WO-00000303"])
+  self.assertEqual(admitted["admitted_cycles"],1)
+  self.assertEqual(len(list(queue.glob("WO-*.json"))),303)
+  receipt=area/"zomorod-site-intake"/(day+".json")
+  result=json.loads(receipt.read_text())
+  self.assertTrue(all(q["state"]=="admitted" for q in result["requests"]))
+  self.assertEqual([q["native_work_order"] for q in result["requests"]],admitted["orders"])
+  replay=bridge.reconcile_site_intake(self.root,orders,self.families)
+  self.assertEqual(replay["orders"],[])
+  self.assertEqual(len(list(queue.glob("WO-*.json"))),303)
+
+ def test_two_cycles_stage_six_distinct_requests_without_native_capacity(self):
+  for day in ("2026-10-19","2026-10-20"):
+   doc,created=bridge.stage_three_requests(self.root,orders,self.families,day)
+   self.assertTrue(created)
+   self.assertEqual(len(doc["requests"]),3)
+  files=list((self.root/"production-instructions"/"zomorod-site-intake").glob("*.json"))
+  self.assertEqual(len(files),2)
+  ids=[q["request_id"] for p in files for q in json.loads(p.read_text())["requests"]]
+  self.assertEqual(len(set(ids)),6)
+
  def test_store_import_sha_and_idempotency(self):
   inbox=self.root/"inbox";dbpath=self.root/"site_store.sqlite3"
   with sqlite3.connect(dbpath) as db:
