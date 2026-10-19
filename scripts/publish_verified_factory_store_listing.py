@@ -107,7 +107,21 @@ def verify_live_release_gate(product, metadata):
     The live model remains the authority; this check NEVER grants approval,
     creates a gate, sets flags in the database, or substitutes for QA.
     """
+    from django.apps import apps
     from django.core.exceptions import ValidationError
+
+    # The live schema, unlike the historical GitHub model, enforces a shared
+    # release gate on ApprovalRequest.save(). Never rely on Product.clean alone.
+    try:
+        Gate = apps.get_model("core", "FactoryReleaseGate")
+    except LookupError as exc:
+        raise ValueError("FACTORY_SHARED_RELEASE_GATE_MODEL_MISSING") from exc
+    gates = Gate.objects.filter(product_id=product.pk)
+    if gates.count() != 1:
+        raise ValueError("FACTORY_SHARED_RELEASE_GATE_MISSING_OR_AMBIGUOUS")
+    gate = gates.first()
+    if not all(getattr(gate, field, None) for field in ("run_id", "artifact_id", "manifest_id")):
+        raise ValueError("FACTORY_RELEASE_EVIDENCE_CHAIN_INCOMPLETE")
 
     candidate = copy(product)
     candidate.active = True
