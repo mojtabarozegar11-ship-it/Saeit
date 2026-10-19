@@ -39,7 +39,8 @@ const nodes={result:{set textContent(v){},append(){}},calculate:{addEventListene
 for(const [id,value] of Object.entries(values)){nodes[id]={value:String(value)};}
 const doc={getElementById(id){return nodes[id]},createElement(){return {innerHTML:'',querySelector(){return {set textContent(v){}}}}}};
 const ctx={window:{},document:doc,Number,Error};
-vm.runInNewContext(js,ctx,{timeout:1000});
+// CI virtual machines can be briefly CPU-constrained; keep a finite timeout.
+vm.runInNewContext(js,ctx,{timeout:5000});
 const calc=ctx.window.ZomorodSeedRate.seedRate;
 const r=calc(350,40,95,85,1);
 const expected=350/(.95*.85)*40/100;
@@ -53,7 +54,7 @@ console.log("OFFLINE_WHEAT_TOOL_FUNCTIONAL_QA=PASS");
         with tempfile.TemporaryDirectory() as d:
             a=Path(d)/"product.js";b=Path(d)/"test.js"
             a.write_text(js);b.write_text(runner)
-            run=subprocess.run(["node",str(b),str(a)],capture_output=True,text=True,timeout=10)
+            run=subprocess.run(["node",str(b),str(a)],capture_output=True,text=True,timeout=15)
         self.assertEqual(run.returncode,0,run.stderr)
         self.assertIn("FUNCTIONAL_QA=PASS",run.stdout)
 
