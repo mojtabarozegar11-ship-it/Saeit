@@ -132,7 +132,10 @@ def preflight(home, site_id):
                for file in ("index.html", "index.php", ".htaccess", "passenger_wsgi.py")):
         raise RuntimeError("SITE_ROOT_NO_PROVEN_PUBLIC_ENTRY")
     sha = verify_release(home)
-    dest = root / "factory-products"
+    dest = root / ("factory-releases/resources" if site_id == "mojplaywin-main"
+                   else "factory-products")
+    if dest.parent.is_symlink() or not dest.parent.is_dir():
+        raise RuntimeError("FACTORY_LIBRARY_PARENT_UNSAFE")
     if dest.is_symlink() or (dest.exists() and not dest.is_dir()):
         raise RuntimeError("FACTORY_DIRECTORY_COLLISION")
     if dest.is_dir():
@@ -159,7 +162,10 @@ def publish(home, site_id):
         if not (root / "index.php").is_file() and not (root / ".htaccess").is_file():
             raise RuntimeError("SITE_ROOT_NO_PROVEN_PUBLIC_ENTRY")
     checksum = verify_release(home)
-    dest = root / "factory-products"
+    dest = root / ("factory-releases/resources" if site_id == "mojplaywin-main"
+                   else "factory-products")
+    if dest.parent.is_symlink() or not dest.parent.is_dir():
+        raise RuntimeError("FACTORY_LIBRARY_PARENT_UNSAFE")
     if dest.is_symlink():
         raise RuntimeError("DESTINATION_SYMLINK")
     if dest.exists() and not dest.is_dir():
@@ -176,7 +182,9 @@ def publish(home, site_id):
     output = {
         "schema": OWNER,
         "site_id": site_id,
-        "library_url": ("/tala/factory-products/index.html" if site_id == "zomorod-tala" else "/factory-products/index.html"),
+        "library_url": ("/tala/factory-products/index.html" if site_id == "zomorod-tala"
+                        else "/factory-releases/resources/index.html" if site_id == "mojplaywin-main"
+                        else "/factory-products/index.html"),
         "products": [{
             "id": PRODUCT, "title": TITLE, "free": True,
             "canonical_url": CANONICAL, "sha256": checksum,
@@ -188,6 +196,10 @@ def publish(home, site_id):
     atomic_write(dest / MARKER, (json.dumps({"schema": OWNER, "site_id": site_id},
                                            sort_keys=True) + "\n").encode(), mode=0o600)
     atomic_write(dest / "catalog.json", (json.dumps(output, sort_keys=True, indent=2) + "\n").encode())
+    # The parent sites use Passenger for dynamic routes. This directive is
+    # confined to our new dedicated directory; it does not edit any shared
+    # .htaccess, Passenger entry point or existing pages.
+    atomic_write(dest / ".htaccess", b"PassengerEnabled off\nDirectoryIndex index.html\nOptions -Indexes\n")
     atomic_write(dest / "index.html", render(site_id, label, category, checksum).encode())
     return {"site_id": site_id, "status": "public_resource_page_prepared",
             "products": 1, "sha256": checksum}

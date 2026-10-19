@@ -81,7 +81,7 @@ jobs:
           done
           echo FACTORY_PUBLIC_RESOURCE_PAGES_STAGED
           REMOTE
-          for item in "mojplaywin-main|https://mojplaywin.com/factory-products/index.html" "zomorod-main|https://zomorodmelal.ir/factory-products/index.html" "zomorod-tala|https://zomorodmelal.ir/tala/factory-products/index.html"; do
+          for item in "mojplaywin-main|https://mojplaywin.com/factory-releases/resources/index.html" "zomorod-main|https://zomorodmelal.ir/factory-products/index.html" "zomorod-tala|https://zomorodmelal.ir/tala/factory-products/index.html"; do
             label="${item%%|*}"
             url="${item#*|}"
             status="$(curl -sSL --max-time 20 -o "$d/$label.html" -w '%{http_code}' "$url")"

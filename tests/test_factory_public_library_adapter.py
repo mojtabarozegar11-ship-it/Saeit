@@ -37,14 +37,16 @@ class ResourceTests(unittest.TestCase):
             self.assertEqual(result["products"], 1)
             root = self.home / root_name
             self.assertEqual((root / "index.html").read_text(), "original")
-            record = json.loads((root / "factory-products/catalog.json").read_text())
+            location = ("factory-releases/resources" if site_id == "mojplaywin-main" else "factory-products")
+            record = json.loads((root / location / "catalog.json").read_text())
             self.assertEqual(record["products"][0]["sha256"], self.hash)
             self.assertFalse(record["purchase_required"])
-            self.assertIn(mod.CANONICAL, (root / "factory-products/index.html").read_text())
+            self.assertIn(mod.CANONICAL, (root / location / "index.html").read_text())
+            self.assertIn("PassengerEnabled off", (root / location / ".htaccess").read_text())
         mod.publish(self.home, "zomorod-main")
 
     def test_existing_non_factory_directory_is_protected(self):
-        target = self.mpw / "factory-products"
+        target = self.mpw / "factory-releases" / "resources"
         target.mkdir()
         (target / "custom.html").write_text("preserve")
         with self.assertRaisesRegex(RuntimeError, "EXISTING_NON_FACTORY_DIRECTORY"):
