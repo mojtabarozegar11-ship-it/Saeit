@@ -104,14 +104,15 @@ function zmWorkAssess(string $path,array $observation): array {
     }
     $linkCount=preg_match_all('~<a\b[^>]*\bhref\s*=~i',$body);
     $findings['title']=$title;
-    $findings['title_length']=mb_strlen($title,'UTF-8');
+    $titleLength=function_exists('mb_strlen')?mb_strlen($title,'UTF-8'):strlen($title);
+    $findings['title_length']=$titleLength;
     $findings['h1_count']=$h1count;
     $findings['meta_description_present']=$desc!=='';
     $findings['internal_link_candidates']=$linkCount;
     $findings['html_sha256']=hash('sha256',$body);
     $issues=[];
     if($title==='')$issues[]='missing_title';
-    elseif(mb_strlen($title,'UTF-8')>100)$issues[]='title_over_100_chars';
+    elseif($titleLength>100)$issues[]='title_over_100_chars';
     if($h1count!==1)$issues[]='h1_count_not_one';
     if($desc==='')$issues[]='missing_meta_description';
     if($linkCount===0)$issues[]='no_anchor_links';
