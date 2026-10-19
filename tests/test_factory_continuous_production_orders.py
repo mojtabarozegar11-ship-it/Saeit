@@ -83,7 +83,10 @@ class ProductionOrderGeneratorTests(unittest.TestCase):
             (inp/(kind+".json")).write_text(json.dumps({
                 "schema":orders.SCHEMA,
                 "items":[{"id":"offline_"+str(i),"title":"Valid local instruction "+str(i),
-                          "specification":"Design a complete testable offline prototype with exact unit tests."}]
+                          "specification":"Design a complete testable offline prototype with exact unit tests.",
+                          "family_id":"F28","specialty":"greenhouse-water",
+                          "target_audience":"engineers","problem_solved":"water "+str(i),
+                          "level":"advanced","language":"en"}]
             }))
         for i in range(4):
             r=orders.generate(self.root)
@@ -103,6 +106,36 @@ class ProductionOrderGeneratorTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             orders.generate(self.root)
         self.assertEqual(list((self.root/"production-instructions"/"orders").iterdir()),[])
+    def test_duplicate_offline_concept_is_not_a_new_product(self):
+        self.seed([])
+        path=self.root/"production-order-inputs"
+        path.mkdir()
+        items=[]
+        for i in range(2):
+            items.append({
+                "id":"idea"+str(i)+"123","title":"Distinct color variant "+str(i),
+                "specification":"Build functional greenhouse budget validator with real tests.",
+                "family_id":"F28","specialty":"Greenhouse Water",
+                "target_audience":"Managers","problem_solved":"Water Budget",
+                "level":"Advanced","language":"en"})
+        (path/"factory-invention-snapshot.json").write_text(json.dumps({
+            "schema":orders.SCHEMA,"items":items}))
+        self.assertEqual(orders.generate(self.root)["action"],"issued")
+        self.assertEqual(orders.generate(self.root)["action"],"no_new_meaningful_input")
+        self.assertEqual(len(self.get()[1]),1)
+
+    def test_incomplete_family_identity_cannot_issue_order(self):
+        self.seed([])
+        path=self.root/"production-order-inputs"
+        path.mkdir()
+        (path/"market-research-snapshot.json").write_text(json.dumps({
+            "schema":orders.SCHEMA,
+            "items":[{"id":"market_01","title":"Real market topic",
+                      "specification":"Build a testable solution with measurable outcomes."}]}))
+        with self.assertRaisesRegex(RuntimeError,"FAMILY_ID_REQUIRED"):
+            orders.generate(self.root)
+        self.assertEqual(len(list((self.root/"production-instructions"/"orders").iterdir())),0)
+
     def test_invention_without_qa_is_not_product_release(self):
         self.seed([base_entry(17,[])])
         orders.generate(self.root)

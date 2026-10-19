@@ -58,7 +58,10 @@ class FactoryDefectLoopTests(unittest.TestCase):
         )
         result = cycle.run_cycle(self.db, self.output, self.recipes)
         self.assertEqual(result["status"], "needs_rework")
-        self.assertEqual(result["manufactured"], 1)
+        # Healthy unchanged goods remain verified, not falsely counted as built.
+        self.assertEqual(result["manufactured"], 0)
+        self.assertEqual(result["packages_checked"], 1)
+        self.assertEqual(result["unchanged_verified"], 1)
         self.assertEqual(result["failed"], 1)
         self.assertEqual(maker.sha256_file(good_file), hash_before)
         record = self._ledger(recipe)

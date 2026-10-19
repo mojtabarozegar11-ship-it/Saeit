@@ -1,6 +1,7 @@
 """Independent VPS finished-goods warehouse acceptance and safety tests."""
 import importlib.util
 import json
+import zipfile
 from pathlib import Path
 import shutil
 import tempfile
@@ -102,6 +103,26 @@ class FactoryWarehouseTests(unittest.TestCase):
             warehouse.cycle(self.private)
         self.assertEqual(archive.read_bytes()[-10:],b"corruption")
         self.assertTrue((self.private/"digital-products"/"farm_enterprise_economics"/"farm_enterprise_economics-internal-qa.zip").is_file())
+    def test_high_expansion_zip_is_held_not_decompressed_or_stocked(self):
+        self.manufacture("farm_enterprise_economics")
+        source=self.private/"digital-products"/"farm_enterprise_economics"
+        archive=source/"farm_enterprise_economics-internal-qa.zip"
+        manifest_file=source/"manufacturing_manifest.json"
+        manifest=json.loads(manifest_file.read_text())
+        with zipfile.ZipFile(archive,"w",compression=zipfile.ZIP_DEFLATED) as f:
+            for item in manifest["files"]:
+                data=b"x"*(8*1024*1024) if item=="README.md" else b"safe\n"
+                f.writestr("farm_enterprise_economics/"+item,data)
+        manifest["artifact_sha256"]=warehouse.digest(archive)
+        manifest_file.write_text(json.dumps(manifest))
+        result=warehouse.cycle(self.private)
+        self.assertEqual(result["stocked"],0)
+        self.assertEqual(result["held"],1)
+        self.assertEqual(self.register()["finished_goods_versions"],0)
+        self.assertIn("WAREHOUSE_UNSAFE_ZIP_ENTRY",
+            self.register()["needs_rework_or_review"][0]["reason"])
+        self.assertTrue(archive.is_file())
+
     def test_unrelated_site_and_order_objects_not_required(self):
         self.manufacture("water_budget_economics")
         result=warehouse.cycle(self.private)

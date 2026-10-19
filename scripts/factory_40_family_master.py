@@ -205,8 +205,32 @@ def find_records(root,by_id,by_slug):
             if not receipt.is_file():raise RuntimeError("MASTER_MISSING_FINAL_RECEIPT")
             data=read_obj(receipt,100000)
             work_order=data.get("order")
+            archive=folder/"product.zip"
             pf=pproot/(str(work_order)+".json")
-            passport=read_obj(pf,200000) if pf.is_file() else {}
+            state_file=liferoot/(str(work_order)+".json")
+            if (not ORDER_RE.fullmatch(str(work_order)+".json")
+                    or work_order!=folder.name or data.get("schema")!="saeit.factory.lifecycle.v1"
+                    or data.get("stage_gates_passed")!=10
+                    or data.get("distributed") is not False
+                    or not HEX_RE.fullmatch(str(data.get("artifact_sha256","")))
+                    or not HEX_RE.fullmatch(str(data.get("passport_sha256","")))
+                    or archive.is_symlink() or not archive.is_file()
+                    or archive.stat().st_size!=data.get("bytes")
+                    or not pf.is_file() or pf.is_symlink()
+                    or not state_file.is_file() or state_file.is_symlink()):
+                raise RuntimeError("MASTER_UNVERIFIED_FINAL_RECEIPT")
+            archive_hash=hashlib.sha256()
+            with archive.open("rb") as verified:
+                for block in iter(lambda:verified.read(1024*1024),b""):
+                    archive_hash.update(block)
+            if (archive_hash.hexdigest()!=data["artifact_sha256"]
+                    or hashlib.sha256(pf.read_bytes()).hexdigest()!=data["passport_sha256"]):
+                raise RuntimeError("MASTER_FINAL_STOCK_SHA_MISMATCH")
+            final_state=read_obj(state_file,200000)
+            if (final_state.get("stage_status",{}).get("11")!="passed"
+                    or final_state.get("status")!="in_finished_goods_warehouse_not_distributed"):
+                raise RuntimeError("MASTER_FINAL_STOCK_STAGE_NOT_APPROVED")
+            passport=read_obj(pf,200000)
             fid=classify({},passport,by_id,by_slug)
             if fid:
                 counts[fid]["final_approved"]+=1

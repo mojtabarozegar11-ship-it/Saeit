@@ -45,7 +45,8 @@ TYPES={
     "three_dimensional":("opens","mesh","textures","scale","software_compatibility"),
 }
 REQUIRED_SPEC={
-    "work_order","title","product_type","version","origin","target_audience",
+    "work_order","family_id","specialty","level","source_instruction_fingerprint",
+    "title","product_type","version","origin","target_audience",
     "problem_solved","deliverables","file_formats","language","scope",
     "prerequisites","acceptance_criteria","sources","asset_licenses",
     "technical_dependencies","stages_and_owners","resource_budget",
@@ -123,7 +124,12 @@ def passport_validate(p,work_id):
         raise RuntimeError("PASSPORT_UNKNOWN_TYPE_DEFINE_QA_FIRST")
     if p["origin"] not in ("site_need","customer_request","market_demand","factory_invention","local_factory_research"):
         raise RuntimeError("PASSPORT_UNKNOWN_ORIGIN")
-    for key in ("title","version","target_audience","problem_solved","language",
+    if (not isinstance(p.get("family_id"),str)
+            or not re.fullmatch(r"F(?:0[1-9]|[1-3][0-9]|40)",p["family_id"])):
+        raise RuntimeError("PASSPORT_INVALID_FAMILY_ID")
+    if not isinstance(p.get("source_instruction_fingerprint"),str) or not SHA_RE.fullmatch(p["source_instruction_fingerprint"]):
+        raise RuntimeError("PASSPORT_MISSING_SOURCE_FINGERPRINT")
+    for key in ("title","version","specialty","level","target_audience","problem_solved","language",
                 "scope","resource_budget","sensitivity","producer_id","independent_reviewer_id"):
         if not isinstance(p[key],str) or len(p[key].strip())<2 or len(p[key])>1500:
             raise RuntimeError("PASSPORT_BAD_FIELD:"+key)
@@ -309,6 +315,19 @@ def import_passport(root,work_id,source):
     if path.exists():raise RuntimeError("PASSPORT_IMMUTABLE_USE_NEW_PRODUCT_REVISION")
     if not record_path(root,wid).is_file():
         raise RuntimeError("PASSPORT_UNKNOWN_WORK_ORDER")
+    work= json_read(root/"production-instructions"/"orders"/(wid+".json"))
+    if (work.get("fingerprint")!=data["source_instruction_fingerprint"]
+            or work.get("id")!=wid):
+        raise RuntimeError("PASSPORT_SOURCE_INSTRUCTION_MISMATCH")
+    allowed_origins={"site-topic-snapshot":"site_need",
+                     "customer-intake-snapshot":"customer_request",
+                     "market-research-snapshot":"market_demand",
+                     "factory-invention-snapshot":"factory_invention",
+                     "local-factory-research":"local_factory_research"}
+    if work.get("origin") and allowed_origins.get(work["origin"])!=data["origin"]:
+        raise RuntimeError("PASSPORT_ORIGIN_MISMATCH")
+    if work.get("family_id") and work["family_id"]!=data["family_id"]:
+        raise RuntimeError("PASSPORT_FAMILY_MISMATCH")
     atomic(path,data)
     state=load_order(root,wid)
     state["status"]="waiting_stage_1_evidence"
@@ -386,10 +405,30 @@ def final_admit(root,order,package):
     if not artifact.is_file() or artifact.stat().st_size>MAX_UPLOAD or artifact.suffix!=".zip":
         raise RuntimeError("FINAL_WAREHOUSE_ARTIFACT_INVALID")
     with zipfile.ZipFile(artifact) as f:
-        bad=f.testzip()
-        names=f.namelist()
-        if bad or any(PurePosixPath(n).is_absolute() or ".." in PurePosixPath(n).parts for n in names):
-            raise RuntimeError("FINAL_WAREHOUSE_UNSAFE_ZIP")
+        members=f.infolist()
+        if not members or len(members)>500:
+            raise RuntimeError("FINAL_WAREHOUSE_TOO_MANY_ZIP_ENTRIES")
+        names=[entry.filename for entry in members]
+        if len(names)!=len(set(names)):
+            raise RuntimeError("FINAL_WAREHOUSE_DUPLICATE_ZIP_MEMBER")
+        unpacked=0
+        for info in members:
+            name=info.filename
+            path=PurePosixPath(name)
+            mode=(info.external_attr >> 16) & 0o170000
+            if (path.is_absolute() or ".." in path.parts or "\\" in name
+                    or not name or "\\x00" in name or info.flag_bits & 1
+                    or mode == 0o120000 or info.file_size < 0
+                    or info.file_size > MAX_UPLOAD or info.compress_size < 0
+                    or (info.file_size and info.compress_size==0)
+                    or info.file_size > max(200*info.compress_size,1024*1024)):
+                raise RuntimeError("FINAL_WAREHOUSE_UNSAFE_ZIP")
+            unpacked+=info.file_size
+            if unpacked>MAX_UPLOAD*2:
+                raise RuntimeError("FINAL_WAREHOUSE_UNPACKED_LIMIT_EXCEEDED")
+        # ZIP CRC check may decompress data: only run after limits are verified.
+        if f.testzip() is not None:
+            raise RuntimeError("FINAL_WAREHOUSE_ZIP_CRC_FAILURE")
         for category in REQUIRED_PACKAGE:
             if not any(n.startswith(category) and len(n)>len(category) and not n.endswith("/") for n in names):
                 raise RuntimeError("FINAL_WAREHOUSE_MISSING_SECTION:"+category)
