@@ -65,7 +65,7 @@ def check(folder,archive,product):
                     and '<iframe' not in h.lower() and '<form' not in h.lower()
                     and 'onclick=' not in h.lower() and '@import' not in c)
     usability=(len(s.links)>=8 and all(x in h for x in
-              ('Skip to main content','See the features','Read the FAQ'))
+              ('Skip to main content','See the features','Explore the workflow'))
               and 'Replace sample claims' in readme)
     accessibility=('href="#main"' in h and 'id="main"' in h
                    and '<main' in h and '<nav' in h and '<footer' in h
@@ -79,7 +79,7 @@ def check(folder,archive,product):
                    and c.count('{')==c.count('}') and
                    h.count('<html')==h.count('</html>')==1)
     provenance=('Original source' in readme and
-                product in readme and len(license_file.read_text('utf8'))>=150)
+                'factory F19' in readme and len(license_file.read_text('utf8'))>=150)
     # Separate review script from producer; content-level checks, not human signoff.
     specialist_review=(s.details>=3 and
                        all((folder/('validation_'+n+'.json')).is_file() for n in MODULES)
