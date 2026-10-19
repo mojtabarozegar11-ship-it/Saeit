@@ -85,3 +85,4 @@ jobs:
               except Exception:pass
             print('MPW_STORE_FILE_FIND='+json.dumps({'root':str(root),'matches':matches}))
           PY
+# 2026-10-19 read-only recheck for safe factory-to-MojPlayWin store scope.
