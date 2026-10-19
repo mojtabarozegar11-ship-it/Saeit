@@ -41,7 +41,7 @@ ACTIONS=('Specify finite input domains and meaningful units for ',
          'Revise the worksheet with protected formulas, guidance and validation for ')
 
 def valid(unit,values):
-    if len(values)!=len(unit[2]) or any(type(x) not in (int,float) or not math.isfinite(x) or x<0 for x in values):
+    if len(values)!=len(unit[2]) or any(type(x) not in (int,float) or not math.isfinite(x) or not 0<=x<=1000000 for x in values):
         raise ValueError('INVALID_QUANTITY')
     names=dict(zip('abc',values))
     tree=ast.parse(unit[1],mode='eval')
@@ -50,7 +50,7 @@ def valid(unit,values):
             raise ValueError('UNSAFE_FORMULA')
     for node in ast.walk(tree):
         if isinstance(node,ast.BinOp) and isinstance(node.op,ast.Div) and isinstance(node.right,ast.Name):
-            if names[node.right.id]==0:raise ValueError('ZERO_DENOMINATOR')
+            if names[node.right.id]<1e-9:raise ValueError('ZERO_OR_UNSUPPORTED_DENOMINATOR')
     return names,tree
 
 def reference(unit,values):
@@ -77,7 +77,7 @@ def build(root,tools):
     from openpyxl.styles import Font,PatternFill,Protection
     from openpyxl.worksheet.datavalidation import DataValidation
     root=Path(root)
-    profile_data=[{'title':u[0],'formula':u[1],'values':u[2],'labels':u[3],'units':u[4],'result_unit':u[5]} for u in UNITS]
+    profile_data=[{'title':u[0],'formula':u[1],'values':u[2],'labels':u[3],'units':u[4],'result_unit':u[5],'maximum_input':1000000,'minimum_positive_divisor':1e-9} for u in UNITS]
     source=protocol.digest({'profiles':profile_data,'producer_sha256':protocol.file_sha(__file__),
                             'protocol_sha256':protocol.file_sha(Path(protocol.__file__))})
     plan={'schema':protocol.SCHEMA,'product_id':PRODUCT,'producer_id':'openpyxl_workbook_builder',
@@ -109,7 +109,7 @@ def build(root,tools):
             formula='='+unit[1]
             for key,row in zip('abc',range(3,6)):formula=formula.replace(key,'B'+str(row))
             sheet['A8']='Calculated result';sheet['B8']=formula;sheet['C8']=unit[5]
-            sheet['A10']='Illustrative inputs. Replace estimates with measured values. Rates must be positive when used as divisors.'
+            sheet['A10']='Illustrative estimates. Supported inputs: 0 to 1,000,000; divisors: at least 0.000000001.'
             name=base+'-draft.xlsx';book.save(folder/name)
             assert load_workbook(folder/name).active['B8'].data_type=='f';return result([name])
         if action==2:
@@ -125,8 +125,8 @@ def build(root,tools):
             sheet.cell(row,2).protection=Protection(locked=False)
             denominators={node.right.id for node in ast.walk(ast.parse(unit[1],mode='eval')) if isinstance(node,ast.BinOp) and isinstance(node.op,ast.Div) and isinstance(node.right,ast.Name)}
             is_divisor='abc'[row-3] in denominators
-            validation=DataValidation(type='decimal',operator='greaterThan' if is_divisor else 'greaterThanOrEqual',formula1=0,allow_blank=False)
-            validation.error='Enter a finite nonnegative measured quantity; divisor values must be positive.'
+            validation=DataValidation(type='decimal',operator='between',formula1=1e-9 if is_divisor else 0,formula2=1000000,allow_blank=False)
+            validation.error='Enter a supported finite quantity between the documented bounds; divisors must be positive.'
             validation.showErrorMessage=True;sheet.add_data_validation(validation);validation.add(sheet.cell(row,2))
         sheet.protection.sheet=True
         for column,width in [('A',34),('B',22),('C',26)]:sheet.column_dimensions[column].width=width
@@ -170,7 +170,8 @@ def build(root,tools):
         convert(folder/'workbook.ods','xlsx',recalculated)
         os.replace(recalculated/'workbook.xlsx',folder/'workbook.xlsx')
         text=['# Capacity planning workbook','Illustrative estimates. Replace inputs with actual measurements.',
-              'Edit unlocked numeric inputs. Inspect the visible formulas and units. Zero denominators are invalid.',
+              'Edit unlocked numeric inputs. Supported range: 0 to 1,000,000; divisor minimum: 0.000000001. Values are planning estimates, not exact physical counts.',
+              'Spreadsheet floating-point arithmetic is used. Sample recalculations are checked with 1e-8 relative tolerance.',
               'Binary storage units are explicit: one GiB equals 1024 MiB. These must not be mixed with decimal GB and MB.',
               'This tool is not an agronomic recommendation, financial forecast or commercial quality certificate.']
         for u in UNITS:text.extend(['## '+u[0],'Inputs: '+', '.join(u[3]),'Output unit: '+u[5],

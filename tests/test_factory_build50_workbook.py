@@ -18,6 +18,10 @@ class Workbook50Tests(unittest.TestCase):
         self.assertEqual(storage[5],'GiB')
         self.assertIn('MiB/file',storage[4])
         self.assertEqual(backup[4],['GiB','MiB/second'])
+    def test_unsupported_large_inputs_are_rejected(self):
+        for unit in producer.UNITS:
+            values=list(unit[2]);values[0]=1000001
+            with self.assertRaises(ValueError):producer.reference(unit,values)
     def test_zero_divisors_are_rejected(self):
         for unit in producer.UNITS:
             if '/b' in unit[1]:
