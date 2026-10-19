@@ -1,0 +1,128 @@
+name: MojPlayWin final security finance and web multi-host audit
+on:
+  push:
+    branches: [mpw-two-books-unified-release-20261019]
+    paths: [".github/workflows/mpw-final-multi-host-security-regression-20261019.yml"]
+permissions: {contents: read}
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 11
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Verify real WSGI settings, untouched sales, secure checkout and shared-host continuity
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 145s ssh -T -F "$d/config" saeit-cpanel bash -s <<'BASH'
+          /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - <<'PY'
+          import os,sys,json,pathlib,urllib.request,urllib.error,urllib.parse,importlib.util,time
+          app=pathlib.Path('/home/zomorod2/mojplaywin.com/passenger_wsgi.py')
+          assert app.is_file()
+          spec=importlib.util.spec_from_file_location('mpw_live_wsgi_hsts_test',str(app))
+          module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+          from django.conf import settings
+          from django.core import checks
+          warnings=[w.id for w in checks.run_checks(include_deployment_checks=True)]
+          assert settings.SECURE_HSTS_SECONDS==86400 and 'security.W004' not in warnings
+          assert 'urls.W005' not in warnings
+          print('MPW_FINAL_DJANGO='+json.dumps({'hsts_seconds':settings.SECURE_HSTS_SECONDS,'deployment_warnings':warnings,
+            'main_wsgi_loaded':True}))
+          from core.models import Product,OrderItem
+          from mpw_commerce.models import CommerceInvoice,CommerceReceipt,CommerceFulfillment
+          from command_center.mpw_two_books_panel import _status_dict
+          stats=_status_dict()
+          books=[]
+          for pk in (72,225):
+             p=Product.objects.get(pk=pk)
+             books.append({'id':pk,'active':p.active,'price_usd':str(p.price)})
+          ids=OrderItem.objects.filter(product_id__in=(72,225)).values_list('order_id',flat=True)
+          print('MPW_FINAL_FINANCES='+json.dumps({'books':books,
+            'orders':OrderItem.objects.filter(product_id__in=(72,225)).count(),
+            'invoices':CommerceInvoice.objects.filter(order_id__in=ids).count(),
+            'receipts':CommerceReceipt.objects.filter(invoice__order_id__in=ids).count(),
+            'deliveries':CommerceFulfillment.objects.filter(item__product_id__in=(72,225)).count(),
+            'worker_healthy':stats['worker']['healthy'],'worker_age_s':stats['worker']['age_seconds'],
+            'worker_state':stats['worker']['state']}))
+          checks_to_run=[('store','https://mojplaywin.com/store/'),
+            ('main','https://mojplaywin.com/'),
+            ('login','https://mojplaywin.com/accounts/login/'),
+            ('book72_guest','https://mojplaywin.com/commerce/book/72/'),
+            ('book225_guest','https://mojplaywin.com/commerce/book/225/'),
+            ('crown_defender','https://mojplaywin.com/games/crown-defender/'),
+            ('other_main','https://zomorodmelal.ir/'),
+            ('other_tala','https://zomorodmelal.ir/tala/')]
+          good={}
+          for label,url in checks_to_run:
+            try:
+              request=urllib.request.Request(url,headers={'Cache-Control':'no-store','User-Agent':'MojPlayWin-final-safe-regression'})
+              with urllib.request.urlopen(request,timeout=12) as response:
+                raw=response.read(155000)
+                report={'http':response.status,'landed':urllib.parse.urlparse(response.geturl()).path,
+                   'hsts':response.headers.get('Strict-Transport-Security',''),
+                   'csp_present':bool(response.headers.get('Content-Security-Policy')),
+                   'content_type':response.headers.get('Content-Type','').split(';')[0]}
+                if label=='store':
+                    report['buy_buttons']=raw.decode('utf8','replace').count('class="mpw-crypto-buy"')
+                if label.endswith('_guest'):
+                    report['no_pdf_leak']=not raw.startswith(b'%PDF-')
+                good[label]=report
+            except urllib.error.HTTPError as ex:good[label]={'http':ex.code}
+            except Exception as ex:good[label]={'error':type(ex).__name__}
+          print('MPW_FINAL_LIVE_HTTP='+json.dumps(good))
+          assert len(books)==2 and books[0]['active'] and books[1]['active']
+          assert books[0]['price_usd']=='7.50' and books[1]['price_usd']=='4.00'
+          assert good.get('store',{}).get('http')==200 and good['store'].get('buy_buttons')==2
+          assert good.get('login',{}).get('http')==200
+          assert good.get('book72_guest',{}).get('landed')=='/accounts/login/'
+          assert good.get('book225_guest',{}).get('landed')=='/accounts/login/'
+          assert all(good.get(t,{}).get('http')==200 for t in ('other_main','other_tala'))
+          assert stats['worker']['healthy'] is True
+          print('MPW_FINAL_REMediation=PASS;no_purchase_or_payment_created=true',flush=True)
+          PY
+          BASH
