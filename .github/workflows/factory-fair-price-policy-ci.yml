@@ -1,0 +1,30 @@
+name: Saeit factory fair prices and honest 90pct arithmetic
+on:
+  push:
+    branches: [feature/factory-fair-90pct-pricing-20261014]
+    paths:
+      - pricing/factory_2026-10-14_valuation.json
+      - scripts/factory_fair_90pct_pricing.py
+      - tests/test_factory_fair_90pct_pricing.py
+      - .github/workflows/factory-fair-price-policy-ci.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test-pricing:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate independent market valuation and safe disclosure
+        run: |
+          set -euo pipefail
+          python -m unittest tests.test_factory_fair_90pct_pricing -v
+          python scripts/factory_fair_90pct_pricing.py
+          echo "FAIR_PRICE_DISCOUNT_POLICY_CI_PASSED=True"
+          echo "FACTORY_PRODUCTS_NOT_ACTIVATED_OR_CHARGED=True"

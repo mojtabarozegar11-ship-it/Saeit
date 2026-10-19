@@ -1,0 +1,84 @@
+{
+  "schema_version": 1,
+  "as_of": "2026-10-14",
+  "currency": "USD",
+  "pricing_rule": {
+    "discount_percent": "90.00",
+    "rounding": "ROUND_HALF_UP",
+    "discount_status": "internal_proposed_launch_reduction_not_verified_former_price",
+    "reference_price_display_allowed": false,
+    "historical_regular_price_verified": false
+  },
+  "market_evidence": [
+    {
+      "name": "Etsy farm Excel spreadsheets market",
+      "url": "https://www.etsy.com/market/farm_excel_spreadsheet",
+      "observed_range_usd": [
+        "4.97",
+        "24.99"
+      ],
+      "note": "Marketplace asking prices, not realized comparable sales"
+    },
+    {
+      "name": "Small Farm and Homestead Record Book",
+      "url": "https://wareloft.com/products/farm-homestead/",
+      "asking_price_usd": "19.00",
+      "note": "Richer Excel and Google Sheets product; not directly equivalent"
+    },
+    {
+      "name": "Penn State agricultural budgets",
+      "url": "https://extension.psu.edu/downloadable/download/sample/sample_id/132650/",
+      "note": "Publicly available institutional alternatives reduce justified price"
+    }
+  ],
+  "assessments": [
+    {
+      "recipe": "farm_enterprise_economics",
+      "product_label": "Farm Enterprise Economics Toolkit — Free Edition",
+      "verified_public_sha256": "06fdb7667cde55279a4f97d0adfa35ca9d2e7155f6740ff3b2588816300d1d13",
+      "functionality": "farm contribution, break-even and 9 scenario variations; standalone offline Python 3.8+",
+      "test_count": 7,
+      "content_limitations": "No taxes, capital, depreciation, discounted cashflow, live market data or support service",
+      "independent_review": "technical_unit_tests_and_public_sha_verified",
+      "prior_public_access": "free_download_available",
+      "fair_normal_price_usd": "0.00",
+      "introductory_price_usd": "0.00",
+      "price_decision": "keep_free_exact_same_sha_no_paid_resale",
+      "publish_gate": "already_public_free_download_not_django_catalog_active",
+      "license_and_owner_verification": "required_before_new_paid_edition",
+      "payment_gate": "not_applicable"
+    },
+    {
+      "recipe": "water_budget_economics",
+      "product_label": "Agricultural Water Budget Economics — Offline Decision Aid",
+      "private_archive_receipt_sha256_prefix": "d82dbdb51122",
+      "functionality": "one-resource linear fractional crop-area allocation by gross margin per m3; offline Python 3.8+; JSON and CSV",
+      "test_count": 9,
+      "content_limitations": "No real irrigation schedule, water rights verification, land/rotation optimization, uncertainty, market data or professional advice",
+      "independent_review": "technical_unit_tests_in_repository_private_archive_integrity_verified",
+      "prior_public_access": "private_internal_qa_only",
+      "fair_normal_price_usd": "9.90",
+      "introductory_price_usd": "0.99",
+      "price_decision": "provisional_fair_launch_quote_not_ordinary_selling_price",
+      "publish_gate": "pending_license_content_owner_and_checkout_verification",
+      "license_and_owner_verification": "pending",
+      "payment_gate": "blocked_until_real_payment_and_fulfillment_confirmed"
+    }
+  ],
+  "future_product_rule": {
+    "scope": "all_verified_factory_product_manifests",
+    "listing": "inactive_draft_by_default",
+    "do_not_price": "unknown_or_unverified_source_or_missing_license_or_unreviewed_quality",
+    "must_have": [
+      "sha256_receipt_verified",
+      "functional_tests_pass",
+      "clear_documented_scope",
+      "ownership_license_clearance",
+      "market_benchmark",
+      "actual_safe_delivery"
+    ],
+    "discount": "apply_90_percent_to_substantiated_fair_value_using_decimal_only",
+    "real_checkout": "must_be_verified_before_paid_purchase_enabled",
+    "no_invented_original_price": true
+  }
+}
