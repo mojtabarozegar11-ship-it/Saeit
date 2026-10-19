@@ -28,6 +28,8 @@ class Factory12StageTests(unittest.TestCase):
     def passport(self):
         return {"schema":m.SPEC_SCHEMA,"work_order":self.wid,"title":"Real software utility",
                 "product_type":"software","version":"1.0.0","origin":"factory_invention",
+                "family_id":"F28","specialty":"farm economics","level":"advanced",
+                "source_instruction_fingerprint":"a"*64,
                 "target_audience":"Software engineers","problem_solved":"Validate local data safely",
                 "deliverables":["working calculator","test harness"],"file_formats":[".zip"],
                 "language":"English","scope":"Local offline execution","prerequisites":["Python 3"],
@@ -143,6 +145,35 @@ class Factory12StageTests(unittest.TestCase):
         self.assertEqual(m.tick(self.root)["final_commercially_verified_stock"],1)
         self.assertEqual(m.tick(self.root)["old_technical_QA_stock_pending_final_review"],2)
         with self.assertRaises(RuntimeError):m.final_admit(self.root,self.wid,bundle.name)
+    def test_rejects_wrong_family_or_forged_work_order_provenance(self):
+        m.tick(self.root)
+        bad=self.passport()
+        bad["family_id"]="F41"
+        with self.assertRaises(RuntimeError):m.passport_validate(bad,self.wid)
+        bad=self.passport()
+        bad["source_instruction_fingerprint"]="0"*64
+        path=self.root/"bad-passport.json"
+        path.write_text(json.dumps(bad))
+        with self.assertRaises(RuntimeError):m.import_passport(self.root,self.wid,path)
+        self.assertFalse(m.spec_path(self.root,self.wid).exists())
+
+    def test_preflight_rejects_duplicate_zip_members_before_admission(self):
+        import warnings
+        self.register()
+        for i in range(1,11):
+            reviewer="reviewer-02" if i in (6,10) else "engineer-01"
+            m.review(self.root,self.wid,self.review_file(i,reviewer=reviewer))
+        bundle=self.root/"duplicate-package.zip"
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore",UserWarning)
+            with zipfile.ZipFile(bundle,"w") as f:
+                for folder in m.REQUIRED_PACKAGE:
+                    f.writestr(folder+"sample.txt","actual content")
+                f.writestr("product/sample.txt","fake replacement")
+        with self.assertRaisesRegex(RuntimeError,"DUPLICATE_ZIP_MEMBER"):
+            m.final_admit(self.root,self.wid,bundle.name)
+        self.assertFalse((self.base/"approved-finished-goods"/self.wid).exists())
+
     def test_unknown_family_cannot_pass(self):
         self.register()
         self.assertEqual(len(m.STAGES),12)
