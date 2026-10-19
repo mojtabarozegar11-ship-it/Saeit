@@ -89,7 +89,13 @@ def scan(root):
                 canonical=json.dumps(signed,sort_keys=True,ensure_ascii=False,
                                      separators=(",",":")).encode()
                 signature=hmac.new(secret.read_bytes(),canonical,hashlib.sha256).hexdigest()
-                if (not isinstance(doc.get("signature"),str)
+                if (doc.get("schema")!="mpw.factory.independent-qa.v1"
+                        or not isinstance(doc.get("checks"),dict)
+                        or any(not isinstance(doc["checks"].get(field),dict)
+                               or doc["checks"][field].get("passed") is not True
+                               or len(str(doc["checks"][field].get("evidence","")).strip())<24
+                               for field in ("content","rights","commercial_release"))
+                        or not isinstance(doc.get("signature"),str)
                         or not hmac.compare_digest(doc["signature"],signature)
                         or doc.get("artifact_sha256")!=sha
                         or doc.get("source_sha256")!=version.name
@@ -155,6 +161,24 @@ def import_drafts(root,app,docroot,*,apply=False):
             m=old.metadata if isinstance(old.metadata,dict) else {}
             if m.get("factory_source_sha256")!=item["version"] or old.owner_id!=owner.pk:
                 raise RuntimeError("MPW_DRAFT_EXISTING_PRODUCT_CONFLICT")
+            # Renew QA flags only; never auto-activate existing or newly
+            # imported products and never touch pricing/delivery permissions.
+            if apply and not old.active:
+                quality="passed" if item["qa_passed"] else "pending"
+                status="owner_publication_review_required" if item["qa_passed"] else "independent_review_required"
+                if (m.get("factory_factual_and_market_qa")!=quality or
+                        m.get("factory_status")!=status):
+                    with transaction.atomic():
+                        locked=ProductModel.objects.select_for_update().get(pk=old.pk)
+                        data=dict(locked.metadata)
+                        if data.get("factory_courier_identity")!=item["identity"] or locked.active:
+                            raise RuntimeError("MPW_DRAFT_UPDATE_SCOPE_CHANGED")
+                        data["factory_factual_and_market_qa"]=quality
+                        data["factory_license_review"]="reviewed" if item["qa_passed"] else "pending"
+                        data["factory_status"]=status
+                        locked.metadata=data
+                        locked.full_clean()
+                        locked.save(update_fields=["metadata","updated_at"])
             result["already_existing"]+=1
             continue
         if not apply:
@@ -170,7 +194,7 @@ def import_drafts(root,app,docroot,*,apply=False):
                 "factory_courier_identity":item["identity"],
                 "factory_recipe":item["product_id"],
                 "factory_source_sha256":item["version"],
-                "factory_bridge_sha256":item["artifact_sha256"],
+                "factory_artifact_sha256":item["artifact_sha256"],
                 "factory_archive_private":True,
                 "factory_publication_permission":False,
                 "factory_factual_and_market_qa":"passed" if item["qa_passed"] else "pending",
