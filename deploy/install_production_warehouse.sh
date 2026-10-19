@@ -70,6 +70,9 @@ if test -f "$worker/run-warehouse.sh"; then
   cp -p "$worker/run-warehouse.sh" "$back/previous-runner.sh"
   chmod 600 "$back/previous-runner.sh"
 fi
+if test -f "$worker/factory_build_50.py"; then
+  cp -p "$worker/factory_build_50.py" "$back/previous-build50.py"
+fi
 rollback() {
   local rc="$?"
   if test "$rc" -ne 0; then
@@ -81,6 +84,9 @@ rollback() {
     if test -f "$back/previous-worker.py"; then
       install -m 600 "$back/previous-worker.py" "$worker/factory_production_warehouse.py"
     fi
+    if test -f "$back/previous-build50.py"; then
+      install -m 600 "$back/previous-build50.py" "$worker/factory_build_50.py"
+    fi
     if test -f "$back/previous-runner.sh"; then
       install -m 700 "$back/previous-runner.sh" "$worker/run-warehouse.sh"
     fi
@@ -89,8 +95,9 @@ rollback() {
 }
 trap rollback EXIT
 
-"$python" -B -m py_compile "$source"
+"$python" -B -m py_compile "$source" "$repo/scripts/factory_build_50.py"
 install -m 600 "$source" "$worker/factory_production_warehouse.py"
+install -m 600 "$repo/scripts/factory_build_50.py" "$worker/factory_build_50.py"
 cat > "$worker/run-warehouse.sh" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
@@ -99,7 +106,7 @@ exec 9>"$ops/production-warehouse-worker.lock"
 flock -n 9 || exit 0
 exec >> "$ops/production-warehouse.log" 2>&1
 exec "$python" -B "$worker/factory_production_warehouse.py" \\
-  --factory-private "$private"
+  --factory-private "$private" --strict-build50
 EOF
 chmod 700 "$worker/run-warehouse.sh"
 

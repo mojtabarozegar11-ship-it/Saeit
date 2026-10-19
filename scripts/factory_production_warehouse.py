@@ -9,6 +9,7 @@ Python 3.8+, stdlib only.
 import argparse
 import fcntl
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -156,8 +157,14 @@ def verify_stored(version):
     return saved
 
 
-def stock_one(root, recipe, warehouse):
+def stock_one(root, recipe, warehouse, *, quality_snapshot=None):
     artifact, manifest = inspect_source(root, recipe)
+    if quality_snapshot is not None:
+        receipt=Path(root)/'digital-products'/recipe/'manufacturing_manifest.json'
+        if (manifest.get('source_sha256')!=quality_snapshot.get('source_sha256')
+                or manifest.get('artifact_sha256')!=quality_snapshot.get('artifact_sha256')
+                or digest(receipt)!=quality_snapshot.get('source_receipt_sha256')):
+            raise RuntimeError('WAREHOUSE_BUILD50_SNAPSHOT_CHANGED')
     if active_rework(root, recipe):
         return {"product_id": recipe, "action": "held_for_rework", "source_sha256": manifest["source_sha256"]}
     container = warehouse / "finished" / recipe
@@ -231,7 +238,7 @@ def stock_summary(warehouse):
     return stocked
 
 
-def cycle(root):
+def cycle(root, *, strict_build50=False):
     root = Path(root).expanduser().resolve()
     if not root.is_dir() or root.is_symlink():
         raise RuntimeError("WAREHOUSE_FACTORY_PRIVATE_ROOT_MISSING")
@@ -248,11 +255,23 @@ def cycle(root):
             raise RuntimeError("WAREHOUSE_MANUFACTURING_INPUT_NOT_READY")
         actions = []
         blocked = []
+        build_quality = None
+        eligible = {}
+        if strict_build50:
+            module_path=Path(__file__).resolve().with_name('factory_build_50.py')
+            spec=importlib.util.spec_from_file_location('saeit_strict_build50',module_path)
+            protocol=importlib.util.module_from_spec(spec);spec.loader.exec_module(protocol)
+            build_quality=protocol.audit(root)
+            eligible={x['product_id']:x for x in build_quality['products'] if x['build_50_verified']}
         for child in sorted(source.iterdir()):
             if child.is_symlink() or not child.is_dir() or not RECIPE.fullmatch(child.name):
                 raise RuntimeError("WAREHOUSE_UNEXPECTED_MANUFACTURING_ENTRY")
             try:
-                item = stock_one(root, child.name, warehouse)
+                if strict_build50 and child.name not in eligible:
+                    blocked.append({'product_id':child.name,'reason':'BUILD50_RETURN_TO_PLANNING'})
+                    continue
+                item = stock_one(root, child.name, warehouse,
+                                 quality_snapshot=eligible[child.name] if strict_build50 else None)
                 actions.append(item)
             except (RuntimeError, ValueError, OSError, zipfile.BadZipFile) as error:
                 # No deletion: record exception and retain all input files.
@@ -270,6 +289,8 @@ def cycle(root):
             "records": inventory,
             "last_cycle_actions": actions,
             "needs_rework_or_review": blocked,
+            "strict_build50_enabled": strict_build50,
+            "build_quality": build_quality,
         }
         write_json_atomic(warehouse / "stock-register.json", register)
         return {
@@ -284,6 +305,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--factory-private", required=True)
     parser.add_argument("--verify-only", action="store_true")
+    parser.add_argument("--strict-build50", action="store_true")
     args = parser.parse_args(argv)
     root = Path(args.factory_private).expanduser().resolve()
     if args.verify_only:
@@ -295,7 +317,7 @@ def main(argv=None):
                 raise RuntimeError("WAREHOUSE_REGISTER_MISMATCH")
         print("FACTORY_WAREHOUSE_VERIFIED_VERSIONS=" + str(len(value)))
         return 0
-    result = cycle(root)
+    result = cycle(root,strict_build50=args.strict_build50)
     print("FACTORY_WAREHOUSE_STATUS=" + result["status"])
     print("FACTORY_WAREHOUSE_NEW_STOCK=" + str(result["stocked"]))
     print("FACTORY_WAREHOUSE_TOTAL_VERSIONS=" + str(result["warehouse_count"]))
