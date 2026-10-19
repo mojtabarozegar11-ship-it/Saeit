@@ -1,0 +1,210 @@
+name: Zomorod Farm Wars isolated production
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/zomorod-farm-wars-live-20261019.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-farmwars-isolated
+  cancel-in-progress: false
+jobs:
+  release:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      (github.event_name == 'workflow_dispatch' ||
+       contains(github.event.head_commit.message, '[approved-zm-farmwars-20261019]'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate gameplay, source and JavaScript
+        shell: bash
+        run: |
+          set -euo pipefail
+          node games/farm-wars/test.mjs
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          src=Path('games/farm-wars/index.html').read_text()
+          m=re.search(r'<script>\s*([\s\S]*?)\s*</script>',src)
+          assert m and src.count('<script>')==1
+          assert 'ZOMOROD FARM WARS' in src and 'aria-live' in src
+          assert 'PassengerEnabled off' in Path('games/farm-wars/.htaccess').read_text()
+          Path('/tmp/zm-farmwars.js').write_text(m.group(1))
+          print('FARM_GAME_SOURCE=PASS')
+          PY
+          node --check /tmp/zm-farmwars.js
+      - name: Snapshot existing public route status
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from urllib.request import urlopen,Request
+          from urllib.error import HTTPError
+          import os,json
+          baseline={}
+          for path in ['/','/agriculture/','/store/','/research/','/tala/']:
+            req=Request('https://zomorodmelal.ir'+path,headers={'Cache-Control':'no-cache','User-Agent':'FarmWarsReleaseQA/1.0'})
+            try:
+              with urlopen(req,timeout=22) as r:code=r.status
+            except HTTPError as e:code=e.code
+            baseline[path]=code
+            print('BEFORE',path,code)
+          with open(os.environ['RUNNER_TEMP']+'/farmwars-before.json','w') as f:json.dump(baseline,f)
+          PY
+      - name: Build pinned SSH relay over VPS to cPanel
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          umask 077
+          d="$RUNNER_TEMP/farmwars-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+          echo FARM_WARS_RELAY=PINNED
+      - name: Guard existing site and create private staging
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farmwars-ssh"
+          timeout 40s ssh -T -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_RUN_ID" <<'REMOTE'
+          set -euo pipefail
+          id="$1";web="$HOME/public_html";stage="$HOME/.zm-farmwars-stage-$id"
+          test -s "$web/index.html" && test -s "$web/.htaccess" && test -s "$web/agriculture/index.html"
+          test ! -e "$web/farm-wars" && test ! -L "$web/farm-wars"
+          test ! -e "$stage"
+          mkdir -m 700 "$stage"
+          sha256sum "$web/index.html" "$web/.htaccess" "$web/agriculture/index.html" > "$stage/immutable.sha256"
+          echo FARM_WARS_UNCHANGED_PAGES_GUARDED=yes
+          REMOTE
+      - name: Stage and verify only the new game files
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farmwars-ssh";stage="/home/zomorod2/.zm-farmwars-stage-$GITHUB_RUN_ID"
+          timeout 35s scp -q -F "$d/config" games/farm-wars/index.html "saeit-cpanel:$stage/index.html"
+          timeout 35s scp -q -F "$d/config" games/farm-wars/.htaccess "saeit-cpanel:$stage/.htaccess"
+          digest="$(sha256sum games/farm-wars/index.html | awk '{print $1}')"
+          timeout 35s ssh -T -F "$d/config" saeit-cpanel \
+            "test \"\$(sha256sum '$stage/index.html' | awk '{print \$1}')\" = '$digest' && grep -Fq 'PassengerEnabled off' '$stage/.htaccess'"
+          echo FARM_WARS_PRIVATE_STAGE=VERIFIED
+      - name: Atomic create only public_html/farm-wars/
+        id: install
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farmwars-ssh"
+          timeout 45s ssh -T -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_RUN_ID" <<'REMOTE'
+          set -euo pipefail
+          id="$1";web="$HOME/public_html";stage="$HOME/.zm-farmwars-stage-$id"
+          target="$web/farm-wars";tmp="$web/.farmwars-temp-$id"
+          test ! -e "$target" && test ! -L "$target" && test ! -e "$tmp"
+          sha256sum -c --status "$stage/immutable.sha256"
+          mkdir -m 755 "$tmp"
+          trap 'rmdir "$tmp" 2>/dev/null || true' EXIT
+          install -m 644 "$stage/index.html" "$tmp/index.html"
+          install -m 644 "$stage/.htaccess" "$tmp/.htaccess"
+          cmp -s "$tmp/index.html" "$stage/index.html"
+          cmp -s "$tmp/.htaccess" "$stage/.htaccess"
+          mv -T "$tmp" "$target"
+          sha256sum -c --status "$stage/immutable.sha256"
+          echo FARM_WARS_ATOMIC_INSTALL=PASS
+          REMOTE
+      - name: Check live game content and old page status
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          from urllib.request import urlopen,Request
+          from urllib.error import HTTPError
+          import hashlib,os,json,time
+          expected=hashlib.sha256(Path('games/farm-wars/index.html').read_bytes()).hexdigest()
+          verified=False
+          for attempt in range(1,6):
+            try:
+              req=Request('https://zomorodmelal.ir/farm-wars/?verify='+os.environ['GITHUB_RUN_ID']+'-'+str(attempt),headers={'Cache-Control':'no-cache','User-Agent':'FarmWarsReleaseQA/1.0'})
+              with urlopen(req,timeout=25) as r:body=r.read(100000);code=r.status;ctype=r.headers.get('Content-Type','')
+              verified=code==200 and hashlib.sha256(body).hexdigest()==expected and 'text/html' in ctype and b'ZOMOROD FARM WARS' in body
+              print('FARM_WARS_LIVE attempt='+str(attempt)+' verified='+str(verified))
+              if verified:break
+            except Exception as e:print('FARM_WARS_RETRY '+type(e).__name__)
+            time.sleep(3)
+          if not verified:raise SystemExit('LIVE_FARM_WARS_NOT_VERIFIED')
+          with open(os.environ['RUNNER_TEMP']+'/farmwars-before.json') as f:baseline=json.load(f)
+          for path,before in baseline.items():
+            try:
+              with urlopen(Request('https://zomorodmelal.ir'+path,headers={'Cache-Control':'no-cache','User-Agent':'FarmWarsReleaseQA/1.0'}),timeout=25) as r:after=r.status
+            except HTTPError as e:after=e.code
+            print('PROTECTED_ROUTE',path,before,after)
+            if before!=after:raise SystemExit('PROTECTED_ROUTE_CHANGED '+path)
+          print('FARM_WARS_PUBLIC_ACCEPTANCE=PASS')
+          PY
+          d="$RUNNER_TEMP/farmwars-ssh"
+          timeout 30s ssh -T -F "$d/config" saeit-cpanel \
+            "sha256sum -c --status '/home/zomorod2/.zm-farmwars-stage-$GITHUB_RUN_ID/immutable.sha256' && echo PROTECTED_FILES_UNCHANGED=YES"
+      - name: Restore empty route on failed verification, never touch other pages
+        if: failure() && steps.install.outcome == 'success'
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farmwars-ssh"
+          timeout 45s ssh -T -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_RUN_ID" <<'REMOTE'
+          set -euo pipefail
+          id="$1";s="$HOME/.zm-farmwars-stage-$id";p="$HOME/public_html/farm-wars"
+          if test -d "$p" && ! test -L "$p" && cmp -s "$p/index.html" "$s/index.html" && cmp -s "$p/.htaccess" "$s/.htaccess"; then
+            rm -f -- "$p/index.html" "$p/.htaccess"
+            rmdir "$p"
+            echo FARM_WARS_ROLLBACK=COMPLETE
+          else
+            echo FARM_WARS_ROLLBACK_SKIPPED_UNEXPECTED_CONTENT
+          fi
+          REMOTE
+      - name: Remove only private staging and SSH keys
+        if: always()
+        run: |
+          set +e
+          d="$RUNNER_TEMP/farmwars-ssh";s="/home/zomorod2/.zm-farmwars-stage-$GITHUB_RUN_ID"
+          if test -f "$d/config"; then
+            timeout 35s ssh -T -F "$d/config" saeit-cpanel \
+              "test ! -L '$s' && rm -f -- '$s/index.html' '$s/.htaccess' '$s/immutable.sha256' && rmdir '$s'" || true
+          fi
+          rm -rf "$d"
