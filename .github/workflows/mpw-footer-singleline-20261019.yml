@@ -3,6 +3,7 @@ on:
   pull_request:
     paths:
       - "scripts/mpw_footer_singleline_atomic_20261019.py"
+      - "scripts/mpw_dynamic_main_shell_20261019.php"
       - "tests/test_mpw_footer_singleline_20261019.py"
       - "core/templates/mojplaywin/footer.html"
       - ".github/workflows/mpw-footer-singleline-20261019.yml"
@@ -30,6 +31,8 @@ jobs:
           python3 -m pip install -q pytest
           python3 -m pytest -q --noconftest tests/test_mpw_footer_singleline_20261019.py
           python3 scripts/mpw_footer_singleline_atomic_20261019.py selftest
+          php -l scripts/mpw_dynamic_main_shell_20261019.php
+          php scripts/mpw_dynamic_main_shell_20261019.php selftest
   release:
     if: >-
       github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
@@ -194,7 +197,7 @@ jobs:
               verified+=1
           print('MPW_ALL_MAIN_ROUTES_FOOTER_VERIFIED='+str(verified))
           PY
-      - name: Roll back all twenty-one exact files if any verification fails
+      - name: Roll back all twenty-two exact files if any verification fails
         if: failure() && steps.publish.outcome == 'success'
         shell: bash
         run: |

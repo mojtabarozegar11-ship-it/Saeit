@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """MojPlayWin main-domain only: atomic one-line footer, no routing or app restart.
 
-Touches 19 proven priority-routed static pages, the exact homepage file and the shared Django
+Touches 19 proven priority-routed static pages, the exact homepage, the shared Django template and the main-only PHP shell; excludes child websites and
 MojPlayWin footer template; DOES NOT edit child sites, .htaccess, orders,
 payment code, database or other server software.
 """
@@ -23,6 +23,7 @@ STATIC=(
 )
 TEMPLATE=APP/"core/templates/mojplaywin/footer.html"
 HOMEPAGE=ROOT/"design-preview-20261017/production-home-20261017.html"
+PHP_SHELL=ROOT/"design-preview-20261017/_mpw_dynamic_main_shell_20261019.php"
 DISPLAY="☆ All Rights Reserved. ☆ 2022. ☆ Mojtaba roozegar ☆"
 MARK="mpw-legal-one-line"
 CSS_ID="mpw-footer-single-line-css-20261019"
@@ -49,7 +50,7 @@ CSS=('<style id="'+CSS_ID+'">'
 def sha(raw:bytes)->str:return hashlib.sha256(raw).hexdigest()
 def fail(message):raise RuntimeError(message)
 def targets():
-    return [PAGES/(slug+".html") for slug in STATIC]+[HOMEPAGE,TEMPLATE]
+    return [PAGES/(slug+".html") for slug in STATIC]+[HOMEPAGE,TEMPLATE,PHP_SHELL]
 
 def before_guard():
     if pwd.getpwuid(os.getuid()).pw_name!="zomorod2":fail("Incorrect deployment user")
@@ -62,10 +63,12 @@ def before_guard():
         if ref not in rewrite:fail("Required static route no longer isolated: "+slug)
     if "/design-preview-20261017/production-home-20261017.html" not in rewrite:
         fail("Actual homepage static rewrite has changed")
+    if "_mpw_dynamic_main_shell_20261019.php" not in rewrite:
+        fail("Exact 19-route PHP shell owner changed")
     wsgi=ROOT/"passenger_wsgi.py"
     if not wsgi.is_file() or wsgi.is_symlink() or "Saeit-staging" not in wsgi.read_text("utf-8",errors="replace"):
         fail("Wrong MojPlayWin app template origin")
-    if len(targets())!=21:fail("Target inventory changed")
+    if len(targets())!=22:fail("Target inventory changed")
     for p in targets():
         if not p.is_file() or p.is_symlink() or p.parent.is_symlink():fail("Target missing or symlink: "+str(p))
 
@@ -102,12 +105,29 @@ def patch(doc:str)->str:
     if out.count(CSS_ID)!=1:fail("CSS integrity check failed")
     return out
 
+PHP_OLD_BRANCH="    } elseif ($footers['mpw-footer']===1) {"
+PHP_NEW_LINE=(
+    "        // Retain one canonical, freshly sourced MojPlayWin footer even when\n"
+    "        // the original response already contained a modern footer.\n"
+    r'''        $body=takeOne($body,'~<footer\b[^>]*class=["\']mw-site-footer["\'][^>]*>[\s\S]*?</footer\s*>~i',$newFooter,'standard footer replacement',true);'''+"\n"
+)
+def patch_php(php_source:str)->str:
+    if "standard footer replacement" in php_source:fail("PHP shell already patched")
+    if php_source.count(PHP_OLD_BRANCH)!=1:fail("PHP footer control branch drifted")
+    if php_source.count("if ($footers['mw-site-footer']===1) {")!=1:
+        fail("Existing main-domain footer class branch missing")
+    if php_source.count("function layoutParts(): array {")!=1:
+        fail("Main PHP layout source missing")
+    if "mpw-contact-safe-business-20261019" not in php_source:
+        fail("Approved business contact code unexpectedly missing")
+    return php_source.replace(PHP_OLD_BRANCH,PHP_NEW_LINE+PHP_OLD_BRANCH,1)
+
 def prepare():
     before_guard()
     batch=[]
     for p in targets():
         raw=p.read_bytes()
-        new=patch(raw.decode("utf-8")).encode("utf-8")
+        new=(patch_php(raw.decode("utf-8")) if p==PHP_SHELL else patch(raw.decode("utf-8"))).encode("utf-8")
         mode=stat.S_IMODE(p.stat().st_mode)
         batch.append((p,raw,new,mode))
     return batch
@@ -154,14 +174,14 @@ def install(run):
         (recovery/"FAILED").write_text("Auto-recovery attempted")
         raise
     (recovery/"INSTALLED").write_text("verified",encoding="utf-8")
-    print("MPW_FOOTER_SINGLE_LINE_INSTALLED="+str(len(modified))+" FILES=21 RESTART=false BACKUP="+str(recovery))
+    print("MPW_FOOTER_SINGLE_LINE_INSTALLED="+str(len(modified))+" FILES=22 RESTART=false BACKUP="+str(recovery))
 
 def rollback(run):
     before_guard()
     recovery=backup_dir(run)
     if not recovery.is_dir() or recovery.is_symlink():fail("Invalid backup directory")
     manifest=json.loads((recovery/"manifest.json").read_text("utf-8"))
-    if len(manifest)!=21 or {x["path"] for x in manifest}!={str(p) for p in targets()}:
+    if len(manifest)!=22 or {x["path"] for x in manifest}!={str(p) for p in targets()}:
         fail("Recovery targets unexpected")
     for row in manifest:
         p=Path(row["path"]);backup=(recovery/row["backup"]).read_bytes()
@@ -170,7 +190,7 @@ def rollback(run):
     for row in reversed(manifest):
         p=Path(row["path"])
         atomic(p,(recovery/row["backup"]).read_bytes(),row["mode"])
-    print("MPW_FOOTER_SINGLE_LINE_ROLLED_BACK=21 RESTART=false")
+    print("MPW_FOOTER_SINGLE_LINE_ROLLED_BACK=22 RESTART=false")
 
 def selftest():
     a='<footer class="mpw-footer"><div>©</div><div><span>© MojPlayWin</span><a href="/privacy/">Privacy</a></div><span class="mpw-founder-footer-final" style="color:gold">Mojtaba Roozegar</span></footer>'
