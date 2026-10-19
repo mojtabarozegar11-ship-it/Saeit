@@ -25,6 +25,12 @@ class VPSProductInstallerTests(unittest.TestCase):
         self.assertIn("PUBLISHING_ENABLED=false", script)
         self.assertIn("ORDER_REQUIRED=false", script)
         self.assertNotIn("core_order", script)
+        self.assertIn("--verify-only", script)
+        self.assertIn("installed-recipes.txt", script)
+        self.assertIn("retired-recipes", script)
+        self.assertIn("catalog_stage", script)
+        self.assertIn("tar -tzf", script)
+        self.assertIn('mv -- "$recipes" "$old_catalog"', script)
 
     def test_manual_or_owner_requested_gated_deployment_is_packaged(self):
         source = Path(__file__).resolve().parents[1]
