@@ -73,7 +73,10 @@ class MeasuredQualityTests(unittest.TestCase):
         doc = json.loads(manifest.read_text())
         doc.pop('qa_measurements')
         manifest.write_text(json.dumps(doc))
-        self.assertTrue(maker.manufacture('sample_product', self.source.parent, out)['changed'])
+        result = maker.manufacture('sample_product', self.source.parent, out)
+        self.assertFalse(result['changed'])
+        self.assertTrue(result['qa_refreshed'])
+        self.assertEqual(json.loads(manifest.read_text())['qa_measurements']['successful_tests'],1)
 
     def test_nested_package_enters_warehouse(self):
         self.write_test("import unittest\nclass T(unittest.TestCase):\n def test_real(self): pass\n")
