@@ -106,6 +106,15 @@ jobs:
                 and 'Check the individual product pages for current checkout options.' in html
                 and 'Payment is not open for these books yet.' not in html
                 and html.count('id="mpw-book-buyer-details"')==1)
+              print('MPW_CHECKOUT_PUBLIC_DIAGNOSTIC='+json.dumps({
+                'attempt':attempt,
+                'checkout_72':html.count('href="/store/product/72/checkout/"'),
+                'checkout_225':html.count('href="/store/product/225/checkout/"'),
+                'details':html.count('id="mpw-book-buyer-details"'),
+                'new_notice':('Check the individual product pages for current checkout options.' in html),
+                'old_notice':('Payment is not open for these books yet.' in html),
+                'total_bytes':len(html)
+              }))
               if ok:break
               time.sleep(3)
           if not ok:raise RuntimeError('Checkout navigation not confirmed live')
