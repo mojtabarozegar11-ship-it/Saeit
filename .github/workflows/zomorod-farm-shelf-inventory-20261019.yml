@@ -2,7 +2,7 @@ name: Zomorod farm game shelf discovery read only
 on:
   push:
     branches: [main]
-    paths: ['.github/workflows/zomorod-farm-shelf-inventory-20261019.yml']
+    paths: ['.github/workflows/zomorod-farm-shelf-inventory-20261019.yml','scripts/zm_farm_home_inventory_20261019.py']
 permissions:
   contents: read
 jobs:
