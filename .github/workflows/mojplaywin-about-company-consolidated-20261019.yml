@@ -1,0 +1,192 @@
+name: MojPlayWin About and Company consolidated P0-P2 safe release
+on:
+  pull_request:
+    paths:
+      - "scripts/mpw_about_company_consolidated_20261019.py"
+      - "tests/test_mpw_about_company_consolidated_20261019.py"
+      - ".github/workflows/mojplaywin-about-company-consolidated-20261019.yml"
+  push:
+    branches: [main]
+    paths:
+      - "scripts/mpw_about_company_consolidated_20261019.py"
+      - ".github/workflows/mojplaywin-about-company-consolidated-20261019.yml"
+permissions:
+  contents: read
+concurrency:
+  group: mojplaywin-about-exact-static-prod
+  cancel-in-progress: false
+jobs:
+  preflight-only:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Pure Python semantic, metadata and safety tests
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_about_company_consolidated_20261019.py
+          python3 -m pip install -q pytest
+          python3 -m pytest -q --noconftest tests/test_mpw_about_company_consolidated_20261019.py
+  publish-exact-about-and-company:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.ref == 'refs/heads/main' &&
+      github.event_name == 'push' &&
+      contains(github.event.head_commit.message, '[approved-mpw-about-company-consolidated-20261019]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Test and snapshot every relevant protected public route
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_about_company_consolidated_20261019.py
+          python3 -m pip install -q pytest
+          python3 -m pytest -q --noconftest tests/test_mpw_about_company_consolidated_20261019.py
+          python3 - <<'PY'
+          import urllib.request,urllib.error,os,json,hashlib
+          root='https://mojplaywin.com'
+          routes=['/','/about/','/company/','/about/mojtaba-rozegar/','/store/',
+             '/contact/','/research/','/studio/','/agents/','/services/',
+             '/mojtaba.roozegar/','/farnaz/','/saman/','/picm/','/taniya/','/zahra/']
+          statuses={}
+          def get(path):
+              request=urllib.request.Request(root+path,headers={'Cache-Control':'no-cache','User-Agent':'MPWConsolidatedAudit/1.0'})
+              try:
+                  with urllib.request.urlopen(request,timeout=17) as res:
+                      return res.status,res.read(1600000)
+              except urllib.error.HTTPError as exc:
+                  return exc.code,exc.read(300000)
+          for path in routes:
+              status,_=get(path)
+              statuses[path]=status
+              print('BASELINE',path,status)
+          for path in ['/','/about/','/company/','/store/','/contact/','/farnaz/']:
+              if statuses[path]!=200:raise SystemExit('Required protected route is unhealthy '+path)
+          direct='/design-preview-20261017/mpw-ten-editorials-20261018/pages/'
+          for public,file in (('/about/','about.html'),('/company/','company.html')):
+              a=get(public);b=get(direct+file)
+              if a[0]!=200 or b[0]!=200 or hashlib.sha256(a[1]).digest()!=hashlib.sha256(b[1]).digest():
+                  raise SystemExit('Route does not match exact permitted static file '+public)
+          with open(os.environ['RUNNER_TEMP']+'/protected-baseline.json','w') as f:
+              json.dump(statuses,f)
+          print('PINNED_STATIC_FILE_ROUTE_CHECK=PASS')
+          PY
+      - name: Open host-key-pinned relay through VPS to cPanel
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-consolidated-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Atomic two-page publish and pinned private backups
+        id: publish
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-consolidated-ssh"
+          timeout 90s ssh -T -F "$d/config" saeit-cpanel \
+             "python3 - install '$GITHUB_RUN_ID'" < scripts/mpw_about_company_consolidated_20261019.py
+      - name: Independently verify live accessible order, SEO and unchanged routes
+        id: smoke
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from html.parser import HTMLParser
+          import os,time,json,urllib.request,urllib.error,re
+          root='https://mojplaywin.com'
+          baseline=json.load(open(os.environ['RUNNER_TEMP']+'/protected-baseline.json'))
+          rid=os.environ['GITHUB_RUN_ID']
+          class A(HTMLParser):
+              def __init__(self):
+                  super().__init__();self.main=False;self.headings=[];self.h1=[];self.images=[]
+              def handle_starttag(self,tag,attrs):
+                  a=dict(attrs)
+                  if tag=='main':self.main=True
+                  if self.main and tag in ('h1','h2','h3','h4'):self.headings.append(tag)
+                  if self.main and tag=='img':self.images.append(a)
+              def handle_endtag(self,tag):
+                  if tag=='main':self.main=False
+          def req(path):
+              url=root+path
+              with urllib.request.urlopen(urllib.request.Request(url,headers={'Cache-Control':'no-cache','Pragma':'no-cache','User-Agent':'MPWConsolidatedVerification/1.0'}),timeout=18) as r:
+                  return r.status,r.read(1600000).decode('utf-8','replace')
+          for path in ('/about/','/company/'):
+              ok=False
+              for n in range(1,5):
+                  try:
+                      status,body=req(path+'?mpw_consolidated='+rid+'-'+str(n))
+                      audit=A();audit.feed(body)
+                      ok=(status==200 and audit.headings and audit.headings[0]=='h1' and
+                          audit.headings.count('h1')==1 and
+                          'MPW_ABOUT_COMPANY_SEMANTIC_20261019_V2' in body and
+                          'mpw-business-contact-20261019' in body)
+                      if path=='/about/':
+                          ok=ok and body.count('class="mpw-profile-indicator"')==30 and body.count('class="mpw-seven-item"')==6
+                      else:
+                          ok=ok and 'Company Overview | MojPlayWin' in body and
+                          'mpw-company-og-20261019' in body and 'mpw-company-harmonized' in body and
+                          body.count('class="mpw-ten-card"')==10
+                      if ok:break
+                  except Exception as e:
+                      print('LIVE_SMOKE_RETRY',path,type(e).__name__)
+                  time.sleep(3)
+              if not ok:raise SystemExit('Live semantic/SEO verification failed '+path)
+              print('VERIFIED_LIVE',path,status)
+          for path,expected in baseline.items():
+              try:actual=req(path)[0]
+              except urllib.error.HTTPError as e:actual=e.code
+              if actual!=expected:raise SystemExit('Protected route HTTP status changed: '+path)
+              print('PROTECTED_ROUTE_UNCHANGED',path,actual)
+          print('CONSOLIDATED_P0_P2_LIVE_PASS')
+          PY
+      - name: Roll back both exact pages if post-release verification fails
+        if: failure() && steps.publish.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-consolidated-ssh"
+          timeout 60s ssh -T -F "$d/config" saeit-cpanel \
+             "python3 - rollback '$GITHUB_RUN_ID'" < scripts/mpw_about_company_consolidated_20261019.py
