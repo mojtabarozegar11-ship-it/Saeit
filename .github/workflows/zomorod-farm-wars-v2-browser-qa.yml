@@ -1,0 +1,43 @@
+name: Farm Wars V2 actual desktop and mobile screenshot QA
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/zomorod-farm-wars-v2-browser-qa.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  browser-qa:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Run offline game regression suite first
+        run: |
+          set -euo pipefail
+          node games/farm-wars/test.mjs
+      - name: Install temporary browser test dependency
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/farm-browser-test
+          cd /tmp/farm-browser-test
+          npm init -y >/dev/null
+          npm install --silent --no-audit --no-fund playwright@1.55.0
+          npx playwright install chromium
+          echo "NODE_PATH=/tmp/farm-browser-test/node_modules" >> "$GITHUB_ENV"
+      - name: Capture live isometric game and verify real gameplay on desktop and phone
+        run: |
+          set -euo pipefail
+          node scripts/farm_wars_v2_browser_qa.cjs
+      - name: Upload real screenshots from each viewport
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: farm-wars-v2-real-browser-screenshots
+          path: artifacts/farm-wars-qa/
+          if-no-files-found: warn
+          retention-days: 7
