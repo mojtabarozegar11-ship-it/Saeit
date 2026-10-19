@@ -37,7 +37,7 @@ api.action('next');assert(api.getState().wood>0);
 api.action('train');assert(api.getState().army>=6);
 const before=api.getState().enemy;api.action('attack');assert(api.getState().enemy<before);
 const gold=api.getState().gold;api.action('repair');assert(api.getState().life>=0);assert(api.getState().gold<=gold);
-api.select(40);api.action('market');assert.equal(api.getState().tiles[40].type,'enemy');
+api.select(46);api.action('market');assert.equal(api.getState().tiles[46].type,'enemy');
 const serialized=JSON.parse(db['zm-farmwars-v1-save']);assert.equal(serialized.day,4);
 api.reset();s=api.getState();assert.equal(s.gold,160);assert.equal(s.done,false);
 for(let i=0;i<30&&!api.getState().done;i++){api.action('attack');api.action('train');api.action('next');}
