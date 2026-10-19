@@ -148,7 +148,7 @@ class BridgeTests(unittest.TestCase):
         self.assertEqual([x["recipe"] for x in a], all_names[:3])
         self.assertEqual([x["recipe"] for x in b], all_names[3:])
         self.assertEqual([x["recipe"] for x in c], all_names[:3])
-        self.assertEqual(sender.read_cursor(source / "store-send-cursor.json"), all_names[2])
+        self.assertEqual(sender.read_cursor(source.parent / "store-send-cursor.json"), all_names[2])
 
     def test_sender_checkpoint_survives_partial_delivery_failure(self):
         source = self.product.parent
@@ -167,7 +167,7 @@ class BridgeTests(unittest.TestCase):
              mock.patch.object(sender, "deliver", side_effect=fail_second):
             with self.assertRaisesRegex(RuntimeError, "temporary SSH failure"):
                 sender.sync(source, "unused", "unused", limit=3)
-        self.assertEqual(sender.read_cursor(source / "store-send-cursor.json"), ordered[0])
+        self.assertEqual(sender.read_cursor(source.parent / "store-send-cursor.json"), ordered[0])
 
     def test_sender_dryrun_does_not_advance_checkpoint(self):
         source = self.product.parent
@@ -176,11 +176,11 @@ class BridgeTests(unittest.TestCase):
                  "recipe": self.product.name, "status": "dry_run_private_only"
              }):
             sender.sync(source, "unused", "unused", limit=3, dry_run=True)
-        self.assertFalse((source / "store-send-cursor.json").exists())
+        self.assertFalse((source.parent / "store-send-cursor.json").exists())
 
     def test_sender_rejects_tampered_cursor_and_symlink(self):
         source = self.product.parent
-        cursor = source / "store-send-cursor.json"
+        cursor = source.parent / "store-send-cursor.json"
         cursor.write_text("not json", encoding="utf-8")
         with mock.patch.object(sender, "host_ssh_options", return_value=["verified"]):
             with self.assertRaisesRegex(ValueError, "STORE_CURSOR_CORRUPTED"):
