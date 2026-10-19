@@ -140,7 +140,7 @@ class BridgeTests(unittest.TestCase):
             sent.append(recipe)
             return {"recipe": recipe, "status": "received_private"}
 
-        with mock.patch.object(sender, "host_ssh_options", return_value=["verified"]), \\
+        with mock.patch.object(sender, "host_ssh_options", return_value=["verified"]), \
              mock.patch.object(sender, "deliver", side_effect=fake_delivery):
             a = sender.sync(source, "unused", "unused", limit=3)
             b = sender.sync(source, "unused", "unused", limit=3)
@@ -163,7 +163,7 @@ class BridgeTests(unittest.TestCase):
                 raise RuntimeError("temporary SSH failure")
             return {"recipe": recipe, "status": "received_private"}
 
-        with mock.patch.object(sender, "host_ssh_options", return_value=["verified"]), \\
+        with mock.patch.object(sender, "host_ssh_options", return_value=["verified"]), \
              mock.patch.object(sender, "deliver", side_effect=fail_second):
             with self.assertRaisesRegex(RuntimeError, "temporary SSH failure"):
                 sender.sync(source, "unused", "unused", limit=3)
@@ -171,7 +171,7 @@ class BridgeTests(unittest.TestCase):
 
     def test_sender_dryrun_does_not_advance_checkpoint(self):
         source = self.product.parent
-        with mock.patch.object(sender, "host_ssh_options", return_value=["verified"]), \\
+        with mock.patch.object(sender, "host_ssh_options", return_value=["verified"]), \
              mock.patch.object(sender, "deliver", return_value={
                  "recipe": self.product.name, "status": "dry_run_private_only"
              }):
