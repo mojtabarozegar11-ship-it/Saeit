@@ -92,6 +92,30 @@ jobs:
           set -euo pipefail
           d="$RUNNER_TEMP/zomorod-baseline-inventory"
           ssh -F "$d/config" saeit-cpanel 'sha256sum "$HOME/.private/zomorod-business/site_store.php" "$HOME/public_html/store/index.php"'
+      - name: Check only safe anchors for additive free-product release
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel 'python3 -' <<'PY'
+          from pathlib import Path
+          a=(Path.home()/".private/zomorod-business/site_store.php").read_text(encoding="utf8")
+          b=(Path.home()/"public_html/store/index.php").read_text(encoding="utf8")
+          for label,part,text in (
+            ("PRIVATE_STORE_DB","function zmStoreDb(",a),
+            ("PRIVATE_PRODUCTS_TABLE","CREATE TABLE IF NOT EXISTS products(",a),
+            ("PRIVATE_PAYMENT_GATE","payment_state",a),
+            ("PRIVATE_FACTORY_DRAFTS","function zmFactoryDraftsPanel(",a),
+            ("PRIVATE_FREE_TABLE","free_digital_products",a),
+            ("PUBLIC_STORE_INIT","zmStoreDb($private)",b),
+            ("PUBLIC_PRODUCTS_QUERY","FROM products WHERE enabled=1",b),
+            ("PUBLIC_RENDER","foreach($items as $p)",b),
+            ("PUBLIC_FREE_TABLE","free_digital_products",b),
+            ("PUBLIC_END","</body></html>",b)):
+              print("ZM_ADD_RELEASE_"+label+"="+str(part in text).lower())
+          print("ZM_ADD_RELEASE_PRIVATE_LENGTH="+str(len(a)))
+          print("ZM_ADD_RELEASE_PUBLIC_LENGTH="+str(len(b)))
+          PY
       - name: Remove temporary SSH credentials
         if: always()
         shell: bash
