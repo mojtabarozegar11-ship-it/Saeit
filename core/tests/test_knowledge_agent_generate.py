@@ -65,7 +65,7 @@ class KnowledgeAgentGenerateTests(TestCase):
         client = Mock()
         client.chat.completions.create.return_value = response
         with patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}), patch(
-            "core.management.commands.knowledge_agent_generate.OpenAI", return_value=client
+            "openai.OpenAI", return_value=client
         ):
             call_command("knowledge_agent_generate", stdout=StringIO())
 
