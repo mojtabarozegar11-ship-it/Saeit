@@ -51,6 +51,22 @@ def verify_source(manifest_path, archive_path, recipe):
         or manifest.get("public_listing_enabled") is not False
         or manifest.get("price") is not None):
         raise ValueError("PACKAGE_NOT_PRIVATE_QA_PASSED")
+    # The last technically-good ZIP may still exist after a new source
+    # revision fails. Never ship that stale package while a defect is open.
+    # The private receiver is not a public storefront, but stale QA must
+    # still fail closed before any transfer.
+    ledger = manifest_path.parents[2] / "qa-rework" / recipe / "ledger.json"
+    if ledger.is_symlink():
+        raise ValueError("PRIVATE_REWORK_LEDGER_UNSAFE")
+    if ledger.is_file():
+        try:
+            state = json.loads(ledger.read_text(encoding="utf-8"))
+        except (OSError, ValueError, TypeError) as exc:
+            raise ValueError("PRIVATE_REWORK_LEDGER_INVALID") from exc
+        if not isinstance(state, dict) or state.get("schema") != "saeit.factory.qa-rework.v1":
+            raise ValueError("PRIVATE_REWORK_LEDGER_UNVERIFIED")
+        if state.get("current_status") in ("needs_rework", "expert_review"):
+            raise ValueError("PRIVATE_PRODUCT_BLOCKED_FOR_REWORK")
     return digest
 
 
