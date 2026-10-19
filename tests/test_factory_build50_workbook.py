@@ -4,6 +4,7 @@ import tempfile
 import unittest
 import zipfile
 import re
+import xml.etree.ElementTree as ET
 ROOT=Path(__file__).resolve().parents[1]
 spec=importlib.util.spec_from_file_location('workbook50',ROOT/'scripts/factory_build50_workbook.py')
 producer=importlib.util.module_from_spec(spec);spec.loader.exec_module(producer)
@@ -20,7 +21,10 @@ class Workbook50Tests(unittest.TestCase):
                     data=source.read(info.filename)
                     if info.filename=='xl/worksheets/sheet1.xml':
                         data=producer.VIEW_PATTERN.sub(b'<sheetViews><sheetView workbookViewId="0"/></sheetViews>',data)
-                        data=data.replace(b'<v></v>',b'<v>4</v>')
+                        xml=ET.fromstring(data)
+                        cached=xml.find('.//{http://schemas.openxmlformats.org/spreadsheetml/2006/main}c[@r="B8"]/{http://schemas.openxmlformats.org/spreadsheetml/2006/main}v')
+                        self.assertIsNotNone(cached);cached.text='4'
+                        data=ET.tostring(xml)
                     target.writestr(info,data)
             self.assertIsNone(load_workbook(temporary).active.freeze_panes)
             self.assertEqual(load_workbook(temporary,data_only=True).active['B8'].value,4)
