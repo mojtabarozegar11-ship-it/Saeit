@@ -3,6 +3,13 @@
 No wallet addresses, private paths, user PII, checkout switches or side effects.
 Unknown providers/delivery are UNKNOWN rather than green/success.
 """
+import json
+import os
+import pathlib
+import stat
+import time
+from datetime import datetime, timezone
+
 from django.apps import apps
 from django.conf import settings
 from django.contrib.admin.views.decorators import staff_member_required
@@ -32,6 +39,55 @@ BOOK_LABELS = {
     72: "The Science and Practice of Chess Improvement",
     225: "Taniya and the Little Baker Worms",
 }
+
+
+
+def _worker_health():
+    """Read only a bounded worker heartbeat; never load payments or customer data."""
+    status = {
+        "present": False, "healthy": False, "state": "unknown",
+        "last_utc": "—", "age_seconds": None,
+        "pending": 0, "matched": 0, "paid": 0, "rejected": 0,
+        "error_type": "",
+    }
+    name = pathlib.Path("/home/zomorod2/.mpw-commerce-two-books/worker-heartbeat.json")
+    try:
+        fd = os.open(str(name), os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        try:
+            meta = os.fstat(fd)
+            if not stat.S_ISREG(meta.st_mode) or meta.st_size < 10 or meta.st_size > 4096:
+                return status
+            with os.fdopen(fd, "r", encoding="utf8") as handle:
+                fd = -1
+                record = json.load(handle)
+        finally:
+            if fd >= 0:
+                os.close(fd)
+        if type(record) is not dict or record.get("schema") != 1:
+            return status
+        timestamp = record.get("utc_epoch")
+        if type(timestamp) is not int:
+            return status
+        age = int(time.time()) - timestamp
+        if age < -30 or age > 86400:
+            return status
+        state = str(record.get("state", "unknown"))[:32]
+        fresh = age <= 180 and age >= -30
+        status.update({
+            "present": True,
+            "healthy": fresh and record.get("healthy") is True and state in ("idle", "scanned", "disabled"),
+            "state": state,
+            "last_utc": datetime.fromtimestamp(timestamp, tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
+            "age_seconds": max(0, age),
+            "pending": int(record.get("pending", 0)),
+            "matched": int(record.get("matched", 0)),
+            "paid": int(record.get("paid", 0)),
+            "rejected": int(record.get("rejected", 0)),
+            "error_type": str(record.get("error_type", ""))[:60],
+        })
+    except (OSError, ValueError, TypeError, KeyError, OverflowError):
+        pass
+    return status
 
 
 def _status_dict():
@@ -130,6 +186,7 @@ def _status_dict():
         pass
     return {
         "books": books,
+        "worker": _worker_health(),
         "flags": active_flags,
         "all_gateway_flags_enabled": all(active_flags.values()),
         "orders_total": orders.count(),
