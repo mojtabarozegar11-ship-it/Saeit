@@ -128,5 +128,69 @@ class BridgeTests(unittest.TestCase):
         self.assertEqual(call.call_count, 1)
 
 
+    def test_sender_rotates_through_all_recipes(self):
+        source = self.product.parent
+        for name in ("a_recipe", "b_recipe", "c_recipe", "d_recipe", "e_recipe"):
+            (source / name).mkdir()
+        all_names = sorted(p.name for p in source.iterdir() if p.is_dir())
+        sent = []
+
+        def fake_delivery(recipe, root, options, *, dry_run=False):
+            self.assertEqual(root, source)
+            sent.append(recipe)
+            return {"recipe": recipe, "status": "received_private"}
+
+        with mock.patch.object(sender, "host_ssh_options", return_value=["verified"]), \\
+             mock.patch.object(sender, "deliver", side_effect=fake_delivery):
+            a = sender.sync(source, "unused", "unused", limit=3)
+            b = sender.sync(source, "unused", "unused", limit=3)
+            c = sender.sync(source, "unused", "unused", limit=3)
+        self.assertEqual([x["recipe"] for x in a], all_names[:3])
+        self.assertEqual([x["recipe"] for x in b], all_names[3:])
+        self.assertEqual([x["recipe"] for x in c], all_names[:3])
+        self.assertEqual(sender.read_cursor(source / "store-send-cursor.json"), all_names[2])
+
+    def test_sender_checkpoint_survives_partial_delivery_failure(self):
+        source = self.product.parent
+        for name in ("a_recipe", "b_recipe"):
+            (source / name).mkdir()
+        ordered = sorted(p.name for p in source.iterdir() if p.is_dir())
+        attempts = []
+
+        def fail_second(recipe, root, options, *, dry_run=False):
+            attempts.append(recipe)
+            if len(attempts) == 2:
+                raise RuntimeError("temporary SSH failure")
+            return {"recipe": recipe, "status": "received_private"}
+
+        with mock.patch.object(sender, "host_ssh_options", return_value=["verified"]), \\
+             mock.patch.object(sender, "deliver", side_effect=fail_second):
+            with self.assertRaisesRegex(RuntimeError, "temporary SSH failure"):
+                sender.sync(source, "unused", "unused", limit=3)
+        self.assertEqual(sender.read_cursor(source / "store-send-cursor.json"), ordered[0])
+
+    def test_sender_dryrun_does_not_advance_checkpoint(self):
+        source = self.product.parent
+        with mock.patch.object(sender, "host_ssh_options", return_value=["verified"]), \\
+             mock.patch.object(sender, "deliver", return_value={
+                 "recipe": self.product.name, "status": "dry_run_private_only"
+             }):
+            sender.sync(source, "unused", "unused", limit=3, dry_run=True)
+        self.assertFalse((source / "store-send-cursor.json").exists())
+
+    def test_sender_rejects_tampered_cursor_and_symlink(self):
+        source = self.product.parent
+        cursor = source / "store-send-cursor.json"
+        cursor.write_text("not json", encoding="utf-8")
+        with mock.patch.object(sender, "host_ssh_options", return_value=["verified"]):
+            with self.assertRaisesRegex(ValueError, "STORE_CURSOR_CORRUPTED"):
+                sender.sync(source, "unused", "unused", limit=3)
+        cursor.unlink()
+        cursor.symlink_to(self.manifest)
+        with mock.patch.object(sender, "host_ssh_options", return_value=["verified"]):
+            with self.assertRaisesRegex(ValueError, "STORE_CURSOR_SYMLINK_UNSAFE"):
+                sender.sync(source, "unused", "unused", limit=3)
+
+
 if __name__ == "__main__":
     unittest.main()
