@@ -129,3 +129,24 @@ jobs:
           done
           timeout 190s ssh -T -F "$d/config" saeit-factory-verified "bash '$dir/install_f19_build50_product.sh' '$dir'"
           echo FACTORY_F19_REAL_PRODUCT_INSTALL_WORKFLOW=PASS
+      - name: Validate forty-eight real independent vector and raster production stages
+        run: |
+          set -euo pipefail
+          python3 -m pip install --disable-pip-version-check --quiet Pillow
+          python3 -m unittest discover -s tests -p 'test_factory_build50_f34_icon_kit.py' -v
+          bash -n deploy/install_f34_build50_icon_kit.sh
+          echo F34_FORTY_EIGHT_DISTINCT_ARTWORK_TESTS=PASS
+      - name: Manufacture original F34 48-icon pack and verify strict private VPS stock
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/forty-proof-ssh"
+          dir="/home/githubops/factory-runtime/operations/.f34-product-$GITHUB_RUN_ID"
+          ssh -T -F "$d/config" saeit-factory-verified "umask 077; test ! -e '$dir'; mkdir -m 700 '$dir'"
+          for file in scripts/factory_build50_f34_icon_kit.py scripts/factory_f34_independent_icon_review.py scripts/factory_build_50.py deploy/install_f34_build50_icon_kit.sh; do
+            item="$(basename "$file")"
+            digest="$(sha256sum "$file" | awk '{print $1}')"
+            scp -q -F "$d/config" "$file" "saeit-factory-verified:$dir/$item"
+            ssh -T -F "$d/config" saeit-factory-verified "test ! -L '$dir/$item' && test \"\$(sha256sum '$dir/$item' | awk '{print \$1}')\" = '$digest'"
+          done
+          timeout 190s ssh -T -F "$d/config" saeit-factory-verified "bash '$dir/install_f34_build50_icon_kit.sh' '$dir'"
+          echo F34_REAL_PRODUCT_FACTORY_DEPLOYMENT=PASS
