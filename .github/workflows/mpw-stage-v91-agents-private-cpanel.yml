@@ -1,0 +1,124 @@
+name: Stage MojPlayWin-only V91 agents to private cPanel location
+on:
+  push:
+    branches: ["feat/mpw-v91-agent-port-isolated-20261018"]
+    paths: [".github/workflows/mpw-stage-v91-agents-private-cpanel.yml"]
+permissions:
+  contents: read
+concurrency:
+  group: mpw-v91-main-site-private-staging-only
+  cancel-in-progress: false
+jobs:
+  stage-only:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/feat/mpw-v91-agent-port-isolated-20261018'
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify actual V91 source hashes and pack only MojPlayWin agent module
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib,json,tarfile
+          base=Path("mpw_v91_port")
+          origin=json.loads((base/"ORIGIN.json").read_text())
+          assert origin["file_count"]>=70
+          for item in origin["modules"]:
+              p=Path(item["destination"])
+              assert p.is_file() and not p.is_symlink()
+              assert hashlib.sha256(p.read_bytes()).hexdigest()==item["sha256"]
+          dest=Path("/tmp/mpw-v91-site-main-stage.tar.gz")
+          with tarfile.open(dest,"w:gz") as arc:
+              for p in sorted(base.rglob("*")):
+                  if p.is_file() and p.suffix in (".py",".json") and "__pycache__" not in p.parts:
+                      arc.add(str(p),arcname=str(p),recursive=False)
+          assert dest.stat().st_size<1500000
+          print("VERIFIED_ORIGINAL_V91_MODULES_FOR_MPW=",origin["file_count"])
+          PY
+          python3 -m py_compile scripts/mpw_stage_v91_port_cpanel.py
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Install only in private MojPlayWin cPanel staging directory, verify all module hashes
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          receiver="$(base64 -w0 scripts/mpw_stage_v91_port_cpanel.py)"
+          timeout 90s ssh -T -F "$d/config" saeit-cpanel "python3 -c 'import base64; exec(base64.b64decode(\"$receiver\"))'" < /tmp/mpw-v91-site-main-stage.tar.gz
+      - name: Smoke test MojPlayWin Gen64 and rule-based agent in that private stage
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 65s ssh -T -F "$d/config" saeit-cpanel 'PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=/home/zomorod2/.private_mojplaywin_main_agents/v91_verified_main_port_20261018 python3 -' <<'PY'
+          import json
+          from mpw_v91_port.runtime import review_draft,valid_main_host
+          sample={
+              "kind":"research_digest",
+              "title":"آزمون مستر ایجنت سایت اصلی مج پلی وین",
+              "summary":"این خلاصه صرفاً برای آزمون مستقل بررسی پژوهشی داخل سایت اصلی مج پلی وین تهیه شده است.",
+              "body":("این متن آزمایشی برای سنجش عملکرد مستر ایجنت و ایجنت پژوهشی بدون انتشار محتوا در سایت اصلی نوشته شده است. "
+                      "هیچ نتیجه علمی یا تجاری واقعی از این متن استخراج نمی‌شود. ")*8,
+              "sources":["https://example.org/"]
+          }
+          data=review_draft(sample)
+          assert valid_main_host("mojplaywin.com")
+          assert not valid_main_host("zomorodmelal.ir")
+          assert data["tenant"]=="mojplaywin-main" and data["review_required"] is True
+          assert data["published"] is False and data["sale_ready"] is False
+          print(json.dumps({"status":"MPW_V91_PRIVATE_STAGE_MASTER_AND_AGENT_OK",
+              "tenant":data["tenant"],"engine":data["engine_version"],
+              "production_enabled":False,"subsites_changed":False}))
+          PY
+      - name: Remove only temporary GitHub runner SSH credentials and staging tarball
+        if: always()
+        shell: bash
+        run: |
+          rm -rf -- "$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          rm -f -- /tmp/mpw-v91-site-main-stage.tar.gz

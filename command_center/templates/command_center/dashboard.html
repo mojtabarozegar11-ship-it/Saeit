@@ -38,7 +38,8 @@ section{margin-top:24px;scroll-margin-top:92px}
 <div id="staff-approvals">{% include "command_center/approval_queue.html" %}</div>
 <div id="staff-content">{% include "command_center/content_studio.html" %}</div>
 <div id="staff-album">{% include "command_center/media_album.html" %}</div>
-<section class="card"><h2>{% if lang == "fa" %}تنظیمات ایجنت‌ها{% else %}Agent Settings{% endif %}</h2><div class="grid">{% for item in agent_settings %}<div class="card"><span class="label">{{ item.label }}</span></div>{% endfor %}</div><p>{% if lang == "fa" %}این بخش‌ها هنوز به عملیات زنده متصل نشده‌اند.{% else %}These settings are not yet connected to live operations.{% endif %}</p></section><section id="staff-infrastructure"><h2>{% if lang == "fa" %}نقشه سلامت سامانه‌ها{% else %}System Health Map{% endif %}</h2><div id="systems" class="grid">
+<section class="card"><h2>{% if lang == "fa" %}تنظیمات ایجنت‌ها{% else %}Agent Settings{% endif %}</h2><div class="grid">{% for item in agent_settings %}<div class="card"><span class="label">{{ item.label }}</span></div>{% endfor %}</div><p>{% if lang == "fa" %}این بخش‌ها هنوز به عملیات زنده متصل نشده‌اند.{% else %}These settings are not yet connected to live operations.{% endif %}</p></section>{% if mpw_main_host %}{% include "command_center/mpw_v91_agent_performance.html" %}{% endif %}
+<section id="staff-infrastructure"><h2>{% if lang == "fa" %}نقشه سلامت سامانه‌ها{% else %}System Health Map{% endif %}</h2><div id="systems" class="grid">
 {% for component in components %}<article class="card" data-component="{{ component }}"><div class="label">{{ component }}</div><span class="state unknown">نامشخص</span><p><small>اتصال داده برقرار نیست</small></p></article>{% endfor %}
 </div></section>
 <section class="card"><h2>{% if lang == "fa" %}پیشرفت تأییدشده{% else %}Verified Progress{% endif %}</h2><div id="workstreams"><p>تا اتصال معیارهای واقعی، درصدی نمایش داده نمی‌شود.</p></div></section>

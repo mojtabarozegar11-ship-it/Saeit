@@ -7,6 +7,7 @@ from .overview import build_overview
 from .catalog import MODULES, AGENT_SETTINGS, localized
 from core.models import Agent, ApprovalRequest, NewsletterStory
 from django.contrib.auth import get_user_model
+from mpw_v91_port.runtime import valid_main_host
 
 COMPONENTS = ("factory", "iran_site", "global_site", "master_agent", "agents", "bots", "vps", "cpanel", "github")
 
@@ -18,6 +19,7 @@ def dashboard(request):
         lang = "fa"
     response = render(request, "command_center/dashboard.html", {
         "components": COMPONENTS, "lang": lang,
+        "mpw_main_host": valid_main_host(request.get_host()),
         "modules": localized(MODULES, lang),
         "agent_settings": localized(AGENT_SETTINGS, lang),
         "staff_counts": {

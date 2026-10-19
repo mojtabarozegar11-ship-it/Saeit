@@ -1,0 +1,119 @@
+{# Shown only for MojPlayWin main-domain authenticated staff, NEVER public. #}
+<section class="card" id="mpw-v91-agent-settings" aria-labelledby="mpw-v91-charts-title">
+<h2 id="mpw-v91-charts-title">تنظیمات و نمودار عملکرد ایجنت‌های MojPlayWin</h2>
+<p>برای هر ایجنت، تنظیم عملیاتی در بالا و نمودار عملکرد ثبت‌شده در پایین نمایش داده می‌شود. هیچ‌کدام از نمودارها آمار تخمینی ندارند.</p>
+<div id="mpw-v91-agent-cards" class="mpw-v91-grid" aria-live="polite"><p>در حال بررسی سوابق خصوصی ایجنت‌ها…</p></div>
+<small>داده‌های این بخش فقط از فضای خصوصی MojPlayWin گرفته می‌شوند؛ نسخه زنده وب، کارخانه و زیرسایت‌های مستقل هیچ تغییری نمی‌کنند.</small>
+</section>
+<style>
+#mpw-v91-agent-settings .mpw-v91-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,310px),1fr));gap:16px}
+#mpw-v91-agent-settings .mpw-v91-card{border:1px solid #405575;background:#101c2f;border-radius:12px;padding:16px}
+#mpw-v91-agent-settings .mpw-v91-card h3{margin-top:0;font-size:1.07rem}
+#mpw-v91-agent-settings .mpw-v91-settings{border-bottom:1px solid #37475c;margin-bottom:18px;padding-bottom:10px}
+#mpw-v91-agent-settings .mpw-v91-chart{display:flex;align-items:end;justify-content:space-between;gap:4px;min-height:116px;border-block-end:1px solid #7487a1;padding-top:12px;margin-block-start:12px}
+#mpw-v91-agent-settings .mpw-v91-day{display:flex;flex-direction:column;justify-content:end;align-items:center;gap:6px;flex:1;min-width:8px;height:102px}
+#mpw-v91-agent-settings .mpw-v91-bar{width:min(100%,20px);background:#69b5ed;border-radius:4px 4px 0 0;min-height:0}
+#mpw-v91-agent-settings .mpw-v91-ticks{display:flex;justify-content:space-between;margin-top:6px}
+#mpw-v91-agent-settings .mpw-v91-nodata{padding:20px 8px;border:1px dashed #52627d;border-radius:8px;color:#cbd5e1}
+#mpw-v91-agent-settings .mpw-v91-status{color:#d8e3f2;font-size:.9rem}
+#mpw-v91-agent-settings .mpw-v91-statline{display:flex;flex-wrap:wrap;gap:12px;color:#bcd6ea;font-size:.9rem}
+</style>
+<script>
+(function(){
+"use strict";
+const region=document.getElementById("mpw-v91-agent-cards");
+if(!region)return;
+const endpoint="{% url 'mpw_private_v91_agent_performance' %}";
+function el(tag,className,text){
+  const e=document.createElement(tag);
+  if(className)e.className=className;
+  if(text!==undefined)e.textContent=String(text);
+  return e;
+}
+function settingRow(parent,label,value){
+  const row=el("p","mpw-v91-status",label+": "+value);
+  parent.appendChild(row);
+}
+function drawChart(parent,agent){
+  const isAudit=agent.metric_kind==="site_health_checks";
+  const metricText=isAudit?"پایش موفق":agent.metric_kind==="editorial_quality_reviews"?"بررسی کیفیت":"پیش‌نویس";
+  parent.appendChild(el("h4",null,isAudit?"نمودار پایش موفق ۱۴ روز اخیر":isReview?"نمودار بازبینی‌های ۱۴ روز اخیر":"نمودار عملکرد ۱۴ روز اخیر"));
+  if(agent.history_available!==true || !Array.isArray(agent.series) || !Array.isArray(agent.days)){
+    parent.appendChild(el("div","mpw-v91-nodata","سابقه روزانه برای این ایجنت ثبت نشده است؛ نمودار ساختگی نمایش داده نمی‌شود."));
+    return;
+  }
+  if(agent.series.length!==14 || agent.days.length!==14 || !agent.series.every(n=>Number.isSafeInteger(n)&&n>=0)){
+    parent.appendChild(el("div","mpw-v91-nodata","داده نمودار معتبر نیست."));
+    return;
+  }
+  const maximum=Math.max(1,...agent.series);
+  const figure=el("div","mpw-v91-chart");
+  figure.setAttribute("role","img");
+  figure.setAttribute("aria-label","تعداد "+metricText+" در ۱۴ روز گذشته: "+agent.series.map((n,i)=>agent.days[i]+": "+n).join("، "));
+  agent.series.forEach((count,i)=>{
+    const column=el("div","mpw-v91-day");
+    const bar=el("div","mpw-v91-bar");
+    bar.style.height=(count ? Math.max(5,Math.round(82*count/maximum)):0)+"px";
+    bar.title=agent.days[i]+" | "+count+" "+metricText;
+    column.appendChild(bar);
+    figure.appendChild(column);
+  });
+  parent.appendChild(figure);
+  const ticks=el("div","mpw-v91-ticks");
+  ticks.append(el("small",null,agent.days[0]),el("small",null,agent.days[13]));
+  parent.appendChild(ticks);
+  if(!agent.series.some(x=>x>0)){
+    parent.appendChild(el("p","mpw-v91-status","در این بازه "+metricText+" ثبت‌شده‌ای وجود ندارد."));
+  }
+}
+async function refresh(){
+  try{
+    const response=await fetch(endpoint,{credentials:"same-origin",cache:"no-store"});
+    if(!response.ok)throw new Error("not_available");
+    const data=await response.json();
+    region.replaceChildren();
+    if(data.state==="unavailable" || !Array.isArray(data.agents) || data.agents.length===0){
+      region.appendChild(el("p","mpw-v91-nodata","اطلاعات عملیاتی خصوصی در دسترس نیست؛ وضعیت ایجنت‌ها نامشخص است."));
+      return;
+    }
+    data.agents.forEach(agent=>{
+      const card=el("article","mpw-v91-card");
+      card.appendChild(el("h3",null,agent.title));
+      const settings=el("div","mpw-v91-settings");
+      settingRow(settings,"مأموریت",agent.setting);
+      const statusLabels={active_private:"فعال در فضای خصوصی",stale_heartbeat:"گزارش فعالیت قدیمی است",ok:"پایش سالم",warning:"هشدار در آخرین پایش",error:"خطا در آخرین پایش",unavailable:"بدون داده"};
+      settingRow(settings,"وضعیت",statusLabels[agent.status]||"نامشخص");
+      if(agent.schedule)settingRow(settings,"زمان‌بندی",agent.schedule);
+      if(Number.isSafeInteger(agent.queue))settingRow(settings,"وظایف در صف",agent.queue);
+      if(Number.isSafeInteger(agent.completed))settingRow(settings,
+        agent.metric_kind==="site_health_checks"?"پایش‌های موفق":
+        agent.metric_kind==="editorial_quality_reviews"?"پیش‌نویس‌های ارزیابی‌شده":"پیش‌نویس‌های تولیدشده",agent.completed);
+      if(agent.metric_kind==="editorial_quality_reviews"){
+        if(Number.isSafeInteger(agent.needs_revision))settingRow(settings,"نیازمند اصلاح",agent.needs_revision);
+        if(Number.isSafeInteger(agent.ready_for_human_review))settingRow(settings,"آماده بررسی مدیر",agent.ready_for_human_review);
+        if(agent.last_observed_utc)settingRow(settings,"آخرین کنترل UTC",agent.last_observed_utc);
+        settingRow(settings,"زمان‌بندی","ساعتی؛ دقیقه ۴۹");
+      }
+      if(agent.metric_kind==="site_health_checks" || agent.metric_kind==="private_review_checks"){
+        if(Number.isSafeInteger(agent.warning_count))settingRow(settings,agent.metric_kind==="private_review_checks"?"نیازمند اصلاح یا تأیید":"هشدار",agent.warning_count);
+        if(Number.isSafeInteger(agent.error_count))settingRow(settings,"خطا",agent.error_count);
+        if(agent.last_observed_utc)settingRow(settings,"آخرین بررسی UTC",agent.last_observed_utc);
+      }
+      if(agent.metric_kind==="site_health_checks")
+        settingRow(settings,"زمان‌بندی","هر ساعت، دقیقه ۳۷؛ مستقل از موتور تولید محتوا");
+      settingRow(settings,"انتشار خودکار","غیرفعال");
+      card.appendChild(settings);
+      drawChart(card,agent);
+      if(agent.note)card.appendChild(el("small",null,agent.note));
+      region.appendChild(card);
+    });
+  }catch(_){
+    region.replaceChildren();
+    region.appendChild(el("p","mpw-v91-nodata","دریافت آمار واقعی ایجنت‌ها ناموفق بود. وضعیت نامشخص است."));
+  }
+}
+refresh();
+const button=document.getElementById("refresh");
+if(button)button.addEventListener("click",refresh);
+})();
+</script>
