@@ -141,8 +141,10 @@ jobs:
                 for pattern in (r"Traceback",r"SpawnException",r"ModuleNotFoundError"))
           failing=bool(report.get("confirmed_root_failure"))
           code_by_path={x.get("path"):x.get("code") for x in report.get("public",[])}
-          confirmed_503=(failing and (code_by_path.get("/") == 503 or
-                                      code_by_path.get("/api/health/") == 503))
+          confirm_by_path={x.get("path"):x.get("code") for x in report.get("confirmation",[])}
+          confirmed_503=(failing and any(
+              code_by_path.get(path)==503 and confirm_by_path.get(path)==503
+              for path in ("/", "/api/health/")))
           lock=store/"last_restart"
           age=time.time()-lock.stat().st_mtime if lock.exists() else 999999
           python_bin=home/"virtualenv"/"Saeit"/"3.10"/"bin"/"python"
