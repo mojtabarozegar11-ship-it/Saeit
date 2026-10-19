@@ -167,7 +167,14 @@ def patch_company(doc):
          lambda m:m.group()[:-1]+' loading="lazy" decoding="async" width="1200" height="675">',
          "Company banner image")
     doc=add_business(doc,"company")
-    doc=edit_tag(doc,r'<body\b[^>]*>',lambda m:m.group()[:-1]+' class="mpw-company-harmonized">',"Company body")
+    def add_company_class(m):
+        tag=m.group()
+        found=re.search(r'\bclass=(["\x27])([^"\x27]*)\1',tag,re.I)
+        if found:
+            if "mpw-company-harmonized" in found.group(2).split():fail("Company class already installed")
+            return tag[:found.start(2)]+found.group(2)+" mpw-company-harmonized"+tag[found.end(2):]
+        return tag[:-1]+' class="mpw-company-harmonized">'
+    doc=edit_tag(doc,r'<body\b[^>]*>',add_company_class,"Company body")
     return doc
 class BodyAudit(HTMLParser):
     def __init__(self):
