@@ -157,8 +157,14 @@ def verify_stored(version):
     return saved
 
 
-def stock_one(root, recipe, warehouse):
+def stock_one(root, recipe, warehouse, *, quality_snapshot=None):
     artifact, manifest = inspect_source(root, recipe)
+    if quality_snapshot is not None:
+        receipt=Path(root)/'digital-products'/recipe/'manufacturing_manifest.json'
+        if (manifest.get('source_sha256')!=quality_snapshot.get('source_sha256')
+                or manifest.get('artifact_sha256')!=quality_snapshot.get('artifact_sha256')
+                or digest(receipt)!=quality_snapshot.get('source_receipt_sha256')):
+            raise RuntimeError('WAREHOUSE_BUILD50_SNAPSHOT_CHANGED')
     if active_rework(root, recipe):
         return {"product_id": recipe, "action": "held_for_rework", "source_sha256": manifest["source_sha256"]}
     container = warehouse / "finished" / recipe
@@ -250,13 +256,13 @@ def cycle(root, *, strict_build50=False):
         actions = []
         blocked = []
         build_quality = None
-        eligible = set()
+        eligible = {}
         if strict_build50:
             module_path=Path(__file__).resolve().with_name('factory_build_50.py')
             spec=importlib.util.spec_from_file_location('saeit_strict_build50',module_path)
             protocol=importlib.util.module_from_spec(spec);spec.loader.exec_module(protocol)
             build_quality=protocol.audit(root)
-            eligible={x['product_id'] for x in build_quality['products'] if x['build_50_verified']}
+            eligible={x['product_id']:x for x in build_quality['products'] if x['build_50_verified']}
         for child in sorted(source.iterdir()):
             if child.is_symlink() or not child.is_dir() or not RECIPE.fullmatch(child.name):
                 raise RuntimeError("WAREHOUSE_UNEXPECTED_MANUFACTURING_ENTRY")
@@ -264,7 +270,8 @@ def cycle(root, *, strict_build50=False):
                 if strict_build50 and child.name not in eligible:
                     blocked.append({'product_id':child.name,'reason':'BUILD50_RETURN_TO_PLANNING'})
                     continue
-                item = stock_one(root, child.name, warehouse)
+                item = stock_one(root, child.name, warehouse,
+                                 quality_snapshot=eligible[child.name] if strict_build50 else None)
                 actions.append(item)
             except (RuntimeError, ValueError, OSError, zipfile.BadZipFile) as error:
                 # No deletion: record exception and retain all input files.

@@ -32,6 +32,17 @@ class FactoryWarehouseTests(unittest.TestCase):
         return maker.manufacture(recipe,self.recipes,self.private/"digital-products")
     def register(self):
         return json.loads((self.private/"production-warehouse"/"stock-register.json").read_text("utf8"))
+    def test_quality_snapshot_cannot_authorize_a_later_artifact_version(self):
+        recipe='farm_enterprise_economics';self.manufacture(recipe)
+        receipt=self.private/'digital-products'/recipe/'manufacturing_manifest.json'
+        previous=json.loads(receipt.read_text())
+        snapshot=dict(previous,source_receipt_sha256=warehouse.digest(receipt))
+        source=self.recipes/recipe/'README.md'
+        source.write_text(source.read_text()+'\nChanged after quality audit.\n')
+        self.manufacture(recipe)
+        with self.assertRaisesRegex(RuntimeError,'SNAPSHOT_CHANGED'):
+            warehouse.stock_one(self.private,recipe,self.private/'production-warehouse',quality_snapshot=snapshot)
+        self.assertTrue(receipt.is_file())
     def test_strict_build50_holds_technical_pass_and_keeps_original(self):
         self.manufacture('farm_enterprise_economics')
         result=warehouse.cycle(self.private,strict_build50=True)

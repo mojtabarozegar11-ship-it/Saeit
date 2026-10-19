@@ -131,16 +131,21 @@ def _run_attempt(root,plan,worker,assembler,reviewer,now=None):
     save(attempt/'01-plan.json',plan)
     receipts.append({'stage':1,'kind':'planning','plan_sha256':digest(plan)})
     try:
-        output_fingerprints=set()
+        claimed_paths=set();claimed_hashes=set()
         for stage,task in enumerate(tasks,2):
             current=stage
+            before={str(p.relative_to(attempt)):file_sha(p) for p in attempt.rglob('*')
+                    if p.is_file() and not p.is_symlink()}
             result=worker(task,dict(context,stage=stage,prior_receipts=list(receipts)))
             outputs=measured_outputs(attempt,result)
             if result['successful_checks']<len(task['acceptance']):raise ValueError('BUILD50_INSUFFICIENT_ACCEPTANCE_CHECKS')
-            fingerprint=digest(sorted(outputs.values()))
-            if fingerprint in output_fingerprints:raise ValueError('BUILD50_REUSED_WORK_OUTPUT')
-            output_fingerprints.add(fingerprint)
+            if claimed_paths.intersection(outputs) or claimed_hashes.intersection(outputs.values()):
+                raise ValueError('BUILD50_REUSED_WORK_OUTPUT')
+            if any(before.get(name)==checksum for name,checksum in outputs.items()):
+                raise ValueError('BUILD50_NO_NEW_WORK_OUTPUT')
+            claimed_paths.update(outputs);claimed_hashes.update(outputs.values())
             receipt={'stage':stage,'task_id':task['id'],'outputs':outputs,
+                     'files_created_or_changed_in_stage':True,
                      'successful_checks':result['successful_checks'],'previous_sha256':digest(receipts[-1])}
             save(attempt/('%02d-work.json'%stage),receipt);receipts.append(receipt)
         current=50
@@ -189,7 +194,7 @@ def verify_attempt(home,state,snapshot):
         plan=read(folder/'01-plan.json');tasks=validate_plan(plan)
         if digest(plan)!=state['plan_sha256'] or plan['product_id']!=Path(home).name:return False
         prior={'stage':1,'kind':'planning','plan_sha256':digest(plan)}
-        seen=set()
+        seen_paths=set();seen_hashes=set()
         for stage,task in enumerate(tasks,2):
             receipt=read(folder/('%02d-work.json'%stage))
             if (receipt.get('stage')!=stage or receipt.get('task_id')!=task['id']
@@ -197,8 +202,9 @@ def verify_attempt(home,state,snapshot):
                     or type(receipt.get('successful_checks')) is not int or receipt['successful_checks']<len(task['acceptance'])):return False
             outputs=receipt['outputs']
             checked=measured_outputs(folder,{'passed':True,'outputs':list(outputs),'successful_checks':1})
-            if checked!=outputs or digest(sorted(outputs.values())) in seen:return False
-            seen.add(digest(sorted(outputs.values())));prior=receipt
+            if (checked!=outputs or receipt.get('files_created_or_changed_in_stage') is not True
+                    or seen_paths.intersection(outputs) or seen_hashes.intersection(outputs.values())):return False
+            seen_paths.update(outputs);seen_hashes.update(outputs.values());prior=receipt
         final=read(folder/'50-summary.json')
         if final.get('previous_sha256')!=digest(prior) or digest(final)!=state.get('final_receipt_sha256'):return False
         review=final.get('review',{})
@@ -269,6 +275,8 @@ def audit(root):
                     'commercial_release':False,'lifetime_attempt_limit':None}
             save(folder/'planning-request.json',ticket)
         rows.append({'product_id':product,'build_50_verified':accepted,
+                     'source_receipt_sha256':source_hash,'source_sha256':receipt.get('source_sha256'),
+                     'artifact_sha256':receipt.get('artifact_sha256'),
                      'quality_approved':False,'commercial_release':False})
     result={'schema':SCHEMA,'products':rows,'inspected':len(rows),
             'requiring_replanning':sum(not x['build_50_verified'] for x in rows),

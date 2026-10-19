@@ -61,6 +61,25 @@ class Build50Tests(unittest.TestCase):
         state=self.run_build(worker=duplicate)
         self.assertEqual(state['status'],'rework_required')
         self.assertIn('REUSED_WORK',state['defects'][0]['reason'])
+    def test_subsets_of_earlier_outputs_cannot_be_new_work(self):
+        def subsets(task,context):
+            folder=Path(context['folder'])
+            for name in ('first','second','third'):(folder/(name+'.txt')).write_text(name)
+            names=['first.txt','second.txt','third.txt'] if task['id']=='task_00' else ['first.txt','second.txt']
+            return {'passed':True,'outputs':names,'successful_checks':2}
+        state=self.run_build(worker=subsets)
+        self.assertEqual(state['completed_stages'],2)
+        self.assertIn('REUSED_WORK',state['defects'][0]['reason'])
+    def test_precreated_future_file_does_not_count_as_new_stage_work(self):
+        def precreate(task,context):
+            folder=Path(context['folder'])
+            if task['id']=='task_00':
+                (folder/'future.txt').write_text('precreated future output')
+                return self.worker(task,context)
+            return {'passed':True,'outputs':['future.txt'],'successful_checks':2}
+        state=self.run_build(worker=precreate)
+        self.assertEqual(state['completed_stages'],2)
+        self.assertIn('NO_NEW_WORK',state['defects'][0]['reason'])
     def test_critical_defect_cannot_be_averaged_away(self):
         def reviewer(plan,context):
             result=self.reviewer(plan,context);result['critical_defects']=['incorrect calculation'];return result
