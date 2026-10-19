@@ -1,0 +1,99 @@
+name: MojPlayWin merchant ETH TRX live scanner dry-run
+on:
+  push:
+    branches: [mpw-two-books-unified-release-20261019]
+    paths: [".github/workflows/mpw-eth-trx-scanner-dryrun-20261019.yml"]
+permissions: {contents: read}
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 11
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Test actual customer transfer indexers with no invoices and no writes
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 165s ssh -T -F "$d/config" saeit-cpanel bash -s <<'BASH'
+          /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - <<'PY'
+          import os,sys,pathlib,inspect,json,time,signal
+          r=pathlib.Path('/home/zomorod2/Saeit-staging')
+          os.chdir(r);sys.path.insert(0,str(r));os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          import django;django.setup()
+          from mpw_commerce.auto_reconcile import discover_eth,discover_trx
+          from mpw_commerce.trusted_chain import verify_with_trusted_rpc
+          import mpw_commerce.auto_reconcile as w
+          print('MPW_REAL_SCANNER_INFO='+json.dumps({
+            'eth_module':discover_eth.__module__,
+            'trx_module':discover_trx.__module__,
+            'verifier_module':verify_with_trusted_rpc.__module__,
+            'eth_signature':str(inspect.signature(discover_eth)),
+            'trx_signature':str(inspect.signature(discover_trx)),
+            'verifier_signature':str(inspect.signature(verify_with_trusted_rpc)),
+            'max_lookback_s':getattr(w,'MAX_LOOKBACK_SECONDS',None),
+            'max_batch':getattr(w,'MAX_BATCH',None),
+          }))
+          class HardTimeout(Exception):pass
+          def alarm(sig,frame):raise HardTimeout('scanner timeout')
+          signal.signal(signal.SIGALRM,alarm)
+          for name,scanner in (('ETH',discover_eth),('TRX',discover_trx)):
+            start=time.monotonic()
+            try:
+              signal.alarm(22)
+              found=scanner(now_ms=int(time.time()*1000),lookback_s=90)
+              signal.alarm(0)
+              print('MPW_REAL_SCANNER_RESULT='+json.dumps({'asset':name,'success':True,
+                'result_type':type(found).__name__,
+                'count':len(found) if isinstance(found,(list,tuple)) else None,
+                'seconds':round(time.monotonic()-start,2)}))
+            except Exception as exc:
+              signal.alarm(0)
+              print('MPW_REAL_SCANNER_RESULT='+json.dumps({'asset':name,'success':False,
+                'error':type(exc).__name__,'seconds':round(time.monotonic()-start,2)}))
+          PY
+          BASH
