@@ -1,9 +1,10 @@
-name: Publish exact Zomorod Mell company favicon
+name: Publish truly round transparent Zomorod Mell favicon
 on:
   push:
     branches: [main]
     paths:
       - ".github/workflows/zomorod-exact-favicon-deploy.yml"
+      - "content/zomorod-seo-brand/deploy_exact_favicon.py"
 permissions:
   contents: read
 concurrency:
@@ -15,20 +16,44 @@ jobs:
     timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
-      - name: Verify exact logo artwork and rollback script
+      - name: Render true round favicon from official transparent company logo
+        shell: bash
         run: |
           set -euo pipefail
-          python3 -m py_compile content/zomorod-seo-brand/deploy_exact_favicon.py
-          python3 - <<'PY'
+          python3 -m venv "$RUNNER_TEMP/zomorod-favicon-venv"
+          "$RUNNER_TEMP/zomorod-favicon-venv/bin/pip" -q install 'Pillow==11.3.0'
+          "$RUNNER_TEMP/zomorod-favicon-venv/bin/python" - <<'PY'
+          import base64, io, math
           from pathlib import Path
-          import base64
+          from PIL import Image, ImageDraw
+          source=Path('content/zomorod-brand/logo-transparent-128.png')
           d=Path('content/zomorod-seo-brand')
-          for n,magic in [('favicon.ico',b'\0\0\1\0'),('icon-180.png',b'\x89PNG\r\n\x1a\n'),('icon-192.png',b'\x89PNG\r\n\x1a\n')]:
-              raw=base64.b64decode((d/(n+'.b64')).read_text(),validate=True)
-              assert raw.startswith(magic) and len(raw)>5000
-              print('FAVICON_VERIFIED',n,len(raw))
-          assert 'ZOMOROD_FAVICON_ROLLBACK=restored' in (d/'deploy_exact_favicon.py').read_text()
+          img=Image.open(source).convert('RGBA')
+          assert img.size == (128,128)
+          assert img.getpixel((0,0))[3] == 0 and img.getpixel((127,127))[3] == 0, 'Source must be transparent'
+          # Clip to exact circle; no square/white/checkerboard around the company mark.
+          a=img.getchannel('A')
+          circle=Image.new('L',img.size,0)
+          drawer=ImageDraw.Draw(circle)
+          drawer.ellipse((1,1,126,126),fill=255)
+          from PIL import ImageChops
+          img.putalpha(ImageChops.multiply(a,circle))
+          assert img.getpixel((0,0))[3]==0 and img.getpixel((127,0))[3]==0
+          ico=io.BytesIO()
+          img.save(ico,format='ICO',sizes=[(16,16),(32,32),(48,48),(64,64),(128,128)])
+          files={'favicon.ico':ico.getvalue()}
+          for size in (180,192):
+              buffer=io.BytesIO()
+              img.resize((size,size),Image.Resampling.LANCZOS).save(buffer,format='PNG',optimize=True)
+              files[f'icon-{size}.png']=buffer.getvalue()
+          for name,raw in files.items():
+              (d/(name+'.b64')).write_text(base64.b64encode(raw).decode('ascii'),encoding='ascii')
+              print('TRUE_ROUND_ICON',name,len(raw))
+          assert files['favicon.ico'][:4]==b'\\x00\\x00\\x01\\x00'
+          assert files['icon-192.png'].startswith(b'\\x89PNG\\r\\n\\x1a\\n')
           PY
+          python3 -m py_compile content/zomorod-seo-brand/deploy_exact_favicon.py
+          grep -q 'ZOMOROD_ROUND_FAVICON_ROLLBACK=restored' content/zomorod-seo-brand/deploy_exact_favicon.py
       - name: Prepare pinned cPanel relay
         shell: bash
         env:
@@ -106,4 +131,4 @@ jobs:
           REMOTE
       - name: Remove temporary runner SSH keys
         if: always()
-        run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
+        run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory" "$RUNNER_TEMP/zomorod-favicon-venv"
