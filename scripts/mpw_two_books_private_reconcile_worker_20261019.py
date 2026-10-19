@@ -39,6 +39,18 @@ def run():
             return {"state": "previous_cycle_running"}
         if any(getattr(settings, key, False) is not True for key in REQUIRED):
             return {"state": "disabled"}
+        from mpw_commerce.models import CommerceInvoice
+        pending = CommerceInvoice.objects.filter(
+            status=CommerceInvoice.Status.AWAITING,
+            order__status="pending",
+        ).select_related("order")[:101]
+        invoices = list(pending)
+        if len(invoices) > 100:
+            return {"state": "unbounded_scope_denied"}
+        for invoice in invoices:
+            product_ids = set(invoice.order.items.values_list("product_id", flat=True))
+            if len(product_ids) != 1 or not product_ids.issubset({72, 225}):
+                return {"state": "other_product_scope_denied"}
         report = reconcile_pending_orders()
         return {
             "state": report.get("state", "unknown"),
