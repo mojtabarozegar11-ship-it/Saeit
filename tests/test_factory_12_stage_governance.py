@@ -81,6 +81,39 @@ class Factory12StageTests(unittest.TestCase):
         self.assertEqual(summary["blocked_reasons"]["missing_product_passport"],1)
         with self.assertRaises(RuntimeError):
             m.final_admit(self.root,self.wid,"something.zip")
+    def test_research_rework_order_not_misclassified_as_missing_product_passport(self):
+        # Only actual manufacturing work requires a product passport at intake.
+        # Research correction cannot be auto-completed or sold as a product.
+        second={
+            "id":"WO-00000002","status":"issued","fingerprint":"b"*64,
+            "origin":"local-factory-research", "source_product_id":12,
+            "phase":"research_rework",
+            "blocker":"FIVE_DISTINCT_PUBLIC_SOURCES_WITH_LINKED_EVIDENCE_REQUIRED",
+            "subject":"Collect five independent authentic citations"
+        }
+        (self.ins/"WO-00000002.json").write_text(json.dumps(second))
+        report=m.tick(self.root)
+        self.assertEqual(report["instructions_seen"],2)
+        self.assertEqual(report["research_only_work_orders"],1)
+        self.assertEqual(report["manufacturing_related_work_orders"],1)
+        self.assertEqual(report["blocked_reasons"]["research_evidence_not_verified"],1)
+        self.assertEqual(report["blocked_reasons"]["missing_product_passport"],1)
+        self.assertEqual(report["workorder_status"]["research_rework_pending_evidence"],1)
+        self.assertEqual(report["final_commercially_verified_stock"],0)
+        self.assertFalse(report["site_distribution_enabled"])
+        # Repeated minute tick does not invent a successful research result.
+        repeat=m.tick(self.root)
+        self.assertEqual(repeat["research_only_work_orders"],1)
+        self.assertEqual(repeat["newly_tracked"],0)
+
+    def test_research_rework_provenance_must_be_checked(self):
+        invalid={"id":"WO-00000002","status":"issued",
+                 "fingerprint":"b"*64,"phase":"research_rework",
+                 "origin":"customer_request","blocker":"unknown"}
+        (self.ins/"WO-00000002.json").write_text(json.dumps(invalid))
+        with self.assertRaisesRegex(RuntimeError,"LIFECYCLE_RESEARCH_TASK_PROVENANCE_INVALID"):
+            m.tick(self.root)
+
     def test_two_existing_technical_products_never_autopromoted(self):
         m.tick(self.root)
         m.tick(self.root)

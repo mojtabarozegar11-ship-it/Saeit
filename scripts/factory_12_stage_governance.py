@@ -322,6 +322,7 @@ def tick(root):
         origin_counts=Counter()
         defect_count=0
         stalled_over_day=0
+        research_only_orders=0
         for filename in sorted(source.iterdir()):
             if filename.is_symlink() or not filename.is_file() or not ORDER_RE.fullmatch(filename.stem) or filename.suffix!=".json":
                 raise RuntimeError("LIFECYCLE_UNEXPECTED_INSTRUCTION")
@@ -345,6 +346,18 @@ def tick(root):
                 stalled_over_day+=int((datetime.now(timezone.utc)-entered).total_seconds()>86400
                                       and state["status"]!="in_finished_goods_warehouse_not_distributed")
             except (ValueError,TypeError,KeyError):pass
+            # Research rework instructions describe evidence collection, not
+            # manufacturable goods. Do not mislabel them as missing passports
+            # or promote them into the product manufacturing pipeline.
+            if item.get("phase")=="research_rework":
+                if (item.get("origin")!="local-factory-research"
+                        or not isinstance(item.get("blocker"),str)
+                        or not item.get("blocker")):
+                    raise RuntimeError("LIFECYCLE_RESEARCH_TASK_PROVENANCE_INVALID")
+                research_only_orders+=1
+                blockers["research_evidence_not_verified"]+=1
+                counts["research_rework_pending_evidence"]+=1
+                continue
             if not passfile.exists():
                 blockers["missing_product_passport"]+=1
                 counts["awaiting_complete_passport"]+=1
@@ -372,6 +385,9 @@ def tick(root):
                     "manual distribution disabled" if i==12 else "evidence and independent QA required")}
                     for i,name in enumerate(STAGES,1)],
                 "instructions_seen":count,"newly_tracked":new,
+                "research_only_work_orders":research_only_orders,
+                "manufacturing_related_work_orders":count-research_only_orders,
+                "research_tasks_not_automatically_manufacturable":True,
                 "workorder_status":dict(counts),"blocked_reasons":dict(blockers),
                 "by_production_origin":dict(origin_counts),
                 "orders_by_stage":dict(stage_counts),
