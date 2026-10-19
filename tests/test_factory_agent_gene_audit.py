@@ -23,7 +23,7 @@ class FactoryAgentGeneAuditTests(unittest.TestCase):
     def test_known_real_execution_gaps_remain_reported(self):
         result=m.audit(ROOT)
         codes={x["id"] for x in result["known_execution_blockers"]}
-        self.assertIn("missing_generic_work_order_executor",codes)
+        self.assertNotIn("missing_generic_work_order_executor",codes)\n        self.assertEqual(codes, {"family_dispatch_not_authorized", "missing_lifecycle_passports"})
         self.assertIn("family_dispatch_not_authorized",codes)
         self.assertIn("missing_lifecycle_passports",codes)
     def test_strict_pinned_source_contracts(self):
