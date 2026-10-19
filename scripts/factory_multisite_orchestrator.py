@@ -153,7 +153,8 @@ def build(registry, root, approvals, output):
             if folder.is_dir() and not folder.is_symlink():
                 try:
                     approved.append(verify_product(root, approvals, folder.name))
-                except (ValueError, OSError, KeyError, json.JSONDecodeError) as e:
+                except (ValueError, OSError, KeyError, json.JSONDecodeError,
+                        zipfile.BadZipFile) as e:
                     blocked.append({"product": folder.name, "reason": str(e)[:90]})
     stats = {"schema": "saeit.factory.distribution-state.v1",
              "sites_known": len(sites), "sites_active": 0,
