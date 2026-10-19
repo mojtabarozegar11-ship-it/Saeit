@@ -125,6 +125,33 @@ jobs:
               summary=json.loads(cursor.read_text(encoding="utf8"))
               for key in ("processed_count","updated_count","research_review_candidates","publication_requires_qa_and_owner_authorization"):
                   print("RESEARCH_INPUT_"+key.upper()+"="+str(summary.get(key)),flush=True)
+          # Verify continuous, private work instructions against VPS reality.
+          instruction_area=private/"production-instructions"
+          instruction_status=instruction_area/"order-status.json"
+          if instruction_status.is_file() and not instruction_status.is_symlink():
+              try:
+                  info=json.loads(instruction_status.read_text(encoding="utf8"))
+                  for key in ("last_scan_utc","last_action","last_order",
+                              "instructions_issued_total","pending_instructions",
+                              "candidate_instructions","site_connection_required",
+                              "distribution_enabled"):
+                      if key in info:
+                          print("INSTRUCTIONS_"+key.upper()+"="+json.dumps(info[key],ensure_ascii=True),flush=True)
+                  order_files=sorted((instruction_area/"orders").glob("WO-*.json"))
+                  print("INSTRUCTIONS_ON_DISK="+str(len(order_files)),flush=True)
+                  for path in order_files[-4:]:
+                      data=json.loads(path.read_text(encoding="utf8"))
+                      print("ORDER_RECENT="+json.dumps({"id":data.get("id"),"phase":data.get("phase"),
+                          "status":data.get("status"),"created_utc":data.get("created_utc"),
+                          "public_distribution_allowed":data.get("public_distribution_allowed")}),flush=True)
+              except Exception as exc:
+                  print("INSTRUCTIONS_STATUS_READ_FAILED="+type(exc).__name__,flush=True)
+          else:
+              print("INSTRUCTIONS_STATUS_ABSENT=true",flush=True)
+          deployed_runner=ops/"production-warehouse"/"run-minute-cycle.sh"
+          if deployed_runner.is_file() and not deployed_runner.is_symlink():
+              deployed=deployed_runner.read_text(encoding="utf8",errors="replace")
+              print("INSTRUCTIONS_DRIVER_CONNECTED="+str(deployed.count("FACTORY_AUTONOMOUS_WORK_ORDER_GENERATOR_V1")==1).lower(),flush=True)
           live_cron=[x for x in c.stdout.splitlines() if "SAEIT_FACTORY_EVERY_MINUTE_V1" in x and not x.lstrip().startswith("#")]
           print("FACTORY_EVERY_MINUTE_CRON_COUNT="+str(len(live_cron)),flush=True)
           issued=private/"production-instructions"/"order-status.json"
