@@ -112,7 +112,7 @@ export function advance(s){
  const boost=m.irrigationUntil>=s.day?1:0;
  const drought=forecast.isDrought&&boost===0;
  for(const plot of Object.values(s.plots||{})){
-  if(['wheat','corn','pumpkin'].includes(plot.type))plot.age+=drought&&plot.gene!=='hardy'?.65:1+boost;
+  if(['wheat','corn','pumpkin'].includes(plot.type))plot.age+=drought&&plot.gene!=='hardy'?0:1+boost;
  }
  const replenishment=forecast.recharge+(forecast.rain?9:0);
  m.water=Math.min(100,m.water+replenishment);
@@ -134,23 +134,23 @@ export function deliver(s){
  m.contract=makeContract(s.day+4);
  return result;
 }
-export function rivalsTurn(s,rivalIndex,random=0.5){
+export function rivalsTurn(s,rivalIndex,random=0.5,towers=0){
  const m=ensureMeta(s),hp=s.enemies?.[rivalIndex]||0;
  if(!hp)return {kind:'gone',damage:0};
  // Each faction has an independent personality; the player can counter them.
  if(rivalIndex===0){
-   const initial=39+Math.floor(random*13),r=mitigateRaid(s,initial);
+   const initial=Math.max(1,39+Math.floor(random*13)-towers*12-Math.floor(s.army/6)),r=mitigateRaid(s,initial);
    s.health=Math.max(0,s.health-r.damage);
    return {kind:'blitz',damage:r.damage,shielded:r.shielded};
  }
  if(rivalIndex===1){
-  const initial=30+Math.floor(random*10),r=mitigateRaid(s,initial);
+  const initial=Math.max(1,30+Math.floor(random*10)-towers*12-Math.floor(s.army/6)),r=mitigateRaid(s,initial);
   s.health=Math.max(0,s.health-r.damage);
   const restored=s.day%4===0?Math.min(16,260-hp):0;
   s.enemies[rivalIndex]+=restored;
   return {kind:'armored',damage:r.damage,shielded:r.shielded,healed:restored};
  }
- const initial=21+Math.floor(random*9),r=mitigateRaid(s,initial);
+ const initial=Math.max(1,21+Math.floor(random*9)-towers*12-Math.floor(s.army/6)),r=mitigateRaid(s,initial);
  s.health=Math.max(0,s.health-r.damage);
  const stolen=Math.min(s.food,9+Math.floor(random*8));
  s.food-=stolen;
