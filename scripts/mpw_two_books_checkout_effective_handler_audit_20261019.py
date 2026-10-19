@@ -46,3 +46,25 @@ for path in ("/store/product/72/checkout/","/store/product/225/checkout/"):
     func=r.func
     print("MPW_CHECKOUT_ACTUAL_HANDLER="+json.dumps({"path":path,"module":func.__module__,
         "function":getattr(func,"__name__","view"),"wrapped_count":int(bool(getattr(func,"__wrapped__",None)))}))
+
+
+from django.test import RequestFactory
+from types import SimpleNamespace
+from core.models import Product
+from mpw_commerce.product_checkout_page import approved_for_checkout
+request = RequestFactory().get("/store/product/72/checkout/", secure=True, HTTP_HOST="mojplaywin.com")
+request.user = SimpleNamespace(is_authenticated=True,is_active=True,pk=-1000)
+for pk in (72,225):
+    p=Product.objects.get(pk=pk)
+    request.path=f"/store/product/{pk}/checkout/"
+    try:
+        approved=approved_for_checkout(request,p)
+        print("MPW_BOOK_AUTHENTICATED_DRY_GATE="+json.dumps({"product":pk,"allowed":approved is True,"result_type":type(approved).__name__,"read_only":True}))
+    except Exception as e:
+        print("MPW_BOOK_AUTHENTICATED_DRY_GATE="+json.dumps({"product":pk,"error_type":type(e).__name__,"read_only":True}))
+source=(app/"core/cryptopay_checkout.py").read_text("utf8","replace")
+checkout_ast=next((n for n in ast.parse(source).body if isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef)) and n.name=="checkout"),None)
+if checkout_ast:
+    first=source.splitlines()[checkout_ast.lineno-1:min(checkout_ast.end_lineno,checkout_ast.lineno+19)]
+    first=[("[REDACTED]" if any(b in x.lower() for b in blocked) else x[:180]) for x in first]
+    print("MPW_ACTIVE_CHECKOUT_DISPATCH_FIRST_LINES="+json.dumps(first,ensure_ascii=False))
