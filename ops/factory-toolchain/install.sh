@@ -25,6 +25,22 @@ if [[ ! -d "$target" ]]; then
   mv -- "$extraction" "$target"
   trap - EXIT
 fi
+# Restore only package-declared links, relocated within this private prefix.
+if [[ -f "$bundle/link-map.json" ]]; then
+  "$base/.venv/bin/python" - "$target/prefix" "$bundle/link-map.json" <<'PYLINK'
+import json,os,pathlib,sys
+root=pathlib.Path(sys.argv[1]).resolve()
+for name,destination in json.loads(pathlib.Path(sys.argv[2]).read_text()).items():
+    relative=pathlib.PurePosixPath(name)
+    if relative.is_absolute() or '..' in relative.parts: raise ValueError('BAD_LINK_PATH')
+    link=root/name; dest=root/destination.lstrip('/')
+    link.parent.resolve().relative_to(root)
+    dest.resolve().relative_to(root)
+    if not dest.exists() or (link.exists() and not link.is_symlink()): continue
+    if link.is_symlink(): link.unlink()
+    link.symlink_to(os.path.relpath(dest,link.parent))
+PYLINK
+fi
 # Restore relocated office resource links removed from the original portable archive.
 for entry in 'share:../../share/libreoffice' 'ure-link:../ure'; do
   name="${entry%%:*}"; destination="${entry#*:}"
@@ -55,7 +71,7 @@ for tool in ffmpeg ffprobe pdftoppm; do
   cat > "$target/bin/$tool" <<EOF
 #!/bin/bash
 set -euo pipefail
-export LD_LIBRARY_PATH="$target/prefix/usr/lib/x86_64-linux-gnu:$target/prefix/lib/x86_64-linux-gnu:$target/prefix/usr/lib:$target/prefix/usr/lib/x86_64-linux-gnu/pulseaudio"
+export LD_LIBRARY_PATH="$target/prefix/usr/lib/x86_64-linux-gnu:$target/prefix/lib/x86_64-linux-gnu:$target/prefix/usr/lib:$target/prefix/usr/lib/x86_64-linux-gnu/pulseaudio:$target/prefix/usr/lib/x86_64-linux-gnu/blas:$target/prefix/usr/lib/x86_64-linux-gnu/lapack"
 exec "$target/prefix/usr/bin/$tool" "\$@"
 EOF
   chmod 700 "$target/bin/$tool"
@@ -63,7 +79,7 @@ done
 cat > "$target/bin/blender" <<EOF
 #!/bin/bash
 set -euo pipefail
-export LD_LIBRARY_PATH="$target/prefix/usr/lib/x86_64-linux-gnu:$target/prefix/lib/x86_64-linux-gnu:$target/prefix/usr/lib:$target/prefix/usr/lib/x86_64-linux-gnu/pulseaudio"
+export LD_LIBRARY_PATH="$target/prefix/usr/lib/x86_64-linux-gnu:$target/prefix/lib/x86_64-linux-gnu:$target/prefix/usr/lib:$target/prefix/usr/lib/x86_64-linux-gnu/pulseaudio:$target/prefix/usr/lib/x86_64-linux-gnu/blas:$target/prefix/usr/lib/x86_64-linux-gnu/lapack"
 export BLENDER_SYSTEM_SCRIPTS="$target/prefix/usr/share/blender/scripts"
 export BLENDER_SYSTEM_DATAFILES="$target/prefix/usr/share/blender/datafiles"
 export PYTHONHOME="$target/prefix/usr"
@@ -79,7 +95,7 @@ fi
 cat > "$target/bin/libreoffice" <<EOF
 #!/bin/bash
 set -euo pipefail
-export LD_LIBRARY_PATH="$target/prefix/usr/lib/libreoffice/program:$target/prefix/usr/lib/x86_64-linux-gnu:$target/prefix/lib/x86_64-linux-gnu:$target/prefix/usr/lib:$target/prefix/usr/lib/x86_64-linux-gnu/pulseaudio"
+export LD_LIBRARY_PATH="$target/prefix/usr/lib/libreoffice/program:$target/prefix/usr/lib/x86_64-linux-gnu:$target/prefix/lib/x86_64-linux-gnu:$target/prefix/usr/lib:$target/prefix/usr/lib/x86_64-linux-gnu/pulseaudio:$target/prefix/usr/lib/x86_64-linux-gnu/blas:$target/prefix/usr/lib/x86_64-linux-gnu/lapack"
 export FONTCONFIG_FILE="$target/fonts.conf" SAL_USE_VCLPLUGIN=svp
 exec "$target/prefix/usr/lib/libreoffice/program/soffice" "\$@"
 EOF

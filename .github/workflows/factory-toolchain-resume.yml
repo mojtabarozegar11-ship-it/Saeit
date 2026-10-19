@@ -15,9 +15,31 @@ jobs:
   resume:
     if: github.event_name == 'push' || (github.event.workflow_run.conclusion != 'success' && github.event.workflow_run.id == 39232784800)
     runs-on: ubuntu-latest
+    container: ubuntu:20.04
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
+      - name: Recover private symlink metadata from signed distro packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update -qq
+          apt-get install -y -qq python3 ca-certificates openssh-client
+          : > "$RUNNER_TEMP/empty-status"
+          apt-get -y -qq --download-only -o Dir::State::status="$RUNNER_TEMP/empty-status" --no-install-recommends install libreoffice-writer libreoffice-impress libreoffice-calc
+          mkdir -p "$RUNNER_TEMP/metadata-prefix"
+          for package in /var/cache/apt/archives/*.deb; do
+            dpkg-deb -x "$package" "$RUNNER_TEMP/metadata-prefix"
+          done
+          python3 - "$RUNNER_TEMP/metadata-prefix" "$RUNNER_TEMP/link-map.json" <<'PYMAP'
+          import json,os,sys
+          from pathlib import Path
+          root=Path(sys.argv[1])
+          records={str(p.relative_to(root)):os.readlink(p) for p in root.rglob('*') if p.is_symlink() and os.readlink(p).startswith('/')}
+          Path(sys.argv[2]).write_text(json.dumps(records,sort_keys=True))
+          print('DISTRO_RELOCATION_LINKS='+str(len(records)))
+          PYMAP
       - name: Resume verified existing bundle without recompilation
         shell: bash
         env:
@@ -51,7 +73,7 @@ jobs:
           print('EXISTING_TRANSFER_BYTES='+str(model.stat().st_size if model.exists() else 0))
           PYWAIT
           stage=/home/githubops/factory-runtime/operations/toolchain-source-39232784800-1
-          scp "${options[@]}" ops/factory-toolchain/install.sh ops/factory-toolchain/prove.py "githubops@178.239.147.150:$stage/"
+          scp "${options[@]}" "$RUNNER_TEMP/link-map.json" ops/factory-toolchain/install.sh ops/factory-toolchain/prove.py "githubops@178.239.147.150:$stage/"
           "${remote[@]}" 'python3 -' <<'PYRESUME'
           import hashlib,json,urllib.request,os
           from pathlib import Path
