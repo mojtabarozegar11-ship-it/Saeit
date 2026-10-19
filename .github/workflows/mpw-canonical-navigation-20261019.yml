@@ -58,9 +58,9 @@ jobs:
           def get(p):
               req=urllib.request.Request('https://mojplaywin.com'+p,headers={'Cache-Control':'no-cache','User-Agent':'MPWNavAudit/1.0'})
               try:
-                  with urllib.request.urlopen(req,timeout=22) as r:return p,r.status,r.read(2300000)
+                  with urllib.request.urlopen(req,timeout=45) as r:return p,r.status,r.read(2300000)
               except urllib.error.HTTPError as e:return p,e.code,e.read(500)
-          with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:result=list(pool.map(get,routes))
+          with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:result=list(pool.map(get,routes))
           state={};mains={};unprotected_legacy={}
           for p,code,body in result:
               state[p]=code
@@ -149,9 +149,9 @@ jobs:
           def get(p):
               req=urllib.request.Request('https://mojplaywin.com'+p,headers={'Cache-Control':'no-cache','Pragma':'no-cache','User-Agent':'MPWNavPostRelease/1.0'})
               try:
-                  with urllib.request.urlopen(req,timeout=22) as r:return p,r.status,r.read(2300000)
+                  with urllib.request.urlopen(req,timeout=45) as r:return p,r.status,r.read(2300000)
               except urllib.error.HTTPError as e:return p,e.code,e.read(500)
-          with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+          with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
               after=list(pool.map(get,list(original['routes'])))
           n=0
           for path,status,body in after:
