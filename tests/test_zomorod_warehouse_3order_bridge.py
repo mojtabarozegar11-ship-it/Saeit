@@ -36,6 +36,13 @@ class BridgeTests(unittest.TestCase):
   self.assertTrue(all(x["publication_approved"] is False for x in docs))
   self.assertTrue(all(x["warehouse_goods_created"] is False for x in docs))
   self.assertEqual({x["family_id"] for x in docs}, {f["family_id"] for f in docs})
+ def test_two_distinct_runs_same_day_produce_six(self):
+  one=bridge.orders_once(self.root,orders,self.families,"2026-10-19-r39280060178")
+  two=bridge.orders_once(self.root,orders,self.families,"2026-10-19-r39280909089")
+  self.assertEqual(one["new"],3)
+  self.assertEqual(two["new"],3)
+  self.assertEqual(len(list((self.root/"production-instructions"/"orders").glob("WO-*.json"))),6)
+  self.assertEqual(bridge.orders_once(self.root,orders,self.families,"2026-10-19-r39280909089")["new"],0)
  def test_second_real_cycle_adds_exactly_three(self):
   bridge.orders_once(self.root,orders,self.families,"2026-10-19")
   next_=bridge.orders_once(self.root,orders,self.families,"2026-10-20")
