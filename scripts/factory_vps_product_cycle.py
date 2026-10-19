@@ -44,11 +44,40 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=2):
                      SCRIPTS / "factory_product_maker.py")
         # Product ideas and their pre-publication QA evidence are read-only DB inputs.
         dossier = portfolio.build(database, str(root / "research-dossiers"), max_products)
+        repair = load("saeit_factory_rework_cycle",
+                      SCRIPTS / "factory_product_rework.py")
         selected = sorted(maker.RECIPES)[:max_recipes]
+        if not Path(recipes).is_dir():
+            raise RuntimeError("PRODUCT_RECIPE_DIRECTORY_MISSING")
         produced = []
+        failures = []
         for recipe in selected:
-            result = maker.manufacture(recipe, recipes, root / "digital-products")
+            source = Path(recipes) / recipe
+            # When an individual product fails, don't lose the prior verified
+            # ZIP or prevent another unrelated recipe from being built.
+            try:
+                result = maker.manufacture(recipe, recipes, root / "digital-products")
+            except RuntimeError as failure:
+                # Unexpected runtime failures are not considered successful,
+                # and are not swallowed: only known QA/recipe failures enter
+                # documented rework.
+                code = repair.classify_error(failure)
+                if code == "OTHER_PRODUCTION_ERROR":
+                    raise
+                recorded = repair.record_failure(
+                    root, recipe, failure,
+                    str(source) if source.is_dir() else "recipe_missing")
+                failures.append(recorded)
+                continue
             produced.append(result)
+            manifest = root / "digital-products" / recipe / "manufacturing_manifest.json"
+            if manifest.is_file():
+                repair.record_technical_recovery(
+                    root, recipe, json.loads(manifest.read_text(encoding="utf-8")))
+        rework_counts = repair.summarize(root)
+        for candidate in dossier.get("entries", []):
+            repair.record_research_gaps(root, candidate)
+        research_rework_counts = repair.summarize_research(root)
         # The outbox is a PRIVATE staging manifest, not a request to a shop.
         # It deliberately does not carry a publish=true flag.
         state = {
@@ -60,7 +89,16 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=2):
             "research_dossiers_updated": dossier["updated_count"],
             "built_product_count": len(produced),
             "built_product_recipes": [p["recipe"] for p in produced],
-            "artifact_qa_passed": all(p["qa_status"] == "passed" for p in produced),
+            "artifact_qa_passed": bool(produced) and not failures and all(
+                p["qa_status"] == "passed" for p in produced),
+            "quality_failures_this_cycle": [
+                {"recipe": item["recipe"], "code": item["code"],
+                 "status": item["status"], "round": item["issue_round"]}
+                for item in failures
+            ],
+            "private_rework_queue": rework_counts,
+            "research_correction_queue": research_rework_counts,
+            "manufacturing_failed_recipe_count": len(failures),
             "technical_zip_checks_only": True,
             "research_coverage_policy": "saeit.factory.research-readiness.v1",
             "research_review_candidate_count": dossier.get("research_review_candidates", 0),
@@ -75,8 +113,11 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=2):
         maker.atomic_text(root / "production-state.json",
                           json.dumps(state, ensure_ascii=False, sort_keys=True, indent=2) + "\n")
         fcntl.flock(file.fileno(), fcntl.LOCK_UN)
-        return {"status": "ok", "processed": dossier["processed_count"],
-                "manufactured": len(produced), "updated": dossier["updated_count"]}
+        return {"status": "needs_rework" if failures else "ok",
+                "processed": dossier["processed_count"],
+                "manufactured": len(produced), "updated": dossier["updated_count"],
+                "failed": len(failures), "rework_queue": rework_counts,
+                "research_rework_queue": research_rework_counts}
 
 
 def main(argv=None):
@@ -96,6 +137,9 @@ def main(argv=None):
     print("VPS_FACTORY_ORDERS_REQUIRED=false")
     print("VPS_FACTORY_PRIVATE_PRODUCT_PACKAGES=" + str(result["manufactured"]))
     print("VPS_FACTORY_PRODUCT_CANDIDATES_SCANNED=" + str(result["processed"]))
+    print("VPS_FACTORY_QA_REWORK_NEW_OR_OPEN=" + str(result.get("failed", 0)))
+    print("VPS_FACTORY_PRIVATE_QA_REWORK=" + json.dumps(result.get("rework_queue", {}), sort_keys=True))
+    print("VPS_FACTORY_RESEARCH_REWORK=" + json.dumps(result.get("research_rework_queue", {}), sort_keys=True))
     print("VPS_FACTORY_STORE_PUBLICATION_ENABLED=false")
     return 0
 
