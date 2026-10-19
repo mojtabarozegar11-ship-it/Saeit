@@ -42,7 +42,8 @@ const site='https://zomorodmelal.ir',target='/topics/zm-r25/game-development/';
   assert.equal(state.meta.water,85);
   assert.equal(state.game.day,1);
   assert.equal(await page.locator('footer').count(),1,'Original research topic footer must remain');
-  await page.screenshot({path:dest+'/'+v.name+'-game-inside-it-page.png',fullPage:true,timeout:25000});
+  await page.evaluate(()=>document.getElementById('zm-farm-card-play').scrollIntoView({behavior:'instant',block:'start'}));
+  await page.screenshot({path:dest+'/'+v.name+'-game-inside-it-page.png',fullPage:false,timeout:40000});
   // Confirm frame still accepts real gameplay input and saves its own state.
   await frame.evaluate(()=>{window.FarmDominionDebug.select(8,11);window.FarmDominionDebug.action('wheat');});
   assert.equal((await frame.evaluate(()=>window.FarmDominionDebug.getState())).plots['8,11'].type,'wheat');
