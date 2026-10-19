@@ -110,3 +110,22 @@ jobs:
           print('BUILD50_REAL_FACTORY_UNVERIFIED_EXECUTOR_FAMILIES='+str(d['counts']['families_without_verified_50_stage_executor']))
           print('BUILD50_REAL_FACTORY_NO_FAKE_RELEASE=PASS')
           PY
+      - name: Test independent original F19 technical producer before site-independent installation
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p 'test_factory_build50_f19_web_template.py' -v
+          bash -n deploy/install_f19_build50_product.sh
+      - name: Build new original F19 website product on VPS and stock after all fifty actual stages
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/forty-proof-ssh"
+          dir="/home/githubops/factory-runtime/operations/.f19-product-$GITHUB_RUN_ID"
+          ssh -T -F "$d/config" saeit-factory-verified "umask 077; test ! -e '$dir'; mkdir -m 700 '$dir'"
+          for source in scripts/factory_build50_f19_web_template.py scripts/factory_f19_independent_web_review.py scripts/factory_build_50.py scripts/factory_build50_family_bridge.py deploy/install_f19_build50_product.sh; do
+            item="$(basename "$source")"
+            checksum="$(sha256sum "$source" | awk '{print $1}')"
+            scp -q -F "$d/config" "$source" "saeit-factory-verified:$dir/$item"
+            ssh -T -F "$d/config" saeit-factory-verified "test ! -L '$dir/$item' && test \"\$(sha256sum '$dir/$item' | awk '{print \$1}')\" = '$checksum'"
+          done
+          timeout 190s ssh -T -F "$d/config" saeit-factory-verified "bash '$dir/install_f19_build50_product.sh' '$dir'"
+          echo FACTORY_F19_REAL_PRODUCT_INSTALL_WORKFLOW=PASS
