@@ -1,0 +1,67 @@
+name: Mojtaba personal uncompromised 100 percent acceptance gate
+on:
+  issues:
+    types: [opened]
+permissions:
+  contents: read
+jobs:
+  lighthouse-gate:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event.issue.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.issue.title == 'Ops: Mojtaba personal 100 point acceptance gate 2026-10-19'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Four real independent Lighthouse measurements
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/mojtaba-perfect-gate
+          export CHROME_PATH="$(command -v google-chrome)"
+          for profile in mobile desktop; do
+            extra=""
+            if [ "$profile" = desktop ]; then extra="--preset=desktop"; fi
+            for run in 1 2; do
+              output="/tmp/mojtaba-perfect-gate/$profile-$run.json"
+              timeout 180s npx --yes lighthouse@12.8.2 \
+                "https://mojplaywin.com/mojtaba.roozegar/" \
+                --chrome-flags="--headless --no-sandbox --disable-dev-shm-usage" \
+                --only-categories=performance,accessibility,best-practices,seo \
+                --output=json --output-path="$output" \
+                --max-wait-for-load=45000 --quiet || echo "MEASUREMENT_FAILED=$profile-$run"
+            done
+          done
+      - name: Enforce full 100 in every result, no exclusions
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, pathlib, sys
+          root=pathlib.Path('/tmp/mojtaba-perfect-gate')
+          failed=[]
+          for device in ('mobile','desktop'):
+              for attempt in (1,2):
+                  f=root / f'{device}-{attempt}.json'
+                  if not f.is_file():
+                      failed.append(f'{device} {attempt}: measurement absent')
+                      continue
+                  data=json.loads(f.read_text())
+                  for key in ('performance','accessibility','best-practices','seo'):
+                      v=data.get('categories',{}).get(key,{}).get('score')
+                      printed=round(v*100) if isinstance(v,(float,int)) else 'INVALID'
+                      print('STRICT_SCORE',device,attempt,key,printed,flush=True)
+                      if printed != 100:failed.append(f'{device} {attempt} {key}: {printed}')
+                  a=data.get('audits',{}).get('robots-txt',{})
+                  print('ROBOTS',device,attempt,a.get('score'),str(a.get('explanation') or '')[:170],flush=True)
+          if failed:
+              print('STRICT_100_RESULT=FAIL',flush=True)
+              for item in failed:print('FAILED_CRITERION',item,flush=True)
+              sys.exit(1)
+          print('STRICT_100_RESULT=PASS',flush=True)
+          PY
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: personal-strict-lighthouse-acceptance
+          path: /tmp/mojtaba-perfect-gate/
+          retention-days: 7
