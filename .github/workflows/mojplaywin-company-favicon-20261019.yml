@@ -1,0 +1,145 @@
+name: MojPlayWin Company favicon exact one-file release
+on:
+  pull_request:
+    paths:
+      - "scripts/mpw_company_favicon_atomic_20261019.py"
+      - "tests/test_mpw_company_favicon_20261019.py"
+      - ".github/workflows/mojplaywin-company-favicon-20261019.yml"
+  push:
+    branches: [main]
+    paths:
+      - "scripts/mpw_company_favicon_atomic_20261019.py"
+      - ".github/workflows/mojplaywin-company-favicon-20261019.yml"
+permissions:
+  contents: read
+concurrency:
+  group: mojplaywin-about-exact-static-prod
+  cancel-in-progress: false
+jobs:
+  preflight-only:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Verify single-file icon change safety
+        run: |
+          python3 -m py_compile scripts/mpw_company_favicon_atomic_20261019.py
+          python3 -m pip install -q pytest
+          python3 -m pytest -q --noconftest tests/test_mpw_company_favicon_20261019.py
+  publish-company-icon:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.ref == 'refs/heads/main' &&
+      github.event_name == 'push' &&
+      contains(github.event.head_commit.message, '[approved-mpw-company-favicon-20261019]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Verify tests, exact public route and icon availability
+        run: |
+          set -euo pipefail
+          python3 -m pip install -q pytest
+          python3 -m pytest -q --noconftest tests/test_mpw_company_favicon_20261019.py
+          python3 - <<'PY'
+          import urllib.request,hashlib,time
+          base='https://mojplaywin.com'
+          def load(path):
+              for attempt in range(3):
+                  try:
+                      with urllib.request.urlopen(urllib.request.Request(base+path,headers={'Cache-Control':'no-cache'}),timeout=18) as r:
+                          if r.status!=200:raise RuntimeError('HTTP not 200')
+                          return r.read(1500000)
+                  except Exception:
+                      if attempt==2:raise
+                      time.sleep(2)
+          live=load('/company/')
+          direct=load('/design-preview-20261017/mpw-ten-editorials-20261018/pages/company.html')
+          if hashlib.sha256(live).digest()!=hashlib.sha256(direct).digest():
+              raise SystemExit('Company response is not exact permitted static file')
+          logo=load('/static/site/mojplaywin-coin-logo.420e0d1f954b.png')
+          if len(logo)<1000:raise SystemExit('Requested favicon unavailable')
+          for uri in ('/about/','/store/','/farnaz/'):
+              load(uri)
+          print('FAVICON_PREPUBLICATION=PASS')
+          PY
+      - name: Open host-key-pinned relay through VPS to cPanel
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-consolidated-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Atomic replacement of only Company favicon
+        id: publish
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-consolidated-ssh"
+          timeout 70s ssh -T -F "$d/config" saeit-cpanel \
+            "python3 - install '$GITHUB_RUN_ID'" < scripts/mpw_company_favicon_atomic_20261019.py
+      - name: Verify live Company favicon and protected site status
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import urllib.request,time
+          req=urllib.request.Request('https://mojplaywin.com/company/?mpw_favicon='+
+                         __import__('os').environ['GITHUB_RUN_ID'],headers={'Cache-Control':'no-cache'})
+          verified=False
+          for n in range(4):
+              try:
+                  with urllib.request.urlopen(req,timeout=18) as r:body=r.read(1500000).decode('utf-8','replace')
+                  verified=('MPW_COMPANY_FAVICON_UNIFIED_20261019' in body and
+                            'href="/static/site/mojplaywin-coin-logo.420e0d1f954b.png"' in body and
+                            'MPW_ABOUT_COMPANY_SEMANTIC_20261019_V2' in body)
+                  if verified:break
+              except Exception as e:print('SMOKE_RETRY',type(e).__name__)
+              time.sleep(3)
+          if not verified:raise SystemExit('Company favicon not verified live')
+          print('COMPANY_FAVICON_LIVE=VERIFIED')
+          PY
+      - name: Restore exact Company HTML when smoke fails
+        if: failure() && steps.publish.outcome == 'success'
+        run: |
+          d="$RUNNER_TEMP/mpw-consolidated-ssh"
+          timeout 60s ssh -T -F "$d/config" saeit-cpanel \
+             "python3 - rollback '$GITHUB_RUN_ID'" < scripts/mpw_company_favicon_atomic_20261019.py
