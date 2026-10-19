@@ -36,7 +36,7 @@ jobs:
           set -euo pipefail
           python3 -m py_compile scripts/mpw_about_remediation_atomic_20261019.py
           python3 -m pip install -q pytest
-          python3 -m pytest -q tests/test_mojplaywin_about_profile_disclosures_20261019.py tests/test_mojplaywin_about_atomic_remediation_20261019.py
+          python3 -m pytest -q --noconftest tests/test_mojplaywin_about_profile_disclosures_20261019.py tests/test_mojplaywin_about_atomic_remediation_20261019.py
   publish-about-only:
     if: >-
       github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
@@ -56,7 +56,7 @@ jobs:
           set -euo pipefail
           python3 -m py_compile scripts/mpw_about_remediation_atomic_20261019.py
           python3 -m pip install -q pytest
-          python3 -m pytest -q tests/test_mojplaywin_about_profile_disclosures_20261019.py tests/test_mojplaywin_about_atomic_remediation_20261019.py
+          python3 -m pytest -q --noconftest tests/test_mojplaywin_about_profile_disclosures_20261019.py tests/test_mojplaywin_about_atomic_remediation_20261019.py
           base=e7633275bfe57752b44e68327df448def3ff432b
           git cat-file -e "$base^{commit}"
           mkdir -p "$RUNNER_TEMP/mpw-fragments/old" "$RUNNER_TEMP/mpw-fragments/new"
