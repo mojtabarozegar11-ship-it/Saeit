@@ -5,8 +5,11 @@ No GitHub or ChatGPT dependency at runtime. No payment, Django writes,
 public product activation, external commerce or customer orders.
 """
 import argparse
+import fcntl
 import hashlib
 import json
+import os
+import tempfile
 from pathlib import Path
 import re
 import subprocess
@@ -122,16 +125,86 @@ def deliver(recipe, source, ssh_options, *, dry_run=False):
     return {"recipe": recipe, "digest": digest, "status": "received_private"}
 
 
+CURSOR_SCHEMA = "saeit.factory.store-private-delivery-cursor.v1"
+
+
+def rotate_recipes(products, last_recipe, limit):
+    """Deterministic rotation: new recipe names and later families get turns."""
+    ordered = sorted(set(products))
+    if last_recipe:
+        ordered = [name for name in ordered if name > last_recipe] + [
+            name for name in ordered if name <= last_recipe
+        ]
+    return ordered[:limit]
+
+
+def read_cursor(path):
+    if path.is_symlink():
+        raise ValueError("STORE_CURSOR_SYMLINK_UNSAFE")
+    if not path.exists():
+        return ""
+    if not path.is_file() or path.stat().st_size > 4096:
+        raise ValueError("STORE_CURSOR_INVALID_FILE")
+    try:
+        record = json.loads(path.read_text(encoding="utf-8"))
+    except (ValueError, OSError) as error:
+        raise ValueError("STORE_CURSOR_CORRUPTED") from error
+    if (not isinstance(record, dict) or record.get("schema") != CURSOR_SCHEMA
+            or not isinstance(record.get("last_recipe"), str)
+            or not SLUG.fullmatch(record["last_recipe"])):
+        raise ValueError("STORE_CURSOR_SCHEMA_INVALID")
+    return record["last_recipe"]
+
+
+def save_cursor(path, recipe):
+    if path.is_symlink() or not SLUG.fullmatch(recipe):
+        raise ValueError("STORE_CURSOR_UNSAFE")
+    payload = json.dumps({"schema": CURSOR_SCHEMA, "last_recipe": recipe},
+                         sort_keys=True) + "\n"
+    fd, temp = tempfile.mkstemp(prefix=".store-send-", dir=str(path.parent))
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as output:
+            os.fchmod(output.fileno(), 0o600)
+            output.write(payload)
+            output.flush()
+            os.fsync(output.fileno())
+        os.replace(temp, path)
+    finally:
+        if os.path.exists(temp):
+            os.unlink(temp)
+
+
 def sync(source, key, known, *, limit=3, dry_run=False):
     if limit < 1 or limit > 20:
         raise ValueError("LIMIT_OUT_OF_RANGE")
     root = Path(source).expanduser().resolve()
-    if not root.is_dir():
-        raise ValueError("FACTORY_PRODUCTS_MISSING")
+    if not root.is_dir() or root.parent.is_symlink():
+        raise ValueError("FACTORY_PRODUCTS_MISSING_OR_UNSAFE")
     options = host_ssh_options(Path(key).expanduser(), Path(known).expanduser())
     products = sorted(p.name for p in root.iterdir()
-                      if p.is_dir() and not p.is_symlink() and SLUG.fullmatch(p.name))[:limit]
-    return [deliver(recipe, root, options, dry_run=dry_run) for recipe in products]
+                      if p.is_dir() and not p.is_symlink() and SLUG.fullmatch(p.name))
+    if not products:
+        return []
+    cursor_path = root.parent / "store-send-cursor.json"
+    lock_path = root.parent / ".store-send-cursor.lock"
+    if lock_path.is_symlink():
+        raise ValueError("STORE_CURSOR_LOCK_SYMLINK_UNSAFE")
+    with lock_path.open("a+b") as lock:
+        os.fchmod(lock.fileno(), 0o600)
+        try:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as error:
+            raise RuntimeError("STORE_SYNC_ALREADY_RUNNING") from error
+        selected = rotate_recipes(products, read_cursor(cursor_path), limit)
+        results = []
+        for recipe in selected:
+            # A product that fails SHA/QA or receipt validation does not advance
+            # the durable checkpoint. Never skip failed private delivery silently.
+            result = deliver(recipe, root, options, dry_run=dry_run)
+            results.append(result)
+            if not dry_run:
+                save_cursor(cursor_path, recipe)
+        return results
 
 
 def main(argv=None):
