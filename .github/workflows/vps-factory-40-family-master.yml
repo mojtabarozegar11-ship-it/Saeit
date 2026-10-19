@@ -102,6 +102,11 @@ jobs:
           old=json.loads((private/"production-warehouse"/"stock-register.json").read_text())
           assert old["sites_contacted"]==0
           assert old["finished_goods_versions"]>=2
+          print("VPS_40_PRIVATE_HASH_VERIFIED_TECHNICAL_PILOT_FAMILIES="+str(report.get("private_verified_technical_pilot_family_count",0)))
+          print("VPS_40_PRIVATE_PILOT_FAMILY_IDS="+json.dumps(report.get("private_verified_technical_pilot_family_ids",[])))
+          print("VPS_40_FULL_INDEPENDENT_QA_FAMILIES="+str(report["fully_verified_active_producer_families"]))
+          assert report["private_verified_technical_pilot_family_count"] >= 11
+          assert report["fully_verified_active_producer_families"] == 0
           print("VPS_40_FAMILIES_REGISTERED="+str(report["registered_families"]))
           print("VPS_40_FAMILY_QA_PRODUCTION_LINES_VERIFIED="+str(report["fully_verified_active_producer_families"]))
           print("VPS_40_FAMILY_PLANNED_SAFE_CAPACITY="+str(report["measured_vps_capacity"]["worker_slots_theoretical"]))
