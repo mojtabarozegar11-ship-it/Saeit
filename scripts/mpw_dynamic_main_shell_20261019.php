@@ -244,7 +244,7 @@ function transformMain(string $body, string $path, string $newHeader, string $ne
           '~<meta\b(?=[^>]*\bproperty=["\']og:description["\'])[^>]*>~i',
           '<meta property="og:description" content="Contact MojPlayWin for customer support, business proposals and press questions through the published support email channel.">',
           'contact-specific social description',true);
-        if(substr_count($body,'mpw-contact-direct')!==3 ||
+        if(substr_count($body,'class="mpw-contact-direct"')!==2 ||
            str_contains($body,'>Coming soon<') ||
            !str_contains($body,'mailto:support@mojplaywin.com?subject=Business%20Partnership')) {
             throw new RuntimeException('Contact profile upgrade verification failed');
