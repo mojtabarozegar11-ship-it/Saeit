@@ -1,0 +1,166 @@
+name: MojPlayWin contact source discovery and responsive browser audit
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/mpw-contact-runtime-audit-20261019.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect-contact-source-readonly:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Open host-key-pinned relay through VPS to cPanel
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-consolidated-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Inspect contact route without writes or secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-consolidated-ssh"
+          timeout 55s ssh -T -F "$d/config" saeit-cpanel 'python3 -c '"'"'
+          from pathlib import Path
+          import os
+          root=Path("/home/zomorod2/mojplaywin.com")
+          rules=root/".htaccess"
+          assert root.is_dir() and rules.is_file()
+          rows=rules.read_text("utf-8",errors="replace").splitlines()
+          print("CONTACT_REWRITE_CONTEXT_START")
+          for n,line in enumerate(rows):
+              if "contact" in line.lower():
+                  for k in range(max(0,n-2),min(len(rows),n+3)):
+                      print(str(k+1)+": "+rows[k][:350])
+          print("CONTACT_REWRITE_CONTEXT_END")
+          matches=[]
+          base=root/"design-preview-20261017"
+          for directory,dirs,files in os.walk(base):
+              depth=directory[len(str(base)):].count(os.sep)
+              dirs[:]=[x for x in dirs if depth<5 and x not in
+                ("node_modules","media","assets","venv",".git","__pycache__")]
+              for f in files:
+                  if "contact" in f.lower() and f.lower().endswith((".html",".php",".htm")):
+                      matches.append(str(Path(directory)/f))
+          for name in matches[:35]:
+              print("CONTACT_CANDIDATE="+name)
+          print("CONTACT_CANDIDATE_COUNT="+str(len(matches)))
+          '"'"''
+  audit-browser-mobile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 17
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install audited browser and accessibility checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/mpw-browser"
+          cd "$RUNNER_TEMP/mpw-browser"
+          npm init -y >/dev/null
+          npm install --no-audit --no-fund --silent playwright @axe-core/playwright
+          npx playwright install --with-deps chromium
+      - name: Measure mobile and desktop layout and accessibility
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/mpw-browser"
+          cat > audit.cjs <<'JS'
+          const {chromium}=require('playwright');
+          const {default:AxeBuilder}=require('@axe-core/playwright');
+          const fs=require('fs');
+          (async()=>{
+            let browser=await chromium.launch({headless:true});
+            let results=[];
+            for(const kind of ['mobile','desktop']){
+              const dims=kind==='mobile'?{width:390,height:844}:{width:1365,height:900};
+              const page=await browser.newPage({viewport:dims,deviceScaleFactor:1});
+              for(const path of ['/about/','/company/','/about/mojtaba-rozegar/','/contact/']){
+                const errors=[];
+                page.on('pageerror',e=>errors.push(String(e).slice(0,180)));
+                let response=await page.goto('https://mojplaywin.com'+path,{waitUntil:'domcontentloaded',timeout:30000});
+                await page.waitForTimeout(900);
+                const metrics=await page.evaluate(()=>{
+                  const imgs=[...document.images];
+                  const info={width:document.documentElement.scrollWidth,viewport:innerWidth,
+                    h1:[...document.querySelectorAll('main h1')].length,
+                    images:imgs.length,images_broken:imgs.filter(i=>i.complete&&i.naturalWidth===0).length,
+                    businessCTA:!!document.querySelector('#mpw-business-contact-20261019 a[href^="mailto:"]'),
+                    businessComingSoon:!![...document.querySelectorAll('main *')].find(x=>x.children.length===0&&x.textContent?.trim()==='Coming soon'),
+                    navTiming:Math.round(performance.getEntriesByType('navigation')[0]?.duration||0)};
+                  return info;
+                });
+                const axe=await new AxeBuilder({page}).withTags(['wcag2a','wcag2aa','wcag21a','wcag21aa']).analyze();
+                const base=path==='/'?'home':path.replace(/\W+/g,'-');
+                await page.screenshot({path:kind+'-'+base+'.png',fullPage:true,animations:'disabled'});
+                const info={kind,path,status:response.status(),...metrics,
+                            axe_violations:axe.violations.map(x=>({id:x.id,impact:x.impact,count:x.nodes.length})),
+                            pageerrors:errors};
+                results.push(info);
+                console.log('BROWSER_AUDIT='+JSON.stringify(info));
+              }
+              await page.close();
+            }
+            fs.writeFileSync('audit.json',JSON.stringify(results,null,2));
+            await browser.close();
+            if(results.some(x=>x.status!==200||x.images_broken>0||x.width>x.viewport+4))
+               process.exitCode=1;
+          })().catch(err=>{console.error(err);process.exitCode=1});
+          JS
+          node audit.cjs
+      - name: Upload screenshots and audit JSON
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mpw-about-contact-responsive-audit
+          path: |
+            ${{ runner.temp }}/mpw-browser/*.png
+            ${{ runner.temp }}/mpw-browser/audit.json
+          retention-days: 14
