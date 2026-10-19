@@ -87,7 +87,9 @@ def import_catalog(root,dbfile,limit=6):
             if p.is_symlink() or not p.is_file() or not p.name.endswith(".json"):
                 raise ValueError("RECEIPT_ENTRY_UNEXPECTED")
             files.append(p)
-    files=files[:limit]
+    # New arrivals must not be starved by repeatedly scanning the first older receipts.
+    if len(files)>10000:raise ValueError('RECEIPT_INDEX_TOO_LARGE')
+    files.sort(key=lambda p:(p.stat().st_mtime,p.name),reverse=True)
     connection=sqlite3.connect(str(dbfile),timeout=12,isolation_level=None)
     try:
         tables={x[0] for x in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")}
@@ -101,9 +103,14 @@ def import_catalog(root,dbfile,limit=6):
             public_enabled INTEGER NOT NULL DEFAULT 0 CHECK(public_enabled=0),
             paid_price_irr INTEGER, imported_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             CHECK(paid_price_irr IS NULL))""")
-        imported=existing=0
+        imported=existing=scanned=0
         for p in files:
             info=validate_received(root,p)
+            if connection.execute('SELECT 1 FROM factory_drafts WHERE sha256=?',(info['sha256'],)).fetchone():
+                existing+=1
+                continue
+            if scanned>=limit:break
+            scanned+=1
             connection.execute("BEGIN IMMEDIATE")
             try:
                 cur=connection.execute("""INSERT OR IGNORE INTO factory_drafts
@@ -115,7 +122,7 @@ def import_catalog(root,dbfile,limit=6):
                 connection.execute("COMMIT")
             except Exception:
                 connection.execute("ROLLBACK");raise
-        return {"imported":imported,"already":existing,"scanned":len(files)}
+        return {"imported":imported,"already":existing,"scanned":scanned}
     finally:connection.close()
 
 
