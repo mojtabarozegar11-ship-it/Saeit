@@ -47,9 +47,9 @@ class SpecialistPilotTests(unittest.TestCase):
             pilots.toolchain(self.manifest)
 
     def _write_generated(self, args, **kwargs):
-        self.assertEqual(args[2:3], ["--render"])
-        family = args[3]
-        stage = Path(args[5])
+        self.assertEqual(args[3:4], ["--render"])
+        family = args[4]
+        stage = Path(args[6])
         output = {}
         for name in pilots.FAMILIES[family]:
             path = stage / name
