@@ -1,0 +1,278 @@
+name: Zomorod homepage header and footer cinematic glass safe publish
+on:
+  pull_request:
+    paths:
+      - scripts/zomorod_home_header_footer_glass_safe_20261019.py
+      - .github/workflows/zomorod-home-header-footer-glass-20261019.yml
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/zomorod-home-header-footer-glass-20261019.yml
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-root-homepage
+  cancel-in-progress: false
+jobs:
+  selftest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: CSS-only lossless test and syntax
+        run: |
+          python3 -m py_compile scripts/zomorod_home_header_footer_glass_safe_20261019.py
+          python3 scripts/zomorod_home_header_footer_glass_safe_20261019.py selftest
+  publish:
+    needs: selftest
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Selftest exact CSS-only reversible patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/zomorod_home_header_footer_glass_safe_20261019.py
+          python3 scripts/zomorod_home_header_footer_glass_safe_20261019.py selftest
+      - name: Public read-only baseline and protected routes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from urllib.request import Request,urlopen
+          for path in ('/','/topics/','/search/','/store/','/about/','/tala/'):
+              with urlopen(Request('https://zomorodmelal.ir'+path,headers={'Cache-Control':'no-cache,no-store','User-Agent':'ZMRowGlassPreflight/1'}),timeout=30) as r:
+                  data=r.read(5000000)
+                  assert r.status==200 and len(data)>200,path
+              if path=='/':
+                  assert len(data)>1500000
+                  assert data.count(b'zm-fixed-scientific-background-20261018')>=1
+                  assert data.count(b'id="zm-glass-floating-cards-20261018"')==1
+                  assert b'id="zm-glass-row-headers-20261018"' in data
+                  assert b'id="zm-home-copy-cinematic-glass-20261019"' in data
+                  assert b'id="zm-home-header-footer-glass-20261019"' not in data
+                  assert b'<header class="topbar wrap"' in data
+                  assert b'id="site-footer"' in data
+                  assert b'ZOMOROD_ORBIT_DATA' in data
+              print('PREFLIGHT_ROUTE_OK='+path,flush=True)
+          with urlopen('https://zomorodmelal.ir/static/site/heroes/zomorod-fixed-cosmos-20261018.webp',timeout=25) as r:
+              signature=r.read(12)
+              assert r.status==200 and signature[:4]==b'RIFF' and signature[8:12]==b'WEBP'
+          print('FIXED_BACKGROUND_ASSET_INTACT=yes',flush=True)
+          PY
+      - name: Prepare verified VPS to cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zm-home-chrome-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.known"
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          echo PINNED_HOST_AND_RELAY_VERIFIED=yes
+      - name: Stage only the isolated home-chrome installer outside public_html
+        id: stage
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-home-chrome-ssh"
+          stage="/home/zomorod2/.zm-home-chrome-stage-$GITHUB_RUN_ID"
+          timeout 40s ssh -T -F "$d/config" saeit-cpanel "test ! -e '$stage' && test ! -L '$stage' && install -d -m 700 '$stage'"
+          cat scripts/zomorod_home_header_footer_glass_safe_20261019.py | timeout 50s ssh -T -F "$d/config" saeit-cpanel "cat > '$stage/apply.py'"
+          timeout 35s ssh -T -F "$d/config" saeit-cpanel "test -s '$stage/apply.py' && python3 '$stage/apply.py' selftest"
+      - name: Record original protected cPanel file digests
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 45s ssh -T -F "$RUNNER_TEMP/zm-home-chrome-ssh/config" saeit-cpanel 'python3 -' <<'PY' > "$RUNNER_TEMP/zm-chrome-protected-before.txt"
+          import hashlib
+          from pathlib import Path
+          root=Path('/home/zomorod2/public_html')
+          for name in ('.htaccess','search/index.html','store/index.php','topics/index.html','about/index.html','company/index.html','tala/index.php','business/index.php'):
+              path=root/name
+              if path.is_file() and not path.is_symlink():
+                  print(name+' '+hashlib.sha256(path.read_bytes()).hexdigest())
+          PY
+          test -s "$RUNNER_TEMP/zm-chrome-protected-before.txt"
+      - name: Make one atomic CSS insertion after verified backup
+        id: install
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-home-chrome-ssh"
+          stage="/home/zomorod2/.zm-home-chrome-stage-$GITHUB_RUN_ID"
+          expected="$(timeout 35s ssh -T -F "$d/config" saeit-cpanel 'sha256sum /home/zomorod2/public_html/index.html' | awk '{print $1}')"
+          test "$(printf '%s' "$expected" | wc -c)" -eq 64
+          timeout 85s ssh -T -F "$d/config" saeit-cpanel "python3 '$stage/apply.py' apply '$GITHUB_RUN_ID' '$expected'"
+      - name: Verify lossless original markup and actual live publication
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-home-chrome-ssh"
+          stage="/home/zomorod2/.zm-home-chrome-stage-$GITHUB_RUN_ID"
+          timeout 50s ssh -T -F "$d/config" saeit-cpanel "python3 '$stage/apply.py' verify '$GITHUB_RUN_ID'"
+          python3 - <<'PY'
+          import time,os
+          from urllib.request import Request,urlopen
+          found=False
+          for attempt in range(7):
+              try:
+                  url='https://zomorodmelal.ir/?__home_chrome_glass='+os.environ['GITHUB_RUN_ID']+'-'+str(attempt)
+                  with urlopen(Request(url,headers={'Cache-Control':'no-cache,no-store','User-Agent':'ZMRowGlassVerify/1'}),timeout=30) as r:
+                      data=r.read(5000000)
+                      assert r.status==200 and len(data)>1500000
+                  assert data.count(b'id="zm-home-header-footer-glass-20261019"')==1
+                  assert data.count(b'id="zm-home-copy-cinematic-glass-20261019"')==1
+                  assert data.count(b'id="zm-glass-row-headers-20261018"')==1
+                  assert data.count(b'id="zm-glass-floating-cards-20261018"')==1
+                  assert data.count(b'id="zm-fixed-scientific-background-20261018"')==1
+                  assert b'ZOMOROD_ORBIT_DATA' in data
+                  assert b'body header.topbar.wrap' in data
+                  assert b'body #site-footer .footer-shell.wrap' in data
+                  found=True
+                  break
+              except Exception as exc:
+                  print('PUBLIC_RETRY='+str(attempt)+' '+repr(exc)[:150],flush=True)
+                  time.sleep(3)
+          assert found,'New header CSS not observed publicly'
+          for path in ('/topics/','/search/','/store/','/about/','/tala/'):
+              with urlopen(Request('https://zomorodmelal.ir'+path,headers={'Cache-Control':'no-cache'}),timeout=30) as r:
+                  assert r.status==200 and len(r.read(3000000))>200
+              print('PROTECTED_ROUTE_STILL_OK='+path,flush=True)
+          print('HOME_CHROME_GLASS_CSS_LIVE_CONFIRMED=yes',flush=True)
+          PY
+      - name: Verify header and footer glass and live navigation across five viewports
+        shell: bash
+        run: |
+          set -euo pipefail
+          dir="$RUNNER_TEMP/zm-chrome-glass-browser";mkdir -p "$dir";cd "$dir"
+          npm --silent init -y >/dev/null
+          npm --silent install --no-save playwright@1.55.0
+          npx playwright install chromium
+          cat > test.cjs <<'JS'
+          const {chromium}=require('playwright');
+          (async()=>{
+            const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
+            for(const width of [1440,1024,768,390,320]){
+              const page=await browser.newPage({viewport:{width,height:900}});
+              const errors=[];page.on('pageerror',e=>errors.push(e.message));
+              await page.goto('https://zomorodmelal.ir/?__header_footer_glass_qa='+width,
+                {waitUntil:'domcontentloaded',timeout:50000});
+              await page.locator('.topic-card').first().waitFor({timeout:22000});
+              const res=await page.evaluate(()=>{
+                const style=document.getElementById('zm-home-header-footer-glass-20261019');
+                if(!style?.sheet)throw Error('New homepage-only style missing');
+                const zones=['header.topbar.wrap','#site-footer .footer-shell.wrap',
+                  '#site-footer .footer-grid > *','#site-footer .footer-copyright'];
+                const nodes=zones.map(s=>document.querySelector(s));
+                if(nodes.some(x=>!x))throw Error('A glass header/footer region is missing');
+                const visuals=nodes.map(x=>{
+                  const c=getComputedStyle(x);
+                  return {bg:c.backgroundImage,shadow:c.boxShadow,filter:c.backdropFilter,border:c.borderStyle};
+                });
+                const links=[...document.querySelectorAll('#site-footer a')].map(x=>x.getAttribute('href'));
+                return {
+                  visuals, footerCards:document.querySelectorAll('#site-footer .footer-grid > *').length,
+                  footerLinks:links,logo:!!document.querySelector('header.topbar.wrap .identity img'),
+                  button:!!document.querySelector('header.topbar.wrap #motion-toggle:not(:disabled)'),
+                  cards:document.querySelectorAll('.topic-card').length,
+                  shelves:document.querySelectorAll('.orbit-shelf > .shelf-explanation').length,
+                  tracks:document.querySelectorAll('.card-track').length,
+                  headline:!!document.getElementById('zm-home-copy-cinematic-glass-20261019'),
+                  bg:getComputedStyle(document.body).backgroundImage,
+                  bgAttachment:getComputedStyle(document.body).backgroundAttachment,
+                  documentWidth:document.documentElement.scrollWidth,viewport:innerWidth
+                };
+              });
+              console.log('HOME_CHROME_GLASS_VIEWPORT='+JSON.stringify({width,...res,errors}));
+              if(res.cards<605||res.shelves!==29||res.tracks!==29||
+                res.footerCards<3||res.footerLinks.length<6||!res.logo||!res.button||!res.headline||
+                res.visuals.some(x=>!x.bg.includes('gradient')||x.border==='none'||x.shadow==='none')||
+                res.visuals.slice(0,2).some(x=>x.filter==='none')||
+                res.bgAttachment!=='fixed'||!res.bg.includes('zomorod-fixed-cosmos-20261018.webp')||
+                res.documentWidth>width+3||errors.length)
+                throw Error('Header/footer glass regression at '+width);
+              await page.locator('header.topbar.wrap a.identity').click();
+              if(!page.url().includes('#home'))throw Error('Header identity link broken at '+width);
+              await page.close();
+            }
+            await browser.close();
+            console.log('HOME_CHROME_GLASS_FIVE_VIEWPORTS=passed');
+          })().catch(e=>{console.error(e.stack);process.exit(1)});
+          JS
+          node test.cjs
+      - name: Assert protected files remain byte identical
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 45s ssh -T -F "$RUNNER_TEMP/zm-home-chrome-ssh/config" saeit-cpanel 'python3 -' <<'PY' > "$RUNNER_TEMP/zm-chrome-protected-after.txt"
+          import hashlib
+          from pathlib import Path
+          root=Path('/home/zomorod2/public_html')
+          for name in ('.htaccess','search/index.html','store/index.php','topics/index.html','about/index.html','company/index.html','tala/index.php','business/index.php'):
+              path=root/name
+              if path.is_file() and not path.is_symlink():
+                  print(name+' '+hashlib.sha256(path.read_bytes()).hexdigest())
+          PY
+          diff -u "$RUNNER_TEMP/zm-chrome-protected-before.txt" "$RUNNER_TEMP/zm-chrome-protected-after.txt"
+          echo PROTECTED_SUBSITES_BYTE_IDENTICAL=yes
+      - name: Restore exact previous homepage on downstream verification failure
+        if: failure() && steps.stage.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-home-chrome-ssh"
+          stage="/home/zomorod2/.zm-home-chrome-stage-$GITHUB_RUN_ID"
+          timeout 70s ssh -T -F "$d/config" saeit-cpanel "python3 '$stage/apply.py' rollback '$GITHUB_RUN_ID'"
+      - name: Remove temporary staged installer only; retain verified backup
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          d="$RUNNER_TEMP/zm-home-chrome-ssh"
+          stage="/home/zomorod2/.zm-home-chrome-stage-$GITHUB_RUN_ID"
+          if test -s "$d/config"; then
+              timeout 35s ssh -T -F "$d/config" saeit-cpanel "rm -f '$stage/apply.py';rmdir '$stage'" || true
+          fi
+          rm -rf "$d"
