@@ -2,7 +2,12 @@ name: MojPlayWin one-pass private agent QA and evolution deployment
 on:
   push:
     branches: [fix/mpw-onepass-private-agent-evolution-20261019]
-    paths: [.github/workflows/mpw-onepass-private-live-20261019.yml]
+    paths:
+      - .github/workflows/mpw-onepass-private-live-20261019.yml
+      - scripts/mpw_onepass_private_evolution_20261019.py
+      - command_center/mpw_private_telemetry.py
+      - command_center/templates/command_center/mpw_agent_monitor.html
+      - tests/test_mpw_onepass_private_evolution_20261019.py
   workflow_dispatch:
 permissions:
   contents: read
