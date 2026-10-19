@@ -1,0 +1,8 @@
+<section class="mw-section" id="mpw-approved-managed-store" aria-label="Verified catalog records">
+<span class="mw-kicker">MANAGED COLLECTION · OWNER REVIEWED</span>
+<h2>Additional verified listings</h2><div class="mw-grid">{% for item in mpw_data.mpw_managed_offers %}
+<article class="mw-card" data-mpw-offer="{{ item.key }}"><div class="mw-card-copy">
+<span class="mw-kicker">{{ item.currency }} {{ item.price }}</span><h3>{{ item.title }}</h3><p>{{ item.body|linebreaksbr }}</p>
+{% if item.payable %}<a href="{{ item.checkout_path }}">Purchase securely ↗</a>
+{% else %}<p class="mw-note">Preview only — checkout is not verified as active.</p>{% endif %}
+</div></article>{% endfor %}</div></section>

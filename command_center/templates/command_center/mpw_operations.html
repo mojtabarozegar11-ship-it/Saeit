@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow"><title>مدیریت یکپارچه MojPlayWin</title>
+<style>
+:root{font-family:Tahoma,Arial,sans-serif;color-scheme:dark;background:#0d1627;color:#f2f6ff}
+body{max-width:1300px;margin:auto;padding:18px} a{color:#86c7ff}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:14px}
+.card{background:#16253b;border:1px solid #39516e;border-radius:14px;padding:16px;margin:10px 0;min-width:0}
+input,textarea,select,button{font:inherit;max-width:100%;padding:9px;background:#0c1b2e;color:#fff;border:1px solid #45617e;border-radius:7px}
+input:not([type=checkbox]),textarea,select{display:block;width:100%;margin:5px 0 12px}textarea{min-height:75px}
+button{cursor:pointer;background:#175483;margin:5px 3px}label{font-size:13px;color:#c5d7ed}
+small{color:#b5c8df;overflow-wrap:anywhere}.warn{border-color:#987c49}h1{font-size:25px}
+.msg{background:#214566;padding:12px;margin:6px 0;border-radius:8px}.tiny{font-size:12px}
+</style></head><body>
+<header><h1>مرکز مدیریت یکپارچه MojPlayWin</h1>
+<p>فقط دامنه اصلی • داده‌های واقعی • ثبت تغییرات و تأیید انتشار • هیچ پرداختی از این پنل اجرا نمی‌شود</p>
+<nav><a href="/staff/command-center/">مرکز فرماندهی</a> · <a href="/staff/command-center/mpw-agents/">نمودارهای ایجنت‌ها</a> · <a href="/store/">فروشگاه</a></nav></header>
+{% for message in messages %}<p role="status" class="msg">{{ message }}</p>{% endfor %}
+<section class="card"><h2>وضعیت واقعی</h2>
+<p>کل سوابق مدیریتی: {{ record_total }} | منبع پایش: {{ telemetry.source }} | کل اجزای پایش: {{ telemetry.summary.total|default:"0" }}</p>
+<p>سالم: {{ telemetry.summary.healthy|default:"0" }} | قدیمی: {{ telemetry.summary.stale|default:"0" }} | نامشخص: {{ telemetry.summary.unknown|default:"0" }} | خطا: {{ telemetry.summary.failed|default:"0" }}</p>
+<p class="tiny">عدد سالم فقط بر پایه گزارش با زمان معتبر محاسبه می‌شود؛ ۷۷ ماژول الزاماً فرایند مستقل نیستند.</p></section>
+<section class="grid">
+<div class="card"><h2>افزودن سطر یا کارت</h2><form method="post">{% csrf_token %}
+<input type="hidden" name="action" value="create"><input type="hidden" name="kind" value="content">
+<label>شناسه یکتا</label><input name="key" required maxlength="100" placeholder="my-card-01">
+<label>مسیر صفحه</label><input name="page_path" value="/" required>
+<label>عنوان</label><input name="title" required maxlength="200">
+<label>متن</label><textarea name="body"></textarea>
+<label>موقعیت</label><select name="slot"><option value="row">سطر</option><option value="card">کارت</option><option value="section">بخش</option></select>
+<label>گروه</label><input name="group" value="editorial">
+<label>مسیر لینک داخلی</label><input name="url" placeholder="/knowledge/">
+<label>عکس استاتیک</label><input name="image" placeholder="site/heroes/research.webp">
+<button type="submit">ایجاد پیش‌نویس</button></form></div>
+<div class="card"><h2>افزودن محصول به ویترین</h2><form method="post">{% csrf_token %}
+<input type="hidden" name="action" value="create"><input type="hidden" name="kind" value="offer">
+<input type="hidden" name="page_path" value="/store/">
+<label>شناسه یکتا</label><input name="key" required placeholder="digital-product-01">
+<label>نام</label><input name="title" required>
+<label>توضیح</label><textarea name="body"></textarea>
+<label>قیمت</label><input name="price" required type="number" min="0" step="0.01">
+<label>ارز</label><select name="currency"><option>USD</option><option>EUR</option><option>CAD</option><option>IRR</option></select>
+<label>مسیر پرداخت داخلی (فقط پس از آزمون)</label><input name="checkout_path" placeholder="/store/product/1/checkout/">
+<button type="submit">ثبت پیش‌نویس فروشگاه</button></form></div>
+<div class="card"><h2>ثبت مأموریت تولید و بررسی</h2><form method="post">{% csrf_token %}
+<input type="hidden" name="action" value="create"><input type="hidden" name="kind" value="job">
+<label>شناسه یکتا</label><input name="key" required placeholder="job-2026-001">
+<label>موضوع مأموریت</label><input name="title" required>
+<label>منشأ</label><select name="origin"><option value="site">سفارش موضوعی سایت</option><option value="customer">مشتری</option><option value="market">تقاضای بازار</option><option value="invention">اختراع کارخانه</option><option value="agent">ایجنت</option></select>
+<label>شناسه کارت یا محصول مرتبط</label><input name="target_key">
+<label>سند مبنا / سفارش</label><input name="source_ref">
+<label>مسیر صفحه مرتبط</label><input name="page_path" value="/">
+<button type="submit">ایجاد مأموریت</button></form></div>
+</section>
+<h2>گردش کیفیت، تصویب، انتشار و اصلاح</h2>
+<p>بازبینی مردود به خط اصلاح بازمی‌گردد، بدون حذف محصول. انتشار محتوا و محصولات فقط پس از کنترل کیفیت و تصویب مالک انجام می‌شود. وضعیت پرداخت جداگانه کنترل می‌شود.</p>
+{% for item in records %}
+<article class="card{% if item.state == 'needs_revision' %} warn{% endif %}">
+<h3>{{ item.title }} <small>({{ item.kind }} · {{ item.key }})</small></h3>
+<p>صفحه: {{ item.page_path }} | وضعیت: <strong>{{ item.get_state_display }}</strong> | نسخه: {{ item.revision }}</p>
+{% if item.published_snapshot %}<small>نسخه منتشرشده قبلی محفوظ است و تا انتشار نسخه تازه نمایش داده می‌شود.</small>{% endif %}
+{% if item.quality_note %}<p>علت برگشت: {{ item.quality_note }}</p>{% endif %}
+{% if item.state == 'draft' or item.state == 'needs_revision' or item.state == 'published' %}
+<form method="post">{% csrf_token %}
+<input type="hidden" name="action" value="edit"><input type="hidden" name="record_id" value="{{ item.pk }}"><input type="hidden" name="revision" value="{{ item.revision }}">
+<label>عنوان</label><input name="title" value="{{ item.draft.title }}" required>
+{% if item.kind == "content" %}
+<label>متن</label><textarea name="body">{{ item.draft.body }}</textarea>
+<label>نوع عنصر</label><select name="slot"><option value="{{ item.draft.slot }}">{{ item.draft.slot }}</option><option value="row">row</option><option value="card">card</option><option value="section">section</option></select>
+<label>گروه</label><input name="group" value="{{ item.draft.group }}">
+<label>لینک</label><input name="url" value="{{ item.draft.url }}">
+<label>عکس</label><input name="image" value="{{ item.draft.image }}">
+{% elif item.kind == "offer" %}
+<label>توضیح</label><textarea name="body">{{ item.draft.body }}</textarea>
+<label>قیمت</label><input name="price" type="number" min="0" step="0.01" value="{{ item.draft.price }}">
+<label>ارز</label><select name="currency"><option value="{{ item.draft.currency }}">{{ item.draft.currency }}</option><option>USD</option><option>EUR</option><option>CAD</option><option>IRR</option></select>
+<label>مسیر پرداخت</label><input name="checkout_path" value="{{ item.draft.checkout_path }}">
+<label><input type="checkbox" name="rights_verified" {% if item.draft.rights_verified %}checked{% endif %}>حقوق فروش تأیید شده</label>
+<label><input type="checkbox" name="payment_verified" {% if item.draft.payment_verified %}checked{% endif %}>پرداخت آزمون شده</label>
+<label><input type="checkbox" name="delivery_verified" {% if item.draft.delivery_verified %}checked{% endif %}>تحویل آزمون شده</label>
+<label>مدرک تست پرداخت</label><input name="payment_evidence" value="{{ item.draft.payment_evidence }}">
+<label>مدرک تحویل</label><input name="delivery_evidence" value="{{ item.draft.delivery_evidence }}">
+{% elif item.kind == "job" %}
+<label>منشأ</label><select name="origin"><option value="{{ item.draft.origin }}">{{ item.draft.origin }}</option><option value="site">site</option><option value="customer">customer</option><option value="market">market</option><option value="invention">invention</option><option value="agent">agent</option></select>
+<label>سند سفارش</label><input name="source_ref" value="{{ item.draft.source_ref }}">
+<label>شناسه خروجی</label><input name="target_key" value="{{ item.draft.target_key }}">
+{% endif %}
+<button>ذخیره ویرایش (نسخه قبلی حفظ شود)</button></form>{% endif %}
+{% if item.state == 'draft' or item.state == 'needs_revision' %}
+<form method="post">{% csrf_token %}<input type="hidden" name="action" value="submit"><input type="hidden" name="record_id" value="{{ item.pk }}"><input type="hidden" name="revision" value="{{ item.revision }}"><button>ارسال به کنترل کیفیت</button></form>{% endif %}
+{% if item.state == 'review' %}
+<form method="post">{% csrf_token %}<input type="hidden" name="record_id" value="{{ item.pk }}"><input type="hidden" name="revision" value="{{ item.revision }}">
+<label>علت مردودی / دستور اصلاح</label><textarea name="note"></textarea><button name="action" value="reject">برگشت برای رفع عیب</button>
+<label>شناسه مدرک تأیید کیفیت</label><input name="evidence"><button name="action" value="qa_pass">تأیید کیفیت</button></form>{% endif %}
+{% if item.state == 'awaiting_approval' and request.user.is_superuser %}
+<form method="post">{% csrf_token %}<input type="hidden" name="action" value="approve"><input type="hidden" name="record_id" value="{{ item.pk }}"><input type="hidden" name="revision" value="{{ item.revision }}">
+<label>شناسه مستند تصویب مالک</label><input name="evidence" required><button>تصویب مالک</button></form>{% endif %}
+{% if item.state == 'approved' %}
+<form method="post">{% csrf_token %}<input type="hidden" name="action" value="publish"><input type="hidden" name="record_id" value="{{ item.pk }}"><input type="hidden" name="revision" value="{{ item.revision }}"><button>انتشار نسخه تأییدشده</button></form>{% endif %}
+</article>
+{% empty %}<p>رکورد مدیریتی هنوز ثبت نشده است؛ محتوای قدیمی سایت بدون تغییر باقی می‌ماند.</p>{% endfor %}
+<section class="card"><h2>خروجی مستند ایجنت‌ها</h2><p>ثبت نتیجه تنها با شاهد واقعی مجاز است؛ این آمار شبیه‌سازی نیست.</p>
+<form method="post">{% csrf_token %}<input name="action" type="hidden" value="record_outcome"><div class="grid">
+<label>نام ایجنت<input name="agent" required></label>
+<label>زمان واقعی گزارش (ISO UTC)<input name="observed_at" required placeholder="2026-10-19T08:00:00Z"></label>
+<label>شناسه مدرک اجرای واقعی<input name="evidence" required></label>
+<label>ماموریت تکمیل<input type="number" name="completed" min="0" value="0"></label>
+<label>خطا<input type="number" name="failed" min="0" value="0"></label>
+<label>تولید<Input type="number" name="produced" min="0" value="0"></label>
+<label>انتشار<input type="number" name="published" min="0" value="0"></label>
+<label>اصلاح<Input type="number" name="reworked" min="0" value="0"></label>
+</div><button>ثبت گزارش مستند</button></form>
+{% for out in outcomes %}<p><strong>{{ out.title }}</strong> | {{ out.draft.observed_at }} | {{ out.draft.metrics }} | <small>{{ out.draft.evidence }}</small></p>{% empty %}<p>خروجی مستند جدیدی ثبت نشده است.</p>{% endfor %}
+</section></body></html>
