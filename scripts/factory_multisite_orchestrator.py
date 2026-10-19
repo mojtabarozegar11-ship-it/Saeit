@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 import re
 import tempfile
+import zipfile
 from urllib.parse import urlsplit
 
 IDENT = re.compile(r"^[a-z][a-z0-9_-]{1,64}$")
@@ -67,8 +68,22 @@ def verify_product(root, approvals, recipe):
         raise ValueError("ARTIFACT_MISSING_OR_UNSAFE")
     sha = digest(archive)
     if (manifest.get("recipe") != recipe or manifest.get("qa_status") != "passed"
-            or manifest.get("artifact_sha256") != sha):
+            or manifest.get("artifact_sha256") != sha
+            or not HASH.fullmatch(str(manifest.get("source_sha256", "")))):
         raise ValueError("TECHNICAL_QA_UNVERIFIED")
+    with zipfile.ZipFile(archive) as zipped:
+        entries = zipped.infolist()
+        if not entries or len(entries) > 80 or sum(x.file_size for x in entries) > 100 * 1024 * 1024:
+            raise ValueError("UNSAFE_ARCHIVE_SIZE")
+        for entry in entries:
+            parts = entry.filename.split("/")
+            if (entry.is_dir() or len(parts) < 2 or parts[0] != recipe
+                    or any(p in ("", ".", "..") for p in parts)
+                    or "\\" in entry.filename or
+                    (entry.external_attr >> 16) & 0o170000 == 0o120000):
+                raise ValueError("UNSAFE_ZIP_ENTRY")
+        if zipped.testzip() is not None:
+            raise ValueError("ZIP_CRC_FAILED")
     ticket = root / "qa-rework" / recipe / "ledger.json"
     if ticket.is_symlink():
         raise ValueError("UNSAFE_DEFECT_LEDGER")
@@ -77,6 +92,7 @@ def verify_product(root, approvals, recipe):
     review = load(approvals / (recipe + ".json"))
     if (review.get("schema") != "saeit.factory.distribution-review.v1"
             or review.get("artifact_sha256") != sha
+            or review.get("source_sha256") != manifest["source_sha256"]
             or review.get("status") != "approved"
             or review.get("sale_required") is not False
             or not isinstance(review.get("reviewer"), str) or not review["reviewer"].strip()):
