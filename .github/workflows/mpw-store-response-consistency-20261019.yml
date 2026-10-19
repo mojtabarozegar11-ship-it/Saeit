@@ -1,4 +1,4 @@
-name: MojPlayWin public store response consistency audit
+name: MojPlayWin public store response consistency audit after graceful refresh
 on:
   push:
     branches: [main]
