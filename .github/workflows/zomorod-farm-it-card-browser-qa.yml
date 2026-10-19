@@ -2,7 +2,7 @@ name: Farm Dominion V4 IT carousel live browser navigation audit
 on:
   push:
     branches: [main]
-    paths: ['.github/workflows/zomorod-farm-it-card-browser-qa.yml']
+    paths: ['.github/workflows/zomorod-farm-it-card-browser-qa.yml', 'games/farm-wars-v3/tests/home-card.cjs']
 permissions: {contents: read}
 jobs:
   browser:
