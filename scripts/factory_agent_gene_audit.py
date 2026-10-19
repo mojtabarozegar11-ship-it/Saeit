@@ -48,7 +48,7 @@ CONTRACTS=[
     ("documented_qa","scripts/factory_12_stage_governance.py",("valid_approval","verify_evidence_files")),
     ("specialist_reviewer_integrity","scripts/factory_12_stage_governance.py",("verify_reviewer_signature","verify_persisted_approvals")),
     ("real_product_build","scripts/factory_product_maker.py",("manufacture","verify_recipe")),
-    ("repair_without_discard","scripts/factory_product_rework.py",("record_failure","record_recovery")),
+    ("repair_without_discard","scripts/factory_product_rework.py",("record_failure","record_technical_recovery")),
     ("immutable_production_warehouse","scripts/factory_production_warehouse.py",("stock_one","verify_stored")),
     ("independent_commercial_stock_gate","scripts/factory_12_stage_governance.py",("final_admit","verify_final_package_zip")),
     ("resource_observation","scripts/factory_40_family_master.py",("cpu_mem_snapshot","run")),
