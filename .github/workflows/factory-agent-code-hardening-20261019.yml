@@ -1,0 +1,79 @@
+name: Factory agents, genes and QA core engineering
+on:
+  pull_request:
+    paths:
+      - "scripts/factory_vps_product_cycle.py"
+      - "scripts/factory_12_stage_governance.py"
+      - "scripts/factory_40_family_master.py"
+      - "scripts/factory_agent_gene_audit.py"
+      - "scripts/factory_evolution_50.py"
+      - "tests/test_factory_vps_product_cycle.py"
+      - "tests/test_factory_12_stage_governance.py"
+      - "tests/test_factory_40_family_master.py"
+      - "tests/test_factory_agent_gene_audit.py"
+      - "tests/test_factory_evolution_50.py"
+      - ".github/workflows/factory-agent-code-hardening-20261019.yml"
+  push:
+    branches: [main]
+    paths:
+      - "scripts/factory_vps_product_cycle.py"
+      - "scripts/factory_12_stage_governance.py"
+      - "scripts/factory_40_family_master.py"
+      - "scripts/factory_agent_gene_audit.py"
+      - "scripts/factory_evolution_50.py"
+      - "tests/test_factory_vps_product_cycle.py"
+      - "tests/test_factory_12_stage_governance.py"
+      - "tests/test_factory_40_family_master.py"
+      - "tests/test_factory_agent_gene_audit.py"
+      - "tests/test_factory_evolution_50.py"
+      - ".github/workflows/factory-agent-code-hardening-20261019.yml"
+permissions:
+  contents: read
+concurrency:
+  group: saeit-factory-agent-core-audit
+  cancel-in-progress: false
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.8", "3.11"]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Agent/module source contracts and deep factory tests
+        run: |
+          set -euo pipefail
+          python -B scripts/factory_agent_gene_audit.py --repo .
+          python -B -m unittest discover -s tests -p "test_factory_agent_gene_audit.py" -v
+          python -B -m unittest discover -s tests -p "test_factory_evolution_50.py" -v
+          python -B -m unittest discover -s tests -p "test_factory_12_stage_governance.py" -v
+          python -B -m unittest discover -s tests -p "test_factory_40_family_master.py" -v
+          python -B -m unittest discover -s tests -p "test_factory_vps_product_cycle.py" -v
+          python -B -m unittest discover -s tests -p "test_factory_product_maker.py" -v
+          python -B -m unittest discover -s tests -p "test_factory_production_warehouse.py" -v
+          python -B -m unittest discover -s tests -p "test_factory_continuous_production_orders.py" -v
+          python -B -m unittest discover -s tests -p "test_factory_product_rework.py" -v
+          python -B -m unittest discover -s tests -p "test_factory_every_minute.py" -v
+      - name: Source QA safeguards never count cached builds as new
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          a=Path("scripts/factory_12_stage_governance.py").read_text()
+          b=Path("scripts/factory_40_family_master.py").read_text()
+          c=Path("scripts/factory_vps_product_cycle.py").read_text()
+          assert "verify_reviewer_signature(root,review)" in a
+          assert "verify_persisted_approvals(root,wid,data)" in a
+          assert "verify_final_package_zip(artifact)" in a
+          assert "artifact_sha256" in b
+          assert "new_or_updated_product_count" in c
+          assert "unchanged_product_rechecks" in c
+          assert "VPS_FACTORY_ACTUALLY_NEW_PACKAGES" in c
+          print("FACTORY_AGENT_ENGINEERING_GATES=PASS")
+          PY
