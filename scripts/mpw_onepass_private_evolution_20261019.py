@@ -129,7 +129,7 @@ def _worker_checks(root, now):
         and isinstance(management_report, dict)
         and report_recent == "recent"
         and management_report.get("factory_connected") in (False, None)
-        and management_report.get("financial_account_data_consulted") is False
+        and management_report.get("financial_account_data_consulted") in (False, 0)
     )
     return {
         "quality": {
