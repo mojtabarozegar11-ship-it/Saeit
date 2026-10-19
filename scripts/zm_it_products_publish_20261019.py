@@ -89,7 +89,7 @@ def payload(stage):
 def insert(old,slug,title):
     if b"</main>" not in old.lower():die("page has no main element: "+slug)
     if PREFIX.encode() in old:die("already modified: "+slug)
-    url="/digital-lab/?tool="+slug
+    url="/digital-products-r25-20261019/?tool="+slug
     block=("""
 <!-- %s:%s:BEGIN -->
 <section class="zm-product-in-page" id="zm-product-%s" aria-label="محصول کاربردی %s"
@@ -124,8 +124,8 @@ def paths_from_saved(state):
 def prepare(stage):
     paths,home=manifest_and_home()
     src=payload(stage)
-    target=ROOT/"digital-lab"
-    if target.exists() or target.is_symlink():die("digital-lab route already exists; refuse to overwrite")
+    target=ROOT/"digital-products-r25-20261019"
+    if target.exists() or target.is_symlink():die("digital-products-r25-20261019 route already exists; refuse to overwrite")
     immutable=[ROOT/"index.html",ROOT/".htaccess",ROOT/"farm-wars/index.html",
                ROOT/"topics/zm-r25/game-development/index.html"]
     for p in immutable:strict_file(p)
@@ -165,7 +165,7 @@ def rollback(stage):
             total+=1
         elif digest(current)!=old_hash:
             die("external concurrent edit; refusing destructive rollback on "+slug)
-    route=ROOT/"digital-lab"
+    route=ROOT/"digital-products-r25-20261019"
     if route.exists() or route.is_symlink():
         if route.is_symlink() or not route.is_dir():die("unsafe new product route")
         if set(p.name for p in route.iterdir())!={"index.html",".htaccess"}:die("non-owned product directory")
@@ -178,14 +178,14 @@ def install(stage):
     for p,sha in state["immutable"].items():
         if digest(strict_file(Path(p)))!=sha:die("protected file changed before install "+p)
     payload_bytes=payload(stage)
-    folder=stage/"digital-lab-staged"
+    folder=stage/"digital-products-r25-20261019-staged"
     folder.mkdir(mode=0o755)
     (folder/"index.html").write_bytes(payload_bytes)
     (folder/".htaccess").write_text("PassengerEnabled off\nDirectoryIndex index.html\nOptions -Indexes\n",encoding="ascii")
     (folder/"index.html").chmod(0o644)
     (folder/".htaccess").chmod(0o644)
     try:
-        folder.rename(ROOT/"digital-lab")
+        folder.rename(ROOT/"digital-products-r25-20261019")
         for slug,p in paths_from_saved(state).items():
             old=strict_file(p)
             if digest(old)!=state["pages"][slug]["original_sha"]:
@@ -200,11 +200,11 @@ def install(stage):
 
 def verify(stage):
     state=load_state(stage)
-    assert digest(strict_file(ROOT/"digital-lab/index.html"))==state["app_sha"]
+    assert digest(strict_file(ROOT/"digital-products-r25-20261019/index.html"))==state["app_sha"]
     for slug,p in paths_from_saved(state).items():
         if digest(strict_file(p))!=state["pages"][slug]["new_sha"]:die("page live hash mismatch "+slug)
         data=strict_file(p)
-        if data.count((PREFIX+":"+slug+":BEGIN").encode())!=1 or ("/digital-lab/?tool="+slug).encode() not in data:
+        if data.count((PREFIX+":"+slug+":BEGIN").encode())!=1 or ("/digital-products-r25-20261019/?tool="+slug).encode() not in data:
             die("product embed invalid "+slug)
     for p,sha in state["immutable"].items():
         # The original game-development page is intentionally modified by this operation.
