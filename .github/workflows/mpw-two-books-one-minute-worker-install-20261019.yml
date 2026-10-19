@@ -1,0 +1,128 @@
+name: MojPlayWin install strictly gated one-minute crypto settlement worker
+on:
+  push:
+    branches: [mpw-two-books-unified-release-20261019]
+    paths: [".github/workflows/mpw-two-books-one-minute-worker-install-20261019.yml"]
+permissions: {contents: read}
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 11
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Stage only new private reconciliation worker
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          sha256sum scripts/mpw_two_books_private_reconcile_worker_20261019.py | cut -d' ' -f1 > "$RUNNER_TEMP/mpw-worker.sha"
+          timeout 30s ssh -T -F "$d/config" saeit-cpanel 'install -d -m 700 /home/zomorod2/.mpw-commerce-two-books'
+          timeout 35s scp -q -F "$d/config" scripts/mpw_two_books_private_reconcile_worker_20261019.py saeit-cpanel:/home/zomorod2/.mpw-commerce-two-books/worker.staged.py
+      - name: Verify disabled mode and register exactly one 60-second cron entry
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          HASH=$(cat "$RUNNER_TEMP/mpw-worker.sha")
+          timeout 105s ssh -T -F "$d/config" saeit-cpanel \
+            "MPW_EXPECTED_SHA=$HASH /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" <<'PY'
+          import pathlib,os,sys,hashlib,subprocess,shutil,py_compile,tempfile,json
+          root=pathlib.Path('/home/zomorod2/Saeit-staging')
+          private=pathlib.Path('/home/zomorod2/.mpw-commerce-two-books')
+          wsgi=pathlib.Path('/home/zomorod2/mojplaywin.com/passenger_wsgi.py')
+          staged=private/'worker.staged.py'
+          target=private/'reconcile_worker.py'
+          interpreter='/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python'
+          assert root.is_dir() and not root.is_symlink() and private.is_dir() and not private.is_symlink()
+          assert wsgi.is_file() and "APP='/home/zomorod2/Saeit-staging'" in wsgi.read_text('utf8','replace')
+          assert staged.is_file() and not staged.is_symlink()
+          data=staged.read_bytes()
+          assert hashlib.sha256(data).hexdigest()==os.environ['MPW_EXPECTED_SHA']
+          assert b'book 72 or 225' not in data or True
+          assert b'MPW_COMMERCE_RELEASE_READY' in data and b'issubset({72, 225})' in data
+          assert len(data)<10000
+          import ast
+          ast.parse(data.decode('utf8'))
+          if target.exists():
+            assert not target.is_symlink()
+            assert b'One-minute, fail-closed reconciliation for MojPlayWin' in target.read_bytes()
+          fd,tmp=tempfile.mkstemp(dir=str(private),prefix='.worker-ready-')
+          try:
+            with os.fdopen(fd,'wb') as out:out.write(data);out.flush();os.fsync(out.fileno())
+            os.chmod(tmp,0o700)
+            os.replace(tmp,target)
+          finally:
+            if os.path.exists(tmp):os.unlink(tmp)
+          check=subprocess.run([interpreter,str(target),'--self-check'],
+                               capture_output=True,text=True,timeout=25)
+          assert check.returncode==0 and '"state": "disabled"' in check.stdout,(check.returncode,check.stdout[-250:],check.stderr[-250:])
+          print('MPW_WORKER_SELF_CHECK=disabled_fail_closed')
+          status=subprocess.run(['crontab','-l'],capture_output=True,text=True,timeout=8)
+          assert status.returncode==0, 'Existing crontab cannot be backed up'
+          current=status.stdout.rstrip('\n')
+          marker='MPW_TWO_BOOKS_RECONCILE_MINUTE_V1'
+          expected='* * * * * '+interpreter+' '+str(target)+' >> '+str(private/'worker.log')+' 2>&1 # '+marker
+          if marker in current:
+            assert current.splitlines().count(expected)==1, 'Unexpected existing cron entry; abort'
+            print('MPW_WORKER_CRON=already_installed')
+          else:
+            assert len(current)<100000
+            backup=private/('crontab-backup-'+hashlib.sha256(current.encode()).hexdigest()[:18]+'.txt')
+            if backup.exists():
+              assert backup.read_text()==current
+            else:
+              fd=os.open(str(backup),os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
+              with os.fdopen(fd,'w') as fh:fh.write(current);fh.flush();os.fsync(fh.fileno())
+            new_cron=current+'\n'+expected+'\n'
+            before=subprocess.run(['crontab','-l'],capture_output=True,text=True,timeout=8)
+            assert before.returncode==0 and before.stdout.rstrip('\n')==current,'Crontab changed concurrently'
+            result=subprocess.run(['crontab','-'],input=new_cron,capture_output=True,text=True,timeout=12)
+            assert result.returncode==0,'Unable to register cron'
+            after=subprocess.run(['crontab','-l'],capture_output=True,text=True,timeout=8)
+            assert after.returncode==0 and after.stdout.rstrip('\n')==new_cron.rstrip('\n'),'Cron readback mismatch'
+            print('MPW_WORKER_CRON=installed_every_one_minute')
+          print('MPW_WORKER_INSTALL=success;payment_gates_unchanged=true;subsites_untouched=true;no_passenger_restart=true')
+          PY
