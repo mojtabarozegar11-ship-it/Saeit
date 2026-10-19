@@ -33,7 +33,7 @@ class VPSProductInstallerTests(unittest.TestCase):
         self.assertIn("workflow_dispatch:", wf)
         self.assertIn("branches: [main]", wf)
         self.assertIn("[approved-factory-unlimited-builds-20261019]", wf)
-        self.assertIn("product_recipes/greenhouse_crop_margin", wf)
+        self.assertIn("product_recipes/**", wf)
 
 
 if __name__ == "__main__":

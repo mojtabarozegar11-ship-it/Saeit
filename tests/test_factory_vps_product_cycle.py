@@ -83,6 +83,20 @@ class FactoryVPSCycleTests(unittest.TestCase):
         self.assertEqual(state["new_or_updated_product_count"],0)
         self.assertEqual(state["unchanged_product_rechecks"],3)
 
+    def test_cycle_builds_a_recipe_added_after_the_factory_code(self):
+        shutil.copytree(ROOT / "product_recipes" / "farm_enterprise_economics",
+                        self.recipes / "new_product_family")
+        (self.recipes / "new_product_family" / "README.md").write_text(
+            "# New Product Family\n", encoding="utf-8")
+        result = cycle.run_cycle(self.db, self.output, self.recipes)
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["manufactured"], 4)
+        self.assertTrue((self.output / "digital-products" / "new_product_family" /
+                         "new_product_family-internal-qa.zip").is_file())
+        state = json.loads((self.output / "production-state.json").read_text(encoding="utf-8"))
+        self.assertEqual(state["registered_recipe_count"], 4)
+        self.assertEqual(state["token_usage"], 0)
+
     def test_missing_recipe_stops_without_claiming_production(self):
         with self.assertRaises(RuntimeError):
             cycle.run_cycle(self.db, self.output, self.home / "missing")

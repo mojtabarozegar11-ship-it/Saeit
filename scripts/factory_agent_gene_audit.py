@@ -58,9 +58,6 @@ CONTRACTS=[
     ("market_evidence_quality","scripts/factory_evidence_quality.py",("assess",)),
 ]
 BLOCKERS=[
-    ("missing_generic_work_order_executor",
-     "factory_vps_product_cycle.py",r"selected = sorted\(maker\.RECIPES\)",
-     "The manufacture loop still uses a static recipe allowlist."),
     ("family_dispatch_not_authorized",
      "factory_40_family_master.py",r"production_job_slots_authorized.?[\"']?\s*:\s*0",
      "The 40-family master monitors capacity but intentionally cannot dispatch untested adapters."),
