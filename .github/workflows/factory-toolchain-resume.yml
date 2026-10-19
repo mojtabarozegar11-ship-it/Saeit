@@ -1,0 +1,86 @@
+name: Resume private factory toolchain installation
+on:
+  workflow_run:
+    workflows: ['Factory private CPU tools and local model install']
+    types: [completed]
+  push:
+    branches: [main]
+    paths: ['.github/workflows/factory-toolchain-resume.yml']
+permissions:
+  contents: read
+concurrency:
+  group: factory-private-toolchain-recovery
+  cancel-in-progress: false
+jobs:
+  resume:
+    if: github.event_name == 'push' || (github.event.workflow_run.conclusion != 'success' && github.event.workflow_run.head_branch == 'main')
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Resume verified existing bundle without recompilation
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/toolchain-ssh"
+          mkdir -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs
+          options=(-i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=3)
+          remote=(ssh "${options[@]}" githubops@178.239.147.150)
+          # Wait for the original writer to stop before inspecting/resuming its files.
+          "${remote[@]}" 'python3 -' <<'PYWAIT'
+          import os,time
+          from pathlib import Path
+          stage=Path.home()/'factory-runtime/operations/toolchain-source-39232784800-1'
+          model=stage/'qwen2.5-coder-0.5b-instruct-q4_k_m.gguf'
+          # The original run has a 40-minute deadline; recovery starts after it.
+          # For the bootstrap push, wait until 10:30 UTC before any mutation.
+          import datetime
+          deadline=datetime.datetime(2026,10,19,10,30,tzinfo=datetime.timezone.utc).timestamp()
+          while time.time()<deadline:
+              time.sleep(min(30,deadline-time.time()))
+          assert stage.is_dir() and (stage/'runtime.tar.xz').is_file()
+          print('EXISTING_TRANSFER_BYTES='+str(model.stat().st_size if model.exists() else 0))
+          PYWAIT
+          stage=/home/githubops/factory-runtime/operations/toolchain-source-39232784800-1
+          scp "${options[@]}" ops/factory-toolchain/install.sh ops/factory-toolchain/prove.py "githubops@178.239.147.150:$stage/"
+          "${remote[@]}" 'python3 -' <<'PYRESUME'
+          import hashlib,json,urllib.request,os
+          from pathlib import Path
+          root=Path.home()/'factory-runtime/operations'
+          # If the original install completed, recovery must leave it alone.
+          manifest=root/'build-toolchain/toolchain-manifest.json'
+          if manifest.is_file():
+              report=json.loads(manifest.read_text())
+              if all(x['passed'] for x in report['checks'].values()):
+                  print('ORIGINAL_INSTALL_ALREADY_VERIFIED');raise SystemExit(0)
+          stage=root/'toolchain-source-39232784800-1'
+          records={line.split()[1]:line.split()[0] for line in (stage/'SHA256SUMS').read_text().splitlines()}
+          def digest(path):
+              h=hashlib.sha256()
+              with path.open('rb') as source:
+                  for chunk in iter(lambda:source.read(1048576),b''): h.update(chunk)
+              return h.hexdigest()
+          assert digest(stage/'runtime.tar.xz')==records['runtime.tar.xz']
+          model=stage/'qwen2.5-coder-0.5b-instruct-q4_k_m.gguf'
+          expected='1d9614638d18024d0fbb36575a15f1302a3adf044df10345688ec4f6e1c4ff32'
+          if not model.is_file() or digest(model)!=expected:
+              offset=model.stat().st_size if model.exists() else 0
+              request=urllib.request.Request('https://huggingface.co/Qwen/Qwen2.5-Coder-0.5B-Instruct-GGUF/resolve/main/'+model.name,headers={'Range':'bytes='+str(offset)+'-'})
+              with urllib.request.urlopen(request,timeout=90) as response:
+                  append=response.status==206
+                  if append: assert response.headers.get('Content-Range','').startswith('bytes '+str(offset)+'-')
+                  with model.open('ab' if append else 'wb') as target:
+                      for chunk in iter(lambda:response.read(1048576),b''):
+                          target.write(chunk)
+              assert digest(model)==expected,'MODEL_HASH_FAILED'
+          os.execvp('timeout',['timeout','900','bash',str(stage/'install.sh'),str(stage),'f7b1913a9c01411393cf28316cd7bb34f8a7165f'])
+          PYRESUME
