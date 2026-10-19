@@ -68,7 +68,7 @@ def registry_valid(reg):
     if not isinstance(profiles,list) or len(profiles)!=40:
         raise RuntimeError("MASTER_EXPECTED_FORTY_FAMILIES")
     ids=[x.get("id") for x in profiles if isinstance(x,dict)]
-    if ids!=["F%02d"%i for i in range(1,41):
+    if ids!=["F%02d"%i for i in range(1,41)]:
         raise RuntimeError("MASTER_FAMILY_ORDER_MISMATCH")
     slugs=set()
     for p in profiles:
