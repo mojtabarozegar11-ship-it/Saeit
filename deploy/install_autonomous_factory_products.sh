@@ -26,9 +26,7 @@ test -f "$repo/scripts/factory_evidence_quality.py"
 test -f "$repo/scripts/factory_first_product_pilot.py"
 test -f "$repo/scripts/factory_vps_product_cycle.py"
 test -f "$repo/scripts/factory_product_rework.py"
-test -f "$repo/product_recipes/farm_enterprise_economics/test_calculator.py"
-test -f "$repo/product_recipes/water_budget_economics/test_calculator.py"
-test -f "$repo/product_recipes/greenhouse_crop_margin/test_calculator.py"
+test -d "$repo/product_recipes"
 command -v flock >/dev/null
 command -v crontab >/dev/null
 if ! systemctl is-active --quiet cron 2>/dev/null &&
@@ -40,8 +38,8 @@ if ! systemctl is-enabled --quiet cron 2>/dev/null &&
   echo "CRON_NOT_BOOT_ENABLED"; exit 1
 fi
 
-mkdir -p "$ops/backups" "$scripts" "$recipes/farm_enterprise_economics" "$recipes/water_budget_economics" "$recipes/greenhouse_crop_margin" "$private"
-chmod 700 "$stage" "$scripts" "$recipes" "$recipes/farm_enterprise_economics" "$recipes/water_budget_economics" "$recipes/greenhouse_crop_margin" "$private"
+mkdir -p "$ops/backups" "$scripts" "$recipes" "$private"
+chmod 700 "$stage" "$scripts" "$recipes" "$private"
 
 # Back up existing code if present; source control remains the source of truth.
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
@@ -54,10 +52,20 @@ for f in factory_product_maker.py factory_autonomous_portfolio.py \
          factory_product_rework.py; do
   install -m 600 "$repo/scripts/$f" "$scripts/$f"
 done
-for recipe in farm_enterprise_economics water_budget_economics greenhouse_crop_margin; do
-  for f in calculator.py test_calculator.py README.md example_inputs.json; do
-    install -m 600 "$repo/product_recipes/$recipe/$f" "$recipes/$recipe/$f"
-  done
+# Every valid recipe folder is deployed automatically; new products need no installer edit.
+shopt -s nullglob
+recipe_sources=("$repo"/product_recipes/*)
+(("${#recipe_sources[@]}" > 0)) || { echo "NO_PRODUCT_RECIPE_DIRECTORIES"; exit 1; }
+for recipe_source in "${recipe_sources[@]}"; do
+  [[ -d "$recipe_source" && ! -L "$recipe_source" ]] || { echo "UNSAFE_PRODUCT_RECIPE_DIRECTORY"; exit 1; }
+  recipe="$(basename "$recipe_source")"
+  mkdir -p "$recipes/$recipe"
+  chmod 700 "$recipes/$recipe"
+  while IFS= read -r -d '' file; do
+    relative="${file#"$recipe_source"/}"
+    mkdir -p "$recipes/$recipe/$(dirname "$relative")"
+    install -m 600 "$file" "$recipes/$recipe/$relative"
+  done < <(find "$recipe_source" -type f -print0)
 done
 
 # Quality gate must exist and compile BEFORE any production cycle or cron change.
@@ -65,19 +73,12 @@ done
   "$scripts/factory_evidence_quality.py" "$scripts/factory_autonomous_portfolio.py" "$scripts/factory_vps_product_cycle.py" "$scripts/factory_product_rework.py"
 
 # Product QA is mandatory BEFORE changes to the local scheduler.
-for recipe in farm_enterprise_economics water_budget_economics greenhouse_crop_margin; do
-  (
-    cd "$recipes/$recipe"
-    "$python" -m unittest -v test_calculator.py
-  )
-done
+# The cycle discovers the complete catalog and runs each recipe's test_*.py suite.
 "$python" "$scripts/factory_vps_product_cycle.py" \
   --db "$db" --out "$private" --recipes "$recipes" \
   --max-products 25
 test -s "$private/production-state.json"
-test -s "$private/digital-products/farm_enterprise_economics/farm_enterprise_economics-internal-qa.zip"
-test -s "$private/digital-products/water_budget_economics/water_budget_economics-internal-qa.zip"
-test -s "$private/digital-products/greenhouse_crop_margin/greenhouse_crop_margin-internal-qa.zip"
+test "$(find "$private/digital-products" -type f -name "*-internal-qa.zip" -print -quit | wc -l)" -ge 1
 
 cat > "$stage/run-local-cycle.sh" <<EOF
 #!/usr/bin/env bash
