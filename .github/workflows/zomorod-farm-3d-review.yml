@@ -1,0 +1,128 @@
+name: Farm Dominion V3 review - 3D presentation and mobile camera
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/zomorod-farm-3d-review.yml']
+permissions: {contents: read}
+concurrency:
+  group: zm-farm-dominion-preview
+  cancel-in-progress: false
+jobs:
+  review:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      contains(github.event.head_commit.message, '[approved-zm-3d-review]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Rebundle 3D engine and revised mobile UX
+        run: |
+          set -euo pipefail
+          b=games/farm-wars-v3
+          node --check "$b/src/main.js"
+          npm install --prefix "$b" --no-audit --no-fund --no-save three@0.181.0 esbuild@0.25.12
+          "$b/node_modules/.bin/esbuild" "$b/src/main.js" --bundle --format=iife --platform=browser --target=es2020 --minify --outfile="$RUNNER_TEMP/game.js"
+          test "$(stat -c %s "$RUNNER_TEMP/game.js")" -gt 400000
+          grep -Fq 'mobile-war-toggle' "$b/index.html"
+          node --check "$RUNNER_TEMP/game.js"
+      - name: Verify unchanged live production routes
+        run: |
+          set -euo pipefail
+          for r in '' agriculture/ research/ store/ tala/ farm-wars/; do
+            status="$(curl -sSL --max-time 30 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir/$r")"
+            echo "PRODUCTION_BASELINE=$r $status";test "$status" = 200
+          done
+      - name: Open pinned deployment relay
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail;umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zm3-review-ssh";install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null;ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 12
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+      - name: Update only private preview and retain both rollback backups
+        id: update
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm3-review-ssh";stage="/home/zomorod2/.zm3-review-$GITHUB_RUN_ID";live="/home/zomorod2/public_html/farm-dominion-preview"
+          ssh -T -F "$d/config" host "test ! -e '$stage' && test -d '$live' && test ! -L '$live' && test -s '$live/index.html' && test -s '$live/game.js' && mkdir -m 700 '$stage' && cp -p '$live/index.html' '$stage/old.html' && cp -p '$live/game.js' '$stage/old.js'"
+          scp -q -F "$d/config" games/farm-wars-v3/index.html "host:$stage/new.html"
+          scp -q -F "$d/config" "$RUNNER_TEMP/game.js" "host:$stage/new.js"
+          exp="$(sha256sum "$RUNNER_TEMP/game.js" | cut -d' ' -f1)"
+          ssh -T -F "$d/config" host "test \"\$(sha256sum '$stage/new.js' | cut -d' ' -f1)\" = '$exp' && cmp -s '$live/index.html' '$stage/old.html' && cmp -s '$live/game.js' '$stage/old.js'"
+          ssh -T -F "$d/config" host "cp -p '$stage/new.js' '$live/.game-review-$GITHUB_RUN_ID' && mv -f '$live/.game-review-$GITHUB_RUN_ID' '$live/game.js' && cp -p '$stage/new.html' '$live/.index-review-$GITHUB_RUN_ID' && mv -f '$live/.index-review-$GITHUB_RUN_ID' '$live/index.html' && cmp -s '$stage/new.js' '$live/game.js' && cmp -s '$stage/new.html' '$live/index.html'"
+          echo FARM_DOMINION_3D_REVIEW_APPLIED=YES
+      - name: Run live browser 3D tests and capture unobstructed gameplay screens
+        id: smoke
+        env:
+          TEST_URL: https://zomorodmelal.ir/farm-dominion-preview/
+        run: |
+          set -euo pipefail
+          d="/tmp/zm3-playwright";mkdir -p "$d";cd "$d"
+          npm init -y >/dev/null;npm install --silent --no-save playwright@1.55.0
+          npx playwright install chromium
+          cd "$GITHUB_WORKSPACE"
+          NODE_PATH="$d/node_modules" node games/farm-wars-v3/tests/browser.cjs
+      - name: Check protected production routes after game preview update
+        run: |
+          set -euo pipefail
+          for r in '' agriculture/ research/ store/ tala/ farm-wars/; do
+            status="$(curl -sSL --max-time 30 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir/$r")"
+            echo "PRODUCTION_AFTER=$r $status";test "$status" = 200
+          done
+      - name: Roll back preview files if browser QA failed
+        if: failure() && steps.update.outcome == 'success'
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm3-review-ssh";stage="/home/zomorod2/.zm3-review-$GITHUB_RUN_ID";live="/home/zomorod2/public_html/farm-dominion-preview"
+          ssh -T -F "$d/config" host "cmp -s '$stage/new.js' '$live/game.js' && cmp -s '$stage/new.html' '$live/index.html' && cp -p '$stage/old.js' '$live/.game-rollback-$GITHUB_RUN_ID' && mv -f '$live/.game-rollback-$GITHUB_RUN_ID' '$live/game.js' && cp -p '$stage/old.html' '$live/.index-rollback-$GITHUB_RUN_ID' && mv -f '$live/.index-rollback-$GITHUB_RUN_ID' '$live/index.html'"
+      - name: Save real browser screenshots as QA artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: farm-dominion-v3-improved-real-screenshots
+          path: artifacts/farm-dominion-3d/
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Clean private stage and SSH keys
+        if: always()
+        run: |
+          set +e
+          d="$RUNNER_TEMP/zm3-review-ssh";stage="/home/zomorod2/.zm3-review-$GITHUB_RUN_ID"
+          if test -f "$d/config"; then
+            ssh -T -F "$d/config" host "test ! -L '$stage' && rm -f '$stage/old.js' '$stage/new.js' '$stage/old.html' '$stage/new.html' && rmdir '$stage'" || true
+          fi
+          rm -rf "$d"
