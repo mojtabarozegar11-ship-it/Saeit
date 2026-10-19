@@ -196,6 +196,10 @@ def publish(home, site_id):
     atomic_write(dest / MARKER, (json.dumps({"schema": OWNER, "site_id": site_id},
                                            sort_keys=True) + "\n").encode(), mode=0o600)
     atomic_write(dest / "catalog.json", (json.dumps(output, sort_keys=True, indent=2) + "\n").encode())
+    # The parent sites use Passenger for dynamic routes. This directive is
+    # confined to our new dedicated directory; it does not edit any shared
+    # .htaccess, Passenger entry point or existing pages.
+    atomic_write(dest / ".htaccess", b"PassengerEnabled off\nDirectoryIndex index.html\nOptions -Indexes\n")
     atomic_write(dest / "index.html", render(site_id, label, category, checksum).encode())
     return {"site_id": site_id, "status": "public_resource_page_prepared",
             "products": 1, "sha256": checksum}
