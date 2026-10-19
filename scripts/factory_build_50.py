@@ -251,6 +251,14 @@ def audit(root):
         # Only a worker-run attempt can reach acceptance; technical proofs alone cannot.
         accepted=False
         if state.get('status')=='awaiting_owner_acceptance' and state.get('completed_stages')==50:
+            # A concrete producer may bind its plan to immutable build inputs.
+            # Its current ZIP must also be one of the verified final-stage outputs.
+            binding=receipt.get('build50_source_snapshot_sha256')
+            if isinstance(binding,str) and re.fullmatch('[a-f0-9]{64}',binding):
+                try:
+                    final=read(Path(state['attempt_folder'])/'50-summary.json')
+                    if receipt.get('artifact_sha256') in final.get('outputs',{}).values():snapshot=binding
+                except (ValueError,OSError,KeyError):pass
             accepted=integrity and verify_attempt(folder,state,snapshot)
         if not accepted:
             ticket={'schema':SCHEMA,'product_id':product,'status':'planning_required',
