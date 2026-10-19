@@ -25,7 +25,8 @@ class QualityModuleUpgradeTests(unittest.TestCase):
         self.assertIn("factory_evidence_quality.py", content)
         self.assertIn("scripts/factory_evidence_quality.py", workflow)
         self.assertIn("workflow_dispatch:", workflow)
-        self.assertNotIn("branches: [main]", workflow)
+        self.assertIn("branches: [main]", workflow)
+        self.assertIn("[approved-factory-unlimited-builds-20261019]", workflow)
 
     def test_upgrade_is_guarded_and_can_roll_back_code(self):
         s = UPGRADE.read_text(encoding="utf-8")
