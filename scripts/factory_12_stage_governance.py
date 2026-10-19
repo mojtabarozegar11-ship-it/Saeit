@@ -386,10 +386,30 @@ def final_admit(root,order,package):
     if not artifact.is_file() or artifact.stat().st_size>MAX_UPLOAD or artifact.suffix!=".zip":
         raise RuntimeError("FINAL_WAREHOUSE_ARTIFACT_INVALID")
     with zipfile.ZipFile(artifact) as f:
-        bad=f.testzip()
-        names=f.namelist()
-        if bad or any(PurePosixPath(n).is_absolute() or ".." in PurePosixPath(n).parts for n in names):
-            raise RuntimeError("FINAL_WAREHOUSE_UNSAFE_ZIP")
+        members=f.infolist()
+        if not members or len(members)>500:
+            raise RuntimeError("FINAL_WAREHOUSE_TOO_MANY_ZIP_ENTRIES")
+        names=[entry.filename for entry in members]
+        if len(names)!=len(set(names)):
+            raise RuntimeError("FINAL_WAREHOUSE_DUPLICATE_ZIP_MEMBER")
+        unpacked=0
+        for info in members:
+            name=info.filename
+            path=PurePosixPath(name)
+            mode=(info.external_attr >> 16) & 0o170000
+            if (path.is_absolute() or ".." in path.parts or "\\" in name
+                    or not name or "\\x00" in name or info.flag_bits & 1
+                    or mode == 0o120000 or info.file_size < 0
+                    or info.file_size > MAX_UPLOAD or info.compress_size < 0
+                    or (info.file_size and info.compress_size==0)
+                    or info.file_size > max(200*info.compress_size,1024*1024)):
+                raise RuntimeError("FINAL_WAREHOUSE_UNSAFE_ZIP")
+            unpacked+=info.file_size
+            if unpacked>MAX_UPLOAD*2:
+                raise RuntimeError("FINAL_WAREHOUSE_UNPACKED_LIMIT_EXCEEDED")
+        # ZIP CRC check may decompress data: only run after limits are verified.
+        if f.testzip() is not None:
+            raise RuntimeError("FINAL_WAREHOUSE_ZIP_CRC_FAILURE")
         for category in REQUIRED_PACKAGE:
             if not any(n.startswith(category) and len(n)>len(category) and not n.endswith("/") for n in names):
                 raise RuntimeError("FINAL_WAREHOUSE_MISSING_SECTION:"+category)
