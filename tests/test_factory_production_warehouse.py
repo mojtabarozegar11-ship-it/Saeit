@@ -32,25 +32,26 @@ class FactoryWarehouseTests(unittest.TestCase):
         return maker.manufacture(recipe,self.recipes,self.private/"digital-products")
     def register(self):
         return json.loads((self.private/"production-warehouse"/"stock-register.json").read_text("utf8"))
-    def test_two_products_first_to_warehouse_zero_site_contact(self):
+    def test_all_registered_products_first_to_warehouse_zero_site_contact(self):
+        expected_count = len(maker.RECIPES)
         for recipe in maker.RECIPES:self.manufacture(recipe)
         result=warehouse.cycle(self.private)
         self.assertEqual(result["status"],"ok")
-        self.assertEqual(result["stocked"],2)
-        self.assertEqual(result["warehouse_count"],2)
+        self.assertEqual(result["stocked"],expected_count)
+        self.assertEqual(result["warehouse_count"],expected_count)
         reg=self.register()
         self.assertFalse(reg["factory_site_dependency"])
         self.assertFalse(reg["distribution_enabled"])
         self.assertEqual(reg["sites_contacted"],0)
-        self.assertEqual(reg["finished_goods_product_count"],2)
-        self.assertEqual(reg["awaiting_commercial_review"],2)
+        self.assertEqual(reg["finished_goods_product_count"],expected_count)
+        self.assertEqual(reg["awaiting_commercial_review"],expected_count)
         for rec in reg["records"]:
             item=self.finished/rec["product_id"]/rec["version"]
             self.assertEqual((item/"product.zip").stat().st_mode & 0o777,0o400)
             self.assertFalse(json.loads((item/"warehouse_manifest.json").read_text())["commercial_release"])
             self.assertEqual(rec["site_transfer_state"],"not_transferred")
         self.assertFalse((self.root/"published").exists())
-        self.assertEqual(len(list(self.private.rglob("*.zip"))),4)  # source and stocked archives
+        self.assertEqual(len(list(self.private.rglob("*.zip"))),expected_count * 2)  # source and stocked archives
     def test_repeat_cycles_never_duplicate_or_overwrite(self):
         self.manufacture("farm_enterprise_economics")
         a=warehouse.cycle(self.private)
