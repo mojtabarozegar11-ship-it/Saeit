@@ -19,7 +19,8 @@
 <body class="site-standard-v2 mojplaywin-site {% block body_class %}mojplaywin-section{% endblock %}">
 <a class="mpw-skip" href="#main-content">Skip to content</a>
 {% include "mojplaywin/theme.html" %}
-<main id="main-content" tabindex="-1">{% block content %}{% endblock %}</main>
+<main id="main-content" tabindex="-1">{% block content %}{% endblock %}
+{% if mpw_managed_blocks %}{% include "mojplaywin/mpw_managed_blocks.html" %}{% endif %}</main>
 {% include "mojplaywin/footer.html" %}
 <script>
 (function(){
