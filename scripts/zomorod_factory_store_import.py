@@ -76,9 +76,11 @@ def import_catalog(root,dbfile,limit=6):
         raise ValueError("STORE_OR_INBOX_UNAVAILABLE")
     if not 1<=limit<=20:raise ValueError("IMPORT_LIMIT")
     receipts=root/"receipts"
-    if receipts.is_symlink() or not receipts.is_dir():return {"imported":0,"already":0,"scanned":0}
+    if receipts.is_symlink():raise ValueError("RECEIPT_DIR_SYMLINK")
     files=[]
-    for folder in sorted(receipts.iterdir()):
+    # Initialize the private store draft catalog even when the factory has
+    # no QC-passed goods to deliver yet. Never invent product entries.
+    for folder in sorted(receipts.iterdir()) if receipts.is_dir() else []:
         if folder.is_symlink() or not folder.is_dir() or not SLUG.fullmatch(folder.name):
             raise ValueError("RECEIPT_FOLDER_UNSAFE")
         for p in sorted(folder.iterdir()):
