@@ -1,0 +1,40 @@
+name: Zomorod wheat free tool and native zero-price catalogue QA
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/zomorod_free_wheat_release.py"
+      - "content/zomorod-v11/site_store.php"
+      - "content/zomorod-v11/store_index.php"
+      - "content/zomorod-v11/free-products/wheat-seed-rate-planner-v1/index.html"
+      - "tests/test_zomorod_free_seed_product.py"
+      - ".github/workflows/zomorod-free-wheat-tool-qa-20261019.yml"
+  pull_request:
+    paths:
+      - "scripts/zomorod_free_wheat_release.py"
+      - "content/zomorod-v11/site_store.php"
+      - "content/zomorod-v11/store_index.php"
+      - "content/zomorod-v11/free-products/wheat-seed-rate-planner-v1/index.html"
+      - "tests/test_zomorod_free_seed_product.py"
+      - ".github/workflows/zomorod-free-wheat-tool-qa-20261019.yml"
+permissions: {contents: read}
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_sqlite
+      - name: Functional offline calculator tests and zero-price/paid payment isolation
+        shell: bash
+        run: |
+          set -euo pipefail
+          php -l content/zomorod-v11/site_store.php
+          php -l content/zomorod-v11/store_index.php
+          python3 -m py_compile scripts/zomorod_free_wheat_release.py
+          python3 -m unittest discover -s tests -p 'test_zomorod_free_seed_product.py' -v
+          echo ZOMOROD_ORIGINAL_WHEAT_FREE_PRODUCT_QA=PASS
