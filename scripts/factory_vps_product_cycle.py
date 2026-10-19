@@ -208,6 +208,19 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
             value=health.get(key,0)
             return value if type(value) is int and value>=0 else 0
         healthy=state['cycle_status']=='ok'
+        # Healthy rechecks are not fresh production; retain that distinction.
+        fresh=state['new_or_updated_product_count'] > 0
+        if fresh:
+            fresh_reason=None
+        elif designer_failures or admission_failures or failures or research_failures:
+            fresh_reason='blocked_rework_or_input'
+        elif design_state.get('pending_requests',0) or design_state.get('deferred_rework_requests',0):
+            fresh_reason='waiting_for_design_or_rework'
+        elif produced:
+            fresh_reason='unchanged_sources_no_distinct_new_product'
+        else:
+            fresh_reason='no_successful_product_build'
+        state['zero_new_products_reason_code']=fresh_reason
         finished=time.time()
         state['cycle_started_at_utc']=datetime.fromtimestamp(started,timezone.utc).isoformat()
         state['cycle_finished_at_utc']=datetime.fromtimestamp(finished,timezone.utc).isoformat()
@@ -219,6 +232,10 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
                   'consecutive_degraded_cycles':0 if healthy else counter('consecutive_degraded_cycles')+1,
                   'new_or_updated_artifacts_total':counter('new_or_updated_artifacts_total')+state['new_or_updated_product_count'],
                   'new_or_updated_artifacts_this_cycle':state['new_or_updated_product_count'],
+                  'last_new_artifact_at_utc':state['cycle_finished_at_utc'] if fresh else health.get('last_new_artifact_at_utc'),
+                  'consecutive_zero_new_cycles':0 if fresh else counter('consecutive_zero_new_cycles')+1,
+                  'zero_new_products_reason_code':fresh_reason,
+                  'new_product_flow_status':'new_or_updated_artifact_recorded' if fresh else 'no_new_artifact_recorded',
                   'unfinished_rework_requires_attention':bool(failures or admission_failures or designer_failures or research_failures),
                   'commercial_quality_certified':False}
         maker.atomic_text(health_path,json.dumps(activity,sort_keys=True,indent=2)+'\n')
