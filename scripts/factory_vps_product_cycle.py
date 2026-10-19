@@ -27,7 +27,7 @@ def load(name, path):
 SCRIPTS = Path(__file__).resolve().parent
 
 
-def run_cycle(database, output, recipes, *, max_products=25, max_recipes=2):
+def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None):
     root = Path(output).expanduser().resolve()
     root.mkdir(parents=True, exist_ok=True, mode=0o700)
     os.chmod(str(root), 0o700)
@@ -46,7 +46,9 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=2):
         dossier = portfolio.build(database, str(root / "research-dossiers"), max_products)
         repair = load("saeit_factory_rework_cycle",
                       SCRIPTS / "factory_product_rework.py")
-        selected = sorted(maker.RECIPES)[:max_recipes]
+        selected = sorted(maker.RECIPES)
+        if max_recipes is not None:
+            selected = selected[:max_recipes]
         if not Path(recipes).is_dir():
             raise RuntimeError("PRODUCT_RECIPE_DIRECTORY_MISSING")
         produced = []
@@ -85,6 +87,9 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=2):
             "mode": "autonomous_supply_led",
             "depends_on_orders": False,
             "api_usage": "none",
+            "token_usage": 0,
+            "build_policy": "all_registered_recipes_sequentially",
+            "registered_recipe_count": len(maker.RECIPES),
             "product_candidates_processed": dossier["processed_count"],
             "research_dossiers_updated": dossier["updated_count"],
             "built_product_count": len(produced),
@@ -126,9 +131,14 @@ def main(argv=None):
     p.add_argument("--out", required=True)
     p.add_argument("--recipes", required=True)
     p.add_argument("--max-products", type=int, default=25)
-    p.add_argument("--max-recipes", type=int, default=2)
+    p.add_argument(
+        "--max-recipes", type=int, default=None,
+        help="Optional positive limit; by default build every registered recipe.",
+    )
     options = p.parse_args(argv)
-    if not 1 <= options.max_products <= 100 or not 1 <= options.max_recipes <= 20:
+    if not 1 <= options.max_products <= 100 or (
+        options.max_recipes is not None and options.max_recipes < 1
+    ):
         raise ValueError("BOUNDED_LIMIT_REQUIRED")
     result = run_cycle(options.db, options.out, options.recipes,
                        max_products=options.max_products,
@@ -136,6 +146,9 @@ def main(argv=None):
     print("VPS_FACTORY_CYCLE_STATUS=" + result["status"])
     print("VPS_FACTORY_ORDERS_REQUIRED=false")
     print("VPS_FACTORY_PRIVATE_PRODUCT_PACKAGES=" + str(result["manufactured"]))
+    print("VPS_FACTORY_REGISTERED_BUILD_RECIPES=" + str(len(load(
+        "saeit_factory_status_maker", SCRIPTS / "factory_product_maker.py").RECIPES)))
+    print("VPS_FACTORY_API_AND_TOKEN_USAGE=0")
     print("VPS_FACTORY_PRODUCT_CANDIDATES_SCANNED=" + str(result["processed"]))
     print("VPS_FACTORY_QA_REWORK_NEW_OR_OPEN=" + str(result.get("failed", 0)))
     print("VPS_FACTORY_PRIVATE_QA_REWORK=" + json.dumps(result.get("rework_queue", {}), sort_keys=True))
