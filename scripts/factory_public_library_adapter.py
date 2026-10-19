@@ -106,10 +106,37 @@ def atomic_write(path, raw, *, mode=0o644):
             os.unlink(temp)
 
 
-def publish(home, site_id):
+def preflight(home, site_id):
+    """Check every known live target without writing a file."""
     home = Path(home).expanduser().resolve()
     if site_id not in ALLOWED:
         raise ValueError("SITE_NOT_ALLOWED")
+    name, _, _ = ALLOWED[site_id]
+    root = home / name
+    if root.is_symlink() or not root.is_dir():
+        raise RuntimeError("SITE_ROOT_NOT_VERIFIED")
+    if not any((root / file).is_file()
+               for file in ("index.html", "index.php", ".htaccess", "passenger_wsgi.py")):
+        raise RuntimeError("SITE_ROOT_NO_PROVEN_PUBLIC_ENTRY")
+    sha = verify_release(home)
+    dest = root / "factory-products"
+    if dest.is_symlink() or (dest.exists() and not dest.is_dir()):
+        raise RuntimeError("FACTORY_DIRECTORY_COLLISION")
+    if dest.is_dir():
+        marker = dest / MARKER
+        if marker.is_symlink() or not marker.is_file():
+            raise RuntimeError("EXISTING_NON_FACTORY_DIRECTORY_PROTECTED")
+        if json.loads(marker.read_text(encoding="utf-8")) != {
+            "schema": OWNER, "site_id": site_id,
+        }:
+            raise RuntimeError("FACTORY_DIRECTORY_OWNER_MISMATCH")
+    return {"site_id": site_id, "sha256": sha,
+            "target_exists": dest.is_dir(), "safe_to_stage": True}
+
+
+def publish(home, site_id):
+    check = preflight(home, site_id)
+    home = Path(home).expanduser().resolve()
     name, label, category = ALLOWED[site_id]
     root = home / name
     if root.is_symlink() or not root.is_dir():
@@ -136,7 +163,7 @@ def publish(home, site_id):
     output = {
         "schema": OWNER,
         "site_id": site_id,
-        "library_url": "/factory-products/index.html",
+        "library_url": ("/tala/factory-products/index.html" if site_id == "zomorod-tala" else "/factory-products/index.html"),
         "products": [{
             "id": PRODUCT, "title": TITLE, "free": True,
             "canonical_url": CANONICAL, "sha256": checksum,
@@ -157,5 +184,7 @@ if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("--home", required=True)
     p.add_argument("--site-id", required=True, choices=sorted(ALLOWED))
+    p.add_argument("--preflight", action="store_true")
     args = p.parse_args()
-    print(json.dumps(publish(args.home, args.site_id), sort_keys=True))
+    print(json.dumps(preflight(args.home, args.site_id) if args.preflight
+                     else publish(args.home, args.site_id), sort_keys=True))
