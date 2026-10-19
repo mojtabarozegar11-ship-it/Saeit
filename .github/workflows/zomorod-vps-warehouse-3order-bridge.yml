@@ -2,7 +2,11 @@ name: Zomorod site-only VPS warehouse bridge plus 3 production orders
 on:
   push:
     branches: [main]
-    paths: [.github/workflows/zomorod-vps-warehouse-3order-bridge.yml]
+    paths:
+      - .github/workflows/zomorod-vps-warehouse-3order-bridge.yml
+      - scripts/zomorod_vps_warehouse_3order_bridge.py
+      - scripts/zomorod_factory_store_import.py
+      - content/zomorod-v11/site_store.php
   schedule:
     - cron: '17 4 * * *'
   workflow_dispatch:
@@ -116,7 +120,10 @@ jobs:
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/zm-site-factory-bridge"
-          git show "6fca6f37d6923494137a210bf9739f20d6ee1dd8:content/zomorod-v11/site_store.php" > "$d/site_store.base.php"
+          git show "172b776365e6206a20a287dc7fcbee0e5699f67f:content/zomorod-v11/site_store.php" > "$d/site_store.base.php"
+          test -s "$d/site_store.base.php"
+          ! grep -Fq 'function zmFactoryDraftsPanel' "$d/site_store.base.php"
+          grep -Fq 'function zmFactoryDraftsPanel' content/zomorod-v11/site_store.php
           original="$(sha256sum "$d/site_store.base.php"|cut -c1-64)"
           desired="$(sha256sum content/zomorod-v11/site_store.php|cut -c1-64)"
           scp -q -F "$d/config" scripts/zomorod_factory_store_import.py zm-cpanel:.private/zomorod-business/zomorod_factory_store_import.py
