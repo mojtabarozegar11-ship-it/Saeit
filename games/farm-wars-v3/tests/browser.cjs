@@ -52,6 +52,33 @@ const url = process.env.TEST_URL || 'http://127.0.0.1:8080/';
   await page.waitForTimeout(1000);
   assert((await page.evaluate(()=>window.FarmDominionDebug.getState())).enemies[0]<oldEnemy,'War attack did not damage enemy castle');
   await page.screenshot({path:dir+'/'+view.name+'-active-battle.png',fullPage:true});
+  // New River Pulse gameplay: irrigation, a finite daily water decision, genetic crops,
+  // a verified caravan contract, and defensive protection.
+  const strategyBefore=await page.evaluate(()=>window.FarmDominionDebug.getStrategy());
+  assert.equal(strategyBefore.v,1,'River Pulse state not initialized');
+  assert.equal(strategyBefore.water,85,'Water starting balance must be consistent');
+  await page.evaluate(()=>window.FarmDominionDebug.action('flow-grow'));
+  const irrigated=await page.evaluate(()=>window.FarmDominionDebug.getStrategy());
+  assert.equal(irrigated.water,60,'Irrigation must consume 25 water');
+  assert.equal(irrigated.pulseDay,1,'First-day River Pulse not marked');
+  await page.evaluate(()=>window.FarmDominionDebug.action('flow-siege'));
+  assert.equal((await page.evaluate(()=>window.FarmDominionDebug.getStrategy())).water,60,'Second water command in one day must not be free or possible');
+  await page.evaluate(()=>window.FarmDominionDebug.action('gene-cycle'));
+  assert.equal((await page.evaluate(()=>window.FarmDominionDebug.getStrategy())).gene,'swift','Genetic seed selection failed');
+  const stock=(await page.evaluate(()=>window.FarmDominionDebug.getStrategy())).cargo;
+  assert.equal(stock.wheat,1,'Harvested wheat must enter caravan cargo');
+  await page.evaluate(()=>window.FarmDominionDebug.nextDay());
+  const newer=await page.evaluate(()=>window.FarmDominionDebug.getStrategy());
+  assert(newer.water>60,'New turn must recharge river');
+  await page.evaluate(()=>window.FarmDominionDebug.action('flow-guard'));
+  assert((await page.evaluate(()=>window.FarmDominionDebug.getStrategy())).guardCharges>=2,'Fortified canal defense missing');
+  assert.equal((await page.locator('#hydro-info').textContent()).includes('آب'),true);
+  assert.equal((await page.locator('#contract-info').textContent()).includes('سفارش'),true);
+  assert.equal((await page.locator('#seed-info').textContent()).includes('بذر'),true);
+  assert(await page.locator('[data-action="flow-grow"]').count()===1);
+  assert(await page.locator('[data-action="contract"]').count()===1);
+  await page.screenshot({path:dir+'/'+view.name+'-river-pulse-strategy.png',fullPage:true});
+
   console.log(view.name.toUpperCase()+'_REAL_3D_QA=PASS modelCount='+result.modelCount+' drawCalls='+result.drawCalls+' resolution='+result.canvas.join('x')+' oldEnemy='+oldEnemy);
   await context.close();
  }
