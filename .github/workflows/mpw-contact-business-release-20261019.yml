@@ -1,0 +1,213 @@
+name: MojPlayWin contact genuine business and press channel safe release
+on:
+  pull_request:
+    paths:
+      - "scripts/mpw_dynamic_main_shell_20261019.php"
+      - "scripts/mpw_contact_business_atomic_20261019.py"
+      - "tests/test_mpw_contact_business_php_20261019.py"
+      - ".github/workflows/mpw-contact-business-release-20261019.yml"
+  push:
+    branches: [main]
+    paths:
+      - "scripts/mpw_dynamic_main_shell_20261019.php"
+      - ".github/workflows/mpw-contact-business-release-20261019.yml"
+permissions:
+  contents: read
+concurrency:
+  group: mojplaywin-about-exact-static-prod
+  cancel-in-progress: false
+jobs:
+  contact-preflight:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+      - name: PHP lint and shared-route regression tests
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_contact_business_atomic_20261019.py
+          python3 -m pip install -q pytest
+          python3 -m pytest -q --noconftest tests/test_mpw_contact_business_php_20261019.py
+  publish-contact-shell:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.ref == 'refs/heads/main' &&
+      github.event_name == 'push' &&
+      contains(github.event.head_commit.message, '[approved-mpw-contact-business-20261019]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+      - name: Verify original approved source and PHP self-tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_contact_business_atomic_20261019.py
+          python3 -m pip install -q pytest
+          python3 -m pytest -q --noconftest tests/test_mpw_contact_business_php_20261019.py
+          git cat-file -e 8751d8bfd47354ba18d1efe75166404127a5bb4a^{commit}
+          git show 8751d8bfd47354ba18d1efe75166404127a5bb4a:scripts/mpw_dynamic_main_shell_20261019.php > "$RUNNER_TEMP/mpw-old-php"
+          sha256sum "$RUNNER_TEMP/mpw-old-php" scripts/mpw_dynamic_main_shell_20261019.php
+          echo "MPW_CONTACT_SCOPE_AND_PHP_SELFTEST=PASS"
+      - name: Record public 19-route baseline without writing
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import urllib.request,urllib.error,json,os,time
+          root='https://mojplaywin.com'
+          routes='/store/ /games/ /ai/ /contact/ /support/ /privacy/ /terms/ /cookies/ /products/ /blockchain/ /commerce/ /crypto-payments/ /global-business/ /research-lab/ /canada-vision/ /agro-industry/ /agriculture/ /education/ /weather/ /about/ /company/ /farnaz/'.split()
+          state={}
+          def request(p):
+              for attempt in range(3):
+                  try:
+                      req=urllib.request.Request(root+p,headers={'Cache-Control':'no-cache','User-Agent':'MPWContactOnlyChange/1.0'})
+                      with urllib.request.urlopen(req,timeout=16) as resp:
+                          return resp.status,resp.read(1300000).decode('utf-8','replace')
+                  except urllib.error.HTTPError as e:
+                      return e.code,e.read(1000).decode('utf-8','replace')
+                  except Exception:
+                      if attempt==2:raise
+                      time.sleep(2)
+          for path in routes:
+              code,body=request(path)
+              state[path]=code
+              print('BEFORE_ROUTE',path,code)
+              if path in ('/store/','/games/','/ai/','/contact/','/about/','/company/') and code!=200:
+                  raise SystemExit('Protected critical route unhealthy '+path)
+              if path=='/contact/':
+                  if body.count('Coming soon')!=2 or 'Business contact will be published' not in body:
+                      raise SystemExit('Unexpected original Contact cards, no deployment')
+          with open(os.environ['RUNNER_TEMP']+'/mpw-contact-routes.json','w') as f:json.dump(state,f)
+          print('CONTACT_PREPUBLICATION_BASELINE=PASS')
+          PY
+      - name: Open host-key-pinned relay through VPS to cPanel
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-consolidated-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Stage private PHP file without changing public site
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-consolidated-ssh"
+          stage="/home/zomorod2/.mpw-contact-shell-stage-$GITHUB_RUN_ID.php"
+          timeout 45s ssh -T -F "$d/config" saeit-cpanel "test ! -e '$stage' && test ! -L '$stage'"
+          scp -q -F "$d/config" scripts/mpw_dynamic_main_shell_20261019.php "saeit-cpanel:$stage"
+          timeout 35s ssh -T -F "$d/config" saeit-cpanel "chmod 600 '$stage'"
+      - name: Publish only approved contact-case PHP branch atomically
+        id: publish
+        shell: bash
+        run: |
+          set -euo pipefail
+          old_sha="$(sha256sum "$RUNNER_TEMP/mpw-old-php" | awk '{print $1}')"
+          new_sha="$(sha256sum scripts/mpw_dynamic_main_shell_20261019.php | awk '{print $1}')"
+          d="$RUNNER_TEMP/mpw-consolidated-ssh"
+          timeout 90s ssh -T -F "$d/config" saeit-cpanel \
+            "python3 - install '$GITHUB_RUN_ID' '$old_sha' '$new_sha'" < scripts/mpw_contact_business_atomic_20261019.py
+      - name: Verify actual Contact response and all protected routes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import urllib.request,urllib.error,json,os,time
+          root='https://mojplaywin.com'
+          rid=os.environ['GITHUB_RUN_ID']
+          def read(p):
+              req=urllib.request.Request(root+p,headers={'Cache-Control':'no-cache','Pragma':'no-cache','User-Agent':'MPWContactPostRelease/1.0'})
+              try:
+                  with urllib.request.urlopen(req,timeout=18) as r:
+                      return r.status,r.read(1400000).decode('utf-8','replace')
+              except urllib.error.HTTPError as e:
+                  return e.code,e.read(1000).decode('utf-8','replace')
+          ok=False
+          for attempt in range(1,6):
+              try:
+                  code,body=read('/contact/?mpw_contact_fix='+rid+'-'+str(attempt))
+                  ok=(code==200 and 'mpw-contact-safe-business-20261019' in body and
+                      body.count('class="mpw-contact-direct"')==2 and
+                      'mailto:support@mojplaywin.com?subject=Business%20Partnership' in body and
+                      'mailto:support@mojplaywin.com?subject=Press%20Inquiry' in body and
+                      '<small>Coming soon</small>' not in body and
+                      'mojplaywin-coin-logo.420e0d1f954b.png' in body)
+                  if ok:break
+              except Exception as e:print('CONTACT_RELEASE_RETRY',type(e).__name__)
+              time.sleep(3)
+          if not ok:raise SystemExit('Contact business/press production smoke failed')
+          baseline=json.load(open(os.environ['RUNNER_TEMP']+'/mpw-contact-routes.json'))
+          for path,expected in baseline.items():
+              actual,_=read(path)
+              if actual!=expected:raise SystemExit('Protected route status changed '+path)
+              print('PROTECTED_ROUTE_UNCHANGED',path,actual)
+          print('CONTACT_BUSINESS_AND_PRESS_LIVE=VERIFIED')
+          PY
+      - name: Automatic checksum-protected rollback if any live test fails
+        if: failure() && steps.publish.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-consolidated-ssh"
+          timeout 60s ssh -T -F "$d/config" saeit-cpanel \
+            "python3 - rollback '$GITHUB_RUN_ID'" < scripts/mpw_contact_business_atomic_20261019.py
+      - name: Clean only the private staged PHP file, preserve recovery backup
+        if: always()
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/mpw-consolidated-ssh"
+          stage="/home/zomorod2/.mpw-contact-shell-stage-$GITHUB_RUN_ID.php"
+          if test -f "$d/config";then
+            timeout 30s ssh -T -F "$d/config" saeit-cpanel \
+              "test ! -L '$stage' && rm -f -- '$stage'" || true
+          fi
