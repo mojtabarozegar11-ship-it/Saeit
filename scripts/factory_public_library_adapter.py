@@ -106,6 +106,8 @@ Additional items are added only after their independent release checks pass.</sm
 
 
 def atomic_write(path, raw, *, mode=0o644):
+    if path.parent.is_symlink():
+        raise RuntimeError('SELF_UPGRADE_BLOCKED_SYMLINK_PARENT')
     fd, temp = tempfile.mkstemp(prefix=".saeit-public-", dir=path.parent)
     try:
         with os.fdopen(fd, "wb") as file:
