@@ -9,6 +9,8 @@ on:
       - "deploy/install_autonomous_factory_products.sh"
       - "tests/test_factory_product_maker.py"
       - "tests/test_factory_product_rework.py"
+      - "tests/test_factory_production_warehouse.py"
+      - "tests/test_factory_quality_module_upgrade.py"
       - "tests/test_factory_vps_product_cycle.py"
       - "tests/test_factory_vps_installer_syntax.py"
       - ".github/workflows/vps-autonomous-product-install.yml"
@@ -34,6 +36,8 @@ jobs:
           python3 -m unittest discover -s product_recipes/greenhouse_crop_margin -p 'test_*.py' -v
           python3 -m unittest discover -s tests -p 'test_factory_product_maker.py' -v
           python3 -m unittest discover -s tests -p 'test_factory_product_rework.py' -v
+          python3 -m unittest discover -s tests -p 'test_factory_production_warehouse.py' -v
+          python3 -m unittest discover -s tests -p 'test_factory_quality_module_upgrade.py' -v
           python3 -m unittest discover -s tests -p 'test_factory_vps_product_cycle.py' -v
           python3 -m unittest discover -s tests -p 'test_factory_evidence_quality.py' -v
           python3 -m unittest discover -s tests -p 'test_factory_vps_installer_syntax.py' -v
