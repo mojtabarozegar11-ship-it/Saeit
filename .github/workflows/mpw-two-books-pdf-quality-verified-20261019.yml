@@ -1,0 +1,171 @@
+name: MojPlayWin final two books PDF technical approval C2PA aware
+on:
+  push:
+    branches: [mpw-two-books-unified-release-20261019]
+    paths: [".github/workflows/mpw-two-books-pdf-quality-verified-20261019.yml"]
+permissions: {contents: read}
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 11
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Validate private final editions in temporary runner without publishing files
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          python3 -m pip install --disable-pip-version-check -q pypdf==6.2.0
+          for id in 72 225; do
+            timeout 100s ssh -T -F "$d/config" saeit-cpanel \
+              "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - $id" \
+              > "$RUNNER_TEMP/mpw-book-$id.pdf" <<'PY'
+          import sys,os,pathlib
+          id_=int(sys.argv[1])
+          root=pathlib.Path('/home/zomorod2/Saeit-staging')
+          os.chdir(root);sys.path.insert(0,str(root))
+          os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          import django;django.setup()
+          from core.models import Product
+          from core.cryptopay_checkout import product_delivery_ready
+          from mpw_commerce.downloads import _private_file
+          from types import SimpleNamespace
+          p=Product.objects.get(pk=id_)
+          if id_ not in (72,225) or not product_delivery_ready(p):
+            raise RuntimeError('Hash-verified private sale asset required')
+          f=_private_file(SimpleNamespace(product=p))
+          with f.open('rb') as src:
+            while True:
+              chunk=src.read(256*1024)
+              if not chunk:break
+              sys.stdout.buffer.write(chunk)
+          PY
+          done
+          python3 - <<'PY'
+          from pypdf import PdfReader
+          from pypdf.generic import ArrayObject, DictionaryObject
+          import hashlib,json,os,pathlib
+          root=pathlib.Path(os.environ['RUNNER_TEMP'])
+          results=[]
+          for pk,expected in ((72,415),(225,40)):
+            f=root/f'mpw-book-{pk}.pdf'
+            r=PdfReader(str(f),strict=False)
+            pages=len(r.pages)
+            root_dictionary=r.trailer['/Root']
+            active_actions = any(str(k) in ('/OpenAction','/AA','/JavaScript') for k in root_dictionary.keys())
+            suspicious_attachments=[]
+            attachments_count=0
+            try:
+              attachments=getattr(r,'attachments',{})
+              for filename,contents in attachments.items():
+                attachments_count+=1
+                suffix=pathlib.PurePosixPath(str(filename)).suffix.lower()
+                if suffix not in ('.pdf','.txt','.png','.jpg','.jpeg','.svg','.csv','.json'):
+                  # Provenance C2PA JUMBF manifests are legitimate attached
+                  # authenticity statements, not user-executable payloads.
+                  valid_c2pa=False
+                  if pk==72 and len(attachments)==1:
+                    associated=r.trailer['/Root'].get('/AF') or []
+                    if len(associated)==1:
+                      af=associated[0].get_object()
+                      embedded=af.get('/EF')
+                      entry=embedded.get_object().get('/F') if embedded else None
+                      stream=entry.get_object() if hasattr(entry,'get_object') else entry
+                      candidates=contents if isinstance(contents,(list,tuple)) else [contents]
+                      valid_c2pa=(str(af.get('/AFRelationship'))=='/C2PA_Manifest'
+                        and str(stream.get('/Subtype'))=='/application/c2pa'
+                        and all(isinstance(v,bytes) and v[4:8]==b'jumb' for v in candidates))
+                  if not valid_c2pa:
+                    suspicious_attachments.append(suffix or 'unknown')
+            except Exception:
+              suspicious_attachments=['unreadable_attachment_table']
+            empty_streams=0
+            page_action_count=0
+            readable=0
+            duplicate_text=0
+            seen=set()
+            failed_pages=0
+            for i,page in enumerate(r.pages):
+              if page.get('/AA') or page.get('/OpenAction'):
+                page_action_count+=1
+              try:
+                annots=page.get('/Annots') or []
+                for ref in annots:
+                  item=ref.get_object()
+                  action=item.get('/A')
+                  if action and str(action.get('/S','')) in ('/JavaScript','/Launch'):
+                    page_action_count+=1
+                payload=page.get_contents()
+                if payload is None or len(payload.get_data())==0:
+                  empty_streams+=1
+                content=(page.extract_text() or '').strip()
+                if len(content)>20:
+                  readable+=1
+                  digest=hashlib.sha256(content.encode('utf8','replace')).hexdigest()
+                  if digest in seen:duplicate_text+=1
+                  seen.add(digest)
+              except Exception:
+                failed_pages+=1
+            outcome={'id':pk,'expected_pages':expected,'actual_pages':pages,
+              'bytes':f.stat().st_size,'encrypted':r.is_encrypted,'active_root_actions':active_actions,
+              'page_unsafe_actions':page_action_count,'attachment_count':attachments_count,
+              'suspicious_attachment_types':suspicious_attachments,
+              'empty_page_streams':empty_streams,'text_pages':readable,
+              'repeated_text_pages':duplicate_text,'unreadable_pages':failed_pages}
+            outcome['passed_technical']= (
+              pages==expected and not r.is_encrypted and not active_actions and
+              not page_action_count and not suspicious_attachments and not empty_streams and
+              failed_pages==0 and f.stat().st_size>10000 and readable >= (400 if pk==72 else 35)
+            )
+            results.append(outcome)
+          print('MPW_PRE_SALE_PDF_QA='+json.dumps(results,sort_keys=True))
+          assert all(x['passed_technical'] for x in results), 'Sale asset structural safety review failed'
+
+          PY
+          rm -f "$RUNNER_TEMP/mpw-book-72.pdf" "$RUNNER_TEMP/mpw-book-225.pdf"
