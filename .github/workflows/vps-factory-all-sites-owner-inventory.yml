@@ -1,0 +1,107 @@
+name: Factory all-site owner inventory read only
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/vps-factory-all-sites-owner-inventory.yml]
+permissions: {contents: read}
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Pinned SSH read-only site and distribution inventory
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/factory-multisite-inventory"
+          install -d -m 700 "$d"
+          trap 'rm -rf "$d"' EXIT
+          for field in VPS_KEY HOST_KEY; do
+            printf '%s' "${!field}" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/$field.key"
+            chmod 600 "$d/$field.key"
+            ssh-keygen -y -P '' -f "$d/$field.key" >/dev/null
+          done
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -i "$d/VPS_KEY.key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/vps.known" -o BatchMode=yes githubops@178.239.147.150 'ssh-keyscan -T 9 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/VPS_KEY.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/HOST_KEY.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 10
+          EOF
+          chmod 600 "$d/config"
+          timeout 65s ssh -T -F "$d/config" saeit-cpanel 'python3 -' <<'PY'
+          import json,subprocess
+          from pathlib import Path
+          home=Path.home()
+          try:
+            raw=subprocess.run(["/usr/local/cpanel/bin/uapi","--output=json","DomainInfo","list_domains"],capture_output=True,text=True,timeout=15)
+            if raw.returncode==0:
+              doc=json.loads(raw.stdout).get("result",{}).get("data",{})
+              keys=("main_domain","addon_domains","sub_domains","parked_domains")
+              for key in keys:
+                value=doc.get(key) or []
+                if isinstance(value,str): value=[value]
+                print("FACTORY_SITE_CPANEL_"+key.upper()+"="+json.dumps(value,ensure_ascii=True))
+            else: print("FACTORY_SITE_CPANEL_UAPI_INCONCLUSIVE")
+          except Exception as e:
+            print("FACTORY_SITE_CPANEL_UAPI_ERROR="+type(e).__name__)
+          for top in ("public_html","zomorodmelal.ir","mojplaywin.com","mojtabarozegar.com","mojtabarozegar.ir"):
+            root=home/top
+            if not root.is_dir() or root.is_symlink(): continue
+            candidates=[]
+            for child in sorted(root.iterdir(),key=lambda x:x.name.lower()):
+              if child.is_symlink() or not child.is_dir() or child.name.startswith("."): continue
+              flags=[p for p in ("passenger_wsgi.py","index.php","index.html","manage.py","wp-config.php") if (child/p).is_file()]
+              if flags or child.name.lower() in ("tala","farnaz","taniya","zahra","saman","roham","picm","mojtaba.roozegar","studio.roham","studio.saman"):
+                candidates.append({"name":child.name,"entry_flags":flags})
+            print("FACTORY_SITE_ROOT="+top)
+            print("FACTORY_SITE_DIRECT_CHILDREN="+json.dumps(candidates[:75],ensure_ascii=True))
+          for project in (home/"Saeit",home/"Saeit-staging"):
+            url=project/"config/urls.py"
+            if url.is_file():
+              data=url.read_text(encoding="utf-8",errors="replace")
+              import re
+              sitepaths=sorted(set(re.findall(r'path\("([^"]{1,110})/"',data)))
+              print("FACTORY_SITE_DJANGO_PATHS="+json.dumps(sitepaths[:110],ensure_ascii=True))
+          print("FACTORY_SITE_INVENTORY_READONLY_DONE")
+          PY
+          timeout 45s ssh -T -F "$d/config" saeit-vps 'python3 -' <<'PY'
+          import json
+          from pathlib import Path
+          root=Path.home()/"factory-runtime"/"private"
+          catalog=root/"multisite-distribution"
+          sites=catalog/"site-registry.json"
+          if sites.is_file():
+            doc=json.loads(sites.read_text(encoding="utf-8"))
+            print("FACTORY_MULTISITE_REGISTRY="+json.dumps([{"id":s.get("id"),"status":s.get("status"),"owner_verified":s.get("owner_verified"),"adapter_verified":s.get("adapter_verified")} for s in doc.get("sites",[])],ensure_ascii=True))
+          status=catalog/"catalogs"/"distribution-state.json"
+          if status.is_file():
+            data=json.loads(status.read_text(encoding="utf-8"))
+            print("FACTORY_MULTISITE_STATUS="+json.dumps({k:data.get(k) for k in ("sites_known","sites_active","products_approved","products_blocked","publications_verified","status")},ensure_ascii=True))
+          import subprocess
+          cr=subprocess.run(["crontab","-l"],capture_output=True,text=True)
+          print("FACTORY_MULTISITE_CRON_COUNT="+str(cr.stdout.count("SAEIT_MULTISITE_CATALOG_V1")))
+          print("FACTORY_ALLSITE_VPS_READONLY_DONE")
+          PY
