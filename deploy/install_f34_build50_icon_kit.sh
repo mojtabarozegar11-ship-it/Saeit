@@ -58,7 +58,32 @@ for name in factory_build50_f34_icon_kit.py factory_f34_independent_icon_review.
 done
 "$toolpython" -B -m py_compile "$target/factory_build50_f34_icon_kit.py" "$target/factory_f34_independent_icon_review.py" "$target/factory_build_50.py"
 "$toolpython" -B "$target/factory_build50_f34_icon_kit.py" --factory-private "$private"
-"$primary" -B "$stock" --factory-private "$private" --strict-build50
+# The existing minute-level warehouse job may own the shared lock.
+# Retry boundedly, without unlocking its file or overwriting live inventory.
+stocked=0
+for attempt in 1 2 3 4 5 6 7 8 9 10 11 12; do
+  "$primary" -B "$stock" --factory-private "$private" --strict-build50
+  if "$primary" -B - "$private" <<'PYSTOCK'
+import json,sys
+from pathlib import Path
+root=Path(sys.argv[1])
+file=root/'production-warehouse/stock-register.json'
+data=json.loads(file.read_text('utf8'))
+id='fieldwork_ui_48_icons'
+assert data.get('strict_build50_enabled') is True
+assert any(x.get('product_id')==id for x in data.get('records',[]))
+PYSTOCK
+  then
+    stocked=1
+    echo F34_WAREHOUSE_LOCK_RETRY_CYCLE="$attempt"
+    break
+  fi
+  sleep 7
+done
+if test "$stocked" -ne 1; then
+  echo F34_WAREHOUSE_STOCK_NOT_CONFIRMED
+  exit 1
+fi
 "$primary" -B "$bridge/factory_build50_family_bridge.py" --factory-private "$private" --registry "$registry" --output "$private/production-family-management/build50-family-dashboard.json"
 "$primary" -B - "$private" <<'PY'
 import json,sys,hashlib,zipfile
