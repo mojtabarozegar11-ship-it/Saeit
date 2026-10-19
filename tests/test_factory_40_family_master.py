@@ -3,6 +3,8 @@ import importlib.util
 import json
 from pathlib import Path
 import tempfile
+import subprocess
+import sys
 import unittest
 
 REPO=Path(__file__).resolve().parents[1]
@@ -88,6 +90,14 @@ class FortyLineMasterTests(unittest.TestCase):
         data=mod.read_obj(reg_path)
         data["profiles"][8]["resource_policy"]["memory_mb_max"]=0
         with self.assertRaises(RuntimeError):mod.registry_valid(data)
+    def test_actual_command_line_exit_and_status(self):
+        self.add_order()
+        command=subprocess.run([sys.executable,str(SCRIPT),"--factory-private",
+                                str(self.root),"--registry",str(reg_path)],
+                               capture_output=True,text=True,timeout=20)
+        self.assertEqual(command.returncode,0,command.stdout+command.stderr)
+        self.assertIn("FACTORY_40_MASTER_STATUS=inventory_and_admission_planning_only",command.stdout)
+        self.assertIn("FACTORY_40_FAMILY_REGISTRY=40",command.stdout)
     def test_unique_product_concept_identity(self):
         signature=mod.product_signature("F28","greenhouse","manager","water use","advanced","en")
         same=mod.product_signature(" f28 ","GREENHOUSE","Manager","water  use","ADVANCED","en")
