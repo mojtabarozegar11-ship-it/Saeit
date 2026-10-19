@@ -1,4 +1,4 @@
-name: VPS Master Agent Read-only Preflight
+name: VPS Master Agent Read-only Preflight - live verification 2026-10-20
 on:
   push:
     branches: [main]
