@@ -170,3 +170,4 @@ jobs:
         run: |
           rm -rf -- "$RUNNER_TEMP/mojplaywin-inventory-ssh"
           rm -f -- /tmp/mpw-isolated-static-publisher.tgz
+# Owner-requested 2026-10-20 retry: isolated static articles, host-pinned relay, rollback and smoke required.
