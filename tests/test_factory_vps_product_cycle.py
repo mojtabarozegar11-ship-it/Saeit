@@ -27,6 +27,8 @@ class FactoryVPSCycleTests(unittest.TestCase):
                         self.recipes / "farm_enterprise_economics")
         shutil.copytree(ROOT / "product_recipes" / "water_budget_economics",
                         self.recipes / "water_budget_economics")
+        shutil.copytree(ROOT / "product_recipes" / "greenhouse_crop_margin",
+                        self.recipes / "greenhouse_crop_margin")
         with sqlite3.connect(str(self.db)) as connection:
             connection.executescript("""
                 CREATE TABLE core_product(
@@ -48,10 +50,12 @@ class FactoryVPSCycleTests(unittest.TestCase):
         first = cycle.run_cycle(self.db, self.output, self.recipes)
         self.assertEqual(first["status"], "ok")
         self.assertEqual(first["processed"], 1)
-        self.assertEqual(first["manufactured"], 2)
+        self.assertEqual(first["manufactured"], 3)
         state = json.loads((self.output / "production-state.json").read_text(encoding="utf-8"))
         self.assertFalse(state["depends_on_orders"])
-        self.assertEqual(state["built_product_count"], 2)
+        self.assertEqual(state["built_product_count"], 3)
+        self.assertEqual(state["api_usage"], "none")
+        self.assertEqual(state["token_usage"], 0)
         self.assertTrue(state["artifact_qa_passed"])
         self.assertTrue(state["technical_zip_checks_only"])
         self.assertEqual(state["research_review_candidate_count"], 0)
@@ -61,6 +65,9 @@ class FactoryVPSCycleTests(unittest.TestCase):
         self.assertTrue((self.output / "digital-products" /
                          "farm_enterprise_economics" /
                          "farm_enterprise_economics-internal-qa.zip").exists())
+        self.assertTrue((self.output / "digital-products" /
+                         "greenhouse_crop_margin" /
+                         "greenhouse_crop_margin-internal-qa.zip").exists())
         self.assertEqual(before, self.db.read_bytes())
 
     def test_second_cycle_is_safe_and_idempotent(self):

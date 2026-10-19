@@ -26,12 +26,14 @@ class VPSProductInstallerTests(unittest.TestCase):
         self.assertIn("ORDER_REQUIRED=false", script)
         self.assertNotIn("core_order", script)
 
-    def test_manual_deployment_packages_gate_and_does_not_auto_run_on_merge(self):
+    def test_manual_or_owner_requested_gated_deployment_is_packaged(self):
         source = Path(__file__).resolve().parents[1]
         wf = (source / ".github/workflows/vps-autonomous-product-install.yml").read_text(encoding="utf-8")
         self.assertIn("scripts/factory_evidence_quality.py", wf)
         self.assertIn("workflow_dispatch:", wf)
-        self.assertNotIn("branches: [main]", wf)
+        self.assertIn("branches: [main]", wf)
+        self.assertIn("[approved-factory-unlimited-builds-20261019]", wf)
+        self.assertIn("product_recipes/greenhouse_crop_margin", wf)
 
 
 if __name__ == "__main__":

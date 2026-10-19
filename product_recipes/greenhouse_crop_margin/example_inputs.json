@@ -1,0 +1,9 @@
+{
+  "currency": "USD",
+  "area_m2": 1000,
+  "expected_yield_kg_per_m2": 12,
+  "price_per_kg": 2.5,
+  "variable_cost_per_m2": 15,
+  "fixed_cost_total": 5000,
+  "rejection_rate_percent": 10
+}

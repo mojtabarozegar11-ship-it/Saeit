@@ -74,6 +74,12 @@ class ManufacturerTests(unittest.TestCase):
             maker.sha256_file(Path(second["private_artifact"]))
         )
 
+    def test_build_count_defaults_to_all_registered_recipes_without_fixed_cap(self):
+        self.assertIn("greenhouse_crop_margin", maker.RECIPES)
+        self.assertEqual(len(maker.RECIPES), 3)
+        self.assertEqual(maker.RECIPES["greenhouse_crop_margin"][0],
+                         "Greenhouse Crop Margin and Break-even Planner")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -25,6 +25,10 @@ RECIPES = {
         "Agricultural Water Budget Economics Planner",
         ("calculator.py", "test_calculator.py", "README.md", "example_inputs.json"),
     ),
+    "greenhouse_crop_margin": (
+        "Greenhouse Crop Margin and Break-even Planner",
+        ("calculator.py", "test_calculator.py", "README.md", "example_inputs.json"),
+    ),
 }
 
 
@@ -153,12 +157,17 @@ def main(argv=None):
     ap.add_argument("--recipes", default=str(Path(__file__).resolve().parents[1] / "product_recipes"))
     ap.add_argument("--out", required=True)
     ap.add_argument("--recipe", choices=["all"] + sorted(RECIPES), default="all")
-    ap.add_argument("--max-builds", type=int, default=2)
+    ap.add_argument(
+        "--max-builds", type=int, default=None,
+        help="Optional positive limit; by default build every registered recipe.",
+    )
     args = ap.parse_args(argv)
-    if not 1 <= args.max_builds <= 20:
-        raise ValueError("max-builds must be between 1 and 20")
+    if args.max_builds is not None and args.max_builds < 1:
+        raise ValueError("max-builds must be positive")
     selected = sorted(RECIPES) if args.recipe == "all" else [args.recipe]
-    results = [manufacture(recipe, args.recipes, args.out) for recipe in selected[:args.max_builds]]
+    if args.max_builds is not None:
+        selected = selected[:args.max_builds]
+    results = [manufacture(recipe, args.recipes, args.out) for recipe in selected]
     for item in results:
         print("FACTORY_DIGITAL_PRODUCT_RECIPE=" + item["recipe"])
         print("FACTORY_DIGITAL_PRODUCT_QA=" + item["qa_status"])
