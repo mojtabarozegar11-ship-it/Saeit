@@ -44,7 +44,7 @@ def registry(path):
     return profiles
 
 
-def orders_once(root,engine,profiles,cycle,*,dry_run=False,max_active=297):
+def orders_once(root,engine,profiles,cycle,*,dry_run=False,max_active=300):
     root=Path(root)
     found=CYCLE.fullmatch(cycle)
     if not found:raise ValueError("CYCLE_ID_INVALID")
@@ -197,7 +197,7 @@ def _verify_site_intake(doc,cycle):
         raise RuntimeError("SITE_INTAKE_PRIVACY_INVALID")
 
 
-def reconcile_site_intake(root,engine,profiles,*,max_admit_cycles=1,max_active=297):
+def reconcile_site_intake(root,engine,profiles,*,max_admit_cycles=1,max_active=300):
     """Promote oldest staged cycle only when native backlog has free capacity."""
     area=Path(root)/"production-instructions"
     intake=area/"zomorod-site-intake"
