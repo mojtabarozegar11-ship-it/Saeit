@@ -6,8 +6,8 @@ from pathlib import Path
 ROOT=Path('/home/zomorod2/public_html')
 BACKUP=Path('/home/zomorod2/.backups/zomorod-final-safe-hardening-20261019')
 FILES=[ROOT/'research/index.html',ROOT/'agriculture/index.html',ROOT/'.htaccess']
-OLD_HEADER='<header class="zm-v7-header" role="none">'
-NEW_HEADER='<header class="zm-v7-header" role="navigation" aria-label="هویت و ناوبری زمرد ملل">'
+OLD_HEADER='<div class="zm-v7-top">'
+NEW_HEADER='<div class="zm-v7-top" role="navigation" aria-label="هویت و ناوبری زمرد ملل">'
 OLD_POLICY='Header always set Content-Security-Policy-Report-Only "base-uri \'self\'; object-src \'none\'"'
 NEW_POLICY='Header always append Content-Security-Policy "base-uri \'self\'; object-src \'none\'"'
 OLD_HSTS='Header always set Strict-Transport-Security "max-age=300"'
