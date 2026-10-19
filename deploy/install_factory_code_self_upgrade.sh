@@ -94,8 +94,8 @@ from pathlib import Path
 p=Path(sys.argv[1])
 a=json.loads(p.read_text(encoding="utf8"))
 assert a["schema"]=="saeit.factory.code-self-upgrade.v1"
-assert a["candidate_count"]==2
-assert a["candidates_with_measured_improvement"]==2
+assert a["candidate_count"]==4
+assert a["candidates_with_measured_improvement"]==4
 assert a["factory_python_files_scanned"]>=15
 assert a["production_code_promotions"]==0
 assert not a["whole_code_autonomous_evolution_complete"]
