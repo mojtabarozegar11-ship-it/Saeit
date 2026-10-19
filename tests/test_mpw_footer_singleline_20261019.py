@@ -24,7 +24,8 @@ def test_root_only_footer_source_and_no_regression_to_old_credit():
        "ventures-currency-crypto","ventures-ecommerce","ventures-fuel-station",
        "ventures-hospitality","ventures-jewelry-gold"}
     assert str(foot.TEMPLATE)=="/home/zomorod2/Saeit-staging/core/templates/mojplaywin/footer.html"
-    assert len(foot.targets())==21
+    assert len(foot.targets())==22
+    assert str(foot.PHP_SHELL)=="/home/zomorod2/mojplaywin.com/design-preview-20261017/_mpw_dynamic_main_shell_20261019.php"
     assert str(foot.HOMEPAGE)=="/home/zomorod2/mojplaywin.com/design-preview-20261017/production-home-20261017.html"
 
 def test_two_distinct_footer_types_keep_links_and_only_one_credit():
@@ -54,4 +55,17 @@ def test_real_production_home_is_patched_without_app_reload():
     assert 'def refresh_app(' not in inspect.getsource(foot)
     rollback=inspect.getsource(foot.rollback)
     assert 'restart.txt' not in rollback
-    assert 'MPW_FOOTER_SINGLE_LINE_ROLLED_BACK=21' in rollback
+    assert 'MPW_FOOTER_SINGLE_LINE_ROLLED_BACK=22' in rollback
+
+def test_main_php_must_replace_existing_modern_footer_to_reflect_2022_rights():
+    current=(ROOT/"scripts/mpw_dynamic_main_shell_20261019.php").read_text("utf-8")
+    assert "standard footer replacement" in current
+    previous=current.replace(foot.PHP_NEW_LINE,"",1)
+    assert "standard footer replacement" not in previous
+    assert foot.patch_php(previous)==current
+    try:
+        foot.patch_php(current)
+        assert False, "Duplicate live PHP change must not be allowed"
+    except RuntimeError:pass
+    assert current.count("mpw-contact-safe-business-20261019")>=1
+    assert current.count("function transformMain(")==1
