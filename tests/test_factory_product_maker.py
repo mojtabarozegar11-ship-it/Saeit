@@ -78,7 +78,7 @@ class ManufacturerTests(unittest.TestCase):
         new_recipe = self.recipes / "new_product_family"
         shutil.copytree(self.product, new_recipe)
         readme = new_recipe / "README.md"
-        readme.write_text("# New Product Family\\n", encoding="utf-8")
+        readme.write_text("# New Product Family\n", encoding="utf-8")
         catalog = maker.discover_recipes(self.recipes)
         self.assertEqual(set(catalog), {"farm_enterprise_economics", "new_product_family"})
         self.assertEqual(catalog["new_product_family"][0], "New Product Family")
