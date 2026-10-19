@@ -370,6 +370,99 @@ def receive_factory_returns(raw, root=VPS):
     return report
 
 
+def triage_factory_stage1(root=VPS):
+    """Actually consume site QA returns into durable actionable Stage-1 work.
+
+    A work instruction and missing evidence checklist are an executed
+    triage operation, not an executed creative repair or reviewer approval.
+    The factory's native general designer accepts a different schema:
+    never insert incomplete QA tickets into its auto-design input.
+    """
+    root = Path(root)
+    clean_dir(root)
+    intake = root/"design-intake/mojplaywin-stage1-quality-returns"
+    clean_dir(intake)
+    parent = root/"design-state"
+    clean_dir(parent)
+    dest = parent/"mojplaywin-stage1-qa-work"
+    private_new(dest)
+    lock_path = dest/".queue.lock"
+    require(not lock_path.is_symlink(), "STAGE1_LOCK_SYMLINK")
+    descriptor = os.open(str(lock_path), os.O_RDWR | os.O_CREAT | getattr(os,"O_NOFOLLOW",0), 0o600)
+    try:
+        fcntl.flock(descriptor, fcntl.LOCK_EX)
+        items = []
+        seen = set()
+        for path in sorted(intake.iterdir()):
+            require(path.is_file() and not path.is_symlink()
+                    and path.name.endswith(".json"), "STAGE1_UNTRUSTED_ENTRY")
+            row = json_file(path, 100_000)
+            require(row.get("schema") == RETURN_SCHEMA
+                    and row.get("tenant") == TENANT
+                    and row.get("status") == "return_for_qa_completion"
+                    and row.get("stage") == 1
+                    and row.get("issues") == list(ISSUES)
+                    and row.get("factory_original_must_be_preserved") is True
+                    and row.get("published") is False, "STAGE1_WRONG_SCOPE")
+            product, version = row.get("product_id"), row.get("source_sha256")
+            require(isinstance(product,str) and RECIPE.fullmatch(product)
+                    and isinstance(version,str) and SHA.fullmatch(version)
+                    and path.name == product+"-"+version+".json"
+                    and (product,version) not in seen, "STAGE1_IDENTITY_INVALID")
+            seen.add((product,version))
+            stock = root/"production-warehouse/finished"/product/version
+            clean_dir(stock)
+            original = json_file(stock/"warehouse_manifest.json", 100_000)
+            artifact = stock/"product.zip"
+            require(artifact.is_file() and not artifact.is_symlink()
+                    and 0 < artifact.stat().st_size <= MAX_ZIP, "STAGE1_ORIGINAL_MISSING")
+            require(original.get("source_sha256") == version
+                    and original.get("artifact_sha256") == row.get("artifact_sha256")
+                    and digest(artifact.read_bytes()) == row["artifact_sha256"]
+                    and original.get("commercial_release") is False,
+                    "STAGE1_SOURCE_NOT_VERIFIABLE")
+            identity = product+"-"+version
+            details = {
+                "schema": RETURN_SCHEMA, "tenant": TENANT,
+                "source_receipt_sha256": digest(json_blob(row)),
+                "product_id":product, "version":version,
+                "artifact_sha256":row["artifact_sha256"],
+                "factory_entry_stage":1,
+                "repair_priority":"needs_independent_review",
+                "status":"awaiting_real_correction_evidence",
+                "unresolved_codes":list(ISSUES),
+                "actual_tasks":[
+                    "Review original product content and scientific factual evidence; record reviewer and source links.",
+                    "Verify copyright, licenses, ownership and third-party components with actual documents.",
+                    "Obtain independently signed final commercial quality and owner publication decision.",
+                    "If defects are found: correct original recipe/source in isolated factory workspace, rebuild and rerun complete tests.",
+                ],
+                "original_archive_preserved":True,
+                "automated_approval":False, "production_rebuild_executed":False,
+                "return_to_site_only_after_new_verified_source_version":True,
+            }
+            result = dest/(identity+".json")
+            if result.exists() or result.is_symlink():
+                require(result.is_file() and not result.is_symlink()
+                        and json_file(result,100_000) == details, "STAGE1_WORK_ORDER_DRIFT")
+            else:
+                atomic(result,json_blob(details))
+            items.append(details)
+            require(len(items)<=MAX_ITEMS,"STAGE1_QUEUE_CAPACITY")
+        state = {"schema":RETURN_SCHEMA,"tenant":TENANT,
+                 "actual_site_returns_accepted":len(items),
+                 "factory_stage1_work_items":len(items),
+                 "unresolved_independent_review_items":len(items),
+                 "physical_rebuild_claimed":False,"commercial_approval_claimed":False,
+                 "all_source_archives_preserved":True,
+                 "review_work_directory":"design-state/mojplaywin-stage1-qa-work",
+                 "last_audit_utc":stamp()}
+        atomic(dest/"stage1-status.json",json_blob(state))
+        return state
+    finally:
+        os.close(descriptor)
+
+
 def main():
     require(len(sys.argv)==2, "COURIER_MODE_REQUIRED")
     mode=sys.argv[1]
@@ -383,6 +476,9 @@ def main():
     elif mode=="vps-return":
         report=receive_factory_returns(sys.stdin.buffer.read(1_000_001))
         print("MPW_COURIER_FACTORY_STAGE1="+json.dumps(report,sort_keys=True))
+    elif mode=="vps-triage":
+        report=triage_factory_stage1()
+        print("MPW_COURIER_FACTORY_TRIAGE="+json.dumps(report,sort_keys=True))
     else:
         raise RuntimeError("INVALID_COURIER_MODE")
 
