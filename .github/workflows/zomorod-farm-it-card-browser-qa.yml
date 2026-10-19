@@ -1,0 +1,26 @@
+name: Farm Dominion V4 IT carousel live browser navigation audit
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/zomorod-farm-it-card-browser-qa.yml']
+permissions: {contents: read}
+jobs:
+  browser:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Install one-time Playwright runtime
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/zm-farm-card-browser
+          cd /tmp/zm-farm-card-browser
+          npm init -y >/dev/null
+          npm install --silent --no-save --no-audit --no-fund playwright@1.55.0
+          npx playwright install chromium
+      - name: Test actual IT game card, thumbnail, navigation and 3D game on desktop and mobile
+        run: |
+          set -euo pipefail
+          NODE_PATH=/tmp/zm-farm-card-browser/node_modules node games/farm-wars-v3/tests/home-card.cjs
