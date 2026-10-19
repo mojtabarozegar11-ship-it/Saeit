@@ -1,0 +1,136 @@
+name: MojPlayWin guarded two-book staff dashboard cPanel install
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/mpw-two-books-staff-dashboard-cpanel-install-20261019.yml"]
+permissions: {contents: read}
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Diagnose actual production eligibility and mainnet auto-settlement prerequisites
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 125s ssh -T -F "$d/config" saeit-cpanel bash -s <<'BASH'
+          set -euo pipefail
+          /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - <<'PY'
+          import os,sys,json,pathlib,ast,inspect
+          from django.conf import settings
+          h=pathlib.Path('/home/zomorod2');app=h/'Saeit-staging'
+          os.chdir(app);sys.path.insert(0,str(app));os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          import django;django.setup()
+          from core.models import Product
+          from django.urls import resolve
+          from mpw_commerce import product_checkout_page,buyer_orders,policy,downloads,settlement,auto_reconcile
+          for m in (product_checkout_page,buyer_orders,downloads):
+           for k in ('FLAGS','APPROVAL_FLAGS','HOSTS','DOMAIN_ALLOWLIST'):
+            v=getattr(m,k,None)
+            if isinstance(v,(list,tuple,set)):print('MPW_NEEDED='+json.dumps({'module':m.__name__,'key':k,'value':list(v)}))
+          for pk in (72,225):
+           p=Product.objects.select_related('knowledge_article').get(pk=pk)
+           m=p.metadata or {}
+           print('MPW_BOOK_GATES='+json.dumps({'pk':pk,'active':p.active,'type':p.product_type,'owner':bool(p.owner_id),'knowledge_id':p.knowledge_article_id,'knowledge_published':getattr(p.knowledge_article,'published',None),'quality_approved':m.get('quality_approved'),'license_verified':m.get('license_verified'),'factory_publication_permission':m.get('factory_publication_permission'),'asset_verified':m.get('asset_verified'),'mpw_commerce_enabled':(m.get('mpw_commerce') or {}).get('enabled'),'secure_django_cookie':settings.SESSION_COOKIE_SECURE}))
+          for k in ('MPW_COMMERCE_RELEASE_READY','MPW_COMMERCE_INVOICING_ENABLED','MPW_COMMERCE_AUTORECONCILE_ENABLED','MPW_COMMERCE_SETTLEMENT_ENABLED','MPW_COMMERCE_REAL_RPC_ENABLED','MPW_COMMERCE_DOWNLOADS_ENABLED','MPW_COMMERCE_CUSTOMER_HTTP_ENABLED','MPW_COMMERCE_BUYER_SIGNATURE_ENABLED'):
+           print('MPW_LIVE_SWITCH='+json.dumps({'key':k,'defined':hasattr(settings,k),'enabled':getattr(settings,k,None) is True}))
+          for m,fn in ((buyer_orders,'_eligible'),(downloads,'_private_file'),(settlement,'_verify_evidence'),(auto_reconcile,'reconcile_pending_orders')):
+           f=getattr(m,fn,None)
+           if f is None:continue
+           lines=inspect.getsource(f).splitlines()
+           if fn=='reconcile_pending_orders':lines=lines[:28]
+           sanitized=[x[:180] if not any(y in x.lower() for y in ('secret','password','api_key','private_key','wallet_address','receiver','sender_address')) else '   [redacted]' for x in lines]
+           print('MPW_GATE_CODE='+json.dumps({'func':fn,'module':m.__name__,'lines':sanitized}))
+          from django.db.models import Count
+          from core.models import KnowledgeArticle
+          print('MPW_KNOWLEDGE_FIELDS='+json.dumps([{'name':f.name,'kind':f.get_internal_type(),'null':getattr(f,'null',None),'blank':getattr(f,'blank',None)} for f in KnowledgeArticle._meta.fields]))
+          print('MPW_NO_COMMERCE_ORDER='+json.dumps({'owners_have_prior_receipt_proof':False}))
+
+          PY
+          BASH
+      - name: Backup-protected installation of read-only main-site panel only
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_two_books_staff_panel_install.py command_center/mpw_two_books_panel.py
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          ssh -F "$d/config" saeit-cpanel 'test "$(id -un)" = zomorod2 && test -d "$HOME/Saeit-staging" && mkdir -p -m 700 "$HOME/.saeit-factory-inbox/private/mpw-books-status"'
+          scp -F "$d/config" scripts/mpw_two_books_staff_panel_install.py \
+            saeit-cpanel:/home/zomorod2/.saeit-factory-inbox/private/mpw-books-status/installer.py
+          scp -F "$d/config" command_center/mpw_two_books_panel.py \
+            saeit-cpanel:/home/zomorod2/.saeit-factory-inbox/private/mpw-books-status/mpw_two_books_panel.py
+          scp -F "$d/config" command_center/templates/command_center/mpw_two_books_panel.html \
+            saeit-cpanel:/home/zomorod2/.saeit-factory-inbox/private/mpw-books-status/mpw_two_books_panel.html
+          ssh -T -F "$d/config" saeit-cpanel \
+            '/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python /home/zomorod2/.saeit-factory-inbox/private/mpw-books-status/installer.py --apply'
+      - name: Read-only HTTPS health check; do not restart shared Passenger
+        shell: bash
+        run: |
+          set -euo pipefail
+          for url in \
+            "https://mojplaywin.com/" \
+            "https://mojplaywin.com/store/" \
+            "https://mojplaywin.com/taniya/" \
+            "https://mojplaywin.com/farnaz/" \
+            "https://mojplaywin.com/saman/" \
+            "https://mojplaywin.com/picm/" \
+            "https://zomorodmelal.ir/"; do
+            code="$(curl -sSL --max-time 15 -o /dev/null -w '%{http_code}' "$url")"
+            echo "MPW_PROTECTED_SITE_HTTP=$code"
+            test "$code" = 200
+          done
+          code="$(curl -sS --max-time 16 -o /dev/null -w '%{http_code}' \
+            'https://mojplaywin.com/staff/command-center/mpw-two-books/')"
+          echo "MPW_TWO_BOOK_PANEL_UNAUTH_HTTP=$code"
+          if test "$code" = 302 || test "$code" = 403; then
+            echo MPW_TWO_BOOK_PANEL_HTTP_PROTECTED_LIVE=true
+          else
+            echo MPW_TWO_BOOK_PANEL_RELOAD_STILL_REQUIRED=true
+          fi
+          echo MPW_CRYPTO_PAYMENT_ACTIVATION_UNCHANGED=true
