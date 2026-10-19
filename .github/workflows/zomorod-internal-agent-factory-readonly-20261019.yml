@@ -134,6 +134,10 @@ jobs:
                       if {"agent_code","status"}.issubset(fields):
                           summary=[dict(code=str(code),status=str(status),count=int(n)) for code,status,n in con.execute("SELECT agent_code,status,COUNT(*) FROM runs GROUP BY agent_code,status ORDER BY agent_code,status")]
                           print("SITE_PRIVATE_PER_AGENT_OUTCOMES="+json.dumps(summary))
+                      if "occurred_at" in fields:
+                          print("SITE_PRIVATE_LATEST_RUN_AT="+str(con.execute("SELECT MAX(occurred_at) FROM runs").fetchone()[0])[:48])
+                          recents=[dict(code=str(code),status=str(status),http=str(http),at=str(at)[:48]) for code,status,http,at in con.execute("SELECT x.agent_code,x.status,x.http_code,x.occurred_at FROM runs x JOIN (SELECT agent_code, MAX(id) latest FROM runs GROUP BY agent_code) t ON x.agent_code=t.agent_code AND x.id=t.latest ORDER BY x.agent_code")]
+                          print("SITE_PRIVATE_LATEST_PER_AGENT="+json.dumps(recents))
                       for field in ("created_at","ran_at","checked_at","timestamp","created","at","observed_at"):
                           if field in fields:
                               print("SITE_PRIVATE_LAST_RUN_TIMESTAMP="+field+" "+str(con.execute('SELECT MAX("'+field+'") FROM runs').fetchone()[0])[:60])
@@ -164,6 +168,11 @@ jobs:
             crontab -l 2>/dev/null | python3 -c '
             import re,sys,json
             rows=[s.strip() for s in sys.stdin if s.strip() and not s.lstrip().startswith("#")]
+            relevant={k:0 for k in ("factory","product","site_agents","knowledge_agent","company_activity","master_agent")}
+            for line in rows:
+                for k in relevant:
+                    if k in line:relevant[k]+=1
+            print("SITE_CRON_ACTIVE_CODE_COUNTS="+json.dumps(relevant))
             for i,line in enumerate(rows):
                 if not re.search(r"factory|product|knowledge_agent|company_activity|site_agents|master_agent",line,re.I):continue
                 methods=[k for k in ("php","python","curl","wget","ssh","rsync","scp","manage.py") if k in line]
