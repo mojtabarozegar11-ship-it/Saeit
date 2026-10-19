@@ -31,7 +31,8 @@ SCRIPTS = Path(__file__).resolve().parent
 
 
 def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
-              enable_designer=False, enable_design_intake=False, design_capacity=1):
+              enable_designer=False, enable_design_intake=False, design_capacity=1,
+              enable_invention_supply=False):
     if (type(max_products) is not int or not 1<=max_products<=100
             or max_recipes is not None and (type(max_recipes) is not int or max_recipes<1)):
         raise ValueError('BOUNDED_LIMIT_REQUIRED')
@@ -69,13 +70,14 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
         invention_state={"enabled":False,"new_technical_briefs_this_tick":0}
         if enable_designer:
             designer = load("saeit_factory_recipe_designer", SCRIPTS / "factory_recipe_designer.py")
-            if enable_design_intake:
+            if enable_design_intake and enable_invention_supply:
                 try:
                     inventor=load('saeit_factory_continuous_invention',SCRIPTS/'factory_continuous_invention.py')
                     invention_state=inventor.propose(root,max_new=1,max_pending=5)
                     invention_state['enabled']=True
                 except (ValueError,RuntimeError,OSError,ArithmeticError) as error:
                     designer_failures.append({'type':'invention_supply','reason':str(error)[:400]})
+            if enable_design_intake:
                 try:
                     intake=load('saeit_factory_design_intake',SCRIPTS/'factory_design_intake.py')
                     engineering_state=intake.cycle(root,supply=SCRIPTS.parent/'factory_config/internal_design_supply.json')
@@ -293,6 +295,7 @@ def main(argv=None):
     p.add_argument("--max-products", type=int, default=25)
     p.add_argument("--enable-designer", action="store_true")
     p.add_argument("--enable-design-intake", action="store_true")
+    p.add_argument("--enable-invention-supply", action="store_true")
     p.add_argument("--design-capacity", type=int, default=6,
                    help="Maximum validated synthesis requests per VPS tick (1-20).")
     p.add_argument(
@@ -308,7 +311,8 @@ def main(argv=None):
                        max_products=options.max_products,
                        max_recipes=options.max_recipes, enable_designer=options.enable_designer,
                        enable_design_intake=options.enable_design_intake,
-                       design_capacity=options.design_capacity)
+                       design_capacity=options.design_capacity,
+                       enable_invention_supply=options.enable_invention_supply)
     print("VPS_FACTORY_CYCLE_STATUS=" + result["status"])
     if result["status"] == "already_running":
         return 0
