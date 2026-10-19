@@ -99,7 +99,7 @@ jobs:
           after="$(sha256sum content/zomorod-v11/site_agents.php | cut -c1-64)"
           test "$before" != "$after"
           cat "$RUNNER_TEMP/site_agents.prior.php" | ssh -T -F "$d/config" saeit-cpanel \
-            "cat > '/home/zomorod2/.zm-previous-agent-$GITHUB_RUN_ID.php' '/home/zomorod2/.zm-next-work-$GITHUB_RUN_ID.php' '/home/zomorod2/.zm-next-cli-$GITHUB_RUN_ID.php'"
+            "cat > '/home/zomorod2/.zm-previous-agent-$GITHUB_RUN_ID.php'"
           cat content/zomorod-v11/site_agents.php | ssh -T -F "$d/config" saeit-cpanel \
             "cat > '/home/zomorod2/.zm-next-agent-$GITHUB_RUN_ID.php'"
           cat content/zomorod-v11/site_agent_workforce.php | ssh -T -F "$d/config" saeit-cpanel \
