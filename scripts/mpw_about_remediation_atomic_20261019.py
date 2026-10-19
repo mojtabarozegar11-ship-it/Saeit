@@ -150,7 +150,7 @@ def edit_drifted_section(doc: str, filename: str):
 
 def find_founder_fragment(doc: str):
     start,end=section_span(doc,"mpw-founder-spotlight-20261019")
-    token='<style id="mpw-founder-spotlight-20261019-style">'
+    token='<style id="mpw-founder-spotlight-style-20261019">'
     if doc.count(token)!=1:fail("Founder's unique scoped stylesheet missing")
     pos=doc.index(token)
     if pos>start:fail("Founder stylesheet unexpectedly moved")
