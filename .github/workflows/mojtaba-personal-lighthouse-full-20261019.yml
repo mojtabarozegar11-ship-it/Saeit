@@ -9,7 +9,7 @@ jobs:
     if: >-
       github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
       github.event.issue.user.login == 'mojtabarozegar11-ship-it' &&
-      github.event.issue.title == 'Ops: Personal Lighthouse full 4x2 audit 2026-10-19'
+      github.event.issue.title == 'Ops: Personal Lighthouse final 4x2 audit 2026-10-19'
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
@@ -34,7 +34,7 @@ jobs:
           print('LIGHTHOUSE_VALID_PROFILE='+profile,flush=True)
           for k in ('performance','accessibility','best-practices','seo'):
               c=d.get('categories',{}).get(k,{})
-              print('LIGHTHOUSE_'+profile.upper()+'_'+k.replace('-','_').upper()+'='+str(round(c['score']*100) if isinstance(c.get('score'),float) else 'INVALID'),flush=True)
+              print('LIGHTHOUSE_'+profile.upper()+'_'+k.replace('-','_').upper()+'='+str(round(c['score']*100) if isinstance(c.get('score'),(int,float)) else 'INVALID'),flush=True)
           for k in ('first-contentful-paint','largest-contentful-paint','speed-index','total-blocking-time','cumulative-layout-shift'):
               a=d.get('audits',{}).get(k,{})
               print('METRIC_'+profile.upper()+'_'+k.upper().replace('-','_')+'='+str(a.get('displayValue','unknown')),flush=True)
