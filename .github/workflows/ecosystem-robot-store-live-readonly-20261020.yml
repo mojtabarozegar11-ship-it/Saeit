@@ -1,0 +1,139 @@
+name: Ecosystem live agent robot master and storefront deep read only snapshot
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/ecosystem-robot-store-live-readonly-20261020.yml"]
+permissions: {contents: read}
+jobs:
+  snapshot:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Read actual cPanel cron, robots, private master reports and store records
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 105s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" <<'PY'
+          import os,json,time,subprocess,sqlite3,collections
+          from pathlib import Path
+          home=Path('/home/zomorod2')
+          mpw=home/'.private_mojplaywin_main_agents'
+          now=time.time()
+          def age(p):
+           try:return int(now-p.stat().st_mtime) if p.is_file() and not p.is_symlink() else None
+           except Exception:return None
+          def read(p):
+           try:
+            if p.is_symlink() or not p.is_file() or p.stat().st_size>500000:return None
+            return json.loads(p.read_text('utf8','replace'))
+           except Exception:return None
+          def emit(k,o):print(k+'='+json.dumps(o,default=str,sort_keys=True))
+          cr=subprocess.run(['crontab','-l'],capture_output=True,text=True,timeout=12)
+          marks=['MPW_V91_MAIN_ONLY_20261018','MPW_V11_MAIN_ONLY_SITE_HEALTH_20261018','MPW_ZOMOROD_QUALITY_REVIEW_MAIN_ONLY_20261018','MPW_ZOMOROD_MANAGEMENT_INTELLIGENCE_MAIN_ONLY_20261018','MPW_PRIVATE_EVOLUTION_MAIN_ONLY_20261018','MPW_77_MODULES_MAIN_ONLY_20261018','MPW_MAIN_PRIVATE_EXECUTION_ROBOTS_20261018','MPW_MAIN_EXTENDED_ROBOTS_20261018','MPW_TWO_BOOKS_INBOUND_RECONCILER_20261019','ZOMOROD','SAEIT_FACTORY']
+          out={}
+          for mark in marks:
+           out[mark]=len([line for line in cr.stdout.splitlines() if mark in line and not line.strip().startswith('#')])
+          emit('ECOSYSTEM_AGENT_CRON',{'cron_exit':cr.returncode,'markers':out,'total_active_entries':len([x for x in cr.stdout.splitlines() if x.strip() and not x.lstrip().startswith('#')])})
+          reports=[
+           ('mpw_master64',mpw/'v91_verified_main_port_20261018/operator_state/heartbeat.json'),
+           ('mpw_health11',mpw/'site_health_main_only_20261018/last_scan.json'),
+           ('mpw_gen65',mpw/'evolution_runtime_20261018/gen65_operational_report.json'),
+           ('mpw_77',mpw/'evolution_runtime_20261018/all_77_modules_last_run.json'),
+           ('mpw_courier',mpw/'evolution_runtime_20261018/warehouse_courier/status.json'),
+           ('mpw_robots',mpw/'evolution_runtime_20261018/private_execution_robots_status.json'),
+           ('mpw_page_factory',mpw/'evolution_runtime_20261018/page_content_status.json'),
+           ('mpw_content_pipeline',mpw/'evolution_runtime_20261018/page_content_report.json'),
+           ('mpw_research',mpw/'evolution_runtime_20261018/research_review.json'),
+          ]
+          whitelist={'status','active_private_generation','existing_public_master_generation','master_generation','modules_hash_verified','modules_import_executed','total_agents','last_master_callback_utc','observed_utc','last_run_utc','last_checked_utc','new_customer_packages_received','new_private_imports','pending_stage1_return','publicly_published','quality_approved','factory_versions_observed','duplicate_versions_skipped','existing_customer_packages_verified','products_published','produced_products','generated_drafts','reviewed_count','approved_count','last_error','failed_count','product_count','run_count','reports_count','cron_enabled','publication_enabled'}
+          for name,p in reports:
+           item=read(p)
+           emit('ECOSYSTEM_MPW_AGENT_REPORT',{'name':name,'exists':p.is_file(),'age_sec':age(p),'is_dict':isinstance(item,dict),
+             'metrics':{k:item[k] for k in whitelist if isinstance(item,dict) and k in item}})
+          # Read-only sqlite table list and aggregate rows. No PII.
+          file=home/'.private/zomorod-business/site_agents.sqlite3'
+          result={'present':file.is_file(),'age_sec':age(file)}
+          if file.is_file() and not file.is_symlink():
+           try:
+            con=sqlite3.connect('file:'+str(file)+'?mode=ro',uri=True,timeout=5)
+            con.execute('PRAGMA query_only=ON')
+            tables=[t[0] for t in con.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' LIMIT 20")]
+            result['tables']=[]
+            for table in tables:
+             if not table.replace('_','').isalnum():continue
+             count=con.execute('SELECT COUNT(*) FROM "'+table+'"').fetchone()[0]
+             result['tables'].append({'table':table,'rows':count})
+            con.close()
+           except Exception as e:result['error']=type(e).__name__
+          emit('ECOSYSTEM_ZOMOROD_AGENT_SQLITE',result)
+          for label,p in [('zom_agent_php',home/'.private/zomorod-business/site_agents.php'),('zom_store',home/'public_html/store/index.html'),('mpw_main_wsgi',home/'mojplaywin.com/passenger_wsgi.py'),('zm_wsgi',home/'public_html/passenger_wsgi.py')]:
+           emit('ECOSYSTEM_HOST_FILE',{'label':label,'exists':p.is_file(),'age_sec':age(p)})
+          # Django store summary - read only.
+          app=home/'Saeit-staging'
+          try:
+           import sys
+           os.chdir(app);sys.path.insert(0,str(app));os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+           import django;django.setup()
+           from core.models import Product,Order,OrderItem,PaymentIntent,Agent,AgentTask
+           from django.db.models import Count
+           products=Product.objects
+           by_type=list(products.values('product_type').annotate(n=Count('id')).order_by('-n')[:18])
+           emit('ECOSYSTEM_MPW_DB',{'total_products':products.count(),'active_products':products.filter(active=True).count(),
+            'by_type':by_type,'orders':Order.objects.count(),
+            'paid_orders':Order.objects.filter(status='paid').count(),
+            'payment_intents':PaymentIntent.objects.count(),
+            'total_agent_rows':Agent.objects.count(),
+            'active_agent_rows':Agent.objects.filter(active=True).count(),
+            'agent_tasks_completed':AgentTask.objects.filter(status='completed').count(),
+            'agent_tasks_running':AgentTask.objects.filter(status='running').count(),
+            'agent_tasks_failed':AgentTask.objects.filter(status='failed').count()})
+          except Exception as e:emit('ECOSYSTEM_MPW_DB',{'error':type(e).__name__})
+          print('ECOSYSTEM_CPANEL_AGENTS_READONLY=PASS')
+          PY
