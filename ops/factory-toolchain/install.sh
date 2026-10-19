@@ -15,7 +15,7 @@ chmod 700 "$root" "$root/versions"
 exec 9>"$root/.install.lock"
 flock -w 30 9 || exit 2
 free_mb="$(df -Pm "$root" | awk 'NR==2 {print $4}')"
-((free_mb >= 3072)) || { echo TOOLCHAIN_DISK_RESERVE_NOT_MET; exit 3; }
+((free_mb >= 5120)) || { echo TOOLCHAIN_DISK_RESERVE_NOT_MET; exit 3; }
 target="$root/versions/$revision"
 test ! -L "$target"
 if [[ ! -d "$target" ]]; then

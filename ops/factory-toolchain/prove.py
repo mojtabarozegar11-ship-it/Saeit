@@ -90,14 +90,45 @@ def prove(root):
         artifact(work/'cube.blend')
         return artifact(work/'cube.png')
     def llm():
-        output=run([root/'llama/bin/llama-cli','-m',root/'models/coder.gguf',
-                    '--no-conversation','--no-display-prompt','--no-warmup',
-                    '-p','What is 2+2? Reply with only the digit.','-n','16','--temp','0',
-                    '--seed','42','-t','1','-c','512'],timeout=180)
-        (work/'local-model-output.txt').write_text(output)
-        if '4' not in output: raise ValueError('LOCAL_MODEL_REFERENCE_PROMPT_FAILED:'+output[-200:])
-        return {'reference_answer_present':True,'output_sha256':hashlib.sha256(output.encode()).hexdigest(),
-                'max_generated_tokens':16,'quality_of_other_answers_verified':False}
+        import socket, urllib.request, urllib.error
+        with socket.socket() as reserved:
+            reserved.bind(('127.0.0.1',0)); port=reserved.getsockname()[1]
+        logfile=(work/'local-model-server.log').open('w')
+        command=[str(root/'llama/bin/llama-server'),'-m',str(root/'models/coder.gguf'),
+                 '--host','127.0.0.1','--port',str(port),'-t','1','-c','512',
+                 '--parallel','1','--no-warmup']
+        process=None
+        try:
+            process=subprocess.Popen(command,stdout=logfile,stderr=logfile)
+            deadline=time.monotonic()+100
+            while time.monotonic()<deadline:
+                if process.poll() is not None: raise ValueError('LOCAL_MODEL_SERVER_EXITED')
+                try:
+                    with urllib.request.urlopen('http://127.0.0.1:'+str(port)+'/health',timeout=2) as response:
+                        if response.status==200: break
+                except (urllib.error.URLError,TimeoutError): pass
+                time.sleep(0.25)
+            else: raise ValueError('LOCAL_MODEL_START_TIMEOUT')
+            payload={'messages':[{'role':'system','content':'Reply to arithmetic with only the numerical result.'},
+                                 {'role':'user','content':'2+2'}],
+                     'max_tokens':16,'temperature':0,'seed':42,'stream':False}
+            request=urllib.request.Request('http://127.0.0.1:'+str(port)+'/v1/chat/completions',
+                data=json.dumps(payload).encode(),headers={'Content-Type':'application/json'})
+            with urllib.request.urlopen(request,timeout=100) as response:
+                result=json.load(response)
+            output=result['choices'][0]['message']['content'].strip()
+            (work/'local-model-output.txt').write_text(output)
+            if output!='4': raise ValueError('LOCAL_MODEL_REFERENCE_PROMPT_FAILED:'+output[-200:])
+            return {'reference_answer':output,'output_sha256':hashlib.sha256(output.encode()).hexdigest(),
+                    'completion_tokens':result.get('usage',{}).get('completion_tokens'),
+                    'max_generated_tokens':16,'loopback_only':True,
+                    'quality_of_other_answers_verified':False}
+        finally:
+            if process is not None and process.poll() is None:
+                process.terminate()
+                try: process.wait(timeout=10)
+                except subprocess.TimeoutExpired: process.kill(); process.wait(timeout=5)
+            logfile.close()
     for name,callback in [('images',images),('documents',documents),('video',media),
                           ('office_render_and_recalculation',office),('blender_cpu_render',render),('local_language_model',llm)]:
         check(name,callback)
