@@ -110,7 +110,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for record in "approved-free-farm|https://mojplaywin.com/factory-releases/farm-enterprise-economics-v1/index.html" "approved-free-sha|https://mojplaywin.com/factory-releases/farm-enterprise-economics-v1/SHA256SUMS.txt" "mpw-main|https://mojplaywin.com/" "mpw-farnaz|https://mojplaywin.com/farnaz/" "mpw-taniya|https://mojplaywin.com/taniya/" "mpw-saman|https://mojplaywin.com/saman/" "mpw-picm|https://mojplaywin.com/picm/" "zomorod-main|https://zomorodmelal.ir/" "zomorod-tala|https://zomorodmelal.ir/tala/"; do
+          for record in "new-library-mpw|https://mojplaywin.com/factory-products/index.html" "new-library-zomorod|https://zomorodmelal.ir/factory-products/index.html" "new-library-tala|https://zomorodmelal.ir/tala/factory-products/index.html" "approved-free-farm|https://mojplaywin.com/factory-releases/farm-enterprise-economics-v1/index.html" "approved-free-sha|https://mojplaywin.com/factory-releases/farm-enterprise-economics-v1/SHA256SUMS.txt" "mpw-main|https://mojplaywin.com/" "mpw-farnaz|https://mojplaywin.com/farnaz/" "mpw-taniya|https://mojplaywin.com/taniya/" "mpw-saman|https://mojplaywin.com/saman/" "mpw-picm|https://mojplaywin.com/picm/" "zomorod-main|https://zomorodmelal.ir/" "zomorod-tala|https://zomorodmelal.ir/tala/"; do
             label="${record%%|*}"
             url="${record#*|}"
             code="$(curl -L -sS -o /dev/null --max-time 14 -w '%{http_code}' "$url" 2>/dev/null || :)"
