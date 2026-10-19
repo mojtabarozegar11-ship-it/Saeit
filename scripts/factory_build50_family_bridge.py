@@ -114,6 +114,10 @@ def inventory(root,registry,proto,master):
                     families[fid]['technical_50_stage_completed']+=1
                 elif entry.get('status')=='rework_required':
                     families[fid]['50_stage_attempts_requiring_rework']+=1
+    for fid,item in families.items():
+        if item['technical_50_stage_completed']>0:
+            item['executor_status']='verified_real_50_stage_technical_executor_for_observed_product'
+            item['next_action']='independent_specialist_review_and_commercial_acceptance'
     for fid,p in by_family.items():
         pilot=base/'family-pilots'/fid
         if pilot.is_symlink():raise RuntimeError('BRIDGE_UNSAFE_PILOT_DIR')
@@ -150,7 +154,7 @@ def inventory(root,registry,proto,master):
     counts={'registered_families':len(families),
             'families_with_valid_50_stage_technical_proof':sum(x['technical_50_stage_completed']>0 for x in families.values()),
             'technical_products_with_verified_50_stages':sum(x.get('verified',False) for x in products),
-            'families_without_verified_50_stage_executor':sum(x['executor_status']=='family_executor_not_yet_verified' for x in families.values()),
+            'families_without_verified_50_stage_executor':sum(x['technical_50_stage_completed']==0 and x['executor_status']=='family_executor_not_yet_verified' for x in families.values()),
             'families_with_private_technical_pilots':sum(x['technical_pilot_count']>0 for x in families.values()),
             'commercially_approved_and_published_products':0}
     if counts['registered_families']!=40:raise RuntimeError('BRIDGE_EXPECTED_40_FAMILIES')
