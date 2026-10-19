@@ -28,6 +28,7 @@ class BothExistingCouriers(unittest.TestCase):
         t=tempfile.TemporaryDirectory();self.addCleanup(t.cleanup)
         self.root=pathlib.Path(t.name)/"factory"
         self.root.mkdir(mode=0o700)
+        (self.root/"design-intake").mkdir(mode=0o700)
         self.site=pathlib.Path(t.name)/"private_site";self.site.mkdir(mode=0o700)
         spec=intake.expand({"schema":intake.SCHEMA,"family_id":"F28",
                             "blueprint":"inventory_coverage"},"factory_invention")
@@ -68,6 +69,7 @@ class BothExistingCouriers(unittest.TestCase):
 
     def test_mpw_tamper_companion_refused_before_site_ingest(self):
         path=self.root/"customer-packs"/self.product/self.version/"customer-package.zip"
+        path.chmod(0o600)
         path.write_bytes(path.read_bytes()+b"tampered")
         with self.assertRaisesRegex(RuntimeError,"CUSTOMER_PACKAGE_SHA_OR_RELEASE_GATE_INVALID"):
             mpw.export_factory(self.root)
