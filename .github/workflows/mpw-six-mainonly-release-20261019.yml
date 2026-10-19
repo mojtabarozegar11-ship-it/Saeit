@@ -1,0 +1,145 @@
+name: MojPlayWin six corrections atomic main-only release
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/mpw_six_mainonly_atomic_20261019.py"
+      - "tests/test_mpw_six_mainonly_atomic.py"
+      - ".github/workflows/mpw-six-mainonly-release-20261019.yml"
+permissions:
+  contents: read
+concurrency:
+  group: mojplaywin-mainonly-six-atomic
+  cancel-in-progress: false
+jobs:
+  release:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event_name == 'push' && contains(github.event.head_commit.message, '[approved-mpw-six-atomic-20261019]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 22
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Validate all six components and preserve protected baseline
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_six_mainonly_atomic_20261019.py
+          python3 -m unittest discover -s tests -p 'test_mpw_six_mainonly_atomic.py' -v
+          python3 - <<'PY'
+          import urllib.request,json,os
+          paths=['/','/store/','/about/','/company/','/research/','/agents/','/knowledge/','/search/?q=chess','/games/','/ai/','/contact/','/support/','/farnaz/','/saman/','/picm/']
+          baseline={}
+          for path in paths:
+              req=urllib.request.Request('https://mojplaywin.com'+path,headers={'User-Agent':'MPWSixAtomicAudit/1.0','Cache-Control':'no-cache'})
+              with urllib.request.urlopen(req,timeout=20) as res:
+                  baseline[path]=res.status
+                  if res.status!=200:raise SystemExit('FAIL_CLOSED_BAD_BASELINE '+path)
+              print('BASELINE '+path+' '+str(baseline[path]),flush=True)
+          with open(os.environ['RUNNER_TEMP']+'/mpw-six-baseline.json','w') as f:json.dump(baseline,f)
+          PY
+      - name: Set up pinned VPS and cPanel SSH
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-footer-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Check exact 20 file hashes and isolated owner routes before writing
+        run: |
+          set -euo pipefail
+          timeout 90s ssh -T -F "$RUNNER_TEMP/mpw-footer-inventory/config" saeit-cpanel python3 - audit < scripts/mpw_six_mainonly_atomic_20261019.py
+      - name: Install six improvements in one atomic stage with private backups
+        run: |
+          set -euo pipefail
+          timeout 105s ssh -T -F "$RUNNER_TEMP/mpw-footer-inventory/config" saeit-cpanel python3 - install "$GITHUB_RUN_ID" < scripts/mpw_six_mainonly_atomic_20261019.py
+      - name: Verify live 19 page layouts, 340 unique topics, SEO, search and protected subsites
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import urllib.request,json,os,re,html
+          from pathlib import Path
+          base='https://mojplaywin.com'
+          def get(p):
+              req=urllib.request.Request(base+p,headers={'Cache-Control':'no-cache','User-Agent':'MPWSixReleaseVerify/1.0','Accept-Encoding':'identity'})
+              with urllib.request.urlopen(req,timeout=22) as res:
+                  if res.status!=200:raise SystemExit('BAD_STATUS '+p)
+                  return res.read(1600000).decode('utf8','replace')
+          main=get('/')
+          if len(re.findall(r'class="mpo-orbit-track"',main))!=17 or len(re.findall(r'href="/topics/\?id=[0-9]{4}"',main))!=340:
+              raise SystemExit('CAROUSEL_OR_TOPIC_LINKS_INVALID')
+          print('HOMEPAGE_17x20_TOPIC_LINKS=PASS',flush=True)
+          topic=get('/topics/?id=0001')
+          if 'MOJPLAYWIN / TOPIC' not in topic or 'Explore related section' not in topic:
+              raise SystemExit('TOPIC_VIEW_INVALID')
+          print('TOPIC_VIEW=PASS',flush=True)
+          for search in ('chess','MojPlayWin','Taniya','AI'):
+              text=get('/search/?q='+search)
+              hit=re.search(r'<h2>(\d+) matches',text)
+              if hit is None or int(hit.group(1))<1:raise SystemExit('SEARCH_NOT_WORKING '+search)
+              print('SEARCH_PASS '+search+' '+hit.group(1),flush=True)
+          names=['about-mojtaba-rozegar','about','agents','company','economy','industry','knowledge','market','research','services','studio','ventures-agriculture','ventures-cafe-restaurant','ventures-carpets','ventures-currency-crypto','ventures-ecommerce','ventures-fuel-station','ventures-hospitality','ventures-jewelry-gold']
+          def route(n):
+              return '/ventures/'+n[9:]+'/' if n.startswith('ventures-') else ('/about/mojtaba-rozegar/' if n=='about-mojtaba-rozegar' else '/'+n+'/')
+          for n in names:
+              path=route(n);s=get(path)
+              if 'lang="en"' not in s or '<link rel="canonical" href="'+base+path+'">' not in s:
+                  raise SystemExit('WRONG_LANG_OR_CANONICAL '+path)
+              if 'class="site-header"' in s or 'class="site-footer"' in s:
+                  raise SystemExit('DUPLICATE_BRAND_SHELL '+path)
+              if 'data:image/jpeg;base64,' in s:
+                  raise SystemExit('LEGACY_INLINE_LOGO '+path)
+              if 'Mojtaba Roozegar' not in s:raise SystemExit('FOUNDER_LINE_MISSING '+path)
+              print('MAIN_PAGE_PASS '+path,flush=True)
+          baseline=json.loads(Path(os.environ['RUNNER_TEMP']+'/mpw-six-baseline.json').read_text())
+          for path in ('/store/','/games/','/ai/','/contact/','/support/','/farnaz/','/saman/','/picm/'):
+              req=urllib.request.Request(base+path,headers={'Cache-Control':'no-cache'})
+              with urllib.request.urlopen(req,timeout=22) as res:
+                  if res.status!=baseline[path]:raise SystemExit('PROTECTED_OR_COMMERCE_PATH_CHANGED '+path)
+              print('PROTECTED_ROUTE_OK '+path,flush=True)
+          print('MAIN_ONLY_SIX_FIXES_VERIFIED=PASS',flush=True)
+          PY
+      - name: Roll back exactly the owned files if any validation fails
+        if: failure()
+        run: |
+          d="$RUNNER_TEMP/mpw-footer-inventory/config"
+          if test -s "$d" && test -f "$RUNNER_TEMP/mpw-six-baseline.json"; then
+            timeout 100s ssh -T -F "$d" saeit-cpanel python3 - rollback "$GITHUB_RUN_ID" < scripts/mpw_six_mainonly_atomic_20261019.py || true
+          fi
+      - name: Clear pinned SSH key material
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/mpw-footer-inventory"
