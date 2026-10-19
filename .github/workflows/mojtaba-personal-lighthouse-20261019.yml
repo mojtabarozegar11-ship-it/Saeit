@@ -1,0 +1,53 @@
+name: Personal site Lighthouse performance verification
+on:
+  issues:
+    types: [opened]
+permissions:
+  contents: read
+jobs:
+  audit:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event.issue.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.issue.title == 'Ops: Personal postrelease Lighthouse audit 2026-10-19'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Verify Chrome and Node availability
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --version
+          google-chrome --version
+      - name: Measure live mobile and desktop Lighthouse
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/mpw-personal-lh
+          export CHROME_PATH="$(command -v google-chrome)"
+          for profile in mobile desktop; do
+            if [ "$profile" = desktop ]; then
+              extra="--preset=desktop"
+            else
+              extra=""
+            fi
+            timeout 170s npx --yes lighthouse@12.8.2               "https://mojplaywin.com/mojtaba.roozegar/"               --chrome-flags="--headless --no-sandbox --disable-dev-shm-usage"               --only-categories=performance,accessibility,best-practices,seo               --output=json --output-path="/tmp/mpw-personal-lh/$profile.json"               --max-wait-for-load=45000 $extra --quiet
+          done
+          python3 - <<'PY'
+          import json
+          for p in ("mobile","desktop"):
+              d=json.load(open("/tmp/mpw-personal-lh/"+p+".json"))
+              print("LIGHTHOUSE_PROFILE="+p)
+              for name in ("performance","accessibility","best-practices","seo"):
+                  c=d["categories"][name]
+                  print("LIGHTHOUSE_"+p.upper()+"_"+name.upper().replace("-","_")+"="+str(round(c["score"]*100)))
+              for k in ("largest-contentful-paint","cumulative-layout-shift","total-blocking-time","speed-index"):
+                  audit=d.get("audits",{}).get(k,{})
+                  print("LIGHTHOUSE_"+p.upper()+"_"+k.upper().replace("-","_")+"="+str(audit.get("displayValue","unknown")))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: personal-lighthouse-evidence
+          path: /tmp/mpw-personal-lh/
+          retention-days: 7
