@@ -148,6 +148,14 @@ jobs:
           d="$RUNNER_TEMP/mpw-consolidated-ssh"
           timeout 90s ssh -T -F "$d/config" saeit-cpanel \
             "python3 - install '$GITHUB_RUN_ID'" < scripts/mpw_footer_singleline_atomic_20261019.py
+      - name: Refresh only MojPlayWin Django cached footer template safely
+        id: refresh
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-consolidated-ssh"
+          timeout 45s ssh -T -F "$d/config" saeit-cpanel \
+            "python3 - refresh '$GITHUB_RUN_ID'" < scripts/mpw_footer_singleline_atomic_20261019.py
       - name: Verify every known main-domain page and unchanged protected paths
         id: verify
         shell: bash
@@ -160,11 +168,17 @@ jobs:
           expected='☆ All Rights Reserved. ☆ 2022. ☆ Mojtaba roozegar ☆'
           def get(path):
               req=urllib.request.Request('https://mojplaywin.com'+path,headers={'Cache-Control':'no-cache','Pragma':'no-cache','User-Agent':'MPWFooterReleaseProof/1.0'})
-              try:
-                  with urllib.request.urlopen(req,timeout=16) as r:
-                      return r.status,r.read(2200000).decode('utf-8','replace')
-              except urllib.error.HTTPError as e:
-                  return e.code,e.read(1000).decode('utf-8','replace')
+              for attempt in range(5):
+                  try:
+                      with urllib.request.urlopen(req,timeout=16) as r:
+                          return r.status,r.read(2200000).decode('utf-8','replace')
+                  except urllib.error.HTTPError as e:
+                      if e.code>=500 and attempt<4:
+                          time.sleep(3);continue
+                      return e.code,e.read(1000).decode('utf-8','replace')
+                  except Exception:
+                      if attempt==4:raise
+                      time.sleep(3)
           verified=0
           for path,prior in baseline.items():
               final,body=get(path)
@@ -175,7 +189,7 @@ jobs:
               # The 19 root static files are directly changed; the other
               # routes inherit the updated shared template or research footer.
               got=False
-              for attempt in range(3):
+              for attempt in range(5):
                   if attempt:
                       time.sleep(3)
                       _,body=get(path+'?_footer_fix='+os.environ['GITHUB_RUN_ID']+'-'+str(attempt))
