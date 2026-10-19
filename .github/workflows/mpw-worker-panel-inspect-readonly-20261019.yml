@@ -176,6 +176,47 @@ jobs:
           print('MPW_WORKER_DIAGNOSTICS='+json.dumps({'tenant':'mojplaywin-main','worker_files':entries,'cron':cron,'panel':details,
                 'module_registry_size':len(rows),'module_capability_sample':rows[:77]},ensure_ascii=False,sort_keys=True))
           PY
+      - name: Verify real MojPlayWin Django staff panel in fresh app worker
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 85s ssh -T -F "$RUNNER_TEMP/mojplaywin-inventory-ssh/config" saeit-cpanel 'cd /home/zomorod2/Saeit-staging && /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -B -' <<'PY'
+          import os,json
+          os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          import django
+          django.setup()
+          from django.contrib.auth import get_user_model
+          from django.test import RequestFactory
+          from django.urls import reverse
+          from command_center.mpw_monitor_views import dashboard, telemetry_api
+          user=get_user_model()(username='ephemeral-mpw-test-staff',is_active=True,is_staff=True)
+          factory=RequestFactory()
+          path=reverse('mpw_agent_monitor')
+          api=reverse('mpw_agent_monitor_api')
+          assert path.endswith('/mpw-agents/') and api.endswith('/api/mpw-agents/')
+          page=factory.get(path,secure=True,HTTP_HOST='mojplaywin.com');page.user=user
+          result=dashboard(page)
+          assert result.status_code==200
+          content=result.content.decode('utf8')
+          assert 'id="quality"' in content
+          assert 'اجرای سالم' in content
+          request=factory.get(api,secure=True,HTTP_HOST='mojplaywin.com');request.user=user
+          response=telemetry_api(request)
+          info=json.loads(response.content)
+          assert response.status_code==200
+          assert info['tenant']=='mojplaywin-main'
+          assert info['summary']['total']==103
+          assert info['summary']['loaded_only']==77
+          assert info['evidence']['open_rework_items']==0
+          assert info['evidence']['worker_execution_receipts_verified']==2
+          assert 'no-store' in response['Cache-Control']
+          print('MPW_PRIVATE_PANEL_FRESH_DJANGO='+json.dumps({
+              'render_200':True,'api_200':True,
+              'worker_receipts':info['evidence']['worker_execution_receipts_verified'],
+              'open_rework':info['evidence']['open_rework_items'],
+              'module_imports_not_claimed_functional':info['summary']['loaded_only']==77,
+              'shared_passenger_restarted':False},sort_keys=True))
+          PY
       - name: Erase temporary SSH keys
         if: always()
         shell: bash
