@@ -140,6 +140,21 @@ class FactorySynthesisIntegrationTests(unittest.TestCase):
         self.assertEqual(status,0)
         self.assertFalse((self.output/'production-state.json').exists())
 
+    def test_corrupt_manifest_shapes_are_rebuilt_without_false_new_products(self):
+        cycle.run_cycle(self.db,self.output,self.recipes)
+        manifests=sorted((self.output/'digital-products').glob('*/manufacturing_manifest.json'))
+        prior=[json.loads(path.read_text()) for path in manifests]
+        malformed=[[],dict(prior[1],qa_measurements=[]),
+                   dict(prior[2],qa_measurements=dict(prior[2]['qa_measurements'],successful_tests='many'))]
+        for path,bad in zip(manifests,malformed): path.write_text(json.dumps(bad))
+        result=cycle.run_cycle(self.db,self.output,self.recipes)
+        self.assertEqual(result['status'],'ok')
+        self.assertEqual(result['manufactured'],3)
+        self.assertEqual(result['new_artifacts'],0)
+        for path in manifests:
+            repaired=json.loads(path.read_text())
+            self.assertGreater(repaired['qa_measurements']['successful_tests'],0)
+
     def test_designer_storage_failure_does_not_stop_existing_products(self):
         self.output.mkdir()
         (self.output/'design-state').write_text('deliberately not a directory')
