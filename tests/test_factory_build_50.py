@@ -127,3 +127,32 @@ class Build50Tests(unittest.TestCase):
             def reject(plan,context,gate=gate):
                 result=self.reviewer(plan,context);result['gates'][gate]=False;return result
             self.assertEqual(self.run_build(reviewer=reject,now=n*61)['status'],'rework_required')
+
+    def test_review_cannot_reuse_assembled_product_as_evidence(self):
+        def reviewer(plan,context):
+            result=self.reviewer(plan,context);result['outputs']=['assembled.txt'];return result
+        state=self.run_build(reviewer=reviewer)
+        self.assertEqual(state['status'],'rework_required')
+        self.assertIn('REVIEW_REUSES',state['defects'][0]['reason'])
+
+    def test_worker_cannot_claim_protocol_receipt_as_product(self):
+        state=self.run_build(worker=lambda task,context:{'passed':True,
+            'outputs':['01-plan.json'],'successful_checks':2})
+        self.assertEqual(state['status'],'rework_required')
+        self.assertIn('RESERVED_EVIDENCE',state['defects'][0]['reason'])
+
+    def test_rejected_or_incomplete_state_never_verifies(self):
+        state=self.run_build();home=self.root/'build-50/test_product'
+        for change in ({'status':'rework_required'},{'completed_stages':49},
+                       {'defects':['unresolved']},{'product_id':'other_product'}):
+            self.assertFalse(engine.verify_attempt(home,dict(state,**change),'a'*64))
+
+    def test_missing_reviewer_or_checks_never_verifies_even_with_rehashed_receipt(self):
+        state=self.run_build();home=self.root/'build-50/test_product'
+        final_path=Path(state['attempt_folder'])/'50-summary.json'
+        original=engine.read(final_path)
+        for change in ({'reviewer_id':''},{'successful_checks':0},{'passed':False}):
+            final=json.loads(json.dumps(original));final['review'].update(change)
+            engine.save(final_path,final)
+            forged=dict(state,final_receipt_sha256=engine.digest(final))
+            self.assertFalse(engine.verify_attempt(home,forged,'a'*64))

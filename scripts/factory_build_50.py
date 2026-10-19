@@ -93,10 +93,13 @@ def measured_outputs(folder,result):
     for name in files:
         if not isinstance(name,str) or not name or '\\' in name or '..' in Path(name).parts or Path(name).is_absolute():
             raise ValueError('BUILD50_UNSAFE_OUTPUT')
+        if len(Path(name).parts)==1 and re.fullmatch(r'(?:01-plan|(?:0[2-9]|[1-4][0-9])-work|50-summary|rejection)\.json',name):
+            raise ValueError('BUILD50_RESERVED_EVIDENCE_OUTPUT')
         path=root/name
         path.resolve().relative_to(root)
         if path.is_symlink() or not path.is_file() or not 1<=path.stat().st_size<=8000000:
             raise ValueError('BUILD50_REAL_OUTPUT_REQUIRED')
+        if name in outputs:raise ValueError('BUILD50_DUPLICATE_OUTPUT')
         outputs[name]=file_sha(path)
     return outputs
 
@@ -156,15 +159,21 @@ def _run_attempt(root,plan,worker,assembler,reviewer,now=None):
                 if file_sha(attempt/name)!=checksum:raise ValueError('BUILD50_PRIOR_WORK_MUTATED')
         assembled=assembler(plan,dict(context,stage=50,prior_receipts=list(receipts)))
         outputs=measured_outputs(attempt,assembled)
+        if claimed_paths.intersection(outputs) or claimed_hashes.intersection(outputs.values()):
+            raise ValueError('BUILD50_ASSEMBLY_REUSES_WORK')
         review=reviewer(plan,dict(context,stage=50,outputs=outputs,prior_receipts=list(receipts)))
         if not isinstance(review,dict) or review.get('critical_defects')!=[]:
             raise ValueError('BUILD50_CRITICAL_DEFECTS_OR_MISSING_REVIEW')
-        if review.get('reviewer_id')==plan.get('producer_id') or not review.get('reviewer_id'):
+        if (not isinstance(review.get('reviewer_id'),str) or not review['reviewer_id'].strip()
+                or review['reviewer_id']==plan.get('producer_id')):
             raise ValueError('BUILD50_SEPARATE_REVIEW_REQUIRED')
         gates=review.get('gates',{})
         if not isinstance(gates,dict) or any(gates.get(gate) is not True for gate in GATES):
             raise ValueError('BUILD50_QUALITY_GATES_NOT_PASSED')
         review_outputs=measured_outputs(attempt,review)
+        if (set(review_outputs).intersection(claimed_paths | set(outputs))
+                or set(review_outputs.values()).intersection(claimed_hashes | set(outputs.values()))):
+            raise ValueError('BUILD50_REVIEW_REUSES_PRODUCTION_OUTPUT')
         if review['successful_checks']<len(GATES):raise ValueError('BUILD50_INSUFFICIENT_QUALITY_CHECKS')
         for receipt in receipts[1:]+[{'outputs':outputs}]:
             for name,checksum in receipt['outputs'].items():
@@ -193,6 +202,10 @@ def _run_attempt(root,plan,worker,assembler,reviewer,now=None):
 
 def verify_attempt(home,state,snapshot):
     try:
+        if (state.get('schema')!=SCHEMA or state.get('status')!='awaiting_owner_acceptance'
+                or type(state.get('completed_stages')) is not int or state['completed_stages']!=50
+                or state.get('defects')!=[] or state.get('next_stage') is not None
+                or state.get('product_id')!=Path(home).name):return False
         folder=Path(state['attempt_folder']);folder.resolve().relative_to(Path(home).resolve())
         if folder.is_symlink() or state.get('source_snapshot_sha256')!=snapshot:return False
         plan=read(folder/'01-plan.json');tasks=validate_plan(plan)
@@ -212,11 +225,18 @@ def verify_attempt(home,state,snapshot):
         final=read(folder/'50-summary.json')
         if final.get('previous_sha256')!=digest(prior) or digest(final)!=state.get('final_receipt_sha256'):return False
         review=final.get('review',{})
-        if review.get('critical_defects')!=[] or review.get('reviewer_id')==plan['producer_id']:return False
+        if (review.get('critical_defects')!=[] or not isinstance(review.get('reviewer_id'),str)
+                or not review['reviewer_id'].strip() or review['reviewer_id']==plan['producer_id']
+                or review.get('passed') is not True
+                or type(review.get('successful_checks')) is not int
+                or review['successful_checks']<len(GATES)):return False
         if any(review.get('gates',{}).get(gate) is not True for gate in GATES):return False
         for key in ('outputs','review_outputs'):
             outputs=final[key]
             if measured_outputs(folder,{'passed':True,'outputs':list(outputs),'successful_checks':1})!=outputs:return False
+            if seen_paths.intersection(outputs) or seen_hashes.intersection(outputs.values()):return False
+            seen_paths.update(outputs);seen_hashes.update(outputs.values())
+        if set(review.get('outputs',[]))!=set(final['review_outputs']):return False
         return True
     except (ValueError,OSError,KeyError,TypeError):return False
 
