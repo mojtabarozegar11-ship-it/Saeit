@@ -133,7 +133,9 @@ def prepare():
                       ("new-article.html",updated_article),("new-home.html",updated_home)]:
       out=STAGE/name;out.write_bytes(data);assert out.read_bytes()==data
     meta={"phase":"prepared","oldArticle":hash_bytes(article),"newArticle":hash_bytes(updated_article),
-          "oldHome":hash_bytes(home),"newHome":hash_bytes(updated_home)}
+          "oldHome":hash_bytes(home),"newHome":hash_bytes(updated_home),
+          "gameIndex":hash_bytes((ROOT/"farm-wars/index.html").read_bytes()),
+          "gameJs":hash_bytes((ROOT/"farm-wars/game.js").read_bytes())}
     store(meta)
     print("IT_GAME_ARTICLE_SAFE_PREPARE=PASS",len(article),"->",len(updated_article),"home",len(home),flush=True)
 def publish_article():
@@ -155,6 +157,8 @@ def verify():
     m=load();assert m["phase"]=="home"
     assert hash_bytes(TOPIC.read_bytes())==m["newArticle"]
     assert hash_bytes(HOME.read_bytes())==m["newHome"]
+    assert hash_bytes((ROOT/"farm-wars/index.html").read_bytes())==m["gameIndex"]
+    assert hash_bytes((ROOT/"farm-wars/game.js").read_bytes())==m["gameJs"]
     article=TOPIC.read_text("utf-8")
     assert MARK in article and "iframe" in article and 'src="/farm-wars/"' in article
     assert "بازی‌سازی" in article
