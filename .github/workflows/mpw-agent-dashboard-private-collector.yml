@@ -2,7 +2,9 @@ name: MojPlayWin private agent dashboard history collector
 on:
   push:
     branches: [main]
-    paths: [.github/workflows/mpw-agent-dashboard-private-collector.yml]
+    paths:
+      - .github/workflows/mpw-agent-dashboard-private-collector.yml
+      - command_center/mpw_private_telemetry.py
   workflow_dispatch:
 permissions:
   contents: read
