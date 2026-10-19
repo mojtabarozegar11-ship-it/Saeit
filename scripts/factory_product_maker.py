@@ -209,7 +209,10 @@ def manufacture(recipe, recipes_root, private_root):
         "needs_content_and_market_review": True, "needs_storefront_adapter_verification": True,
     }
     atomic_text(manifest_path, json.dumps(metadata, ensure_ascii=False, sort_keys=True, indent=2) + "\n")
-    return {"recipe": recipe, "changed": True, "qa_status": "passed",
+    return {"recipe": recipe,
+            "changed": prior.get("source_sha256") != checksum or
+                       prior.get("artifact_sha256") != metadata["artifact_sha256"],
+            "qa_refreshed": True, "qa_status": "passed",
             "private_artifact": str(zip_path)}
 
 
