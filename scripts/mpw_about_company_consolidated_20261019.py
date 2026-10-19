@@ -199,7 +199,7 @@ def validate_pair(about,company):
                 "mpw-advanced-research","mpw-complementary-details","official_profile_20261016"):
         if key not in about:fail("Preserved About evidence missing "+key)
     if company.count('class="mpw-ten-card"')!=10:fail("Company article count changed")
-    if COMPANY_TITLE not in company or 'og:description' not in company:fail("Company SEO missing")
+    if html.escape(COMPANY_TITLE) not in company or 'og:description' not in company:fail("Company SEO missing")
     if 'theme-color" content="#050608"' not in company:fail("Theme color drifted")
     if len(about.encode())<90000 or len(company.encode())<19000:fail("Content was truncated")
     return {"about_headings_before_h1":0,"company_headings_before_h1":0,
