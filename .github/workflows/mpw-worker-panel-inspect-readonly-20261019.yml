@@ -115,6 +115,37 @@ jobs:
           telemetry=root/'command_center/mpw_private_telemetry.py'
           details={'panel_present':panel.is_file(),'panel_quality_section_on_disk':panel.is_file() and 'id="quality"' in panel.read_text('utf8','replace'),
                     'telemetry_evidence_on_disk':telemetry.is_file() and '"evidence": evidence' in telemetry.read_text('utf8','replace')}
+          # Inspect only safe telemetry shape and bounded clock age, never log text.
+          for slug, log in (('quality_review_agent_20261018','last_review.log'),
+                            ('management_intelligence_20261018','last_run.log')):
+              p=base/slug/log
+              if not p.is_file() or p.is_symlink() or p.stat().st_size>100000: continue
+              raw=p.read_text('utf8','replace').strip()
+              vals=[]
+              for cand in (raw, raw[raw.find('{'):] if '{' in raw else ''):
+                  try:
+                      obj=json.loads(cand)
+                      if isinstance(obj,dict): vals.append(obj)
+                  except (ValueError,TypeError): pass
+              if vals:
+                  v=vals[0]
+                  entries[slug+'_log_contract']={'parseable_json':True,'keys':sorted(v.keys())[:45],
+                      'status':v.get('status') if isinstance(v.get('status'),str) else None,
+                      'tenant_present':v.get('tenant')=='mojplaywin-main',
+                      'timestamp_fields':{k:str(v[k])[:45] for k in ('observed_utc','checked_at','completed_at','status') if k in v}}
+              else:
+                  entries[slug+'_log_contract']={'parseable_json':False,'last_line_bounded_char_count':len(raw)}
+          for slug,script in (('quality_review_agent_20261018','review_private_drafts.py'),
+                              ('management_intelligence_20261018','worker.py')):
+              p=base/slug/script
+              if not p.is_file() or p.is_symlink(): continue
+              import ast
+              t=ast.parse(p.read_text('utf8','replace'))
+              methods=[]
+              for n in t.body:
+                  if isinstance(n,ast.If) and '__name__' in ast.unparse(n.test):
+                      methods.append(ast.unparse(n)[:1000])
+              entries[slug+'_main_flow']=methods
           print('MPW_WORKER_DIAGNOSTICS='+json.dumps({'tenant':'mojplaywin-main','worker_files':entries,'cron':cron,'panel':details,
                 'module_registry_size':len(rows),'module_capability_sample':rows[:77]},ensure_ascii=False,sort_keys=True))
           PY
