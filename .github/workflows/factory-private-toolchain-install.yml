@@ -1,0 +1,121 @@
+name: Factory private CPU tools and local model install
+on:
+  pull_request:
+    paths: ['ops/factory-toolchain/**', '.github/workflows/factory-private-toolchain-install.yml']
+  push:
+    branches: [main]
+    paths: ['ops/factory-toolchain/**', '.github/workflows/factory-private-toolchain-install.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: factory-private-toolchain-install
+  cancel-in-progress: false
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          bash -n ops/factory-toolchain/install.sh
+          python3 -m py_compile ops/factory-toolchain/prove.py
+  build-install:
+    needs: validate
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[approved-factory-toolchain-20261019]'))
+    runs-on: ubuntu-latest
+    container: ubuntu:20.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build portable SSE2 model runtime and extract signed distro tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update -qq
+          apt-get install -y -qq ca-certificates git g++ make cmake pkg-config tar openssh-client python3 curl xz-utils
+          source="$RUNNER_TEMP/llama-source"
+          git init -q "$source"
+          git -C "$source" fetch -q --depth 1 https://github.com/ggml-org/llama.cpp 4c1004c49221b07c3b8108977e3d1991fc9f45cc
+          git -C "$source" checkout -q --detach FETCH_HEAD
+          test "$(git -C "$source" rev-parse HEAD)" = 4c1004c49221b07c3b8108977e3d1991fc9f45cc
+          cmake -S "$source" -B "$source/build" -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_SHARED_LIBS=OFF -DLLAMA_OPENSSL=OFF -DLLAMA_CURL=OFF \
+            -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=ON -DLLAMA_BUILD_SERVER=ON \
+            -DGGML_NATIVE=OFF -DGGML_SSE42=OFF -DGGML_AVX=OFF -DGGML_AVX2=OFF \
+            -DGGML_AVX_VNNI=OFF -DGGML_FMA=OFF -DGGML_F16C=OFF -DGGML_BMI2=OFF \
+            -DGGML_AVX512=OFF -DGGML_CPU_ALL_VARIANTS=OFF -DGGML_OPENMP=OFF \
+            -DGGML_LLAMAFILE=OFF -DGGML_CPU_REPACK=OFF \
+            -DCMAKE_C_FLAGS='-march=x86-64 -mtune=generic' \
+            -DCMAKE_CXX_FLAGS='-march=x86-64 -mtune=generic' \
+            -DCMAKE_EXE_LINKER_FLAGS='-static-libstdc++ -static-libgcc' > "$RUNNER_TEMP/cmake.log" 2>&1
+          timeout 1100 cmake --build "$source/build" --parallel 2 --target llama-cli llama-server > "$RUNNER_TEMP/build.log" 2>&1 || { tail -80 "$RUNNER_TEMP/build.log"; exit 1; }
+          bundle="$RUNNER_TEMP/toolchain-bundle"
+          mkdir -p "$bundle/runtime/llama/bin" "$bundle/runtime/prefix"
+          cp "$source/build/bin/llama-cli" "$source/build/bin/llama-server" "$bundle/runtime/llama/bin/"
+          : > "$RUNNER_TEMP/empty-dpkg-status"
+          apt-get -y -qq --download-only -o Dir::State::status="$RUNNER_TEMP/empty-dpkg-status" \
+            --no-install-recommends install ffmpeg blender libreoffice-writer libreoffice-impress libreoffice-calc \
+            fonts-dejavu-core poppler-utils python3.8 python3.8-minimal libpython3.8-stdlib \
+            > "$RUNNER_TEMP/runtime-packages.log" 2>&1 || { tail -60 "$RUNNER_TEMP/runtime-packages.log"; exit 1; }
+          for package in /var/cache/apt/archives/*.deb; do
+            name="$(dpkg-deb -f "$package" Package)"
+            case "$name" in libc6|libc-bin|libc6-dev) continue;; esac
+            dpkg-deb -x "$package" "$bundle/runtime/prefix"
+          done
+          # Remove absolute/escaping links; retain the host's own glibc/loader.
+          python3 - "$bundle/runtime/prefix" <<'PY'
+          from pathlib import Path
+          import sys
+          root=Path(sys.argv[1]).resolve()
+          for path in root.rglob('*'):
+              if path.is_symlink():
+                  try: path.resolve().relative_to(root)
+                  except (ValueError,RuntimeError): path.unlink()
+          PY
+          tar -C "$bundle/runtime" -cJf "$bundle/runtime.tar.xz" .
+          curl -fL --retry 2 --max-time 300 \
+            https://huggingface.co/Qwen/Qwen2.5-Coder-0.5B-Instruct-GGUF/resolve/main/qwen2.5-coder-0.5b-instruct-q4_k_m.gguf \
+            -o "$bundle/qwen2.5-coder-0.5b-instruct-q4_k_m.gguf"
+          printf '%s  %s\n' 1d9614638d18024d0fbb36575a15f1302a3adf044df10345688ec4f6e1c4ff32 "$bundle/qwen2.5-coder-0.5b-instruct-q4_k_m.gguf" | sha256sum -c --status
+          cp ops/factory-toolchain/install.sh ops/factory-toolchain/prove.py "$bundle/"
+          (cd "$bundle"; sha256sum runtime.tar.xz qwen2.5-coder-0.5b-instruct-q4_k_m.gguf install.sh prove.py > SHA256SUMS)
+          echo FACTORY_PORTABLE_CPU_TOOL_BUNDLE_BUILT
+      - name: Install privately on VPS, execute artifact checks and preserve factory
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/toolchain-ssh"
+          mkdir -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs
+          options=(-i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=3)
+          remote=(ssh "${options[@]}" githubops@178.239.147.150)
+          stage="/home/githubops/factory-runtime/operations/toolchain-source-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          "${remote[@]}" "umask 077; mkdir -m 700 '$stage'; df -Pm '$stage'; python3 --version; test -x \"\$HOME/factory-runtime/.venv/bin/python\"; \"\$HOME/factory-runtime/.venv/bin/python\" --version"
+          bundle="$RUNNER_TEMP/toolchain-bundle"
+          for file in SHA256SUMS runtime.tar.xz qwen2.5-coder-0.5b-instruct-q4_k_m.gguf install.sh prove.py; do
+            scp "${options[@]}" "$bundle/$file" "githubops@178.239.147.150:$stage/$file"
+          done
+          "${remote[@]}" "cd '$stage'; sha256sum -c SHA256SUMS; timeout 900 bash install.sh '$stage' '$GITHUB_SHA'"
+          "${remote[@]}" 'python3 -' <<'PY'
+          import json
+          from pathlib import Path
+          root=Path.home()/'factory-runtime'
+          report=json.loads((root/'operations/build-toolchain/toolchain-manifest.json').read_text())
+          assert all(x['passed'] for x in report['checks'].values())
+          print('VPS_TOOLCHAIN_REAL_CHECKS='+json.dumps({k:v['passed'] for k,v in report['checks'].items()},sort_keys=True))
+          print('VPS_TOOLCHAIN_PACKAGES='+json.dumps(report['packages'],sort_keys=True))
+          print('VPS_EXISTING_COMFYUI_CPU_ENV='+str((Path.home()/'comfyui-isolated/env-cpu/bin/python').is_file()))
+          production=json.loads((root/'private/autonomous-product-cycle/production-state.json').read_text())
+          print('VPS_FACTORY_RECIPE_COUNT_AFTER_INSTALL='+str(production['registered_recipe_count']))
+          assert production['registered_recipe_count']>=5
+          print('VPS_TOOLCHAIN_DOES_NOT_CERTIFY_40_FAMILIES_OR_100_GENERATIONS')
+          PY
