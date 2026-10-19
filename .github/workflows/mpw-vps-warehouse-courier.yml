@@ -227,6 +227,42 @@ jobs:
           d="$RUNNER_TEMP/factory-store-preflight"
           timeout 35s scp -q -F "$d/config" scripts/mpw_three_factory_orders.py saeit-vps:factory-runtime/operations/production-instructions/mpw-three-orders.py
           timeout 100s ssh -T -F "$d/config" saeit-vps             "python3 -B factory-runtime/operations/production-instructions/mpw-three-orders.py --factory-private factory-runtime/private/autonomous-product-cycle --native-engine factory-runtime/operations/production-instructions/generate-orders.py --cycle $(date -u +%Y%m%d)-$GITHUB_RUN_ID"
+      - name: Verify exactly three MojPlayWin requests on VPS and native acceptance separately
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/factory-store-preflight"
+          cycle="$(date -u +%Y%m%d)-$GITHUB_RUN_ID"
+          timeout 50s ssh -T -F "$d/config" saeit-vps python3 - "$cycle" <<'PY'
+          from pathlib import Path
+          import json,sys
+          base=Path.home()/"factory-runtime/private/autonomous-product-cycle/production-instructions"
+          receipt=json.loads((base/"mojplaywin-order-receipts"/(sys.argv[1]+".json")).read_text())
+          assert receipt["tenant"]=="mojplaywin-main"
+          if receipt.get("status")=="waiting_for_native_capacity":
+              names=receipt["requests"]
+              assert len(names)==3 and len(set(names))==3
+              for name in names:
+                  row=json.loads((base/"mojplaywin-pending-instructions"/(name+".json")).read_text())
+                  assert row["site"]=="mojplaywin.com"
+                  assert row["cycle"]==sys.argv[1]
+                  assert row["status"]=="waiting_for_native_capacity"
+                  assert row["commercial_approval"] is False
+              print("MPW_SITE_ORDERS_ACCEPTED_BY_VPS=3")
+              print("MPW_NATIVE_FACTORY_ORDERS_ACCEPTED=0")
+              print("MPW_NATIVE_FACTORY_BACKLOG=AT_CAPACITY")
+          else:
+              ids=receipt["orders"]
+              assert len(ids)==3 and len(set(ids))==3
+              for ident in ids:
+                  row=json.loads((base/"orders"/(ident+".json")).read_text())
+                  assert row["requesting_site"]=="mojplaywin.com"
+                  assert row["bridge_cycle"]==sys.argv[1]
+                  assert row["public_distribution_allowed"] is False
+                  assert row["manufacturing_qa_passed"] is False
+              print("MPW_NATIVE_FACTORY_ORDERS_ACCEPTED=3")
+              print("MPW_NATIVE_FACTORY_ORDER_IDS="+json.dumps(ids))
+          PY
       - name: Independently verify private recipient and first stage return count
         shell: bash
         run: |
