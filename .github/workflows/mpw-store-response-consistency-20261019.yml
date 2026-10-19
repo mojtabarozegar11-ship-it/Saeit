@@ -27,3 +27,17 @@ jobs:
           print("MPW_STORE_VARIANTS="+json.dumps(samples))
           print("MPW_STORE_VARIANT_COUNTS="+json.dumps(dict(Counter(str((r["length"],r["has_buyer_details"],r["has_checkout_link"])) for r in samples))))
           PY
+      - name: Inspect DNS targets for inconsistent storefront routing
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import socket,subprocess,json,time
+          hosts=sorted({x[4][0] for x in socket.getaddrinfo('mojplaywin.com',443) if x[0]==socket.AF_INET})
+          print('MPW_STORE_DNS_TARGETS='+json.dumps(hosts))
+          for host in hosts:
+              out=subprocess.run(['curl','-ksS','--connect-timeout','6','--max-time','14','--resolve',
+                  'mojplaywin.com:443:'+host,'-o','/dev/null','-w','%{http_code} %{remote_ip}',
+                  'https://mojplaywin.com/store/?dns_audit='+str(time.time_ns())],
+                  capture_output=True,text=True)
+              print('MPW_STORE_ORIGIN_PINNED='+json.dumps({'ip':host,'code_remote':out.stdout,'exit_code':out.returncode}))
+          PY
