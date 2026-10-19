@@ -1,0 +1,26 @@
+name: Zomorod warehouse bridge three orders safe QA
+on:
+  pull_request:
+    paths:
+      - scripts/zomorod_vps_warehouse_3order_bridge.py
+      - scripts/zomorod_factory_store_import.py
+      - tests/test_zomorod_warehouse_3order_bridge.py
+      - content/zomorod-v11/site_store.php
+      - .github/workflows/zomorod-warehouse-bridge-qa.yml
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+      - name: Python site bridge/native factory and PHP syntax checks
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p 'test_zomorod_warehouse_3order_bridge.py' -v
+          php -l content/zomorod-v11/site_store.php
+          python3 -m py_compile scripts/zomorod_vps_warehouse_3order_bridge.py scripts/zomorod_factory_store_import.py
+          echo ZOMOROD_BRIDGE_THREE_ORDER_AND_STORE_QA=passed

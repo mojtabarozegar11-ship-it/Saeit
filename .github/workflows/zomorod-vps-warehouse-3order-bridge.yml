@@ -1,0 +1,236 @@
+name: Zomorod site-only VPS warehouse bridge plus 3 production orders
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/zomorod-vps-warehouse-3order-bridge.yml]
+  schedule:
+    - cron: '17 4 * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-vps-warehouse-bridge-site-only
+  cancel-in-progress: false
+jobs:
+  bridge:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+      - name: Verify three-order and native private store safety gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p 'test_zomorod_warehouse_3order_bridge.py' -v
+          php -l content/zomorod-v11/site_store.php
+          echo ZM_BRIDGE_TESTS=passed
+      - name: Prepare pinned SSH to both VPS and Zomorod cPanel
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zm-site-factory-bridge"; install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host zm-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host zm-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump zm-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ForwardAgent no
+            RequestTTY no
+            ConnectTimeout 12
+            ConnectionAttempts 1
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -T -F "$d/config" zm-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo ZM_BRIDGE_BOTH_PINNED_HOSTS=verified
+      - name: Stage site-only robot modules on VPS without touching factory executors
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-site-factory-bridge"
+          ssh -T -F "$d/config" zm-vps bash -se <<'REMOTE'
+          set -euo pipefail
+          test "$(id -un)" = githubops
+          test -d "$HOME/factory-runtime/private/autonomous-product-cycle"
+          test -s "$HOME/factory-runtime/operations/production-instructions/generate-orders.py"
+          test -s "$HOME/factory-runtime/operations/factory_store_sender.py"
+          test -s "$HOME/.ssh/saeit_factory_store_ed25519"
+          test -s "$HOME/.ssh/saeit_factory_store_hosts"
+          dest="$HOME/factory-runtime/operations/zomorod-site-bridge"
+          test ! -L "$dest"
+          install -d -m 700 "$dest"
+          for f in bridge.py warehouse.py families.json;do test ! -L "$dest/$f";done
+          REMOTE
+          scp -q -F "$d/config" scripts/zomorod_vps_warehouse_3order_bridge.py zm-vps:factory-runtime/operations/zomorod-site-bridge/bridge.py
+          scp -q -F "$d/config" scripts/factory_production_warehouse.py zm-vps:factory-runtime/operations/zomorod-site-bridge/warehouse.py
+          scp -q -F "$d/config" factory_config/forty_families.json zm-vps:factory-runtime/operations/zomorod-site-bridge/families.json
+          ssh -T -F "$d/config" zm-vps bash -se <<'REMOTE'
+          set -euo pipefail
+          x="$HOME/factory-runtime/operations/zomorod-site-bridge"
+          chmod 600 "$x/"*.py "$x/families.json"
+          python3 -B - "$x" <<'PY'
+          import ast,json,sys
+          from pathlib import Path
+          p=Path(sys.argv[1])
+          for f in ["bridge.py","warehouse.py"]:ast.parse((p/f).read_text())
+          assert len(json.loads((p/"families.json").read_text())["profiles"])==40
+          print("ZM_BRIDGE_VPS_40_FAMILY_REGISTRY_AND_ROBOT_READY=yes")
+          PY
+          REMOTE
+      - name: Guarded Zomorod native private store module and importer deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-site-factory-bridge"
+          git show "6fca6f37d6923494137a210bf9739f20d6ee1dd8:content/zomorod-v11/site_store.php" > "$d/site_store.base.php"
+          original="$(sha256sum "$d/site_store.base.php"|cut -c1-64)"
+          desired="$(sha256sum content/zomorod-v11/site_store.php|cut -c1-64)"
+          scp -q -F "$d/config" scripts/zomorod_factory_store_import.py zm-cpanel:.private/zomorod-business/zomorod_factory_store_import.py
+          scp -q -F "$d/config" content/zomorod-v11/site_store.php zm-cpanel:.private/zomorod-business/.site_store.bridge-candidate.php
+          ssh -T -F "$d/config" zm-cpanel bash -se -- "$GITHUB_RUN_ID" "$original" "$desired" <<'REMOTE'
+          set -euo pipefail
+          run="$1";old="$2";new="$3"
+          test "$HOME" = /home/zomorod2
+          dir="$HOME/.private/zomorod-business"
+          store="$dir/site_store.php";incoming="$dir/.site_store.bridge-candidate.php"
+          script="$dir/zomorod_factory_store_import.py"
+          test -f "$store" && test ! -L "$store" && test ! -L "$script" && test ! -L "$incoming"
+          test -f "$dir/site_store.sqlite3"
+          test -s "$HOME/.saeit-factory-inbox/bin/store_receiver.py"
+          test "$(sha256sum "$incoming"|cut -c1-64)" = "$new"
+          existing="$(sha256sum "$store"|cut -c1-64)"
+          if test "$existing" != "$old" && test "$existing" != "$new";then
+            echo ZM_BRIDGE_UNRECOGNIZED_NATIVE_STORE=blocked;exit 21
+          fi
+          bin="$(command -v php)"
+          "$bin" -l "$incoming" >/dev/null
+          python3 -B - "$script" <<'PY'
+          import ast,sys
+          ast.parse(open(sys.argv[1],encoding="utf8").read())
+          PY
+          back="$HOME/.backups/zomorod-site-factory-bridge/$run"
+          if test ! -e "$back";then
+            install -d -m 700 "$back"
+            cp -p "$store" "$back/site_store.before.php"
+            python3 - "$dir/site_store.sqlite3" "$back/site_store.backup.sqlite3" <<'PY'
+          import sqlite3,sys
+          with sqlite3.connect(sys.argv[1],timeout=10) as old:
+              with sqlite3.connect(sys.argv[2]) as new:old.backup(new)
+          PY
+            chmod 600 "$back/"*
+          fi
+          if test "$existing" = "$old";then
+            cp -p "$incoming" "$dir/.site_store.bridge-atomic-$run.php"
+            mv -f "$dir/.site_store.bridge-atomic-$run.php" "$store"
+          fi
+          test "$(sha256sum "$store"|cut -c1-64)" = "$new"
+          echo ZM_BRIDGE_ZOMOROD_STORE_PRIVATE_ADMIN=installed
+          REMOTE
+      - name: Deliver authentic warehouse QA goods and issue exactly three site production orders
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-site-factory-bridge"
+          timeout 230s ssh -T -F "$d/config" zm-vps bash -se -- "$GITHUB_RUN_ID" <<'REMOTE'
+          set -euo pipefail
+          run="$1"
+          private="$HOME/factory-runtime/private/autonomous-product-cycle"
+          ops="$HOME/factory-runtime/operations"
+          bridge="$ops/zomorod-site-bridge"
+          exec 8>"$bridge/.zomorod-cycle.lock"
+          flock -w 30 8
+          python3 -B "$bridge/bridge.py" \
+            --factory-private "$private" \
+            --orders-engine "$ops/production-instructions/generate-orders.py" \
+            --warehouse-module "$bridge/warehouse.py" \
+            --sender-module "$ops/factory_store_sender.py" \
+            --families "$bridge/families.json" \
+            --ssh-key "$HOME/.ssh/saeit_factory_store_ed25519" \
+            --known-hosts "$HOME/.ssh/saeit_factory_store_hosts" \
+            --cycle "$(date -u +%F)-r$run" \
+            --max-ship 3
+          REMOTE
+      - name: Import private goods into Zomorod store and verify no paid products fabricated
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-site-factory-bridge"
+          timeout 130s ssh -T -F "$d/config" zm-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          dir="$HOME/.private/zomorod-business"
+          python3 -B "$dir/zomorod_factory_store_import.py" \
+            --inbox "$HOME/.saeit-factory-inbox" \
+            --store-db "$dir/site_store.sqlite3" --limit 20
+          python3 - "$dir/site_store.sqlite3" <<'PY'
+          import sqlite3,sys
+          with sqlite3.connect("file:"+sys.argv[1]+"?mode=ro",uri=True) as db:
+              names={x[0] for x in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+              assert {"factory_drafts","products"}.issubset(names)
+              n=db.execute("SELECT COUNT(*) FROM factory_drafts").fetchone()[0]
+              bad=db.execute("SELECT COUNT(*) FROM factory_drafts WHERE public_enabled<>0 OR paid_price_irr IS NOT NULL").fetchone()[0]
+              assert bad==0
+              print("ZM_BRIDGE_STORE_VERIFIED_DRAFTS="+str(n))
+              print("ZM_BRIDGE_PUBLIC_PURCHASE_ACTIVATIONS=0")
+          PY
+          REMOTE
+      - name: Verify three native work order receipts on VPS
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-site-factory-bridge"
+          ssh -T -F "$d/config" zm-vps python3 - "$GITHUB_RUN_ID" <<'PY'
+          from pathlib import Path
+          import datetime,json,sys
+          root=Path.home()/"factory-runtime/private/autonomous-product-cycle"
+          cycle=datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")+"-r"+sys.argv[1]
+          receipt=root/"production-instructions/zomorod-site-order-receipts"/(cycle+".json")
+          assert receipt.is_file() and not receipt.is_symlink()
+          obj=json.loads(receipt.read_text(encoding="utf8"))
+          assert obj["schema"]=="saeit.zomorod.site-factory-bridge.v1" and obj["site"]=="zomorodmelal.ir"
+          ids=obj["orders"]
+          assert len(ids)==3 and len(set(ids))==3
+          for oid in ids:
+              item=json.loads((root/"production-instructions/orders"/(oid+".json")).read_text(encoding="utf8"))
+              assert item["requesting_site"]=="zomorodmelal.ir"
+              assert item["public_distribution_allowed"] is False
+          print("ZM_BRIDGE_THREE_NATIVE_FACTORY_ORDERS_VERIFIED=yes")
+          print("ZM_BRIDGE_FACTORY_ORDER_IDS="+json.dumps(ids))
+          PY
+      - name: Remove only ephemeral GitHub runner SSH keys
+        if: always()
+        shell: bash
+        run: rm -rf "$RUNNER_TEMP/zm-site-factory-bridge"
