@@ -1,4 +1,4 @@
-name: MojPlayWin indexer endpoint HTTP diagnosis read only
+name: MojPlayWin validated chain indexer observation
 on:
   push:
     branches: [main]
