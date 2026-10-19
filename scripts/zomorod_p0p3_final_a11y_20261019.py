@@ -9,7 +9,7 @@ FILES=[ROOT/x for x in ['about/index.html','research/index.html','agriculture/in
 MARKER='zm-p0p3-final-a11y-20261019'
 STYLES={
 'about/index.html':'''<style id="zm-p0p3-final-a11y-20261019">body #main .zm-card > span{color:#ffe8ae!important;text-shadow:0 1px 2px #092a1d!important}</style>''',
-'research/index.html':'''<style id="zm-p0p3-final-a11y-20261019">body .zm-footer-main a[href="/"]{color:#163c2f!important;text-decoration:underline!important}</style>''',
+'research/index.html':'''<style id="zm-p0p3-final-a11y-20261019">body .zm-footer-main a[href="/"]{color:#163c2f!important;text-decoration:underline!important}body #main .zm-card > span{color:#ffe8ae!important;text-shadow:0 1px 2px #092a1d!important}</style>''',
 'agriculture/index.html':'''<style id="zm-p0p3-final-a11y-20261019">body a:focus-visible{outline:3px solid #ffdf8f;outline-offset:2px}</style>''',
 }
 def digest(b):return hashlib.sha256(b).hexdigest()
