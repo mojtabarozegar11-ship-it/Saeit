@@ -1,0 +1,117 @@
+name: MojPlayWin sales dashboard release with full-depth checkout
+on:
+  push:
+    branches: [mpw-sales-panel-ledger-20261019]
+    paths: [".github/workflows/mpw-two-books-sales-panel-retry-20261019.yml"]
+permissions: {contents: read}
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false, fetch-depth: 0}
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Prepare isolated dashboard files
+        run: |
+          set -euo pipefail
+                    BASE=$(git merge-base HEAD origin/main)
+          git show "$BASE:command_center/mpw_two_books_panel.py" | sha256sum | cut -d' ' -f1 > "$RUNNER_TEMP/mpw-py-old.sha"
+          git show "$BASE:command_center/templates/command_center/mpw_two_books_panel.html" | sha256sum | cut -d' ' -f1 > "$RUNNER_TEMP/mpw-html-old.sha"
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 35s ssh -T -F "$d/config" saeit-cpanel 'install -d -m 700 /home/zomorod2/.mpw-panel-atomic-20261019'
+          timeout 45s scp -q -F "$d/config" command_center/mpw_two_books_panel.py saeit-cpanel:/home/zomorod2/.mpw-panel-atomic-20261019/panel.py
+          timeout 45s scp -q -F "$d/config" command_center/templates/command_center/mpw_two_books_panel.html saeit-cpanel:/home/zomorod2/.mpw-panel-atomic-20261019/panel.html
+      - name: Install only staff dashboard files with strict baseline and rollback
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          OLD_PY=$(cat "$RUNNER_TEMP/mpw-py-old.sha")
+          OLD_HTML=$(cat "$RUNNER_TEMP/mpw-html-old.sha")
+          timeout 135s ssh -T -F "$d/config" saeit-cpanel \
+            "MPW_OLD_PY=$OLD_PY MPW_OLD_HTML=$OLD_HTML /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" <<'PY'
+          import os,pathlib,ast,hashlib,tempfile,sys
+          root=pathlib.Path('/home/zomorod2/Saeit-staging')
+          wsgi=pathlib.Path('/home/zomorod2/mojplaywin.com/passenger_wsgi.py')
+          assert root.is_dir() and not root.is_symlink()
+          assert wsgi.is_file() and "APP='/home/zomorod2/Saeit-staging'" in wsgi.read_text('utf8','replace')
+          stage=pathlib.Path('/home/zomorod2/.mpw-panel-atomic-20261019')
+          pairs=[
+            (root/'command_center/mpw_two_books_panel.py',stage/'panel.py',os.environ['MPW_OLD_PY']),
+            (root/'command_center/templates/command_center/mpw_two_books_panel.html',stage/'panel.html',os.environ['MPW_OLD_HTML']),
+          ]
+          current={}
+          for target,source,sha in pairs:
+            assert target.is_file() and not target.is_symlink() and source.is_file() and not source.is_symlink()
+            raw=target.read_bytes();candidate=source.read_bytes()
+            assert hashlib.sha256(raw).hexdigest()==sha, 'Source drift: refusing overwrite '+str(target)
+            assert candidate and len(candidate)<30000
+            if target.suffix=='.py':ast.parse(candidate.decode('utf8'))
+            current[target]=raw
+          def put(dest,content):
+            fd,name=tempfile.mkstemp(prefix='.mpw-panel-',dir=str(dest.parent))
+            try:
+              with os.fdopen(fd,'wb') as out:out.write(content);out.flush();os.fsync(out.fileno())
+              os.chmod(name,dest.stat().st_mode & 0o777)
+              os.replace(name,dest)
+            finally:
+              if os.path.exists(name):os.unlink(name)
+          try:
+            for target,source,_ in pairs:put(target,source.read_bytes())
+            sys.path.insert(0,str(root));os.chdir(root)
+            os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+            import django;django.setup()
+            from django.template.loader import get_template
+            get_template('command_center/mpw_two_books_panel.html')
+            from command_center.mpw_two_books_panel import _status_dict
+            data=_status_dict()
+            assert {'commerce_invoices_count','verified_receipts_count','confirmed_revenue_usd','commerce_fulfillment_count'}.issubset(data)
+            print('MPW_FINANCE_DASHBOARD_LIVE='+str({k:data[k] for k in ('commerce_invoices_count','verified_receipts_count','confirmed_revenue_usd','commerce_fulfillment_count')}))
+          except Exception:
+            for target,previous in current.items():put(target,previous)
+            raise
+          print('MPW_DASHBOARD_DEPLOY=success;main_site_staff_only=true;no_restart=true;payment_unchanged=true')
+          PY
