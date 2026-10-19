@@ -626,6 +626,10 @@ function buildActions(){
  for(const [id,fn] of [['next-day',nextDay],['cam-left',()=>{cam.angle-=Math.PI/8;updateCamera();}],['cam-right',()=>{cam.angle+=Math.PI/8;updateCamera();}],['cam-home',()=>{cam.center.set(-3.5,0,0);cam.angle=Math.PI/4;cam.zoom=1;updateCamera();}],['zoom-in',()=>setZoom(1.2)],['zoom-out',()=>setZoom(.82)]]){
   ui[id].addEventListener('click',fn);
  }
+ $('toggle-war').addEventListener('click',()=>{
+  const panel=$('rival-panel');const open=panel.classList.toggle('open');
+  $('toggle-war').setAttribute('aria-expanded',String(open));
+ });
  ui.tutorial.addEventListener('click',()=>{ui.tour.style.display='block';});
  ui['close-tour'].addEventListener('click',()=>ui.tour.style.display='none');
  ui.start.addEventListener('click',()=>{
