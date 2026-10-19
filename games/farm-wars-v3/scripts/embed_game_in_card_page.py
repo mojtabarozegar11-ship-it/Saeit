@@ -28,13 +28,13 @@ CSS=r"""
 #zm-farm-card-play p{margin:4px 0;color:#d5e6d6;line-height:1.9;font-size:clamp(11px,1.5vw,14px)}
 #zm-farm-card-play .zm-play-fullscreen{display:inline-flex;justify-content:center;align-items:center;gap:7px;padding:11px 17px;background:linear-gradient(145deg,#f7d994,#c3a058);border-radius:13px;color:#253223!important;text-decoration:none!important;font-weight:800;font-size:13px;border:1px solid #fff1bb;text-wrap:nowrap}
 #zm-farm-card-play .zm-play-fullscreen:focus-visible{outline:3px solid #fff7d5;outline-offset:3px}
-#zm-farm-card-play .zm-play-viewport{width:100%;height:min(78svh,780px);min-height:540px;max-height:850px;overflow:hidden;border:2px solid #a8c69c73;border-radius:18px;background:#91bfa8;box-shadow:0 12px 30px #0006}
+#zm-farm-card-play .zm-play-viewport{width:100%;height:min(90svh,860px);min-height:740px;max-height:900px;overflow:hidden;border:2px solid #a8c69c73;border-radius:18px;background:#91bfa8;box-shadow:0 12px 30px #0006}
 #zm-farm-card-play iframe{width:100%;height:100%;border:0;display:block;background:#8cbbab}
 #zm-farm-card-play .zm-play-footnote{text-align:center;font-size:11px;color:#b8d5bb;margin-top:10px}
 @media(max-width:740px){
  #zm-farm-card-play{margin:15px -8px 22px;padding:8px;border-radius:14px}
  #zm-farm-card-play .zm-play-head{padding:10px 8px}
- #zm-farm-card-play .zm-play-viewport{height:75svh;min-height:530px;max-height:none;border-radius:12px}
+ #zm-farm-card-play .zm-play-viewport{height:92svh;min-height:720px;max-height:none;border-radius:12px}
  #zm-farm-card-play .zm-play-fullscreen{padding:9px 12px;font-size:11px}
 }
 @media(prefers-reduced-motion:reduce){#zm-farm-card-play *{scroll-behavior:auto!important;transition:none!important}}
