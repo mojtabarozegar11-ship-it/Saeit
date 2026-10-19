@@ -52,67 +52,22 @@ chmod 600 "$ops/backups/autonomous-product-runtime-before-$stamp.tar.gz"
 
 for f in factory_product_maker.py factory_autonomous_portfolio.py \
          factory_evidence_quality.py factory_first_product_pilot.py factory_vps_product_cycle.py \
-         factory_product_rework.py; do
+         factory_product_rework.py factory_recipe_catalog_sync.py; do
   install -m 600 "$repo/scripts/$f" "$scripts/$f"
 done
-# Stage an exact source catalog. QA runs before the live catalog is changed.
-shopt -s nullglob
-recipe_sources=("$repo"/product_recipes/*)
-(("${#recipe_sources[@]}" > 0)) || { echo "NO_PRODUCT_RECIPE_DIRECTORIES"; exit 1; }
-catalog_stage="$ops/.product-recipes-stage-$stamp"
-old_catalog="$ops/.product-recipes-old-$stamp"
-desired_catalog="$ops/.product-recipes-desired-$stamp.txt"
-retired="$private/retired-recipes"
-cleanup_staging() {
-  if [[ -n "${catalog_stage:-}" && "$catalog_stage" == "$ops"/.product-recipes-stage-* && -d "$catalog_stage" ]]; then
-    rm -rf -- "$catalog_stage"
-  fi
-  if [[ -n "${desired_catalog:-}" && "$desired_catalog" == "$ops"/.product-recipes-desired-* && -f "$desired_catalog" ]]; then
-    rm -f -- "$desired_catalog"
-  fi
-}
-trap cleanup_staging EXIT
-mkdir -m 700 "$catalog_stage"
-: > "$desired_catalog"
-chmod 600 "$desired_catalog"
-for recipe_source in "${recipe_sources[@]}"; do
-  [[ -d "$recipe_source" && ! -L "$recipe_source" ]] || { echo "UNSAFE_PRODUCT_RECIPE_DIRECTORY"; exit 1; }
-  recipe="$(basename "$recipe_source")"
-  [[ "$recipe" =~ ^[a-z0-9]+(_[a-z0-9]+)*$ ]] || { echo "INVALID_PRODUCT_RECIPE_SLUG"; exit 1; }
-  if find "$recipe_source" -type l -print -quit | grep -q .; then
-    echo "UNSAFE_PRODUCT_RECIPE_SYMLINK"; exit 1
-  fi
-  printf '%s\\n' "$recipe" >> "$desired_catalog"
-  mkdir -m 700 "$catalog_stage/$recipe"
-  while IFS= read -r -d '' file; do
-    relative="${file#"$recipe_source"/}"
-    mkdir -p "$catalog_stage/$recipe/$(dirname "$relative")"
-    install -m 600 "$file" "$catalog_stage/$recipe/$relative"
-  done < <(find "$recipe_source" -type f -print0)
-done
-"$python" "$repo/scripts/factory_product_maker.py" \
-  --recipes "$catalog_stage" --verify-only
-
-# Swap only the dedicated recipe catalog. The prior VPS runtime has a verified backup.
-if [[ -e "$recipes" ]]; then
-  [[ -d "$recipes" && ! -L "$recipes" ]] || { echo "UNSAFE_ACTIVE_RECIPE_CATALOG"; exit 1; }
-  mv -- "$recipes" "$old_catalog"
-fi
-mv -- "$catalog_stage" "$recipes"
+# Reconcile the full catalog from a verified private staging copy. Removed recipes
+# are quarantined out of the active runtime; product packages and research ledgers remain.
+"$python" "$scripts/factory_recipe_catalog_sync.py" \
+  --source "$repo/product_recipes" --active "$recipes" \
+  --retired "$private/retired-recipes" --manifest "$stage/installed-recipes.json"
 
 # Quality gate must exist and compile BEFORE any production cycle or cron change.
 "$python" -B -c 'import ast, pathlib, sys; [ast.parse(pathlib.Path(x).read_text(encoding="utf-8")) for x in sys.argv[1:]]' \
   "$scripts/factory_evidence_quality.py" "$scripts/factory_autonomous_portfolio.py" "$scripts/factory_vps_product_cycle.py" "$scripts/factory_product_rework.py"
 
-# Build the staged catalog before changing the scheduler. Restore the previous active
-# catalog if the production cycle cannot complete; the failed source stays in backups.
-if ! "$python" "$scripts/factory_vps_product_cycle.py" \
-  --db "$db" --out "$private" --recipes "$recipes" --max-products 25; then
-  failed_catalog="$ops/backups/failed-product-recipes-$stamp"
-  mv -- "$recipes" "$failed_catalog"
-  if [[ -d "$old_catalog" ]]; then mv -- "$old_catalog" "$recipes"; fi
-  exit 1
-fi
+# Recipe QA already passed in the catalog sync; run the current full cycle.
+"$python" "$scripts/factory_vps_product_cycle.py" \
+  --db "$db" --out "$private" --recipes "$recipes" --max-products 25
 test -s "$private/production-state.json"
 test "$(find "$private/digital-products" -type f -name "*-internal-qa.zip" -print -quit | wc -l)" -ge 1
 
