@@ -1,0 +1,255 @@
+name: MojPlayWin canonical homepage navigation and safe menu scripts
+on:
+  pull_request:
+    paths:
+      - "scripts/mpw_canonical_navigation_atomic_20261019.py"
+      - "tests/test_mpw_canonical_navigation_20261019.py"
+      - ".github/workflows/mpw-canonical-navigation-20261019.yml"
+  push:
+    branches: [main]
+    paths:
+      - "scripts/mpw_canonical_navigation_atomic_20261019.py"
+      - ".github/workflows/mpw-canonical-navigation-20261019.yml"
+permissions:
+  contents: read
+concurrency:
+  group: mojplaywin-main-site-visual-nav-only
+  cancel-in-progress: false
+jobs:
+  preflight:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Ensure exact homepage header and guarded JS regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_canonical_navigation_atomic_20261019.py
+          python3 -m pip install -q pytest
+          python3 -m pytest -q --noconftest tests/test_mpw_canonical_navigation_20261019.py
+          python3 scripts/mpw_canonical_navigation_atomic_20261019.py selftest
+  release:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.ref == 'refs/heads/main' &&
+      github.event_name == 'push' &&
+      contains(github.event.head_commit.message, '[approved-mpw-canonical-nav-20261019]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 26
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Preflight tests and baseline 44 known URLs without edits
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_canonical_navigation_atomic_20261019.py
+          python3 -m pip install -q pytest
+          python3 -m pytest -q --noconftest tests/test_mpw_canonical_navigation_20261019.py
+          python3 scripts/mpw_canonical_navigation_atomic_20261019.py selftest
+          python3 - <<'PY'
+          import json,urllib.request,urllib.error,hashlib,re,os,concurrent.futures
+          static=['/about/mojtaba-rozegar/','/about/','/agents/','/company/','/economy/','/industry/','/knowledge/','/market/','/research/','/services/','/studio/','/ventures/agriculture/','/ventures/cafe-restaurant/','/ventures/carpets/','/ventures/currency-crypto/','/ventures/ecommerce/','/ventures/fuel-station/','/ventures/hospitality/','/ventures/jewelry-gold/']
+          dynamic=['/'+s+'/' for s in 'store games ai contact support privacy terms cookies products blockchain commerce crypto-payments global-business research-lab canada-vision agro-industry agriculture education weather'.split()]
+          children=['/farnaz/','/saman/','/picm/','/taniya/','/zahra/']
+          routes=['/']+static+dynamic+children
+          def get(p):
+              req=urllib.request.Request('https://mojplaywin.com'+p,headers={'Cache-Control':'no-cache','User-Agent':'MPWNavAudit/1.0'})
+              try:
+                  with urllib.request.urlopen(req,timeout=22) as r:return p,r.status,r.read(2300000)
+              except urllib.error.HTTPError as e:return p,e.code,e.read(500)
+          with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:result=list(pool.map(get,routes))
+          state={};mains={}
+          for p,code,body in result:
+              state[p]=code
+              if p in static:
+                  main=re.search(rb'<main\b[^>]*>[\s\S]*?</main\s*>',body,re.I)
+                  if not main:raise SystemExit('Main section missing '+p)
+                  mains[p]=hashlib.sha256(main.group()).hexdigest()
+              if p not in children and code!=200:raise SystemExit('Main route unhealthy '+p)
+              print('PRE_NAV_STATUS',p,code,flush=True)
+          root=next(body for p,_,body in result if p=='/')
+          with open(os.environ['RUNNER_TEMP']+'/mpw-nav-before.json','w') as f:json.dump({'routes':state,'static':static,'dynamic':dynamic,'children':children,'mains':mains,'home_sha':hashlib.sha256(root).hexdigest()},f)
+          print('NAV_SOURCE_BASELINE=VERIFIED_44')
+          PY
+      - name: Install Chromium before deployment for fail-closed smoke
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/mpw-nav-browser"
+          cd "$RUNNER_TEMP/mpw-nav-browser"
+          npm init -y >/dev/null
+          npm install --no-audit --no-fund --silent playwright
+          npx playwright install --with-deps chromium
+      - name: Open host-key-pinned relay through VPS to cPanel
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-consolidated-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Compile transformed real PHP on host and verify exact homepage header
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-consolidated-ssh"
+          timeout 90s ssh -T -F "$d/config" saeit-cpanel \
+            "python3 - audit" < scripts/mpw_canonical_navigation_atomic_20261019.py
+      - name: Atomic replace 19 static root navs and one PHP dispatcher
+        id: publish
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-consolidated-ssh"
+          timeout 110s ssh -T -F "$d/config" saeit-cpanel \
+            "python3 - install '$GITHUB_RUN_ID'" < scripts/mpw_canonical_navigation_atomic_20261019.py
+      - name: Check 38 root URLs, unchanged 19 content sections and protected child statuses
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,urllib.request,urllib.error,hashlib,re,os,concurrent.futures
+          original=json.load(open(os.environ['RUNNER_TEMP']+'/mpw-nav-before.json'))
+          def get(p):
+              req=urllib.request.Request('https://mojplaywin.com'+p,headers={'Cache-Control':'no-cache','Pragma':'no-cache','User-Agent':'MPWNavPostRelease/1.0'})
+              try:
+                  with urllib.request.urlopen(req,timeout=22) as r:return p,r.status,r.read(2300000)
+              except urllib.error.HTTPError as e:return p,e.code,e.read(500)
+          with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+              after=list(pool.map(get,list(original['routes'])))
+          n=0
+          for path,status,body in after:
+              if status!=original['routes'][path]:raise SystemExit('Original HTTP status changed '+path)
+              if path=='/':
+                  if hashlib.sha256(body).hexdigest()!=original['home_sha']:raise SystemExit('Homepage source unexpectedly changed')
+                  continue
+              if path in original['children']:continue
+              html=body.decode('utf-8','replace')
+              if (html.count('data-mpw-nav-harmonized-20261019="true"')!=1 or
+                  html.count('id="mw-all-pages-menu"')!=1 or
+                  'Primary MojPlayWin navigation' not in html or
+                  '☆ All Rights Reserved. ☆ 2022. ☆ Mojtaba roozegar ☆' not in html):
+                  raise SystemExit('Canonical menu or legal footer missing '+path)
+              if path in original['mains']:
+                  main=re.search(rb'<main\b[^>]*>[\s\S]*?</main\s*>',body,re.I)
+                  if not main or hashlib.sha256(main.group()).hexdigest()!=original['mains'][path]:
+                      raise SystemExit('Protected original main content changed '+path)
+              print('CANONICAL_MENU_CONFIRMED',path,status,flush=True)
+              n+=1
+          if n!=38:raise SystemExit('Not all 38 main routes verified')
+          print('MPW_ALL_38_CANONICAL_NAVS=VERIFIED',flush=True)
+          PY
+      - name: Chromium tests all 38 paths on mobile and desktop and dropdown interactions
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/mpw-nav-browser"
+          cat > verify.cjs <<'JS'
+          const {chromium}=require('playwright');
+          const fs=require('fs');
+          const staticPaths=['/about/mojtaba-rozegar/','/about/','/agents/','/company/','/economy/','/industry/','/knowledge/','/market/','/research/','/services/','/studio/','/ventures/agriculture/','/ventures/cafe-restaurant/','/ventures/carpets/','/ventures/currency-crypto/','/ventures/ecommerce/','/ventures/fuel-station/','/ventures/hospitality/','/ventures/jewelry-gold/'];
+          const dynamicPaths='store games ai contact support privacy terms cookies products blockchain commerce crypto-payments global-business research-lab canada-vision agro-industry agriculture education weather'.split(' ').map(x=>'/'+x+'/');
+          const paths=['/',...staticPaths,...dynamicPaths];
+          (async()=>{
+            const browser=await chromium.launch({headless:true});
+            const reports=[];
+            try{
+              for(const width of [390,1365]){
+                const page=await browser.newPage({viewport:{width,height:844},deviceScaleFactor:1});
+                for(const p of paths){
+                  const errors=[];
+                  const onError=e=>errors.push((e.stack||String(e)).slice(0,350));
+                  page.on('pageerror',onError);
+                  const resp=await page.goto('https://mojplaywin.com'+p,{waitUntil:'domcontentloaded',timeout:30000});
+                  await page.waitForTimeout(120);
+                  const metric=await page.evaluate(()=>{
+                    const h=document.querySelector('header.mw-site-nav');
+                    const details=h?.querySelector('details#mw-all-pages-menu');
+                    return {
+                      h1:document.querySelectorAll('main h1').length,
+                      header:!!h,canonical:h?.getAttribute('data-mpw-nav-harmonized-20261019')==='true',
+                      navLinks:h?.querySelectorAll('nav a').length||0,
+                      disclosure:!!details,visible:details?getComputedStyle(details).display!=='none':false,
+                      docWidth:document.documentElement.scrollWidth,viewport:innerWidth,
+                      legal:(document.querySelector('footer')?.innerText||'').includes('☆ All Rights Reserved. ☆ 2022. ☆ Mojtaba roozegar ☆')
+                    };
+                  });
+                  const main=p!=='/';
+                  let opened=false,closed=false;
+                  if(main && metric.disclosure){
+                    const trigger=page.locator('header.mw-site-nav details#mw-all-pages-menu > summary');
+                    await trigger.click({timeout:3000});
+                    opened=await page.locator('header.mw-site-nav details#mw-all-pages-menu').evaluate(x=>x.open);
+                    await trigger.click({timeout:3000});
+                    closed=!(await page.locator('header.mw-site-nav details#mw-all-pages-menu').evaluate(x=>x.open));
+                  }
+                  const good=resp.status()===200 && metric.header && metric.h1===1 && metric.legal &&
+                     metric.docWidth<=width+4 && errors.length===0 &&
+                     (!main || (metric.canonical&&metric.navLinks>=10&&metric.disclosure&&metric.visible&&opened&&closed));
+                  const record={p,width,ok:good,errors,...metric,opened,closed};
+                  console.log('CANONICAL_NAV_CHROMIUM='+JSON.stringify(record));
+                  reports.push(record);
+                  if(!good)throw Error('Menu/JS visual regression '+p+' '+width);
+                  if(['/','/about/','/store/','/research/','/agents/'].includes(p)){
+                    await page.screenshot({path:width+'-'+p.replace(/\W+/g,'-')+'.png',fullPage:false,animations:'disabled'});
+                  }
+                  page.off('pageerror',onError);
+                }
+                await page.close();
+              }
+            }finally{fs.writeFileSync('audit.json',JSON.stringify(reports,null,2));await browser.close();}
+            console.log('CANONICAL_NAV_BROWSER=PASS_76_CASES');
+          })().catch(e=>{console.error(e);process.exitCode=1});
+          JS
+          node verify.cjs
+      - name: Restore all 20 original files if any public or browser verification fails
+        if: failure() && steps.publish.outcome == 'success'
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-consolidated-ssh"
+          timeout 90s ssh -T -F "$d/config" saeit-cpanel \
+            "python3 - rollback '$GITHUB_RUN_ID'" < scripts/mpw_canonical_navigation_atomic_20261019.py
+      - name: Attach mobile and desktop nav screenshots and browser errors
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mojplaywin-canonical-nav-390-1365
+          path: |
+            ${{ runner.temp }}/mpw-nav-browser/*.png
+            ${{ runner.temp }}/mpw-nav-browser/audit.json
+          if-no-files-found: ignore
+          retention-days: 14
