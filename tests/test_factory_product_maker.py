@@ -61,7 +61,7 @@ class ManufacturerTests(unittest.TestCase):
         self.assertEqual(maker.sha256_file(filename), digest)
 
     def test_missing_recipe_file_rejected(self):
-        (self.product / "example_inputs.json").unlink()
+        (self.product / "README.md").unlink()
         with self.assertRaises(RuntimeError):
             maker.manufacture("farm_enterprise_economics", self.recipes, self.output)
         self.assertFalse(self.output.exists())
@@ -74,9 +74,21 @@ class ManufacturerTests(unittest.TestCase):
             maker.sha256_file(Path(second["private_artifact"]))
         )
 
-    def test_build_count_defaults_to_all_registered_recipes_without_fixed_cap(self):
+    def test_new_recipe_folder_is_discovered_without_code_registration(self):
+        new_recipe = self.recipes / "new_product_family"
+        shutil.copytree(self.product, new_recipe)
+        readme = new_recipe / "README.md"
+        readme.write_text("# New Product Family\\n", encoding="utf-8")
+        catalog = maker.discover_recipes(self.recipes)
+        self.assertEqual(set(catalog), {"farm_enterprise_economics", "new_product_family"})
+        self.assertEqual(catalog["new_product_family"][0], "New Product Family")
+        result = maker.manufacture("new_product_family", self.recipes, self.output)
+        self.assertEqual(result["qa_status"], "passed")
+        self.assertTrue(Path(result["private_artifact"]).is_file())
+
+    def test_default_catalog_has_no_two_recipe_limit(self):
         self.assertIn("greenhouse_crop_margin", maker.RECIPES)
-        self.assertEqual(len(maker.RECIPES), 3)
+        self.assertGreaterEqual(len(maker.RECIPES), 3)
         self.assertEqual(maker.RECIPES["greenhouse_crop_margin"][0],
                          "Greenhouse Crop Margin and Break-even Planner")
 
