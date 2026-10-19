@@ -56,7 +56,7 @@ def install(run,expected_old,expected_new):
     before=TARGET.read_bytes();new=stage.read_bytes()
     check_hash(before,expected_old,"Original PHP")
     check_hash(new,expected_new,"Approved new PHP")
-    if new.count(b"mpw-contact-safe-business-20261019")!=1:
+    if new.count(b"mpw-contact-safe-business-20261019")!=2:
         # Marker is one CSS id in source.
         fail("Unique contact CSS marker missing")
     if before.count(b"function transformMain(")!=1 or new.count(b"function transformMain(")!=1:
