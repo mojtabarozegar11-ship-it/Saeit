@@ -217,6 +217,35 @@ jobs:
               'module_imports_not_claimed_functional':info['summary']['loaded_only']==77,
               'shared_passenger_restarted':False},sort_keys=True))
           PY
+      - name: Inspect scoped Passenger app roots and restart marker safety
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 45s ssh -T -F "$RUNNER_TEMP/mojplaywin-inventory-ssh/config" saeit-cpanel 'python3 -B -' <<'PY'
+          from pathlib import Path
+          import json,os
+          root=Path('/home/zomorod2/mojplaywin.com')
+          assert root.is_dir() and not root.is_symlink()
+          paths=['.htaccess','farnaz/.htaccess','taniya/.htaccess',
+                 'saman/.htaccess','picm/.htaccess','zahra/.htaccess',
+                 'mojtaba.roozegar/.htaccess']
+          found={}
+          for rel in paths:
+              p=root/rel
+              if p.is_symlink() or not p.is_file(): continue
+              lines=p.read_text('utf8','replace').splitlines()
+              found[rel]=[line.strip()[:220] for line in lines if line.strip().startswith(
+                   ('PassengerAppRoot','PassengerAppGroupName','PassengerBaseURI','PassengerEnabled',
+                    'PassengerAppType','PassengerStartupFile'))]
+          tmp=root/'tmp'
+          marker=tmp/'restart.txt'
+          print('MPW_PASSENGER_ISOLATION='+json.dumps({
+              'roots':found, 'main_tmp_exists':tmp.is_dir() and not tmp.is_symlink(),
+              'main_marker_symlink':marker.is_symlink(),
+              'main_marker_exists':marker.is_file(),
+              'wsgi_inside_main_root':(root/'passenger_wsgi.py').is_file(),
+              'live_restart_executed':False},sort_keys=True))
+          PY
       - name: Erase temporary SSH keys
         if: always()
         shell: bash
