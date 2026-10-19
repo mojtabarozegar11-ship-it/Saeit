@@ -1,0 +1,105 @@
+name: MojPlayWin real settlement scanner and cron release prerequisites
+on:
+  push:
+    branches: [mpw-two-books-unified-release-20261019]
+    paths: [".github/workflows/mpw-settlement-activation-audit-20261019.yml"]
+permissions: {contents: read}
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 11
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Map confirmed-chain scanner and automation without authorizing payments
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 125s ssh -T -F "$d/config" saeit-cpanel bash -s <<'BASH'
+          /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - <<'PY'
+          import os,sys,pathlib,json,ast,subprocess
+          r=pathlib.Path('/home/zomorod2/Saeit-staging')
+          sys.path.insert(0,str(r));os.chdir(r);os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          import django;django.setup()
+          for module in ('mpw_commerce','mpw_native_checkout'):
+            root=r/module
+            found=[]
+            if root.is_dir():
+              for p in sorted(root.glob('*.py')):
+                txt=p.read_text('utf8','replace')
+                source=ast.parse(txt)
+                funcs=[n.name for n in source.body if isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef))]
+                if any(k in p.name for k in ('reconcile','settlement','scanner','rpc','chain','price','wallet','order','invoice','receipt')):
+                  found.append({'name':p.name,'funcs':funcs[:22],'flag_refs':sorted(set(t.value for t in ast.walk(source) if isinstance(t,ast.Constant) and isinstance(t.value,str) and t.value.startswith('MPW_COMMERCE_')))[:30]})
+            print('MPW_PAYMENT_CODE_MODULES='+json.dumps({'package':module,'files':found}))
+          for rel in ('mpw_commerce/auto_reconcile.py','mpw_commerce/chain_rpc.py','mpw_commerce/rpc_clients.py'):
+            p=r/rel
+            if not p.is_file():continue
+            src=p.read_text('utf8','replace')
+            tree=ast.parse(src)
+            mods=[]
+            for node in tree.body:
+              if not isinstance(node,(ast.FunctionDef,ast.AsyncFunctionDef)):continue
+              if node.name not in ('reconcile_pending_orders','verify_with_trusted_rpc','discover_eth','discover_trx'):continue
+              lines=[]
+              for ln in src.splitlines()[node.lineno-1:node.end_lineno]:
+                s=ln.strip()
+                if any(t in s.lower() for t in ('url=','api_key','token','password','secret','recipient','address','wallet','private_key','mnemonic')):continue
+                if any(t in s.lower() for t in ('http','rpc','return','exception','raise','settler','scanner','receipt','verify','enabled','transaction','max_batch','state','paid')):
+                  lines.append(s[:170])
+              mods.append({'fn':node.name,'lines':lines[:85]})
+            print('MPW_SCANNER_POLICY='+json.dumps({'module':rel,'functions':mods}))
+          try:
+            cr=subprocess.run(['crontab','-l'],capture_output=True,text=True,timeout=4)
+            lines=(cr.stdout or '').splitlines()
+            print('MPW_CRON_STATUS='+json.dumps({'readable':cr.returncode==0,'entries':len(lines),
+              'mpw_commerce_entry_count':sum('mpw_commerce' in x.lower() for x in lines),
+              'reconcile_entry_count':sum('reconcile' in x.lower() and not x.lstrip().startswith('#') for x in lines)}))
+          except Exception as ex:
+            print('MPW_CRON_STATUS='+json.dumps({'readable':False,'error':type(ex).__name__}))
+          PY
+          BASH
