@@ -146,7 +146,7 @@ def blank_order(work_id,source):
             "current_stage":1,"status":"awaiting_complete_passport",
             "review_receipts":[],"defects":[],"revision":1,
             "commercial_release":False,"distribution_enabled":False,
-            "final_warehouse_id":None,"last_checked_utc":now()}
+            "final_warehouse_id":None,"last_checked_utc":now(),"stage_entered_utc":now()}
 def area(root):return root/"product-lifecycle"
 def record_path(root,order):return area(root)/"records"/(order+".json")
 def spec_path(root,order):return area(root)/"passports"/(order+".json")
@@ -233,6 +233,10 @@ def tick(root):
         count=0
         new=0
         blockers=Counter()
+        stage_counts=Counter()
+        origin_counts=Counter()
+        defect_count=0
+        stalled_over_day=0
         for filename in sorted(source.iterdir()):
             if filename.is_symlink() or not filename.is_file() or not ORDER_RE.fullmatch(filename.stem) or filename.suffix!=".json":
                 raise RuntimeError("LIFECYCLE_UNEXPECTED_INSTRUCTION")
@@ -248,6 +252,14 @@ def tick(root):
                 new+=1
             state=load_order(root,wid)
             passfile=spec_path(root,wid)
+            origin_counts[str(item.get("origin","unclassified"))]+=1
+            stage_counts[str(state.get("current_stage",1))]+=1
+            defect_count+=sum(d.get("status")!="resolved" for d in state.get("defects",[]))
+            try:
+                entered=datetime.fromisoformat(state.get("stage_entered_utc",state["created_utc"]))
+                stalled_over_day+=int((datetime.now(timezone.utc)-entered).total_seconds()>86400
+                                      and state["status"]!="in_finished_goods_warehouse_not_distributed")
+            except (ValueError,TypeError,KeyError):pass
             if not passfile.exists():
                 blockers["missing_product_passport"]+=1
                 counts["awaiting_complete_passport"]+=1
@@ -276,6 +288,11 @@ def tick(root):
                     for i,name in enumerate(STAGES,1)],
                 "instructions_seen":count,"newly_tracked":new,
                 "workorder_status":dict(counts),"blocked_reasons":dict(blockers),
+                "by_production_origin":dict(origin_counts),
+                "orders_by_stage":dict(stage_counts),
+                "open_defects":defect_count,
+                "orders_stalled_over_24h":stalled_over_day,
+                "per_order_resource_metrics_available":False,
                 "old_technical_QA_stock_pending_final_review":tech_versions,
                 "final_commercially_verified_stock":ready,
                 "site_distribution_enabled":False,"sites_contacted":0,
@@ -295,6 +312,7 @@ def import_passport(root,work_id,source):
     atomic(path,data)
     state=load_order(root,wid)
     state["status"]="waiting_stage_1_evidence"
+    state["stage_entered_utc"]=now()
     atomic(record_path(root,wid),state)
     return path
 def review(root,order,evidence_input):
@@ -317,9 +335,11 @@ def review(root,order,evidence_input):
         state["defects"].append(new_defect)
         state["status"]="expert_review" if new_defect["status"]=="expert_review" else "rework_required"
         state["stage_status"][str(stage)]="failed"
+        state["stage_entered_utc"]=now()
     else:
         state["stage_status"][str(stage)]="passed"
         state["current_stage"]=stage+1
+        state["stage_entered_utc"]=now()
         state["status"]="waiting_stage_"+str(stage+1)+"_evidence" if stage<10 else "awaiting_final_warehouse_admission"
     state["review_receipts"].append({"stage":stage,"decision":receipt["decision"],
                                     "sha256":evidence_hash,"reviewer":receipt["reviewer_id"],
