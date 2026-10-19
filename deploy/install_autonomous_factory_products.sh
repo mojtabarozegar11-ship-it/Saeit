@@ -63,7 +63,7 @@ done
 
 # Quality gate must exist and compile BEFORE any production cycle or cron change.
 "$python" -B -c 'import ast, pathlib, sys; [ast.parse(pathlib.Path(x).read_text(encoding="utf-8")) for x in sys.argv[1:]]' \
-  "$scripts/factory_evidence_quality.py" "$scripts/factory_autonomous_portfolio.py" "$scripts/factory_vps_product_cycle.py" "$scripts/factory_product_rework.py"
+  "$scripts/factory_evidence_quality.py" "$scripts/factory_autonomous_portfolio.py" "$scripts/factory_vps_product_cycle.py" "$scripts/factory_product_rework.py" "$scripts/factory_recipe_catalog_sync.py"
 
 # Recipe QA already passed in the catalog sync; run the current full cycle.
 "$python" "$scripts/factory_vps_product_cycle.py" \
