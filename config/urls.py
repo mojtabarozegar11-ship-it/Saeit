@@ -7,7 +7,8 @@ from command_center.views import dashboard as staff_dashboard
 
 from core.views import home, platform_page, taniya_studio
 from core.mojplaywin_views import venture
-from core.commerce_views import store_home, auctions_home\nfrom core.product_seo_views import product_detail
+from core.commerce_views import store_home, auctions_home
+from core.product_seo_views import product_detail
 from core.seo_views import site_search, robots_txt, sitemap_xml
 from core.weather_views import weather
 from core.academy_views import (
