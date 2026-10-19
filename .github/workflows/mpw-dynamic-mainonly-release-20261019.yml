@@ -1,0 +1,191 @@
+name: MojPlayWin single-stage live dynamic main-only template alignment
+on:
+  pull_request:
+    paths:
+      - "scripts/mpw_dynamic_main_shell_20261019.php"
+      - "scripts/mpw_dynamic_main_shell_atomic_20261019.py"
+      - "tests/test_mpw_dynamic_mainonly_20261019.py"
+      - ".github/workflows/mpw-dynamic-mainonly-release-20261019.yml"
+  push:
+    branches: [main]
+    paths:
+      - "scripts/mpw_dynamic_main_shell_20261019.php"
+      - "scripts/mpw_dynamic_main_shell_atomic_20261019.py"
+      - "tests/test_mpw_dynamic_mainonly_20261019.py"
+      - ".github/workflows/mpw-dynamic-mainonly-release-20261019.yml"
+permissions:
+  contents: read
+concurrency:
+  group: mojplaywin-main-dynamic-exact19-atomic
+  cancel-in-progress: false
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Validate PHP renderer, safety contract and atomic route script
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_dynamic_main_shell_atomic_20261019.py
+          python3 -m unittest discover -s tests -p 'test_mpw_dynamic_mainonly_20261019.py' -v
+          command -v php
+          php -l scripts/mpw_dynamic_main_shell_20261019.php
+          php scripts/mpw_dynamic_main_shell_20261019.php selftest
+  release:
+    needs: contract
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event_name == 'push' && contains(github.event.head_commit.message, '[approved-mpw-dynamic-19-20261019]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 29
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Public preflight for all main and protected routes
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import urllib.request,urllib.error,re,os,json
+          routes='store games ai contact support privacy terms cookies products blockchain commerce crypto-payments global-business research-lab canada-vision agro-industry agriculture education weather'.split()
+          checked={}
+          for slug in routes:
+              path='/'+slug+'/'
+              req=urllib.request.Request('https://mojplaywin.com'+path,headers={'Cache-Control':'no-cache','User-Agent':'MPWMainDynamicBefore/1.0'})
+              with urllib.request.urlopen(req,timeout=22) as res:
+                  page=res.read(2300000).decode('utf8','replace')
+                  if res.status!=200 or '<main' not in page.lower() or '<footer' not in page.lower():
+                      raise SystemExit('BASELINE_UNHEALTHY '+path)
+                  checked[path]={'status':res.status,'h1':(re.search(r'<h1\b[^>]*>(.*?)</h1>',page,re.I|re.S) or ['',''])[1][:140]}
+                  print('BASELINE_MAIN_OK '+path,flush=True)
+          for slug in ('farnaz','saman','picm'):
+              path='/'+slug+'/'
+              with urllib.request.urlopen('https://mojplaywin.com'+path,timeout=22) as res:
+                  checked[path]={'status':res.status}
+                  if res.status!=200:raise SystemExit('PROTECTED_BASELINE_UNHEALTHY '+path)
+                  print('PROTECTED_BASELINE_OK '+path,flush=True)
+          with open(os.environ['RUNNER_TEMP']+'/mpw-dynamic-baseline.json','w') as f:json.dump(checked,f)
+          PY
+      - name: Set up pinned VPS and cPanel SSH
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-footer-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Stage only vetted PHP in protected folder outside public website
+        run: |
+          set -euo pipefail
+          sha="$(sha256sum scripts/mpw_dynamic_main_shell_20261019.php | awk '{print $1}')"
+          printf '%s' "$sha" > "$RUNNER_TEMP/mpw-main-php-sha"
+          test "${#sha}" -eq 64
+          timeout 40s sh -c 'cat scripts/mpw_dynamic_main_shell_20261019.php | ssh -T -F "$1" saeit-cpanel "umask 077; cat > /home/zomorod2/.mpw-main-shell-staging-$2.php"' -- "$RUNNER_TEMP/mpw-footer-inventory/config" "$GITHUB_RUN_ID"
+      - name: Remote PHP lint, exact URI preflight and nonmutating HTML regression
+        run: |
+          set -euo pipefail
+          file="/home/zomorod2/.mpw-main-shell-staging-$GITHUB_RUN_ID.php"
+          config="$RUNNER_TEMP/mpw-footer-inventory/config"
+          timeout 40s ssh -T -F "$config" saeit-cpanel "if command -v php >/dev/null 2>&1; then php -l '$file' && php '$file' selftest; else /opt/cpanel/ea-php82/root/usr/bin/php -l '$file' && /opt/cpanel/ea-php82/root/usr/bin/php '$file' selftest; fi"
+          sha="$(cat "$RUNNER_TEMP/mpw-main-php-sha")"
+          timeout 60s ssh -T -F "$config" saeit-cpanel python3 - audit "$GITHUB_RUN_ID" "$sha" < scripts/mpw_dynamic_main_shell_atomic_20261019.py
+      - name: Install 19 root-only GET template corrections as ONE transaction
+        run: |
+          set -euo pipefail
+          sha="$(cat "$RUNNER_TEMP/mpw-main-php-sha")"
+          timeout 75s ssh -T -F "$RUNNER_TEMP/mpw-footer-inventory/config" saeit-cpanel python3 - install "$GITHUB_RUN_ID" "$sha" < scripts/mpw_dynamic_main_shell_atomic_20261019.py
+      - name: Confirm live header, footer, SEO and original service availability
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import urllib.request,re,json,os,html
+          from pathlib import Path
+          domain='https://mojplaywin.com'
+          routes='store games ai contact support privacy terms cookies products blockchain commerce crypto-payments global-business research-lab canada-vision agro-industry agriculture education weather'.split()
+          def fetch(path):
+              req=urllib.request.Request(domain+path,headers={'Cache-Control':'no-cache','User-Agent':'MPWMainShellVerify/1.0','Accept-Encoding':'identity'})
+              with urllib.request.urlopen(req,timeout=25) as res:
+                  return res.status,res.headers,res.read(2300000).decode('utf8','replace')
+          for slug in routes:
+              path='/'+slug+'/'
+              status,headers,body=fetch(path)
+              if status!=200 or headers.get('X-MPW-Main-Shell')!='exact-owner-only':
+                  raise SystemExit('MAIN_SHELL_NOT_ACTIVE '+path)
+              if len(re.findall(r'<header\b[^>]*class="mw-site-nav"',body,re.I))!=1 or len(re.findall(r'<footer\b[^>]*class="mw-site-footer"',body,re.I))!=1:
+                  raise SystemExit('DUPLICATE_OR_MISSING_MAIN_SHELL '+path)
+              if re.search(r'<(?:header|footer)\b[^>]*class="(?:site-header|site-footer|mpw-header|mpw-footer)"',body,re.I):
+                  raise SystemExit('LEGACY_BRANDING_REMAINS '+path)
+              if '<html lang="en" dir="ltr">' not in body or '<link rel="canonical" href="'+domain+path+'">' not in body:
+                  raise SystemExit('SEO_OR_LANG_INCORRECT '+path)
+              if 'Mojtaba Roozegar' not in body or '<main' not in body:
+                  raise SystemExit('FOUNDER_OR_MAIN_MISSING '+path)
+              if slug=='store' and ('Chess' not in body or 'Taniya' not in body):
+                  raise SystemExit('STORE_CATALOG_LOST')
+              if slug=='weather' and 'weather-section-head' not in body:
+                  raise SystemExit('WEATHER_LIVE_SECTION_LOST')
+              print('MAIN_DYNAMIC_OK '+path,flush=True)
+          baseline=json.loads(Path(os.environ['RUNNER_TEMP']+'/mpw-dynamic-baseline.json').read_text())
+          for slug in ('farnaz','saman','picm'):
+              path='/'+slug+'/'
+              status,headers,body=fetch(path)
+              if status!=baseline[path]['status'] or headers.get('X-MPW-Main-Shell'):
+                  raise SystemExit('PROTECTED_SITE_CHANGED '+path)
+              print('PROTECTED_SITE_OK '+path,flush=True)
+          # The original Django content must still be directly available,
+          # proving only the owner-scoped GET presentation is overlaid.
+          status,headers,original=fetch('/store/?__mpw_template_passthru=1&__mpw_canon_passthru=1')
+          if status!=200 or headers.get('X-MPW-Main-Shell') or 'Chess' not in original:
+              raise SystemExit('STORE_PASSTHRU_BROKEN')
+          print('STORE_DYNAMIC_ORIGIN_PRESERVED=true',flush=True)
+          print('MPW_DYNAMIC_19_PUBLIC_QA=PASS',flush=True)
+          PY
+      - name: Roll back exact main-only route and bridge if QA failed
+        if: failure()
+        run: |
+          set -euo pipefail
+          config="$RUNNER_TEMP/mpw-footer-inventory/config"
+          if test -s "$config" && test -f "$RUNNER_TEMP/mpw-main-php-sha"; then
+            timeout 70s ssh -T -F "$config" saeit-cpanel python3 - rollback "$GITHUB_RUN_ID" < scripts/mpw_dynamic_main_shell_atomic_20261019.py || true
+          fi
+      - name: Remove private stage and SSH material
+        if: always()
+        run: |
+          config="$RUNNER_TEMP/mpw-footer-inventory/config"
+          if test -s "$config"; then
+            timeout 25s ssh -T -F "$config" saeit-cpanel "rm -f -- /home/zomorod2/.mpw-main-shell-staging-$GITHUB_RUN_ID.php" || true
+          fi
+          rm -rf -- "$RUNNER_TEMP/mpw-footer-inventory"
