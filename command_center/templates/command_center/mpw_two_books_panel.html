@@ -10,7 +10,7 @@ main{max-width:1080px;padding:32px 17px;margin:auto}a{color:#badfff}.grid{displa
 .card{padding:20px;border:1px solid #445872;border-radius:18px;background:#1c3049}
 h1{font-size:1.7rem}h2{font-size:1.2rem;margin:0 0 8px}.value{font-size:1.55rem;font-weight:700}
 .ok{color:#9ddcba}.pending{color:#ffd79a}ul{margin:0;padding-right:20px}
-small{color:#c3d1e5}code{overflow-wrap:anywhere}table{border-collapse:collapse;width:100%}td,th{border-bottom:1px solid #3a526f;padding:7px;text-align:right}
+small{color:#c3d1e5}code{overflow-wrap:anywhere}.state-row{display:grid;grid-template-columns:170px 1fr;gap:12px;align-items:center;margin:9px 0}progress{width:100%;height:15px;accent-color:#66bb99}table{border-collapse:collapse;width:100%}td,th{border-bottom:1px solid #3a526f;padding:7px;text-align:right}
 </style>
 </head>
 <body><main>
@@ -22,7 +22,21 @@ small{color:#c3d1e5}code{overflow-wrap:anywhere}table{border-collapse:collapse;w
 <div class="card"><h2>درخواست‌های پرداخت</h2><div class="value">{{ intents_total }}</div></div>
 <div class="card"><h2>فاکتورهای موتور Native</h2><div class="value">{{ native_invoices_count|default_if_none:"نامشخص" }}</div></div>
 <div class="card"><h2>تسویه و تحویل آزمون‌شده</h2><div class="value pending">هنوز تأیید نشده</div></div>
+<div class="card"><h2>فاکتورهای موتور جدید</h2><div class="value">{{ commerce_invoices_count|default_if_none:"نامشخص" }}</div></div>
+<div class="card"><h2>رسیدهای تأییدشده زنجیره</h2><div class="value">{{ verified_receipts_count|default_if_none:"نامشخص" }}</div></div>
+<div class="card"><h2>درآمد دارای رسید معتبر (USD)</h2><div class="value">{{ confirmed_revenue_usd|default_if_none:"نامشخص" }}</div></div>
+<div class="card"><h2>سوابق تحویل دیجیتال</h2><div class="value">{{ commerce_fulfillment_count|default_if_none:"نامشخص" }}</div></div>
 </div>
+<h2>نمودار وضعیت فاکتورهای دو کتاب</h2>
+<section class="card">
+{% if commerce_invoices_count %}
+{% for state,value in commerce_invoices_by_status.items %}
+<div class="state-row"><span><code>{{ state }}</code> — {{ value }}</span><progress max="{{ commerce_invoices_count }}" value="{{ value }}">{{ value }}</progress></div>
+{% endfor %}
+{% else %}<p>هنوز فاکتور تجاری ثبت نشده است یا داده‌های موتور جدید قابل خواندن نیستند.</p>{% endif %}
+</section>
+<h2>وضعیت واقعی تحویل</h2>
+<div class="card">{% if commerce_fulfillments_by_status %}<ul>{% for name,value in commerce_fulfillments_by_status.items %}<li>{{ name }}: {{ value }}</li>{% endfor %}</ul>{% else %}هنوز سابقه تحویل تأییدشده ثبت نشده است.{% endif %}</div>
 <h2>فهرست دو کتاب</h2>
 <div class="grid">
 {% for book in books %}
