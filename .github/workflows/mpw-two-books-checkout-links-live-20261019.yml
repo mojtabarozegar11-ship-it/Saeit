@@ -88,6 +88,38 @@ jobs:
           set -euo pipefail
           d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
           timeout 125s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - publish '$GITHUB_RUN_ID'" < scripts/mpw_two_books_checkout_link_20261019.py
+      - name: Gracefully refresh audited Passenger app template cache after exact store edit
+        id: refresh
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 50s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" <<'PY'
+          from pathlib import Path
+          import os
+          H=Path('/home/zomorod2')
+          app=H/'Saeit-staging'
+          wsgi=H/'mojplaywin.com/passenger_wsgi.py'
+          store=app/'core/templates/mojplaywin/store.html'
+          if not app.is_dir() or app.is_symlink() or wsgi.is_symlink() or not wsgi.is_file():
+              raise SystemExit('SHARED_PASSENGER_ROOT_NOT_VERIFIED')
+          if "APP='/home/zomorod2/Saeit-staging'" not in wsgi.read_text('utf8','replace'):
+              raise SystemExit('WSGI_APP_ROOT_NOT_PINNED')
+          if store.is_symlink() or not store.is_file():
+              raise SystemExit('STORE_TEMPLATE_NOT_REGULAR')
+          content=store.read_bytes()
+          if (content.count(b'href="/store/product/72/checkout/"')!=1
+             or content.count(b'href="/store/product/225/checkout/"')!=1):
+              raise SystemExit('STORE_LINKS_NOT_INSTALLED')
+          directory=app/'tmp'
+          if directory.is_symlink():
+              raise SystemExit('UNSAFE_RESTART_DIRECTORY')
+          directory.mkdir(exist_ok=True)
+          marker=directory/'restart.txt'
+          if marker.is_symlink() or (marker.exists() and not marker.is_file()):
+              raise SystemExit('UNSAFE_RESTART_MARKER')
+          marker.touch()
+          print('MPW_PASSENGER_TEMPLATE_REFRESH_REQUESTED=1;STORE_ONLY_TEMPLATE_MODIFIED=1')
+          PY
       - name: Public verify checkout links and protected paths
         id: smoke
         run: |
@@ -133,3 +165,23 @@ jobs:
           set -euo pipefail
           d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
           timeout 125s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - rollback '$GITHUB_RUN_ID'" < scripts/mpw_two_books_checkout_link_20261019.py
+      - name: Refresh app template cache again if exact rollback was applied
+        if: failure() && steps.install.outcome == 'success'
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 50s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" <<'PY'
+          from pathlib import Path
+          H=Path('/home/zomorod2');app=H/'Saeit-staging'
+          wsgi=H/'mojplaywin.com/passenger_wsgi.py'
+          store=app/'core/templates/mojplaywin/store.html'
+          if not wsgi.is_file() or "APP='/home/zomorod2/Saeit-staging'" not in wsgi.read_text('utf8','replace'):
+              raise SystemExit('WSGI_PIN_NOT_VERIFIED')
+          if b'href="/store/product/72/checkout/"' in store.read_bytes():
+              raise SystemExit('ROLLBACK_NOT_COMPLETE')
+          marker=app/'tmp/restart.txt'
+          if marker.is_symlink() or marker.parent.is_symlink():
+              raise SystemExit('UNSAFE_MARKER')
+          marker.touch()
+          print('MPW_POST_ROLLBACK_CACHE_REFRESH_REQUESTED=1')
+          PY
