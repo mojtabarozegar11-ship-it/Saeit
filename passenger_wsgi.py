@@ -22,21 +22,17 @@ if os.path.exists(env_path):
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 
-# CloudLinux's Passenger interpreter activates the app's lib site-packages,
-# while compiled wheels such as pydantic_core may be installed under lib64.
-# Add the existing package directory directly; do not re-run executable .pth hooks.
-venv_lib64 = os.path.join(
-    os.path.expanduser("~"),
-    "virtualenv",
-    "Saeit",
-    "3.10",
-    "lib64",
-    "python3.10",
-    "site-packages",
-)
-if os.path.isdir(venv_lib64) and venv_lib64 not in sys.path:
-    sys.path.insert(1, venv_lib64)
+# Compiled Python wheels may live in CloudLinux's lib64. Never mix 3.10
+# site-packages with a 3.11 Passenger interpreter (or vice versa).
+# No executable .pth hooks are replayed.
+py_version = f"{sys.version_info.major}.{sys.version_info.minor}"
+for root in (
+    os.path.join(os.path.expanduser("~"), "virtualenv", "Saeit", py_version),
+    os.path.join(os.path.expanduser("~"), "virtualenv", "repositories", "Saeit", py_version),
+    sys.prefix,
+):
+    compiled = os.path.join(root, "lib64", "python" + py_version, "site-packages")
+    if os.path.isdir(compiled) and compiled not in sys.path:
+        sys.path.insert(1, compiled)
 
-# Avoid site.addsitedir(): it re-runs executable .pth hooks and can re-enter
-# Django initialization before Passenger imports this WSGI application.
 from config.wsgi import application
