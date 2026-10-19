@@ -53,3 +53,14 @@ def test_repeated_patch_and_missing_evidence_fail_closed():
             assert False,"Fail-closed check not enforced"
         except RuntimeError:
             pass
+
+def test_existing_company_schema_is_preserved_and_not_duplicated():
+    a=about()
+    existing='<script type="application/ld+json" id="preexisting-company-schema">{"@context":"https://schema.org","@type":"Organization","name":"MojPlayWin"}</script>'
+    b=company().replace("</head>",existing+"</head>")
+    pa,pb=mpw.compose(a,b)
+    mpw.validate_pair(pa,pb)
+    assert existing in pb
+    assert pb.count('type="application/ld+json"')==1
+    assert "mpw-company-schema-20261019" not in pb
+    assert 'property="og:description"' in pb
