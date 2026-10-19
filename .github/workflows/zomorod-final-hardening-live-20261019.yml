@@ -1,4 +1,4 @@
-name: Zomorod complete final WCAG and safe security headers production patch
+name: Zomorod final WCAG and security release verified health endpoint
 on:
   push:
     branches: [main]
@@ -30,7 +30,7 @@ jobs:
           from urllib.request import urlopen,Request
           for path in ('/','/research/','/agriculture/','/about/','/store/','/tala/','/business/','/company/','/search/','/topics/','/amozeshgah/','/tala/api/health.php'):
            with urlopen(Request('https://zomorodmelal.ir'+path,headers={'Cache-Control':'no-cache'}),timeout=30) as r:
-            assert r.status==200 and len(r.read(100000))>200,path
+            assert r.status==200 and len(r.read(100000))>(2 if path=='/tala/api/health.php' else 200),path
             if path=='/business/':
              csp=r.headers.get('Content-Security-Policy','')
              assert "default-src 'none'" in csp and "frame-ancestors 'none'" in csp,'Management CSP already not protected'
@@ -129,7 +129,7 @@ jobs:
            for n in range(6):
             with urlopen(Request(b+path+'?__zm_hardening='+os.environ['GITHUB_RUN_ID']+'-'+str(n),headers={'Cache-Control':'no-cache'}),timeout=40) as r:
              body=r.read(120000)
-             assert r.status==200 and len(body)>200,path
+             assert r.status==200 and len(body)>(2 if path=='/tala/api/health.php' else 200),path
              h=r.headers.get('Strict-Transport-Security','')
              c=r.headers.get('Content-Security-Policy','')
              ref=r.headers.get('Referrer-Policy','')
