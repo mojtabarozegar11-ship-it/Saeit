@@ -366,11 +366,31 @@ def import_site(batch, root=DEST):
             else:
                 atomic(original,json_blob(ret))
         rows.append({"product_id":product,"version":version,"qa_state":qa["qa_state"]})
+    # Report the entire persistent private inbox, not merely the final page:
+    # pagination must not make a twelve-version inventory look like three.
+    total = passed_total = pending_total = 0
+    for product_dir in sorted((root/"received").iterdir()):
+        require(product_dir.is_dir() and not product_dir.is_symlink()
+                and RECIPE.fullmatch(product_dir.name), "RECEIVED_INVENTORY_UNSAFE")
+        for version_dir in sorted(product_dir.iterdir()):
+            require(version_dir.is_dir() and not version_dir.is_symlink()
+                    and SHA.fullmatch(version_dir.name), "RECEIVED_VERSION_UNSAFE")
+            state = json_file(version_dir/"site_qa.json",100_000)
+            require(state.get("tenant")==TENANT
+                    and state.get("product_id")==product_dir.name
+                    and state.get("version")==version_dir.name
+                    and state.get("public_listing") is False,
+                    "RECEIVED_QA_STATE_CORRUPTED")
+            total += 1
+            passed_total += (state.get("qa_state") == "independent_qa_passed_awaiting_owner_release")
+            pending_total += (state.get("qa_state") != "independent_qa_passed_awaiting_owner_release")
+            require(total <= 10000, "PRIVATE_INBOX_INVENTORY_LIMIT")
     report = {"schema":SCHEMA,"tenant":TENANT,"last_checked_utc":stamp(),
-              "factory_versions_observed":len(products),"new_private_imports":added,
-              "duplicate_versions_skipped":previous,"quality_approved":approved,
-              "pending_stage1_return":len(rows)-approved,"publicly_published":0,
-              "store_product_created":0,"warehouse_bot_connected":True}
+              "factory_versions_observed":total,"last_transfer_page_versions":len(products),
+              "new_private_imports":added,"duplicate_versions_skipped":previous,
+              "quality_approved":passed_total,"pending_stage1_return":pending_total,
+              "publicly_published":0,"store_product_created":0,
+              "warehouse_bot_connected":True}
     atomic(root/"status.json",json_blob(report))
     return report
 
