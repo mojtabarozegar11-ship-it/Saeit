@@ -5,6 +5,8 @@ on:
     paths:
       - .github/workflows/zomorod-site-agent-100-stage-release.yml
       - content/zomorod-v11/site_agents.php
+      - content/zomorod-v11/site_agent_workforce.php
+      - content/zomorod-v11/site_agent_cycle_cli.php
   workflow_dispatch:
 permissions:
   contents: read
@@ -33,6 +35,11 @@ jobs:
           php content/zomorod-v11/tests/site_agents_generation_harness.php > "$RUNNER_TEMP/100-gates.log"
           test "$(grep -c '^SITE_AGENT_GENERATION_GATE=' "$RUNNER_TEMP/100-gates.log")" -eq 100
           echo SITE_AGENT_100_SCENARIO_GATES=passed
+          php -l content/zomorod-v11/site_agent_workforce.php
+          php -l content/zomorod-v11/site_agent_cycle_cli.php
+          php content/zomorod-v11/tests/site_workforce_100_test.php > "$RUNNER_TEMP/site-worker-100-gates.log"
+          test "$(grep -c '^ZM_SITE_WORK_GENERATION_TEST=' "$RUNNER_TEMP/site-worker-100-gates.log")" -eq 100
+          echo SITE_AGENT_WORKER_100_EVIDENCE_GATES=passed
       - name: Prepare pinned cPanel relay
         shell: bash
         env:
@@ -92,9 +99,13 @@ jobs:
           after="$(sha256sum content/zomorod-v11/site_agents.php | cut -c1-64)"
           test "$before" != "$after"
           cat "$RUNNER_TEMP/site_agents.prior.php" | ssh -T -F "$d/config" saeit-cpanel \
-            "cat > '/home/zomorod2/.zm-previous-agent-$GITHUB_RUN_ID.php'"
+            "cat > '/home/zomorod2/.zm-previous-agent-$GITHUB_RUN_ID.php' '/home/zomorod2/.zm-next-work-$GITHUB_RUN_ID.php' '/home/zomorod2/.zm-next-cli-$GITHUB_RUN_ID.php'"
           cat content/zomorod-v11/site_agents.php | ssh -T -F "$d/config" saeit-cpanel \
             "cat > '/home/zomorod2/.zm-next-agent-$GITHUB_RUN_ID.php'"
+          cat content/zomorod-v11/site_agent_workforce.php | ssh -T -F "$d/config" saeit-cpanel \
+            "cat > '/home/zomorod2/.zm-next-work-$GITHUB_RUN_ID.php'"
+          cat content/zomorod-v11/site_agent_cycle_cli.php | ssh -T -F "$d/config" saeit-cpanel \
+            "cat > '/home/zomorod2/.zm-next-cli-$GITHUB_RUN_ID.php'"
           timeout 40s ssh -T -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_RUN_ID" "$before" "$after" <<'REMOTE'
           set -euo pipefail
           run="$1";sha_before="$2";sha_after="$3"
@@ -102,12 +113,17 @@ jobs:
           private="$HOME/.private/zomorod-business"
           current="$private/site_agents.php"
           test -f "$current" && test ! -L "$current" && test -f "$private/site_agents.sqlite3"
+          test ! -e "$private/site_agent_workforce.php"
+          test ! -e "$private/site_agent_cycle_cli.php"
+          test -f "$HOME/.zm-next-work-$run.php" && test -f "$HOME/.zm-next-cli-$run.php"
           test "$(sha256sum "$current"|cut -c1-64)" = "$sha_before"
           test "$(sha256sum "$HOME/.zm-next-agent-$run.php"|cut -c1-64)" = "$sha_after"
           test "$(sha256sum "$HOME/.zm-previous-agent-$run.php"|cut -c1-64)" = "$sha_before"
           bin="$(command -v php || true)";test -n "$bin"
           "$bin" -l "$current" >/dev/null
           "$bin" -l "$HOME/.zm-next-agent-$run.php" >/dev/null
+          "$bin" -l "$HOME/.zm-next-work-$run.php" >/dev/null
+          "$bin" -l "$HOME/.zm-next-cli-$run.php" >/dev/null
           "$bin" -r 'exit(extension_loaded("pdo_sqlite")?0:1);'
           backup="$HOME/.backups/zomorod-site-agent-v12/$run"
           test ! -e "$backup"
@@ -138,6 +154,10 @@ jobs:
           bin="$(command -v php || true)";test -n "$bin"
           "$bin" -l "$candidate" >/dev/null
           chmod 600 "$candidate"
+          test ! -e "$private/site_agent_workforce.php" && test ! -e "$private/site_agent_cycle_cli.php"
+          work_candidate="$HOME/.zm-next-work-$run.php"
+          cli_candidate="$HOME/.zm-next-cli-$run.php"
+          test -f "$work_candidate" && test -f "$cli_candidate"
           installed=0
           rollback(){
             rc="$?"
@@ -146,15 +166,21 @@ jobs:
               test "$(sha256sum "$current"|cut -c1-64)" = "$new_sha" &&
                 cp -p "$before" "$private/.site_agents.rollback-$run.php" &&
                 mv -f "$private/.site_agents.rollback-$run.php" "$current" || true
+              rm -f -- "$private/site_agent_workforce.php" "$private/site_agent_cycle_cli.php"
               echo "SITE_AGENT_RELEASE_ROLLBACK_ATTEMPTED=yes"
             fi
             exit "$rc"
           }
           trap rollback EXIT
           new_sha="$(sha256sum "$candidate"|cut -c1-64)"
+          cp -p "$work_candidate" "$private/site_agent_workforce.php"
+          cp -p "$cli_candidate" "$private/site_agent_cycle_cli.php"
+          chmod 600 "$private/site_agent_workforce.php" "$private/site_agent_cycle_cli.php"
+          installed=1
+          "$bin" -l "$private/site_agent_workforce.php" >/dev/null
+          "$bin" -l "$private/site_agent_cycle_cli.php" >/dev/null
           cp -p "$candidate" "$private/.site_agents.v12-$run.php"
           mv -f "$private/.site_agents.v12-$run.php" "$current"
-          installed=1
           "$bin" -l "$current" >/dev/null
           test "$(sha256sum "$current"|cut -c1-64)" = "$new_sha"
           "$bin" -d display_errors=0 -r '
@@ -172,6 +198,7 @@ jobs:
           trap - EXIT
           installed=0
           echo "SITE_AGENT_ONLY_PRIVATE_PHP_UPGRADED=yes"
+          echo "SITE_AGENT_EVIDENCE_WORKFORCE_INSTALLED=yes"
           echo "NO_DJANGO_DB_MIGRATION_OR_FACTORY_CHANGE=yes"
           REMOTE
       - name: Live inspect website paths and private module, without inventing activity
@@ -188,6 +215,8 @@ jobs:
           test "$(sha256sum "$file"|cut -c1-64)" != "$(sha256sum "$backup"|cut -c1-64)"
           bin="$(command -v php)"
           "$bin" -l "$file" >/dev/null
+          test -f "$HOME/.private/zomorod-business/site_agent_workforce.php"
+          test -f "$HOME/.private/zomorod-business/site_agent_cycle_cli.php"
           echo "SITE_AGENT_LIVE_PRIVATE_RUNTIME=verified"
           REMOTE
           for route in /business/ /agents/ /api/health/; do
@@ -224,7 +253,48 @@ jobs:
           echo "SITE_AGENT_POST_RELEASE_RUNS_ADDED=11\n";
           echo "SITE_AGENT_POST_RELEASE_FAILED_COUNT=".count($fail)."\n";
           echo "SITE_MASTER_AGGREGATE_TRUTHFUL=yes\n";
+          echo "SITE_PRIVATE_MONITORS_CHECKED=yes\n";
           ' "$script"
+          REMOTE
+      - name: Verify real site-local evidence creation and pin private ten-minute site-only schedule
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-agent100-release"
+          timeout 180s ssh -T -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_RUN_ID" <<'REMOTE'
+          set -euo pipefail
+          run="$1"
+          private="$HOME/.private/zomorod-business"
+          app="$private/site_agents.php"
+          work="$private/site_agent_workforce.php"
+          cli="$private/site_agent_cycle_cli.php"
+          test -s "$app" && test -s "$work" && test -s "$cli"
+          phpbin="$(command -v php)"
+          "$phpbin" -r '
+          require_once $argv[1];
+          require_once $argv[2];
+          $db=zmAgentDb(dirname($argv[1]));
+          $before=(int)$db->query("SELECT COUNT(*) FROM site_work_outputs")->fetchColumn();
+          $results=zmWorkCycle($db,null,2);
+          $after=(int)$db->query("SELECT COUNT(*) FROM site_work_outputs")->fetchColumn();
+          if(count($results)!==2 || $after-$before!==2)exit(21);
+          foreach($results as $r)echo "SITE_WORK_LIVE_EVIDENCE=".json_encode($r,JSON_UNESCAPED_UNICODE)."\n";
+          $view=zmWorkDashboard($db);
+          if(strpos($view,"کارهای ثبت‌شده ایجنت‌ها")===false)exit(22);
+          echo "SITE_WORK_REAL_PRIVATE_OUTPUTS=2\n";
+          echo "SITE_WORK_PRIVATE_PANEL=verified\n";
+          ' "$app" "$work"
+          test -f "$private/site_agents.sqlite3"
+          crontab -l > "$HOME/.backups/zomorod-site-agent-v12/$run/crontab.before.txt"
+          if grep -q 'site_agent_cycle_cli.php' "$HOME/.backups/zomorod-site-agent-v12/$run/crontab.before.txt";then
+            echo "SITE_WORK_UNEXPECTED_DUPLICATE_CRON=blocked";exit 23
+          fi
+          cp -p "$HOME/.backups/zomorod-site-agent-v12/$run/crontab.before.txt" "$HOME/.backups/zomorod-site-agent-v12/$run/crontab.candidate.txt"
+          printf '\n*/10 * * * * %s -d display_errors=0 %s >/dev/null 2>&1 # zm-site-agents-only-v100\n' "$phpbin" "$cli" >> "$HOME/.backups/zomorod-site-agent-v12/$run/crontab.candidate.txt"
+          crontab "$HOME/.backups/zomorod-site-agent-v12/$run/crontab.candidate.txt"
+          crontab -l | grep -Fq '# zm-site-agents-only-v100'
+          echo "SITE_WORK_TEN_MINUTE_CRON=enabled"
+          echo "SITE_WORK_DJANGO_DATABASE_UNCHANGED=yes"
           REMOTE
       - name: Automatic rollback after failed acceptance gate, if this run installed new PHP
         if: failure()
@@ -255,6 +325,24 @@ jobs:
             fi
           else
             echo "SITE_AGENT_NO_VALID_BACKUP_FROM_THIS_RUN=yes"
+          fi
+          REMOTE
+            timeout 30s ssh -T -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_RUN_ID" <<'REMOTE'
+          set -euo pipefail
+          run="$1"
+          private="$HOME/.private/zomorod-business"
+          backup="$HOME/.backups/zomorod-site-agent-v12/$run"
+          if test -f "$backup/crontab.before.txt" && crontab -l | grep -Fq '# zm-site-agents-only-v100'; then
+            crontab "$backup/crontab.before.txt"
+            echo "SITE_WORK_CRON_ROLLED_BACK=yes"
+          fi
+          if test -f "$backup/site_agents.prior.php";then
+            if ! cmp -s "$private/site_agents.php" "$backup/site_agents.prior.php";then
+              echo "SITE_WORK_DOWNSTREAM_ROLLBACK_REQUIRES_MANUAL_VERIFICATION=yes"
+            else
+              rm -f "$private/site_agent_workforce.php" "$private/site_agent_cycle_cli.php"
+              echo "SITE_WORK_NEW_MODULES_ROLLED_BACK=yes"
+            fi
           fi
           REMOTE
           fi
