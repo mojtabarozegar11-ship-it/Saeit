@@ -1,7 +1,7 @@
 name: MojPlayWin VPS factory warehouse QA return courier
 on:
   push:
-    branches: [feat/mpw-vps-warehouse-qa-rework-bot-20261019]
+    branches: [fix/mpw-courier-operational-stage1-20261019]
     paths:
       - .github/workflows/mpw-vps-warehouse-courier.yml
       - scripts/mpw_vps_warehouse_courier.py
@@ -16,7 +16,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   courier:
-    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feat/mpw-vps-warehouse-qa-rework-bot-20261019')
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/fix/mpw-courier-operational-stage1-20261019')
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
@@ -129,6 +129,28 @@ jobs:
             "python3 -c 'import base64;exec(base64.b64decode(\"$source\"))' vps-return" \
             < "$RUNNER_TEMP/mpw-qa-feedback.json"
           echo 'MPW_FACTORY_STAGE1_RETURN_CHANNEL=PASS'
+      - name: Consume accepted returns as executable factory Stage-1 QA review jobs
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/factory-store-preflight"
+          source="$(base64 -w0 scripts/mpw_vps_warehouse_courier.py)"
+          timeout 90s ssh -T -F "$d/config" saeit-vps \
+            "python3 -c 'import base64;exec(base64.b64decode(\"$source\"))' vps-triage" \
+            > "$RUNNER_TEMP/mpw-factory-stage1-triage.jsonl"
+          python3 - <<'PY'
+          import os,json
+          from pathlib import Path
+          lines=Path(os.environ['RUNNER_TEMP']+'/mpw-factory-stage1-triage.jsonl').read_text().splitlines()
+          assert len(lines)==1 and lines[0].startswith('MPW_COURIER_FACTORY_TRIAGE=')
+          report=json.loads(lines[0].split('=',1)[1])
+          assert report['tenant']=='mojplaywin-main'
+          assert report['factory_stage1_work_items']==report['actual_site_returns_accepted']
+          assert report['factory_stage1_work_items']>=0
+          assert report['commercial_approval_claimed'] is False
+          assert report['physical_rebuild_claimed'] is False
+          print('MPW_FACTORY_REAL_STAGE1_TRIAGE='+json.dumps(report,sort_keys=True))
+          PY
       - name: Independently verify private recipient and first stage return count
         shell: bash
         run: |
@@ -159,6 +181,13 @@ jobs:
               assert v['published'] is False
               rows.append(v)
           assert len(rows)<=50
+          state=b/'design-state/mojplaywin-stage1-qa-work/stage1-status.json'
+          assert state.is_file() and not state.is_symlink()
+          proof=json.loads(state.read_text())
+          assert proof['tenant']=='mojplaywin-main'
+          assert proof['factory_stage1_work_items']==len(rows)
+          assert proof['commercial_approval_claimed'] is False
+          assert proof['physical_rebuild_claimed'] is False
           print('MPW_FACTORY_STAGE1_RETURN_READBACK='+json.dumps({
               'records':len(rows),'retained_for_correction':True,
               'factory_rebuild_claimed':False,'cross_tenant_changes':False},sort_keys=True))
@@ -168,4 +197,4 @@ jobs:
         shell: bash
         run: |
           rm -rf -- "$RUNNER_TEMP/factory-store-preflight"
-          rm -f -- "$RUNNER_TEMP/mpw-factory-stock.tgz" "$RUNNER_TEMP/mpw-qa-feedback.json"
+          rm -f -- "$RUNNER_TEMP/mpw-factory-stock.tgz" "$RUNNER_TEMP/mpw-qa-feedback.json" "$RUNNER_TEMP/mpw-factory-stage1-triage.jsonl"
