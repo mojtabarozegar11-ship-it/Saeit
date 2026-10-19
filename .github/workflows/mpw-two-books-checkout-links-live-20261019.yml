@@ -1,0 +1,126 @@
+name: MojPlayWin guarded two-book checkout navigation activation 2026-10-19
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/mpw-two-books-checkout-links-live-20261019.yml"]
+permissions: {contents: read}
+concurrency:
+  group: mojplaywin-only-checkout-navigation-20261019
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Verify fail-closed source and idempotence
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_two_books_checkout_link_20261019.py
+          python3 scripts/mpw_two_books_checkout_link_20261019.py selftest
+      - name: Record main and child-site response baseline
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from urllib.request import Request,urlopen
+          from urllib.error import HTTPError
+          import os,json
+          paths=['/','/store/','/store/product/72/','/store/product/225/','/taniya/','/farnaz/','/saman/','/picm/','/zahra/']
+          states={}
+          for path in paths:
+              try:
+                  with urlopen(Request('https://mojplaywin.com'+path,headers={'Cache-Control':'no-cache'}),timeout=18) as r:states[path]=r.status
+              except HTTPError as e:states[path]=e.code
+          for path in ('/','/store/','/store/product/72/','/store/product/225/','/taniya/','/farnaz/','/saman/','/picm/'):
+              if states[path]!=200:raise RuntimeError('Unexpected protected baseline '+path)
+          with open(os.environ['RUNNER_TEMP']+'/mpw-checkout-nav-baseline.json','w') as f:json.dump(states,f)
+          print('MPW_CHECKOUT_LINK_BASELINE='+json.dumps(states))
+          PY
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Publish verified checkout paths on book cards only
+        id: install
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 125s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - publish '$GITHUB_RUN_ID'" < scripts/mpw_two_books_checkout_link_20261019.py
+      - name: Public verify checkout links and protected paths
+        id: smoke
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from urllib.request import Request,urlopen
+          from urllib.error import HTTPError
+          import json,os,time
+          ok=False
+          for attempt in range(6):
+              req=Request('https://mojplaywin.com/store/?checkout_navigation_run='+os.environ['GITHUB_RUN_ID']+'-'+str(attempt),
+                 headers={'Cache-Control':'no-cache','Pragma':'no-cache'})
+              with urlopen(req,timeout=25) as r:html=r.read(950000).decode('utf8','replace')
+              ok=(html.count('href="/store/product/72/checkout/"')==1
+                and html.count('href="/store/product/225/checkout/"')==1
+                and 'Check the individual product pages for current checkout options.' in html
+                and 'Payment is not open for these books yet.' not in html
+                and html.count('id="mpw-book-buyer-details"')==1)
+              if ok:break
+              time.sleep(3)
+          if not ok:raise RuntimeError('Checkout navigation not confirmed live')
+          with open(os.environ['RUNNER_TEMP']+'/mpw-checkout-nav-baseline.json') as f:before=json.load(f)
+          after={}
+          for path in before:
+              try:
+                  with urlopen(Request('https://mojplaywin.com'+path,headers={'Cache-Control':'no-cache'}),timeout=18) as r:after[path]=r.status
+              except HTTPError as e:after[path]=e.code
+          if before!=after:raise RuntimeError('Protected site response regression')
+          print('MPW_BOOK_CHECKOUT_NAVIGATION_LIVE=VERIFIED;PAYMENT_GATEWAY_UNCHANGED=YES')
+          PY
+      - name: Roll back exact book snippet if verification fails
+        if: failure() && steps.install.outcome == 'success'
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 125s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - rollback '$GITHUB_RUN_ID'" < scripts/mpw_two_books_checkout_link_20261019.py
