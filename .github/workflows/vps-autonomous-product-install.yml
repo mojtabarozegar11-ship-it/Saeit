@@ -8,6 +8,8 @@ on:
       - "scripts/factory_build_50.py"
       - "tests/test_factory_build_50.py"
       - "scripts/factory_design_intake.py"
+      - "scripts/factory_continuous_invention.py"
+      - "tests/test_factory_continuous_invention.py"
       - "tests/test_factory_design_intake.py"
       - "factory_config/internal_design_supply.json"
       - "scripts/factory_recipe_designer.py"
@@ -38,6 +40,8 @@ on:
       - "scripts/factory_build_50.py"
       - "tests/test_factory_build_50.py"
       - "scripts/factory_design_intake.py"
+      - "scripts/factory_continuous_invention.py"
+      - "tests/test_factory_continuous_invention.py"
       - "tests/test_factory_design_intake.py"
       - "factory_config/internal_design_supply.json"
       - "scripts/factory_recipe_designer.py"
@@ -76,6 +80,7 @@ jobs:
           python -m pip install openpyxl==3.1.5
           python -B -m unittest discover -s tests -p 'test_factory_recipe_designer.py' -v
           python -B -m unittest discover -s tests -p 'test_factory_design_intake.py' -v
+          python -B -m unittest discover -s tests -p 'test_factory_continuous_invention.py' -v
           python -B -m unittest discover -s tests -p 'test_factory_measured_qa.py' -v
           python -B -m unittest discover -s tests -p 'test_factory_product_maker.py' -v
           python -B -m unittest discover -s tests -p 'test_factory_production_warehouse.py' -v
@@ -102,6 +107,7 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_factory_production_warehouse.py' -v
           python3 -m unittest discover -s tests -p 'test_factory_quality_module_upgrade.py' -v
           python3 -m unittest discover -s tests -p 'test_factory_vps_product_cycle.py' -v
+          python3 -m unittest discover -s tests -p 'test_factory_continuous_invention.py' -v
           python3 -m unittest discover -s tests -p 'test_factory_specialist_pilots.py' -v
           python3 -m unittest discover -s tests -p 'test_factory_research_triage.py' -v
           python3 -m unittest discover -s tests -p 'test_factory_build_50.py' -v
@@ -124,7 +130,7 @@ jobs:
           ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
           test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
           SSH=(ssh -i "$d/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o BatchMode=yes githubops@178.239.147.150)
-          tar -cf - scripts/factory_design_intake.py tests/test_factory_design_intake.py factory_config/internal_design_supply.json scripts/factory_build50_workbook.py tests/test_factory_build50_workbook.py scripts/factory_build_50.py tests/test_factory_build_50.py tests/test_factory_vps_product_cycle.py tests/test_factory_specialist_pilots.py tests/test_factory_research_triage.py scripts/factory_specialist_pilots.py scripts/factory_specialist_formats.py scripts/factory_research_triage.py scripts/factory_recipe_designer.py factory_config/design_opportunities.json scripts/factory_first_product_pilot.py scripts/factory_autonomous_portfolio.py scripts/factory_evidence_quality.py scripts/factory_product_maker.py scripts/factory_product_rework.py scripts/factory_vps_product_cycle.py scripts/factory_production_warehouse.py product_recipes/ deploy/install_production_warehouse.sh deploy/install_autonomous_factory_products.sh | "${SSH[@]}" 'mkdir -p "$HOME/factory-runtime/operations/product-deploy-${{ github.sha }}"; tar -xf - -C "$HOME/factory-runtime/operations/product-deploy-${{ github.sha }}"'
+          tar -cf - scripts/factory_continuous_invention.py tests/test_factory_continuous_invention.py scripts/factory_design_intake.py tests/test_factory_design_intake.py factory_config/internal_design_supply.json scripts/factory_build50_workbook.py tests/test_factory_build50_workbook.py scripts/factory_build_50.py tests/test_factory_build_50.py tests/test_factory_vps_product_cycle.py tests/test_factory_specialist_pilots.py tests/test_factory_research_triage.py scripts/factory_specialist_pilots.py scripts/factory_specialist_formats.py scripts/factory_research_triage.py scripts/factory_recipe_designer.py factory_config/design_opportunities.json scripts/factory_first_product_pilot.py scripts/factory_autonomous_portfolio.py scripts/factory_evidence_quality.py scripts/factory_product_maker.py scripts/factory_product_rework.py scripts/factory_vps_product_cycle.py scripts/factory_production_warehouse.py product_recipes/ deploy/install_production_warehouse.sh deploy/install_autonomous_factory_products.sh | "${SSH[@]}" 'mkdir -p "$HOME/factory-runtime/operations/product-deploy-${{ github.sha }}"; tar -xf - -C "$HOME/factory-runtime/operations/product-deploy-${{ github.sha }}"'
           # VPS regression: GitHub hosted QA had openpyxl but the actual VPS
           # service venv did not; F27 designs were silently blocked (6 of 15).
           # Provision the exact reviewed version before staging QA. No elevated
@@ -269,7 +275,7 @@ jobs:
               subprocess.run([str(py),str(runtime/"scripts/factory_vps_product_cycle.py"),
                   "--db",str(base/"private/factory-fresh-isolated.sqlite3"),
                   "--out",str(root),"--recipes",str(runtime/"product_recipes"),
-                  "--enable-designer","--enable-design-intake"],check=True,timeout=90,
+                  "--enable-designer","--enable-design-intake","--enable-invention-supply"],check=True,timeout=90,
                   stdout=subprocess.DEVNULL)
           status=json.loads((root/"engineering-intake/production-results.json").read_text())
           records=[]
@@ -285,6 +291,19 @@ jobs:
           assert any(r["family_id"]=="F27" for r in records)
           before=set(json.loads((root/"engineering-before-${{ github.sha }}.json").read_text()))
           novel={r["functional_sha256"] for r in records}-before
+          # VPS integration proof: two distinct internally invented, actually
+          # manufactured ZIPs; design tickets or orders alone never count.
+          auto=[r for r in records if str(r.get("source_id","")).startswith("auto_need_")]
+          auto_ids={r["functional_sha256"] for r in auto}
+          assert len(auto_ids)>=2, "FACTORY_AUTONOMOUS_INVENTION_NO_REAL_PRODUCTS"
+          for row in auto:
+              proposal=root/"engineering-briefs"/(row["source_id"]+".json")
+              assert proposal.is_file() and not proposal.is_symlink()
+              data=json.loads(proposal.read_text())
+              assert data["origin"]=="factory_invention"
+              assert data["commercial_release"] is False
+          print("FACTORY_AUTONOMOUS_NEW_TECHNICAL_FUNCTIONS="+str(len(auto_ids)))
+          print("FACTORY_AUTONOMOUS_SALE_READY_PRODUCTS=0")
           print("FACTORY_ENGINEERING_FUNCTIONAL_PRODUCTS="+str(status["functional_products"]))
           print("FACTORY_ENGINEERING_REAL_FORMAT_PROTOTYPES="+str(status["technical_prototypes"]))
           print("FACTORY_ENGINEERING_NOVEL_FUNCTIONS_SINCE_DEPLOY="+str(len(novel)))

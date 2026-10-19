@@ -33,6 +33,7 @@ test -f "$repo/scripts/factory_research_triage.py"
 test -f "$repo/factory_config/design_opportunities.json"
 test -f "$repo/factory_config/internal_design_supply.json"
 test -f "$repo/scripts/factory_design_intake.py"
+test -f "$repo/scripts/factory_continuous_invention.py"
 test -f "$repo/scripts/factory_autonomous_portfolio.py"
 test -f "$repo/scripts/factory_evidence_quality.py"
 test -f "$repo/scripts/factory_first_product_pilot.py"
@@ -79,7 +80,7 @@ chmod 700 "$stage" "$scripts" "$recipes" "$private"
 
 for f in factory_product_maker.py factory_autonomous_portfolio.py \
          factory_evidence_quality.py factory_first_product_pilot.py factory_vps_product_cycle.py \
-         factory_product_rework.py factory_recipe_designer.py factory_specialist_pilots.py factory_specialist_formats.py factory_research_triage.py factory_build_50.py factory_build50_workbook.py factory_design_intake.py; do
+         factory_product_rework.py factory_recipe_designer.py factory_specialist_pilots.py factory_specialist_formats.py factory_research_triage.py factory_build_50.py factory_build50_workbook.py factory_design_intake.py factory_continuous_invention.py; do
   install -m 600 "$repo/scripts/$f" "$scripts/$f"
 done
 install -d -m 700 "$stage/factory_config"
@@ -107,13 +108,13 @@ incoming=""
 
 # Quality gate must exist and compile BEFORE any production cycle or cron change.
 "$python" -B -c 'import ast, pathlib, sys; [ast.parse(pathlib.Path(x).read_text(encoding="utf-8")) for x in sys.argv[1:]]' \
-  "$scripts/factory_recipe_designer.py" "$scripts/factory_evidence_quality.py" "$scripts/factory_autonomous_portfolio.py" "$scripts/factory_vps_product_cycle.py" "$scripts/factory_product_rework.py" "$scripts/factory_specialist_pilots.py" "$scripts/factory_specialist_formats.py" "$scripts/factory_research_triage.py"
+  "$scripts/factory_recipe_designer.py" "$scripts/factory_evidence_quality.py" "$scripts/factory_autonomous_portfolio.py" "$scripts/factory_vps_product_cycle.py" "$scripts/factory_product_rework.py" "$scripts/factory_specialist_pilots.py" "$scripts/factory_specialist_formats.py" "$scripts/factory_research_triage.py" "$scripts/factory_continuous_invention.py"
 
 # Product QA is mandatory BEFORE changes to the local scheduler.
 # The cycle discovers the complete catalog and runs each recipe's test_*.py suite.
 "$python" "$scripts/factory_vps_product_cycle.py" \
   --db "$db" --out "$private" --recipes "$recipes" \
-  --max-products 25 --enable-designer --enable-design-intake
+  --max-products 25 --enable-designer --enable-design-intake --enable-invention-supply
 test -s "$private/production-state.json"
 test "$(find "$private/digital-products" -type f -name "*-internal-qa.zip" -print -quit | wc -l)" -ge 1
 
@@ -126,7 +127,7 @@ flock -n 9 || exit 0
 exec >> "$ops/autonomous-product-cycle.log" 2>&1
 "$python" "$scripts/factory_vps_product_cycle.py" \\
   --db "$db" --out "$private" --recipes "$recipes" \\
-  --max-products 25 --enable-designer --enable-design-intake
+  --max-products 25 --enable-designer --enable-design-intake --enable-invention-supply
 # A broken specialist cannot stop core product manufacturing. Its private
 # rework receipt persists for the following minute; publication stays locked.
 if ! "$python" "$scripts/factory_specialist_pilots.py" \\
