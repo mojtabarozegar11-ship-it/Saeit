@@ -25,6 +25,14 @@ if [[ ! -d "$target" ]]; then
   mv -- "$extraction" "$target"
   trap - EXIT
 fi
+# Restore relocated office resource links removed from the original portable archive.
+for entry in 'share:../../share/libreoffice' 'ure-link:../ure'; do
+  name="${entry%%:*}"; destination="${entry#*:}"
+  office_link="$target/prefix/usr/lib/libreoffice/$name"
+  if [[ ! -e "$office_link" && ! -L "$office_link" ]]; then
+    ln -s "$destination" "$office_link"
+  fi
+done
 mkdir -p "$target/bin" "$target/work" "$target/models" "$target/font-cache"
 if [[ ! -x "$target/venv/bin/python" ]]; then
   "$base/.venv/bin/python" -m venv "$target/venv"
@@ -47,7 +55,7 @@ for tool in ffmpeg ffprobe pdftoppm; do
   cat > "$target/bin/$tool" <<EOF
 #!/bin/bash
 set -euo pipefail
-export LD_LIBRARY_PATH="$target/prefix/usr/lib/x86_64-linux-gnu:$target/prefix/lib/x86_64-linux-gnu"
+export LD_LIBRARY_PATH="$target/prefix/usr/lib/x86_64-linux-gnu:$target/prefix/lib/x86_64-linux-gnu:$target/prefix/usr/lib:$target/prefix/usr/lib/x86_64-linux-gnu/pulseaudio"
 exec "$target/prefix/usr/bin/$tool" "\$@"
 EOF
   chmod 700 "$target/bin/$tool"
@@ -55,7 +63,7 @@ done
 cat > "$target/bin/blender" <<EOF
 #!/bin/bash
 set -euo pipefail
-export LD_LIBRARY_PATH="$target/prefix/usr/lib/x86_64-linux-gnu:$target/prefix/lib/x86_64-linux-gnu"
+export LD_LIBRARY_PATH="$target/prefix/usr/lib/x86_64-linux-gnu:$target/prefix/lib/x86_64-linux-gnu:$target/prefix/usr/lib:$target/prefix/usr/lib/x86_64-linux-gnu/pulseaudio"
 export BLENDER_SYSTEM_SCRIPTS="$target/prefix/usr/share/blender/scripts"
 export BLENDER_SYSTEM_DATAFILES="$target/prefix/usr/share/blender/datafiles"
 export PYTHONHOME="$target/prefix/usr"
@@ -71,7 +79,7 @@ fi
 cat > "$target/bin/libreoffice" <<EOF
 #!/bin/bash
 set -euo pipefail
-export LD_LIBRARY_PATH="$target/prefix/usr/lib/libreoffice/program:$target/prefix/usr/lib/x86_64-linux-gnu:$target/prefix/lib/x86_64-linux-gnu"
+export LD_LIBRARY_PATH="$target/prefix/usr/lib/libreoffice/program:$target/prefix/usr/lib/x86_64-linux-gnu:$target/prefix/lib/x86_64-linux-gnu:$target/prefix/usr/lib:$target/prefix/usr/lib/x86_64-linux-gnu/pulseaudio"
 export FONTCONFIG_FILE="$target/fonts.conf" SAL_USE_VCLPLUGIN=svp
 exec "$target/prefix/usr/lib/libreoffice/program/soffice" "\$@"
 EOF

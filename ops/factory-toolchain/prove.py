@@ -8,18 +8,20 @@ from pathlib import Path
 import subprocess
 import sys
 import time
+import tempfile
 
 
 def run(command, *, timeout=90, env=None):
     result=subprocess.run([str(x) for x in command],capture_output=True,text=True,
                           timeout=timeout,env=env)
     if result.returncode:
-        raise RuntimeError('COMMAND_FAILED:'+str(command[0])+':'+(result.stderr+result.stdout)[-1500:])
+        details=result.stderr+result.stdout
+        raise RuntimeError('COMMAND_FAILED:'+str(command[0])+':'+details[:700]+'\n'+details[-800:])
     return result.stdout
 
 
 def prove(root):
-    root=Path(root); work=root/'work'; work.mkdir(exist_ok=True)
+    root=Path(root); work=Path(tempfile.mkdtemp(prefix='proof-',dir=str(root)))
     checks={}; artifacts={}
     def check(name, callback):
         started=time.monotonic()
