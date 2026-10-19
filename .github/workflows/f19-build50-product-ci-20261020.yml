@@ -1,4 +1,4 @@
-name: F19 real BUILD50 original website product CI
+name: F19 and F34 real BUILD50 website and SVG PNG icon production CI
 on:
   push:
     branches: [main]
@@ -13,9 +13,11 @@ jobs:
       - name: Test all 50 production stages, final archive and tamper rejection
         run: |
           set -euo pipefail
+          python3 -m pip install --disable-pip-version-check --quiet Pillow
           bash -n deploy/install_f19_build50_product.sh
           python3 -m py_compile scripts/factory_build50_f19_web_template.py scripts/factory_f19_independent_web_review.py scripts/factory_build50_family_bridge.py
           python3 -m unittest discover -s tests -p 'test_factory_build50_f19_web_template.py' -v
           python3 -m unittest discover -s tests -p 'test_factory_build50_family_bridge.py' -v
           python3 -m unittest discover -s tests -p 'test_factory_build_50.py' -v
-          echo F19_BUILD50_ORIGINAL_PRODUCT_CI=PASS
+          python3 -m unittest discover -s tests -p 'test_factory_build50_f34_icon_kit.py' -v
+          echo FACTORY_F19_F34_ORIGINAL_PRODUCTS_CI=PASS
