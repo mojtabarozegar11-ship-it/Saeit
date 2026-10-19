@@ -29,10 +29,26 @@ Host *
   BatchMode yes
   ConnectTimeout 12
   ConnectionAttempts 1
+  ControlMaster auto
+  ControlPath $d/control-%C
+  ControlPersist 12m
+  ServerAliveInterval 20
+  ServerAliveCountMax 3
   ForwardAgent no
   RequestTTY no
 EOF
 chmod 600 "$d/config"
 timeout 30s ssh -F "$d/config" vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
 test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
-echo RIVER_PULSE_PINNED_SSH_RELAY=PASS
+# Keep one authenticated, host-key-pinned connection open for all subsequent
+# page/site actions. Prevents VPS SSH MaxStartups rate-limit on rapid workflows.
+for i in 1 2 3 4; do
+  if timeout 35s ssh -T -F "$d/config" vps true &&
+     timeout 35s ssh -T -F "$d/config" host true; then
+    echo RIVER_PULSE_PINNED_SSH_RELAY=PASS
+    exit 0
+  fi
+  sleep $((i*4))
+done
+echo 'Cannot establish reliable persistent VPS->cPanel relay' >&2
+exit 1
