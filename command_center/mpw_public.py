@@ -5,12 +5,22 @@ from django.conf import settings
 from .models import MpwRecord, TENANT, local_path
 
 HOSTS = frozenset(("mojplaywin.com", "www.mojplaywin.com"))
+MAIN_PATHS = frozenset(("/", "/store/", "/industry/", "/research/", "/knowledge/",
+                        "/market/", "/economy/", "/studio/", "/agents/", "/company/",
+                        "/auctions/", "/blog/", "/newsletter/"))
+MAIN_PREFIXES = ("/ventures/", "/knowledge/", "/company/", "/blog/", "/newsletter/")
 SAFE_IMAGE = re.compile(r"^site/[a-zA-Z0-9_./-]+\.(?:webp|png|jpg|jpeg)$")
 
 
 def feature_enabled(name):
     # Dedicated MojPlayWin switch: never modify shared Django settings to enable it.
     return bool(getattr(settings, name, False)) or os.environ.get(name, "").strip().lower() in ("1", "yes", "on", "true")
+
+
+def editable_main_path(path):
+    # An explicit allowlist protects *all* sibling sites, including unnamed future ones.
+    return local_path(path) and (path in MAIN_PATHS or
+        any(path.startswith(prefix) for prefix in MAIN_PREFIXES))
 
 
 def is_main(request):
@@ -66,6 +76,8 @@ def public_context(request):
     if not is_main(request) or not feature_enabled("MPW_CONTROL_ENABLED"):
         return {"mpw_managed_blocks": [], "mpw_managed_offers": []}
     path = request.path
+    if not editable_main_path(path):
+        return {"mpw_managed_blocks": [], "mpw_managed_offers": []}
     blocks, offers = [], []
     for row in MpwRecord.objects.filter(tenant=TENANT, kind="content",
                                         page_path=path).exclude(published_snapshot={}).order_by("key")[:100]:

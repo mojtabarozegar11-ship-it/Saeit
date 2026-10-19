@@ -72,6 +72,8 @@ class MainControlTests(TestCase):
         with self.assertRaises(ValidationError):
             create_record(self.owner,"content","cross","//external.example",self.content_source())
         with self.assertRaises(ValidationError):
+            create_record(self.owner,"content","subsite-protected","/farnaz/",self.content_source())
+        with self.assertRaises(ValidationError):
             create_record(self.owner,"content","bad-img","/",
                           {**self.content_source(),"image":"../admin/private.png"})
         job=create_record(self.owner,"job","factory-work","/",

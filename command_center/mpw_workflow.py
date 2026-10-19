@@ -8,7 +8,7 @@ from django.db import transaction
 from django.utils import timezone
 from core.models import AuditLog
 from .models import MpwRecord, TENANT, local_path
-from .mpw_public import safe_payload
+from .mpw_public import safe_payload, editable_main_path
 
 ORIGINS = ("site", "customer", "market", "invention", "agent")
 EDITABLE = {
@@ -82,7 +82,7 @@ def audit(user, rec, action, before, after):
 def create_record(user, kind, key, page_path, payload):
     if kind not in EDITABLE:
         raise ValidationError("Unsupported kind.")
-    if not local_path(page_path):
+    if not editable_main_path(page_path):
         raise ValidationError("Invalid site page.")
     if kind == "offer" and page_path != "/store/":
         raise ValidationError("Offers belong only to the main store.")
