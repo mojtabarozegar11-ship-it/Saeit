@@ -192,7 +192,8 @@ def manufacture(recipe, recipes_root, private_root):
 def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--recipes", default=str(DEFAULT_RECIPES))
-    ap.add_argument("--out")\n    ap.add_argument("--verify-only", action="store_true",
+    ap.add_argument("--out")
+    ap.add_argument("--verify-only", action="store_true",
                     help="Run all discovered product suites without writing packages.")
     ap.add_argument("--recipe", default="all", help="Recipe slug or all (discovered automatically).")
     ap.add_argument("--max-builds", type=int, default=None,
@@ -201,7 +202,8 @@ def main(argv=None):
     if args.max_builds is not None and args.max_builds < 1:
         raise ValueError("max-builds must be positive")
     if not args.verify_only and not args.out:
-        ap.error("--out is required unless --verify-only is used")\n    recipes = discover_recipes(args.recipes)
+        ap.error("--out is required unless --verify-only is used")
+    recipes = discover_recipes(args.recipes)
     if args.recipe != "all" and args.recipe not in recipes:
         raise ValueError("UNSUPPORTED_RECIPE:" + args.recipe)
     selected = sorted(recipes) if args.recipe == "all" else [args.recipe]
