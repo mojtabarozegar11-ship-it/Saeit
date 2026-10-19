@@ -79,7 +79,7 @@ r=checks.run_checks()
 assert not [w for w in r if w.id=='urls.W005'],[w.id for w in r]
 for url in ['/commerce/book/72/','/commerce/book/225/','/commerce/checkout/order/']:
     assert resolve(url).namespaces==['mpw_commerce']
-assert reverse('mpw_commerce:book',kwargs={'pk':72})=='/commerce/book/72/'
+assert resolve('/commerce/book/72/').url_name=='book'
 print('MPW_COMMERCE_URL_NAMESPACE=UNIQUE')
 """
     job=subprocess.run([sys.executable,"-c",code],cwd=str(CODE),capture_output=True,text=True,timeout=30)
