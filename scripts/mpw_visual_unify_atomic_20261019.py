@@ -37,7 +37,8 @@ body.mpw-design-unified-v1 .mpw-header .mpw-mark>*{opacity:0!important}
 body.mpw-design-unified-v1 .mw-site-nav .mw-brand img{width:54px!important;height:54px!important;object-fit:contain}
 body.mpw-design-unified-v1 .mw-site-nav .mw-brand-copy strong,body.mpw-design-unified-v1 .mpw-header .mpw-brand>span:last-child{color:#f5d18c!important;font-size:clamp(1.02rem,1.5vw,1.25rem);font-weight:800}
 body.mpw-design-unified-v1 .mw-site-nav .mw-brand-copy small,body.mpw-design-unified-v1 .mpw-header .mpw-brand small{color:#cec0ac!important;font-size:.71rem;letter-spacing:.055em}
-body.mpw-design-unified-v1 .mw-site-nav nav,body.mpw-design-unified-v1 .mpw-header .mpw-nav{display:flex;flex:1 1 auto;min-width:0;align-items:center;gap:8px 15px;flex-wrap:wrap}
+body.mpw-design-unified-v1 .mw-site-nav nav{display:flex;flex:1 1 auto;min-width:0;align-items:center;gap:8px 15px;flex-wrap:wrap}
+body.mpw-design-unified-v1 .mpw-header .mpw-nav{flex:1 1 auto;min-width:0;align-items:center;gap:8px 15px;flex-wrap:wrap}
 body.mpw-design-unified-v1 .mw-site-nav nav>a,body.mpw-design-unified-v1 .mpw-header .mpw-nav>a{color:#f3e7ce!important;text-decoration:none!important;font-size:.89rem;line-height:1.5}
 body.mpw-design-unified-v1 .mw-site-nav nav>a:hover,body.mpw-design-unified-v1 .mpw-header .mpw-nav>a:hover{color:#ffe1a5!important}
 body.mpw-design-unified-v1 .mw-site-nav a:focus-visible,body.mpw-design-unified-v1 .mpw-header a:focus-visible,body.mpw-design-unified-v1 .mpw-header button:focus-visible{outline:3px solid #f9dda0!important;outline-offset:3px}
