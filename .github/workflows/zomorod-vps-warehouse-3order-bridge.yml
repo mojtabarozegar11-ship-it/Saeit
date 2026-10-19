@@ -165,8 +165,9 @@ jobs:
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/zm-site-factory-bridge"
-          timeout 230s ssh -T -F "$d/config" zm-vps bash -se <<'REMOTE'
+          timeout 230s ssh -T -F "$d/config" zm-vps bash -se -- "$GITHUB_RUN_ID" <<'REMOTE'
           set -euo pipefail
+          run="$1"
           private="$HOME/factory-runtime/private/autonomous-product-cycle"
           ops="$HOME/factory-runtime/operations"
           bridge="$ops/zomorod-site-bridge"
@@ -180,6 +181,7 @@ jobs:
             --families "$bridge/families.json" \
             --ssh-key "$HOME/.ssh/saeit_factory_store_ed25519" \
             --known-hosts "$HOME/.ssh/saeit_factory_store_hosts" \
+            --cycle "$(date -u +%F)-r$run" \
             --max-ship 3
           REMOTE
       - name: Import private goods into Zomorod store and verify no paid products fabricated
@@ -210,11 +212,11 @@ jobs:
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/zm-site-factory-bridge"
-          ssh -T -F "$d/config" zm-vps 'python3 -' <<'PY'
+          ssh -T -F "$d/config" zm-vps python3 - "$GITHUB_RUN_ID" <<'PY'
           from pathlib import Path
-          import datetime,json
+          import datetime,json,sys
           root=Path.home()/"factory-runtime/private/autonomous-product-cycle"
-          cycle=datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
+          cycle=datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")+"-r"+sys.argv[1]
           receipt=root/"production-instructions/zomorod-site-order-receipts"/(cycle+".json")
           assert receipt.is_file() and not receipt.is_symlink()
           obj=json.loads(receipt.read_text(encoding="utf8"))
