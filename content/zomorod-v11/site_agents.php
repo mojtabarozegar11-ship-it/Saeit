@@ -26,24 +26,109 @@ function zmAgentDb(string $private): PDO {
     foreach($seed as $row) $stmt->execute($row);
     return $db;
 }
-function zmAgentCycle(PDO $db,?string $code=null): array {
-    $rows=$code?$db->prepare('SELECT * FROM agents WHERE code=? AND enabled=1'):$db->prepare('SELECT * FROM agents WHERE enabled=1 ORDER BY code');
-    $rows->execute($code?[$code]:[]);$results=[];
-    foreach($rows->fetchAll() as $agent){
+/**
+ * Site-only monitoring runtime; never claims content publishing, research
+ * output, financial activity or factory production from an HTTP response.
+ * All probes are same-origin, TLS-verified, bounded and evidence-labelled.
+ * Optional injected transport supports deterministic, network-free tests.
+ */
+function zmAgentValidatedPath(string $path): string {
+    if (!preg_match('#^/[a-z0-9/_-]{0,119}$#iD', $path)
+        || str_contains($path, '..') || str_contains($path, '//') || str_contains($path, '\\')) {
+        throw new InvalidArgumentException('Unsafe or nonlocal agent check path');
+    }
+    return $path;
+}
+function zmAgentProbe(string $path, ?callable $transport=null): array {
+    $path=zmAgentValidatedPath($path);
+    $url='https://zomorodmelal.ir'.$path;
+    if ($transport !== null) {
+        // Injected by offline regression tests; no external URL is accepted.
+        $sample=$transport($url);
+        if (!is_array($sample)) throw new RuntimeException('Invalid monitor fixture');
+        $http=(int)($sample['http']??0);
+        $bytes=(int)($sample['bytes']??0);
+        $type=(string)($sample['content_type']??'text/html');
+        $error=(string)($sample['error']??'');
+    } elseif (!function_exists('curl_init')) {
+        return ['error',0,'PHP cURL unavailable'];
+    } else {
+        $http=0;$bytes=0;$type='';$error='';
+        $attempts=2; // One bounded retry only for a transport failure.
+        for ($attempt=1;$attempt<=$attempts;$attempt++) {
+            $ch=curl_init($url);
+            if ($ch===false) return ['error',0,'Cannot initialize curl'];
+            curl_setopt_array($ch,[
+                CURLOPT_RETURNTRANSFER=>true,
+                CURLOPT_FOLLOWLOCATION=>false,
+                CURLOPT_CONNECTTIMEOUT=>4,
+                CURLOPT_TIMEOUT=>9,
+                CURLOPT_USERAGENT=>'ZomorodSiteAgent/12.0 (site-local health only)',
+                CURLOPT_SSL_VERIFYPEER=>true,
+                CURLOPT_SSL_VERIFYHOST=>2,
+                CURLOPT_MAXREDIRS=>0,
+                CURLOPT_PROTOCOLS=>CURLPROTO_HTTPS,
+                CURLOPT_HTTPHEADER=>['Accept: text/html,application/json;q=0.9,*/*;q=0.5'],
+            ]);
+            $body=curl_exec($ch);
+            $http=(int)curl_getinfo($ch,CURLINFO_HTTP_CODE);
+            $type=(string)curl_getinfo($ch,CURLINFO_CONTENT_TYPE);
+            $error=(string)curl_error($ch);
+            $bytes=is_string($body)?strlen($body):0;
+            curl_close($ch);
+            if ($http!==0 || $attempt===$attempts) break;
+            usleep(125000); // 125ms, no unbounded exponential retries.
+        }
+    }
+    // A bare 200 can be a placeholder, broken template, or login response.
+    $ok=($http===200 && $bytes>=64 && $error===''
+         && preg_match('#^(text/html|application/json|application/xhtml\+xml)#i',$type)===1);
+    if ($ok) $status='ok';
+    elseif ($http>=300 && $http<500) $status='warning';
+    else $status='error';
+    $reason=($http===200&&$bytes<64)?'short response':
+        (($http===200&&$error==='')?'unexpected content type':($error!==''?'transport failure':'HTTP '.$http));
+    // Safe, short, opaque evidence; avoid echoing URLs, HTML or request secrets.
+    $detail=$ok?'HTTP 200 validated; '.min($bytes,999999).' bytes':
+       ($status==='warning'?'non-success HTTP '.$http:'probe failed: '.$reason);
+    return [$status,$http,$detail];
+}
+function zmAgentCycle(PDO $db,?string $code=null,?callable $transport=null): array {
+    $sql='SELECT * FROM agents WHERE enabled=1'.
+      ($code===null?' ORDER BY CASE WHEN code="master" THEN 1 ELSE 0 END,code':' AND code=?');
+    $stmt=$db->prepare($sql);
+    $stmt->execute($code===null?[]:[$code]);
+    $results=[];$unhealthy=[];
+    foreach($stmt->fetchAll() as $agent){
         $start=microtime(true);$http=0;$detail='';$status='error';
-        try{
-            $url='https://zomorodmelal.ir'.$agent['check_path'];
-            if(function_exists('curl_init')){
-                $ch=curl_init($url);
-                curl_setopt_array($ch,[CURLOPT_RETURNTRANSFER=>true,CURLOPT_FOLLOWLOCATION=>false,CURLOPT_CONNECTTIMEOUT=>4,CURLOPT_TIMEOUT=>9,CURLOPT_USERAGENT=>'ZomorodSiteAgent/1.0 (site-local check)',CURLOPT_SSL_VERIFYPEER=>true,CURLOPT_SSL_VERIFYHOST=>2,CURLOPT_MAXREDIRS=>0]);
-                $response=curl_exec($ch);$http=(int)curl_getinfo($ch,CURLINFO_HTTP_CODE);
-                $err=curl_error($ch);curl_close($ch);
-                $detail=$err?:'HTTP '.$http.' / '.(is_string($response)?strlen($response):0).' bytes';
-            }else{$detail='PHP cURL unavailable';}
-            $status=$http===200?'ok':($http>=300&&$http<500?'warning':'error');
-        }catch(Throwable $e){$detail='Connection or site health error';}
-        $elapsed=max(0,(int)((microtime(true)-$start)*1000));
-        $db->prepare('INSERT INTO runs(agent_code,status,http_code,duration_ms,detail) VALUES(?,?,?,?,?)')->execute([$agent['code'],$status,$http,$elapsed,substr($detail,0,240)]);
+        try {
+            [$status,$http,$detail]=zmAgentProbe((string)$agent['check_path'],$transport);
+            if ($agent['code']==='master') {
+                if($code===null) {
+                    // Master sees the complete current-cycle outcomes, not
+                    // just whether the homepage happens to return 200.
+                    if($unhealthy){
+                        $status='warning';
+                        $detail='Current cycle not fully healthy: '.implode(',',array_slice($unhealthy,0,10));
+                    } elseif ($status==='ok') {
+                        $detail='Master verified own HTTP and '.count($results).' site-agent checks';
+                    }
+                } elseif($status==='ok') {
+                    $last=$db->query('SELECT MAX(occurred_at) FROM runs WHERE agent_code!="master"')->fetchColumn();
+                    if(!$last || strtotime((string)$last)<time()-7200){
+                        $status='warning';
+                        $detail='Other site-agent checks are stale or missing';
+                    }
+                }
+            }
+        } catch(Throwable $e) {
+            $status='error';$http=0;
+            $detail=$e instanceof InvalidArgumentException?'Invalid configured site path':'Site health probe failed';
+        }
+        if($status!=='ok')$unhealthy[]=(string)$agent['code'];
+        $elapsed=max(0,(int)round((microtime(true)-$start)*1000));
+        $db->prepare('INSERT INTO runs(agent_code,status,http_code,duration_ms,detail) VALUES(?,?,?,?,?)')
+            ->execute([$agent['code'],$status,$http,$elapsed,substr($detail,0,240)]);
         $results[]=[$agent['code'],$status,$http];
     }
     return $results;
@@ -60,17 +145,17 @@ function zmAgentHandle(PDO $db,string $action,string $code): void {
     }else throw new RuntimeException('Unsupported action');
 }
 function zmAgentChart(array $recent):string {
-    $values=array_reverse(array_map(fn($r)=>(string)$r['status']==='ok'?95:((string)$r['status']==='warning'?55:10),array_slice($recent,0,14)));
+    $values=array_reverse(array_map(fn($r)=>(string)$r['status']==='ok'?100:((string)$r['status']==='warning'?50:0),array_slice($recent,0,14)));
     if(!$values)return '<p class="muted">هنوز داده واقعی برای نمودار ثبت نشده است.</p>';
     $n=count($values);$pts=[];
     foreach($values as $i=>$v){$x=10+($n===1?0:$i*220/($n-1));$y=99-$v*.82;$pts[]=round($x,1).','.round($y,1);}
     $poly=htmlspecialchars(implode(' ',$pts),ENT_QUOTES,'UTF-8');
-    return '<svg viewBox="0 0 240 110" width="100%" height="112" role="img" aria-label="نمودار موفقیت چهارده اجرای آخر ایجنت"><rect x="1" y="1" width="238" height="108" rx="9" fill="#152c1d" stroke="#596a49"/><path d="M10 88H230 M10 55H230 M10 22H230" stroke="#4f6e49" fill="none" stroke-dasharray="3 6"/><polyline fill="none" stroke="#edcd7d" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" points="'.$poly.'"/></svg>';
+    return '<svg viewBox="0 0 240 110" width="100%" height="112" role="img" aria-label="نمودار وضعیت HTTP چهارده اجرای آخر ایجنت"><rect x="1" y="1" width="238" height="108" rx="9" fill="#152c1d" stroke="#596a49"/><path d="M10 88H230 M10 55H230 M10 22H230" stroke="#4f6e49" fill="none" stroke-dasharray="3 6"/><polyline fill="none" stroke="#edcd7d" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" points="'.$poly.'"/></svg>';
 }
 function zmAgentRender(PDO $db):void {
     $agents=$db->query('SELECT * FROM agents ORDER BY CASE WHEN code="master" THEN 0 ELSE 1 END,code')->fetchAll();
     $n=(int)$db->query('SELECT COUNT(*) FROM runs')->fetchColumn();
-    echo '<section><h2>مستر ایجنت و ایجنت‌های زمرد ملل</h2><p>این سامانه فقط داخل پنل مدیریت است؛ نسخه سازگار با نقش‌های قبلی و V91، با اندازه‌گیری واقعی HTTP. فعالیت فعلی پایش سایت است، نه تولید خودکار مقاله، تراکنش بانکی یا بازنویسی سایت.</p><p class="muted">گزارش‌های ثبت‌شده: '.(string)$n.' — هر نمودار بر اساس حداکثر ۱۴ اجرای واقعی همان ایجنت ترسیم می‌شود.</p></section>';
+    echo '<section><h2>مستر ایجنت و ایجنت‌های زمرد ملل</h2><p>این سامانه فقط داخل پنل مدیریت است؛ نسخه سازگار با نقش‌های قبلی و V91، با اندازه‌گیری واقعی HTTP. فعالیت فعلی پایش سایت است، نه تولید خودکار مقاله، تراکنش بانکی یا بازنویسی سایت.</p><p class="muted">گزارش‌های ثبت‌شده: '.(string)$n.' — هر نمودار تنها وضعیت HTTP ثبت‌شده را نشان می‌دهد؛ تولید یا انتشار محتوا را ثابت نمی‌کند.</p></section>';
     echo '<div class="grid">';
     foreach($agents as $a){
         $code=(string)$a['code'];$stmt=$db->prepare('SELECT * FROM runs WHERE agent_code=? ORDER BY id DESC LIMIT 14');$stmt->execute([$code]);$runs=$stmt->fetchAll();
