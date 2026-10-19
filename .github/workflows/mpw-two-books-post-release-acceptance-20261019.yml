@@ -1,0 +1,117 @@
+name: MojPlayWin production live two-book merchant acceptance and isolation
+on:
+  push:
+    branches: [mpw-two-books-unified-release-20261019]
+    paths: [".github/workflows/mpw-two-books-post-release-acceptance-20261019.yml"]
+permissions: {contents: read}
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 11
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Verify public storefront, immutable book price, gated downloads and one-minute reconcile
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 125s ssh -T -F "$d/config" saeit-cpanel bash -s <<'BASH'
+          /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - <<'PY'
+          import os,sys,pathlib,json,subprocess,urllib.request,urllib.error,hashlib
+          r=pathlib.Path('/home/zomorod2/Saeit-staging')
+          os.chdir(r);sys.path.insert(0,str(r));os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          import django;django.setup()
+          from django.conf import settings
+          from core.models import Product
+          from mpw_commerce.models import CommerceInvoice,CommerceReceipt,CommerceFulfillment
+          from mpw_native_checkout.wallet_ownership import proven_assets
+          flags=('MPW_COMMERCE_RELEASE_READY','MPW_COMMERCE_CUSTOMER_HTTP_ENABLED',
+             'MPW_COMMERCE_INVOICING_ENABLED','MPW_COMMERCE_BUYER_SIGNATURE_ENABLED',
+             'MPW_COMMERCE_SETTLEMENT_ENABLED','MPW_COMMERCE_REAL_RPC_ENABLED',
+             'MPW_COMMERCE_AUTORECONCILE_ENABLED','MPW_COMMERCE_DOWNLOADS_ENABLED')
+          out={'all_gate_switches_enabled':all(getattr(settings,k,False) is True for k in flags),
+            'proven_network_wallets':all(proven_assets().get(k) is True for k in ('ETH','TRX')),
+            'books':[]}
+          for pk,price in ((72,'7.50'),(225,'4.00')):
+            p=Product.objects.select_related('knowledge_article').get(pk=pk)
+            meta=p.metadata or {}
+            sale=meta.get('mpw_commerce',{})
+            out['books'].append({'id':pk,'active':p.active,'usd_price':str(p.price),
+              'correct_price':str(p.price)==price,'knowledge_published':bool(p.knowledge_article and p.knowledge_article.published),
+              'approval_controls':all(meta.get(flag) is True for flag in ('quality_approved','license_verified','factory_publication_permission','asset_verified')),
+              'private_digital_delivery_enabled':sale.get('enabled') is True and sale.get('fulfillment')=='digital'})
+          command=subprocess.run(['crontab','-l'],capture_output=True,text=True,timeout=8)
+          out['merchant_worker_one_minute']=(command.returncode==0 and
+              sum('MPW_TWO_BOOKS_RECONCILE_MINUTE_V1' in s and s.startswith('* * * * * ')
+                 for s in command.stdout.splitlines())==1)
+          out['invoices_created']=CommerceInvoice.objects.count()
+          out['confirmed_receipts']=CommerceReceipt.objects.count()
+          out['delivery_records']=CommerceFulfillment.objects.count()
+          checks=[]
+          for label,path in (('shop','/store/'),('book_chess','/commerce/book/72/'),
+              ('book_taniya','/commerce/book/225/'),('private_download_no_auth','/commerce/download/1/')):
+            req=urllib.request.Request('https://mojplaywin.com'+path,
+                 headers={'User-Agent':'MojPlayWin-Release-Postcheck/1','Cache-Control':'no-cache'})
+            try:
+              with urllib.request.urlopen(req,timeout=10) as resp:
+                content=resp.read(140000).decode('utf8','replace')
+                checks.append({'resource':label,'status':resp.status,
+                  'two_buy_links':content.count('class="mpw-crypto-buy"') if label=='shop' else None,
+                  'contains_payment_instruction':('verified ETH or TRX' in content) if label=='shop' else None})
+            except urllib.error.HTTPError as exc:
+              checks.append({'resource':label,'status':exc.code})
+            except Exception as exc:
+              checks.append({'resource':label,'error':type(exc).__name__})
+          out['http_checks']=checks
+          out['shop_has_two_ctas']=any(v['resource']=='shop' and v.get('status')==200 and v.get('two_buy_links')==2 for v in checks)
+          out['anonymous_download_blocked']=any(v['resource']=='private_download_no_auth' and v.get('status') in (401,403,404) for v in checks)
+          print('MPW_PRODUCTION_ACCEPTANCE='+json.dumps(out,sort_keys=True))
+          assert out['all_gate_switches_enabled'] and out['proven_network_wallets'] and out['merchant_worker_one_minute']
+          assert all(p['active'] and p['correct_price'] and p['knowledge_published'] and p['approval_controls'] and p['private_digital_delivery_enabled'] for p in out['books'])
+          assert out['shop_has_two_ctas'] and out['anonymous_download_blocked']
+          PY
+          BASH
