@@ -105,3 +105,14 @@ jobs:
           print("FACTORY_MULTISITE_CRON_COUNT="+str(cr.stdout.count("SAEIT_MULTISITE_CATALOG_V1")))
           print("FACTORY_ALLSITE_VPS_READONLY_DONE")
           PY
+
+      - name: Verify owner-approved free artifact and main site routes without changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          for record in "approved-free-farm|https://mojplaywin.com/factory-releases/farm-enterprise-economics-v1/index.html" "approved-free-sha|https://mojplaywin.com/factory-releases/farm-enterprise-economics-v1/SHA256SUMS.txt" "mpw-main|https://mojplaywin.com/" "mpw-farnaz|https://mojplaywin.com/farnaz/" "mpw-taniya|https://mojplaywin.com/taniya/" "mpw-saman|https://mojplaywin.com/saman/" "mpw-picm|https://mojplaywin.com/picm/" "zomorod-main|https://zomorodmelal.ir/" "zomorod-tala|https://zomorodmelal.ir/tala/"; do
+            label="${record%%|*}"
+            url="${record#*|}"
+            code="$(curl -L -sS -o /dev/null --max-time 14 -w '%{http_code}' "$url" 2>/dev/null || :)"
+            echo "FACTORY_SITE_HTTP_${label}=${code:-unreachable}"
+          done
