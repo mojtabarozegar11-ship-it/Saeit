@@ -255,3 +255,5 @@ jobs:
               print("FACTORY_"+label+"_CRON_COUNT="+str(n),flush=True)
           print("STAGE_SNAPSHOT_READONLY=PASS",flush=True)
           PY
+
+# Owner-requested 2026-10-20 VPS actual-production inventory; read-only and no factory or storefront mutation.
