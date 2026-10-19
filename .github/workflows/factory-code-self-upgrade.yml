@@ -1,0 +1,88 @@
+name: Factory measured source self-upgrade private
+on:
+  pull_request:
+    paths:
+      - "scripts/factory_code_self_upgrade.py"
+      - "tests/test_factory_code_self_upgrade.py"
+      - "deploy/install_factory_code_self_upgrade.sh"
+      - ".github/workflows/factory-code-self-upgrade.yml"
+  push:
+    branches: [main]
+    paths:
+      - "scripts/factory_code_self_upgrade.py"
+      - "tests/test_factory_code_self_upgrade.py"
+      - "deploy/install_factory_code_self_upgrade.sh"
+      - ".github/workflows/factory-code-self-upgrade.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: factory-safe-code-self-upgrade
+  cancel-in-progress: false
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.8","3.9","3.10","3.11","3.12","3.13","3.14"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Verify original security problem and measured source correction
+        run: |
+          set -euo pipefail
+          python -B -m unittest discover -s tests -p 'test_factory_code_self_upgrade.py' -v
+          bash -n deploy/install_factory_code_self_upgrade.sh
+  install:
+    needs: test
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && contains(github.event.head_commit.message,'[approved-factory-code-selfedit-20261019]')))
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Install isolated VPS source self-edit runner
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/selfupgrade-ssh"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs
+          ssh_vps() {
+            ssh -i "$d/key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o BatchMode=yes -o ConnectTimeout=15 githubops@178.239.147.150 "$@"
+          }
+          stage="/home/githubops/factory-runtime/operations/.self-edit-staging-$GITHUB_RUN_ID"
+          ssh_vps "umask 077; test ! -e '$stage'; mkdir -m 700 '$stage'"
+          tar -cf - scripts/factory_*.py scripts/vps_master_evolution_cycle.py deploy/install_factory_code_self_upgrade.sh | ssh_vps "tar -xf - -C '$stage'"
+          ssh_vps "bash -n '$stage/deploy/install_factory_code_self_upgrade.sh'; bash '$stage/deploy/install_factory_code_self_upgrade.sh' '$stage'"
+          ssh_vps 'python3 -' <<'PY'
+          import json
+          from pathlib import Path
+          root=Path.home()/"factory-runtime"
+          report=root/"private/autonomous-product-cycle/code-self-upgrade/evolution-proof.json"
+          state=json.loads(report.read_text(encoding="utf8"))
+          assert state["candidate_count"] == 2
+          assert state["candidates_with_measured_improvement"] == 2
+          assert state["factory_python_files_scanned"] >= 15
+          assert state["production_code_promotions"] == 0
+          assert state["generation_number_proven_in_production"] == 0
+          assert all(x["negative_case_reproduced"] and x["security_regression_prevented"] for x in state["candidates"])
+          print("VPS_SELF_EDIT_REAL_CANDIDATE_PROOF="+json.dumps([
+              {"path":x["path"],"before":x["baseline"],"after":x["candidate"]}
+              for x in state["candidates"]],sort_keys=True))
+          print("VPS_SELF_EDIT_TOTAL_FACTORY_MODULES="+str(state["factory_python_files_scanned"]))
+          print("VPS_SELF_EDIT_PRODUCTION_PROMOTIONS="+str(state["production_code_promotions"]))
+          print("VPS_SELF_EDIT_FULL_AUTONOMY_CLAIM=false")
+          PY
