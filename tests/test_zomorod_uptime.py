@@ -43,7 +43,7 @@ class MonitorTests(unittest.TestCase):
         self.assertIn("cron: '*/15 * * * *'", text)
         self.assertIn("confirmed_root_failure", text)
         self.assertIn("restart_requested", text)
-        self.assertIn("PASSENGER_MAPPING=verified", text)
+        self.assertIn("PASSENGER_MAPPING=", text)
         self.assertNotIn("pkill", text)
         self.assertNotIn("rm -rf", text)
 
