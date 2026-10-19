@@ -93,6 +93,8 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None):
             "product_candidates_processed": dossier["processed_count"],
             "research_dossiers_updated": dossier["updated_count"],
             "built_product_count": len(produced),
+            "new_or_updated_product_count": sum(bool(p.get("changed")) for p in produced),
+            "unchanged_product_rechecks": sum(not bool(p.get("changed")) for p in produced),
             "built_product_recipes": [p["recipe"] for p in produced],
             "artifact_qa_passed": bool(produced) and not failures and all(
                 p["qa_status"] == "passed" for p in produced),
@@ -120,7 +122,9 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None):
         fcntl.flock(file.fileno(), fcntl.LOCK_UN)
         return {"status": "needs_rework" if failures else "ok",
                 "processed": dossier["processed_count"],
-                "manufactured": len(produced), "updated": dossier["updated_count"],
+                "manufactured": len(produced),
+                "new_artifacts": sum(bool(p.get("changed")) for p in produced),
+                "updated": dossier["updated_count"],
                 "failed": len(failures), "rework_queue": rework_counts,
                 "research_rework_queue": research_rework_counts}
 
@@ -146,6 +150,7 @@ def main(argv=None):
     print("VPS_FACTORY_CYCLE_STATUS=" + result["status"])
     print("VPS_FACTORY_ORDERS_REQUIRED=false")
     print("VPS_FACTORY_PRIVATE_PRODUCT_PACKAGES=" + str(result["manufactured"]))
+    print("VPS_FACTORY_ACTUALLY_NEW_PACKAGES=" + str(result.get("new_artifacts", 0)))
     print("VPS_FACTORY_REGISTERED_BUILD_RECIPES=" + str(len(load(
         "saeit_factory_status_maker", SCRIPTS / "factory_product_maker.py").RECIPES)))
     print("VPS_FACTORY_API_AND_TOKEN_USAGE=0")
