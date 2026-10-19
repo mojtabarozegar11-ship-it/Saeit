@@ -1,0 +1,50 @@
+name: Personal mobile robots SEO reliability audit
+on:
+  issues:
+    types: [opened]
+permissions:
+  contents: read
+jobs:
+  audit:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event.issue.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.issue.title == 'Ops: Personal mobile robots verification 2026-10-19'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Repeat real robots and full mobile Lighthouse checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/mobile-robots-evidence
+          for i in 1 2 3; do
+            echo "ROOT_ROBOTS_CHECK=$i"
+            curl -sS -L --max-time 15 --retry 2 -o /tmp/mobile-robots-evidence/robots-$i.txt \
+                -w "ROBOTS_HTTP=%{http_code} ROBOTS_BYTES=%{size_download} ROBOTS_REDIRECT=%{num_redirects} ROBOTS_TTFB=%{time_starttransfer}\n" \
+                -H 'User-Agent: Chrome-Lighthouse' 'https://mojplaywin.com/robots.txt'
+            head -c 400 /tmp/mobile-robots-evidence/robots-$i.txt
+            echo
+            timeout 165s npx --yes lighthouse@12.8.2 \
+              'https://mojplaywin.com/mojtaba.roozegar/' \
+              --chrome-flags='--headless --no-sandbox --disable-dev-shm-usage' \
+              --only-categories=performance,accessibility,best-practices,seo \
+              --output=json --output-path="/tmp/mobile-robots-evidence/mobile-$i.json" \
+              --max-wait-for-load=45000 --quiet || { echo "LH_FAILURE=$i"; continue; }
+            ITERATION="$i" python3 - <<'PY'
+          import json,os
+          i=os.environ["ITERATION"]
+          d=json.load(open("/tmp/mobile-robots-evidence/mobile-"+i+".json"))
+          for k,v in d.get("categories",{}).items():
+              n=v.get("score")
+              print("MOBILE_REPEAT_"+i+"_"+k.upper().replace("-","_")+"="+(str(round(100*n)) if isinstance(n,(int,float)) else "INVALID"))
+          r=d.get("audits",{}).get("robots-txt",{})
+          print("MOBILE_ROBOTS_AUDIT_"+i+"="+str(r.get("score"))+" "+str(r.get("explanation")))
+          PY
+          done
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: personal-robots-lighthouse-repeated
+          path: /tmp/mobile-robots-evidence/
+          retention-days: 7
