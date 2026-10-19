@@ -87,7 +87,7 @@ class FactoryVPSCycleTests(unittest.TestCase):
         shutil.copytree(ROOT / "product_recipes" / "farm_enterprise_economics",
                         self.recipes / "new_product_family")
         (self.recipes / "new_product_family" / "README.md").write_text(
-            "# New Product Family\\n", encoding="utf-8")
+            "# New Product Family\n", encoding="utf-8")
         result = cycle.run_cycle(self.db, self.output, self.recipes)
         self.assertEqual(result["status"], "ok")
         self.assertEqual(result["manufactured"], 4)
