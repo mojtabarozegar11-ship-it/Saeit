@@ -69,7 +69,12 @@ jobs:
           assert m
           row=next(r for r in json.loads(m.group(1))['rows'] if r['id']=='ZM-R25')
           assert len(row['cards'])==22
-          assert {c['canonicalUrl'] for c in row['cards']}=={c['path'] for c in cards}|{'/farm-wars/'}
+          actual={c.get('canonicalUrl') for c in row['cards']}
+          expected={c['path'] for c in cards}|{'/farm-wars/'}
+          print('R25_URL_DIAGNOSTIC_ACTUAL='+repr(sorted(actual,key=str)),flush=True)
+          print('R25_URL_DIAGNOSTIC_MISSING='+repr(sorted(expected-actual)),flush=True)
+          print('R25_URL_DIAGNOSTIC_EXTRA='+repr(sorted(actual-expected,key=str)),flush=True)
+          assert actual==expected, 'R25 URL mismatch; see diagnostic above'
           assert b'<html' in get('/farm-wars/',200000).lower()
           for c in cards:
               p=get(c['path'],90000)
