@@ -223,3 +223,4 @@ jobs:
       - name: Clean temporary SSH keys
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/factory-store-preflight"
+# Owner-initiated safe free-toolkit native-store release check 2026-10-20; one SHA-pinned zero-price product only.
