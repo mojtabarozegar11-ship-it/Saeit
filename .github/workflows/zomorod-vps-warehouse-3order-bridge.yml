@@ -115,6 +115,44 @@ jobs:
           print("ZM_BRIDGE_VPS_40_FAMILY_REGISTRY_AND_ROBOT_READY=yes")
           PY
           REMOTE
+      - name: Diagnose live native factory order capacity and exact backlog safely
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-site-factory-bridge"
+          timeout 40s ssh -T -F "$d/config" zm-vps 'python3 -' <<'PY'
+          from pathlib import Path
+          import json,re
+          root=Path.home()/"factory-runtime/private/autonomous-product-cycle"
+          folder=root/"production-instructions/orders"
+          if not folder.is_dir() or folder.is_symlink():
+              print("ZM_BRIDGE_PREFLIGHT=QUEUE_DIRECTORY_MISSING");raise SystemExit(1)
+          order_re=re.compile(r"^WO-[0-9]{8}\.json$")
+          counts={"issued":0,"in_engineering":0,"blocked_rework":0,"completed_verified":0}
+          invalid=0;num=0;max_id=0
+          for file in sorted(folder.iterdir()):
+              num+=1
+              if file.is_symlink() or not file.is_file() or not order_re.fullmatch(file.name):
+                  invalid+=1
+                  continue
+              if file.stat().st_size>100000:
+                  invalid+=1;continue
+              try:
+                  data=json.loads(file.read_text(encoding="utf-8"))
+              except (OSError,ValueError):
+                  invalid+=1;continue
+              if data.get("schema")!="saeit.factory.production-instructions.v1" or data.get("id")!=file.stem or data.get("status") not in counts:
+                  invalid+=1;continue
+              max_id=max(max_id,int(file.stem[3:]))
+              counts[data["status"]]+=1
+          active=counts["issued"]+counts["in_engineering"]+counts["blocked_rework"]
+          print("ZM_BRIDGE_NATIVE_ORDER_RECORDS="+str(num))
+          print("ZM_BRIDGE_NATIVE_ORDERS_BY_STATUS="+json.dumps(counts,sort_keys=True))
+          print("ZM_BRIDGE_NATIVE_ORDER_UNEXPECTED_ENTRIES="+str(invalid))
+          print("ZM_BRIDGE_NATIVE_PENDING="+str(active))
+          print("ZM_BRIDGE_NATIVE_SLOTS_FOR_THREE="+("yes" if active<=294 and num<=14997 else "no"))
+          print("ZM_BRIDGE_NATIVE_LAST_ID="+str(max_id))
+          PY
       - name: Guarded Zomorod native private store module and importer deployment
         shell: bash
         run: |
