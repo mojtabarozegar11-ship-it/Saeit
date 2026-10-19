@@ -153,6 +153,27 @@ def install(run):
     (recovery/"INSTALLED").write_text("verified",encoding="utf-8")
     print("MPW_FOOTER_SINGLE_LINE_INSTALLED="+str(len(modified))+" FILES=20 RESTART=false BACKUP="+str(recovery))
 
+def refresh_app(run):
+    """Signal only MojPlayWin's Passenger app to reload its cached Django templates.
+
+    No source bytes, routing, site assets or other application folders change.
+    """
+    before_guard()
+    recovery=backup_dir(run)
+    if not recovery.is_dir() or not (recovery/"INSTALLED").is_file():
+        fail("Cannot reload without completed, backed-up footer install")
+    records=json.loads((recovery/"manifest.json").read_text("utf-8"))
+    if len(records)!=20 or any(sha(Path(row["path"]).read_bytes())!=row["after"] for row in records):
+        fail("Site changed after install; refusing application reload")
+    wsgi=ROOT/"passenger_wsgi.py"
+    if not wsgi.is_file() or wsgi.is_symlink() or wsgi.resolve()!=wsgi:
+        fail("MojPlayWin restart target is not safe")
+    # App-specific mtime signal, preserving all original WSGI bytes.
+    original=sha(wsgi.read_bytes())
+    os.utime(wsgi,None)
+    if sha(wsgi.read_bytes())!=original:fail("WSGI bytes changed unexpectedly")
+    print("MPW_MAIN_TEMPLATE_REFRESH_SIGNAL=PASS",flush=True)
+
 def rollback(run):
     before_guard()
     recovery=backup_dir(run)
@@ -167,7 +188,12 @@ def rollback(run):
     for row in reversed(manifest):
         p=Path(row["path"])
         atomic(p,(recovery/row["backup"]).read_bytes(),row["mode"])
-    print("MPW_FOOTER_SINGLE_LINE_ROLLED_BACK=20")
+    # Restore old Django templates in the live worker as well. This is an
+    # app-specific Passenger reload signal, not a site-wide config change.
+    wsgi=ROOT/"passenger_wsgi.py"
+    if not wsgi.is_file() or wsgi.is_symlink():fail("Rollback WSGI signal target changed")
+    os.utime(wsgi,None)
+    print("MPW_FOOTER_SINGLE_LINE_ROLLED_BACK=20 APP_TEMPLATE_RELOADED=true")
 
 def selftest():
     a='<footer class="mpw-footer"><div>©</div><div><span>© MojPlayWin</span><a href="/privacy/">Privacy</a></div><span class="mpw-founder-footer-final" style="color:gold">Mojtaba Roozegar</span></footer>'
@@ -190,5 +216,6 @@ if __name__=="__main__":
         batch=prepare()
         print("MPW_FOOTER_SINGLE_LINE_READY="+str(len(batch)))
     elif len(sys.argv)==3 and sys.argv[1]=="install":install(sys.argv[2])
+    elif len(sys.argv)==3 and sys.argv[1]=="refresh":refresh_app(sys.argv[2])
     elif len(sys.argv)==3 and sys.argv[1]=="rollback":rollback(sys.argv[2])
-    else:fail("Usage: selftest|audit|install RUN_ID|rollback RUN_ID")
+    else:fail("Usage: selftest|audit|install RUN_ID|refresh RUN_ID|rollback RUN_ID")
