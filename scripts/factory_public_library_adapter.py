@@ -13,6 +13,7 @@ from pathlib import Path
 import os
 import re
 import tempfile
+import zipfile
 
 PRODUCT = "farm_enterprise_economics"
 RELEASE = "farm-enterprise-economics-v1"
@@ -48,6 +49,18 @@ def verify_release(home):
     match = re.fullmatch(r"([0-9a-f]{64})  " + re.escape(ZIP), record)
     if not match or sha_file(archive) != match.group(1):
         raise RuntimeError("CANONICAL_RELEASE_HASH_NOT_VALID")
+    if archive.stat().st_size <= 0 or archive.stat().st_size > 25 * 1024 * 1024:
+        raise RuntimeError("CANONICAL_RELEASE_ARCHIVE_SIZE_INVALID")
+    try:
+        with zipfile.ZipFile(archive) as source:
+            members = source.namelist()
+            if source.testzip() is not None or len(members) > 80 or not {
+                "farm_enterprise_economics/calculator.py",
+                "farm_enterprise_economics/README.md",
+            }.issubset(set(members)):
+                raise RuntimeError("CANONICAL_RELEASE_ZIP_QA_FAILED")
+    except zipfile.BadZipFile as error:
+        raise RuntimeError("CANONICAL_RELEASE_ZIP_UNREADABLE") from error
     body = page.read_text(encoding="utf-8")
     if "Farm Enterprise Economics Toolkit" not in body or match.group(1) not in body:
         raise RuntimeError("CANONICAL_RELEASE_CONTENT_NOT_VALID")
