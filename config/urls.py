@@ -7,7 +7,7 @@ from command_center.views import dashboard as staff_dashboard
 
 from core.views import home, platform_page, taniya_studio
 from core.mojplaywin_views import venture
-from core.commerce_views import store_home, auctions_home
+from core.commerce_views import store_home, auctions_home\nfrom core.product_seo_views import product_detail
 from core.seo_views import site_search, robots_txt, sitemap_xml
 from core.weather_views import weather
 from core.academy_views import (
@@ -44,7 +44,7 @@ urlpatterns = [
     path("search/", site_search, name="site_search"),
     path("robots.txt", robots_txt, name="robots_txt"),
     path("sitemap.xml", sitemap_xml, name="sitemap_xml"),
-    path("store/", store_home, name="store"),
+    path("store/", store_home, name="store"),\n    path("store/product/<int:product_id>/", product_detail, name="store_product_detail"),
     path("auctions/", auctions_home, name="auctions"),
     path("company-gallery/", company_gallery, name="company_gallery"),
     path("company-content/<slug:slug>/", company_content_feed, name="company_content_feed"),
