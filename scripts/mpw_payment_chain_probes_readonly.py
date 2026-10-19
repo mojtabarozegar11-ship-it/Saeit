@@ -45,3 +45,13 @@ for fn in (discover_eth, discover_trx):
         "origin":str(Path(inspect.getsourcefile(loader)).name)
     })
     break
+
+for fn in (discover_eth,discover_trx):
+    source=inspect.getsource(fn)
+    clean=[]
+    for line in source.splitlines():
+        if any(t in line.lower() for t in ("secret","token","password","api_key","authorization","mnemonic","private_key","receiving_address")):
+            clean.append("[sensitive configuration withheld]")
+        else:
+            clean.append(line[:210])
+    emit("MPW_INDEXER_DISCOVERY_SOURCE",{"asset":fn.__name__,"source":clean[:130],"module":fn.__module__})
