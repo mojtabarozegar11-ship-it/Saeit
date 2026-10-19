@@ -165,3 +165,84 @@ def summarize(private_root):
             status = data.get("current_status", "needs_rework")
             counts[status] = counts.get(status, 0) + 1
     return counts
+
+
+RESEARCH_FIX_PLANS = {
+    "FIVE_DISTINCT_PUBLIC_SOURCES_WITH_LINKED_EVIDENCE_REQUIRED":
+        "Research and verify independent public sources; record source URLs and direct evidence links.",
+    "ONE_HUNDRED_DISTINCT_STRONG_EVIDENCE_PASSAGES_REQUIRED":
+        "Collect substantive, distinct factual evidence with provenance, relevance and confidence.",
+    "ONE_STRUCTURED_INTERNAL_RESEARCH_ACTION_REQUIRED":
+        "Perform and document one authentic internal test or reproducible research action.",
+    "TEN_FACTOR_VALIDATION_PASS_REQUIRED":
+        "Review each missing demand, willingness-to-pay, financial, legal and execution factor.",
+    "FACTORY_OWNER_OR_ACTIVE_PRODUCT_STATE_INVALID":
+        "Resolve genuine ownership and project provenance with the authorized owner.",
+    "PUBLISHED_KNOWLEDGE_PROVENANCE_REQUIRED":
+        "Prepare and approve accurate source-linked editorial documentation.",
+    "FAIR_PRICE_AND_COST_REVIEW_REQUIRED":
+        "Verify actual production costs, buyer value, and pricing assumptions.",
+    "HUMAN_COMMERCIAL_LICENSE_AND_FACTUAL_REVIEW_REQUIRED":
+        "Obtain documented intellectual-property, factual accuracy and commercial review.",
+}
+
+
+def record_research_gaps(private_root, entry):
+    """Create durable, actionable research-defect tickets from actual QA results."""
+    product_id = entry.get("product_id") if isinstance(entry, dict) else None
+    if not isinstance(product_id, int) or isinstance(product_id, bool) or product_id < 1:
+        raise ValueError("INVALID_RESEARCH_PRODUCT_ID")
+    gate = entry.get("research_quality_gate")
+    if not isinstance(gate, dict) or gate.get("schema") != "saeit.factory.research-readiness.v1":
+        raise ValueError("RESEARCH_GATE_MISSING")
+    blockers = gate.get("blockers")
+    if not isinstance(blockers, list) or any(
+        not isinstance(x, str) or x not in RESEARCH_FIX_PLANS for x in blockers
+    ):
+        raise ValueError("RESEARCH_BLOCKERS_UNRECOGNIZED")
+    passed = gate.get("research_gate_passed") is True
+    root = Path(private_root).expanduser().resolve()
+    path = root / "research-rework" / ("product-" + str(product_id)) / "ledger.json"
+    try:
+        obj = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        obj = {"schema": "saeit.factory.research-rework.v1", "product_id": product_id,
+               "history": []}
+    if obj.get("schema") != "saeit.factory.research-rework.v1" or obj.get("product_id") != product_id:
+        raise RuntimeError("RESEARCH_REWORK_LEDGER_MISMATCH")
+    # A research gate never supplies commercial approval; even a research PASS
+    # still requires scientific, owner and legal/product signoff.
+    status = "review_research_evidence" if passed else "research_correction_required"
+    key = _digest({"source_sha256": entry.get("sha256"), "blockers": blockers,
+                   "passed": passed})
+    if obj["history"] and obj["history"][-1].get("fingerprint") == key:
+        return {"product_id": product_id, "status": status, "updated": False}
+    obj["history"].append({
+        "revision": len(obj["history"]) + 1,
+        "created_at_utc": stamp(),
+        "fingerprint": key,
+        "source_dossier_sha256": str(entry.get("sha256", ""))[:64],
+        "status": status,
+        "blocking_reasons": sorted(set(blockers)),
+        "corrective_actions": [
+            {"reason": code, "instruction": RESEARCH_FIX_PLANS[code]}
+            for code in sorted(set(blockers))
+        ],
+        "research_evidence_counts": gate.get("counts", {}),
+        "independent_review_required": True,
+    })
+    obj["current_status"] = status
+    obj["public_sale_allowed"] = False
+    _atomic_json(path, obj)
+    return {"product_id": product_id, "status": status, "updated": True}
+
+
+def summarize_research(private_root):
+    root = Path(private_root).expanduser().resolve() / "research-rework"
+    counts = {"research_correction_required": 0, "review_research_evidence": 0}
+    if root.is_dir():
+        for path in root.glob("product-*/ledger.json"):
+            obj = json.loads(path.read_text(encoding="utf-8"))
+            key = str(obj.get("current_status", "unknown"))
+            counts[key] = counts.get(key, 0) + 1
+    return counts
