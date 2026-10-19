@@ -1,0 +1,112 @@
+name: BUILD50 forty-family genuine production-evidence VPS activation
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/vps-build50-forty-family-bridge-20261020.yml"
+permissions: {contents: read}
+concurrency:
+  group: saeit-private-build50-forty-family-evidence
+  cancel-in-progress: false
+jobs:
+  test_and_install:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 13
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Verify substantive fifty-stage receipts, all forty families and no fabricated approvals
+        run: |
+          set -euo pipefail
+          bash -n deploy/install_build50_forty_family_bridge.sh
+          python3 -m py_compile scripts/factory_build50_family_bridge.py
+          python3 -m unittest discover -s tests -p test_factory_build50_family_bridge.py -v
+          python3 -m unittest discover -s tests -p test_factory_build_50.py -v
+          python3 -m unittest discover -s tests -p test_factory_40_family_master.py -v
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('scripts/factory_build50_family_bridge.py').read_text()
+          assert "proto.verify_attempt" in p
+          assert "'commercial_release_allowed':False" in p
+          for x in ('urllib.request','requests.post','subprocess.run','os.system','shutil.rmtree'):
+              assert x not in p
+          print('BUILD50_FORTY_SAFE_ADMISSION_TESTS=PASS')
+          PY
+      - name: Open host-key-verified SSH connection to existing private factory VPS
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/forty-proof-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-factory-verified
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/key
+            UserKnownHostsFile $d/known
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 15
+            ServerAliveInterval 10
+            ServerAliveCountMax 2
+            ForwardAgent no
+          EOF
+          chmod 600 "$d/config"
+          ssh -T -F "$d/config" saeit-factory-verified 'set -eu; test "$(id -un)" = githubops; test -x "$HOME/factory-runtime/.venv/bin/python"; test -s "$HOME/factory-runtime/operations/forty-family-master/forty_families.json"; test "$(crontab -l | grep -c SAEIT_FACTORY_EVERY_MINUTE_V1)" -eq 1; echo BUILD50_VPS_EXISTING_FACTORY_VERIFIED'
+      - name: Transfer hash-verified worker and guarded installer without altering active factory
+        id: stage
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/forty-proof-ssh"
+          path="/home/githubops/factory-runtime/operations/.fifty-family-release-$GITHUB_RUN_ID"
+          ssh -T -F "$d/config" saeit-factory-verified "umask 077; test ! -e '$path'; mkdir -m 700 '$path'"
+          for file in scripts/factory_build50_family_bridge.py scripts/factory_build_50.py scripts/factory_40_family_master.py deploy/install_build50_forty_family_bridge.sh; do
+            name="$(basename "$file")"
+            scp -q -F "$d/config" "$file" "saeit-factory-verified:$path/$name"
+            hash="$(sha256sum "$file" | awk '{print $1}')"
+            ssh -T -F "$d/config" saeit-factory-verified "test ! -L '$path/$name' && test \"\$(sha256sum '$path/$name' | awk '{print \$1}')\" = '$hash'"
+          done
+          echo BUILD50_40_BRIDGE_HASH_STAGING=PASS
+      - name: Install and execute 40 family proof routing in real VPS without sales release
+        id: install
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/forty-proof-ssh"
+          path="/home/githubops/factory-runtime/operations/.fifty-family-release-$GITHUB_RUN_ID"
+          timeout 160s ssh -T -F "$d/config" saeit-factory-verified "bash '$path/install_build50_forty_family_bridge.sh' '$path'"
+      - name: Recheck 40-family ledger, genuine completed stages and old factory schedules
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/forty-proof-ssh"
+          timeout 90s ssh -T -F "$d/config" saeit-factory-verified 'python3 -' <<'PY'
+          import json,subprocess
+          from pathlib import Path
+          home=Path.home()
+          root=home/'factory-runtime'
+          p=root/'private/autonomous-product-cycle/production-family-management/build50-family-dashboard.json'
+          d=json.loads(p.read_text())
+          assert d['schema']=='saeit.factory.build50-family-bridge.v1'
+          assert d['counts']['registered_families']==40
+          assert len(d['families'])==40
+          assert all(x['worker_packages_required']==48 for x in d['families'])
+          assert d['commercial_release_allowed'] is False
+          assert d['payment_or_orders_created'] is False
+          cron=subprocess.check_output(['crontab','-l'],text=True)
+          for label in ('SAEIT_FACTORY_EVERY_MINUTE_V1','SAEIT_FACTORY_LIFECYCLE_12_V1',
+                        'SAEIT_FACTORY_FORTY_FAMILY_MASTER_V1','SAEIT_FACTORY_BUILD50_FORTY_FAMILY_BRIDGE_V1'):
+              assert cron.count(label)==1,label
+          print('BUILD50_REAL_FACTORY_40_FAMILIES=VERIFIED')
+          print('BUILD50_REAL_FACTORY_VERIFIED_PRODUCTS='+str(d['counts']['technical_products_with_verified_50_stages']))
+          print('BUILD50_REAL_FACTORY_UNVERIFIED_EXECUTOR_FAMILIES='+str(d['counts']['families_without_verified_50_stage_executor']))
+          print('BUILD50_REAL_FACTORY_NO_FAKE_RELEASE=PASS')
+          PY
