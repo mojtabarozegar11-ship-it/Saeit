@@ -19,6 +19,8 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
+      - name: Install pinned offline spreadsheet QA dependency
+        run: python3 -m pip install --disable-pip-version-check 'openpyxl==3.1.5'
       - name: Verify scientific coverage is never fabricated or auto-approved
         run: |
           set -euo pipefail
