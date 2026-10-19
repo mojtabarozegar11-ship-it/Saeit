@@ -76,6 +76,88 @@ def unique_replace(src: str, old: str, new: str, label: str):
         fail("Ambiguous source or concurrent change: " + label + "; matches=" + str(src.count(old)))
     return src.replace(old, new, 1)
 
+
+def section_span(doc: str, section_id: str):
+    opening = list(re.finditer(
+        r'<section\b[^>]*\bid="'+re.escape(section_id)+r'"[^>]*>',
+        doc, re.I))
+    if len(opening)!=1: fail("Ambiguous actual live section "+section_id)
+    start=opening[0].start()
+    end=doc.find("</section>",opening[0].end())
+    if end<0: fail("Unclosed actual live section "+section_id)
+    return start,end+len("</section>")
+
+def edit_drifted_section(doc: str, filename: str):
+    """Allow a bounded change to the actual section if its older entire snippet drifted.
+
+    Do not overwrite modified/extra existing gallery content or other page areas.
+    """
+    mapping={
+        "mojplaywin_about_team_section_20261018.html":
+            ("mpw-meet-team-20261018","mpw-team-card","mpw-meet-team-heading-20261018","Illustrative Team Roles"),
+        "mpw_international_team_section_20261018.html":
+            ("mpw-international-team-20261018","mpw-intl-card","mpw-international-team-heading-20261018","Illustrative International Operations Roles"),
+        "mpw_senior_advisory_board_20261018.html":
+            ("mpw-senior-advisory-20261018","mpw-advisory-card","mpw-senior-advisory-heading-20261018","Illustrative Advisory Role Profiles"),
+        "mpw_seven_team_gallery_20261019.html":
+            ("mpw-seven-gallery-20261019","mpw-seven-item","mpw-seven-gallery-heading-20261019","Additional Team Portrait Gallery"),
+        "mpw_founder_spotlight_20261019.html":
+            ("mpw-founder-spotlight-20261019",None,"mpw-founder-title-20261019","Mojtaba Roozegar"),
+    }
+    sid,kind,hid,title=mapping[filename]
+    start,end=section_span(doc,sid)
+    part=doc[start:end]
+    heading=r'(<h2\b[^>]*\bid="'+re.escape(hid)+r'"[^>]*>)[\s\S]*?(</h2>)'
+    part,count=re.subn(heading,lambda m:m.group(1)+title+m.group(2),part,count=1,flags=re.I)
+    if count!=1:fail("Live heading is not uniquely identifiable in "+filename)
+    if kind in ("mpw-team-card","mpw-intl-card","mpw-advisory-card"):
+        if part.count('class="'+kind+'"')!=10:fail("Source card count drifted "+filename)
+        if "mpw-profile-indicator" in part:
+            fail("Unexpected preexisting per-profile disclosure in "+filename)
+        label=("<p class=\"mpw-profile-indicator\">Fictional advisor · no verified appointment</p>"
+               if kind=="mpw-advisory-card" else
+               "<p class=\"mpw-profile-indicator\">Illustrative role · not verified staff</p>")
+        li='<li class="'+kind+'">'
+        if part.count(li)!=10:fail("Live list opening format drifted "+filename)
+        part=part.replace(li,li+label)
+        if kind=="mpw-team-card":
+            before="CEO &amp; Business Development"
+            after="Business Strategy &amp; Development (Illustrative Role)"
+            if part.count(before)!=1:fail("Live fictional CEO role drifted")
+            part=part.replace(before,after,1)
+        if kind=="mpw-intl-card":
+            if part.count(">Chief Executive Officer</p>")!=1:
+                fail("Live international CEO role drifted")
+            part=part.replace(">Chief Executive Officer</p>",
+                              ">Executive Strategy &amp; Operations (Illustrative Role)</p>",1)
+    elif kind=="mpw-seven-item":
+        if part.count('class="mpw-seven-item"')!=7:fail("Original live gallery not exactly seven items")
+        pattern=r'\s*<li class="mpw-seven-item" data-gallery-image="06">[\s\S]*?</li>'
+        part,count=re.subn(pattern,"",part,count=1)
+        if count!=1:fail("Cannot isolate repeated image number six")
+        part=part.replace("Seven high-resolution portrait collections",
+                          "Six distinct high-resolution portrait collections")
+    else:
+        role=r'(<p class="mpw-founder-role">)[\s\S]*?(</p>)'
+        part,count=re.subn(role,lambda m:m.group(1)+"Owner · Founder · Chief Executive Officer"+m.group(2),part,count=1)
+        if count!=1:fail("Founder role drifted")
+        note=('<p class="mpw-owner-legal">Mojtaba Roozegar owns and leads MojPlayWin, '
+              'a limited liability company. Registration number and jurisdiction '
+              'are not asserted without documentary verification.</p>')
+        if "mpw-owner-legal" not in part:
+            part=part.replace("</h2>", "</h2>"+note,1)
+    return doc[:start]+part+doc[end:]
+
+def find_founder_fragment(doc: str):
+    start,end=section_span(doc,"mpw-founder-spotlight-20261019")
+    token='<style id="mpw-founder-spotlight-style-20261019">'
+    if doc.count(token)!=1:fail("Founder's unique scoped stylesheet missing")
+    pos=doc.index(token)
+    if pos>start:fail("Founder stylesheet unexpectedly moved")
+    css_end=doc.find("</style>",pos)
+    if css_end<0 or css_end>start:fail("Founder stylesheet boundaries drifted")
+    return doc[pos:end]
+
 class Audit(HTMLParser):
     def __init__(self):
         super().__init__()
@@ -135,11 +217,16 @@ def compose(html: str, sources: dict[str, tuple[str,str]]) -> str:
         fail("Original H1 count changed")
     for filename in FILES:
         old,new=sources[filename]
-        html=unique_replace(html,old,new,filename)
+        if html.count(old)==1:
+            html=unique_replace(html,old,new,filename)
+        elif html.count(old)==0:
+            html=edit_drifted_section(html,filename)
+        else:
+            fail("Duplicated old source fragment "+filename)
     html=unique_replace(html,ORIGINAL_IDENTITY,OWNERSHIP,"company type and CEO identity")
-    # Move the complete existing founder portrait and description above the company
-    # history, rather than duplicating either the image or the heading.
-    founder = sources["mpw_founder_spotlight_20261019.html"][1]
+    # Capture precisely the currently rendered founder block (the live HTML may
+    # have acquired harmless styling changes since the original source commit).
+    founder=find_founder_fragment(html)
     html=unique_replace(html,founder,"","relocate single founder section")
     hero=re.search(r'<header\b[^>]*\bid="about-top"[^>]*>[\s\S]*?</header>',html,re.I)
     if not hero: fail("Original About hero missing")
@@ -173,6 +260,8 @@ def compose(html: str, sources: dict[str, tuple[str,str]]) -> str:
 #mpw-advanced-research .mw-section,#mpw-complementary-details .mw-section{max-width:100%;overflow-wrap:anywhere}
 #mpw-advanced-research section[id],#mpw-complementary-details section[id],#mpw-founder-spotlight-20261019{scroll-margin-top:22px}
 #mpw-founder-spotlight-20261019{margin-top:clamp(24px,4vw,42px)}
+#mpw-meet-team-20261018 .mpw-profile-indicator,#mpw-international-team-20261018 .mpw-profile-indicator,#mpw-senior-advisory-20261018 .mpw-profile-indicator{font-size:.76rem;line-height:1.55;color:#f4dba9;font-weight:750;margin:0 0 .5rem}
+#mpw-founder-spotlight-20261019 .mpw-owner-legal{line-height:1.65;color:#f4deb3;font-weight:650;margin:.7rem 0}
 @media(max-width:600px){#mpw-advanced-research,#mpw-complementary-details{padding:14px;border-radius:16px}}
 </style>
 <script id="mpw-about-hash-open-20261019">
