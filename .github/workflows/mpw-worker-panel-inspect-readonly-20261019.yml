@@ -146,6 +146,22 @@ jobs:
                   if isinstance(n,ast.If) and '__name__' in ast.unparse(n.test):
                       methods.append(ast.unparse(n)[:1000])
               entries[slug+'_main_flow']=methods
+          for slug,log in (('quality_review_agent_20261018','last_review.log'),
+                           ('management_intelligence_20261018','last_run.log')):
+              p=base/slug/log
+              if not p.is_file() or p.is_symlink() or p.stat().st_size>100000: continue
+              j=json.loads(p.read_text('utf8','replace'))
+              view={}
+              for k,v in j.items():
+                  if k in ('source_hashes_verified','actual_private_drafts_scored','factory_or_zomorod_modified',
+                           'website_published','public_content_published','shared_Django_changed',
+                           'financial_actions_executed','validated_private_drafts','source_modules_hash_verified',
+                           'zomorod_or_factory_modified','status'):
+                      view[k]=v if isinstance(v,(str,bool,int,float)) else {'type':type(v).__name__,'length':len(v) if hasattr(v,'__len__') else None}
+                  elif k in ('quality_review_results','knowledge_quality_gates'):
+                      view[k]={'type':type(v).__name__,'length':len(v) if hasattr(v,'__len__') else None}
+              entries[slug+'_verified_fields']=view
+              entries[slug+'_mode']=oct(p.stat().st_mode & 0o777)
           print('MPW_WORKER_DIAGNOSTICS='+json.dumps({'tenant':'mojplaywin-main','worker_files':entries,'cron':cron,'panel':details,
                 'module_registry_size':len(rows),'module_capability_sample':rows[:77]},ensure_ascii=False,sort_keys=True))
           PY
