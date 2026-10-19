@@ -3,7 +3,7 @@ const assert=require('node:assert/strict');
 (async()=>{
  const browser=await chromium.launch({headless:true,args:['--no-sandbox','--disable-dev-shm-usage','--enable-webgl','--use-gl=angle','--use-angle=swiftshader']});
  for(const w of [{name:'desktop',width:1440,height:900,mobile:false},{name:'mobile',width:390,height:844,mobile:true}]){
-  const context=await browser.newContext({viewport:{width:w.width,height:w.height},isMobile:w.mobile,hasTouch:w.mobile});
+  const context=await browser.newContext({viewport:{width:w.width,height:w.height},isMobile:w.mobile,hasTouch:w.mobile,reducedMotion:'reduce'});
   const page=await context.newPage();const errors=[];
   page.on('pageerror',e=>errors.push(e.message));
   let r=await page.goto('https://zomorodmelal.ir/?farmv4_card_qa='+Date.now(),{waitUntil:'domcontentloaded',timeout:55000});
@@ -21,7 +21,8 @@ const assert=require('node:assert/strict');
    return im?.complete&&im.naturalWidth>=500;
   },{timeout:16000});
   assert.equal(await img.getAttribute('src'),'/farm-wars/cover.webp');
-  await target.click({timeout:15000});
+  await target.focus();
+  await target.click({force:true,timeout:15000});
   await page.waitForURL('**/farm-wars/**',{timeout:30000});
   await page.waitForFunction(()=>window.FarmDominionDebug?.getRender().renderReady,{timeout:35000});
   const game=await page.evaluate(()=>window.FarmDominionDebug.getRender());
