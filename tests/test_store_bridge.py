@@ -86,6 +86,35 @@ class BridgeTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             receiver.finalize(self.inbox, self.product.name, self.digest)
 
+    def test_sender_blocks_stale_artifact_when_qa_rework_is_open(self):
+        ticket = self.manifest.parents[2] / "qa-rework" / self.product.name / "ledger.json"
+        ticket.parent.mkdir(parents=True)
+        ticket.write_text(json.dumps({
+            "schema": "saeit.factory.qa-rework.v1",
+            "current_status": "needs_rework",
+            "public_sale_allowed": False,
+            "history": [{"code": "PRODUCT_QA_FAILED"}],
+        }), encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "BLOCKED_FOR_REWORK"):
+            sender.verify_source(self.manifest, self.archive, self.product.name)
+        ticket.write_text(json.dumps({
+            "schema": "saeit.factory.qa-rework.v1",
+            "current_status": "technical_qa_pass_only_owner_and_content_review_pending",
+            "public_sale_allowed": False,
+            "history": [{"status": "technically_recovered"}],
+        }), encoding="utf-8")
+        self.assertEqual(
+            sender.verify_source(self.manifest, self.archive, self.product.name),
+            self.digest,
+        )
+
+    def test_sender_rejects_unverified_rework_ledger(self):
+        ticket = self.manifest.parents[2] / "qa-rework" / self.product.name / "ledger.json"
+        ticket.parent.mkdir(parents=True)
+        ticket.write_text('not-json', encoding='utf-8')
+        with self.assertRaisesRegex(ValueError, "LEDGER_INVALID"):
+            sender.verify_source(self.manifest, self.archive, self.product.name)
+
     def test_sender_does_not_contact_network_on_dry_run(self):
         with mock.patch.object(sender, "call", side_effect=AssertionError("no network allowed")):
             result = sender.deliver(self.product.name, self.product.parent, ["key"], dry_run=True)
