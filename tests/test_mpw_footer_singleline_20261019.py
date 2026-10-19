@@ -44,3 +44,14 @@ def test_two_distinct_footer_types_keep_links_and_only_one_credit():
           assert False, "Repeated publish must fail closed"
       except RuntimeError:
           pass
+
+def test_passenger_refresh_uses_verified_main_site_app_root_not_wsgi_mtime():
+    import inspect
+    text=inspect.getsource(foot.refresh_app)
+    assert 'ROOT/"tmp/restart.txt"' in text
+    assert 'PassengerAppRoot /home/zomorod2/mojplaywin.com' in text
+    assert 'os.utime(signal,None)' in text
+    assert 'os.utime(wsgi,None)' not in text
+    rollback=inspect.getsource(foot.rollback)
+    assert 'ROOT/"tmp/restart.txt"' in rollback
+    assert 'PassengerAppRoot /home/zomorod2/mojplaywin.com' in rollback

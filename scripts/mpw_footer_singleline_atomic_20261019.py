@@ -165,14 +165,18 @@ def refresh_app(run):
     records=json.loads((recovery/"manifest.json").read_text("utf-8"))
     if len(records)!=20 or any(sha(Path(row["path"]).read_bytes())!=row["after"] for row in records):
         fail("Site changed after install; refusing application reload")
-    wsgi=ROOT/"passenger_wsgi.py"
-    if not wsgi.is_file() or wsgi.is_symlink() or wsgi.resolve()!=wsgi:
-        fail("MojPlayWin restart target is not safe")
-    # App-specific mtime signal, preserving all original WSGI bytes.
-    original=sha(wsgi.read_bytes())
-    os.utime(wsgi,None)
-    if sha(wsgi.read_bytes())!=original:fail("WSGI bytes changed unexpectedly")
-    print("MPW_MAIN_TEMPLATE_REFRESH_SIGNAL=PASS",flush=True)
+    # This virtual host explicitly declares PassengerAppRoot as ROOT, and
+    # Passenger's supported restart signal is ROOT/tmp/restart.txt.
+    ht=HT.read_text("utf-8",errors="replace")
+    if "PassengerAppRoot /home/zomorod2/mojplaywin.com" not in ht or "PassengerStartupFile passenger_wsgi.py" not in ht:
+        fail("PassengerAppRoot changed since read-only audit")
+    signal=ROOT/"tmp/restart.txt"
+    if not signal.parent.is_dir() or signal.parent.is_symlink() or not signal.is_file() or signal.is_symlink():
+        fail("Passenger restart signal path not safe")
+    digest=sha(signal.read_bytes())
+    os.utime(signal,None)
+    if sha(signal.read_bytes())!=digest:fail("Passenger restart marker bytes changed")
+    print("MPW_PASSENGER_ROOT_TEMPLATE_RESTART=PASS",flush=True)
 
 def rollback(run):
     before_guard()
@@ -188,12 +192,18 @@ def rollback(run):
     for row in reversed(manifest):
         p=Path(row["path"])
         atomic(p,(recovery/row["backup"]).read_bytes(),row["mode"])
-    # Restore old Django templates in the live worker as well. This is an
-    # app-specific Passenger reload signal, not a site-wide config change.
-    wsgi=ROOT/"passenger_wsgi.py"
-    if not wsgi.is_file() or wsgi.is_symlink():fail("Rollback WSGI signal target changed")
-    os.utime(wsgi,None)
-    print("MPW_FOOTER_SINGLE_LINE_ROLLED_BACK=20 APP_TEMPLATE_RELOADED=true")
+    # After exact file restoration ask only the configured MojPlayWin
+    # PassengerAppRoot to reload its Django template cache.
+    ht=HT.read_text("utf-8",errors="replace")
+    if "PassengerAppRoot /home/zomorod2/mojplaywin.com" not in ht:
+        fail("Rollback Passenger root changed")
+    signal=ROOT/"tmp/restart.txt"
+    if not signal.is_file() or signal.is_symlink() or signal.parent.is_symlink():
+        fail("Rollback Passenger restart signal missing")
+    digest=sha(signal.read_bytes())
+    os.utime(signal,None)
+    if sha(signal.read_bytes())!=digest:fail("Rollback changed restart signal content")
+    print("MPW_FOOTER_SINGLE_LINE_ROLLED_BACK=20 PASSENGER_RESTART_SIGNALED=true")
 
 def selftest():
     a='<footer class="mpw-footer"><div>©</div><div><span>© MojPlayWin</span><a href="/privacy/">Privacy</a></div><span class="mpw-founder-footer-final" style="color:gold">Mojtaba Roozegar</span></footer>'
