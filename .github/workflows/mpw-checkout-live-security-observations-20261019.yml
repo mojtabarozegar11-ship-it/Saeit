@@ -1,0 +1,114 @@
+name: MojPlayWin current security and live worker behavior audit
+on:
+  push:
+    branches: [mpw-two-books-unified-release-20261019]
+    paths: [".github/workflows/mpw-checkout-live-security-observations-20261019.yml"]
+permissions: {contents: read}
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 11
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Inspect live security issues and required frontend behavior, no mutation
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 130s ssh -T -F "$d/config" saeit-cpanel bash -s <<'BASH'
+          /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - <<'PY'
+          import os,sys,pathlib,json,hashlib,re,time,urllib.request,urllib.error,urllib.parse
+          r=pathlib.Path('/home/zomorod2/Saeit-staging')
+          os.chdir(r);sys.path.insert(0,str(r));os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          import django;django.setup()
+          from django.core import checks
+          from django.conf import settings
+          from core.models import Product,OrderItem
+          from mpw_commerce.models import CommerceInvoice,CommerceReceipt,CommerceFulfillment
+          from mpw_commerce.product_checkout_page import product_checkout_page
+          from django.test import RequestFactory
+          print('MPW_NEW_AUDIT_DJANGO='+json.dumps({'check_ids':[x.id for x in checks.run_checks(include_deployment_checks=True)],
+           'hsts_seconds':settings.SECURE_HSTS_SECONDS,'secure_ssl':settings.SECURE_SSL_REDIRECT,'debug':settings.DEBUG}))
+          print('MPW_NEW_AUDIT_FILES='+json.dumps({'settings_sha':hashlib.sha256((r/'config/settings.py').read_bytes()).hexdigest(),
+            'url_sha':hashlib.sha256((r/'config/urls.py').read_bytes()).hexdigest(),
+            'apache_sha':hashlib.sha256(pathlib.Path('/home/zomorod2/mojplaywin.com/.htaccess').read_bytes()).hexdigest()}))
+          rf=RequestFactory()
+          for pk in (72,225):
+            p=Product.objects.select_related('owner').get(pk=pk)
+            req=rf.get('/commerce/book/'+str(pk)+'/',secure=True,HTTP_HOST='mojplaywin.com');req.user=p.owner
+            resp=product_checkout_page(req,pk)
+            html=resp.content.decode('utf8','replace')
+            scripts=re.findall(r'<script([^>]*)>(.*?)</script>',html,re.S|re.I)
+            styles=re.findall(r'<style([^>]*)>(.*?)</style>',html,re.S|re.I)
+            html_attributes=re.findall(r'\son[a-z]+\s*=',html,re.I)
+            external_js=[(a.strip()[:90],len(code)) for a,code in scripts]
+            print('MPW_NEW_AUDIT_CHECKOUT='+json.dumps({'book':pk,'status':resp.status_code,
+               'scripts_count':len(scripts),'scripts':external_js[:5],
+               'styles_count':len(styles),'styles':[(a[:90],len(code)) for a,code in styles[:3]],
+               'inline_handlers':len(html_attributes),
+               'script_hashes':[hashlib.sha256(code.encode('utf8')).hexdigest()[:16] for a,code in scripts],
+               'script_src_hosts':sorted(set(re.findall(r'<script[^>]*src="https?://([^/"]+)',html))),
+               'csp_header':resp.get('Content-Security-Policy'),
+               'cache_control':resp.get('Cache-Control')}))
+          heartbeat=pathlib.Path('/home/zomorod2/.mpw-commerce-two-books/worker-heartbeat.json')
+          if heartbeat.is_file():
+            data=json.loads(heartbeat.read_text('utf8'))
+            print('MPW_NEW_AUDIT_HEARTBEAT='+json.dumps({'age_s':int(time.time())-data.get('utc_epoch',0),'state':data.get('state'),
+              'healthy':data.get('healthy'),'error_type':data.get('error_type')}))
+          from command_center.mpw_two_books_panel import _status_dict
+          panel=_status_dict()
+          print('MPW_NEW_AUDIT_PANEL='+json.dumps({'worker':panel.get('worker'),'invoices':panel.get('commerce_invoices_count'),
+           'receipts':panel.get('verified_receipts_count'),'revenue':panel.get('confirmed_revenue_usd')}))
+          for name,url in (('store','https://mojplaywin.com/store/'),('product72','https://mojplaywin.com/store/product/72/'),
+             ('login','https://mojplaywin.com/accounts/login/'),('taniya','https://mojplaywin.com/commerce/book/225/')):
+            try:
+              with urllib.request.urlopen(urllib.request.Request(url,headers={'User-Agent':'MojPlayWin-security-readonly-current'}),timeout=10) as response:
+                print('MPW_NEW_AUDIT_HTTP='+json.dumps({'name':name,'status':response.status,'path':urllib.parse.urlparse(response.geturl()).path,
+                 'hsts':response.headers.get('Strict-Transport-Security'),'csp':response.headers.get('Content-Security-Policy')}))
+            except Exception as exc:print('MPW_NEW_AUDIT_HTTP='+json.dumps({'name':name,'error':type(exc).__name__}))
+          PY
+          BASH
