@@ -1,13 +1,17 @@
 """Functional tests for the greenhouse crop margin planning tool."""
 import json
+import importlib.util
 from pathlib import Path
 import subprocess
 import sys
 import tempfile
 import unittest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from calculator import calculate
+calculator_path = Path(__file__).resolve().with_name("calculator.py")
+spec = importlib.util.spec_from_file_location("greenhouse_crop_margin_calculator", calculator_path)
+calculator_module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(calculator_module)
+calculate = calculator_module.calculate
 
 
 class GreenhouseCropMarginTests(unittest.TestCase):
