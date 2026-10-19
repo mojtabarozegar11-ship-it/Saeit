@@ -291,6 +291,49 @@ def deliver_stock(factory_root,ware,warehouse_module,sender,ssh_key,ssh_hosts,ma
     return results
 
 
+def deliver_customer_bundles(root,sender,ssh_key,ssh_hosts,max_products=3,*,dry_run=False):
+    """Continue existing Zomorod courier after manufacturing: deliver *private*
+    buyer-ready candidate ZIPs, even where strict final warehouse admission is
+    correctly blocked pending 50-stage independent commercial approval.
+    """
+    root=Path(root)
+    offers=root/"customer-packs"
+    if offers.is_symlink():raise ValueError("CUSTOMER_CATALOG_SYMLINK")
+    if max_products==0 or not offers.is_dir():return []
+    options=sender.host_ssh_options(Path(ssh_key),Path(ssh_hosts))
+    candidates=[]
+    for recipe in offers.iterdir():
+        if recipe.name=="status.json":continue
+        if recipe.is_symlink() or not recipe.is_dir() or not sender.SLUG.fullmatch(recipe.name):
+            raise ValueError("CUSTOMER_CATALOG_UNSAFE_ENTRY")
+        for version in recipe.iterdir():
+            if version.is_symlink() or not version.is_dir() or not sender.SHA.fullmatch(version.name):
+                raise ValueError("CUSTOMER_VERSION_UNSAFE_ENTRY")
+            receipt=version/"candidate_manifest.json"
+            if receipt.is_symlink() or not receipt.is_file():continue
+            candidates.append((receipt.stat().st_mtime,recipe.name,version.name))
+            if len(candidates)>4000:raise ValueError("CUSTOMER_CATALOG_CAPACITY_LIMIT")
+    # Newest candidates first; bounded scan avoids permanently re-shipping
+    # three old packages and ignoring new independently manufactured products.
+    candidates.sort(key=lambda x:(x[0],x[1],x[2]),reverse=True)
+    shipped=[];scanned=0
+    for _,recipe,version in candidates:
+        if len(shipped)>=max_products or scanned>=min(len(candidates),max_products*8):break
+        scanned+=1
+        try:
+            sender.verify_consumer_source(root,recipe,version)
+            original=sender.deliver(recipe,root/"digital-products",options,dry_run=dry_run)
+            if original.get("status") not in ("received_private","already_received","dry_run_private_only"):
+                raise RuntimeError("CUSTOMER_ORIGINAL_NOT_RECEIVED")
+            item=sender.deliver_consumer(recipe,root,version,options,dry_run=dry_run)
+            if item.get("status")!="already_received_customer":
+                shipped.append(item)
+        except (OSError,ValueError,RuntimeError) as exc:
+            shipped.append({"recipe":recipe,"version":version,
+                            "status":"blocked_"+type(exc).__name__})
+    return shipped
+
+
 def main():
     p=argparse.ArgumentParser()
     p.add_argument("--factory-private",required=True)
@@ -328,9 +371,14 @@ def main():
     # Store delivery must not be blocked by the independent native order backlog.
     results=deliver_stock(base,base/"production-warehouse",ware,sender,a.ssh_key,
                           a.known_hosts,a.max_ship,dry_run=a.dry_run)
+    consumer=deliver_customer_bundles(base,sender,a.ssh_key,a.known_hosts,
+                                      a.max_ship,dry_run=a.dry_run)
     print("ZM_BRIDGE_SITE_REQUEST_RECEIPT="+json.dumps(staged,ensure_ascii=False,sort_keys=True))
     print("ZM_BRIDGE_NATIVE_ADMISSION="+json.dumps(admission,ensure_ascii=False,sort_keys=True))
     print("ZM_BRIDGE_DELIVERED_PRIVATE="+json.dumps(results,ensure_ascii=False,sort_keys=True))
+    print("ZM_BRIDGE_CUSTOMER_PACKAGES_DELIVERED_PRIVATE="+json.dumps(consumer,ensure_ascii=False,sort_keys=True))
+    print("ZM_BRIDGE_CUSTOMER_PACKAGES_NEW="+str(sum(x.get("status")=="received_private_customer" for x in consumer)))
+    print("ZM_BRIDGE_REAL_CUSTOMER_PURCHASE_ORDERS_CONFIRMED=0")
     print("ZM_BRIDGE_REQUESTS_THIS_CYCLE="+str(len(staged["requests"])))
     print("ZM_BRIDGE_NATIVE_ORDERS_ADMITTED="+str(len(admission["orders"])))
     print("ZM_BRIDGE_NATIVE_CAPACITY_BLOCKED="+str(admission["capacity_blocked"]).lower())

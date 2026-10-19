@@ -5,6 +5,7 @@ Every imported item is a verified received factory package, not a sale-ready goo
 """
 import argparse
 import hashlib
+import importlib.util
 import json
 from pathlib import Path
 import re
@@ -70,6 +71,36 @@ def validate_received(root, receipt):
             "status":"awaiting_commercial_and_owner_approval"}
 
 
+def customer_candidates(root,limit=20):
+    """Only private deliverables WITH authenticated prior technical store draft."""
+    parent=root/"customer-receipts"
+    if parent.is_symlink():raise ValueError("CUSTOMER_RECEIPT_DIRECTORY_SYMLINK")
+    if not parent.is_dir():return []
+    verifier_path=root/"bin/store_receiver.py"
+    if verifier_path.is_symlink() or not verifier_path.is_file():
+        raise ValueError("CUSTOMER_RECEIVER_MISSING")
+    module=importlib.util.spec_from_file_location("zm_private_store_receiver",verifier_path)
+    verifier=importlib.util.module_from_spec(module);module.loader.exec_module(verifier)
+    rows=[]
+    for product in sorted(parent.iterdir()):
+        if product.is_symlink() or not product.is_dir() or not SLUG.fullmatch(product.name):
+            raise ValueError("CUSTOMER_RECEIPT_PRODUCT_UNSAFE")
+        for row in product.iterdir():
+            if row.is_symlink() or not row.is_file() or not row.name.endswith(".json") or not SHA.fullmatch(row.stem):
+                raise ValueError("CUSTOMER_RECEIPT_VERSION_UNSAFE")
+            if not verifier.consumer_status(root,product.name,row.stem):
+                raise ValueError("CUSTOMER_RECEIPT_NOT_SHA_VERIFIED")
+            meta=verifier.verify_consumer(root,product.name,row.stem,
+                root/"customer-packages"/product.name/row.stem/"customer-package.zip",
+                root/"customer-packages"/product.name/row.stem/"candidate_manifest.json")
+            rows.append({"product_id":product.name,"source_sha":row.stem,
+                        "original_sha":meta["factory_internal_zip_sha256"],
+                        "package_sha":meta["package_sha256"],
+                        "title":str(meta.get("name",""))[:160]})
+            if len(rows)>10000:raise ValueError("CUSTOMER_CANDIDATES_LIMIT")
+    return sorted(rows,key=lambda x:(x["product_id"],x["source_sha"]))[:limit]
+
+
 def import_catalog(root,dbfile,limit=6):
     root=Path(root);dbfile=Path(dbfile)
     if root.is_symlink() or not root.is_dir() or dbfile.is_symlink() or not dbfile.is_file():
@@ -103,6 +134,13 @@ def import_catalog(root,dbfile,limit=6):
             public_enabled INTEGER NOT NULL DEFAULT 0 CHECK(public_enabled=0),
             paid_price_irr INTEGER, imported_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             CHECK(paid_price_irr IS NULL))""")
+        connection.execute("""CREATE TABLE IF NOT EXISTS factory_consumer_candidates(
+            product_id TEXT NOT NULL, source_sha256 TEXT NOT NULL,
+            original_artifact_sha256 TEXT NOT NULL, package_sha256 TEXT NOT NULL,
+            title TEXT NOT NULL, state TEXT NOT NULL,
+            public_enabled INTEGER NOT NULL DEFAULT 0 CHECK(public_enabled=0),
+            paid_price_irr INTEGER CHECK(paid_price_irr IS NULL),
+            PRIMARY KEY(product_id,source_sha256))""")
         imported=existing=scanned=0
         for p in files:
             info=validate_received(root,p)
@@ -122,7 +160,36 @@ def import_catalog(root,dbfile,limit=6):
                 connection.execute("COMMIT")
             except Exception:
                 connection.execute("ROLLBACK");raise
-        return {"imported":imported,"already":existing,"scanned":scanned}
+        customers=customer_candidates(root,limit=limit)
+        consumer_new=consumer_existing=0
+        for row in customers:
+            # A genuine original ZIP must have a matching private draft.
+            if not connection.execute("SELECT 1 FROM factory_drafts WHERE product_id=? AND sha256=?",
+                    (row["product_id"],row["original_sha"])).fetchone():
+                continue
+            found=connection.execute("""SELECT package_sha256 FROM factory_consumer_candidates
+                    WHERE product_id=? AND source_sha256=?""",
+                    (row["product_id"],row["source_sha"])).fetchone()
+            if found:
+                if found[0]!=row["package_sha"]:raise ValueError("CONSUMER_VERSION_SHA_COLLISION")
+                consumer_existing+=1
+                continue
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                connection.execute("""INSERT INTO factory_consumer_candidates
+                    (product_id,source_sha256,original_artifact_sha256,package_sha256,title,state,
+                     public_enabled,paid_price_irr)
+                    VALUES(?,?,?,?,?,'awaiting_independent_commercial_review',0,NULL)""",
+                    (row["product_id"],row["source_sha"],row["original_sha"],
+                     row["package_sha"],row["title"]))
+                consumer_new+=1
+                connection.execute("COMMIT")
+            except Exception:
+                connection.execute("ROLLBACK");raise
+        return {"imported":imported,"already":existing,"scanned":scanned,
+                "customer_bundles_new":consumer_new,
+                "customer_bundles_already":consumer_existing,
+                "public_customer_bundles":0}
     finally:connection.close()
 
 

@@ -14,6 +14,7 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+import zipfile
 
 HOST = "zohal.pws-dns.net"
 USER = "zomorod2"
@@ -123,6 +124,91 @@ def deliver(recipe, source, ssh_options, *, dry_run=False):
     if "STORE_PRIVATE_RECEIPT_VERIFIED" not in receipt.stdout:
         raise RuntimeError("STORE_RECEIPT_NOT_VERIFIED")
     return {"recipe": recipe, "digest": digest, "status": "received_private"}
+
+
+
+def verify_consumer_source(root, recipe, version):
+    """Read only a real buyer-use archive tied to the exact previous QA ZIP."""
+    if not SLUG.fullmatch(recipe) or not SHA.fullmatch(version):
+        raise ValueError("CONSUMER_PRODUCT_VERSION_INVALID")
+    root=Path(root).expanduser().resolve()
+    files=root/"customer-packs"/recipe/version
+    if files.is_symlink() or not files.is_dir():
+        raise ValueError("CONSUMER_PACKAGE_NOT_AVAILABLE")
+    candidate=files/"candidate_manifest.json"
+    archive=files/"customer-package.zip"
+    source=root/"digital-products"/recipe/"manufacturing_manifest.json"
+    original=root/"digital-products"/recipe/(recipe+"-internal-qa.zip")
+    for item in (candidate,archive,source,original):
+        if item.is_symlink() or not item.is_file():
+            raise ValueError("CONSUMER_SOURCE_UNSAFE")
+    if candidate.stat().st_size>100000 or not 0<archive.stat().st_size<=MAX_BUNDLE:
+        raise ValueError("CONSUMER_SIZE_REJECTED")
+    doc=json.loads(candidate.read_text("utf8"))
+    manifest=json.loads(source.read_text("utf8"))
+    if (manifest.get("source_sha256")!=version
+            or manifest.get("recipe")!=recipe
+            or manifest.get("qa_status")!="passed"
+            or manifest.get("public_listing_enabled") is not False
+            or sha256(original)!=manifest.get("artifact_sha256")
+            or doc.get("schema")!="saeit.factory.consumer-package.v1"
+            or doc.get("product_id")!=recipe
+            or doc.get("factory_source_sha256")!=version
+            or doc.get("factory_internal_zip_sha256")!=manifest.get("artifact_sha256")
+            or doc.get("technical_buyer_package_verified") is not True
+            or doc.get("consumer_cli_smoke_examples_passed")!=2
+            or doc.get("commercial_release") is not False
+            or doc.get("public_download_allowed") is not False
+            or doc.get("eligible_for_commercial_listing") is not False
+            or doc.get("independent_domain_review_completed") is not False
+            or doc.get("rights_and_license_review_completed") is not False
+            or doc.get("price") is not None
+            or doc.get("package_sha256")!=sha256(archive)
+            or doc.get("package_bytes")!=archive.stat().st_size):
+        raise ValueError("CONSUMER_PACKAGE_PROVENANCE_OR_POLICY_INVALID")
+    with zipfile.ZipFile(str(archive)) as zipped:
+        names=zipped.namelist()
+        needed={"guide/START_HERE.md","product/calculator.py","product/example_inputs.json",
+                "qa/SHA256SUMS.txt","license/REVIEW_REQUIRED.txt"}
+        if len(names)>80 or not needed.issubset(set(names)) or zipped.testzip() is not None:
+            raise ValueError("CONSUMER_ZIP_QA_NOT_PASSED")
+        if b"NOT LICENSED FOR PUBLIC RESALE" not in zipped.read("license/REVIEW_REQUIRED.txt"):
+            raise ValueError("CONSUMER_RIGHTS_HOLD_INVALID")
+        for line in zipped.read("qa/SHA256SUMS.txt").decode("utf8").splitlines():
+            digest,separator,name=line.partition("  ")
+            if not separator or not SHA.fullmatch(digest) or name not in names:
+                raise ValueError("CONSUMER_MEMBER_SUM_MISSING")
+            if hashlib.sha256(zipped.read(name)).hexdigest()!=digest:
+                raise ValueError("CONSUMER_MEMBER_SUM_CHANGED")
+    return candidate,archive,doc
+
+
+def deliver_consumer(recipe, root, version, ssh_options, *, dry_run=False):
+    candidate,archive,meta=verify_consumer_source(root,recipe,version)
+    if dry_run:
+        return {"recipe":recipe,"version":version,"status":"dry_run_private_consumer",
+                "package_sha256":meta["package_sha256"]}
+    remote=USER+"@"+HOST
+    base=["ssh","-p",str(PORT)]+ssh_options+[remote]
+    def received():
+        status=call(base+[" ".join(["python3",RECEIVER,
+            "consumer-status",recipe,version,"--root",INBOX])],allowed=(0,1))
+        return status.returncode==0 and "STORE_CONSUMER_PRIVATE_RECEIPT_VERIFIED" in status.stdout
+    if received():
+        return {"recipe":recipe,"version":version,"status":"already_received_customer",
+                "package_sha256":meta["package_sha256"]}
+    call(base+[" ".join(["python3",RECEIVER,
+        "consumer-prepare",recipe,version,"--root",INBOX])])
+    target=INBOX+"/incoming/consumer/"+recipe+"/"+version+"/"
+    for local,part in ((archive,"customer-package.zip.partial"),
+                       (candidate,"candidate_manifest.json.partial")):
+        call(["scp","-P",str(PORT)]+ssh_options+[str(local),remote+":"+target+part],
+             timeout=65)
+    call(base+[" ".join(["python3",RECEIVER,
+        "consumer-finalize",recipe,version,"--root",INBOX])])
+    if not received():raise RuntimeError("CONSUMER_SITE_SHA_RECEIPT_NOT_VERIFIED")
+    return {"recipe":recipe,"version":version,"status":"received_private_customer",
+            "package_sha256":meta["package_sha256"]}
 
 
 CURSOR_SCHEMA = "saeit.factory.store-private-delivery-cursor.v1"
