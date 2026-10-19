@@ -48,10 +48,15 @@ class FamilyBridgeTests(unittest.TestCase):
         artifact.write_bytes(b'tampered')
         self.assertEqual(self.execute()['families'][13]['technical_pilot_count'],0)
     def test_true_verified_fifty_stage_attempt_is_counted_with_its_family(self):
+        topics=('input_validation','output_units','rounding_precision','error_boundaries',
+                'dependency_resolution','accessibility_notes','formula_correctness','security_limits',
+                'data_integrity','performance_limits','compatibility_matrix','user_workflow')
+        actions=('Specify real conditions for','Create distinct evidence for',
+                 'Verify negative scenarios for','Document tested limitations for')
         plan={'schema':protocol.SCHEMA,'product_id':'sampleF27','family_id':'F27',
               'producer_id':'workbook_producer','source_snapshot_sha256':'c'*64,
               'work_packages':[{'id':'real_%02d'%i,
-                'instruction':'Derive a new measurable capability #%02d using distinct input and acceptance evidence.'%i,
+                'instruction':actions[i%4]+' '+topics[i//4]+' using nonreused files and measurable acceptance proofs.',
                 'acceptance':['Real file matches tested expected behavior','Failure case is checked']}
                 for i in range(48)]}
         def worker(task,context):
