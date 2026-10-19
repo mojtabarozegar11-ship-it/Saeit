@@ -65,6 +65,18 @@ jobs:
           home=Path("/home/zomorod2")
           app=home/"Saeit-staging"
           root=home/"mojplaywin.com"
+          for rel in ("core/templates/mojplaywin/home.html","core/templates/mojplaywin/footer.html"):
+              p=app/rel
+              if p.is_file():
+                  data=p.read_text("utf-8",errors="replace")
+                  print("TEMPLATE_HEAD",p.name,repr(data[:220]))
+                  for line in data.splitlines():
+                      if any(t in line for t in ("footer.html","site_base.html","mpx-bottom-bar","mpw-founder-footer-final","extends")):
+                          print("TEMPLATE_INCLUDE",p.name,line[:360])
+          rules=(root/".htaccess").read_text("utf-8",errors="replace").splitlines()
+          for line in rules:
+              if "PassengerAppRoot" in line or "PassengerStartupFile" in line or "PassengerPython" in line:
+                  print("PASSENGER_DIRECTIVE",line[:240])
           for p in [app/"core/templates/mojplaywin/footer.html",
                     app/"core/templates/mojplaywin/site_base.html",
                     app/"core/templates/mojplaywin/home.html",
