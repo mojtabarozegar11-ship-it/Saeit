@@ -1,0 +1,126 @@
+name: Zomorod Farm Wars V2 production-only hotfix
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/zomorod-farm-wars-v2-release.yml']
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-farmwars-isolated
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      contains(github.event.head_commit.message, '[approved-farmwars-v2-release]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify completed illustrated game
+        run: |
+          set -euo pipefail
+          node games/farm-wars/test.mjs
+          grep -Fq '<canvas id="land"' games/farm-wars/index.html
+          grep -Fq 'function castle(' games/farm-wars/index.html
+      - name: Establish pinned SSH connection to hosting via VPS
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zm-farm-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 12
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          echo SSH_CONNECTION_READY=YES
+      - name: Stage file and protect the verified site baseline
+        id: stage
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-farm-ssh"
+          stage="/home/zomorod2/.zm-farm-v2-$GITHUB_RUN_ID"
+          ssh -T -F "$d/config" host "install -d -m 700 '$stage' && test -s /home/zomorod2/public_html/farm-wars/index.html && test ! -L /home/zomorod2/public_html/farm-wars/index.html && cp -p /home/zomorod2/public_html/farm-wars/index.html '$stage/previous.html'"
+          scp -q -F "$d/config" games/farm-wars/index.html "host:$stage/new.html"
+          digest="$(sha256sum games/farm-wars/index.html | cut -d' ' -f1)"
+          ssh -T -F "$d/config" host "test \"\$(sha256sum '$stage/new.html' | cut -d' ' -f1)\" = '$digest'"
+          echo STAGED_AND_BACKED_UP=YES
+      - name: Publish single game file atomically
+        id: install
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-farm-ssh"
+          stage="/home/zomorod2/.zm-farm-v2-$GITHUB_RUN_ID"
+          ssh -T -F "$d/config" host "test -s '$stage/previous.html' && cmp -s '$stage/previous.html' /home/zomorod2/public_html/farm-wars/index.html && cp -p '$stage/new.html' /home/zomorod2/public_html/farm-wars/.index-release-$GITHUB_RUN_ID && mv -f /home/zomorod2/public_html/farm-wars/.index-release-$GITHUB_RUN_ID /home/zomorod2/public_html/farm-wars/index.html && cmp -s '$stage/new.html' /home/zomorod2/public_html/farm-wars/index.html"
+          echo ONLY_FARM_WARS_PAGE_CHANGED=YES
+      - name: Verify live public URL serves exact version 2 bytes
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib,os,time
+          from pathlib import Path
+          from urllib.request import Request,urlopen
+          expected=hashlib.sha256(Path('games/farm-wars/index.html').read_bytes()).hexdigest()
+          for n in range(1,6):
+            try:
+              url='https://zomorodmelal.ir/farm-wars/?new='+os.environ['GITHUB_RUN_ID']+'-'+str(n)
+              with urlopen(Request(url,headers={'Cache-Control':'no-cache'}),timeout=30) as r:body=r.read(120000);status=r.status
+              if status==200 and hashlib.sha256(body).hexdigest()==expected and b'<canvas id="land"' in body:
+                print('FARM_WARS_V2_LIVE=VERIFIED');break
+            except Exception as e:print(type(e).__name__)
+            time.sleep(3)
+          else:raise SystemExit('PUBLIC_GAME_UNVERIFIED')
+          for route in ['/','/agriculture/','/research/','/store/','/tala/']:
+            with urlopen('https://zomorodmelal.ir'+route,timeout=30) as r:
+              assert r.status==200,route
+              print('UNCHANGED_SITE_ROUTE='+route)
+          PY
+      - name: Restore previous game if live check failed
+        if: failure() && steps.install.outcome == 'success'
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-farm-ssh"
+          stage="/home/zomorod2/.zm-farm-v2-$GITHUB_RUN_ID"
+          ssh -T -F "$d/config" host "cmp -s '$stage/new.html' /home/zomorod2/public_html/farm-wars/index.html && cp -p '$stage/previous.html' /home/zomorod2/public_html/farm-wars/.restore-$GITHUB_RUN_ID && mv -f /home/zomorod2/public_html/farm-wars/.restore-$GITHUB_RUN_ID /home/zomorod2/public_html/farm-wars/index.html"
+      - name: Clean staging and credentials
+        if: always()
+        run: |
+          set +e
+          d="$RUNNER_TEMP/zm-farm-ssh";stage="/home/zomorod2/.zm-farm-v2-$GITHUB_RUN_ID"
+          if test -f "$d/config"; then
+            ssh -T -F "$d/config" host "test ! -L '$stage' && rm -f '$stage/new.html' '$stage/previous.html' && rmdir '$stage'" || true
+          fi
+          rm -rf "$d"
