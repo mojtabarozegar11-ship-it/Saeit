@@ -7,7 +7,7 @@ on:
   push:
     branches: [main]
     paths:
-      - .github/workflows/zomorod-glass-home-copys-publish-20261018.yml
+      - .github/workflows/zomorod-home-copy-glass-20261019.yml
 permissions:
   contents: read
 concurrency:
