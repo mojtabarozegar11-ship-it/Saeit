@@ -129,6 +129,9 @@ function transformMain(string $body, string $path, string $newHeader, string $ne
         if ($footers['mpw-footer']===1) {
             $body=takeOne($body,'~<footer\b[^>]*class=["\']mpw-footer["\'][^>]*>[\s\S]*?</footer\s*>~i','','duplicate brand footer',true);
         }
+        // Retain one canonical, freshly sourced MojPlayWin footer even when
+        // the original response already contained a modern footer.
+        $body=takeOne($body,'~<footer\b[^>]*class=["\']mw-site-footer["\'][^>]*>[\s\S]*?</footer\s*>~i',$newFooter,'standard footer replacement',true);
     } elseif ($footers['mpw-footer']===1) {
         $body=takeOne($body,'~<footer\b[^>]*class=["\']mpw-footer["\'][^>]*>[\s\S]*?</footer\s*>~i',$newFooter,'brand footer',true);
     } else {
