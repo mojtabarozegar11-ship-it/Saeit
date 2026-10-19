@@ -12,6 +12,7 @@ from collections import Counter
 from datetime import datetime, timezone
 import fcntl
 import hashlib
+import hmac
 import json
 import os
 from pathlib import Path, PurePosixPath
@@ -57,6 +58,88 @@ REQUIRED_PACKAGE=(
 )
 MAX_DEFECT_ROUNDS=3
 MAX_UPLOAD=80*1024*1024
+MAX_ZIP_ENTRIES=1000
+MAX_ZIP_UNCOMPRESSED_BYTES=240*1024*1024
+MAX_ZIP_RATIO=120
+
+def signed_review_message(review):
+    payload={key:value for key,value in review.items() if key!="reviewer_signature"}
+    return json.dumps(payload,ensure_ascii=False,sort_keys=True,
+                      separators=(",",":")).encode("utf8")
+
+def verify_reviewer_signature(root, review):
+    """Independent reviewers must possess an out-of-band provisioned secret.
+
+    This HMAC does not prove a person's professional qualifications: the
+    identity-to-key assignment must be verified by a separate trusted operator.
+    An arbitrary JSON `human_attestation:true` can no longer self-authorize.
+    """
+    keys=root/"product-lifecycle"/"reviewer-keys.json"
+    if not keys.is_file() or keys.is_symlink() or (keys.stat().st_mode & 0o077):
+        raise RuntimeError("REVIEWER_SECRET_STORE_MISSING_OR_INSECURE")
+    mapping=json_read(keys,100000)
+    if mapping.get("schema")!="saeit.factory.reviewer-keys.v1":
+        raise RuntimeError("REVIEWER_SECRET_SCHEMA_INVALID")
+    key=mapping.get("reviewers",{}).get(review.get("reviewer_id"))
+    sig=review.get("reviewer_signature")
+    if not isinstance(key,str) or not re.fullmatch(r"[a-f0-9]{64,128}",key):
+        raise RuntimeError("REVIEWER_NOT_ENROLLED")
+    if not isinstance(sig,str) or not SHA_RE.fullmatch(sig):
+        raise RuntimeError("REVIEWER_SIGNATURE_REQUIRED")
+    expected=hmac.new(bytes.fromhex(key),signed_review_message(review),hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(expected,sig):
+        raise RuntimeError("REVIEWER_SIGNATURE_MISMATCH")
+
+def verify_final_package_zip(artifact):
+    """Reject zip bombs, duplicates, symlinks and traversal before decompression."""
+    with zipfile.ZipFile(artifact,"r") as archive:
+        members=archive.infolist()
+        if not members or len(members)>MAX_ZIP_ENTRIES:
+            raise RuntimeError("FINAL_ZIP_TOO_MANY_ENTRIES")
+        names=set()
+        unpacked=0
+        for entry in members:
+            name=entry.filename
+            path=PurePosixPath(name)
+            if (not name or name in names or "\\" in name or path.is_absolute()
+                    or ".." in path.parts or name.startswith(".") or
+                    (entry.external_attr >> 16) & 0o170000 == 0o120000
+                    or entry.flag_bits & 1):
+                raise RuntimeError("FINAL_WAREHOUSE_UNSAFE_ZIP")
+            names.add(name)
+            unpacked+=entry.file_size
+            if (entry.file_size<0 or unpacked>MAX_ZIP_UNCOMPRESSED_BYTES
+                    or (entry.file_size>1024*1024 and
+                        entry.file_size/max(entry.compress_size,1)>MAX_ZIP_RATIO)):
+                raise RuntimeError("FINAL_ZIP_DECOMPRESSION_LIMIT")
+        for required in REQUIRED_PACKAGE:
+            if not any(x.startswith(required) and len(x)>len(required)
+                       and not x.endswith("/") for x in names):
+                raise RuntimeError("FINAL_WAREHOUSE_MISSING_SECTION:"+required)
+        if archive.testzip() is not None:
+            raise RuntimeError("FINAL_ZIP_CRC_FAILED")
+
+def verify_persisted_approvals(root, order, record):
+    """Revalidate all ten saved review hashes and specialist authorizations."""
+    receipts=record.get("review_receipts",[])
+    if not isinstance(receipts,list) or len(receipts)!=10:
+        raise RuntimeError("FINAL_REVIEW_RECEIPT_COUNT_INVALID")
+    for stage in range(1,11):
+        receipt=receipts[stage-1]
+        if not isinstance(receipt,dict) or receipt.get("stage")!=stage or receipt.get("decision")!="pass":
+            raise RuntimeError("FINAL_STAGE_APPROVAL_MISSING")
+        digest=receipt.get("sha256")
+        if not isinstance(digest,str) or not SHA_RE.fullmatch(digest):
+            raise RuntimeError("FINAL_REVIEW_HASH_INVALID")
+        file=area(root)/"review-receipts"/order/("stage-"+str(stage)+"-"+digest+".json")
+        if sha(file)!=digest:
+            raise RuntimeError("FINAL_REVIEW_RECEIPT_TAMPERED")
+        saved=json_read(file)
+        if saved.get("order")!=order or saved.get("stage")!=stage or saved.get("decision")!="pass":
+            raise RuntimeError("FINAL_REVIEW_RECEIPT_WRONG_STAGE")
+        if stage in (6,10):
+            verify_reviewer_signature(root,saved)
+
 MAX_ORDERS=15000
 
 def now():
@@ -203,6 +286,8 @@ def valid_approval(root,order,review,record):
             raise RuntimeError("REVIEW_FAMILY_QA_CHECKS_MISSING")
     evidence=review.get("evidence_files")
     verify_evidence_files(root,evidence)
+    if stage in (6,10) and review["decision"]=="pass":
+        verify_reviewer_signature(root,review)
     if review["decision"]=="pass":
         if any(x["status"]!="passed" for x in checks):
             raise RuntimeError("REVIEW_FAILED_CHECK_CANNOT_PASS")
@@ -322,7 +407,11 @@ def review(root,order,evidence_input):
     input_file=Path(evidence_input)
     receipt=json_read(input_file)
     stage=valid_approval(root,wid,receipt,state)
-    evidence_hash=sha(input_file)
+    # Hash the exact canonical bytes persisted by atomic() rather than the
+    # differently formatted external input receipt: otherwise final verification
+    # always reports false tampering even for legitimately approved stages.
+    canonical=(json.dumps(receipt,ensure_ascii=False,sort_keys=True,indent=2)+"\n").encode("utf8")
+    evidence_hash=hash_bytes(canonical)
     receipt_dir=area(root)/"review-receipts"/wid
     dirs(receipt_dir)
     dest=receipt_dir/("stage-"+str(stage)+"-"+evidence_hash+".json")
@@ -380,19 +469,13 @@ def final_admit(root,order,package):
         raise RuntimeError("FINAL_WAREHOUSE_OPEN_DEFECT_OR_WRONG_STATE")
     if passport["human_review_required"] is not True:
         raise RuntimeError("FINAL_WAREHOUSE_HUMAN_REVIEW_REQUIRED")
+    verify_persisted_approvals(root,wid,data)
     # Live archive must be under factory private root and include all distinct
     # required categories, e.g. docs, preview and QA report (not empty folders).
     artifact=under(root,package)
     if not artifact.is_file() or artifact.stat().st_size>MAX_UPLOAD or artifact.suffix!=".zip":
         raise RuntimeError("FINAL_WAREHOUSE_ARTIFACT_INVALID")
-    with zipfile.ZipFile(artifact) as f:
-        bad=f.testzip()
-        names=f.namelist()
-        if bad or any(PurePosixPath(n).is_absolute() or ".." in PurePosixPath(n).parts for n in names):
-            raise RuntimeError("FINAL_WAREHOUSE_UNSAFE_ZIP")
-        for category in REQUIRED_PACKAGE:
-            if not any(n.startswith(category) and len(n)>len(category) and not n.endswith("/") for n in names):
-                raise RuntimeError("FINAL_WAREHOUSE_MISSING_SECTION:"+category)
+    verify_final_package_zip(artifact)
     house=area(root)/"approved-finished-goods"/wid
     if house.exists():raise RuntimeError("FINAL_WAREHOUSE_EXISTING_VERSION")
     dirs(house.parent)
