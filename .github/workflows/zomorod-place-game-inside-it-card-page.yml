@@ -1,0 +1,169 @@
+name: Zomorod place Farm Dominion inside the existing IT game card page
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/zomorod-place-game-inside-it-card-page.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zm-farm-dominion-final-release
+  cancel-in-progress: false
+jobs:
+  embed:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      (github.event_name == 'workflow_dispatch' ||
+       contains(github.event.head_commit.message, '[approved-zm-embed-it-game-20261019]'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 19
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate scoped insertion and canonical game target before any writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile games/farm-wars-v3/scripts/embed_game_in_card_page.py
+          node --check games/farm-wars-v3/tests/embedded-game-page.cjs
+          python3 - <<'PY'
+          from urllib.request import Request,urlopen
+          from urllib.error import HTTPError
+          import json,os,re
+          root='https://zomorodmelal.ir'
+          baseline={}
+          for route in ['/','/topics/zm-r25/game-development/','/farm-wars/','/store/','/agriculture/','/research/','/tala/']:
+           with urlopen(Request(root+route,headers={'Cache-Control':'no-cache','User-Agent':'ZomorodITCardPlacementQA/1'}),timeout=35) as r:
+            status=r.status
+            body=r.read(2600000) if route in ['/','/topics/zm-r25/game-development/'] else None
+           baseline[route]=status
+           assert status==200,(route,status)
+           print('GAME_CARD_PAGE_PROTECTED_BEFORE='+route+' '+str(status),flush=True)
+           if route=='/topics/zm-r25/game-development/':
+            assert b'<main' in body and b'<h1' in body
+            assert b'id="zm-farm-3d-player"' not in body
+           if route=='/':
+            match=re.search(rb'window\.ZOMOROD_ORBIT_DATA=(\{.*?\});</script>',body,re.S)
+            assert match
+            data=json.loads(match.group(1))
+            row=next(r for r in data['rows'] if r['id']=='ZM-R25')
+            assert len(row['cards'])==22
+            assert next(c for c in row['cards'] if c['id']=='ZM-R25-GAME-FARM-DOMINION-20261019')['canonicalUrl']=='/farm-wars/'
+            assert next(c for c in row['cards'] if c['slug']=='game-development')['canonicalUrl']=='/topics/zm-r25/game-development/'
+          with open(os.environ['RUNNER_TEMP']+'/game-page-before.json','w') as f:json.dump(baseline,f)
+          PY
+      - name: Establish certificate-fingerprint-pinned VPS to cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          bash games/farm-wars-v3/scripts/ssh_relay.sh
+      - name: Create private staged backups and verify zero unrelated edits
+        id: prepare
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          stage="/home/zomorod2/.zm-it-game-embed-$GITHUB_RUN_ID"
+          timeout 45s ssh -T -F "$d/config" host \
+            "test ! -e '$stage' && test ! -L '$stage' && install -d -m 700 '$stage'"
+          timeout 50s scp -q -F "$d/config" games/farm-wars-v3/scripts/embed_game_in_card_page.py "host:$stage/installer.py"
+          timeout 50s ssh -T -F "$d/config" host \
+            "python3 '$stage/installer.py' prepare '$GITHUB_RUN_ID'"
+      - name: Add playable full-size WebGL iframe within existing game-development article
+        id: article
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          stage="/home/zomorod2/.zm-it-game-embed-$GITHUB_RUN_ID"
+          timeout 60s ssh -T -F "$d/config" host \
+            "python3 '$stage/installer.py' article '$GITHUB_RUN_ID'"
+      - name: Verify the original topic page now hosts the live 3D game, without affecting article
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from urllib.request import Request,urlopen
+          from html.parser import HTMLParser
+          import time
+          route='https://zomorodmelal.ir/topics/zm-r25/game-development/'
+          for attempt in range(1,6):
+           req=Request(route+'?zm_embed_v4='+str(time.time_ns()),headers={'Cache-Control':'no-cache,no-store'})
+           with urlopen(req,timeout=38) as r:content=r.read(150000).decode('utf-8');status=r.status
+           if status==200 and 'ZM-FARM-WARS-EMBEDDED-IN-IT-GAME-CARD-20261019' in content and 'id="zm-farm-3d-player"' in content and 'src="/farm-wars/"' in content and 'بازی‌سازی' in content:
+            print('IT_GAME_CARD_PAGE_LIVE_EMBED=PASS');break
+           if attempt==5:raise SystemExit('Article embed not visible publicly')
+          PY
+      - name: Change only the dedicated game card destination to that same existing page
+        id: home
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          stage="/home/zomorod2/.zm-it-game-embed-$GITHUB_RUN_ID"
+          timeout 65s ssh -T -F "$d/config" host \
+            "python3 '$stage/installer.py' home '$GITHUB_RUN_ID'"
+      - name: Test actual game inside article and both IT carousel cards on desktop and mobile
+        id: browser
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/zomorod-game-page-playwright
+          cd /tmp/zomorod-game-page-playwright
+          npm init -y >/dev/null
+          npm install --silent --no-audit --no-fund --no-save playwright@1.55.0
+          npx playwright install chromium
+          cd "$GITHUB_WORKSPACE"
+          NODE_PATH=/tmp/zomorod-game-page-playwright/node_modules node games/farm-wars-v3/tests/embedded-game-page.cjs
+      - name: Validate original article and homepage checksums, other pages and live links
+        id: final
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh";stage="/home/zomorod2/.zm-it-game-embed-$GITHUB_RUN_ID"
+          timeout 60s ssh -T -F "$d/config" host \
+            "python3 '$stage/installer.py' verify '$GITHUB_RUN_ID'"
+          python3 - <<'PY'
+          from urllib.request import Request,urlopen
+          import json,os
+          with open(os.environ['RUNNER_TEMP']+'/game-page-before.json') as f:baseline=json.load(f)
+          for route,previous in baseline.items():
+           with urlopen(Request('https://zomorodmelal.ir'+route,headers={'Cache-Control':'no-cache','User-Agent':'ZomorodITCardPlacementQA/1'}),timeout=35) as r:status=r.status
+           assert status==previous,(route,previous,status)
+           print('IT_GAME_PAGE_PROTECTED_AFTER='+route+' '+str(status))
+          print('EXISTING_IT_CARD_DESTINATION_AND_WEBGL_EMBED_PRODUCTION=PASS')
+          PY
+      - name: Revert only scoped article and game-card destination if any stage fails
+        if: failure() && steps.prepare.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh";stage="/home/zomorod2/.zm-it-game-embed-$GITHUB_RUN_ID"
+          if test -f "$d/config"; then
+            timeout 90s ssh -T -F "$d/config" host \
+              "python3 '$stage/installer.py' rollback '$GITHUB_RUN_ID'"
+          fi
+      - name: Save genuine screenshots from article with embedded live game
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zomorod-it-game-development-embedded-live-browser-qa
+          path: artifacts/farm-dom-it-page/
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Remove staging backups only after final success
+        if: success()
+        shell: bash
+        run: |
+          set +e
+          d="$RUNNER_TEMP/farm-v4-ssh";stage="/home/zomorod2/.zm-it-game-embed-$GITHUB_RUN_ID"
+          timeout 45s ssh -T -F "$d/config" host \
+            "test ! -L '$stage' && rm -f -- '$stage/old-article.html' '$stage/new-article.html' '$stage/old-home.html' '$stage/new-home.html' '$stage/installer.py' '$stage/metadata.json' && rmdir '$stage'" || true
+      - name: Wipe temporary SSH keys
+        if: always()
+        shell: bash
+        run: rm -rf "$RUNNER_TEMP/farm-v4-ssh"
