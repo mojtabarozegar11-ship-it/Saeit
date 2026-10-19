@@ -157,5 +157,55 @@ jobs:
               emit("DEPLOYED_FILE_"+name+"_PRESENT",path.is_file() and not path.is_symlink())
               if path.is_file() and not path.is_symlink():
                   emit("DEPLOYED_FILE_"+name+"_SHA256",hashlib.sha256(path.read_bytes()).hexdigest())
+          # Additional final acceptance measurements: private evidence only.
+          triage=read(private/"research-triage"/"triage-status.json")
+          emit("RESEARCH_TRIAGE_REAL_LEDGER_COUNT",triage.get("research_ledgers_found") if triage else None)
+          emit("RESEARCH_TRIAGE_GENUINE_REPAIRS",triage.get("genuine_research_repairs_verified_this_run") if triage else None)
+          known=0;valid=[];invalid=[]
+          for family in [f"F{i:02d}" for i in range(1,41)]:
+              folder=private/"family-pilots"/family
+              if folder.is_symlink() or not folder.is_dir():continue
+              known+=1
+              for receipt_path in sorted(folder.glob("*/technical-receipt.json"))[-3:]:
+                  receipt=read(receipt_path,200000)
+                  if not receipt or receipt_path.is_symlink():continue
+                  fs=receipt.get("files",{})
+                  if not isinstance(fs,dict) or not fs:continue
+                  if receipt.get("commercial_release") is not False:continue
+                  if receipt.get("family")!=family:continue
+                  correct=True
+                  for name,expected in fs.items():
+                      if not isinstance(name,str) or not re.fullmatch(r"[A-Za-z0-9_.-]{1,100}",name):
+                          correct=False;break
+                      file=receipt_path.parent/name
+                      if file.is_symlink() or not file.is_file():
+                          correct=False;break
+                      actual=hashlib.sha256(file.read_bytes()).hexdigest() if file.stat().st_size<=25000000 else None
+                      if actual!=expected:correct=False;break
+                  if correct:
+                      valid.append(family);break
+              else:
+                  invalid.append(family)
+          emit("SPECIALIST_TECHNICAL_PILOT_FAMILIES",sorted(set(valid)))
+          emit("SPECIALIST_TECHNICAL_PILOT_VERIFIED_COUNT",len(set(valid)))
+          emit("SPECIALIST_PILOT_PRESENT_BUT_BAD_HASH",sorted(set(invalid)))
+          upgrade=read(private/"code-self-upgrade"/"evolution-proof.json")
+          if upgrade:
+              for field in ("factory_python_files_scanned","candidate_count",
+                            "preexisting_verified_repairs","validated_repair_rule_coverage",
+                            "production_code_promotions","whole_code_autonomous_evolution_complete"):
+                  emit("SELF_EDIT_"+field.upper(),upgrade.get(field))
+          emit("SELF_EDIT_PROOF_AGE_SECONDS",age(private/"code-self-upgrade"/"evolution-proof.json"))
+          # These independently measurable gates must all pass before claiming 100/100.
+          gates={
+             "production_cron_configured":len([line for line in cron.stdout.splitlines() if "SAEIT_FACTORY_EVERY_MINUTE_V1" in line and not line.lstrip().startswith("#")])==1,
+             "40_specialist_families_independently_validated":bool(families) and families.get("fully_verified_active_producer_families")==40,
+             "no_research_defects_remaining":bool(triage) and triage.get("research_ledgers_found")==0,
+             "commercial_final_quality_proved":bool(stages) and (stages.get("final_commercially_verified_stock") or 0)>0,
+             "multi_site_distribution_receipts_verified":bool(stock) and stock.get("distribution_enabled") is True and (stock.get("sites_contacted") or 0)>0,
+             "all_code_autonomous_evolution_proved":bool(upgrade) and upgrade.get("whole_code_autonomous_evolution_complete") is True,
+          }
+          emit("FINAL_ACCEPTANCE_GATES",gates)
+          emit("FINAL_ACCEPTANCE_ALL_PASSED",all(gates.values()))
           print("AUDIT_READONLY_COMPLETED=PASS",flush=True)
           PY

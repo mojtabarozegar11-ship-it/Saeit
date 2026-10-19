@@ -18,8 +18,14 @@ class MojPlayWinIsolatedLayoutTests(TestCase):
                 self.assertNotIn('aria-label="Zomorodmelal"', html)
                 self.assertIn('<html lang="en" dir="ltr">', html)
                 self.assertIn('href="https://mojplaywin.com' + path + '"', html)
-                self.assertIn('data-mpw-copyright-founder="true"', html)
-                self.assertEqual(html.count("Mojtaba Roozegar</span>"), 1)
+                # The owner-approved footer is now a *single line* legal notice.
+                # Keep the test in sync with that exact published contract, not
+                # the superseded separate copyright and founder spans.
+                self.assertEqual(html.count('data-mpw-final-founder="true"'), 1)
+                self.assertEqual(
+                    html.count("☆ All Rights Reserved. ☆ 2022. ☆ Mojtaba roozegar ☆"), 1
+                )
+                self.assertEqual(html.count('class="mpw-legal-one-line"'), 1)
                 self.assertNotIn('data:image/jpeg;base64,', html)
 
     def test_seo_titles_are_unique_by_section(self):

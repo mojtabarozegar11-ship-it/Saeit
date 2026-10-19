@@ -6,6 +6,7 @@ New sites become eligible through the private registry after owner/adapter check
 """
 import argparse
 import hashlib
+import hmac
 import json
 import os
 from pathlib import Path
@@ -58,6 +59,34 @@ def verify_site(site):
     return site
 
 
+def verify_independent_release_signature(root, review):
+    """Require an out-of-band registered reviewer, not self-declared checks."""
+    secrets = root / "product-lifecycle" / "reviewer-keys.json"
+    if (secrets.is_symlink() or not secrets.is_file()
+            or (secrets.stat().st_mode & 0o077)):
+        raise ValueError("INDEPENDENT_REVIEWER_KEYS_MISSING_OR_INSECURE")
+    authorized = load(secrets)
+    if authorized.get("schema") != "saeit.factory.reviewer-keys.v1":
+        raise ValueError("INDEPENDENT_REVIEWER_KEY_SCHEMA_INVALID")
+    reviewer = review.get("reviewer_id")
+    producer = review.get("producer_id")
+    if (not isinstance(reviewer, str) or not reviewer
+            or not isinstance(producer, str) or not producer or reviewer == producer):
+        raise ValueError("INDEPENDENT_REVIEWER_MUST_DIFFER_FROM_PRODUCER")
+    key = authorized.get("reviewers", {}).get(reviewer)
+    signature = review.get("reviewer_signature")
+    if (not isinstance(key, str) or not re.fullmatch(r"[0-9a-f]{64,128}", key)
+            or not isinstance(signature, str) or not HASH.fullmatch(signature)):
+        raise ValueError("NO_ENROLLED_SIGNED_INDEPENDENT_APPROVAL")
+    payload = {field: value for field, value in review.items()
+               if field != "reviewer_signature"}
+    message = json.dumps(payload, sort_keys=True, separators=(",", ":"),
+                         ensure_ascii=False).encode("utf-8")
+    expected = hmac.new(bytes.fromhex(key), message, hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(expected, signature):
+        raise ValueError("DISTRIBUTION_REVIEW_SIGNATURE_MISMATCH")
+
+
 def verify_product(root, approvals, recipe):
     if not IDENT.fullmatch(recipe):
         raise ValueError("INVALID_PRODUCT_SLUG")
@@ -97,6 +126,7 @@ def verify_product(root, approvals, recipe):
             or review.get("sale_required") is not False
             or not isinstance(review.get("reviewer"), str) or not review["reviewer"].strip()):
         raise ValueError("NO_APPROVED_NONCOMMERCIAL_RELEASE")
+    verify_independent_release_signature(root, review)
     checks = review.get("checks")
     if not isinstance(checks, dict) or any(
         not isinstance(checks.get(k), dict) or checks[k].get("passed") is not True
