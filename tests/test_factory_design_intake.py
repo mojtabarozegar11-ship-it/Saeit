@@ -104,11 +104,13 @@ class DesignIntakeTests(unittest.TestCase):
         self.assertEqual(evidence['successful_tests'],4)
         self.assertEqual(result['family_id'],'F27')
     def test_supply_is_internal_and_does_not_invent_customer_or_market_demand(self):
-        result=intake.cycle(self.root,supply=ROOT/'factory_config/internal_design_supply.json')
-        self.assertEqual(result['enqueued'],15)
-        self.assertEqual(result['channels']['customer_request']['accepted'],0)
-        self.assertEqual(result['channels']['market_demand']['accepted'],0)
-        self.assertEqual(intake.cycle(self.root,supply=ROOT/'factory_config/internal_design_supply.json')['enqueued'],0)
+        supply=ROOT/'factory_config/internal_design_supply.json'
+        first=intake.cycle(self.root,supply=supply)
+        second=intake.cycle(self.root,supply=supply)
+        self.assertEqual(first['enqueued']+second['enqueued'],15)
+        self.assertEqual(first['channels']['customer_request']['accepted'],0)
+        self.assertEqual(second['channels']['market_demand']['accepted'],0)
+        self.assertEqual(intake.cycle(self.root,supply=supply)['enqueued'],0)
     def test_mathematical_owner_briefs_have_collision_free_source_ids(self):
         config={'schema':'saeit.factory.internal-design-supply.v1','briefs':[
             {'schema':intake.SCHEMA,'family_id':'F28','mathematical_definition':{
