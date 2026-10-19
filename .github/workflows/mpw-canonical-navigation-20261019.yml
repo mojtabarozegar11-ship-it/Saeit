@@ -67,7 +67,7 @@ jobs:
               if p in static:
                   main=re.search(rb'<main\b[^>]*>[\s\S]*?</main\s*>',body,re.I)
                   if not main:raise SystemExit('Main section missing '+p)
-                  mains[p]=hashlib.sha256(re.sub(rb'<header\\b(?=[^>]*\\bclass=["\\\'](?:mw-site-nav|mpw-header)["\\\'])[^>]*>[\\s\\S]*?</header\\s*>',b'',main.group(),count=1,flags=re.I)).hexdigest()
+                  mains[p]=hashlib.sha256(re.sub(rb'<header\b[^>]*class="(?:mw-site-nav|mpw-header)"[^>]*>[\s\S]*?</header\s*>',b'',main.group(),count=1,flags=re.I)).hexdigest()
                   unprotected_legacy[p]=b"if(b){b.addEventListener(" in main.group()
               if p not in children and code!=200:raise SystemExit('Main route unhealthy '+p)
               print('PRE_NAV_STATUS',p,code,flush=True)
@@ -169,7 +169,7 @@ jobs:
               if path in original['mains']:
                   main=re.search(rb'<main\b[^>]*>[\s\S]*?</main\s*>',body,re.I)
                   if not main:raise SystemExit('Protected main content missing '+path)
-                  section=re.sub(rb'<header\\b(?=[^>]*\\bclass=["\\\'](?:mw-site-nav|mpw-header)["\\\'])[^>]*>[\\s\\S]*?</header\\s*>',b'',main.group(),count=1,flags=re.I)
+                  section=re.sub(rb'<header\b[^>]*class="(?:mw-site-nav|mpw-header)"[^>]*>[\s\S]*?</header\s*>',b'',main.group(),count=1,flags=re.I)
                   if original['unprotected_legacy'][path]:
                       # Restore only the three exact approved JS guards in
                       # memory before hashing; unrelated content must stay
