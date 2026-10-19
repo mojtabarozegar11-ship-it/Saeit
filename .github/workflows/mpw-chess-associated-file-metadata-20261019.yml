@@ -1,0 +1,145 @@
+name: MojPlayWin chess embedded-source safe forensic classification
+on:
+  push:
+    branches: [mpw-two-books-unified-release-20261019]
+    paths: [".github/workflows/mpw-chess-associated-file-metadata-20261019.yml"]
+permissions: {contents: read}
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 11
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Validate private final editions in temporary runner without publishing files
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          python3 -m pip install --disable-pip-version-check -q pypdf==6.2.0
+          for id in 72 225; do
+            timeout 100s ssh -T -F "$d/config" saeit-cpanel \
+              "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - $id" \
+              > "$RUNNER_TEMP/mpw-book-$id.pdf" <<'PY'
+          import sys,os,pathlib
+          id_=int(sys.argv[1])
+          root=pathlib.Path('/home/zomorod2/Saeit-staging')
+          os.chdir(root);sys.path.insert(0,str(root))
+          os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          import django;django.setup()
+          from core.models import Product
+          from core.cryptopay_checkout import product_delivery_ready
+          from mpw_commerce.downloads import _private_file
+          from types import SimpleNamespace
+          p=Product.objects.get(pk=id_)
+          if id_ not in (72,225) or not product_delivery_ready(p):
+            raise RuntimeError('Hash-verified private sale asset required')
+          f=_private_file(SimpleNamespace(product=p))
+          with f.open('rb') as src:
+            while True:
+              chunk=src.read(256*1024)
+              if not chunk:break
+              sys.stdout.buffer.write(chunk)
+          PY
+          done
+          python3 - <<'PY'
+          from pypdf import PdfReader
+          from pathlib import Path
+          import json,os,hashlib
+          root=Path(os.environ['RUNNER_TEMP'])
+          for pk in (72,225):
+            file=root/f'mpw-book-{pk}.pdf'
+            r=PdfReader(str(file),strict=False)
+            stream_status=[]
+            for ix in sorted(set((0,min(1,len(r.pages)-1),len(r.pages)//2,len(r.pages)-1))):
+              item=r.pages[ix].get_contents()
+              stream_status.append({'page_index':ix,'has_stream':item is not None,
+                 'stream_type':type(item).__name__,
+                 'uncompressed_bytes':len(item.get_data()) if item is not None else 0})
+            files=[]
+            for name,values in r.attachments.items():
+              ext=Path(str(name)).suffix.lower()
+              arr=values if isinstance(values,(list,tuple)) else [values]
+              for value in arr:
+                if isinstance(value,bytes):
+                  b=value
+                elif hasattr(value,'get_data'):
+                  b=value.get_data()
+                else:b=b''
+                head=b[:16]
+                if head.startswith(b'%PDF-'):kind='PDF'
+                elif head.startswith(b'\x89PNG'):kind='PNG'
+                elif head.startswith(b'\xff\xd8\xff'):kind='JPEG'
+                elif head.startswith(b'MZ'):kind='WINDOWS_BINARY'
+                elif head.startswith(b'PK\x03\x04'):kind='ZIP'
+                elif head.startswith(b'GIF8'):kind='GIF'
+                elif head.startswith(b'\x7fELF'):kind='ELF'
+                elif not b:kind='EMPTY'
+                elif b[:200].count(b'\x00')==0 and all(c in b'\r\n\t' or 32<=c<=126 for c in b[:80]):kind='TEXT_LIKE'
+                else:kind='UNKNOWN_BINARY'
+                files.append({'extension':ext or 'none','kind':kind,'bytes':len(b),'magic_hex':head[:12].hex()})
+            if pk==72:
+              af=r.trailer['/Root'].get('/AF') or []
+              specs=[]
+              for ref in af:
+                obj=ref.get_object()
+                ef=obj.get('/EF')
+                efo=ef.get_object() if hasattr(ef,'get_object') else ef
+                stream=efo.get('/F') if efo else None
+                stream=stream.get_object() if hasattr(stream,'get_object') else stream
+                specs.append({'relation':str(obj.get('/AFRelationship',''))[:35],
+                  'mime':str(stream.get('/Subtype',''))[:70] if stream else None,
+                  'has_description':bool(obj.get('/Desc')),
+                  'has_stream':stream is not None,
+                  'file_name_extension':Path(str(obj.get('/F',''))).suffix.lower() or 'none'})
+              print('MPW_CHESS_AF_METADATA='+json.dumps(specs))
+            print('MPW_ATTACHMENT_SECURITY='+json.dumps({'book':pk,'page_streams':stream_status,
+                 'embedded_files':files,'root_keys':sorted(str(k) for k in r.trailer['/Root'].keys())[:20]}))
+          PY
+
+          rm -f "$RUNNER_TEMP/mpw-book-72.pdf" "$RUNNER_TEMP/mpw-book-225.pdf"
