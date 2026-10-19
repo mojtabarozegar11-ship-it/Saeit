@@ -1,4 +1,4 @@
-name: MojPlayWin live chain indexer failure diagnosis read only
+name: MojPlayWin ETH TRX indexer conditions read only
 on:
   push:
     branches: [main]
