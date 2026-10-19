@@ -402,17 +402,18 @@ function refreshPlots(){
 }
 function initScene(){
  const mobile=window.innerWidth<750;
+ if(mobile){cam.center.copy(pos(3.4,6));}else{cam.center.set(-1,0,-.5);}
  renderer=new THREE.WebGLRenderer({canvas:ui.world,antialias:!mobile,alpha:false,powerPreference:'high-performance'});
  renderer.setPixelRatio(Math.min(devicePixelRatio||1,mobile?1.4:1.8));
  renderer.setSize(ui.world.clientWidth||innerWidth,ui.world.clientHeight||innerHeight);
  renderer.outputColorSpace=THREE.SRGBColorSpace;
- renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.48;
+ renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.17;
  renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
  scene=new THREE.Scene();scene.background=new THREE.Color(0xa0c3c6);
  scene.fog=new THREE.FogExp2(0x9dbfc0,.007);
- const hemi=new THREE.HemisphereLight(0xe5f4ff,0x6f8754,2.22);scene.add(hemi);
+ const hemi=new THREE.HemisphereLight(0xe5f4ff,0x6f8754,1.65);scene.add(hemi);
  const ambient=new THREE.AmbientLight(0xf4dcbb,.45);scene.add(ambient);
- sun=new THREE.DirectionalLight(0xffd49e,3.4);sun.position.set(-25,38,16);sun.castShadow=true;
+ sun=new THREE.DirectionalLight(0xffd49e,2.95);sun.position.set(-25,38,16);sun.castShadow=true;
  sun.shadow.mapSize.set(mobile?1024:2048,mobile?1024:2048);
  sun.shadow.camera.left=-37;sun.shadow.camera.right=37;sun.shadow.camera.top=35;sun.shadow.camera.bottom=-35;
  sun.shadow.camera.near=.5;sun.shadow.camera.far=100;
@@ -435,7 +436,7 @@ function resize(){
  const w=ui.world.clientWidth||window.innerWidth,h=ui.world.clientHeight||window.innerHeight;
  renderer.setSize(w,h,false);
  const aspect=w/h;
- const viewHeight=(w<750?22:32)/cam.zoom;
+ const viewHeight=(w<750?34:43)/cam.zoom;
  camera.left=-viewHeight*aspect/2;camera.right=viewHeight*aspect/2;camera.top=viewHeight/2;camera.bottom=-viewHeight/2;
  camera.updateProjectionMatrix();
  renderer.render(scene,camera);
@@ -448,7 +449,7 @@ function updateCamera(){
  resize();
 }
 function panCamera(dx,dy){
- const scale=(window.innerWidth<750?22:32)/(innerHeight*cam.zoom);
+ const scale=(window.innerWidth<750?34:43)/(innerHeight*cam.zoom);
  const forward=new THREE.Vector3(-Math.sin(cam.angle),0,-Math.cos(cam.angle));
  const right=new THREE.Vector3(Math.cos(cam.angle),0,-Math.sin(cam.angle));
  cam.center.addScaledVector(right,-dx*scale).addScaledVector(forward,dy*scale*1.13);
@@ -631,7 +632,7 @@ function buildActions(){
   ui.intro.classList.add('hidden');
   if(!localStorage.getItem('zm-farm-dominion-intro-seen')){
    localStorage.setItem('zm-farm-dominion-intro-seen','yes');
-   setTimeout(()=>{ui.tour.style.display='block';},1200);
+   showToast('برای کاشت‌وکار روی زمین خود بزنید؛ راهنما از پنل فرماندهی در دسترس است.');
   }
  });
  ui.world.addEventListener('pointerdown',e=>{
