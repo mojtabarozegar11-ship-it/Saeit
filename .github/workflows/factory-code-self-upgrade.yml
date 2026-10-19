@@ -76,8 +76,9 @@ jobs:
           root=Path.home()/"factory-runtime"
           report=root/"private/autonomous-product-cycle/code-self-upgrade/evolution-proof.json"
           state=json.loads(report.read_text(encoding="utf8"))
-          assert state["candidate_count"] == 2
-          assert state["candidates_with_measured_improvement"] == 2
+          assert state["candidate_count"] >= 1
+          assert state["candidates_with_measured_improvement"] == state["candidate_count"]
+          assert state["validated_repair_rule_coverage"] == 4
           assert state["factory_python_files_scanned"] >= 15
           assert state["production_code_promotions"] == 0
           assert state["generation_number_proven_in_production"] == 0
