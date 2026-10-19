@@ -1,0 +1,143 @@
+name: MojPlayWin factory warehouse schema audit readonly
+on:
+  push:
+    branches: [feat/mpw-vps-warehouse-qa-rework-bot-20261019]
+    paths: [.github/workflows/mpw-vps-warehouse-schema-audit.yml]
+permissions:
+  contents: read
+concurrency:
+  group: mpw-factory-schema-audit
+  cancel-in-progress: false
+jobs:
+  discover:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/feat/mpw-vps-warehouse-qa-rework-bot-20261019'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Prepare pinned SSH identities
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/factory-store-preflight"
+          install -d -m 700 "$d"
+          for item in VPS_KEY HOST_KEY; do
+            key="$d/${item}.key"
+            printf '%s' "${!item}" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$key"
+            chmod 600 "$key"
+            ssh-keygen -y -P '' -f "$key" >/dev/null
+          done
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -i "$d/VPS_KEY.key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/vps.known" -o BatchMode=yes githubops@178.239.147.150 'ssh-keyscan -T 10 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/VPS_KEY.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/HOST_KEY.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 12
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+      - name: Read only factory stock and rework schema from VPS
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/factory-store-preflight"
+          timeout 85s ssh -T -F "$d/config" saeit-vps python3 - <<'PY'
+          from pathlib import Path
+          import json,os
+          base=Path.home()/'factory-runtime/private'
+          roots=(base/'autonomous-product-cycle',base)
+          listings=[]
+          for r in roots:
+              if r.is_dir() and not r.is_symlink():
+                  for p in sorted(r.iterdir()):
+                      if p.is_symlink():continue
+                      listings.append({'parent':r.name,'entry':p.name,'dir':p.is_dir()})
+          root=base/'autonomous-product-cycle'
+          folders=('product-lifecycle/approved-finished-goods','product-lifecycle/records',
+                   'product-lifecycle/passports','production-instructions/orders',
+                   'digital-products','warehouse','finished-goods','rework','quality')
+          details={}
+          for rel in folders:
+              p=root/rel
+              info={'present':p.is_dir() and not p.is_symlink()}
+              if info['present']:
+                  seq=[x for x in sorted(p.iterdir()) if not x.is_symlink()]
+                  info['count']=len(seq)
+                  info['first_names']=[x.name for x in seq[:5] if x.is_dir()]
+                  if rel=='product-lifecycle/approved-finished-goods':
+                      samples=[]
+                      for d in seq[:5]:
+                          receipt=d/'receipt.json'
+                          if d.is_dir() and receipt.is_file() and not receipt.is_symlink():
+                              try:
+                                  o=json.loads(receipt.read_bytes())
+                                  samples.append({'receipt_keys':sorted(o.keys())[:50],
+                                    'artifact_exists':(d/'product.zip').is_file(),
+                                    'qc_gates':o.get('stage_gates_passed'),
+                                    'distributed':o.get('distributed')})
+                              except Exception:pass
+                      info['samples']=samples
+              details[rel]=info
+          states={}
+          for rel in ('production-state.json','product-lifecycle/lifecycle-status.json',
+                      'production-instructions/order-status.json','production-family-management/family-dashboard.json'):
+              p=root/rel
+              if p.is_file() and not p.is_symlink() and p.stat().st_size<=1000000:
+                  try:
+                      o=json.loads(p.read_bytes())
+                      if isinstance(o,dict):
+                          states[rel]={'keys':sorted(o.keys())[:50],
+                                       'counts':{k:v for k,v in o.items() if k in (
+                                        'built_product_count','artifact_qa_passed','publishable_product_count',
+                                        'store_distribution_state','production_ready_families','distribution_enabled',
+                                        'new_work_ready_to_dispatch','instructions_issued_total','pending_instructions')
+                                        and isinstance(v,(str,bool,int,type(None)))}}
+                  except Exception:pass
+          print('MPW_FACTORY_WAREHOUSE_DISCOVERY='+json.dumps({'root':str(root),
+                 'root_exists':root.is_dir(),'top_level':listings[:120],
+                 'folders':details,'states':states},sort_keys=True))
+          PY
+      - name: Read only scoped cPanel inbox and Django product metadata shape
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/factory-store-preflight"
+          timeout 80s ssh -T -F "$d/config" saeit-cpanel 'python3 -B -' <<'PY'
+          from pathlib import Path
+          import json
+          root=Path('/home/zomorod2/.private_mojplaywin_main_agents')
+          ev=root/'evolution_runtime_20261018'
+          children=[]
+          if ev.is_dir() and not ev.is_symlink():
+              children=[{'name':p.name,'dir':p.is_dir()} for p in ev.iterdir()
+                        if not p.is_symlink() and any(x in p.name.lower() for x in ('factory','product','ware','inbox','qa','quality'))]
+          print('MPW_CPANEL_FACTORY_INBOX_DISCOVERY='+json.dumps({'private_exists':root.is_dir(),
+                'candidates':children[:50]},sort_keys=True))
+          PY
+      - name: Erase ephemeral relay keys
+        if: always()
+        shell: bash
+        run: rm -rf -- "$RUNNER_TEMP/factory-store-preflight"
