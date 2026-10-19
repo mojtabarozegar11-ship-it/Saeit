@@ -84,7 +84,8 @@ def sitemap_xml(request):
     urls += [f"/knowledge/book/{code}/" for code in books]
     domains = KnowledgeDomain.objects.filter(active=True).values_list("code", flat=True)
     urls += [f"/knowledge/domain/{code}/" for code in domains]
-    urls += [f"/store/product/{pk}/" for pk in Product.objects.filter(active=True).values_list("pk",flat=True)]\n    items = "".join(f"<url><loc>{xml_escape('https://zomorodmelal.ir' + u)}</loc></url>" for u in dict.fromkeys(urls))
+    urls += [f"/store/product/{pk}/" for pk in Product.objects.filter(active=True).values_list("pk",flat=True)]
+    items = "".join(f"<url><loc>{xml_escape('https://zomorodmelal.ir' + u)}</loc></url>" for u in dict.fromkeys(urls))
     return HttpResponse(f'<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{items}</urlset>', content_type="application/xml")
 
 
