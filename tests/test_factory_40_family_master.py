@@ -1,5 +1,6 @@
 """Master allocator policy: 40 families, strict nonactivation, offline resources."""
 import importlib.util
+import hashlib
 import json
 from pathlib import Path
 import tempfile
@@ -109,10 +110,23 @@ class FortyLineMasterTests(unittest.TestCase):
         wid=self.add_order(1,"F27",passport={"family_id":"F27"})
         target=self.root/"product-lifecycle"/"approved-finished-goods"/wid
         target.mkdir(parents=True)
-        (target/"receipt.json").write_text(json.dumps({"order":wid,"distributed":False}))
+        artifact=target/"product.zip"
+        artifact.write_bytes(b"real verified example")
+        digest=hashlib.sha256(artifact.read_bytes()).hexdigest()
+        record=self.root/"product-lifecycle"/"records"
+        record.mkdir(parents=True)
+        (record/(wid+".json")).write_text(json.dumps({
+            "final_warehouse_id":wid,"stage_status":{"11":"passed"}}))
+        (target/"receipt.json").write_text(json.dumps({
+            "order":wid,"distributed":False,"bytes":artifact.stat().st_size,
+            "stage_gates_passed":10,"artifact_sha256":digest}))
         c=self.run_master()
         self.assertEqual(c["families"][26]["approved_final_stock"],1)
         self.assertEqual(c["families"][0]["approved_final_stock"],0)
+        artifact.write_bytes(b"tampered contents")
+        check=self.run_master()
+        self.assertEqual(check["families"][26]["approved_final_stock"],0)
+        self.assertEqual(check["unassigned_work_orders"]["invalid_or_unverified_final_goods"],1)
 
 if __name__=="__main__":
     unittest.main()
