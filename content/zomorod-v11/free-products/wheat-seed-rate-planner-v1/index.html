@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>محاسبه‌گر علمی بذر گندم | زمرد ملل</title>
+<meta name="description" content="ابزار آفلاین و رایگان برآورد میزان بذر گندم براساس تراکم بوته، وزن هزار دانه، قوه نامیه و استقرار مزرعه">
+<style>
+:root{font-family:Tahoma,"Noto Sans Arabic",Arial,sans-serif;color-scheme:dark}*{box-sizing:border-box}
+body{background:radial-gradient(circle at 80% 0,#304d31,#10281b 68%);color:#f1f1e9;margin:0;min-height:100vh;line-height:1.9}
+main{max-width:960px;margin:auto;padding:25px 18px 70px}h1,h2{color:#f0d18a}
+header{padding:14px 5%;border-bottom:1px solid #978552}a{color:#f1d18a}
+.panel{background:#173729;border:1px solid #8f8754;padding:20px;border-radius:16px;margin-top:20px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px}
+label{display:block;margin:6px 0}input{width:100%;padding:11px;border:1px solid #9ab69c;border-radius:8px;background:#11251c;color:white;font-size:1.1rem}
+button{background:#d9b969;border:0;border-radius:9px;color:#1e2414;font-size:1.05rem;font-weight:700;padding:13px 23px;cursor:pointer}
+#result{font-size:1.18rem}strong.output{font-size:1.7rem;color:#f5d77f}
+small,.note{color:#ced9d1}footer{margin-top:30px;padding:20px;border-top:1px solid #978552}
+@media(max-width:550px){main{padding:16px}h1{font-size:1.6rem}}
+</style></head>
+<body>
+<header><a href="https://zomorodmelal.ir/">زمرد ملل</a> ← ابزارهای زراعت ← محاسبه‌گر بذر گندم</header>
+<main>
+<p>ابزار دیجیتال رایگان | ویرایش ۱٫۰ | اجرا کاملاً آفلاین پس از ذخیره فایل</p>
+<h1>محاسبه‌گر علمی میزان بذر گندم</h1>
+<p>برای برنامه‌ریزی اولیه مقدار بذر لازم، تراکم هدف بوته‌های استقراریافته، وزن هزار دانه همان محموله بذر، قوه نامیه آزمایشگاهی و درصد موردانتظار سبزشدن در مزرعه را وارد کنید. هیچ داده‌ای به سرور فرستاده نمی‌شود.</p>
+<section class="panel">
+<h2>داده‌های مزرعه و محموله بذر</h2>
+<div class="grid">
+<div><label for="density">تراکم هدف پس از استقرار (بوته در متر مربع)</label><input id="density" type="number" min="50" max="900" step="1" value="350" required></div>
+<div><label for="tkw">وزن هزار دانه (گرم)</label><input id="tkw" type="number" min="10" max="100" step="0.1" value="40" required></div>
+<div><label for="germ">قوه نامیه آزمایشگاهی (درصد)</label><input id="germ" type="number" min="20" max="100" step="0.1" value="95" required></div>
+<div><label for="emergence">سبزشدن مزرعه‌ای نسبت به بذر زنده (درصد)</label><input id="emergence" type="number" min="20" max="100" step="0.1" value="85" required></div>
+<div><label for="area">سطح مزرعه (هکتار)</label><input id="area" type="number" min="0.01" max="100000" step="0.01" value="1" required></div>
+</div>
+<p><button type="button" id="calculate">محاسبه مقدار بذر</button> <a href="index.html" download="wheat-seed-rate-planner-v1.html">دریافت نسخه آفلاین HTML</a></p>
+<div id="result" role="status" aria-live="polite"></div>
+</section>
+<section class="panel">
+<h2>روش محاسبه و کنترل علمی</h2>
+<p>تعداد بذر کاشته‌شده در هر متر مربع از تقسیم تعداد بوته‌های مورد انتظار بر حاصل‌ضرب کسری قوه نامیه و کسری سبزشدن مزرعه‌ای به دست می‌آید. سپس با وزن هزار دانه، وزن بذر در واحد سطح محاسبه می‌شود.</p>
+<p><code>seed_count_m2 = target_plants_m2 / ((germination_pct/100) × (field_emergence_pct/100))</code></p>
+<p><code>seed_rate_kg_ha = seed_count_m2 × thousand_kernel_weight_g / 100</code></p>
+<p><strong>توجه:</strong> در این ابزار «سبزشدن مزرعه‌ای» ضریب بقای بذر زنده تا مرحله شمارش بوته است و نباید با درصد بذر جوانه‌زده دوباره‌شماری شود. اگر نرخ استقرار ارائه‌شده شما از ابتدا شامل افت قوه نامیه است، ورودی‌ها را دوباره تعریف کنید.</p>
+<p>ورودی‌های پیش‌فرض فقط مثال آموزشی هستند؛ توصیه عمومی برای یک رقم، اقلیم یا تاریخ کشت به شمار نمی‌آیند. تراکم مطلوب باید بر اساس رقم، اقلیم، تاریخ کشت، رطوبت، عمق بذر، وضعیت بستر، شیوه کشت، بیماری‌ها، خطر ورس و نتایج آزمون مزرعه‌ای منطقه تعیین شود. وزن هزار دانه را از همان بچ بذر اندازه‌گیری و قوه نامیه را از آزمایش معتبر دریافت کنید.</p>
+<p>این ابزار جایگزین مشاوره زراعی، آزمون جوانه‌زنی، آزمایش مزرعه‌ای یا استاندارد رسمی بذر نیست. گزارش محاسبات بر پایه فرض‌های ارائه‌شده توسط استفاده‌کننده است؛ برای تصمیم تجاری نتیجه را با کارشناس محلی تطبیق دهید.</p>
+</section>
+<footer><small>© شرکت کشت و صنعت زمرد ملل — ابزار آموزشی رایگان. کد این صفحه برای استفاده و ذخیره شخصی به‌صورت رایگان عرضه شده است. هیچ تضمین عملکرد زراعی ارائه نمی‌شود.</small></footer>
+</main>
+<script>
+(function(){
+"use strict";
+function seedRate(target,tkw,germination,emergence,hectares){
+const entries=[target,tkw,germination,emergence,hectares];
+if(!entries.every(Number.isFinite)||target<50||target>900||tkw<10||tkw>100||germination<20||germination>100||emergence<20||emergence>100||hectares<0.01||hectares>100000){throw Error("ورودی خارج از محدوده مجاز است");}
+const seedsM2=target/(germination/100*emergence/100);
+const kgHa=seedsM2*tkw/100;
+return {seedsM2,kgHa,totalKg:kgHa*hectares};
+}
+window.ZomorodSeedRate={seedRate};
+document.getElementById("calculate").addEventListener("click",function(){
+const get=id=>Number(document.getElementById(id).value);
+const target=document.getElementById("result");
+try{
+const r=seedRate(get("density"),get("tkw"),get("germ"),get("emergence"),get("area"));
+const num=n=>n.toLocaleString("fa-IR",{maximumFractionDigits:2});
+target.textContent="";
+const section=document.createElement("div");
+section.innerHTML="<p>میزان بذر موردنیاز در هر هکتار:</p><strong class='output'></strong><p class='seeds'></p><p class='total'></p>";
+section.querySelector(".output").textContent=num(r.kgHa)+" کیلوگرم/هکتار";
+section.querySelector(".seeds").textContent="تعداد بذر کاشت: "+num(r.seedsM2)+" عدد در متر مربع";
+section.querySelector(".total").textContent="کل بذر سطح انتخابی: "+num(r.totalKg)+" کیلوگرم";
+target.append(section);
+}catch(e){target.textContent="خطا: "+e.message;}
+});
+document.getElementById("calculate").click();
+})();
+</script>
+</body></html>
