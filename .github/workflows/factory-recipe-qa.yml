@@ -13,8 +13,10 @@ on:
     branches: [main]
     paths:
       - "scripts/factory_product_maker.py"
+      - "scripts/factory_recipe_catalog_sync.py"
       - "product_recipes/**"
       - "tests/test_factory_product_maker.py"
+      - "tests/test_factory_recipe_catalog_sync.py"
       - ".github/workflows/factory-recipe-qa.yml"
 permissions:
   contents: read
