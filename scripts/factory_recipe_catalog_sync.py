@@ -112,8 +112,10 @@ def sync_catalog(source_root, active_root, retired_root, manifest_path):
 
         previous = set()
         if moved_old:
-            old_dirs = [item for item in old.iterdir() if item.is_dir() and not item.name.startswith(".")]
-            previous = set(maker.discover_recipes(old)) if old_dirs else set()
+            old_entries = [item for item in old.iterdir() if not item.name.startswith(".")]
+            if any(not item.is_dir() or item.is_symlink() for item in old_entries):
+                raise RuntimeError("PREVIOUS_CATALOG_CONTAINS_UNSAFE_ENTRIES")
+            previous = set(maker.discover_recipes(old)) if old_entries else set()
         removed = sorted(previous - names)
         for slug in removed:
             destination = _unique_archive_path(retired, slug, stamp)
