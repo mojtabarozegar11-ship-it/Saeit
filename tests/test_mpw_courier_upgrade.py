@@ -11,6 +11,7 @@ import unittest
 import zipfile
 from scripts import mpw_vps_warehouse_courier as c
 from scripts import mpw_three_factory_orders as orders
+from scripts import mpw_courier_catalog_drafts as catalog
 from scripts import factory_continuous_production_orders as native
 
 def sample_zip():
@@ -125,6 +126,26 @@ class CourierUpgradeTests(unittest.TestCase):
             if not b["has_more"]:break
             cursor=b["next_cursor"]
         self.assertEqual(got,53)
+
+    def test_unapproved_product_scans_only_as_private_draft(self):
+        self.add_product(1)
+        c.import_site(c.export_factory(self.root),self.site)
+        rows=catalog.scan(self.site)
+        self.assertEqual(len(rows),1)
+        self.assertFalse(rows[0]["qa_passed"])
+        self.assertEqual(rows[0]["product_id"],"game")
+
+    def test_three_requests_wait_durably_if_native_factory_at_capacity(self):
+        cycle="20261019-39287192970"
+        first=orders.issue_three(self.root,native,cycle,max_active=0)
+        self.assertEqual(first["status"],"waiting_for_native_capacity")
+        self.assertEqual(first["requested"],3)
+        self.assertEqual(first["native_accepted"],0)
+        self.assertEqual(len(first["requests"]),3)
+        retry=orders.issue_three(self.root,native,cycle,max_active=0)
+        self.assertEqual(retry["new"],0)
+        self.assertEqual(retry["requests"],first["requests"])
+        self.assertFalse(list((self.root/"production-instructions/orders").glob("*.json")))
 
     def test_three_orders_per_run_native_queue_retry_safe(self):
         cycle="20261019-39287192970"
