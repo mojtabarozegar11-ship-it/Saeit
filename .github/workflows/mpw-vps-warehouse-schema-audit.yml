@@ -116,6 +116,33 @@ jobs:
                                         'new_work_ready_to_dispatch','instructions_issued_total','pending_instructions')
                                         and isinstance(v,(str,bool,int,type(None)))}}
                   except Exception:pass
+          wa=root/'production-warehouse'
+          info={}
+          for rel in ('stock-register.json','finished'):
+              p=wa/rel
+              if p.is_dir() and not p.is_symlink():
+                  products=[]
+                  for x in sorted(p.iterdir()):
+                      if not x.is_dir() or x.is_symlink():continue
+                      for v in sorted(x.iterdir()):
+                          manifest=v/'warehouse_manifest.json'
+                          if manifest.is_file() and not manifest.is_symlink():
+                              q=json.loads(manifest.read_bytes())
+                              products.append({'id':q.get('product_id'),'version':v.name,
+                                'manufacturing_qc':q.get('manufacturing_qc'),'commercial_release':q.get('commercial_release'),
+                                'site_transfer_state':q.get('site_transfer_state'),'bytes':q.get('bytes'),'zip':(v/'product.zip').is_file()})
+                  info['finished']=products[:25]
+              elif p.is_file() and not p.is_symlink():
+                  q=json.loads(p.read_bytes())
+                  info['register']={'count':q.get('finished_goods_product_count'),
+                    'versions':q.get('finished_goods_versions'),
+                    'awaiting_commercial_review':q.get('awaiting_commercial_review'),
+                    'needs_rework_or_review':q.get('needs_rework_or_review')}
+          info['production_warehouse'] = [x.name for x in wa.iterdir() if not x.is_symlink()][:40] if wa.is_dir() else []
+          quality=root/'qa-rework'
+          info['native_qa_rework']={'exists':quality.is_dir() and not quality.is_symlink(),
+             'recipes':[x.name for x in quality.iterdir() if x.is_dir()][:25]} if quality.is_dir() and not quality.is_symlink() else {'exists':False}
+          print('MPW_FACTORY_STOCK_DETAIL='+json.dumps(info,sort_keys=True))
           print('MPW_FACTORY_WAREHOUSE_DISCOVERY='+json.dumps({'root':str(root),
                  'root_exists':root.is_dir(),'top_level':listings[:120],
                  'folders':details,'states':states},sort_keys=True))
