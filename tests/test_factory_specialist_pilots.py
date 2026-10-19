@@ -50,6 +50,15 @@ class SpecialistPilotTests(unittest.TestCase):
         self.assertEqual(version, self.version)
         self.assertEqual(executable, link)
 
+    def test_atomic_blocks_external_symlink_parent(self):
+        outside=self.root/"outside"
+        outside.mkdir()
+        link=self.root/"external"
+        link.symlink_to(outside, target_is_directory=True)
+        with self.assertRaisesRegex(RuntimeError,"SELF_UPGRADE_BLOCKED_SYMLINK_PARENT"):
+            pilots.atomic(link/"status.json",{"test":True})
+        self.assertFalse((outside/"status.json").exists())
+
     def test_manifest_cannot_run_unpinned_python(self):
         data = json.loads(self.manifest.read_text())
         data["python"] = "/tmp/untrusted-python"

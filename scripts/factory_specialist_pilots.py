@@ -158,6 +158,8 @@ def render(family, folder):
 
 
 def atomic(path, data):
+    if path.parent.is_symlink():
+        raise RuntimeError('SELF_UPGRADE_BLOCKED_SYMLINK_PARENT')
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     handle, temp = tempfile.mkstemp(prefix=".pilot-", dir=str(path.parent))
     try:

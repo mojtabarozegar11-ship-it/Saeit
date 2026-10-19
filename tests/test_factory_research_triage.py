@@ -45,6 +45,15 @@ class ResearchTriage(unittest.TestCase):
         again = module.snapshot(self.root)
         self.assertEqual(again["workplans_created_or_updated"], 0)
 
+    def test_atomic_rejects_symlink_directory_escape(self):
+        outside=self.root/"outside"
+        outside.mkdir()
+        link=self.root/"unsafe-link"
+        link.symlink_to(outside, target_is_directory=True)
+        with self.assertRaisesRegex(RuntimeError,"SELF_UPGRADE_BLOCKED_SYMLINK_PARENT"):
+            module.atomic(link/"unexpected.json",{"untrusted":True})
+        self.assertFalse((outside/"unexpected.json").exists())
+
     def test_unrecognized_reason_fails_closed(self):
         self.make(7, ["unverified_new_reason"])
         with self.assertRaisesRegex(RuntimeError, "UNRECOGNIZED_REASON"):
