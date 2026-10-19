@@ -108,6 +108,36 @@ class FactoryDefectLoopTests(unittest.TestCase):
         self.assertEqual(len(self._ledger("farm_enterprise_economics")["history"]), 3)
         self.assertEqual(repair.summarize(self.output)["expert_review"], 1)
 
+    def test_research_quality_failure_generates_actionable_non_discarding_ticket(self):
+        result = cycle.run_cycle(self.db, self.output, self.recipes)
+        self.assertEqual(result["status"], "ok")
+        ledger = self.output / "research-rework" / "product-1" / "ledger.json"
+        self.assertTrue(ledger.is_file())
+        obj = json.loads(ledger.read_text())
+        self.assertEqual(obj["current_status"], "research_correction_required")
+        self.assertGreater(len(obj["history"][0]["blocking_reasons"]), 0)
+        self.assertGreater(len(obj["history"][0]["corrective_actions"]), 0)
+        self.assertFalse(obj["public_sale_allowed"])
+        self.assertEqual(obj["history"][0]["independent_review_required"], True)
+        before = len(obj["history"])
+        cycle.run_cycle(self.db, self.output, self.recipes)
+        self.assertEqual(len(json.loads(ledger.read_text())["history"]), before)
+        state = json.loads((self.output / "production-state.json").read_text())
+        self.assertEqual(state["research_correction_queue"]["research_correction_required"], 1)
+        self.assertEqual(state["publishable_product_count"], 0)
+
+    def test_research_defect_remains_stored_when_source_changes(self):
+        cycle.run_cycle(self.db, self.output, self.recipes)
+        with sqlite3.connect(str(self.db)) as conn:
+            conn.execute(
+                "UPDATE core_product SET metadata=? WHERE id=1",
+                (json.dumps({"validation": {"outcome":"NEEDS_MORE_EVIDENCE", "missing_factors":["market_demand"]}}),)
+            )
+        cycle.run_cycle(self.db, self.output, self.recipes)
+        obj = json.loads((self.output / "research-rework" / "product-1" / "ledger.json").read_text())
+        self.assertEqual(len(obj["history"]), 2)
+        self.assertEqual(obj["current_status"], "research_correction_required")
+
     def test_invalid_recipe_slug_never_writes_outside_private_root(self):
         with self.assertRaises(ValueError):
             repair.record_failure(self.output, "../danger", "any failure", "src")
