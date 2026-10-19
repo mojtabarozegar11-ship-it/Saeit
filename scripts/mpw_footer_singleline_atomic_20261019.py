@@ -156,31 +156,6 @@ def install(run):
     (recovery/"INSTALLED").write_text("verified",encoding="utf-8")
     print("MPW_FOOTER_SINGLE_LINE_INSTALLED="+str(len(modified))+" FILES=21 RESTART=false BACKUP="+str(recovery))
 
-def refresh_app(run):
-    """Signal only MojPlayWin's Passenger app to reload its cached Django templates.
-
-    No source bytes, routing, site assets or other application folders change.
-    """
-    before_guard()
-    recovery=backup_dir(run)
-    if not recovery.is_dir() or not (recovery/"INSTALLED").is_file():
-        fail("Cannot reload without completed, backed-up footer install")
-    records=json.loads((recovery/"manifest.json").read_text("utf-8"))
-    if len(records)!=20 or any(sha(Path(row["path"]).read_bytes())!=row["after"] for row in records):
-        fail("Site changed after install; refusing application reload")
-    # This virtual host explicitly declares PassengerAppRoot as ROOT, and
-    # Passenger's supported restart signal is ROOT/tmp/restart.txt.
-    ht=HT.read_text("utf-8",errors="replace")
-    if "PassengerAppRoot /home/zomorod2/mojplaywin.com" not in ht or "PassengerStartupFile passenger_wsgi.py" not in ht:
-        fail("PassengerAppRoot changed since read-only audit")
-    signal=ROOT/"tmp/restart.txt"
-    if not signal.parent.is_dir() or signal.parent.is_symlink() or not signal.is_file() or signal.is_symlink():
-        fail("Passenger restart signal path not safe")
-    digest=sha(signal.read_bytes())
-    os.utime(signal,None)
-    if sha(signal.read_bytes())!=digest:fail("Passenger restart marker bytes changed")
-    print("MPW_PASSENGER_ROOT_TEMPLATE_RESTART=PASS",flush=True)
-
 def rollback(run):
     before_guard()
     recovery=backup_dir(run)
@@ -218,6 +193,5 @@ if __name__=="__main__":
         batch=prepare()
         print("MPW_FOOTER_SINGLE_LINE_READY="+str(len(batch)))
     elif len(sys.argv)==3 and sys.argv[1]=="install":install(sys.argv[2])
-    elif len(sys.argv)==3 and sys.argv[1]=="refresh":refresh_app(sys.argv[2])
     elif len(sys.argv)==3 and sys.argv[1]=="rollback":rollback(sys.argv[2])
-    else:fail("Usage: selftest|audit|install RUN_ID|refresh RUN_ID|rollback RUN_ID")
+    else:fail("Usage: selftest|audit|install RUN_ID|rollback RUN_ID")
