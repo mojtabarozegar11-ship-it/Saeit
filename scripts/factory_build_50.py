@@ -109,6 +109,7 @@ def run_attempt(root,plan,worker,assembler,reviewer,now=None):
     if any(p.is_symlink() for p in (root,root/'build-50',home)):
         raise ValueError('BUILD50_UNSAFE_ROOT')
     home.mkdir(parents=True,exist_ok=True,mode=0o700)
+    if (home/'.attempt.lock').is_symlink():raise ValueError('BUILD50_UNSAFE_LOCK')
     with (home/'.attempt.lock').open('a+b') as lock:
         os.fchmod(lock.fileno(),0o600)
         try:fcntl.flock(lock.fileno(),fcntl.LOCK_EX|fcntl.LOCK_NB)
@@ -127,11 +128,24 @@ def _run_attempt(root,plan,worker,assembler,reviewer,now=None):
     state_path=home/'state.json';prior=read(state_path) if state_path.exists() else {}
     if prior.get('status')=='rework_required' and prior.get('plan_sha256')==digest(plan) and now<prior.get('retry_at',0):
         return dict(prior,deferred=True)
-    number=prior.get('attempt',0)+1
+    prior_number=prior.get('attempt',0)
+    if type(prior_number) is not int or prior_number<0:raise ValueError('BUILD50_INVALID_ATTEMPT_STATE')
+    existing=[int(p.name[8:]) for p in home.glob('attempt-*')
+              if re.fullmatch(r'attempt-[0-9]{8,}',p.name)]
+    latest=max(existing,default=0)
+    previous_defects=list(prior.get('defects',[]))
+    # A killed process may leave a real attempt before state.json was committed.
+    # Never reuse that folder or get stuck permanently on FileExistsError.
+    if latest>prior_number:
+        interrupted={'failed_stage':None,'reason':'BUILD50_INTERRUPTED_ATTEMPT',
+                     'retained_attempt':latest,'return_to_stage':1}
+        previous_defects.append(interrupted)
+        save(home/('interrupted-%08d.json'%latest),interrupted)
+    number=max(prior_number,latest)+1
     attempt=home/('attempt-%08d'%number);attempt.mkdir(parents=True,mode=0o700)
     receipts=[];current=1
     context={'product_id':product,'attempt':number,'folder':str(attempt),
-             'previous_defects':prior.get('defects',[]),'plan_sha256':digest(plan)}
+             'previous_defects':previous_defects,'plan_sha256':digest(plan)}
     save(attempt/'01-plan.json',plan)
     receipts.append({'stage':1,'kind':'planning','plan_sha256':digest(plan)})
     try:

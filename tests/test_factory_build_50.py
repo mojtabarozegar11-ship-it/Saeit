@@ -156,3 +156,27 @@ class Build50Tests(unittest.TestCase):
             engine.save(final_path,final)
             forged=dict(state,final_receipt_sha256=engine.digest(final))
             self.assertFalse(engine.verify_attempt(home,forged,'a'*64))
+
+    def test_interrupted_process_does_not_permanently_block_product(self):
+        def killed(task,context):
+            self.worker(task,context)
+            raise KeyboardInterrupt('simulated process termination')
+        with self.assertRaises(KeyboardInterrupt):self.run_build(worker=killed)
+        retained=self.root/'build-50/test_product/attempt-00000001'
+        self.assertTrue((retained/'task_00.txt').is_file())
+        seen=[]
+        def recovered(task,context):
+            seen.extend(context['previous_defects']);return self.worker(task,context)
+        state=self.run_build(worker=recovered,now=61)
+        self.assertEqual(state['attempt'],2)
+        self.assertEqual(state['completed_stages'],50)
+        self.assertEqual(seen[0]['reason'],'BUILD50_INTERRUPTED_ATTEMPT')
+        self.assertTrue((retained/'task_00.txt').is_file())
+        self.assertTrue(engine.verify_attempt(self.root/'build-50/test_product',state,'a'*64))
+
+    def test_lock_symlink_is_rejected(self):
+        home=self.root/'build-50/test_product';home.mkdir(parents=True)
+        target=self.root/'unrelated';target.write_text('preserve')
+        (home/'.attempt.lock').symlink_to(target)
+        with self.assertRaisesRegex(ValueError,'UNSAFE_LOCK'):self.run_build()
+        self.assertEqual(target.read_text(),'preserve')

@@ -216,3 +216,65 @@ class FactorySynthesisIntegrationTests(unittest.TestCase):
         ledger=json.loads((self.output/"qa-rework"/generated.name/"ledger.json").read_text())
         self.assertEqual(ledger["current_status"],"technical_qa_pass_only_owner_and_content_review_pending")
         self.assertGreaterEqual(len(ledger["history"]),1)
+
+class ProductionContinuityTests(unittest.TestCase):
+    setUp=FactoryVPSCycleTests.setUp
+
+    def test_unavailable_research_database_does_not_stop_independent_manufacturing(self):
+        result=cycle.run_cycle(self.home/'unavailable.db',self.output,self.recipes)
+        self.assertEqual(result['status'],'needs_rework')
+        self.assertEqual(result['manufactured'],3)
+        state=json.loads((self.output/'production-state.json').read_text())
+        self.assertTrue(state['research_failures'])
+        self.assertEqual(state['product_candidates_processed'],0)
+
+    def test_filesystem_failure_in_one_product_is_isolated(self):
+        real_load=cycle.load
+        maker=real_load('failure_isolation',ROOT/'scripts/factory_product_maker.py')
+        original=maker.manufacture
+        def manufacture(recipe,*args,**kwargs):
+            if recipe=='farm_enterprise_economics':raise OSError('injected write failure')
+            return original(recipe,*args,**kwargs)
+        def load(name,path):
+            return maker if name=='saeit_factory_manufacturer_cycle' else real_load(name,path)
+        with mock.patch.object(maker,'manufacture',side_effect=manufacture),mock.patch.object(cycle,'load',side_effect=load):
+            result=cycle.run_cycle(self.db,self.output,self.recipes)
+        self.assertEqual(result['manufactured'],2)
+        self.assertEqual(result['failed'],1)
+        self.assertTrue((self.output/'qa-rework/farm_enterprise_economics/ledger.json').is_file())
+
+    def test_admission_failures_enter_durable_rework(self):
+        (self.recipes/'broken_recipe').mkdir()
+        cycle.run_cycle(self.db,self.output,self.recipes)
+        data=json.loads((self.output/'qa-rework/broken_recipe/ledger.json').read_text())
+        self.assertFalse(data['public_sale_allowed'])
+        self.assertEqual(len(data['history']),1)
+
+    def test_health_distinguishes_rechecks_from_new_products_and_tracks_recovery(self):
+        cycle.run_cycle(self.db,self.output,self.recipes)
+        cycle.run_cycle(self.db,self.output,self.recipes)
+        path=self.output/'production-health.json';data=json.loads(path.read_text())
+        self.assertEqual(data['completed_cycles'],2)
+        self.assertEqual(data['new_or_updated_artifacts_total'],3)
+        self.assertEqual(data['new_or_updated_artifacts_this_cycle'],0)
+        self.assertIsNotNone(data['last_healthy_cycle_at_utc'])
+        cycle.run_cycle(self.home/'missing.db',self.output,self.recipes)
+        data=json.loads(path.read_text());self.assertEqual(data['consecutive_degraded_cycles'],1)
+        cycle.run_cycle(self.db,self.output,self.recipes)
+        self.assertEqual(json.loads(path.read_text())['consecutive_degraded_cycles'],0)
+
+    def test_direct_api_rejects_invalid_limits(self):
+        for kwargs in ({'max_products':True},{'max_products':0},{'max_recipes':0},{'max_recipes':True}):
+            with self.assertRaisesRegex(ValueError,'BOUNDED_LIMIT'):cycle.run_cycle(self.db,self.output,self.recipes,**kwargs)
+
+    def test_deferred_design_failure_is_not_reported_as_healthy(self):
+        real_load=cycle.load
+        designer=real_load('deferred_designer',ROOT/'scripts/factory_recipe_designer.py')
+        result={'new_recipes':0,'intake_failures':[],'rework':[], 'deferred_rework_requests':1}
+        def load(name,path):
+            return designer if name=='saeit_factory_recipe_designer' else real_load(name,path)
+        with mock.patch.object(designer,'cycle',return_value=result),mock.patch.object(cycle,'load',side_effect=load):
+            state=cycle.run_cycle(self.db,self.output,self.recipes,enable_designer=True)
+        self.assertEqual(state['status'],'needs_rework')
+        self.assertEqual(state['manufactured'],3)
+        self.assertTrue(json.loads((self.output/'production-health.json').read_text())['unfinished_rework_requires_attention'])

@@ -13,6 +13,9 @@ import json
 import os
 from pathlib import Path
 import sys
+import sqlite3
+import time
+from datetime import datetime, timezone
 
 
 def load(name, path):
@@ -29,6 +32,10 @@ SCRIPTS = Path(__file__).resolve().parent
 
 def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
               enable_designer=False):
+    if (type(max_products) is not int or not 1<=max_products<=100
+            or max_recipes is not None and (type(max_recipes) is not int or max_recipes<1)):
+        raise ValueError('BOUNDED_LIMIT_REQUIRED')
+    started=time.time()
     root = Path(output).expanduser().resolve()
     root.mkdir(parents=True, exist_ok=True, mode=0o700)
     os.chmod(str(root), 0o700)
@@ -44,7 +51,13 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
         maker = load("saeit_factory_manufacturer_cycle",
                      SCRIPTS / "factory_product_maker.py")
         # Product ideas and their pre-publication QA evidence are read-only DB inputs.
-        dossier = portfolio.build(database, str(root / "research-dossiers"), max_products)
+        research_failures=[]
+        try:
+            dossier = portfolio.build(database, str(root / "research-dossiers"), max_products)
+        except (RuntimeError,ValueError,OSError,sqlite3.Error) as error:
+            research_failures.append({'type':type(error).__name__,'reason':str(error)[:400]})
+            dossier={'processed_count':0,'updated_count':0,'entries':[]}
+
         repair = load("saeit_factory_rework_cycle",
                       SCRIPTS / "factory_product_rework.py")
         design_state = {"enabled": False, "new_recipes": 0}
@@ -55,9 +68,14 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
             try:
                 design_state = designer.cycle(root, seed_file=SCRIPTS.parent / "factory_config" / "design_opportunities.json",
                                               database=database)
-            except (ValueError, OSError, ArithmeticError) as error:
+            except (ValueError, OSError, ArithmeticError, sqlite3.Error) as error:
                 designer_failures.append({"type": type(error).__name__, "reason": str(error)[:400]})
                 design_state["status"] = "needs_rework"
+            designer_failures.extend(design_state.get("intake_failures",[]))
+            designer_failures.extend(design_state.get("rework",[]))
+            if design_state.get("deferred_rework_requests",0):
+                designer_failures.append({'type':'deferred_rework',
+                    'count':design_state['deferred_rework_requests']})
             design_state["enabled"] = True
         admission_failures = []
         recipe_catalog = maker.discover_recipes(recipes, errors=admission_failures)
@@ -84,6 +102,9 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
                 raise RuntimeError("GENERATED_RECIPE_COLLIDES_WITH_STATIC_SOURCE")
             recipe_catalog.update(generated)
             recipe_roots.update({key: generated_root for key in generated})
+        for item in admission_failures:
+            repair.record_failure(root,item['recipe'],RuntimeError(item['reason']),
+                                  str(recipe_roots.get(item['recipe'],Path(recipes))/item['recipe']))
         selected = sorted(recipe_catalog)
         # Persist rotation: bounded cycles must not starve later recipe names.
         cursor_file = root / "recipe-cursor.json"
@@ -105,7 +126,7 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
             # ZIP or prevent another unrelated recipe from being built.
             try:
                 result = maker.manufacture(recipe, recipe_roots[recipe], root / "digital-products")
-            except RuntimeError as failure:
+            except (RuntimeError,ValueError,OSError,ArithmeticError) as failure:
                 # Every product runtime failure enters durable rework; healthy
                 # recipes continue. Infrastructure/import errors still propagate.
                 recorded = repair.record_failure(
@@ -138,7 +159,7 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
         # It deliberately does not carry a publish=true flag.
         state = {
             "schema_version": 1,
-            "cycle_status": "needs_rework" if failures or admission_failures or designer_failures else "ok",
+            "cycle_status": "needs_rework" if failures or admission_failures or designer_failures or research_failures else "ok",
             "mode": "autonomous_supply_led",
             "depends_on_orders": False,
             "api_usage": "none",
@@ -147,6 +168,7 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
             "registered_recipe_count": len(recipe_catalog),
             "recipe_designer": design_state,
             "designer_failures": designer_failures,
+            "research_failures": research_failures,
             "source_recoveries": source_recoveries,
             "recipe_admission_failures": admission_failures,
             "product_candidates_processed": dossier["processed_count"],
@@ -176,10 +198,34 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
             "publication_locked_until_owner_approval": True,
             "store_distribution_state": "not_connected",
         }
+        # Persist actual activity, not merely a configured cron or a cached ZIP.
+        health_path=root/'production-health.json'
+        try:
+            health=json.loads(health_path.read_text(encoding='utf8'))
+            if not isinstance(health,dict):health={}
+        except (OSError,ValueError):health={}
+        def counter(key):
+            value=health.get(key,0)
+            return value if type(value) is int and value>=0 else 0
+        healthy=state['cycle_status']=='ok'
+        finished=time.time()
+        state['cycle_started_at_utc']=datetime.fromtimestamp(started,timezone.utc).isoformat()
+        state['cycle_finished_at_utc']=datetime.fromtimestamp(finished,timezone.utc).isoformat()
+        state['cycle_duration_seconds']=max(0,finished-started)
+        activity={'schema':'saeit.factory.production-health.v1',
+                  'last_cycle_finished_at_utc':state['cycle_finished_at_utc'],
+                  'last_healthy_cycle_at_utc':state['cycle_finished_at_utc'] if healthy else health.get('last_healthy_cycle_at_utc'),
+                  'cycle_status':state['cycle_status'],'completed_cycles':counter('completed_cycles')+1,
+                  'consecutive_degraded_cycles':0 if healthy else counter('consecutive_degraded_cycles')+1,
+                  'new_or_updated_artifacts_total':counter('new_or_updated_artifacts_total')+state['new_or_updated_product_count'],
+                  'new_or_updated_artifacts_this_cycle':state['new_or_updated_product_count'],
+                  'unfinished_rework_requires_attention':bool(failures or admission_failures or designer_failures or research_failures),
+                  'commercial_quality_certified':False}
+        maker.atomic_text(health_path,json.dumps(activity,sort_keys=True,indent=2)+'\n')
         maker.atomic_text(root / "production-state.json",
                           json.dumps(state, ensure_ascii=False, sort_keys=True, indent=2) + "\n")
         fcntl.flock(file.fileno(), fcntl.LOCK_UN)
-        return {"status": "needs_rework" if failures or admission_failures or designer_failures else "ok",
+        return {"status": "needs_rework" if failures or admission_failures or designer_failures or research_failures else "ok",
                 "processed": dossier["processed_count"],
                 "manufactured": len(produced),
                 "new_artifacts": sum(bool(p.get("changed")) for p in produced),

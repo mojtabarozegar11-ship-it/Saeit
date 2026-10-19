@@ -213,3 +213,21 @@ jobs:
           print("FACTORY_QUALITY_MULTIPLIER_MEASURED="+str(quality["quality_multiplier_measured"]))
           print("FACTORY_BUILD50_STRICT_WAREHOUSE_GATE=PASS")
           PYQUALITY50
+
+          "${SSH[@]}" '"$HOME/factory-runtime/.venv/bin/python" -' <<'PYHEALTH'
+          import json,time
+          from datetime import datetime
+          from pathlib import Path
+          root=Path.home()/"factory-runtime/private/autonomous-product-cycle"
+          health=json.loads((root/"production-health.json").read_text())
+          state=json.loads((root/"production-state.json").read_text())
+          assert health["schema"]=="saeit.factory.production-health.v1"
+          assert health["completed_cycles"]>=2
+          age=time.time()-datetime.fromisoformat(health["last_cycle_finished_at_utc"]).timestamp()
+          assert 0<=age<600, "FACTORY_PRODUCTION_HEALTH_STALE"
+          assert health["new_or_updated_artifacts_this_cycle"]==state["new_or_updated_product_count"]
+          assert state["built_product_count"]>=1
+          print("FACTORY_CONTINUITY_HEALTH="+json.dumps(health,sort_keys=True))
+          print("FACTORY_RESEARCH_FAILURES="+json.dumps(state.get("research_failures",[])))
+          print("FACTORY_PRODUCTION_ACTIVITY_MEASURED=PASS")
+          PYHEALTH

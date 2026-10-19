@@ -160,3 +160,47 @@ class DatabaseDesignIntakeTests(unittest.TestCase):
         self.spec['origin']='invented_source'
         with self.assertRaisesRegex(ValueError,'ORIGIN_INVALID'):
             designer.validate(self.spec)
+
+class RetryLifecycleTests(unittest.TestCase):
+    setUp=DesignerTests.setUp
+
+    def test_transient_design_failure_retries_and_produces_without_manual_edit(self):
+        designer.save(self.root/'design-intake'/'request.json',self.spec)
+        with mock.patch.object(designer,'compile_recipe',side_effect=OSError('temporary I/O failure')):
+            first=designer.cycle(self.root,now=100)
+        self.assertEqual(first['requests_processed'],1)
+        self.assertEqual(first['rework'][0]['return_to_stage'],1)
+        with mock.patch.object(designer,'compile_recipe',side_effect=AssertionError('backoff')):
+            self.assertEqual(designer.cycle(self.root,now=159)['requests_processed'],0)
+        self.assertEqual(designer.cycle(self.root,now=161)['new_recipes'],1)
+
+    def test_malformed_requests_cannot_exceed_per_cycle_budget(self):
+        folder=self.root/'design-intake';folder.mkdir()
+        for i in range(5):(folder/('%d.json'%i)).write_text('invalid JSON')
+        result=designer.cycle(self.root,max_designs=1,now=100)
+        self.assertEqual(result['requests_processed'],1)
+        self.assertEqual(result['pending_requests'],4)
+        self.assertEqual(len(result['rework']),1)
+        second=designer.cycle(self.root,max_designs=1,now=101)
+        self.assertEqual(second['requests_processed'],1)
+        self.assertEqual(second['deferred_rework_requests'],1)
+
+    def test_unsupported_request_remains_retryable_without_lifetime_limit(self):
+        self.spec['family_id']='F12'
+        designer.save(self.root/'design-intake'/'request.json',self.spec)
+        result=designer.cycle(self.root,now=0)
+        for n in range(1,35):result=designer.cycle(self.root,now=n*4000)
+        self.assertEqual(result['rework'][0]['attempt'],35)
+        self.assertIsNone(result['rework'][0]['lifetime_attempt_limit'])
+
+    def test_database_outage_does_not_stop_local_seed_designs(self):
+        result=designer.cycle(self.root,seed_file=SEEDS,database=self.root/'missing.db')
+        self.assertEqual(result['new_recipes'],1)
+        self.assertEqual(result['intake_failures'][0]['source'],'database')
+
+    def test_broken_seed_does_not_stop_existing_intake(self):
+        designer.save(self.root/'design-intake'/'request.json',self.spec)
+        seed=self.root/'broken-seed.json';seed.write_text('invalid JSON')
+        result=designer.cycle(self.root,seed_file=seed)
+        self.assertEqual(result['new_recipes'],1)
+        self.assertEqual(result['intake_failures'][0]['source'],'seed')

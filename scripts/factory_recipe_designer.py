@@ -13,7 +13,9 @@ import json
 import os
 from pathlib import Path
 import re
+import sqlite3
 import tempfile
+import time
 
 SCHEMA = 'saeit.factory.design-request.v1'
 IDENT = re.compile(r'^[a-z][a-z0-9_]{1,47}$')
@@ -320,45 +322,71 @@ def enqueue_database_requests(database, root):
     return imported
 
 
-def cycle(root, *, seed_file=None, max_designs=1, database=None):
+def cycle(root, *, seed_file=None, max_designs=1, database=None, now=None):
     """Fair bounded work per tick, with no lifetime limit on accepted requests."""
     root=Path(root)
+    now=time.time() if now is None else now
     if isinstance(max_designs,bool) or not isinstance(max_designs,int) or max_designs < 1:
         raise ValueError('DESIGN_CAPACITY_INVALID')
     private(root/'design-intake'); private(root/'design-state')
-    seed_requests(root,seed_file)
-    imported=enqueue_database_requests(database,root)
-    actions=[]; blocked=[]; pending=0
+    intake_failures=[]
+    try:seed_requests(root,seed_file)
+    except (ValueError,OSError) as error:
+        intake_failures.append({'source':'seed','reason':str(error)[:300]})
+    try:imported=enqueue_database_requests(database,root)
+    except (ValueError,OSError,sqlite3.Error) as error:
+        imported=0
+        intake_failures.append({'source':'database','reason':str(error)[:300]})
+    actions=[]; blocked=[]; pending=0; attempts=0; deferred=0
     engine_sha=hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
     for request in sorted((root/'design-intake').iterdir()):
         if request.name.startswith('.'): continue
-        ticket=None
+        ticket=root/'design-state'/('blocked-'+digest({'file':request.name,'engine':engine_sha})+'.json')
+        prior={}
+        charged=False
         sha=None
         try:
             spec=read(request)
             sha=digest(spec)
             ticket=root/'design-state'/(digest({'request':sha,'engine':engine_sha})+'.json')
             if ticket.is_file():
-                previous=read(ticket)
-                previous_recipe=previous.get('result',{}).get('recipe')
-                if not previous_recipe or (root/'generated-product-recipes'/previous_recipe).is_dir():
+                prior=read(ticket)
+                previous_result=prior.get('result',{})
+                previous_recipe=previous_result.get('recipe') if isinstance(previous_result,dict) else None
+                if prior.get('status')=='design_rework_required':
+                    if now < prior.get('retry_at',0):
+                        deferred+=1; continue
+                elif previous_recipe and (root/'generated-product-recipes'/previous_recipe).is_dir():
                     continue
-            if len(actions)+len(blocked) >= max_designs:
+            if attempts >= max_designs:
                 pending+=1; continue
+            attempts+=1; charged=True
             result=compile_recipe(spec,root/'generated-product-recipes')
             receipt={'status':'recipe_created' if result['created'] else 'equivalent_program_exists',
                      'request_sha256':sha,'request_file':request.name,'result':result}
             save(ticket,receipt); actions.append(receipt)
         except (ValueError,OSError,ArithmeticError) as error:
             # Keep original request for correction; changed contents yield a new revision.
-            row={'status':'design_rework_required','request_file':request.name,'reason':str(error)[:300]}
-            key=digest({'file':request.name,'error':str(error)})
-            ticket=ticket or root/'design-state'/('blocked-'+key+'.json')
-            if not ticket.exists():
-                save(ticket,row); blocked.append(row)
+            # Reading a malformed request also consumes capacity. Every rejected
+            # request remains retryable; transient I/O failures cannot retire it.
+            if not charged:
+                if ticket.is_file():
+                    try:prior=read(ticket)
+                    except (ValueError,OSError):prior={}
+                if now < prior.get('retry_at',0):
+                    deferred+=1; continue
+                if attempts >= max_designs:
+                    pending+=1; continue
+                attempts+=1
+            number=prior.get('attempt',0)+1
+            row={'status':'design_rework_required','request_file':request.name,
+                 'reason':str(error)[:300],'attempt':number,'return_to_stage':1,
+                 'retry_at':now+min(3600,60*(2**min(number-1,6))),
+                 'lifetime_attempt_limit':None}
+            save(ticket,row); blocked.append(row)
     result={'schema':'saeit.factory.designer-state.v1','new_recipes':sum(x['result']['created'] for x in actions),
-            'requests_processed':len(actions)+len(blocked),'pending_requests':pending,
-            'database_design_requests_imported':imported,
+            'requests_processed':attempts,'pending_requests':pending,'deferred_rework_requests':deferred,
+            'database_design_requests_imported':imported,'intake_failures':intake_failures,
             'actions':actions,'rework':blocked,'adapter_families_implemented':['F28'],
             'catalog_lifetime_limit':None,'general_ai_invention':False,'commercial_release':False}
     save(root/'designer-state.json',result)
