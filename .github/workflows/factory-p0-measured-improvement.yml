@@ -1,0 +1,35 @@
+name: P0 measured factory improvement tests
+on:
+  pull_request:
+    paths:
+      - "scripts/factory_p0_improvement.py"
+      - "tests/test_factory_p0_improvement.py"
+      - "deploy/install_factory_p0_improvement.sh"
+      - ".github/workflows/factory-p0-measured-improvement.yml"
+  push:
+    branches: [main]
+    paths:
+      - "scripts/factory_p0_improvement.py"
+      - "tests/test_factory_p0_improvement.py"
+      - "deploy/install_factory_p0_improvement.sh"
+      - ".github/workflows/factory-p0-measured-improvement.yml"
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.8", "3.11"]
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with: {python-version: "${{ matrix.python-version }}"}
+      - name: Verify bounded work orders and truthful final goods
+        run: |
+          set -euo pipefail
+          bash -n deploy/install_factory_p0_improvement.sh
+          python -B -m unittest discover -s tests -p "test_factory_p0_improvement.py" -v
