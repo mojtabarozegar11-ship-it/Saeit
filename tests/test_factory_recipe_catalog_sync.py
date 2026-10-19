@@ -51,6 +51,13 @@ class RecipeCatalogSyncTests(unittest.TestCase):
         self.assertEqual(installed["active_recipes"], sorted(result["active_recipes"]))
         self.assertEqual(installed["retired_this_sync"], ["obsolete_recipe"])
 
+    def test_fresh_install_creates_first_active_catalog(self):
+        result = sync.sync_catalog(self.source, self.active, self.retired, self.manifest)
+        self.assertEqual(result["active_recipes"], ["farm_enterprise_economics"])
+        self.assertEqual(result["retired_count"], 0)
+        self.assertTrue((self.active / "farm_enterprise_economics" / "README.md").is_file())
+        self.assertTrue(self.manifest.is_file())
+
     def test_zero_test_recipe_aborts_without_changing_active_catalog(self):
         (self.source / "empty_test_recipe").mkdir()
         (self.source / "empty_test_recipe" / "README.md").write_text(
