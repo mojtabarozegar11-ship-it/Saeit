@@ -139,3 +139,55 @@ def test_public_artifact_corruption_prevents_activation(prepared_store):
                           delegated_owner_instruction=True)
     product.refresh_from_db()
     assert not product.active
+
+@pytest.mark.django_db
+@override_settings(DEBUG=False)
+def test_runtime_shared_release_gate_blocks_even_dry_run_without_db_writes(
+    prepared_store, monkeypatch
+):
+    """Production may require a gate absent from the simpler local Product class.
+
+    The preflight must discover that requirement before creating an article,
+    an ApprovalRequest, or mutating the product in the live database.
+    """
+    from django.core.exceptions import ValidationError
+
+    inbox, app, webroot, digest, product, owner = prepared_store
+    original_clean = Product.clean
+
+    def deployed_clean(self):
+        original_clean(self)
+        if self.active and self.metadata.get("factory_status") == "published_free":
+            raise ValidationError(
+                "Factory Product approval requires its shared Release Gate."
+            )
+
+    monkeypatch.setattr(Product, "clean", deployed_clean)
+    publisher = script("publish_verified_factory_store_listing")
+    for apply in (False, True):
+        with pytest.raises(ValueError, match="RUNTIME_RELEASE_GATE_NOT_READY"):
+            publisher.publish(
+                inbox, app, webroot, apply=apply,
+                delegated_owner_instruction=True,
+            )
+        product.refresh_from_db()
+        assert product.active is False
+        assert product.knowledge_article_id is None
+        assert product.metadata["factory_status"] == "needs_editorial_pricing_and_owner_approval"
+        assert KnowledgeArticle.objects.count() == 0
+        assert ApprovalRequest.objects.count() == 0
+
+
+@pytest.mark.django_db
+@override_settings(DEBUG=False)
+def test_dry_run_on_an_unsaved_candidate_cannot_change_product_state(prepared_store):
+    inbox, app, webroot, digest, product, owner = prepared_store
+    publisher = script("publish_verified_factory_store_listing")
+    assert publisher.publish(inbox, app, webroot)["status"] == "verified_dry_run"
+    product.refresh_from_db()
+    assert product.active is False
+    assert product.metadata["factory_status"] == "needs_editorial_pricing_and_owner_approval"
+    assert product.metadata.get("factory_publication_permission") is None
+    assert Product.objects.count() == 1
+    assert KnowledgeArticle.objects.count() == 0
+    assert ApprovalRequest.objects.count() == 0
