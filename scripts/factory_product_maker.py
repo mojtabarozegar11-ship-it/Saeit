@@ -155,7 +155,11 @@ def manufacture(recipe, recipes_root, private_root):
         prior = json.loads(manifest_path.read_text(encoding="utf-8"))
     except (OSError, ValueError, TypeError):
         prior = {}
-    if (prior.get("source_sha256") == checksum and prior.get("qa_status") == "passed"
+    if (prior.get("schema_version") == 3 and prior.get("source_sha256") == checksum
+            and prior.get("qa_status") == "passed"
+            and prior.get("qa_test_count", 0) >= MIN_TESTS_PER_RECIPE
+            and prior.get("minimum_tests_required") == MIN_TESTS_PER_RECIPE
+            and prior.get("scientific_validity") == "pending_independent_specialist_review"
             and zip_path.is_file() and prior.get("artifact_sha256") == sha256_file(zip_path)):
         return {"recipe": recipe, "changed": False, "qa_status": "passed",
                 "private_artifact": str(zip_path)}
