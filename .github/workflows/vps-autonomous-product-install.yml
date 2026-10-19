@@ -7,6 +7,10 @@ on:
       - "scripts/factory_vps_product_cycle.py"
       - "product_recipes/greenhouse_crop_margin/**"
       - "deploy/install_autonomous_factory_products.sh"
+      - "tests/test_factory_product_maker.py"
+      - "tests/test_factory_product_rework.py"
+      - "tests/test_factory_vps_product_cycle.py"
+      - "tests/test_factory_vps_installer_syntax.py"
       - ".github/workflows/vps-autonomous-product-install.yml"
   workflow_dispatch:
 permissions:
