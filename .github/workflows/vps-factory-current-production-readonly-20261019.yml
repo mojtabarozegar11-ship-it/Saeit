@@ -1,4 +1,4 @@
-name: VPS Factory Current Production Status Read Only
+name: VPS Factory Current Production Status Read Only — refreshed operational audit
 on:
   push:
     branches: [main]
