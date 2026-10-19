@@ -1,0 +1,168 @@
+name: Zomorod wheat 50 scientific articles - wheat-card-only deployment
+on:
+  push:
+    branches: [main]
+    paths:
+      - "content/zomorod-wheat-encyclopedia-20261019/**"
+      - ".github/workflows/zomorod-wheat-50-scientific-publication-20261019.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zm-wheat-card-only-scientific-50
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 22
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and validate fifty 1000-word HTML scientific articles
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 content/zomorod-wheat-encyclopedia-20261019/build_wheat_library.py
+          python3 - <<'PY'
+          from pathlib import Path
+          from html.parser import HTMLParser
+          base=Path("content/zomorod-wheat-encyclopedia-20261019/library")
+          p=sorted(base.glob("*/index.html"))
+          assert len(p)==50
+          class Body(HTMLParser):
+              def __init__(self):super().__init__();self.depth=0;self.words=[]
+              def handle_starttag(self,tag,attrs):
+                  if tag=="article" and ("class","study-paper") in attrs:self.depth=1
+                  elif self.depth:self.depth+=1
+              def handle_endtag(self,tag):
+                  if self.depth:self.depth-=1
+              def handle_data(self,data):
+                  if self.depth:self.words.extend(data.split())
+          for f in p:
+              doc=f.read_text(encoding="utf-8")
+              parser=Body();parser.feed(doc)
+              assert len(parser.words)>=1000,(str(f),len(parser.words))
+              assert '<link rel="canonical"' in doc
+              assert 'application/ld+json' in doc
+              assert 'ZOMOROD-WHEAT-LIBRARY-20261019' in doc
+          assert (base/"index.html").read_text(encoding="utf8").count('class="wheat-entry"')==50
+          assert (base/".htaccess").read_text(encoding="ascii")=="PassengerEnabled off\nDirectoryIndex index.html\nOptions -Indexes\n"
+          print("SOURCE_QA=50 ARTICLES, >=1000 WORDS, CANONICAL AND SCIENTIFIC REFERENCES")
+          PY
+      - name: Establish SSH relay with pinned fingerprints
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/wheat-sci"
+          mkdir -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host zm-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host zm-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump zm-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" zm-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.known"
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          echo "PINNED_GITHUB_VPS_CPANEL=verified"
+      - name: Validate wheat page, preserve live original, and stage only new library
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/wheat-sci"
+          ssh -F "$d/config" zm-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1"; card="$HOME/public_html/topics/zm-r01/wheat"
+          backup="$HOME/.backups/zomorod-wheat-science-50/$sha"
+          test -f "$card/index.html" && test ! -L "$card" && test ! -L "$card/index.html"
+          grep -Fq 'data-zm-dedicated-topic=' "$card/index.html"
+          test ! -e "$card/library" && test ! -e "$backup"
+          mkdir -p "$backup/staging"
+          cp -p "$card/index.html" "$backup/original.html"
+          sha256sum "$card/index.html" > "$backup/sha256-before.txt"
+          REMOTE
+          tar -cf - -C content/zomorod-wheat-encyclopedia-20261019 library | ssh -F "$d/config" zm-cpanel \
+            "tar -xf - -C /home/zomorod2/.backups/zomorod-wheat-science-50/$GITHUB_SHA/staging"
+      - name: Atomic wheat-only publication and rollback on failed public test
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/wheat-sci"
+          ssh -F "$d/config" zm-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1";card="$HOME/public_html/topics/zm-r01/wheat"
+          backup="$HOME/.backups/zomorod-wheat-science-50/$sha"
+          test -f "$backup/original.html" && test -d "$backup/staging/library"
+          test ! -e "$card/library"
+          cmp -s "$backup/original.html" "$card/index.html"
+          test "$(find "$backup/staging/library" -mindepth 2 -maxdepth 2 -name index.html -type f | wc -l)" -eq 50
+          changed=0; installed=0
+          rollback() {
+            set +e
+            if test "$changed" = 1;then
+              cp -p "$backup/original.html" "$card/.index.wheat-rollback.$sha"
+              mv -f "$card/.index.wheat-rollback.$sha" "$card/index.html"
+            fi
+            if test "$installed" = 1 && test -d "$card/library";then
+              mv "$card/library" "$backup/rolled-back-library"
+            fi
+            echo "WHEAT_ROLLBACK=attempted"
+          }
+          trap 'rc=$?;trap - EXIT;rollback;exit "$rc"' EXIT
+          python3 - "$backup/original.html" "$backup/next.html" <<'PY'
+          from pathlib import Path
+          import sys
+          s=Path(sys.argv[1]).read_text(encoding="utf8")
+          marker="<!-- ZOMOROD-WHEAT-LIBRARY-20261019 -->"
+          assert marker not in s and s.count("</main>")==1
+          block=marker+'''<section class="topic-panel" id="wheat-science-50" style="background:#1d4033;border:1px solid #d9c184;box-shadow:0 12px 36px #0004">
+          <h2>دانشنامه گندم؛ ۵۰ مقاله علمی تخصصی</h2><p>مجموعه ۵۰ مقاله تحلیلی همراه با روش‌های آزمایش، سنجه‌های علمی، ملاحظات فنی و منابع مطالعه.</p>
+          <a style="color:#f6d997;font-weight:bold;font-size:1.2em" href="/topics/zm-r01/wheat/library/">مطالعه مجموعه ۵۰ مقاله گندم ←</a></section>'''
+          Path(sys.argv[2]).write_text(s.replace("</main>",block+"</main>",1),encoding="utf8")
+          PY
+          mv "$backup/staging/library" "$card/library"
+          installed=1
+          cp -p "$backup/next.html" "$card/.index.wheat-next.$sha"
+          chmod --reference="$card/index.html" "$card/.index.wheat-next.$sha"
+          mv -f "$card/.index.wheat-next.$sha" "$card/index.html"
+          changed=1
+          for route in /topics/zm-r01/wheat/ /topics/zm-r01/wheat/library/ /topics/zm-r01/wheat/library/bread-wheat-genome/;do
+            code="$(curl -sSL --max-time 25 -o "$backup/response.html" -w '%{http_code}' "https://zomorodmelal.ir$route?release=$sha" || true)"
+            echo "WHEAT_PUBLIC_URL=$route STATUS=$code"
+            test "$code" = 200
+            grep -Fq 'ZOMOROD-WHEAT-LIBRARY-20261019' "$backup/response.html"
+          done
+          test "$(find "$card/library" -mindepth 2 -maxdepth 2 -name index.html -type f | wc -l)" -eq 50
+          trap - EXIT
+          echo "WHEAT_LIVE_50_VERIFIED=yes"
+          REMOTE
