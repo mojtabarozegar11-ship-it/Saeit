@@ -72,7 +72,7 @@ chmod 700 "$stage" "$scripts" "$recipes" "$private"
 
 for f in factory_product_maker.py factory_autonomous_portfolio.py \
          factory_evidence_quality.py factory_first_product_pilot.py factory_vps_product_cycle.py \
-         factory_product_rework.py factory_recipe_designer.py factory_specialist_pilots.py factory_specialist_formats.py factory_research_triage.py; do
+         factory_product_rework.py factory_recipe_designer.py factory_specialist_pilots.py factory_specialist_formats.py factory_research_triage.py factory_build_50.py; do
   install -m 600 "$repo/scripts/$f" "$scripts/$f"
 done
 install -d -m 700 "$stage/factory_config"
@@ -125,6 +125,7 @@ if ! "$python" "$scripts/factory_specialist_pilots.py" \\
   --out "$private" --manifest "$ops/build-toolchain/toolchain-manifest.json"; then
   echo FACTORY_SPECIALIST_PILOT_NEEDS_REWORK
 fi
+"$python" "$scripts/factory_build_50.py" --factory-private "$private"
 if ! "$python" "$scripts/factory_research_triage.py" --out "$private"; then
   echo FACTORY_RESEARCH_TRIAGE_NEEDS_REWORK
 fi

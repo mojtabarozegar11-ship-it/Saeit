@@ -3,6 +3,8 @@ on:
   push:
     branches: [main]
     paths:
+      - "scripts/factory_build_50.py"
+      - "tests/test_factory_build_50.py"
       - "scripts/factory_recipe_designer.py"
       - "factory_config/design_opportunities.json"
       - "tests/test_factory_recipe_designer.py"
@@ -26,6 +28,8 @@ on:
       - ".github/workflows/vps-autonomous-product-install.yml"
   pull_request:
     paths:
+      - "scripts/factory_build_50.py"
+      - "tests/test_factory_build_50.py"
       - "scripts/factory_recipe_designer.py"
       - "factory_config/design_opportunities.json"
       - "tests/test_factory_recipe_designer.py"
@@ -66,6 +70,7 @@ jobs:
           python -B -m unittest discover -s tests -p 'test_factory_vps_product_cycle.py' -v
           python -B -m unittest discover -s tests -p 'test_factory_specialist_pilots.py' -v
           python -B -m unittest discover -s tests -p 'test_factory_research_triage.py' -v
+          python -B -m unittest discover -s tests -p 'test_factory_build_50.py' -v
   deploy:
     needs: measured-qa
     if: github.event_name == 'workflow_dispatch' || (github.repository == 'mojtabarozegar11-ship-it/Saeit' && contains(github.event.head_commit.message, '[approved-factory-unlimited-builds-20261019]'))
@@ -85,6 +90,7 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_factory_vps_product_cycle.py' -v
           python3 -m unittest discover -s tests -p 'test_factory_specialist_pilots.py' -v
           python3 -m unittest discover -s tests -p 'test_factory_research_triage.py' -v
+          python3 -m unittest discover -s tests -p 'test_factory_build_50.py' -v
           python3 -m unittest discover -s tests -p 'test_factory_evidence_quality.py' -v
           python3 -m unittest discover -s tests -p 'test_factory_vps_installer_syntax.py' -v
       - name: Install private VPS factory product cycle
@@ -103,8 +109,9 @@ jobs:
           ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
           test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
           SSH=(ssh -i "$d/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o BatchMode=yes githubops@178.239.147.150)
-          tar -cf - tests/test_factory_vps_product_cycle.py tests/test_factory_specialist_pilots.py tests/test_factory_research_triage.py scripts/factory_specialist_pilots.py scripts/factory_specialist_formats.py scripts/factory_research_triage.py scripts/factory_recipe_designer.py factory_config/design_opportunities.json scripts/factory_first_product_pilot.py scripts/factory_autonomous_portfolio.py scripts/factory_evidence_quality.py scripts/factory_product_maker.py scripts/factory_product_rework.py scripts/factory_vps_product_cycle.py scripts/factory_production_warehouse.py product_recipes/ deploy/install_production_warehouse.sh deploy/install_autonomous_factory_products.sh | "${SSH[@]}" 'mkdir -p "$HOME/factory-runtime/operations/product-deploy-${{ github.sha }}"; tar -xf - -C "$HOME/factory-runtime/operations/product-deploy-${{ github.sha }}"'
+          tar -cf - scripts/factory_build_50.py tests/test_factory_build_50.py tests/test_factory_vps_product_cycle.py tests/test_factory_specialist_pilots.py tests/test_factory_research_triage.py scripts/factory_specialist_pilots.py scripts/factory_specialist_formats.py scripts/factory_research_triage.py scripts/factory_recipe_designer.py factory_config/design_opportunities.json scripts/factory_first_product_pilot.py scripts/factory_autonomous_portfolio.py scripts/factory_evidence_quality.py scripts/factory_product_maker.py scripts/factory_product_rework.py scripts/factory_vps_product_cycle.py scripts/factory_production_warehouse.py product_recipes/ deploy/install_production_warehouse.sh deploy/install_autonomous_factory_products.sh | "${SSH[@]}" 'mkdir -p "$HOME/factory-runtime/operations/product-deploy-${{ github.sha }}"; tar -xf - -C "$HOME/factory-runtime/operations/product-deploy-${{ github.sha }}"'
           "${SSH[@]}" '"$HOME/factory-runtime/.venv/bin/python" -B -m unittest discover -s "$HOME/factory-runtime/operations/product-deploy-${{ github.sha }}/tests" -p test_factory_vps_product_cycle.py -v'
+          "${SSH[@]}" '"$HOME/factory-runtime/.venv/bin/python" -B -m unittest discover -s "$HOME/factory-runtime/operations/product-deploy-${{ github.sha }}/tests" -p test_factory_build_50.py -v'
           echo VPS_FACTORY_ISOLATED_FAULT_INJECTION=PASS
           "${SSH[@]}" 'bash "$HOME/factory-runtime/operations/product-deploy-${{ github.sha }}/deploy/install_autonomous_factory_products.sh"'
           "${SSH[@]}" 'bash "$HOME/factory-runtime/operations/product-deploy-${{ github.sha }}/deploy/install_production_warehouse.sh"'
@@ -176,3 +183,19 @@ jobs:
           assert not blocked, "SPECIALIST_PILOT_TECHNICAL_QA_BLOCKED"
           PYFAMILY
           "${SSH[@]}" 'test -s "$HOME/factory-runtime/private/autonomous-product-cycle/production-state.json" && test "$(find "$HOME/factory-runtime/private/autonomous-product-cycle/digital-products" -type f -name "*-internal-qa.zip" -print -quit)" != "" && crontab -l | grep SAEIT_AUTONOMOUS_PRODUCTS_V2 && echo AUTONOMOUS_PRODUCT_VPS_VERIFIED'
+
+          "${SSH[@]}" '"$HOME/factory-runtime/.venv/bin/python" -' <<'PYQUALITY50'
+          import json
+          from pathlib import Path
+          root=Path.home()/"factory-runtime/private/autonomous-product-cycle"
+          quality=json.loads((root/"build-50-status.json").read_text())
+          register=json.loads((root/"production-warehouse/stock-register.json").read_text())
+          assert register["strict_build50_enabled"] is True
+          assert quality["inspected"]>=5
+          assert quality["commercial_release"] is False
+          print("FACTORY_BUILD50_PRODUCTS_INSPECTED="+str(quality["inspected"]))
+          print("FACTORY_BUILD50_PROVEN_COMPLETED="+str(quality["verified_50_stage_builds"]))
+          print("FACTORY_BUILD50_RETURNED_TO_PLANNING="+str(quality["requiring_replanning"]))
+          print("FACTORY_QUALITY_MULTIPLIER_MEASURED="+str(quality["quality_multiplier_measured"]))
+          print("FACTORY_BUILD50_STRICT_WAREHOUSE_GATE=PASS")
+          PYQUALITY50

@@ -77,7 +77,7 @@ jobs:
           }
           ssh_vps 'set -eu; test "$(id -un)" = githubops; test -d "$HOME/factory-runtime/operations"; test -x "$HOME/factory-runtime/.venv/bin/python"; echo VPS_EXISTING_FACTORY_PATHS_VERIFIED; if crontab -l 2>/dev/null | grep -q SAEIT_AUTONOMOUS_PRODUCTS_V2; then echo VPS_PRODUCTION_CRON_PRESENT; else echo VPS_PRODUCTION_CRON_BOOTSTRAP_REQUIRED; fi'
           archive="$d/release.tar"
-          tar -cf "$archive" scripts/factory_production_warehouse.py scripts/factory_vps_product_cycle.py scripts/factory_autonomous_portfolio.py scripts/factory_evidence_quality.py scripts/factory_first_product_pilot.py scripts/factory_product_maker.py scripts/factory_product_rework.py deploy/install_autonomous_factory_products.sh deploy/install_production_warehouse.sh product_recipes/farm_enterprise_economics product_recipes/water_budget_economics
+          tar -cf "$archive" scripts/factory_build_50.py scripts/factory_production_warehouse.py scripts/factory_vps_product_cycle.py scripts/factory_autonomous_portfolio.py scripts/factory_evidence_quality.py scripts/factory_first_product_pilot.py scripts/factory_product_maker.py scripts/factory_product_rework.py deploy/install_autonomous_factory_products.sh deploy/install_production_warehouse.sh product_recipes/farm_enterprise_economics product_recipes/water_budget_economics
           digest="$(sha256sum "$archive" | awk '{print $1}')"
           dir="/home/githubops/factory-runtime/operations/warehouse-release-$GITHUB_RUN_ID"
           ssh_vps "umask 077; test ! -e '$dir'; mkdir -m 700 '$dir'"

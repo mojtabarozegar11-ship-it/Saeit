@@ -32,6 +32,16 @@ class FactoryWarehouseTests(unittest.TestCase):
         return maker.manufacture(recipe,self.recipes,self.private/"digital-products")
     def register(self):
         return json.loads((self.private/"production-warehouse"/"stock-register.json").read_text("utf8"))
+    def test_strict_build50_holds_technical_pass_and_keeps_original(self):
+        self.manufacture('farm_enterprise_economics')
+        result=warehouse.cycle(self.private,strict_build50=True)
+        self.assertEqual(result['stocked'],0)
+        self.assertEqual(result['held'],1)
+        register=self.register()
+        self.assertTrue(register['strict_build50_enabled'])
+        self.assertEqual(register['build_quality']['verified_50_stage_builds'],0)
+        self.assertEqual(register['build_quality']['requiring_replanning'],1)
+        self.assertTrue((self.private/'digital-products/farm_enterprise_economics/farm_enterprise_economics-internal-qa.zip').exists())
     def test_all_registered_products_first_to_warehouse_zero_site_contact(self):
         expected_count = len(maker.RECIPES)
         for recipe in maker.RECIPES:self.manufacture(recipe)
