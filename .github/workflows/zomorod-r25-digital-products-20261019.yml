@@ -7,7 +7,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: zomorod-r25-digital-products-repaired-release
+  group: zomorod-r25-digital-products-unique-route-release
   cancel-in-progress: false
 jobs:
   release:
@@ -135,13 +135,13 @@ jobs:
                   except Exception:
                       if attempt==4:raise
                       time.sleep(3)
-          app=get('/digital-lab/?tool=seo')
+          app=get('/digital-products-r25-20261019/?tool=seo')
           assert 'ZOMOROD DIGITAL LAB' in app
           for c in catalog:
               slug=c['slug']
               page=get('/topics/zm-r25/'+slug+'/')
               assert 'ZM-IT-PRODUCT-20261019:'+slug+':BEGIN' in page
-              assert '/digital-lab/?tool='+slug in page
+              assert '/digital-products-r25-20261019/?tool='+slug in page
               print('LIVE_PRODUCT=PASS '+slug,flush=True)
           assert 'FARM DOMINION' in get('/farm-wars/')
           print('PUBLIC_DIGITAL_PRODUCTS_21_AND_GAME_1=PASS')
