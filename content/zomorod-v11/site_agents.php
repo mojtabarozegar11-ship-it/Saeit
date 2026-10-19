@@ -108,8 +108,10 @@ function zmAgentCycle(PDO $db,?string $code=null,?callable $transport=null): arr
                     // Master sees the complete current-cycle outcomes, not
                     // just whether the homepage happens to return 200.
                     if($unhealthy){
-                        $status='warning';
-                        $detail='Current cycle not fully healthy: '.implode(',',array_slice($unhealthy,0,10));
+                        // Do not downgrade the master's own transport failure.
+                        if ($status==='ok') $status='warning';
+                        $detail='Current cycle not fully healthy: '.implode(',',array_slice($unhealthy,0,10)).
+                            '; master_check='.$http;
                     } elseif ($status==='ok') {
                         $detail='Master verified own HTTP and '.count($results).' site-agent checks';
                     }
