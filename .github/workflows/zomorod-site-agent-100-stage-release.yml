@@ -270,7 +270,7 @@ jobs:
           cli="$private/site_agent_cycle_cli.php"
           test -s "$app" && test -s "$work" && test -s "$cli"
           phpbin="$(command -v php)"
-          "$phpbin" -r '
+          "$phpbin" -d display_errors=0 -r '
           require_once $argv[1];
           require_once $argv[2];
           $db=zmAgentDb(dirname($argv[1]));
