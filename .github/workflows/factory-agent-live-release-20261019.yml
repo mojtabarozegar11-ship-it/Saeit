@@ -25,6 +25,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: {persist-credentials: false}
+      - name: Install pinned specialist spreadsheet test dependency
+        run: python3 -m pip install --disable-pip-version-check 'openpyxl==3.1.5'
       - name: Validate installer and source-level safety contract
         run: |
           set -euo pipefail
