@@ -7,6 +7,7 @@ on:
       - scripts/mpw_vps_warehouse_courier.py
       - tests/test_mpw_vps_warehouse_courier.py
       - tests/test_existing_courier_customer_packages.py
+      - tests/test_mpw_three_bidirectional_orders.py
   schedule:
     - cron: '48 * * * *'
   workflow_dispatch:
@@ -30,6 +31,7 @@ jobs:
           set -euo pipefail
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_mpw_vps_warehouse_courier -v
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_existing_courier_customer_packages -v
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_mpw_three_bidirectional_orders -v
           python3 -m py_compile scripts/mpw_vps_warehouse_courier.py
           python3 - <<'PY'
           from pathlib import Path
@@ -131,6 +133,33 @@ jobs:
             "python3 -c 'import base64;exec(base64.b64decode(\"$source\"))' vps-return" \
             < "$RUNNER_TEMP/mpw-qa-feedback.json"
           echo 'MPW_FACTORY_STAGE1_RETURN_CHANNEL=PASS'
+      - name: Transfer THREE verified site-origin product rework orders to native VPS factory
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/factory-store-preflight"
+          source="$(base64 -w0 scripts/mpw_vps_warehouse_courier.py)"
+          timeout 65s ssh -T -F "$d/config" saeit-cpanel \
+            "python3 -c 'import base64;exec(base64.b64decode(\"$source\"))' site-three-orders-export" \
+            > "$RUNNER_TEMP/mpw-three-product-orders.json"
+          python3 - <<'PY'
+          import json,os
+          f=os.environ['RUNNER_TEMP']+'/mpw-three-product-orders.json'
+          data=json.load(open(f))
+          assert data['schema']=='mpw.factory.three-product-requests.v1'
+          assert data['tenant']=='mojplaywin-main'
+          assert data['exact_product_requests']==3
+          assert len(data['requests'])==3
+          assert {q['slot'] for q in data['requests']}=={1,2,3}
+          assert len({q['request_id'] for q in data['requests']})==3
+          assert all(q['paid_customer_purchase'] is False for q in data['requests'])
+          print('MPW_SITE_VERIFIED_PRODUCT_REQUESTS=3')
+          PY
+          timeout 95s ssh -T -F "$d/config" saeit-vps \
+            "python3 -c 'import base64;exec(base64.b64decode(\"$source\"))' vps-three-orders-import" \
+            < "$RUNNER_TEMP/mpw-three-product-orders.json"
+          echo MPW_SITE_TO_FACTORY_THREE_PRODUCT_REQUESTS_DELIVERED=PASS
       - name: Consume accepted returns as executable factory Stage-1 QA review jobs
         shell: bash
         run: |
@@ -201,4 +230,4 @@ jobs:
         shell: bash
         run: |
           rm -rf -- "$RUNNER_TEMP/factory-store-preflight"
-          rm -f -- "$RUNNER_TEMP/mpw-factory-stock.tgz" "$RUNNER_TEMP/mpw-qa-feedback.json" "$RUNNER_TEMP/mpw-factory-stage1-triage.jsonl"
+          rm -f -- "$RUNNER_TEMP/mpw-factory-stock.tgz" "$RUNNER_TEMP/mpw-qa-feedback.json" "$RUNNER_TEMP/mpw-factory-stage1-triage.jsonl" "$RUNNER_TEMP/mpw-three-product-orders.json"

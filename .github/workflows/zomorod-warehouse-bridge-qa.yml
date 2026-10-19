@@ -6,6 +6,7 @@ on:
       - scripts/zomorod_factory_store_import.py
       - tests/test_zomorod_warehouse_3order_bridge.py
       - tests/test_existing_courier_customer_packages.py
+      - tests/test_mpw_three_bidirectional_orders.py
       - scripts/factory_store_sender.py
       - scripts/store_receiver.py
       - scripts/mpw_vps_warehouse_courier.py
@@ -26,6 +27,7 @@ jobs:
           set -euo pipefail
           python3 -m unittest discover -s tests -p 'test_zomorod_warehouse_3order_bridge.py' -v
           python3 -m unittest discover -s tests -p 'test_mpw_vps_warehouse_courier.py' -v
+          python3 -m unittest discover -s tests -p 'test_mpw_three_bidirectional_orders.py' -v
           python3 -m unittest discover -s tests -p 'test_existing_courier_customer_packages.py' -v
           php -l content/zomorod-v11/site_store.php
           python3 -m py_compile scripts/zomorod_vps_warehouse_3order_bridge.py scripts/zomorod_factory_store_import.py
