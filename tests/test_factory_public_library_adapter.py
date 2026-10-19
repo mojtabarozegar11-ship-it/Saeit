@@ -42,6 +42,7 @@ class ResourceTests(unittest.TestCase):
             self.assertEqual(record["products"][0]["sha256"], self.hash)
             self.assertFalse(record["purchase_required"])
             self.assertIn(mod.CANONICAL, (root / location / "index.html").read_text())
+            self.assertIn("PassengerEnabled off", (root / location / ".htaccess").read_text())
         mod.publish(self.home, "zomorod-main")
 
     def test_existing_non_factory_directory_is_protected(self):
