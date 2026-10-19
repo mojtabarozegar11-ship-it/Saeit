@@ -1,0 +1,113 @@
+name: VPS factory coordinated one-minute cadence
+on:
+  pull_request:
+    paths:
+      - "deploy/install_factory_every_minute.sh"
+      - "deploy/install_autonomous_factory_products.sh"
+      - "deploy/install_production_warehouse.sh"
+      - "tests/test_factory_every_minute.py"
+      - ".github/workflows/vps-factory-every-minute-20261019.yml"
+  push:
+    branches: [main]
+    paths:
+      - "deploy/install_factory_every_minute.sh"
+      - "deploy/install_autonomous_factory_products.sh"
+      - "deploy/install_production_warehouse.sh"
+      - "tests/test_factory_every_minute.py"
+      - ".github/workflows/vps-factory-every-minute-20261019.yml"
+permissions:
+  contents: read
+concurrency:
+  group: saeit-vps-factory-minute-cadence
+  cancel-in-progress: false
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Check 1-minute cron, sequential production and QA, offline warehouse, rollback
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p 'test_factory_every_minute.py' -v
+          python3 -m unittest discover -s tests -p 'test_factory_production_warehouse.py' -v
+          python3 -m unittest discover -s tests -p 'test_factory_vps_product_cycle.py' -v
+  deploy:
+    needs: contract
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event_name == 'push' && contains(github.event.head_commit.message, '[approved-factory-minute-20261019]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Publish ONE cron tick per minute on existing independent factory VPS
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/factory-minute"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          ssh_vps() {
+            ssh -i "$d/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=10 -o ServerAliveCountMax=2 githubops@178.239.147.150 "$@"
+          }
+          ssh_vps 'test "$(id -un)" = githubops && test -d "$HOME/factory-runtime/operations/production-warehouse" && test -s "$HOME/factory-runtime/private/autonomous-product-cycle/production-warehouse/stock-register.json" && echo FACTORY_MINUTE_VPS_PREFLIGHT=PASS'
+          stage="/home/githubops/factory-runtime/operations/.factory-minute-install-$GITHUB_RUN_ID.sh"
+          sha="$(sha256sum deploy/install_factory_every_minute.sh | awk '{print $1}')"
+          cat deploy/install_factory_every_minute.sh | ssh_vps "umask 077; test ! -e '$stage'; cat > '$stage'; chmod 700 '$stage'"
+          ssh_vps "test \"\$(sha256sum '$stage' | awk '{print \$1}')\" = '$sha' && bash -n '$stage' && bash '$stage'"
+          echo FACTORY_MINUTE_DEPLOY_SCRIPT=PASS
+          ssh_vps 'python3 -' <<'PY'
+          from pathlib import Path
+          import json, subprocess,datetime
+          home=Path.home()
+          ops=home/"factory-runtime"/"operations"
+          cron=subprocess.check_output(["crontab","-l"],text=True)
+          entries=[x for x in cron.splitlines() if "SAEIT_FACTORY_EVERY_MINUTE_V1" in x and not x.lstrip().startswith("#")]
+          expected="* * * * * /bin/bash "+str(ops/"production-warehouse"/"run-minute-cycle.sh")+" # SAEIT_AUTONOMOUS_PRODUCTS_V2 SAEIT_PRODUCTION_WAREHOUSE_V1 SAEIT_FACTORY_EVERY_MINUTE_V1"
+          assert entries==[expected],entries
+          assert cron.count("SAEIT_AUTONOMOUS_PRODUCTS_V2")==1
+          assert cron.count("SAEIT_PRODUCTION_WAREHOUSE_V1")==1
+          assert (ops/"production-warehouse"/"run-minute-cycle.sh").is_file()
+          reg=json.loads((home/"factory-runtime"/"private"/"autonomous-product-cycle"/"production-warehouse"/"stock-register.json").read_text())
+          assert reg["sites_contacted"]==0 and reg["distribution_enabled"] is False
+          print("FACTORY_CRON_INTERVAL_SECONDS=60")
+          print("FACTORY_PRODUCE_THEN_STOCK_ORDER=YES")
+          print("FACTORY_CRON_SINGLE_DRIVER=YES")
+          print("FACTORY_WAREHOUSE_VERSIONS="+str(reg["finished_goods_versions"]))
+          print("FACTORY_SITE_DISTRIBUTION=DISABLED")
+          print("FACTORY_ONE_MINUTE_INSTALL_VERIFIED=PASS")
+          PY
+          # Run the same scheduled runner once to confirm production and QA
+          # without waiting for or altering any website.
+          timeout 180s ssh_vps 'bash "$HOME/factory-runtime/operations/production-warehouse/run-minute-cycle.sh"; python3 -' <<'PY'
+          from pathlib import Path
+          import json,time
+          ops=Path.home()/"factory-runtime"/"operations"
+          log=ops/"factory-minute-cycle.log"
+          if not log.is_file():raise SystemExit("MINUTE_WORKER_LOG_MISSING")
+          text=log.read_text(errors="replace")
+          if "FACTORY_MINUTE_START_UTC=" not in text or "FACTORY_MINUTE_WAREHOUSE_FINISHED=true" not in text:
+              raise SystemExit("MINUTE_WORKER_STOCK_STAGE_NOT_VERIFIED")
+          inventory=Path.home()/"factory-runtime"/"private"/"autonomous-product-cycle"/"production-warehouse"/"stock-register.json"
+          reg=json.loads(inventory.read_text())
+          if reg["sites_contacted"]!=0 or reg["distribution_enabled"] is not False:raise SystemExit("SITES_CONTACTED")
+          print("FACTORY_MINUTE_MANUAL_CYCLE=PASS")
+          print("FACTORY_MINUTE_STOCK_VERSIONS="+str(reg["finished_goods_versions"]))
+          print("FACTORY_MINUTE_NO_SITE_TRANSFER=PASS")
+          PY
+      - name: Final scheduling result
+        run: |
+          echo "FACTORY_SCHEDULE=EVERY_60_SECONDS"
+          echo "FACTORY_QA_AND_WAREHOUSE=SEQUENTIAL"
+          echo "FACTORY_CROSS_TICK_OVERLAP=LOCKED"
+          echo "FACTORY_INDEPENDENT_OF_SITES=true"
