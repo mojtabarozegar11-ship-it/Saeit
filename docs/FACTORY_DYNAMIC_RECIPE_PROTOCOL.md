@@ -14,10 +14,15 @@ installer.
 5. Push the change through GitHub. CI discovers, tests, and packages every recipe;
    the VPS deployment ships the complete recipe catalog automatically.
 
-The recipe test suite must complete within 60 seconds on the VPS Python runtime.
+CI validates the recipe runner on Python 3.8, 3.11 and 3.13. Every recipe must
+execute at least one unittest case; the minimum is enforced in code and the actual
+count is recorded in its manufacturing manifest. The suite must complete within
+60 seconds on the VPS Python runtime.
 Symlinks, malformed folder names, missing documentation, or missing tests stop
 catalog discovery. A failing test blocks that recipe's package. Each package is
-written privately and reproducibly; discovery never publishes products or sets a
+written privately and reproducibly. VPS catalog sync replaces stale files exactly;
+recipes removed from GitHub are moved to a private retired-recipes archive. Existing
+product packages and research ledgers are preserved. Discovery never publishes products or sets a
 price. Commercial review and owner approval remain separate gates.
 
 The build queue has no fixed recipe-count ceiling and runs sequentially to fit VPS
