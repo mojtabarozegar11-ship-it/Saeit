@@ -12,7 +12,7 @@ ROOT=HOME/'mojplaywin.com'
 APP=HOME/'Saeit-staging'
 HT=ROOT/'.htaccess'
 TARGET=ROOT/'design-preview-20261017/_mpw_dynamic_main_shell_20261019.php'
-EXPECTED_HT='ad715102ab237d8ed63d807b8f30065fb341a8785f02d5644af6fc826c6936ea'
+EXPECTED_HT='54bdd92811cbb6085707921d6a9db9b8ce0b845732edead9b44787651dc62ca6'
 ROUTES=(
 'store','games','ai','contact','support','privacy','terms','cookies',
 'products','blockchain','commerce','crypto-payments','global-business',
