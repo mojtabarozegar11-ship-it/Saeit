@@ -1,0 +1,74 @@
+name: VPS Factory Multi-Site Private Catalog Install
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/vps-factory-multisite-private-install.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: factory-multisite-private-install
+  cancel-in-progress: false
+jobs:
+  install:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Unit tests and private-only installer syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p 'test_factory_multisite_orchestrator.py' -v
+          bash -n deploy/install_factory_multisite_private.sh
+      - name: Deliver private catalog software to VPS only
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/factory-multisite"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P '' -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          sshopts=(-i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=12)
+          tar -cf "$d/bundle.tar" scripts/factory_multisite_orchestrator.py config/factory_sites_seed.json deploy/install_factory_multisite_private.sh
+          ssh "${sshopts[@]}" githubops@178.239.147.150 'test "$(id -un)" = githubops && mkdir -p "$HOME/factory-runtime/operations/multisite-deploy-source"'
+          scp "${sshopts[@]}" "$d/bundle.tar" githubops@178.239.147.150:/home/githubops/factory-runtime/operations/multisite-deploy-source/source.tar
+          ssh "${sshopts[@]}" githubops@178.239.147.150 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          root="$HOME/factory-runtime/operations/multisite-deploy-source"
+          test ! -L "$root"
+          python3 - "$root/source.tar" "$root" <<'PY'
+          import pathlib,sys,tarfile
+          path=pathlib.Path(sys.argv[1])
+          dest=pathlib.Path(sys.argv[2])
+          expected={
+              "scripts/factory_multisite_orchestrator.py",
+              "config/factory_sites_seed.json",
+              "deploy/install_factory_multisite_private.sh",
+          }
+          with tarfile.open(path) as tar:
+              members=tar.getmembers()
+              assert {m.name for m in members} == expected
+              assert all(m.isfile() and not m.issym() and not m.islnk() for m in members)
+              for item in members:
+                  target=dest/item.name
+                  target.parent.mkdir(parents=True,exist_ok=True)
+                  target.write_bytes(tar.extractfile(item).read())
+                  target.chmod(0o600)
+          PY
+          bash "$root/deploy/install_factory_multisite_private.sh"
+          test -s "$HOME/factory-runtime/private/multisite-distribution/catalogs/distribution-state.json"
+          test "$(crontab -l | grep -c SAEIT_MULTISITE_CATALOG_V1)" -eq 1
+          echo VPS_FACTORY_MULTISITE_INSTALL_CONFIRMED
+          REMOTE
