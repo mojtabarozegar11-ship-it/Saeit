@@ -1,5 +1,12 @@
 name: MojPlayWin About isolated owner-and-gallery remediation
 on:
+  pull_request:
+    paths:
+      - "content/**"
+      - "scripts/mpw_about_remediation_atomic_20261019.py"
+      - "tests/test_mojplaywin_about_atomic_remediation_20261019.py"
+      - "tests/test_mojplaywin_about_profile_disclosures_20261019.py"
+      - ".github/workflows/mojplaywin-about-remediation-20261019.yml"
   push:
     branches: [main]
     paths:
@@ -16,6 +23,20 @@ concurrency:
   group: mojplaywin-about-exact-static-prod
   cancel-in-progress: false
 jobs:
+  preflight-only:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compile and test isolated About-page content
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_about_remediation_atomic_20261019.py
+          python3 -m pip install -q pytest
+          python3 -m pytest -q tests/test_mojplaywin_about_profile_disclosures_20261019.py tests/test_mojplaywin_about_atomic_remediation_20261019.py
   publish-about-only:
     if: >-
       github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
