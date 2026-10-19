@@ -198,6 +198,59 @@ function transformMain(string $body, string $path, string $newHeader, string $ne
     if ($bodyCount!==1 || !str_contains($body,'mpw-dynamic-main'))throw new RuntimeException('Body scope missing');
     $body=takeOne($body,'~</head\s*>~i',MPW_STYLE."\n</head>",'scoped appearance',true);
     if (!str_contains($body,'Mojtaba Roozegar')) throw new RuntimeException('Founder credit absent');
+
+    // Contact-only disclosure. Routes, stores, agents, and child sites are unchanged.
+    if ($path==='/contact/') {
+        $mail='support@mojplaywin.com';
+        $cards=[
+          'Business'=>[
+            'Business proposals via support',
+            'Send business proposals and partnership enquiries using our published support inbox. Please include your organization, requested scope, and an appropriate subject. This is not a separately staffed business mailbox; no response time is promised.',
+            'Business%20Partnership%20-%20MojPlayWin',
+            'Send a business proposal'
+          ],
+          'Press'=>[
+            'Press enquiries via support',
+            'Send questions about public company information or media enquiries through the published support inbox. Use the press subject line; a dedicated press office or guaranteed reply is not claimed.',
+            'Press%20Inquiry%20-%20MojPlayWin',
+            'Send a press enquiry'
+          ]
+        ];
+        foreach($cards as $role=>$copy) {
+            $pattern='~<article\b(?=[^>]*\bclass=["\']mpw-page-card["\'])[^>]*>\s*<small>\s*Coming soon\s*</small>\s*<h2>\s*'.preg_quote($role,'~').'\s*</h2>\s*<p>[\s\S]*?</p>\s*</article>~i';
+            $replacements=0;
+            $body=preg_replace_callback($pattern,static function(array $match) use ($copy,$mail,$role): string {
+                return '<article class="mpw-page-card"><small>'.$copy[0].'</small>'.
+                  '<h2>'.$role.'</h2><p>'.$copy[1].'</p>'.
+                  '<a class="mpw-contact-direct" href="mailto:'.$mail.'?subject='.$copy[2].'">'.$copy[3].'</a></article>';
+            },$body,1,$replacements);
+            if(!is_string($body)||$replacements!==1) {
+                throw new RuntimeException('Contact card unexpected original content: '.$role);
+            }
+        }
+        $style='<style id="mpw-contact-safe-business-20261019">'.
+          'body.mpw-dynamic-main .mpw-page-card .mpw-contact-direct{display:inline-block;max-width:100%;overflow-wrap:anywhere;line-height:1.55;margin-top:12px;padding:11px 13px;border:1px solid #d6b36d;border-radius:10px;background:#bd9758;color:#11140f!important;text-decoration:none;font-weight:700;box-sizing:border-box}'.
+          'body.mpw-dynamic-main .mpw-page-card .mpw-contact-direct:focus-visible{outline:3px solid #f9dfab;outline-offset:3px}'.
+          'body.mpw-dynamic-main .mpw-page-grid{min-width:0;max-width:100%;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr))}'.
+          'body.mpw-dynamic-main .mpw-page-grid .mpw-page-card{min-width:0;overflow-wrap:anywhere}'.
+          '@media(max-width:600px){body.mpw-dynamic-main .mpw-page-grid{grid-template-columns:minmax(0,1fr)}}'.
+          '</style>';
+        $body=takeOne($body,'~</head\s*>~i',$style."\n</head>",'contact-only CSS',true);
+        $body=takeOne($body,
+          '~<link\b(?=[^>]*\brel=["\']icon["\'])[^>]*>~i',
+          '<link rel="icon" type="image/png" href="/static/site/mojplaywin-coin-logo.420e0d1f954b.png">',
+          'contact-only brand icon',true);
+        $body=takeOne($body,
+          '~<meta\b(?=[^>]*\bproperty=["\']og:description["\'])[^>]*>~i',
+          '<meta property="og:description" content="Contact MojPlayWin for customer support, business proposals and press questions through the published support email channel.">',
+          'contact-specific social description',true);
+        if(substr_count($body,'class="mpw-contact-direct"')!==2 ||
+           str_contains($body,'>Coming soon<') ||
+           !str_contains($body,'mailto:support@mojplaywin.com?subject=Business%20Partnership')) {
+            throw new RuntimeException('Contact profile upgrade verification failed');
+        }
+    }
+
     return $body;
 }
 
@@ -236,6 +289,23 @@ if (PHP_SAPI==='cli' && ($argv[1]??'')==='selftest') {
     if (!str_contains($result,'<h1>Games</h1>') || str_contains($result,'class="mpw-header"')) {
         throw new RuntimeException('Games test failed');
     }
+
+    $contactPrefix=str_replace('</head>',
+        '<link rel="icon" href="/old-company-icon.png">'.
+        '<meta property="og:description" content="Old generic text"></head>',$prefix);
+    $contactHtml=$contactPrefix.'<header class="site-header">Legacy</header>'.$h.
+        '<main id="main"><h1>Talk to MojPlayWin.</h1>'.
+        '<article class="mpw-page-card"><small>Coming soon</small><h2>Business</h2><p>Business contact will be published only after the mailbox is operational.</p></article>'.
+        '<article class="mpw-page-card"><small>Coming soon</small><h2>Press</h2><p>Press resources will be added with verified public releases.</p></article>'.
+        '</main>'.$f.'</body></html>';
+    $contactOutput=transformMain($contactHtml,'/contact/',$h,$f);
+    if(str_contains($contactOutput,'>Coming soon<') ||
+       !str_contains($contactOutput,'mpw-contact-safe-business-20261019') ||
+       !str_contains($contactOutput,'mailto:support@mojplaywin.com?subject=Business%20Partnership') ||
+       !str_contains($contactOutput,'Press%20Inquiry%20-%20MojPlayWin')) {
+        throw new RuntimeException('Contact-specific verified transformation failed');
+    }
+
     echo "MPW_MAIN_ONLY_BRIDGE_SELFTEST=PASS\n";
     exit(0);
 }
