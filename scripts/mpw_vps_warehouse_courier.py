@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 import fcntl
 import hashlib
+import importlib.util
 import io
 import json
 import os
@@ -230,6 +231,15 @@ def export_factory(root=VPS):
     records = stock_records(Path(root))
     companions = {(p,v):customer_companion(root,p,v,m["artifact_sha256"])
                   for p,v,m,raw in records}
+    # Three buyer-format goods per courier cycle; retain every underlying
+    # original stock record so the Stage-1 QA feedback contract is unchanged.
+    eligible=sorted(k for k,v in companions.items() if v is not None)
+    if len(eligible)>3:
+        now=datetime.now(timezone.utc)
+        pointer=((now.date().toordinal()*24+now.hour)*3)%len(eligible)
+        selected={eligible[(pointer+i)%len(eligible)] for i in range(3)}
+        companions={key:(value if key in selected else None)
+                    for key,value in companions.items()}
     stream = io.BytesIO()
     with tarfile.open(fileobj=stream, mode="w:gz") as tar:
         index = {"schema": SCHEMA, "tenant": TENANT, "created_utc": stamp(),
@@ -567,6 +577,219 @@ def triage_factory_stage1(root=VPS):
         os.close(descriptor)
 
 
+PRODUCT_ORDER_SCHEMA="mpw.factory.three-product-requests.v1"
+PRODUCT_ORDER_ID=re.compile(r"^MPWREQ-[a-f0-9]{20}$")
+PRODUCT_ORDER_CYCLE=re.compile(r"^20[0-9]{6}$")
+
+def three_site_product_requests(root=DEST,cycle=None):
+    """Three ACTUAL private site-origin QA rework requests, not buyer purchases.
+    Ground each request in a byte-verified site stock and signed return ticket.
+    A calendar-day cycle remains idempotent on hourly scheduler replays.
+    """
+    root=target_root(root)
+    cycle=cycle or datetime.now(timezone.utc).strftime("%Y%m%d")
+    require(bool(PRODUCT_ORDER_CYCLE.fullmatch(cycle)),"THREE_ORDERS_CYCLE_INVALID")
+    try:day=datetime.strptime(cycle,"%Y%m%d").date()
+    except ValueError as exc:raise RuntimeError("THREE_ORDERS_CYCLE_INVALID") from exc
+    folder=root/"returns"
+    private_new(folder)
+    candidates=[]
+    for product in sorted(folder.iterdir()):
+        require(product.is_dir() and not product.is_symlink() and RECIPE.fullmatch(product.name),
+                "THREE_ORDERS_SITE_PRODUCT_UNSAFE")
+        for row in sorted(product.iterdir()):
+            require(row.is_file() and not row.is_symlink() and row.suffix==".json"
+                    and SHA.fullmatch(row.stem),"THREE_ORDERS_SITE_VERSION_UNSAFE")
+            ticket=json_file(row,100_000)
+            version=row.stem
+            received=root/"received"/product.name/version
+            clean_dir(received)
+            meta=json_file(received/"warehouse_manifest.json",100_000)
+            archive=received/"product.zip"
+            require(archive.is_file() and not archive.is_symlink()
+                    and 0<archive.stat().st_size<=MAX_ZIP,"THREE_ORDERS_PRODUCT_MISSING")
+            verify_stock(meta,product.name,version,archive.read_bytes())
+            qa=json_file(received/"site_qa.json",100_000)
+            require(ticket.get("schema")==RETURN_SCHEMA and ticket.get("tenant")==TENANT
+                    and ticket.get("status")=="return_for_qa_completion"
+                    and ticket.get("stage")==1
+                    and ticket.get("source_sha256")==version
+                    and ticket.get("artifact_sha256")==meta["artifact_sha256"]
+                    and ticket.get("product_id")==product.name
+                    and ticket.get("issues")==list(ISSUES)
+                    and ticket.get("published") is False
+                    and qa.get("qa_state")=="requires_factory_stage1_rework"
+                    and qa.get("artifact_sha256")==meta["artifact_sha256"]
+                    and qa.get("public_listing") is False
+                    and qa.get("payment_enabled") is False,
+                    "THREE_ORDERS_SITE_SOURCE_MISMATCH")
+            candidates.append((product.name,version,meta["artifact_sha256"]))
+            require(len(candidates)<=MAX_ITEMS,"THREE_ORDERS_SITE_INDEX_FULL")
+    require(len(candidates)>=3,"THREE_ORDERS_NOT_ENOUGH_VERIFIED_SITE_PRODUCTS")
+    start=(day.toordinal()*3)%len(candidates)
+    chosen=[candidates[(start+i)%len(candidates)] for i in range(3)]
+    rows=[]
+    for slot,(product,version,sha) in enumerate(chosen,1):
+        request_id="MPWREQ-"+digest((cycle+"|"+product+"|"+version).encode())[:20]
+        rows.append({"slot":slot,"request_id":request_id,"product_id":product,
+                     "source_sha256":version,"artifact_sha256":sha,
+                     "kind":"verified_site_product_quality_rework",
+                     "paid_customer_purchase":False,"public_distribution":False})
+    assert len({row["request_id"] for row in rows})==3
+    doc={"schema":PRODUCT_ORDER_SCHEMA,"tenant":TENANT,"cycle":cycle,
+         "exact_product_requests":3,"requests":rows,
+         "publications":0,"commercial_authorizations":0,
+         "source":"site_verified_private_qa_returns",
+         "real_customer_purchases":0}
+    outbound=root/"product-orders-outbound"
+    private_new(outbound)
+    path=outbound/(cycle+".json")
+    if path.exists() or path.is_symlink():
+        require(json_file(path)==doc,"THREE_ORDERS_SITE_RECEIPT_CONFLICT")
+    else:atomic(path,json_blob(doc))
+    return json_blob(doc)
+
+def receive_three_product_requests(raw,root=VPS,engine_path=None,max_active=300):
+    """Bind three verified site product rework orders to the existing native
+    factory WO engine under its real lock; never count them as buyer orders.
+    Prior unresolved three-site batches prevent backlog amplification.
+    """
+    require(0<len(raw)<=160000,"THREE_ORDERS_BATCH_LIMIT")
+    batch=json.loads(raw)
+    require(isinstance(batch,dict) and batch.get("schema")==PRODUCT_ORDER_SCHEMA
+            and batch.get("tenant")==TENANT and batch.get("exact_product_requests")==3
+            and batch.get("source")=="site_verified_private_qa_returns"
+            and batch.get("real_customer_purchases")==0
+            and batch.get("commercial_authorizations")==0
+            and batch.get("publications")==0,
+            "THREE_ORDERS_BATCH_SCHEMA")
+    cycle=batch.get("cycle")
+    require(isinstance(cycle,str) and bool(PRODUCT_ORDER_CYCLE.fullmatch(cycle)),
+            "THREE_ORDERS_CYCLE_INVALID")
+    rows=batch.get("requests")
+    require(isinstance(rows,list) and len(rows)==3 and
+            {r.get("slot") for r in rows if isinstance(r,dict)}=={1,2,3},
+            "THREE_ORDERS_REQUEST_COUNT")
+    seen=set()
+    root=Path(root)
+    clean_dir(root)
+    validated=[]
+    for row in rows:
+        product,version,sha=row.get("product_id"),row.get("source_sha256"),row.get("artifact_sha256")
+        require(isinstance(product,str) and RECIPE.fullmatch(product)
+                and isinstance(version,str) and SHA.fullmatch(version)
+                and isinstance(sha,str) and SHA.fullmatch(sha)
+                and row.get("kind")=="verified_site_product_quality_rework"
+                and row.get("paid_customer_purchase") is False
+                and row.get("public_distribution") is False
+                and row.get("request_id")=="MPWREQ-"+digest(
+                    (cycle+"|"+product+"|"+version).encode())[:20],
+                "THREE_ORDERS_REQUEST_INVALID")
+        require((product,version) not in seen,"THREE_ORDERS_DUPLICATE_SOURCE")
+        seen.add((product,version))
+        stock=root/"production-warehouse/finished"/product/version
+        clean_dir(stock)
+        manifest=json_file(stock/"warehouse_manifest.json",100000)
+        artifact=stock/"product.zip"
+        require(artifact.is_file() and not artifact.is_symlink()
+                and 0<artifact.stat().st_size<=MAX_ZIP,"THREE_ORDERS_FACTORY_STOCK_MISSING")
+        verify_stock(manifest,product,version,artifact.read_bytes())
+        require(manifest["artifact_sha256"]==sha,"THREE_ORDERS_FACTORY_SHA_MISMATCH")
+        feedback=root/"design-intake/mojplaywin-stage1-quality-returns"/(product+"-"+version+".json")
+        original=json_file(feedback,100000)
+        require(original.get("schema")==RETURN_SCHEMA and original.get("tenant")==TENANT
+                and original.get("source_sha256")==version
+                and original.get("artifact_sha256")==sha
+                and original.get("status")=="return_for_qa_completion"
+                and original.get("issues")==list(ISSUES),
+                "THREE_ORDERS_UNVERIFIED_SITE_FEEDBACK")
+        validated.append(row)
+    path=Path(engine_path) if engine_path else (
+        Path.home()/"factory-runtime/operations/production-instructions/generate-orders.py")
+    require(path.is_file() and not path.is_symlink(),"THREE_ORDERS_NATIVE_ENGINE_MISSING")
+    spec=importlib.util.spec_from_file_location("mpw_native_factory_wo_engine",path)
+    engine=importlib.util.module_from_spec(spec);spec.loader.exec_module(engine)
+    area=root/"production-instructions"
+    orderdir=area/"orders"
+    clean_dir(area);clean_dir(orderdir)
+    receipt_dir=area/"mojplaywin-site-product-batches"
+    private_new(receipt_dir)
+    with (area/".orders.lock").open("a+b") as lock:
+        fcntl.flock(lock.fileno(),fcntl.LOCK_EX)
+        entries=[]
+        for file in sorted(orderdir.iterdir()):
+            require(file.is_file() and not file.is_symlink()
+                    and bool(engine.ORDER_RE.fullmatch(file.name)),
+                    "THREE_ORDERS_NATIVE_ENTRY_UNSAFE")
+            entries.append(engine.validate_old(file))
+            require(len(entries)<=engine.MAX_ORDERS,"THREE_ORDERS_NATIVE_CATALOG_LIMIT")
+        same=[x for x in entries if x.get("requesting_site")=="mojplaywin.com"
+              and x.get("bridge_cycle")==cycle]
+        require(len(same) in (0,3),"THREE_ORDERS_PARTIAL_NATIVE_BATCH")
+        if same:
+            by_slot={r["bridge_slot"]:r for r in same}
+            require(set(by_slot)=={1,2,3} and all(
+                by_slot[i]["site_request_id"]==row["request_id"]
+                and by_slot[i]["source_product_id"]==row["product_id"]
+                and by_slot[i]["source_sha256"]==row["source_sha256"]
+                for i,row in enumerate(validated,1)), "THREE_ORDERS_NATIVE_REPLAY_CONFLICT")
+            order_ids=[by_slot[i]["id"] for i in (1,2,3)]
+            action="already_admitted"
+        else:
+            other_active=[x for x in entries if x.get("requesting_site")=="mojplaywin.com"
+                         and x["status"]!="completed_verified"]
+            pending=sum(x["status"]!="completed_verified"
+                        and not engine.consumes_research_capacity(x) for x in entries)
+            if other_active:
+                action="waiting_for_prior_three_to_complete";order_ids=[]
+            elif pending+3>max_active or len(entries)+3>engine.MAX_ORDERS:
+                action="waiting_for_native_capacity";order_ids=[]
+            else:
+                serial=max((int(x["id"][3:]) for x in entries),default=0)
+                order_ids=[]
+                for slot,row in enumerate(validated,1):
+                    serial+=1
+                    oid="WO-"+str(serial).zfill(8)
+                    task={"origin":"mojplaywin-site-qa-return",
+                          "requesting_site":"mojplaywin.com",
+                          "bridge_cycle":cycle,"bridge_slot":slot,
+                          "site_request_id":row["request_id"],
+                          "source_product_id":row["product_id"],
+                          "source_sha256":row["source_sha256"],
+                          "source_artifact_sha256":row["artifact_sha256"],
+                          "phase":"engineering_specification",
+                          "subject":"Repair and re-verify existing site product "+row["product_id"],
+                          "instruction":"Use linked site Stage-1 QA return to investigate scientific/content quality, licensing and commercial defects. Rebuild only if evidence justifies it. Preserve original version and independently rerun functional tests.",
+                          "acceptance":["Verified existing source and QA return receipt",
+                                        "Real correction or justified outstanding blocker",
+                                        "Independent quality and rights review before sale",
+                                        "Never release publicly without owner authorization"],
+                          "technical_product_release":False}
+                    record=dict(task,schema=engine.SCHEMA,id=oid,
+                        fingerprint=engine.fingerprint(task),
+                        created_utc=engine.stamp(),status="issued",
+                        instruction_kind="site_product_rework_work_order",
+                        independent_of_websites=False,
+                        requires_customer_order=False,api_required=False,
+                        manufacturing_qa_passed=False,publication_approved=False,
+                        public_distribution_allowed=False,warehouse_goods_created=False)
+                    engine.atomic_json(orderdir/(oid+".json"),record)
+                    order_ids.append(oid)
+                action="three_native_product_orders_created"
+        result={"schema":PRODUCT_ORDER_SCHEMA,"tenant":TENANT,"cycle":cycle,
+                "received_verified_site_requests":3,"native_product_orders":order_ids,
+                "new_native_orders":3 if action=="three_native_product_orders_created" else 0,
+                "status":action,"real_paid_customer_orders":0,
+                "factory_finished_products_claimed":0,
+                "sales_or_publication_enabled":False}
+        target=receipt_dir/(cycle+".json")
+        if target.exists() or target.is_symlink():
+            prior=json_file(target)
+            if prior.get("native_product_orders") and prior.get("native_product_orders")!=order_ids:
+                raise RuntimeError("THREE_ORDERS_RECEIPT_COLLISION")
+        engine.atomic_json(target,result)
+    return result
+
 def main():
     require(len(sys.argv)==2, "COURIER_MODE_REQUIRED")
     mode=sys.argv[1]
@@ -583,6 +806,11 @@ def main():
     elif mode=="vps-triage":
         report=triage_factory_stage1()
         print("MPW_COURIER_FACTORY_TRIAGE="+json.dumps(report,sort_keys=True))
+    elif mode=="site-three-orders-export":
+        sys.stdout.buffer.write(three_site_product_requests())
+    elif mode=="vps-three-orders-import":
+        result=receive_three_product_requests(sys.stdin.buffer.read(160001))
+        print("MPW_COURIER_THREE_PRODUCT_ORDERS="+json.dumps(result,sort_keys=True))
     else:
         raise RuntimeError("INVALID_COURIER_MODE")
 
