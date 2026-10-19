@@ -48,7 +48,7 @@ class FactoryDefectLoopTests(unittest.TestCase):
 
     def test_failure_preserves_old_zip_and_does_not_block_other_recipe(self):
         initial = cycle.run_cycle(self.db, self.output, self.recipes)
-        self.assertEqual(initial["manufactured"], 2)
+        self.assertEqual(initial["manufactured"], len(maker.RECIPES))
         recipe = "farm_enterprise_economics"
         good_file = (self.output / "digital-products" / recipe /
                      (recipe + "-internal-qa.zip"))
@@ -58,7 +58,7 @@ class FactoryDefectLoopTests(unittest.TestCase):
         )
         result = cycle.run_cycle(self.db, self.output, self.recipes)
         self.assertEqual(result["status"], "needs_rework")
-        self.assertEqual(result["manufactured"], 1)
+        self.assertEqual(result["manufactured"], len(maker.RECIPES) - 1)
         self.assertEqual(result["failed"], 1)
         self.assertEqual(maker.sha256_file(good_file), hash_before)
         record = self._ledger(recipe)
