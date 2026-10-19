@@ -63,10 +63,13 @@ jobs:
           ssh_vps() {
             ssh -i "$d/key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o BatchMode=yes -o ConnectTimeout=15 githubops@178.239.147.150 "$@"
           }
-          stage="/home/githubops/factory-runtime/operations/.self-edit-staging-$GITHUB_RUN_ID"
+          stage="/home/githubops/factory-runtime/operations/.self-edit-staging-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
           ssh_vps "umask 077; test ! -e '$stage'; mkdir -m 700 '$stage'"
+          echo FACTORY_SELF_EDIT_VPS_STAGE_CREATED=PASS
           tar -cf - scripts/factory_*.py scripts/vps_master_evolution_cycle.py deploy/install_factory_code_self_upgrade.sh | ssh_vps "tar -xf - -C '$stage'"
-          ssh_vps "bash -n '$stage/deploy/install_factory_code_self_upgrade.sh'; bash '$stage/deploy/install_factory_code_self_upgrade.sh' '$stage'"
+          echo FACTORY_SELF_EDIT_SOURCE_TRANSFER=PASS
+          ssh_vps "bash -n '$stage/deploy/install_factory_code_self_upgrade.sh' && bash -x '$stage/deploy/install_factory_code_self_upgrade.sh' '$stage'"
+          echo FACTORY_SELF_EDIT_SOURCE_INSTALL=PASS
           ssh_vps 'python3 -' <<'PY'
           import json
           from pathlib import Path
