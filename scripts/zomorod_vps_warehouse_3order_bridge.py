@@ -202,5 +202,22 @@ def main():
 if __name__=="__main__":
     try:main()
     except (OSError,ValueError,RuntimeError,KeyError,json.JSONDecodeError) as err:
-        print("ZM_BRIDGE_CYCLE_FAILED="+type(err).__name__,file=sys.stderr)
+        # Never log paths, SSH details, credentials or arbitrary exception strings.
+        # Expose only exact, hard-coded operational blocker codes to GitHub Actions.
+        safe_codes={
+            "MODULE_INVALID","FAMILY_REGISTRY_MISSING","FAMILY_REGISTRY_SCHEMA",
+            "FACTORY_40_FAMILIES_INVALID","FACTORY_FAMILY_ENTRY_INVALID",
+            "CYCLE_ID_INVALID","FACTORY_PRIVATE_ROOT_INVALID",
+            "FACTORY_NATIVE_ORDER_QUEUE_NOT_READY","FACTORY_NATIVE_ORDER_ENTRY_UNSAFE",
+            "SITE_BRIDGE_DUPLICATE_ORDERS","SITE_BRIDGE_EXISTING_ORDER_CONFLICT",
+            "SITE_BRIDGE_RECEIPT_MISMATCH","FACTORY_PENDING_CAPACITY_REACHED",
+            "FACTORY_SITE_ORDER_ALREADY_EXISTS_WITH_DIFFERENT_CYCLE",
+            "ORDER_ID_COLLISION","NOT_EXACTLY_THREE",
+            "ORDERS_EXISTING_RECORD_INVALID","ORDERS_EXISTING_RECORD_UNSAFE",
+            "ORDERS_BAD_WORK_STATE","ORDERS_BAD_RECORD_FINGERPRINT",
+            "ORDERS_UNSAFE_DIRECTORY","ORDERS_SYMLINK_PARENT",
+        }
+        code=str(err)
+        label=code if code in safe_codes else type(err).__name__
+        print("ZM_BRIDGE_CYCLE_FAILED="+label,file=sys.stderr)
         sys.exit(1)
