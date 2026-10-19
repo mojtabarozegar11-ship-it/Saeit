@@ -40,6 +40,7 @@ class ManufacturerTests(unittest.TestCase):
             self.assertIn("farm_enterprise_economics/README.md", names)
             self.assertIsNone(archive.testzip())
         manifest = json.loads((path.parent / "manufacturing_manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual(manifest["schema_version"], 3)
         self.assertEqual(manifest["qa_status"], "passed")
         self.assertGreaterEqual(manifest["qa_test_count"], maker.MIN_TESTS_PER_RECIPE)
         self.assertEqual(manifest["minimum_tests_required"], 1)
