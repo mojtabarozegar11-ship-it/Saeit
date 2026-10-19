@@ -1,0 +1,103 @@
+name: VPS Factory Current Production Status Read Only
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/vps-factory-current-production-readonly-20261019.yml
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - name: Snapshot factory live process, last cycle and warehouse without changes
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/factory-now"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          timeout 75s ssh -T -i "$d/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=12 githubops@178.239.147.150 'python3 -' <<'PY'
+          from pathlib import Path
+          import datetime,json,re,subprocess,time,os
+          home=Path.home()
+          root=home/"factory-runtime"
+          ops=root/"operations"
+          private=root/"private"/"autonomous-product-cycle"
+          utc=datetime.datetime.now(datetime.timezone.utc)
+          print("STATUS_CAPTURE_UTC="+utc.isoformat(),flush=True)
+          def age(path,label):
+              if not path.is_file() or path.is_symlink():
+                  print(label+"_EXISTS=false",flush=True)
+                  return None
+              seconds=max(0,round(time.time()-path.stat().st_mtime))
+              print(label+"_AGE_SECONDS="+str(seconds),flush=True)
+              return seconds
+          ps=subprocess.run(["ps","-eo","pid=,etime=,args="],capture_output=True,text=True,timeout=10)
+          for name,keys in [
+              ("MAIN_RESEARCH_LOOP",("vps-only-loop.sh",)),
+              ("MANUFACTURING_PROCESS",("factory_vps_product_cycle.py",)),
+              ("WAREHOUSE_PROCESS",("factory_production_warehouse.py",)),
+          ]:
+              lines=[x for x in ps.stdout.splitlines() if all(k in x for k in keys) and "python3 -" not in x]
+              print(name+"_RUNNING="+str(bool(lines)).lower(),flush=True)
+              print(name+"_PROCESS_COUNT="+str(len(lines)),flush=True)
+          c=subprocess.run(["crontab","-l"],capture_output=True,text=True,timeout=10)
+          print("CRON_READ_OK="+str(c.returncode==0).lower(),flush=True)
+          for name,marker in [
+              ("MANUFACTURING","SAEIT_AUTONOMOUS_PRODUCTS_V2"),
+              ("PRODUCTION_WAREHOUSE","SAEIT_PRODUCTION_WAREHOUSE_V1"),
+          ]:
+              lines=[x for x in c.stdout.splitlines() if marker in x and x.strip() and not x.lstrip().startswith("#")]
+              print(name+"_SCHEDULE_COUNT="+str(len(lines)),flush=True)
+              print(name+"_CRON="+("; ".join(x[:240] for x in lines)),flush=True)
+          for tag,file in [
+              ("MANUFACTURING_LOG",ops/"autonomous-product-cycle.log"),
+              ("MANUFACTURING_STATE",private/"production-state.json"),
+              ("WAREHOUSE_LOG",ops/"production-warehouse.log"),
+              ("WAREHOUSE_REGISTER",private/"production-warehouse"/"stock-register.json"),
+              ("MAIN_FACTORY_LOG",ops/"vps-only-factory.log"),
+          ]:
+              age(file,tag)
+          for tag,file in [
+              ("MANUFACTURING_STATE",private/"production-state.json"),
+              ("WAREHOUSE_REGISTER",private/"production-warehouse"/"stock-register.json"),
+          ]:
+              if file.is_file() and not file.is_symlink():
+                  try:
+                      doc=json.loads(file.read_text(encoding="utf8"))
+                      keys=("mode","product_candidates_processed","built_product_count","built_product_recipes",
+                            "manufacturing_failed_recipe_count","private_rework_queue",
+                            "research_correction_queue","store_distribution_state","status",
+                            "finished_goods_versions","finished_goods_product_count",
+                            "factory_site_dependency","customer_order_dependency",
+                            "distribution_enabled","sites_contacted","awaiting_commercial_review",
+                            "needs_rework_or_review","last_cycle_actions")
+                      for key in keys:
+                          if key in doc:
+                              val=doc[key]
+                              text=json.dumps(val,ensure_ascii=True)
+                              if len(text)>450:text=text[:450]+"(truncated)"
+                              print(tag+"_"+key.upper()+"="+text,flush=True)
+                  except Exception as exc:
+                      print(tag+"_PARSE_ERROR="+type(exc).__name__,flush=True)
+          for tag,file in [
+              ("MANUFACTURING_LOG",ops/"autonomous-product-cycle.log"),
+              ("WAREHOUSE_LOG",ops/"production-warehouse.log"),
+          ]:
+              if file.is_file() and not file.is_symlink() and file.stat().st_size<15000000:
+                  lines=file.read_text(encoding="utf8",errors="replace").splitlines()
+                  relevant=[x for x in lines if re.match(r"^(VPS_FACTORY_|FACTORY_WAREHOUSE_)",x)]
+                  for x in relevant[-12:]:
+                      print(tag+"_RECENT="+x[:250],flush=True)
+          PY
