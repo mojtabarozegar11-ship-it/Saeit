@@ -1,0 +1,270 @@
+name: MojPlayWin main pages original atelier visual unification
+on:
+  pull_request:
+    paths:
+      - "scripts/mpw_visual_unify_atomic_20261019.py"
+      - "tests/test_mpw_visual_unify_20261019.py"
+      - ".github/workflows/mpw-main-visual-unify-20261019.yml"
+  push:
+    branches: [main]
+    paths:
+      - "scripts/mpw_visual_unify_atomic_20261019.py"
+      - ".github/workflows/mpw-main-visual-unify-20261019.yml"
+permissions:
+  contents: read
+concurrency:
+  group: mojplaywin-main-visual-unify-20261019
+  cancel-in-progress: false
+jobs:
+  preflight-pr:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Check 38-route scope, legacy menu, semantic and atomic rollback
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_visual_unify_atomic_20261019.py
+          python3 -m pip install -q pytest
+          python3 -m pytest -q --noconftest tests/test_mpw_visual_unify_20261019.py
+          python3 scripts/mpw_visual_unify_atomic_20261019.py selftest
+  publish-main-visual-unify:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.ref == 'refs/heads/main' &&
+      github.event_name == 'push' &&
+      contains(github.event.head_commit.message, '[approved-mpw-main-visual-unify-20261019]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Verify guarded source and snapshot all main and child routes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_visual_unify_atomic_20261019.py
+          python3 -m pip install -q pytest
+          python3 -m pytest -q --noconftest tests/test_mpw_visual_unify_20261019.py
+          python3 scripts/mpw_visual_unify_atomic_20261019.py selftest
+          python3 - <<'PY'
+          import urllib.request,urllib.error,os,json,hashlib,concurrent.futures
+          static=['/about/mojtaba-rozegar/','/about/','/agents/','/company/',
+                  '/economy/','/industry/','/knowledge/','/market/','/research/',
+                  '/services/','/studio/','/ventures/agriculture/',
+                  '/ventures/cafe-restaurant/','/ventures/carpets/',
+                  '/ventures/currency-crypto/','/ventures/ecommerce/',
+                  '/ventures/fuel-station/','/ventures/hospitality/','/ventures/jewelry-gold/']
+          dynamic=['/'+s+'/' for s in ('store games ai contact support privacy terms cookies products blockchain commerce crypto-payments global-business research-lab canada-vision agro-industry agriculture education weather').split()]
+          children=['/farnaz/','/saman/','/picm/','/taniya/','/zahra/']
+          routes=['/']+static+dynamic+children
+          def get(p):
+              request=urllib.request.Request('https://mojplaywin.com'+p,headers={'Cache-Control':'no-cache','User-Agent':'MPWVisualAudit/1.0'})
+              try:
+                  with urllib.request.urlopen(request,timeout=18) as resp:
+                      return p,resp.status,resp.read(2300000)
+              except urllib.error.HTTPError as exc:
+                  return p,exc.code,exc.read(1000)
+          with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+              result=list(pool.map(get,routes))
+          state={p:status for p,status,_ in result}
+          for p,code,_ in result:print('VISUAL_BASELINE_ROUTE',p,code,flush=True)
+          if any(state[p]!=200 for p in ['/']+static+dynamic):
+              raise SystemExit('Main root route already unhealthy, no publish')
+          root=next(payload for p,code,payload in result if p=='/')
+          sha=hashlib.sha256(root).hexdigest()
+          with open(os.environ['RUNNER_TEMP']+'/mpw-visual-before.json','w') as f:
+              json.dump({'routes':state,'homepage_sha256':sha,'static':static,'dynamic':dynamic,'children':children},f)
+          print('HOMEPAGE_REFERENCE_SHA256='+sha)
+          print('MAIN_PAGES_BASELINE='+str(len(static)+len(dynamic)))
+          PY
+      - name: Prepare Chromium before any site changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/mpw-visual-browser"
+          cd "$RUNNER_TEMP/mpw-visual-browser"
+          npm init -y >/dev/null
+          npm install --silent --no-fund --no-audit playwright
+          npx playwright install --with-deps chromium
+      - name: Open host-key-pinned relay through VPS to cPanel
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-consolidated-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Preflight exact existing static HTML and PHP syntax on host
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-consolidated-ssh"
+          timeout 90s ssh -T -F "$d/config" saeit-cpanel \
+            "python3 - audit" < scripts/mpw_visual_unify_atomic_20261019.py
+      - name: Atomic publish of only 19 root static, 19 root dynamic and shared CSS
+        id: publish
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-consolidated-ssh"
+          timeout 110s ssh -T -F "$d/config" saeit-cpanel \
+            "python3 - install '$GITHUB_RUN_ID'" < scripts/mpw_visual_unify_atomic_20261019.py
+      - name: Verify public visual design markers, same footer and protected routes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,urllib.request,urllib.error,os,hashlib,concurrent.futures,re,time
+          data=json.load(open(os.environ['RUNNER_TEMP']+'/mpw-visual-before.json'))
+          css='/design-preview-20261017/static/site/mpw-main-visual-unify-20261019.css'
+          req=urllib.request.Request('https://mojplaywin.com'+css,headers={'Cache-Control':'no-cache'})
+          with urllib.request.urlopen(req,timeout=20) as resp:
+              content=resp.read(250000)
+              if resp.status!=200 or b'mpw-design-unified-v1' not in content:
+                  raise SystemExit('Shared visual stylesheet unavailable')
+          def get(p):
+              request=urllib.request.Request('https://mojplaywin.com'+p,headers={'Cache-Control':'no-cache','Pragma':'no-cache','User-Agent':'MPWVisualPostRelease/1.0'})
+              for attempt in range(3):
+                  try:
+                      with urllib.request.urlopen(request,timeout=18) as r:
+                          return p,r.status,r.read(2300000)
+                  except urllib.error.HTTPError as e:
+                      return p,e.code,e.read(1000)
+                  except Exception:
+                      if attempt==2:raise
+                      time.sleep(2)
+          with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+              posts=list(pool.map(get,list(data['routes'])))
+          count=0
+          for p,status,raw in posts:
+              if status!=data['routes'][p]:
+                  raise SystemExit('Protected route status changed '+p)
+              if p in data['children']:
+                  print('CHILD_SITE_NOT_MODIFIED',p,status,flush=True);continue
+              if p=='/':
+                  if hashlib.sha256(raw).hexdigest()!=data['homepage_sha256']:
+                      raise SystemExit('Reference homepage unexpectedly modified')
+                  print('REFERENCE_HOMEPAGE_UNCHANGED=true',flush=True);continue
+              s=raw.decode('utf-8','replace')
+              if ('mpw-design-unified-v1' not in s or css not in s or
+                  not re.search(r'<body\b[^>]*class="[^"]*mpw-design-unified-v1',s,re.I) or
+                  '☆ All Rights Reserved. ☆ 2022. ☆ Mojtaba roozegar ☆' not in s):
+                  raise SystemExit('Missing live design, body or legal footer: '+p)
+              print('MPW_BRAND_UNIFIED',p,status,flush=True)
+              count+=1
+          if count!=38:raise SystemExit('Fewer than 38 main pages verified')
+          print('MPW_ALL_38_MAIN_PAGES_VERIFIED=PASS',flush=True)
+          PY
+      - name: Real Chromium mobile and desktop smoke and screenshots
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/mpw-visual-browser"
+          cat > verify.cjs <<'JS'
+          const {chromium}=require('playwright');
+          const fs=require('fs');
+          const paths=['/','/about/','/services/','/studio/','/company/','/research/','/store/','/agents/','/games/','/contact/'];
+          (async()=>{
+            const browser=await chromium.launch({headless:true});
+            const reports=[];
+            try {
+              for(const screen of [{width:390,height:844},{width:1365,height:900}]){
+                const page=await browser.newPage({viewport:screen});
+                for(const p of paths){
+                  const errors=[];
+                  const onError=e=>errors.push(String(e));
+                  page.on('pageerror',onError);
+                  const resp=await page.goto('https://mojplaywin.com'+p,{waitUntil:'domcontentloaded',timeout:30000});
+                  await page.waitForTimeout(350);
+                  const metrics=await page.evaluate(()=>{
+                    const hdr=document.querySelector('header.mw-site-nav,header.mpw-header');
+                    const style=hdr?getComputedStyle(hdr):null;
+                    return {
+                      unified:document.body.classList.contains('mpw-design-unified-v1'),
+                      background:getComputedStyle(document.body).backgroundColor,
+                      headerBackground:style?.backgroundImage||'',
+                      navLinks:hdr?.querySelectorAll('a').length||0,
+                      documentWidth:document.documentElement.scrollWidth,
+                      viewport:innerWidth,
+                      h1:document.querySelectorAll('main h1').length,
+                      footerRights:(document.querySelector('footer')?.innerText||'').includes('☆ All Rights Reserved. ☆ 2022. ☆ Mojtaba roozegar ☆'),
+                      imagesBroken:[...document.images].filter(x=>x.complete&&x.naturalWidth===0).length
+                    }
+                  });
+                  const ok=resp.status()===200 && metrics.h1===1 &&
+                    metrics.footerRights && metrics.documentWidth<=screen.width+4 &&
+                    (p==='/' ? !metrics.unified : metrics.unified&&metrics.background==='rgb(8, 9, 11)' &&
+                                      metrics.headerBackground.includes('gradient'));
+                  const report={path:p,width:screen.width,status:resp.status(),errors:errors.slice(0,3),...metrics,ok};
+                  reports.push(report);
+                  console.log('MPW_VISUAL_CHROMIUM='+JSON.stringify(report));
+                  if(!ok)throw Error('Visual regression on '+p+' '+screen.width);
+                  if(['/','/about/','/research/','/store/','/services/'].includes(p)){
+                    await page.screenshot({path:screen.width+'-'+p.replace(/\W+/g,'-')+'.png',fullPage:false,animations:'disabled'});
+                  }
+                  page.off('pageerror',onError);
+                }
+                await page.close();
+              }
+            } finally {fs.writeFileSync('visual-audit.json',JSON.stringify(reports,null,2));await browser.close();}
+            console.log('MPW_VISUAL_BROWSER_SMOKE=PASS');
+          })().catch(e=>{console.error(e);process.exitCode=1});
+          JS
+          node verify.cjs
+      - name: Roll back exact 20 source files and new CSS on verification failure
+        if: failure() && steps.publish.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-consolidated-ssh"
+          timeout 85s ssh -T -F "$d/config" saeit-cpanel \
+            "python3 - rollback '$GITHUB_RUN_ID'" < scripts/mpw_visual_unify_atomic_20261019.py
+      - name: Attach independent screenshots and computed-style findings
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mojplaywin-visual-unification-mobile-desktop
+          path: |
+            ${{ runner.temp }}/mpw-visual-browser/*.png
+            ${{ runner.temp }}/mpw-visual-browser/visual-audit.json
+          if-no-files-found: ignore
+          retention-days: 14
