@@ -16,6 +16,7 @@ from pathlib import Path
 import re
 import sys
 import tempfile
+import unicodedata
 
 SCHEMA="saeit.factory.production-instructions.v1"
 MAX_BACKLOG=300
@@ -146,9 +147,27 @@ def local_input_tasks(root):
                     or not isinstance(title,str) or not 8<=len(title)<=160
                     or not isinstance(details,str) or not 30<=len(details)<=3000):
                 raise RuntimeError("ORDERS_INCOMPLETE_SOURCE_ENTRY:"+kind)
-            # Customer & external market assertions remain unverified snapshots.
+            # A site/customer/market hint without an identifiable product
+            # family is not a valid engineering order. Never guess its class.
+            family=item.get("family_id")
+            if not isinstance(family,str) or not re.fullmatch(r"F(?:0[1-9]|[1-3][0-9]|40)",family):
+                raise RuntimeError("ORDERS_FAMILY_ID_REQUIRED:"+kind)
+            axes=("specialty","target_audience","problem_solved","level","language")
+            if any(not isinstance(item.get(k),str) or len(item[k].strip())<2
+                   or len(item[k])>250 for k in axes):
+                raise RuntimeError("ORDERS_PRODUCT_IDENTITY_INCOMPLETE:"+kind)
+            identity=[family]+[
+                " ".join(unicodedata.normalize("NFKC",item[k]).casefold().split())
+                for k in axes
+            ]
+            # Title and colour alone cannot establish a different product.
+            concept=checksum(identity)
             result.append({"origin":kind,"source_product_id":key,
                 "source_sha256":checksum({"id":key,"title":title,"specification":details}),
+                "family_id":family,"specialty":item["specialty"],
+                "target_audience":item["target_audience"],
+                "problem_solved":item["problem_solved"],"level":item["level"],
+                "language":item["language"],"concept_sha256":concept,
                 "phase":"engineering_specification","slot":1,"subject":title,
                 "instruction":details, "technical_product_release":False,
                 "acceptance":["Design and test a concrete implementable recipe",
@@ -193,10 +212,18 @@ def generate(root,max_backlog=MAX_BACKLOG):
         active=sum(x["status"]!="completed_verified" for x in old)
         candidates=local_research_tasks(root)+local_input_tasks(root)
         seen={x["fingerprint"] for x in old}
+        known_concepts={x["concept_sha256"] for x in old
+                        if isinstance(x.get("concept_sha256"),str)
+                        and HASH_RE.fullmatch(x["concept_sha256"])}
         selected=None
+        skipped_same_concept=0
         if active<max_backlog:
             for task in candidates:
                 key=fingerprint(task)
+                concept=task.get("concept_sha256")
+                if concept and concept in known_concepts:
+                    skipped_same_concept+=1
+                    continue
                 if key not in seen:
                     selected=(task,key)
                     break
@@ -221,6 +248,7 @@ def generate(root,max_backlog=MAX_BACKLOG):
         report={"schema":SCHEMA,"last_scan_utc":stamp(),"last_action":action,
                 "last_order":order_id,"instructions_issued_total":len(old)+int(bool(selected)),
                 "pending_instructions":active,"candidate_instructions":len(candidates),
+                "duplicate_concepts_skipped":skipped_same_concept,
                 "site_connection_required":False,"customer_order_required":False,
                 "distribution_enabled":False,"production_warehouse_unmodified":True}
         atomic_json(area/"order-status.json",report)
