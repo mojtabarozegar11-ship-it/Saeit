@@ -4,6 +4,7 @@ on:
     paths:
       - "scripts/mpw_about_company_consolidated_20261019.py"
       - "tests/test_mpw_about_company_consolidated_20261019.py"
+      - "tests/test_mpw_consolidated_workflow_syntax_20261019.py"
       - ".github/workflows/mojplaywin-about-company-consolidated-20261019.yml"
   push:
     branches: [main]
@@ -28,7 +29,7 @@ jobs:
           set -euo pipefail
           python3 -m py_compile scripts/mpw_about_company_consolidated_20261019.py
           python3 -m pip install -q pytest
-          python3 -m pytest -q --noconftest tests/test_mpw_about_company_consolidated_20261019.py
+          python3 -m pytest -q --noconftest tests/test_mpw_about_company_consolidated_20261019.py tests/test_mpw_consolidated_workflow_syntax_20261019.py
   publish-exact-about-and-company:
     if: >-
       github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
@@ -47,7 +48,7 @@ jobs:
           set -euo pipefail
           python3 -m py_compile scripts/mpw_about_company_consolidated_20261019.py
           python3 -m pip install -q pytest
-          python3 -m pytest -q --noconftest tests/test_mpw_about_company_consolidated_20261019.py
+          python3 -m pytest -q --noconftest tests/test_mpw_about_company_consolidated_20261019.py tests/test_mpw_consolidated_workflow_syntax_20261019.py
           python3 - <<'PY'
           import urllib.request,urllib.error,os,json,hashlib
           root='https://mojplaywin.com'
@@ -166,9 +167,10 @@ jobs:
                       if path=='/about/':
                           ok=ok and body.count('class="mpw-profile-indicator"')==30 and body.count('class="mpw-seven-item"')==6
                       else:
-                          ok=ok and 'Company Overview | MojPlayWin' in body and
-                          'mpw-company-og-20261019' in body and 'mpw-company-harmonized' in body and
-                          body.count('class="mpw-ten-card"')==10
+                          ok=(ok and 'Company Overview | MojPlayWin' in body and
+                              'mpw-company-og-20261019' in body and
+                              'mpw-company-harmonized' in body and
+                              body.count('class="mpw-ten-card"')==10)
                       if ok:break
                   except Exception as e:
                       print('LIVE_SMOKE_RETRY',path,type(e).__name__)
