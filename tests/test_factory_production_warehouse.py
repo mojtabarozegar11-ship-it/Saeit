@@ -83,6 +83,18 @@ class FactoryWarehouseTests(unittest.TestCase):
         self.assertEqual(result["held"],1)
         self.assertTrue((self.private/"digital-products"/"farm_enterprise_economics"/"farm_enterprise_economics-internal-qa.zip").exists())
         self.assertEqual(self.register()["finished_goods_versions"],0)
+    def test_schema_three_evidence_requires_an_executed_test(self):
+        self.manufacture("farm_enterprise_economics")
+        f=self.private/"digital-products"/"farm_enterprise_economics"/"manufacturing_manifest.json"
+        manifest=json.loads(f.read_text())
+        self.assertEqual(manifest["schema_version"],3)
+        self.assertGreaterEqual(manifest["qa_test_count"],1)
+        manifest["qa_test_count"]=0
+        manifest["qa_evidence"]["tests_executed"]=0
+        f.write_text(json.dumps(manifest))
+        with self.assertRaisesRegex(RuntimeError,"WAREHOUSE_MANUFACTURING_QA_NOT_APPROVED"):
+            warehouse.inspect_source(self.private,"farm_enterprise_economics")
+
     def test_failed_qa_manifest_cannot_become_finished_good(self):
         self.manufacture("farm_enterprise_economics")
         f=self.private/"digital-products"/"farm_enterprise_economics"/"manufacturing_manifest.json"
