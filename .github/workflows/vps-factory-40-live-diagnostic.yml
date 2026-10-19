@@ -1,4 +1,4 @@
-name: Read-only VPS 40-family installation diagnostic
+name: Read-only VPS 40-family installation diagnostic - live verification 2026-10-20
 on:
   push:
     branches: [main]
