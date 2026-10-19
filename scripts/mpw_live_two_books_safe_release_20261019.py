@@ -239,6 +239,26 @@ print('MPW_COMMERCE_READY_BOTH_BOOKS=PASS')
         raise RuntimeError("Independent Django smoke test failed")
 
 
+
+def restart_main_passenger_only():
+    """Reload MojPlayWin's own Passenger app without touching sibling apps."""
+    root = pathlib.Path("/home/zomorod2/mojplaywin.com")
+    htaccess = root / ".htaccess"
+    wsgi = root / "passenger_wsgi.py"
+    restart_file = root / "tmp/restart.txt"
+    if (not htaccess.is_file() or htaccess.is_symlink()
+            or not wsgi.is_file() or wsgi.is_symlink()
+            or not restart_file.parent.is_dir() or restart_file.parent.is_symlink()):
+        raise RuntimeError("Main Passenger restart isolation not verified")
+    config = htaccess.read_text("utf8", "replace")
+    if "PassengerAppRoot /home/zomorod2/mojplaywin.com" not in config:
+        raise RuntimeError("Main Passenger restart scope mismatch")
+    if "APP='/home/zomorod2/Saeit-staging'" not in wsgi.read_text("utf8", "replace"):
+        raise RuntimeError("Unexpected main Passenger app target")
+    restart_file.touch(mode=0o600)
+    print("MPW_ONLY_MAIN_PASSENGER_RESTART_TRIGGERED=YES",flush=True)
+
+
 def smoke_real_web(Product):
     from urllib.request import Request, urlopen
     from urllib.error import HTTPError
@@ -249,14 +269,24 @@ def smoke_real_web(Product):
     def get(uri, cookie=None):
         req = Request("https://mojplaywin.com"+uri, headers={
             "User-Agent":"MojPlayWin-TwoBook-Release-Probe/1",
+            "Cache-Control":"no-cache, no-store",
             **({"Cookie":settings.SESSION_COOKIE_NAME+"="+cookie} if cookie else {}),
         })
         with urlopen(req, timeout=14) as response:
             if response.status != 200 or urlparse(response.geturl()).path != uri:
                 raise RuntimeError("Live route is not accepting checkout")
             return response.read(120000).decode("utf8","replace")
-    landing=get("/store/")
-    if landing.count('class="mpw-crypto-buy"') != 2:
+    import time
+    landing = None
+    for attempt in range(7):
+        time.sleep(2)
+        try:
+            landing = get("/store/")
+        except Exception:
+            landing = None
+        if landing and landing.count('class="mpw-crypto-buy"') == 2:
+            break
+    if not landing or landing.count('class="mpw-crypto-buy"') != 2:
         raise RuntimeError("Main store has not loaded final checkout links")
     p=Product.objects.select_related("owner").get(pk=72)
     if not p.owner.is_active:
@@ -316,6 +346,7 @@ def main():
             ensure_file(STORE,next_store)
             ensure_file(SETTINGS,next_settings)
             smoke_new_process()
+            restart_main_passenger_only()
             smoke_real_web(Product)
             print("MPW_PRODUCTION_OPEN=VERIFIED_MAIN_DOMAIN_TWO_BOOKS",flush=True)
         except Exception as exc:
@@ -338,6 +369,7 @@ def main():
             # Never erase sale history or revoke a paid entitlement.
             if not CommerceInvoice.objects.exists():
                 revert_rows(Product,KnowledgeArticle,transaction,saved,new_article)
+                restart_main_passenger_only()
                 print("MPW_PRODUCTION_ROLLBACK=COMPLETE",flush=True)
             else:
                 print("MPW_PRODUCTION_ROLLBACK=MANUAL_FINANCIAL_REVIEW_REQUIRED",flush=True)
