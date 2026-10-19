@@ -111,7 +111,7 @@ jobs:
           selector=Path.home()/"public_html"/".htaccess"
           if selector.is_file():
               t=selector.read_text(errors="replace")
-              names=re.findall(r'(?m)^\\s*PassengerPython\\s+"([^"]+)"',t)
+              names=[line.split('"')[1] for line in t.splitlines() if line.strip().startswith("PassengerPython ") and line.count('"')>=2]
               print("ROOT_PASSENGER_MODE="+",".join("selector" if x.endswith("/lswsgi") else "virtualenv" if "/virtualenv/Saeit/" in x else "other" for x in names))
           try:
               response=Client(HTTP_HOST="zomorodmelal.ir").get("/api/health/",secure=True)
