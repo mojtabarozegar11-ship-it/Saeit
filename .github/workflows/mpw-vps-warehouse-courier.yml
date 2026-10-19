@@ -1,11 +1,12 @@
 name: MojPlayWin VPS factory warehouse QA return courier
 on:
   push:
-    branches: [fix/mpw-courier-operational-stage1-20261019]
+    branches: [main]
     paths:
       - .github/workflows/mpw-vps-warehouse-courier.yml
       - scripts/mpw_vps_warehouse_courier.py
       - tests/test_mpw_vps_warehouse_courier.py
+      - tests/test_existing_courier_customer_packages.py
   schedule:
     - cron: '48 * * * *'
   workflow_dispatch:
@@ -16,7 +17,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   courier:
-    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/fix/mpw-courier-operational-stage1-20261019')
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
@@ -28,6 +29,7 @@ jobs:
         run: |
           set -euo pipefail
           PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_mpw_vps_warehouse_courier -v
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_existing_courier_customer_packages -v
           python3 -m py_compile scripts/mpw_vps_warehouse_courier.py
           python3 - <<'PY'
           from pathlib import Path
@@ -165,6 +167,8 @@ jobs:
           assert v['publicly_published']==0
           assert v['store_product_created']==0
           assert v['quality_approved']==0
+          assert isinstance(v.get('new_customer_packages_received',0),int)
+          assert v.get('publicly_published')==0
           print('MPW_FACTORY_INBOX_READBACK='+json.dumps(v,sort_keys=True))
           PY
           timeout 50s ssh -T -F "$d/config" saeit-vps python3 - <<'PY'
