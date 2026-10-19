@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """MojPlayWin main-domain only: atomic one-line footer, no routing or app restart.
 
-Touches 19 proven priority-routed static page files and the shared Django
+Touches 19 proven priority-routed static pages, the exact homepage file and the shared Django
 MojPlayWin footer template; DOES NOT edit child sites, .htaccess, orders,
 payment code, database or other server software.
 """
@@ -22,6 +22,7 @@ STATIC=(
     "ventures-hospitality","ventures-jewelry-gold"
 )
 TEMPLATE=APP/"core/templates/mojplaywin/footer.html"
+HOMEPAGE=ROOT/"design-preview-20261017/production-home-20261017.html"
 DISPLAY="☆ All Rights Reserved. ☆ 2022. ☆ Mojtaba roozegar ☆"
 MARK="mpw-legal-one-line"
 CSS_ID="mpw-footer-single-line-css-20261019"
@@ -48,7 +49,7 @@ CSS=('<style id="'+CSS_ID+'">'
 def sha(raw:bytes)->str:return hashlib.sha256(raw).hexdigest()
 def fail(message):raise RuntimeError(message)
 def targets():
-    return [PAGES/(slug+".html") for slug in STATIC]+[TEMPLATE]
+    return [PAGES/(slug+".html") for slug in STATIC]+[HOMEPAGE,TEMPLATE]
 
 def before_guard():
     if pwd.getpwuid(os.getuid()).pw_name!="zomorod2":fail("Incorrect deployment user")
@@ -59,10 +60,12 @@ def before_guard():
     for slug in STATIC:
         ref="/design-preview-20261017/mpw-ten-editorials-20261018/pages/"+slug+".html"
         if ref not in rewrite:fail("Required static route no longer isolated: "+slug)
+    if "/design-preview-20261017/production-home-20261017.html" not in rewrite:
+        fail("Actual homepage static rewrite has changed")
     wsgi=ROOT/"passenger_wsgi.py"
     if not wsgi.is_file() or wsgi.is_symlink() or "Saeit-staging" not in wsgi.read_text("utf-8",errors="replace"):
         fail("Wrong MojPlayWin app template origin")
-    if len(targets())!=20:fail("Target inventory changed")
+    if len(targets())!=21:fail("Target inventory changed")
     for p in targets():
         if not p.is_file() or p.is_symlink() or p.parent.is_symlink():fail("Target missing or symlink: "+str(p))
 
@@ -151,7 +154,7 @@ def install(run):
         (recovery/"FAILED").write_text("Auto-recovery attempted")
         raise
     (recovery/"INSTALLED").write_text("verified",encoding="utf-8")
-    print("MPW_FOOTER_SINGLE_LINE_INSTALLED="+str(len(modified))+" FILES=20 RESTART=false BACKUP="+str(recovery))
+    print("MPW_FOOTER_SINGLE_LINE_INSTALLED="+str(len(modified))+" FILES=21 RESTART=false BACKUP="+str(recovery))
 
 def refresh_app(run):
     """Signal only MojPlayWin's Passenger app to reload its cached Django templates.
@@ -183,7 +186,7 @@ def rollback(run):
     recovery=backup_dir(run)
     if not recovery.is_dir() or recovery.is_symlink():fail("Invalid backup directory")
     manifest=json.loads((recovery/"manifest.json").read_text("utf-8"))
-    if len(manifest)!=20 or {x["path"] for x in manifest}!={str(p) for p in targets()}:
+    if len(manifest)!=21 or {x["path"] for x in manifest}!={str(p) for p in targets()}:
         fail("Recovery targets unexpected")
     for row in manifest:
         p=Path(row["path"]);backup=(recovery/row["backup"]).read_bytes()
@@ -192,18 +195,7 @@ def rollback(run):
     for row in reversed(manifest):
         p=Path(row["path"])
         atomic(p,(recovery/row["backup"]).read_bytes(),row["mode"])
-    # After exact file restoration ask only the configured MojPlayWin
-    # PassengerAppRoot to reload its Django template cache.
-    ht=HT.read_text("utf-8",errors="replace")
-    if "PassengerAppRoot /home/zomorod2/mojplaywin.com" not in ht:
-        fail("Rollback Passenger root changed")
-    signal=ROOT/"tmp/restart.txt"
-    if not signal.is_file() or signal.is_symlink() or signal.parent.is_symlink():
-        fail("Rollback Passenger restart signal missing")
-    digest=sha(signal.read_bytes())
-    os.utime(signal,None)
-    if sha(signal.read_bytes())!=digest:fail("Rollback changed restart signal content")
-    print("MPW_FOOTER_SINGLE_LINE_ROLLED_BACK=20 PASSENGER_RESTART_SIGNALED=true")
+    print("MPW_FOOTER_SINGLE_LINE_ROLLED_BACK=21 RESTART=false")
 
 def selftest():
     a='<footer class="mpw-footer"><div>©</div><div><span>© MojPlayWin</span><a href="/privacy/">Privacy</a></div><span class="mpw-founder-footer-final" style="color:gold">Mojtaba Roozegar</span></footer>'
