@@ -74,10 +74,16 @@ function takeOne(string $subject, string $regex, string $replacement, string $de
 }
 
 function countTagClass(string $body, string $tag, string $class): int {
-    $pat = '~<' . preg_quote($tag, '~') . '\b[^>]*class=["\'][^"\']*\b'
-        . preg_quote($class, '~') . '\b[^"\']*["\'][^>]*>~i';
-    $count = preg_match_all($pat, $body);
-    return is_int($count) ? $count : 0;
+    $n=0;
+    $matched=[];
+    if(!preg_match_all('~<'.preg_quote($tag,'~').'\b[^>]*>~i',$body,$matched))return 0;
+    foreach($matched[0] as $opening){
+        if(preg_match('~\bclass\s*=\s*["\']([^"\']*)["\']~i',$opening,$captured)){
+            $parts=preg_split('/\s+/',trim($captured[1]));
+            if(in_array($class,$parts,true))$n++;
+        }
+    }
+    return $n;
 }
 
 function transformMain(string $body, string $path, string $newHeader, string $newFooter): string {
@@ -102,7 +108,7 @@ function transformMain(string $body, string $path, string $newHeader, string $ne
     ];
     if (array_sum($heads)<1 || array_sum($heads)>2 || array_sum($footers)<1 || array_sum($footers)>2
         || max($heads)>1 || max($footers)>1) {
-        throw new RuntimeException('Incompatible original site shell');
+        throw new RuntimeException('Incompatible original site shell: '.json_encode([$heads,$footers]));
     }
     if ($heads['mw-site-nav']===1) {
         if ($heads['site-header']===1) {
