@@ -234,6 +234,56 @@ def find_records(root,by_id,by_slug):
                 unassigned["final_goods_unclassified"]+=1
     return counts,unassigned,lengths
 
+
+def technical_pilot_inventory(root, permitted_families):
+    """Read verified private technical samples, without granting production approval."""
+    folder=root/"family-pilots"
+    seen={}
+    if not folder.exists():return seen
+    if not folder.is_dir() or folder.is_symlink():
+        raise RuntimeError("MASTER_UNSAFE_PILOT_ROOT")
+    for family in permitted_families:
+        base=folder/family
+        if not base.is_dir() or base.is_symlink():continue
+        for version in base.iterdir():
+            if (version.is_symlink() or not version.is_dir()
+                    or not re.fullmatch(r"[a-f0-9]{20}",version.name)):
+                continue
+            receipt=version/"technical-receipt.json"
+            if receipt.is_symlink() or not receipt.is_file() or receipt.stat().st_size>200000:
+                continue
+            try:
+                data=read_obj(receipt,200000)
+                files=data.get("files")
+                if not (data.get("schema")=="saeit.factory.specialist-pilot.v1"
+                    and data.get("family")==family and data.get("source_key")==version.name
+                    and data.get("technical_quality_passed") is True
+                    and data.get("commercial_release") is False
+                    and data.get("distribution_enabled") is False
+                    and data.get("independent_specialist_review_completed") is False
+                    and data.get("owner_approval_recorded") is False
+                    and isinstance(files,dict) and 1<=len(files)<=6):
+                    continue
+                ok=True
+                for name,expected in files.items():
+                    if (not isinstance(name,str)
+                            or not re.fullmatch(r"[A-Za-z0-9_.-]{1,100}",name)
+                            or not isinstance(expected,str) or not HEX_RE.fullmatch(expected)):
+                        ok=False;break
+                    artifact=version/name
+                    if artifact.is_symlink() or not artifact.is_file() or artifact.stat().st_size<100:
+                        ok=False;break
+                    digest=hashlib.sha256()
+                    with artifact.open("rb") as stream:
+                        for part in iter(lambda:stream.read(65536),b""):
+                            digest.update(part)
+                    if digest.hexdigest()!=expected:
+                        ok=False;break
+                if ok:seen[family]=max(len(files),seen.get(family,0))
+            except (OSError,ValueError,TypeError,KeyError,RuntimeError):
+                continue
+    return seen
+
 def run(root,registry):
     root=Path(root).expanduser().resolve()
     if not root.is_dir() or root.is_symlink():raise RuntimeError("MASTER_INVALID_PRIVATE_FACTORY_ROOT")
@@ -248,11 +298,14 @@ def run(root,registry):
         by_slug={p["slug"]:p for p in profiles}
         count,unassigned,durations=find_records(root,by_id,by_slug)
         measured=cpu_mem_snapshot(ops)
+        verified_pilots=technical_pilot_inventory(root,by_id)
         rows=[]
         for profile in profiles:
             fid=profile["id"]
             stat=count[fid]
-            paused_reason="unverified_production_adapter_and_no_real_pilot"
+            paused_reason=("independent_specialist_qa_and_benchmarks_pending"
+                           if fid in verified_pilots else
+                           "unverified_production_adapter_and_no_real_pilot")
             if profile["resource_policy"]["gpu_required"] and not measured["gpu_availability_verified"]:
                 paused_reason="gpu_vram_not_measured_and_adapter_unverified"
             item={
@@ -261,7 +314,8 @@ def run(root,registry):
                 "in_production":stat["in_production"],"in_rework":stat["in_rework"],
                 "pending_review_or_spec":stat["waiting"],
                 "approved_final_stock":stat["final_approved"],
-                "technical_qa_trial_count":0,
+                "technical_qa_trial_count":int(fid in verified_pilots),
+                "private_verified_pilot_files":verified_pilots.get(fid,0),
                 "last_real_verified_production_duration_seconds":None,
                 "actual_cost_usd":None,"planned_concurrent_jobs":0,
                 "critical_defects_open":stat["open_defects"],
@@ -281,6 +335,10 @@ def run(root,registry):
             "registered_families":len(rows),"production_ready_families":0,
             "fully_verified_active_producer_families":0,
             "all_family_profiles_complete":True,
+            "private_verified_technical_pilot_family_count":len(verified_pilots),
+            "private_verified_technical_pilot_family_ids":sorted(verified_pilots),
+            "unverified_specialist_family_count":40-len(verified_pilots),
+            "technical_pilots_not_final_quality_or_activation":True,
             "families":rows,"unassigned_work_orders":dict(unassigned),
             "measured_vps_capacity":measured,
             "resource_policy":"reserve_capacity_for_rework_before_new_builds",
@@ -306,6 +364,7 @@ def main():
     r=run(a.factory_private,a.registry)
     print("FACTORY_40_FAMILY_REGISTRY="+str(r.get("registered_families","locked")))
     print("FACTORY_40_VERIFIED_ACTIVE_LINES="+str(r.get("fully_verified_active_producer_families",0)))
+    print("FACTORY_40_REAL_PRIVATE_TECHNICAL_PILOT_LINES="+str(r.get("private_verified_technical_pilot_family_count",0)))
     print("FACTORY_40_JOBS_EXECUTED_BY_MASTER=0")
     print("FACTORY_40_SITE_TRANSFERS=0")
     print("FACTORY_40_MASTER_STATUS="+r.get("master_mode",r.get("status","unknown")))

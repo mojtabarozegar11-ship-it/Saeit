@@ -57,6 +57,34 @@ class FortyLineMasterTests(unittest.TestCase):
         self.assertEqual(doc["sites_contacted"],0)
         self.assertFalse(doc["distribution_enabled"])
         self.assertEqual(doc["measured_vps_capacity"]["production_job_slots_authorized"],0)
+    def test_actual_hashed_pilot_counts_without_authorizing_production(self):
+        family = "F27"
+        version = "a" * 20
+        folder = self.root/"family-pilots"/family/version
+        folder.mkdir(parents=True)
+        source = folder/"budget.xlsx"
+        source.write_bytes(b"private authentic pilot" * 40)
+        checksum = hashlib.sha256(source.read_bytes()).hexdigest()
+        receipt = {"schema": "saeit.factory.specialist-pilot.v1",
+            "family": family, "source_key": version,
+            "technical_quality_passed": True, "commercial_release": False,
+            "independent_specialist_review_completed": False,
+            "distribution_enabled": False, "owner_approval_recorded": False,
+            "files": {"budget.xlsx": checksum}}
+        (folder/"technical-receipt.json").write_text(json.dumps(receipt))
+        found = self.run_master()
+        self.assertEqual(found["private_verified_technical_pilot_family_count"], 1)
+        self.assertEqual(found["private_verified_technical_pilot_family_ids"], ["F27"])
+        self.assertEqual(found["unverified_specialist_family_count"], 39)
+        self.assertEqual(found["families"][26]["technical_qa_trial_count"], 1)
+        self.assertEqual(found["families"][26]["private_verified_pilot_files"], 1)
+        self.assertEqual(found["fully_verified_active_producer_families"], 0)
+        self.assertFalse(found["distribution_enabled"])
+        source.write_bytes(b"tampered" * 40)
+        damaged = self.run_master()
+        self.assertEqual(damaged["private_verified_technical_pilot_family_count"], 0)
+        self.assertEqual(damaged["families"][26]["technical_qa_trial_count"], 0)
+
     def test_matching_work_orders_profile_specific_status(self):
         self.add_order(1,"F28",passport={
             "family_id":"F28","specialty":"greenhouse_water","target_audience":"production manager",
