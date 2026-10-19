@@ -29,7 +29,8 @@ jobs:
         run: |
           set -euo pipefail
           cd "$RUNNER_TEMP/zomorod-row-audit"
-          node "$GITHUB_WORKSPACE/scripts/zomorod_home_row_visibility_audit_20261019.cjs"
+          cp "$GITHUB_WORKSPACE/scripts/zomorod_home_row_visibility_audit_20261019.cjs" ./audit.cjs
+          node audit.cjs
       - name: Preserve audit evidence
         if: always()
         uses: actions/upload-artifact@v4
