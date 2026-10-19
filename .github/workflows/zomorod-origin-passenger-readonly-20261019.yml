@@ -1,0 +1,133 @@
+name: Zomorod origin vs Passenger forensic read-only
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/zomorod-origin-passenger-readonly-20261019.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-origin-diagnostics
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - name: Classify Passenger and Apache routing without printing credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          export PYTHONDONTWRITEBYTECODE=1
+          python3 - <<'PY'
+          import os,re,pathlib,subprocess,json
+          h=pathlib.Path.home(); app=h/"Saeit"; ht=h/"public_html"/".htaccess"
+          print("ORIGIN_APP_PRESENT="+str((app/"passenger_wsgi.py").is_file()))
+          if ht.is_file():
+              lines=ht.read_text(errors="replace").splitlines()
+              for key in ("PassengerAppRoot","PassengerBaseURI","PassengerPython","PassengerEnabled","PassengerStartupFile","PassengerAppType","DirectoryIndex","PYTHONHOME","PYTHONPATH"):
+                  vals=[x.strip().split(None,2) for x in lines if x.strip().startswith(key+" ") or x.strip().startswith("SetEnv "+key+" ")]
+                  if key=="PassengerPython":
+                      category=("venv" if any("/virtualenv/" in " ".join(v) for v in vals) else "selector" if any("lswsgi" in " ".join(v) for v in vals) else "other")
+                      print("ORIGIN_PASSENGER_PYTHON="+category)
+                  else:
+                      print("ORIGIN_CONFIG_"+key+"="+("present" if vals else "absent"))
+          for rel in ("stderr.log","tmp/restart.txt","config/settings.py","farnaz/__init__.py","command_center/templates/command_center/dashboard.html"):
+              p=app/rel; print("ORIGIN_FILE_"+rel.replace("/","_")+"="+("present" if p.is_file() else "missing"))
+          p=h/".cl.selector"/"python-selector.json"
+          if p.is_file():
+              j=json.loads(p.read_text())
+              data=j.get("Saeit",{})
+              print("ORIGIN_SELECTOR_ENABLED="+str(data.get("enabled","unknown")))
+              print("ORIGIN_SELECTOR_VERSION="+str(data.get("python_version","unknown"))[:12])
+          print("ORIGIN_PROCESSES_PASSENGER="+str(sum(1 for x in subprocess.run(
+              ["ps","-u",os.environ.get("USER","zomorod2"),"-o","args="],
+              text=True,capture_output=True,timeout=5).stdout.splitlines()
+              if re.search(r"(?:Passenger|lswsgi|passenger_wsgi)",x,re.I))))
+          for rel in ("Saeit/stderr.log","public_html/error_log","logs/zomorodmelal.ir-ssl_log","logs/zomorodmelal.ir"):
+              p=h/rel
+              if not p.is_file() or p.is_symlink():continue
+              with p.open("rb") as f:
+                  f.seek(max(0,p.stat().st_size-240000)); text=f.read().decode("utf8","replace")
+              tail=text.splitlines()[-250:]
+              needles={"module_missing":r"ModuleNotFoundError|No module named",
+                       "imports":r"ImportError|cannot import",
+                       "passenger_start":r"Passenger.*(?:start|spawn|fail)|SpawnException|Application startup",
+                       "database":r"OperationalError|DatabaseError|unable to open database",
+                       "permissions":r"Permission denied|EACCES",
+                       "pythonhome":r"PYTHONHOME|PythonHome|encodings",
+                       "runtime":r"Traceback|SystemExit|RuntimeError|Internal Server Error"}
+              counts={n:sum(bool(re.search(pat,line,re.I)) for line in tail) for n,pat in needles.items()}
+              print("ORIGIN_LOG_CLASS="+rel.replace("/","_")+" "+json.dumps(counts,sort_keys=True))
+          PY
+          REMOTE
+      - name: Compare TLS/proxy and local origin route status without sending credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          for path in / /api/health/ /admin/login/ /agents/; do
+            for origin in public loopback; do
+              extra=()
+              if test "$origin" = loopback; then extra=(--resolve "zomorodmelal.ir:443:127.0.0.1"); fi
+              result="$(curl --silent --show-error --max-time 9 --connect-timeout 5 --output /dev/null --write-out '%{http_code}|%{content_type}|%{ssl_verify_result}' "${extra[@]}" -H 'Cache-Control: no-cache' "https://zomorodmelal.ir$path?__ro_compare=20261019" 2>/dev/null || echo '000|unavailable|na')"
+              printf 'ORIGIN_PROBE path=%s via=%s result=%s\n' "$path" "$origin" "$result"
+            done
+          done
+          REMOTE
+      - name: Remove temporary SSH material
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
