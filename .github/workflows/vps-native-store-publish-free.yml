@@ -111,6 +111,38 @@ jobs:
           python3 -m py_compile scripts/publish_verified_factory_store_listing.py
           python3 -m py_compile scripts/publish_factory_free_tool.py
           test -f core/templates/core/store.html
+      - name: Read-only verify factory Release Gate before any public template write
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -F "$RUNNER_TEMP/factory-store-preflight/config" saeit-cpanel 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          cd "$HOME/Saeit-staging"
+          "$HOME/virtualenv/Saeit-staging/3.11/bin/python" - <<'PY'
+          import os,sys
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          import django;django.setup()
+          from django.apps import apps
+          Product=apps.get_model("core","Product")
+          products=Product.objects.filter(pk=131,active=False,price=0,currency="USD")
+          if products.count()!=1:
+              raise SystemExit("NATIVE_FACTORY_PRODUCT_NOT_EXACTLY_ONE_INACTIVE_FREE_DRAFT")
+          product=products.get()
+          metadata=product.metadata if isinstance(product.metadata,dict) else {}
+          if metadata.get("factory_recipe")!="farm_enterprise_economics" or metadata.get("factory_software_qa")!="passed":
+              raise SystemExit("NATIVE_FACTORY_PRODUCT_PROVENANCE_OR_QA_MISSING")
+          try:Gate=apps.get_model("core","FactoryReleaseGate")
+          except LookupError:
+              raise SystemExit("RUNTIME_RELEASE_GATE_MODEL_MISSING_REFUSE_UNGUARDED_ACTIVATION")
+          gate=Gate.objects.filter(product_id=product.pk).select_related("run","artifact","manifest").first()
+          if gate is None or gate.manifest_id is None or gate.run_id is None or gate.artifact_id is None:
+              raise SystemExit("FACTORY_RELEASE_GATE_MISSING_REQUIRE_REAL_MANIFEST_INDEPENDENT_QA")
+          from core.factory_governance import release_manifest_is_current
+          if not release_manifest_is_current(gate.manifest,product,gate.run,gate.artifact):
+              raise SystemExit("FACTORY_RELEASE_GATE_MANIFEST_STALE_OR_UNVERIFIED")
+          print("FACTORY_RELEASE_GATE_PREFLIGHT_PASSED=true")
+          PY
+          REMOTE
       - name: Stage release importer and narrowly update Django store card markup
         shell: bash
         run: |
