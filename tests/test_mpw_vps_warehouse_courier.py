@@ -8,7 +8,7 @@ import zipfile
 
 from scripts.mpw_vps_warehouse_courier import (
     SCHEMA, TENANT, ISSUES, digest, export_factory, import_site,
-    feedback_site, receive_factory_returns, unpack, safe_zip,
+    feedback_site, receive_factory_returns, triage_factory_stage1, unpack, safe_zip,
 )
 
 
@@ -72,6 +72,36 @@ class VPSWarehouseCourierTests(unittest.TestCase):
         self.assertEqual(doc["issues"],list(ISSUES))
         self.assertFalse(doc["published"])
         self.assertTrue((self.stock/"product.zip").is_file())
+
+    def test_return_queue_is_actually_consumed_at_first_factory_stage(self):
+        raw=export_factory(self.factory)
+        import_site(raw,self.site)
+        receive_factory_returns(feedback_site(self.site),self.factory)
+        first=triage_factory_stage1(self.factory)
+        self.assertEqual(first["factory_stage1_work_items"],1)
+        self.assertEqual(first["unresolved_independent_review_items"],1)
+        self.assertFalse(first["commercial_approval_claimed"])
+        state=(self.factory/"design-state/mojplaywin-stage1-qa-work"/
+               (self.product+"-"+self.version+".json"))
+        before=state.read_bytes()
+        self.assertTrue(state.is_file())
+        entry=json.loads(before)
+        self.assertEqual(entry["factory_entry_stage"],1)
+        self.assertEqual(len(entry["actual_tasks"]),4)
+        self.assertFalse(entry["production_rebuild_executed"])
+        self.assertTrue((self.stock/"product.zip").is_file())
+        again=triage_factory_stage1(self.factory)
+        self.assertEqual(again["factory_stage1_work_items"],1)
+        self.assertEqual(state.read_bytes(),before)
+
+    def test_stage_one_work_never_claims_factory_quality_approval(self):
+        raw=export_factory(self.factory)
+        import_site(raw,self.site)
+        receive_factory_returns(feedback_site(self.site),self.factory)
+        triage_factory_stage1(self.factory)
+        status=self.factory/"design-state/mojplaywin-stage1-qa-work/stage1-status.json"
+        self.assertFalse(json.loads(status.read_text())["commercial_approval_claimed"])
+        self.assertFalse(json.loads(status.read_text())["physical_rebuild_claimed"])
 
     def test_retry_is_idempotent_no_duplicate_and_version_preserved(self):
         first=export_factory(self.factory)
