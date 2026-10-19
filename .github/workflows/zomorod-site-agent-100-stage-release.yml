@@ -194,6 +194,38 @@ jobs:
             echo "SITE_AGENT_PRESERVED_ROUTE=$route status=$code"
             test "$code" = "200"
           done
+      - name: Automatic rollback after failed acceptance gate, if this run installed new PHP
+        if: failure()
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-agent100-release"
+          if test -s "$d/config"; then
+            new_sha="$(sha256sum content/zomorod-v11/site_agents.php | cut -c1-64)"
+            timeout 45s ssh -T -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_RUN_ID" "$new_sha" <<'REMOTE'
+          set -euo pipefail
+          run="$1";new_sha="$2"
+          current="$HOME/.private/zomorod-business/site_agents.php"
+          before="$HOME/.backups/zomorod-site-agent-v12/$run/site_agents.prior.php"
+          if test -f "$current" && test -f "$before"; then
+            live="$(sha256sum "$current"|cut -c1-64)"
+            old="$(sha256sum "$before"|cut -c1-64)"
+            if test "$live" = "$new_sha"; then
+              cp -p "$before" "$HOME/.private/zomorod-business/.site_agents.restore-$run.php"
+              mv -f "$HOME/.private/zomorod-business/.site_agents.restore-$run.php" "$current"
+              test "$(sha256sum "$current"|cut -c1-64)" = "$old"
+              echo "SITE_AGENT_RESTORED_PREVIOUS_SAFELY=yes"
+            elif test "$live" = "$old"; then
+              echo "SITE_AGENT_ALREADY_UNCHANGED_OR_ROLLED_BACK=yes"
+            else
+              echo "SITE_AGENT_UNEXPECTED_CONCURRENT_CONTENT_REFUSED_ROLLBACK=yes"
+              exit 10
+            fi
+          else
+            echo "SITE_AGENT_NO_VALID_BACKUP_FROM_THIS_RUN=yes"
+          fi
+          REMOTE
+          fi
       - name: Delete only temporary delivery files
         if: always()
         shell: bash
