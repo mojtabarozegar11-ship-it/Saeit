@@ -1,4 +1,4 @@
-name: F19 and F34 real BUILD50 website and SVG PNG icon production CI
+name: F19 and F34 verified BUILD50 full original production CI
 on:
   push:
     branches: [main]
