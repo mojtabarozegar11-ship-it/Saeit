@@ -63,6 +63,15 @@ catalog_stage="$ops/.product-recipes-stage-$stamp"
 old_catalog="$ops/.product-recipes-old-$stamp"
 desired_catalog="$ops/.product-recipes-desired-$stamp.txt"
 retired="$private/retired-recipes"
+cleanup_staging() {
+  if [[ -n "${catalog_stage:-}" && "$catalog_stage" == "$ops"/.product-recipes-stage-* && -d "$catalog_stage" ]]; then
+    rm -rf -- "$catalog_stage"
+  fi
+  if [[ -n "${desired_catalog:-}" && "$desired_catalog" == "$ops"/.product-recipes-desired-* && -f "$desired_catalog" ]]; then
+    rm -f -- "$desired_catalog"
+  fi
+}
+trap cleanup_staging EXIT
 mkdir -m 700 "$catalog_stage"
 : > "$desired_catalog"
 chmod 600 "$desired_catalog"
