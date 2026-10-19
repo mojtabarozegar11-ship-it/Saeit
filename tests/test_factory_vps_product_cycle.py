@@ -6,6 +6,8 @@ import sqlite3
 import shutil
 import tempfile
 import unittest
+from unittest import mock
+import fcntl
 
 ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location(
@@ -128,6 +130,71 @@ class FactoryCycleIsolationTests(unittest.TestCase):
 
 class FactorySynthesisIntegrationTests(unittest.TestCase):
     setUp = FactoryVPSCycleTests.setUp
+
+    def test_cli_overlap_is_successful_skip(self):
+        self.output.mkdir()
+        with (self.output/'.production-cycle.lock').open('a+b') as locked:
+            fcntl.flock(locked.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            status=cycle.main(['--db',str(self.db),'--out',str(self.output),
+                               '--recipes',str(self.recipes)])
+        self.assertEqual(status,0)
+        self.assertFalse((self.output/'production-state.json').exists())
+
+    def test_corrupt_manifest_shapes_are_rebuilt_without_false_new_products(self):
+        cycle.run_cycle(self.db,self.output,self.recipes)
+        manifests=sorted((self.output/'digital-products').glob('*/manufacturing_manifest.json'))
+        prior=[json.loads(path.read_text()) for path in manifests]
+        malformed=[[],dict(prior[1],qa_measurements=[]),
+                   dict(prior[2],qa_measurements=dict(prior[2]['qa_measurements'],successful_tests='many'))]
+        for path,bad in zip(manifests,malformed): path.write_text(json.dumps(bad))
+        result=cycle.run_cycle(self.db,self.output,self.recipes)
+        self.assertEqual(result['status'],'ok')
+        self.assertEqual(result['manufactured'],3)
+        self.assertEqual(result['new_artifacts'],0)
+        for path in manifests:
+            repaired=json.loads(path.read_text())
+            self.assertGreater(repaired['qa_measurements']['successful_tests'],0)
+
+    def test_designer_storage_failure_does_not_stop_existing_products(self):
+        self.output.mkdir()
+        (self.output/'design-state').write_text('deliberately not a directory')
+        result=cycle.run_cycle(self.db,self.output,self.recipes,enable_designer=True)
+        self.assertEqual(result['status'],'needs_rework')
+        self.assertEqual(result['manufactured'],3)
+        state=json.loads((self.output/'production-state.json').read_text())
+        self.assertTrue(state['designer_failures'])
+        self.assertEqual(len(list((self.output/'digital-products').glob('*/*-internal-qa.zip'))),3)
+
+    def test_unclassified_product_runtime_failure_is_durable_and_isolated(self):
+        real_load=cycle.load
+        maker=real_load('isolated_maker',ROOT/'scripts/factory_product_maker.py')
+        original=maker.manufacture
+        def manufacture(recipe,*args,**kwargs):
+            if recipe=='farm_enterprise_economics':
+                raise RuntimeError('NEW_PRODUCT_FAILURE_CATEGORY')
+            return original(recipe,*args,**kwargs)
+        def load(name,path):
+            return maker if name=='saeit_factory_manufacturer_cycle' else real_load(name,path)
+        with mock.patch.object(maker,'manufacture',side_effect=manufacture), mock.patch.object(cycle,'load',side_effect=load):
+            result=cycle.run_cycle(self.db,self.output,self.recipes)
+        self.assertEqual(result['status'],'needs_rework')
+        self.assertEqual(result['manufactured'],2)
+        ledger=json.loads((self.output/'qa-rework/farm_enterprise_economics/ledger.json').read_text())
+        self.assertIn('NEW_PRODUCT_FAILURE_CATEGORY',ledger['history'][-1]['actual_error_excerpt'])
+
+    def test_missing_generated_tests_are_repaired_before_catalog_admission(self):
+        cycle.run_cycle(self.db,self.output,self.recipes,enable_designer=True)
+        cycle.run_cycle(self.db,self.output,self.recipes,enable_designer=True)
+        generated=next((self.output/'generated-product-recipes').iterdir())
+        for file in generated.glob('test_*.py'): file.unlink()
+        result=cycle.run_cycle(self.db,self.output,self.recipes,enable_designer=True)
+        self.assertEqual(result['status'],'ok')
+        self.assertEqual(result['registered_recipes'],5)
+        self.assertTrue(list(generated.glob('test_*.py')))
+        state=json.loads((self.output/'production-state.json').read_text())
+        self.assertEqual(len(state['source_recoveries']),1)
+        retained=Path(state['source_recoveries'][0]['retained_broken_source'])
+        self.assertFalse(list(retained.glob('test_*.py')))
 
     def test_new_recipe_is_generated_built_and_repaired_without_static_folder(self):
         static_before = sorted(x.name for x in self.recipes.iterdir())

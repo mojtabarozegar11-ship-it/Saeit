@@ -185,10 +185,17 @@ def manufacture(recipe, recipes_root, private_root):
         prior = json.loads(manifest_path.read_text(encoding="utf-8"))
     except (OSError, ValueError, TypeError):
         prior = {}
+    if not isinstance(prior, dict):
+        prior = {}
+    prior_qa = prior.get("qa_measurements")
+    if not isinstance(prior_qa, dict):
+        prior_qa = {}
+    successful = prior_qa.get("successful_tests")
+    previous_artifact_sha = sha256_file(zip_path) if zip_path.is_file() else None
     if (prior.get("source_sha256") == checksum and prior.get("qa_status") == "passed"
-            and prior.get("qa_measurements", {}).get("policy_version") == QA_POLICY_VERSION
-            and prior.get("qa_measurements", {}).get("successful_tests", 0) >= 1
-            and zip_path.is_file() and prior.get("artifact_sha256") == sha256_file(zip_path)):
+            and prior_qa.get("policy_version") == QA_POLICY_VERSION
+            and type(successful) is int and successful >= 1
+            and zip_path.is_file() and prior.get("artifact_sha256") == previous_artifact_sha):
         return {"recipe": recipe, "changed": False, "qa_status": "passed",
                 "private_artifact": str(zip_path)}
     measurements = {}
@@ -210,8 +217,7 @@ def manufacture(recipe, recipes_root, private_root):
     }
     atomic_text(manifest_path, json.dumps(metadata, ensure_ascii=False, sort_keys=True, indent=2) + "\n")
     return {"recipe": recipe,
-            "changed": prior.get("source_sha256") != checksum or
-                       prior.get("artifact_sha256") != metadata["artifact_sha256"],
+            "changed": previous_artifact_sha != metadata["artifact_sha256"],
             "qa_refreshed": True, "qa_status": "passed",
             "private_artifact": str(zip_path)}
 
