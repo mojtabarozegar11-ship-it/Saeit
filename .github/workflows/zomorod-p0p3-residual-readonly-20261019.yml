@@ -1,0 +1,36 @@
+name: Zomorod verify precise remaining contrast issues after coordinated release
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/zomorod-p0p3-residual-readonly-20261019.yml]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Axe read-only contrast detail for remaining templates
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/zm-residual" && cd "$RUNNER_TEMP/zm-residual"
+          npm --silent init -y >/dev/null
+          npm --silent install --no-save playwright@1.55.0 @axe-core/playwright@4.10.2
+          npx playwright install chromium
+          cat > detail.cjs <<'JS'
+          const {chromium}=require('playwright');const Axe=require('@axe-core/playwright').default;
+          (async()=>{
+           const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
+           for(const p of ['/about/','/research/','/agriculture/']){
+            const ctx=await browser.newContext({viewport:{width:390,height:850}});
+            const page=await ctx.newPage();
+            await page.goto('https://zomorodmelal.ir'+p+'?__residual=1',{waitUntil:'domcontentloaded',timeout:50000});
+            const a=await new Axe({page}).withTags(['wcag2a','wcag2aa','wcag21a','wcag21aa','best-practice']).analyze();
+            console.log('RESIDUAL_A11Y='+JSON.stringify({path:p,violations:a.violations.map(v=>({id:v.id,count:v.nodes.length,details:v.nodes.map(n=>({html:n.html.slice(0,300),selector:n.target,summary:n.failureSummary?.slice(0,450)})).slice(0,25)}))}));
+            await ctx.close();
+           }
+           await browser.close()
+          })().catch(e=>{console.error(e.stack);process.exit(1)});
+          JS
+          node detail.cjs
