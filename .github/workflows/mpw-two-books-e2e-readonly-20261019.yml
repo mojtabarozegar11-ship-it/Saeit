@@ -1,4 +1,4 @@
-name: MojPlayWin two book customer checkout render and payment audit read only
+name: MojPlayWin live chain indexer failure diagnosis read only
 on:
   push:
     branches: [main]
