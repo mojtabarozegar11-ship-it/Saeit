@@ -1,0 +1,115 @@
+name: Deep read only sales agent output evidence audit 2026 10 20
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/ecosystem-deep-sales-agent-evidence-20261020.yml"]
+permissions: {contents: read}
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 13
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Aggregate real agent work results and 714 product eligibility without mutation
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 110s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" <<'PY'
+          from pathlib import Path
+          from collections import Counter
+          import os,sys,sqlite3,json,time,datetime
+          H=Path('/home/zomorod2')
+          def emit(k,x):print(k+'='+json.dumps(x,default=str,sort_keys=True,ensure_ascii=False))
+          f=H/'.private/zomorod-business/site_agents.sqlite3'
+          if f.is_file() and not f.is_symlink():
+           c=sqlite3.connect('file:'+str(f)+'?mode=ro',uri=True)
+           c.execute('PRAGMA query_only=1')
+           for name in ['agents','runs','site_work_state','site_work_outputs','site_work_generation_evidence']:
+            fields=[r[1] for r in c.execute('PRAGMA table_info('+name+')')]
+            metrics={}
+            for key in ['status','state','result','agent_code','code','kind','type','category','output_type','job_type']:
+             if key not in fields:continue
+             try:
+              rows=c.execute('SELECT "'+key+'",count(*) FROM "'+name+'" GROUP BY "'+key+'" ORDER BY count(*) DESC LIMIT 18').fetchall()
+              metrics[key]=[{'v':str(v)[:80] if v is not None else None,'n':n} for v,n in rows]
+             except Exception as ex:metrics[key+'_exception']=type(ex).__name__
+            emit('DEEP_ZM_AGENT_TABLE',{'table':name,'columns':fields,'groups':metrics})
+           c.close()
+          os.chdir(H/'Saeit-staging');sys.path.insert(0,str(H/'Saeit-staging'))
+          os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          import django
+          django.setup()
+          from core.models import Agent,AgentTask,Product,Order,OrderItem
+          from django.db.models import Count
+          print('DEEP_MPW_AGENTS='+json.dumps([{'code':a.code,'active':bool(a.active),'agent_id':a.pk} for a in Agent.objects.all().order_by('code')[:60]],ensure_ascii=False))
+          t=AgentTask
+          for key in ['status','agent_id']:
+           if any(x.name==key for x in t._meta.fields):
+            emit('DEEP_MPW_TASK_GROUP_'+key,list(t.objects.values(key).annotate(n=Count('id')).order_by('-n')[:50]))
+          p=Product
+          active=Counter()
+          inactive=Counter()
+          quality=Counter()
+          sample=[]
+          for item in p.objects.only('id','title','active','metadata','product_type').iterator(chunk_size=120):
+           m=item.metadata if isinstance(item.metadata,dict) else {}
+           key=str(m.get('factory_status') or m.get('publication_status') or m.get('status') or 'unclassified')[:65]
+           (active if item.active else inactive)[key]+=1
+           for fld in ['quality_approved','asset_verified','license_verified','checkout_enabled','payment_live','factory_published','commercial_approval']:
+            if m.get(fld) is True:quality[fld+'_true']+=1
+            elif m.get(fld) is False:quality[fld+'_false']+=1
+            else:quality[fld+'_unspecified']+=1
+           if len(sample)<5 and not item.active:sample.append({'id':item.pk,'type':item.product_type,'title_length':len(item.title),'metadata_keys':sorted(m.keys())[:20]})
+          emit('DEEP_MPW_PRODUCTS',{'total':p.objects.count(),'active':p.objects.filter(active=True).count(),'inactive':p.objects.filter(active=False).count(),'active_states':dict(active),'inactive_states':dict(inactive),'quality_flags':dict(quality),'sample_metadata_schemas':sample})
+          try:
+           records=list(AgentTask.objects.values('status').annotate(n=Count('id')))
+           emit('DEEP_MPW_TASK_TOTAL',{'status_counts':records,'newest_created_at':str(AgentTask.objects.order_by('-id').values_list('created_at',flat=True).first()) if any(x.name=='created_at' for x in AgentTask._meta.fields) else None})
+          except Exception as e:emit('DEEP_MPW_TASK_TOTAL',{'error':type(e).__name__})
+          emit('DEEP_STORE_COMMERCIAL',{'orders':Order.objects.count(),'order_items':OrderItem.objects.count(),'paid':Order.objects.filter(status='paid').count()})
+          
+          PY
