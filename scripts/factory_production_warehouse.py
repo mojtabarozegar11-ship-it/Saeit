@@ -26,6 +26,13 @@ MAX_MEMBERS = 100
 MAX_MANIFEST = 64 * 1024
 
 
+def safe_member_name(name):
+    if not isinstance(name, str) or len(name) > 512 or "\\" in name:
+        return False
+    return all(re.fullmatch(r"[A-Za-z0-9_.-]{1,128}", part)
+               and part not in (".", "..") for part in name.split("/"))
+
+
 def digest(path):
     result = hashlib.sha256()
     with path.open("rb") as source:
@@ -109,8 +116,7 @@ def inspect_source(root, recipe):
         or not SHA.fullmatch(str(manifest.get("artifact_sha256", "")))
         or not isinstance(expected_files, list)
         or not expected_files or len(expected_files) > MAX_MEMBERS
-        or any(not isinstance(n, str) or not re.fullmatch(r"[A-Za-z0-9_.-]{1,128}", n)
-               or n in (".", "..") for n in expected_files)
+        or any(not safe_member_name(n) for n in expected_files)
         or len(set(expected_files)) != len(expected_files)
     ):
         raise RuntimeError("WAREHOUSE_MANUFACTURING_QA_NOT_APPROVED")

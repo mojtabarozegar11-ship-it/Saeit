@@ -46,8 +46,17 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None):
         dossier = portfolio.build(database, str(root / "research-dossiers"), max_products)
         repair = load("saeit_factory_rework_cycle",
                       SCRIPTS / "factory_product_rework.py")
-        recipe_catalog = maker.discover_recipes(recipes)
+        admission_failures = []
+        recipe_catalog = maker.discover_recipes(recipes, errors=admission_failures)
         selected = sorted(recipe_catalog)
+        # Persist rotation: bounded cycles must not starve later recipe names.
+        cursor_file = root / "recipe-cursor.json"
+        try:
+            cursor = json.loads(cursor_file.read_text(encoding="utf-8")).get("last_recipe", "")
+        except (OSError, ValueError, AttributeError):
+            cursor = ""
+        if max_recipes is not None:
+            selected = [r for r in selected if r > cursor] + [r for r in selected if r <= cursor]
         if max_recipes is not None:
             selected = selected[:max_recipes]
         if not Path(recipes).is_dir():
@@ -77,6 +86,8 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None):
             if manifest.is_file():
                 repair.record_technical_recovery(
                     root, recipe, json.loads(manifest.read_text(encoding="utf-8")))
+        if selected:
+            maker.atomic_text(cursor_file, json.dumps({"last_recipe": selected[-1]}))
         rework_counts = repair.summarize(root)
         for candidate in dossier.get("entries", []):
             repair.record_research_gaps(root, candidate)
@@ -91,13 +102,14 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None):
             "token_usage": 0,
             "build_policy": "all_registered_recipes_sequentially",
             "registered_recipe_count": len(recipe_catalog),
+            "recipe_admission_failures": admission_failures,
             "product_candidates_processed": dossier["processed_count"],
             "research_dossiers_updated": dossier["updated_count"],
             "built_product_count": len(produced),
             "new_or_updated_product_count": sum(bool(p.get("changed")) for p in produced),
             "unchanged_product_rechecks": sum(not bool(p.get("changed")) for p in produced),
             "built_product_recipes": [p["recipe"] for p in produced],
-            "artifact_qa_passed": bool(produced) and not failures and all(
+            "artifact_qa_passed": bool(produced) and not failures and not admission_failures and all(
                 p["qa_status"] == "passed" for p in produced),
             "quality_failures_this_cycle": [
                 {"recipe": item["recipe"], "code": item["code"],
@@ -121,7 +133,7 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None):
         maker.atomic_text(root / "production-state.json",
                           json.dumps(state, ensure_ascii=False, sort_keys=True, indent=2) + "\n")
         fcntl.flock(file.fileno(), fcntl.LOCK_UN)
-        return {"status": "needs_rework" if failures else "ok",
+        return {"status": "needs_rework" if failures or admission_failures else "ok",
                 "processed": dossier["processed_count"],
                 "manufactured": len(produced),
                 "new_artifacts": sum(bool(p.get("changed")) for p in produced),
@@ -153,7 +165,7 @@ def main(argv=None):
     print("VPS_FACTORY_PRIVATE_PRODUCT_PACKAGES=" + str(result["manufactured"]))
     print("VPS_FACTORY_ACTUALLY_NEW_PACKAGES=" + str(result.get("new_artifacts", 0)))
     print("VPS_FACTORY_REGISTERED_BUILD_RECIPES=" + str(len(load(
-        "saeit_factory_status_maker", SCRIPTS / "factory_product_maker.py").discover_recipes(options.recipes))))
+        "saeit_factory_status_maker", SCRIPTS / "factory_product_maker.py").discover_recipes(options.recipes, errors=[]))))
     print("VPS_FACTORY_API_AND_TOKEN_USAGE=0")
     print("VPS_FACTORY_PRODUCT_CANDIDATES_SCANNED=" + str(result["processed"]))
     print("VPS_FACTORY_QA_REWORK_NEW_OR_OPEN=" + str(result.get("failed", 0)))
