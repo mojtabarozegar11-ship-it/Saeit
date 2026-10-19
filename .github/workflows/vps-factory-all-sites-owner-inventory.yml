@@ -85,6 +85,17 @@ jobs:
               import re
               sitepaths=sorted(set(re.findall(r'path\("([^"]{1,110})/"',data)))
               print("FACTORY_SITE_DJANGO_PATHS="+json.dumps(sitepaths[:110],ensure_ascii=True))
+          for rel in ("mojplaywin.com/.htaccess","public_html/.htaccess","public_html/tala/.htaccess"):
+            ht=home/rel
+            if ht.is_file() and not ht.is_symlink():
+              import re
+              safe=[]
+              for n,line in enumerate(ht.read_text(encoding="utf-8",errors="replace").splitlines(),1):
+                value=line.strip()
+                if value.startswith(("RewriteCond","RewriteRule","RewriteEngine","Options","DirectoryIndex","ErrorDocument","Passenger","FallbackResource")):
+                  value=re.sub(r'(?i)(password|token|secret|key)=\\S+',r'\\1=[redacted]',value)
+                  safe.append([n,value[:210]])
+              print("FACTORY_SITE_REWRITE_RULES="+json.dumps({"file":rel,"rules":safe[:95]},ensure_ascii=True))
           print("FACTORY_SITE_INVENTORY_READONLY_DONE")
           PY
           timeout 45s ssh -T -F "$d/config" saeit-vps 'python3 -' <<'PY'
