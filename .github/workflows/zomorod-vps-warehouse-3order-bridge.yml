@@ -6,6 +6,9 @@ on:
       - .github/workflows/zomorod-vps-warehouse-3order-bridge.yml
       - scripts/zomorod_vps_warehouse_3order_bridge.py
       - scripts/zomorod_factory_store_import.py
+      - scripts/factory_store_sender.py
+      - scripts/store_receiver.py
+      - tests/test_existing_courier_customer_packages.py
       - content/zomorod-v11/site_store.php
   schedule:
     - cron: '17 4 * * *'
@@ -33,6 +36,8 @@ jobs:
         run: |
           set -euo pipefail
           python3 -m unittest discover -s tests -p 'test_zomorod_warehouse_3order_bridge.py' -v
+          python3 -m unittest discover -s tests -p 'test_existing_courier_customer_packages.py' -v
+          python3 -m py_compile scripts/factory_store_sender.py scripts/store_receiver.py scripts/zomorod_vps_warehouse_3order_bridge.py
           php -l content/zomorod-v11/site_store.php
           echo ZM_BRIDGE_TESTS=passed
       - name: Prepare pinned SSH to both VPS and Zomorod cPanel
@@ -97,10 +102,11 @@ jobs:
           dest="$HOME/factory-runtime/operations/zomorod-site-bridge"
           test ! -L "$dest"
           install -d -m 700 "$dest"
-          for f in bridge.py warehouse.py families.json;do test ! -L "$dest/$f";done
+          for f in bridge.py warehouse.py sender.py families.json;do test ! -L "$dest/$f";done
           REMOTE
           scp -q -F "$d/config" scripts/zomorod_vps_warehouse_3order_bridge.py zm-vps:factory-runtime/operations/zomorod-site-bridge/bridge.py
           scp -q -F "$d/config" scripts/factory_production_warehouse.py zm-vps:factory-runtime/operations/zomorod-site-bridge/warehouse.py
+          scp -q -F "$d/config" scripts/factory_store_sender.py zm-vps:factory-runtime/operations/zomorod-site-bridge/sender.py
           scp -q -F "$d/config" factory_config/forty_families.json zm-vps:factory-runtime/operations/zomorod-site-bridge/families.json
           ssh -T -F "$d/config" zm-vps bash -se <<'REMOTE'
           set -euo pipefail
@@ -110,7 +116,7 @@ jobs:
           import ast,json,sys
           from pathlib import Path
           p=Path(sys.argv[1])
-          for f in ["bridge.py","warehouse.py"]:ast.parse((p/f).read_text())
+          for f in ["bridge.py","warehouse.py","sender.py"]:ast.parse((p/f).read_text())
           assert len(json.loads((p/"families.json").read_text())["profiles"])==40
           print("ZM_BRIDGE_VPS_40_FAMILY_REGISTRY_AND_ROBOT_READY=yes")
           PY
@@ -205,6 +211,49 @@ jobs:
           test "$(sha256sum "$store"|cut -c1-64)" = "$new"
           echo ZM_BRIDGE_ZOMOROD_STORE_PRIVATE_ADMIN=installed
           REMOTE
+      - name: Install private consumer sidecar support into EXISTING SHA-verified site receiver
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-site-factory-bridge"
+          target=".saeit-factory-inbox/bin"
+          scp -q -F "$d/config" scripts/store_receiver.py zm-cpanel:"$target/.receiver-customer-qa-${GITHUB_RUN_ID}.py"
+          ssh -T -F "$d/config" zm-cpanel bash -se -- "$GITHUB_RUN_ID" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          rid="$1"
+          target="$HOME/.saeit-factory-inbox/bin"
+          old="$target/store_receiver.py"
+          candidate="$target/.receiver-customer-qa-$rid.py"
+          test "$HOME" = "/home/zomorod2"
+          test -d "$target" && test ! -L "$target"
+          test -f "$old" && test ! -L "$old"
+          test -f "$candidate" && test ! -L "$candidate"
+          python3 -B - "$old" "$candidate" <<'PY'
+          import ast,sys
+          for f in sys.argv[1:]:
+              ast.parse(open(f,encoding="utf8").read())
+          PY
+          grep -Fq 'def validate_package(' "$candidate"
+          grep -Fq 'def consumer_finalize(' "$candidate"
+          backup="$HOME/.backups/zomorod-site-factory-bridge/$rid"
+          install -d -m 700 "$backup"
+          if test ! -e "$backup/store_receiver.before.py";then
+            cp -p "$old" "$backup/store_receiver.before.py"
+            chmod 600 "$backup/store_receiver.before.py"
+          fi
+          chmod 600 "$candidate"
+          mv -f "$candidate" "$old"
+          python3 -B - "$old" <<'PY'
+          import importlib.util,sys
+          path=sys.argv[1]
+          spec=importlib.util.spec_from_file_location("zm_receiver",path)
+          mod=importlib.util.module_from_spec(spec);spec.loader.exec_module(mod)
+          assert callable(mod.consumer_status) and callable(mod.consumer_finalize)
+          print("ZM_PRIVATE_CONSUMER_RECEIVER_VERIFY=PASS")
+          PY
+          echo ZM_EXISTING_RECEIVER_CONSUMER_SUPPORT=installed
+          REMOTE
       - name: Deliver authentic warehouse QA goods and issue exactly three site production orders
         shell: bash
         run: |
@@ -222,7 +271,7 @@ jobs:
             --factory-private "$private" \
             --orders-engine "$ops/production-instructions/generate-orders.py" \
             --warehouse-module "$bridge/warehouse.py" \
-            --sender-module "$ops/factory_store_sender.py" \
+            --sender-module "$bridge/sender.py" \
             --families "$bridge/families.json" \
             --ssh-key "$HOME/.ssh/saeit_factory_store_ed25519" \
             --known-hosts "$HOME/.ssh/saeit_factory_store_hosts" \
@@ -248,6 +297,10 @@ jobs:
               n=db.execute("SELECT COUNT(*) FROM factory_drafts").fetchone()[0]
               bad=db.execute("SELECT COUNT(*) FROM factory_drafts WHERE public_enabled<>0 OR paid_price_irr IS NOT NULL").fetchone()[0]
               assert bad==0
+              c=db.execute("SELECT COUNT(*) FROM factory_consumer_candidates").fetchone()[0]
+              pending=db.execute("SELECT COUNT(*) FROM factory_consumer_candidates WHERE public_enabled<>0 OR paid_price_irr IS NOT NULL").fetchone()[0]
+              assert pending==0
+              print("ZM_BRIDGE_CONSUMER_PACKAGES_IN_PRIVATE_STORE="+str(c))
               print("ZM_BRIDGE_STORE_VERIFIED_DRAFTS="+str(n))
               print("ZM_BRIDGE_PUBLIC_PURCHASE_ACTIVATIONS=0")
           PY
