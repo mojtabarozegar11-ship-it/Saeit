@@ -56,6 +56,13 @@ button{font-family:inherit;cursor:pointer;touch-action:manipulation}button:focus
  .control{bottom:94px}
  #intro .intro-panel{max-height:93vh;overflow:auto}
 }
+.pulse-panel{border-color:#75c9a190;background:linear-gradient(155deg,#1b5043f2,#0c2d27f6)}
+.pulse-reading{padding:7px 8px;margin:5px 0;background:#0c281e77;border:1px solid #8cbaa65d;border-radius:10px;font-size:11px;color:#e2f5e4;line-height:1.7}
+.river-hint{color:#bde5e4!important}
+.tool.river{background:linear-gradient(160deg,#357f84,#164955);border-color:#9fdbce}
+.tool.river.active{background:linear-gradient(160deg,#63adba,#236c76);color:#fff}
+.tool.gene{background:linear-gradient(165deg,#755a9f,#3d355e)}
+.tool.caravan{background:linear-gradient(165deg,#b4864e,#78512d)}
 </style>
 </head>
 <body>
@@ -66,6 +73,14 @@ button{font-family:inherit;cursor:pointer;touch-action:manipulation}button:focus
 </header>
 <button id="toggle-war" class="mobile-war-toggle" type="button" aria-controls="rival-panel" aria-expanded="false">⚔️ رقیب‌ها</button>
 <aside id="rival-panel" class="ui side">
+ <section class="sheet pulse-panel" aria-label="سامانه نبض رودخانه و ژنتیک بذر">
+  <div class="heading"><span>🌊 نبض رودخانه</span><span class="pill">مکانیک ویژه</span></div>
+  <p>یک منبع مشترک، سه سرنوشت: آب را به مزرعه، خندق دفاعی یا سیل محاصره ببرید. هر روز فقط یک فرمان آب.</p>
+  <div class="pulse-reading" id="hydro-info">💧 آب و آب‌وهوا در حال آماده‌سازی…</div>
+  <div class="pulse-reading" id="seed-info">🧬 بذرهای ژنتیکی…</div>
+  <div class="pulse-reading" id="contract-info">📦 سفارش کاروان…</div>
+  <p class="river-hint">💡 آبیاری محصول را زودتر می‌رساند، خندق خسارت دشمن را کاهش می‌دهد و سیل، یورش بعدی را قوی‌تر می‌کند.</p>
+ </section>
   <section class="sheet"><div class="heading"><span>⚔️ نبرد قلمروها</span><span class="pill" id="day"></span></div><p>سه خاندان رقیب برای تصرف دره زمرد آماده‌اند. ارتش بساز و قلعه‌هایشان را فتح کن.</p><div id="enemies"></div><div class="mission" id="mission"></div></section>
   <section class="sheet"><div class="heading"><span>📜 گزارش نبرد</span><span class="pill" id="season"></span></div><div class="news" id="log" role="status" aria-live="polite"></div></section>
 </aside>
@@ -83,8 +98,8 @@ button{font-family:inherit;cursor:pointer;touch-action:manipulation}button:focus
   </div>
 </div>
 <div id="toast" class="toast hide" role="status" aria-live="polite"></div>
-<div id="intro"><div class="intro-panel"><div class="intro-emblem">♛</div><div class="over" style="color:#e6cf92;letter-spacing:2.5px;font-size:12px;font-weight:800">FARM DOMINION • 3D WORLD</div><h2>فرمانروای مزرعه‌ها</h2><p>زمینت را آباد کن، محصولات را برداشت کن، آسیاب و انبار بساز، سرباز تعلیم بده و در نبرد واقعی با سه خاندان رقیب پیروز شو.</p><div class="badges"><b>🌾 کشاورزی</b><b>🏘️ شهرسازی</b><b>🐑 دامداری</b><b>⚔️ نبرد سه‌بعدی</b><b>🏰 فتح قلعه‌ها</b></div><button id="start" disabled>جهان در حال آماده‌سازی...</button><div class="loading" id="loading">بارگذاری مدل‌های سه‌بعدی...</div><div id="error"></div></div></div>
-<div id="tour" class="tour" role="dialog" aria-labelledby="tourTitle"><h2 id="tourTitle">شروع امپراتوری</h2><p id="tourBody">ابتدا با انتخاب زمین نزدیک قلعه خود گندم بکارید، سپس با زدن «روز بعد» محصول رشد می‌کند. پس از برداشت از بخش سپاه سرباز آموزش دهید و به قلعه‌های رقیب حمله کنید.</p><button id="close-tour">متوجه شدم</button></div>
+<div id="intro"><div class="intro-panel"><div class="intro-emblem">♛</div><div class="over" style="color:#e6cf92;letter-spacing:2.5px;font-size:12px;font-weight:800">FARM DOMINION • 3D WORLD</div><h2>فرمانروای مزرعه‌ها</h2><p>مزرعه بساز، بذرهای پربار یا مقاوم انتخاب کن و جریان رودخانه را بین رشد محصول، دفاع و محاصره تقسیم کن. سپاه و کاروان‌هایت در برابر سه خاندان رقیب سرنوشت قلمرو را رقم می‌زنند.</p><div class="badges"><b>🌾 مزرعه زنده</b><b>🌊 مهندسی آب</b><b>🧬 بذرهای ژنتیکی</b><b>⚔️ جنگ سه‌بعدی</b><b>🏰 سه خاندان رقیب</b><b>📦 کاروان و تجارت</b></div><button id="start" disabled>جهان در حال آماده‌سازی...</button><div class="loading" id="loading">بارگذاری مدل‌های سه‌بعدی...</div><div id="error"></div></div></div>
+<div id="tour" class="tour" role="dialog" aria-labelledby="tourTitle"><h2 id="tourTitle">شروع امپراتوری</h2><p id="tourBody">اول زمین سبز خود را لمس کنید و گندم بکارید. با «روز بعد» محصول می‌رسد. با «آبیاری» رشد را سرعت دهید، با «خندق آب» دفاع کنید یا با «سیل محاصره» حمله بعدی را تقویت کنید. از «انتخاب بذر» ژن پربار، زودرس یا مقاوم را برگزینید و محصول برداشت‌شده را با «ارسال سفارش» به کاروان بفروشید.</p><button id="close-tour">متوجه شدم</button></div>
 <script src="./game.js" defer></script>
 </body>
 </html>
