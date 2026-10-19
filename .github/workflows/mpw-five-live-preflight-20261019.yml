@@ -105,6 +105,56 @@ jobs:
               "private_monitor_present":Path("/home/zomorod2/.private_mojplaywin_main_agents/evolution_runtime_20261018/agent_dashboard_telemetry.json").is_file(),
               },sort_keys=True))
           PY
+      - name: Discover live Django template origins and DB migration state
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 100s ssh -T -F "$RUNNER_TEMP/mojplaywin-inventory-ssh/config" saeit-cpanel 'cd /home/zomorod2/Saeit-staging && /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -' <<'PY'
+          import os,json,re
+          from pathlib import Path
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          import django
+          django.setup()
+          from django.conf import settings
+          from django.template.loader import get_template
+          from django.db import connection
+          from django.urls import resolve
+          names=["mojplaywin/home.html","mojplaywin/store.html","mojplaywin/site_base.html",
+                 "mojplaywin/theme.html","mojplaywin/footer.html",
+                 "command_center/dashboard.html","command_center/mpw_agent_monitor.html"]
+          templates={}
+          for name in names:
+              try:
+                  t=get_template(name)
+                  s=Path(t.origin.name).read_text("utf8","replace")
+                  templates[name]={"path":t.origin.name,"bytes":len(s),
+                   "head":s[:200].replace("\n"," "),"extends":re.findall(r"{%\\s*extends\\s+([^%]+)%}",s[:2000])[:2],
+                   "contains_books":("mpw-sale-book72" in s and "mpw-sale-book225" in s)}
+              except Exception as e:
+                  templates[name]={"error":type(e).__name__}
+          routes={}
+          for u in ("/","/store/","/staff/command-center/","/staff/command-center/mpw-operations/"):
+              try:
+                  z=resolve(u)
+                  routes[u]={"func":str(z.func)[:150],"url_name":z.url_name}
+              except Exception as e:routes[u]={"error":type(e).__name__}
+          try:
+              tabs=connection.introspection.table_names()
+              database={"vendor":connection.vendor,"available":True,
+               "mpw_table_present":"command_center_mpwrecord" in tabs,
+               "table_count":len(tabs)}
+          except Exception as e:
+              database={"vendor":connection.vendor,"available":False,"reason":type(e).__name__}
+          root=Path.cwd()
+          dirs={}
+          for name in ("core/templates/mojplaywin","templates/mojplaywin","command_center/templates/command_center"):
+              folder=root/name
+              dirs[name]=sorted(x.name for x in folder.iterdir() if x.is_file())[:75] if folder.is_dir() else []
+          print("MPW_DJANGO_MAP="+json.dumps({"templates":templates,"routes":routes,
+              "database":database,"folders":dirs,
+              "apps":{"command_center":"command_center" in settings.INSTALLED_APPS},
+              "feature_enabled":bool(os.environ.get("MPW_CONTROL_ENABLED"))},sort_keys=True))
+          PY
       - name: Capture non-invasive public main and child site baseline
         run: |
           python3 - <<'PY'
