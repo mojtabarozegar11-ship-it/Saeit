@@ -3,6 +3,9 @@ on:
   pull_request:
     paths:
       - content/zomorod-v11/site_agents.php
+      - content/zomorod-v11/site_agent_workforce.php
+      - content/zomorod-v11/site_agent_cycle_cli.php
+      - content/zomorod-v11/tests/site_workforce_100_test.php
       - content/zomorod-v11/tests/site_agents_generation_harness.php
       - .github/workflows/zomorod-site-agent-100-stage-qa.yml
   push:
@@ -28,6 +31,9 @@ jobs:
         run: |
           set -euo pipefail
           php -l content/zomorod-v11/site_agents.php
+          php -l content/zomorod-v11/site_agent_workforce.php
+          php -l content/zomorod-v11/site_agent_cycle_cli.php
+          php -l content/zomorod-v11/tests/site_workforce_100_test.php
           php -l content/zomorod-v11/tests/site_agents_generation_harness.php
           php -r 'require "content/zomorod-v11/site_agents.php";if(!function_exists("zmAgentRender")||!function_exists("zmAgentHandle")||!function_exists("zmAgentCycle"))exit(2);echo "AGENT_ADMIN_COMPATIBILITY=passed\n";'
           ! grep -qiE 'CURLOPT_SSL_VERIFYPEER.?=>.?false|CURLOPT_SSL_VERIFYHOST.?=>.?0' content/zomorod-v11/site_agents.php
@@ -39,6 +45,13 @@ jobs:
           test "$(grep -c '^SITE_AGENT_GENERATION_GATE=' "$RUNNER_TEMP/agent-gates.log")" -eq 100
           tail -n 3 "$RUNNER_TEMP/agent-gates.log"
           printf '%s\n' 'SITE_AGENT_NOT_LIVE_PROMOTION=yes'
+      - name: Site-only work engine 100 independent evidence checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          php content/zomorod-v11/tests/site_workforce_100_test.php > "$RUNNER_TEMP/agent-work.log"
+          test "$(grep -c '^ZM_SITE_WORK_GENERATION_TEST=' "$RUNNER_TEMP/agent-work.log")" -eq 100
+          tail -n 3 "$RUNNER_TEMP/agent-work.log"
       - name: Save generation acceptance evidence
         if: always()
         uses: actions/upload-artifact@v4

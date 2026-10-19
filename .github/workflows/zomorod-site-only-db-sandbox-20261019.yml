@@ -1,0 +1,131 @@
+name: Zomorod site-only original Django database restoration sandbox gate
+on:
+  pull_request:
+    paths:
+      - .github/workflows/zomorod-site-only-db-sandbox-20261019.yml
+permissions:
+  contents: read
+jobs:
+  sandbox:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - name: Restore a known site-only original to isolated test DB, run real Django migrations
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          timeout 540s ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_RUN_ID" <<'REMOTE'
+          set -euo pipefail
+          run="$1";export PYTHONDONTWRITEBYTECODE=1
+          test "$HOME" = "/home/zomorod2"
+          cd "$HOME/Saeit"
+          py="$HOME/virtualenv/Saeit/3.10/bin/python"
+          source_db="$HOME/Saeit/backups/zomorod_gallery_20261014/db-before-first-publish.sqlite3"
+          stage="$HOME/.backups/zomorod-site-django-sandbox-$run"
+          test -f "$source_db" && test ! -L "$source_db" && test ! -e "$stage"
+          umask 077; mkdir -m 700 "$stage"
+          trap 'rm -rf -- "$stage"' EXIT
+          "$py" - "$source_db" "$stage/candidate.sqlite3" <<'PY'
+          import sqlite3,sys,pathlib
+          a=pathlib.Path(sys.argv[1]);b=pathlib.Path(sys.argv[2])
+          if a.stat().st_size<100000:raise SystemExit("BASELINE_TOO_SMALL")
+          src=sqlite3.connect("file:"+str(a)+"?mode=ro",uri=True,timeout=3)
+          dst=sqlite3.connect(b)
+          src.backup(dst)
+          src.close()
+          assert dst.execute("PRAGMA quick_check").fetchone()[0]=="ok"
+          names={x[0] for x in dst.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+          assert {"auth_user","django_migrations"}.issubset(names)
+          assert dst.execute("SELECT COUNT(*) FROM auth_user").fetchone()[0]>=1
+          print("SITE_DB_SANDBOX_ORIGINAL_ZOMOROD_BACKUP=verified")
+          print("SITE_DB_SANDBOX_ORIGINAL_TABLES="+str(len(names)))
+          dst.close()
+          PY
+          export DATABASE_URL="sqlite:///$stage/candidate.sqlite3"
+          "$py" - <<'PY'
+          import os,django
+          os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          django.setup()
+          from django.conf import settings
+          p=os.path.realpath(settings.DATABASES['default']['NAME'])
+          expected=os.path.realpath(os.environ['DATABASE_URL'].removeprefix('sqlite:///'))
+          assert p==expected,(p,expected)
+          print("SITE_DB_SANDBOX_ACTUAL_CONFIG=isolated")
+          PY
+          if timeout 240s "$py" manage.py migrate --noinput --verbosity 1 > "$stage/migrations.log" 2>&1; then
+            echo "SITE_DB_SANDBOX_MIGRATE=passed"
+          else
+            echo "SITE_DB_SANDBOX_MIGRATE=failed"
+            grep -E 'ERROR|Error|Applying |Traceback|Migration|Inconsistent' "$stage/migrations.log" | tail -n 15 || true
+            exit 9
+          fi
+          "$py" - "$stage/candidate.sqlite3" <<'PY'
+          import sqlite3,sys
+          db=sqlite3.connect(sys.argv[1])
+          assert db.execute("PRAGMA quick_check").fetchone()[0]=="ok"
+          tables={x[0] for x in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+          expect={"django_migrations","auth_user","core_agent","core_agenttask","core_knowledgeagentrun","core_knowledgebook"}
+          missing=expect-tables
+          if missing:raise SystemExit("SITE_DB_MIGRATED_MISSING="+",".join(sorted(missing)))
+          counts={n:db.execute('SELECT COUNT(*) FROM "'+n+'"').fetchone()[0] for n in expect}
+          assert counts['auth_user']>=1
+          print("SITE_DB_SANDBOX_MIGRATION_TABLE_COUNT="+str(len(tables)))
+          print("SITE_DB_SANDBOX_MIGRATION_COUNTS="+str(counts))
+          print("SITE_DB_SANDBOX_STILL_STANDALONE=yes")
+          db.close()
+          PY
+          echo SITE_DB_SANDBOX_NO_PRODUCTION_DB_WRITES=yes
+          REMOTE
+      - name: Remove temporary relay credentials
+        if: always()
+        shell: bash
+        run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"

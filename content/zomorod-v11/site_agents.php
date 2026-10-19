@@ -173,4 +173,9 @@ function zmAgentRender(PDO $db):void {
         echo '</section>';
     }
     echo '</div>';
+    $workModule=__DIR__.'/site_agent_workforce.php';
+    if(is_file($workModule) && !is_link($workModule)){
+        require_once $workModule;
+        echo zmWorkDashboard($db);
+    }
 }

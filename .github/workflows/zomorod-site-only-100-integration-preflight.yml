@@ -1,0 +1,125 @@
+name: Zomorod site-only Django and private agents recovery candidate preflight
+on:
+  pull_request:
+    paths:
+      - .github/workflows/zomorod-site-only-100-integration-preflight.yml
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - name: Audit only cPanel site Django database candidates, no writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          export PYTHONDONTWRITEBYTECODE=1
+          cd /home/zomorod2/Saeit
+          py="$HOME/virtualenv/Saeit/3.10/bin/python"
+          "$py" - <<'PY'
+          import os,pathlib,datetime,sqlite3,urllib.parse,json
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          import django
+          django.setup()
+          from django.conf import settings
+          root=pathlib.Path.home()
+          active=pathlib.Path(str(settings.DATABASES["default"]["NAME"])).resolve()
+          candidate_dirs=[
+             root/"Saeit/backups/pre_phase19_cleanup_20261004-124041",
+             root/"Saeit/backups",
+             root/".backups/zomorod",
+             root/"Saeit",
+             root/".private/zomorod-business",
+          ]
+          expected={"django_migrations","auth_user","core_agent","core_agenttask"}
+          scanned=set()
+          def inspect(p,label):
+              if not p.is_file() or p.is_symlink() or p in scanned:return
+              scanned.add(p)
+              try:
+                  if p.stat().st_size > 1000000000 or p.stat().st_size < 100:return
+                  if p.open("rb").read(16)!=b"SQLite format 3\x00":return
+                  uri="file:"+urllib.parse.quote(str(p))+"?mode=ro"
+                  db=sqlite3.connect(uri,uri=True,timeout=3)
+                  db.execute("PRAGMA query_only=ON")
+                  tables={r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+                  checks={}
+                  for t in ["django_migrations","auth_user","core_agent","core_agenttask","core_newsletterstory","core_knowledgebook","core_knowledgeagentrun","core_product","core_order"]:
+                      if t in tables:
+                          checks[t]=int(db.execute('SELECT COUNT(*) FROM "'+t+'"').fetchone()[0])
+                  integr=db.execute("PRAGMA quick_check").fetchone()[0]
+                  print("SITE_DB_CANDIDATE="+json.dumps({"label":label,"path":str(p.relative_to(root)) if p.is_relative_to(root) else "external",
+                    "active":p==active,"bytes":p.stat().st_size,"tables":len(tables),"presence":sorted(tables&expected),
+                    "counts":checks,"quick_check":integr,"modified_utc":datetime.datetime.fromtimestamp(p.stat().st_mtime,datetime.timezone.utc).isoformat()},ensure_ascii=False))
+                  db.close()
+              except Exception as e:
+                  print("SITE_DB_CANDIDATE_READ_ERROR="+label+" "+type(e).__name__)
+          inspect(active,"ACTIVE")
+          for d in candidate_dirs:
+              if not d.is_dir() or d.is_symlink():continue
+              for path in sorted(d.glob("**/*.sqlite3"))[:60]:
+                  if len(path.relative_to(d).parts)>6:continue
+                  if "mojplaywin" in str(path).lower() or "vps" in str(path).lower():continue
+                  inspect(path,d.name)
+          print("SITE_DB_CANDIDATES_SCANNED="+str(len(scanned)))
+          print("SITE_ACTIVE_DB_REL="+str(active.relative_to(root)) if active.is_relative_to(root) else "external")
+          print("SITE_DJANGO_APPS_COUNT="+str(len(settings.INSTALLED_APPS)))
+          PY
+          df -k "$HOME" | tail -1 | awk '{print "SITE_HOST_FREE_KB="$4}'
+          REMOTE
+      - name: Cleanup SSH materials
+        if: always()
+        shell: bash
+        run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
