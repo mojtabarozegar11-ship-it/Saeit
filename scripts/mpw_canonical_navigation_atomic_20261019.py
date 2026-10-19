@@ -64,7 +64,8 @@ def canonical(doc):
     header=matches[0].group(0)
     if (not header.startswith('<header class="mw-site-nav"') or
         'data-design="atelier-v4"' not in header or
-        '<nav aria-label="Primary MojPlayWin navigation"' not in header or
+        '<nav' not in header or
+        '<summary' not in header or
         'id="mw-all-pages-menu"' not in header or
         '<details' not in header or
         header.count('href=')<10):
