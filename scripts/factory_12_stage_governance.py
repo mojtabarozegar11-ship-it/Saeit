@@ -45,7 +45,8 @@ TYPES={
     "three_dimensional":("opens","mesh","textures","scale","software_compatibility"),
 }
 REQUIRED_SPEC={
-    "work_order","title","product_type","version","origin","target_audience",
+    "work_order","family_id","specialty","level","source_instruction_fingerprint",
+    "title","product_type","version","origin","target_audience",
     "problem_solved","deliverables","file_formats","language","scope",
     "prerequisites","acceptance_criteria","sources","asset_licenses",
     "technical_dependencies","stages_and_owners","resource_budget",
@@ -123,7 +124,12 @@ def passport_validate(p,work_id):
         raise RuntimeError("PASSPORT_UNKNOWN_TYPE_DEFINE_QA_FIRST")
     if p["origin"] not in ("site_need","customer_request","market_demand","factory_invention","local_factory_research"):
         raise RuntimeError("PASSPORT_UNKNOWN_ORIGIN")
-    for key in ("title","version","target_audience","problem_solved","language",
+    if (not isinstance(p.get("family_id"),str)
+            or not re.fullmatch(r"F(?:0[1-9]|[1-3][0-9]|40)",p["family_id"])):
+        raise RuntimeError("PASSPORT_INVALID_FAMILY_ID")
+    if not isinstance(p.get("source_instruction_fingerprint"),str) or not SHA_RE.fullmatch(p["source_instruction_fingerprint"]):
+        raise RuntimeError("PASSPORT_MISSING_SOURCE_FINGERPRINT")
+    for key in ("title","version","specialty","level","target_audience","problem_solved","language",
                 "scope","resource_budget","sensitivity","producer_id","independent_reviewer_id"):
         if not isinstance(p[key],str) or len(p[key].strip())<2 or len(p[key])>1500:
             raise RuntimeError("PASSPORT_BAD_FIELD:"+key)
@@ -309,6 +315,19 @@ def import_passport(root,work_id,source):
     if path.exists():raise RuntimeError("PASSPORT_IMMUTABLE_USE_NEW_PRODUCT_REVISION")
     if not record_path(root,wid).is_file():
         raise RuntimeError("PASSPORT_UNKNOWN_WORK_ORDER")
+    work= json_read(root/"production-instructions"/"orders"/(wid+".json"))
+    if (work.get("fingerprint")!=data["source_instruction_fingerprint"]
+            or work.get("id")!=wid):
+        raise RuntimeError("PASSPORT_SOURCE_INSTRUCTION_MISMATCH")
+    allowed_origins={"site-topic-snapshot":"site_need",
+                     "customer-intake-snapshot":"customer_request",
+                     "market-research-snapshot":"market_demand",
+                     "factory-invention-snapshot":"factory_invention",
+                     "local-factory-research":"local_factory_research"}
+    if work.get("origin") and allowed_origins.get(work["origin"])!=data["origin"]:
+        raise RuntimeError("PASSPORT_ORIGIN_MISMATCH")
+    if work.get("family_id") and work["family_id"]!=data["family_id"]:
+        raise RuntimeError("PASSPORT_FAMILY_MISMATCH")
     atomic(path,data)
     state=load_order(root,wid)
     state["status"]="waiting_stage_1_evidence"
