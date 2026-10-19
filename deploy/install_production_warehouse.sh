@@ -122,6 +122,16 @@ print("FACTORY_WAREHOUSE_PRIVATE_STOCK_VERSIONS="+str(info['finished_goods_versi
 print("FACTORY_WAREHOUSE_SITE_TRANSFERS=0")
 PY
 
+# Preserve a verified synchronized one-minute factory run during upgrades.
+if crontab -l 2>/dev/null | grep -q SAEIT_FACTORY_EVERY_MINUTE_V1; then
+  test "$(crontab -l | grep -c SAEIT_AUTONOMOUS_PRODUCTS_V2)" -eq 1
+  test "$(crontab -l | grep -c SAEIT_PRODUCTION_WAREHOUSE_V1)" -eq 1
+  trap - EXIT
+  echo FACTORY_WAREHOUSE_SCHEDULE=VPS_LOCAL_EVERY_MINUTE_PRESERVED
+  echo FACTORY_WAREHOUSE_SITE_PUBLISHING=false
+  exit 0
+fi
+
 # Existing factory production runs at minute 23; warehouse stock scan is 31.
 # It also runs immediately at installation and can be invoked manually.
 # Submit directly via stdin to avoid remote temporary crontab file-path issues.

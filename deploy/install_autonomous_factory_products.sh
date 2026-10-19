@@ -90,6 +90,15 @@ exec "$python" "$scripts/factory_vps_product_cycle.py" \\
 EOF
 chmod 700 "$stage/run-local-cycle.sh"
 
+# Do not regress an already-installed every-minute synchronized warehouse loop.
+if crontab -l 2>/dev/null | grep -q SAEIT_FACTORY_EVERY_MINUTE_V1; then
+  test "$(crontab -l | grep -c SAEIT_AUTONOMOUS_PRODUCTS_V2)" -eq 1
+  test "$(crontab -l | grep -c SAEIT_PRODUCTION_WAREHOUSE_V1)" -eq 1
+  echo AUTONOMOUS_SCHEDULE=VPS_LOCAL_EVERY_MINUTE_PRESERVED
+  echo PUBLISHING_ENABLED=false
+  exit 0
+fi
+
 # All unrelated cron entries are preserved.
 crontab -l > "$ops/backups/crontab-before-autonomous-product-$stamp.txt" 2>/dev/null ||
   : > "$ops/backups/crontab-before-autonomous-product-$stamp.txt"
