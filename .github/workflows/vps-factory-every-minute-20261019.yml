@@ -89,7 +89,7 @@ jobs:
           PY
           # Run the same scheduled runner once to confirm production and QA
           # without waiting for or altering any website.
-          timeout 180s ssh_vps 'bash "$HOME/factory-runtime/operations/production-warehouse/run-minute-cycle.sh"; python3 -' <<'PY'
+          ssh_vps 'timeout 180s bash "$HOME/factory-runtime/operations/production-warehouse/run-minute-cycle.sh"; python3 -' <<'PY'
           from pathlib import Path
           import json,time
           ops=Path.home()/"factory-runtime"/"operations"
