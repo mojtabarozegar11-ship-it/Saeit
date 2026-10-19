@@ -89,6 +89,45 @@ def _status_dict():
         native_invoices = invoice_model.objects.count()
     except LookupError:
         pass
+    # A successful order status is not independent proof of a chain payment.
+    commerce_count = None
+    commerce_by_status = {}
+    verified_receipts_count = None
+    confirmed_revenue_usd = None
+    fulfillment_count = None
+    fulfillments_by_status = {}
+    try:
+        from decimal import Decimal
+        from django.db.models import Sum
+        invoice_model = apps.get_model("mpw_commerce", "CommerceInvoice")
+        receipt_model = apps.get_model("mpw_commerce", "CommerceReceipt")
+        fulfillment_model = apps.get_model("mpw_commerce", "CommerceFulfillment")
+        invoices = invoice_model.objects.filter(order_id__in=order_ids)
+        commerce_count = invoices.count()
+        for value in invoices.values_list("status", flat=True):
+            commerce_by_status[value] = commerce_by_status.get(value, 0) + 1
+        verified = receipt_model.objects.filter(
+            invoice_id__in=invoices.values_list("id", flat=True),
+            finalized_at__isnull=False,
+        ).exclude(evidence_digest="")
+        verified_receipts_count = verified.count()
+        confirmed = invoices.filter(
+            id__in=verified.values_list("invoice_id", flat=True),
+            status=invoice_model.Status.PAID,
+        )
+        confirmed_revenue_usd = str(
+            confirmed.aggregate(amount=Sum("total_usd"))["amount"] or Decimal("0.00")
+        )
+        fulfilled = fulfillment_model.objects.filter(
+            item__order_id__in=order_ids,
+            item__product_id__in=BOOK_IDS,
+        )
+        fulfillment_count = fulfilled.count()
+        for value in fulfilled.values_list("status", flat=True):
+            fulfillments_by_status[value] = fulfillments_by_status.get(value, 0) + 1
+    except LookupError:
+        # Preserve honest unknown status when commerce V2 is not installed.
+        pass
     return {
         "books": books,
         "flags": active_flags,
@@ -98,6 +137,12 @@ def _status_dict():
         "intents_total": intents.count(),
         "intents_by_status": intent_status,
         "native_invoices_count": native_invoices,
+        "commerce_invoices_count": commerce_count,
+        "commerce_invoices_by_status": commerce_by_status,
+        "verified_receipts_count": verified_receipts_count,
+        "confirmed_revenue_usd": confirmed_revenue_usd,
+        "commerce_fulfillment_count": fulfillment_count,
+        "commerce_fulfillments_by_status": fulfillments_by_status,
         "verified_customer_downloads": None,
         "real_settlement_test_verified": False,  # Never claim real settlement from flags.
         "can_enable_payments": False,  # Operational release requires externally audited evidence.
