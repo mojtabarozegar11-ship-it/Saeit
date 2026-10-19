@@ -83,12 +83,23 @@ jobs:
           $before=(int)$db->query("SELECT COUNT(*) FROM runs")->fetchColumn();
           $out=zmAgentCycle($db);
           $after=(int)$db->query("SELECT COUNT(*) FROM runs")->fetchColumn();
-          if(count($out)<1 || $after-$before !== count($out))exit(7);
+          if(count($out)!==11 || $after-$before !== count($out))exit(7);
           foreach($out as [$code,$status,$http]) {
             echo "SITE_AGENT code=".$code." status=".$status." http=".$http."\n";
           }
           echo "SITE_AGENTS_EXECUTED=".count($out)."\n";
           echo "SITE_AGENT_RUN_DATA_PRIVATE=yes\n";
+          $expected=["agriculture","commerce","content","economic","master","media","quality","research","security","seo","weather"];
+          $seen=[]; $fail=[];
+          foreach($out as $entry) {
+            if(!is_array($entry) || count($entry)<3){ $fail[]="malformed"; continue; }
+            [$code,$status,$http]=$entry;
+            $seen[]=$code;
+            if($status!=="ok" || (int)$http!==200) $fail[]=$code;
+          }
+          if(array_diff($expected,$seen) || count(array_unique($seen))!==11) $fail[]="missing_or_duplicate";
+          echo "SITE_AGENTS_FAILED=".count($fail)."\\n";
+          if($fail){ fwrite(STDERR,"SITE_AGENTS_NOT_HEALTHY=".implode(",",$fail)."\\n"); exit(8); }
           ' "$app"
           REMOTE
       - name: Remove runner SSH credentials
