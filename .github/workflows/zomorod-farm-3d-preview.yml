@@ -1,0 +1,174 @@
+name: Farm Dominion 3D isolated preview and real browser QA
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/zomorod-farm-3d-preview.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zm-farm-dominion-preview
+  cancel-in-progress: false
+jobs:
+  preview:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      (github.event_name == 'workflow_dispatch' ||
+       contains(github.event.head_commit.message, '[approved-zm-farm-3d-preview]'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 24
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Build real 3D game and bundle local Three.js (no external runtime engine)
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="games/farm-wars-v3"
+          python3 -m py_compile "$base/scripts/download_models.py"
+          node --check "$base/src/main.js"
+          node --check "$base/tests/browser.cjs"
+          npm install --prefix "$base" --no-audit --no-fund --no-save three@0.181.0 esbuild@0.25.12
+          mkdir -p "$base/build/assets"
+          "$base/node_modules/.bin/esbuild" "$base/src/main.js" --bundle --format=iife --platform=browser --target=es2020 --minify --outfile="$base/build/game.js"
+          cp "$base/index.html" "$base/build/index.html"
+          printf 'PassengerEnabled off\nDirectoryIndex index.html\nOptions -Indexes\n' > "$base/build/.htaccess"
+          python3 "$base/scripts/download_models.py"
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          root=Path('games/farm-wars-v3/build')
+          html=(root/'index.html').read_text()
+          js=(root/'game.js').read_text()
+          assert len(js)>300000, 'missing self-contained Three.js bundle'
+          assert '<canvas id="world"' in html and 'script src="./game.js"' in html
+          assert 'FarmDominionDebug' in js
+          assert 'OPENAI_API_KEY' not in js and 'sk-proj-' not in js
+          assert len(list((root/'assets').glob('*.glb')))==27
+          print('FARM_DOMINION_BUILD=PASS',len(js),len(html))
+          PY
+          node --check "$base/build/game.js"
+      - name: Capture existing live site baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,os
+          from urllib.request import Request,urlopen
+          from urllib.error import HTTPError
+          base='https://zomorodmelal.ir'
+          routes=['/','/farm-wars/','/agriculture/','/research/','/store/','/tala/']
+          statuses={}
+          for p in routes:
+            try:
+              with urlopen(Request(base+p,headers={'User-Agent':'ZomorodThreeDimensionalPreflight/1'}),timeout=27) as r:code=r.status
+            except HTTPError as e:code=e.code
+            statuses[p]=code
+            print('PROTECTED_BEFORE',p,code)
+            assert code==200,p
+          with open(os.environ['RUNNER_TEMP']+'/zm3-baseline.json','w') as f:json.dump(statuses,f)
+          PY
+      - name: Pin VPS and hosting fingerprints with existing private secrets
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          umask 077
+          d="$RUNNER_TEMP/zm-farm-3d-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host vps
+            HostName 178.239.147.150
+            User githubops
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host host
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 12
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          echo FARM_DOMINION_3D_RELAY=PINNED
+      - name: Stage full 3D game outside public root
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-farm-3d-ssh"
+          staging="/home/zomorod2/.farm-dominion-3d-stage-$GITHUB_RUN_ID"
+          ssh -T -F "$d/config" host "test ! -e '$staging' && test ! -e /home/zomorod2/public_html/farm-dominion-preview && install -d -m 700 '$staging'"
+          tar -cf - -C games/farm-wars-v3/build . | timeout 110s ssh -T -F "$d/config" host "tar -xf - -C '$staging'"
+          local_hash="$(sha256sum games/farm-wars-v3/build/game.js | awk '{print $1}')"
+          ssh -T -F "$d/config" host "test \"\$(sha256sum '$staging/game.js' | awk '{print \$1}')\" = '$local_hash' && test \$(find '$staging/assets' -name '*.glb' | wc -l) -eq 27 && grep -Fq 'PassengerEnabled off' '$staging/.htaccess'"
+          echo FARM_DOMINION_3D_STAGING=PASS
+      - name: Publish only new unlinked preview route
+        id: preview
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-farm-3d-ssh"
+          staging="/home/zomorod2/.farm-dominion-3d-stage-$GITHUB_RUN_ID"
+          preview="/home/zomorod2/public_html/farm-dominion-preview"
+          ssh -T -F "$d/config" host "test -s '$staging/index.html' && test ! -e '$preview' && test ! -L '$preview' && mv -T '$staging' '$preview' && test -s '$preview/game.js'"
+          echo ONLY_NEW_PREVIEW_ROUTE_PUBLISHED=YES
+      - name: Run actual WebGL game in Chromium on desktop and phone
+        shell: bash
+        env:
+          TEST_URL: https://zomorodmelal.ir/farm-dominion-preview/
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/zm-farm-playwright
+          cd /tmp/zm-farm-playwright
+          npm init -y >/dev/null
+          npm install --silent --no-save --no-fund --no-audit playwright@1.55.0
+          npx playwright install chromium
+          cd "$GITHUB_WORKSPACE"
+          NODE_PATH=/tmp/zm-farm-playwright/node_modules node games/farm-wars-v3/tests/browser.cjs
+      - name: Protect original production URLs
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from urllib.request import urlopen
+          import json,os
+          with open(os.environ['RUNNER_TEMP']+'/zm3-baseline.json') as f:baseline=json.load(f)
+          for p,old in baseline.items():
+            with urlopen('https://zomorodmelal.ir'+p,timeout=25) as r:now=r.status
+            assert now==old,(p,old,now)
+            print('UNMODIFIED_LIVE_PROTECTED_ROUTE',p,now)
+          print('FARM_3D_PREVIEW_PROTECTED_SITE=PASS')
+          PY
+      - name: Upload screenshots of real desktop, farming and combat visuals
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: farm-dominion-v3-real-webgl-screenshots
+          path: artifacts/farm-dominion-3d/
+          retention-days: 7
+          if-no-files-found: warn
+      - name: Remove SSH credentials, retain isolated preview for later release
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/zm-farm-3d-ssh"
