@@ -3,6 +3,8 @@ on:
   pull_request:
     paths:
       - "scripts/factory_code_self_upgrade.py"
+      - "scripts/factory_first_product_pilot.py"
+      - "scripts/factory_public_library_adapter.py"
       - "tests/test_factory_code_self_upgrade.py"
       - "deploy/install_factory_code_self_upgrade.sh"
       - ".github/workflows/factory-code-self-upgrade.yml"
@@ -10,6 +12,8 @@ on:
     branches: [main]
     paths:
       - "scripts/factory_code_self_upgrade.py"
+      - "scripts/factory_first_product_pilot.py"
+      - "scripts/factory_public_library_adapter.py"
       - "tests/test_factory_code_self_upgrade.py"
       - "deploy/install_factory_code_self_upgrade.sh"
       - ".github/workflows/factory-code-self-upgrade.yml"
