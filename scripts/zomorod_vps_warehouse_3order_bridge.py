@@ -77,7 +77,21 @@ def orders_once(root,engine,profiles,cycle,*,dry_run=False,max_active=300):
             if value.get("orders")!=confirmed or len(confirmed)!=3:
                 raise RuntimeError("SITE_BRIDGE_RECEIPT_MISMATCH")
             return {"status":"already_issued","orders":confirmed,"new":0}
-        active=sum(item["status"]!="completed_verified" for item in existing)
+        # Research-evidence rework is tracked by the 12-stage governance plane;
+        # it is not a manufacturable order. Keep every old WO intact, but do not
+        # consume the separate site/manufacturing capacity with those records.
+        # Unknown or unproven tasks still count against the manufacturing cap.
+        def production_capacity_used(item):
+            if item["status"]=="completed_verified":return False
+            evidence_only=(
+                item.get("phase")=="research_rework"
+                and item.get("origin")=="local-factory-research"
+                and isinstance(item.get("blocker"),str)
+                and bool(item["blocker"].strip())
+                and item.get("requesting_site") is None
+            )
+            return not evidence_only
+        active=sum(production_capacity_used(item) for item in existing)
         missing=3-len(ours)
         if active+missing>max_active or len(existing)+missing>engine.MAX_ORDERS:
             raise RuntimeError("FACTORY_PENDING_CAPACITY_REACHED")

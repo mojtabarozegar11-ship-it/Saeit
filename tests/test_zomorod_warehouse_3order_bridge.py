@@ -95,6 +95,34 @@ class BridgeTests(unittest.TestCase):
   self.assertEqual(replay["orders"],[])
   self.assertEqual(len(list(queue.glob("WO-*.json"))),303)
 
+ def test_evidence_only_research_queue_does_not_block_separate_manufacturing_pool(self):
+  queue=self.root/"production-instructions"/"orders"
+  for number in range(1,301):
+   ident=f"WO-{number:08d}"
+   (queue/(ident+".json")).write_text(json.dumps({
+       "schema":orders.SCHEMA,"id":ident,"status":"issued",
+       "fingerprint":hashlib.sha256(ident.encode()).hexdigest(),
+       "public_distribution_allowed":False,"phase":"research_rework",
+       "origin":"local-factory-research","blocker":"research_evidence_missing"
+   }))
+  original={p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in queue.glob("*.json")}
+  day="2026-10-19-r39288904264"
+  staged,created=bridge.stage_three_requests(self.root,orders,self.families,day)
+  self.assertTrue(created)
+  admitted=bridge.reconcile_site_intake(self.root,orders,self.families)
+  self.assertFalse(admitted["capacity_blocked"])
+  self.assertEqual(admitted["orders"],["WO-00000301","WO-00000302","WO-00000303"])
+  self.assertEqual(len(list(queue.glob("*.json"))),303)
+  self.assertTrue(all(hashlib.sha256((queue/name).read_bytes()).hexdigest()==digest
+                      for name,digest in original.items()))
+  self.assertTrue(all(json.loads((queue/(wid+".json")).read_text())["phase"]=="engineering_specification"
+                      for wid in admitted["orders"]))
+  self.assertTrue(all(json.loads((queue/(wid+".json")).read_text())["public_distribution_allowed"] is False
+                      for wid in admitted["orders"]))
+  replay=bridge.reconcile_site_intake(self.root,orders,self.families)
+  self.assertEqual(replay["orders"],[])
+  self.assertEqual(len(list(queue.glob("*.json"))),303)
+
  def test_two_cycles_stage_six_distinct_requests_without_native_capacity(self):
   for day in ("2026-10-19","2026-10-20"):
    doc,created=bridge.stage_three_requests(self.root,orders,self.families,day)
