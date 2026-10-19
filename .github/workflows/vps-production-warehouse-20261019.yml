@@ -1,0 +1,111 @@
+name: Independent VPS factory production warehouse
+on:
+  pull_request:
+    paths:
+      - "scripts/factory_production_warehouse.py"
+      - "tests/test_factory_production_warehouse.py"
+      - "deploy/install_production_warehouse.sh"
+      - ".github/workflows/vps-production-warehouse-20261019.yml"
+  push:
+    branches: [main]
+    paths:
+      - "scripts/factory_production_warehouse.py"
+      - "tests/test_factory_production_warehouse.py"
+      - "deploy/install_production_warehouse.sh"
+      - ".github/workflows/vps-production-warehouse-20261019.yml"
+permissions:
+  contents: read
+concurrency:
+  group: saeit-vps-production-warehouse-private
+  cancel-in-progress: false
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Verify real product QA, warehouse versioning and no publication
+        run: |
+          set -euo pipefail
+          bash -n deploy/install_production_warehouse.sh
+          python3 -m py_compile scripts/factory_production_warehouse.py
+          python3 -m unittest discover -s tests -p 'test_factory_production_warehouse.py' -v
+          python3 -m unittest discover -s tests -p 'test_factory_product_maker.py' -v
+          python3 -m unittest discover -s tests -p 'test_factory_product_rework.py' -v
+          python3 -m unittest discover -s tests -p 'test_factory_vps_product_cycle.py' -v
+          python3 - <<'PY'
+          from pathlib import Path
+          content=Path('scripts/factory_production_warehouse.py').read_text()+Path('deploy/install_production_warehouse.sh').read_text()
+          for forbidden in ('factory_store_sender', 'factory_multisite_orchestrator', 'requests.post(', 'urllib.request', 'publish_verified_factory_store_listing'):
+              assert forbidden not in content
+          assert 'FACTORY_WAREHOUSE_SITE_PUBLISHING=false' in content
+          assert 'SAEIT_AUTONOMOUS_PRODUCTS_V2' in content
+          print('WAREHOUSE_SITE_INDEPENDENCE_CONTRACT=PASS')
+          PY
+  install:
+    needs: contract
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event_name == 'push' && contains(github.event.head_commit.message, '[approved-independent-warehouse-20261019]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Test local product and warehouse logic
+        run: |
+          set -euo pipefail
+          bash -n deploy/install_production_warehouse.sh
+          python3 -m unittest discover -s tests -p 'test_factory_production_warehouse.py' -v
+          python3 -m unittest discover -s tests -p 'test_factory_vps_product_cycle.py' -v
+      - name: Stage and install on standalone VPS, never websites
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/warehouse"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          ssh_vps() {
+            ssh -i "$d/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=10 -o ServerAliveCountMax=2 githubops@178.239.147.150 "$@"
+          }
+          ssh_vps 'set -eu; test "$(id -un)" = githubops; test -d "$HOME/factory-runtime/operations"; test -x "$HOME/factory-runtime/.venv/bin/python"; echo VPS_EXISTING_FACTORY_PATHS_VERIFIED; if crontab -l 2>/dev/null | grep -q SAEIT_AUTONOMOUS_PRODUCTS_V2; then echo VPS_PRODUCTION_CRON_PRESENT; else echo VPS_PRODUCTION_CRON_BOOTSTRAP_REQUIRED; fi'
+          archive="$d/release.tar"
+          tar -cf "$archive" scripts/factory_production_warehouse.py scripts/factory_vps_product_cycle.py scripts/factory_autonomous_portfolio.py scripts/factory_evidence_quality.py scripts/factory_first_product_pilot.py scripts/factory_product_maker.py scripts/factory_product_rework.py deploy/install_autonomous_factory_products.sh deploy/install_production_warehouse.sh product_recipes/farm_enterprise_economics product_recipes/water_budget_economics
+          digest="$(sha256sum "$archive" | awk '{print $1}')"
+          dir="/home/githubops/factory-runtime/operations/warehouse-release-$GITHUB_RUN_ID"
+          ssh_vps "umask 077; test ! -e '$dir'; mkdir -m 700 '$dir'"
+          cat "$archive" | ssh_vps "umask 077; cat > '$dir/bundle.tar'"
+          ssh_vps bash -se -- "$dir" "$digest" <<'REMOTE'
+          set -euo pipefail
+          root="$1"; hash="$2"
+          test ! -L "$root" && test -f "$root/bundle.tar"
+          printf '%s  %s\n' "$hash" "$root/bundle.tar" | sha256sum -c --status
+          python3 - "$root" <<'PY'
+          import pathlib,tarfile,sys
+          dest=pathlib.Path(sys.argv[1])
+          with tarfile.open(dest/"bundle.tar","r:") as archive:
+              for member in archive:
+                  name=pathlib.PurePosixPath(member.name)
+                  if member.issym() or member.islnk() or (not member.isfile() and not member.isdir()) or '..' in name.parts or name.is_absolute():
+                      raise RuntimeError('WAREHOUSE_UNSAFE_BUNDLE')
+              archive.extractall(path=dest)
+          print('WAREHOUSE_PRIVATE_SOURCE_INTEGRITY=PASS')
+          PY
+          bash "$root/deploy/install_production_warehouse.sh"
+          test -s "$HOME/factory-runtime/private/autonomous-product-cycle/production-warehouse/stock-register.json"
+          test "$(crontab -l | grep -c SAEIT_PRODUCTION_WAREHOUSE_V1)" -eq 1
+          test "$(crontab -l | grep -c SAEIT_AUTONOMOUS_PRODUCTS_V2)" -eq 1
+          echo WAREHOUSE_AUTONOMOUS_VPS_ACTIVE=PASS
+          REMOTE
+      - name: Confirm entirely offline stock-first operations
+        run: |
+          echo FACTORY_SITE_DEPENDENCY=false
+          echo FACTORY_WEBSITE_PUBLICATION=false
+          echo FACTORY_PRODUCE_THEN_STOCK=true
