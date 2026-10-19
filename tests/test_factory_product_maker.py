@@ -46,6 +46,8 @@ class ManufacturerTests(unittest.TestCase):
         self.assertEqual(manifest["quality_scope"], "software_tests_and_zip_integrity_only")
         self.assertEqual(manifest["scientific_validity"], "pending_independent_specialist_review")
         self.assertEqual(manifest["economic_value"], "pending_independent_review")
+        self.assertEqual(manifest["automatic_product_invention"], "not_implemented")
+        self.assertTrue(manifest["new_recipe_authoring_required"])
         self.assertFalse(manifest["customer_order_required"])
         self.assertFalse(manifest["public_listing_enabled"])
         self.assertIsNone(manifest["price"])
