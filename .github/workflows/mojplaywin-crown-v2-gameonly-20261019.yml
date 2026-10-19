@@ -1,0 +1,207 @@
+name: MojPlayWin Crown Defender V2 Royal Nebula (game-only safe upgrade)
+# Rerun with guarded current Studio page length; protect 10 preexisting field guides.
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/mojplaywin-crown-v2-gameonly-20261019.yml'
+permissions:
+  contents: read
+concurrency:
+  group: mojplaywin-about-exact-static-prod
+  cancel-in-progress: false
+jobs:
+  upgrade-original-game-v2:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.ref == 'refs/heads/main' &&
+      github.event_name == 'push' &&
+      contains(github.event.head_commit.message, '[approved-mpw-crown-v2-20261019]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify game V2 source, compatibility and JavaScript parser
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_crown_v2_exact_publish_20261019.py
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib
+          src=Path('games/crown-defender/index.html').read_bytes()
+          assert hashlib.sha256(src).hexdigest()=='d760c309ac74abb33570fa8ce64e93522a10d037f00e3f32dbad54ac04c8cdd2'
+          for marker in (b'Crown Defender V2',b'Royal Nebula',b'id="upgradeShop"',b'id="start"',b'id="pause"',b'window.__mpwCrownDefenderTest'):
+            assert marker in src,marker
+          print('MPW_CROWN_V2_SOURCE_VERIFIED=YES bytes='+str(len(src)))
+          PY
+          python3 - <<'PY'
+          from pathlib import Path
+          src=Path('games/crown-defender/index.html').read_text('utf-8')
+          Path('/tmp/mpw-crown-v2.js').write_text(src.split('<script>',1)[1].split('</script>',1)[0],'utf-8')
+          PY
+          node --check /tmp/mpw-crown-v2.js
+          echo 'MPW_CROWN_V2_JS_PARSER=PASS'
+      - name: Baseline main and protected routes, require existing game
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,os
+          from urllib.request import Request,urlopen
+          from urllib.error import HTTPError
+          root='https://mojplaywin.com'
+          paths=['/','/games/','/studio/','/store/','/about/','/research/','/knowledge/',
+                 '/mojtaba.roozegar/','/mojtaba.roozegar/about/','/farnaz/','/saman/',
+                 '/picm/','/taniya/','/zahra/']
+          base={}
+          for path in paths:
+            u=root+path
+            req=Request(u,headers={'User-Agent':'MPWCrownDefenderBaseline/1.0','Cache-Control':'no-cache'})
+            try:
+              with urlopen(req,timeout=20) as r:code=r.status
+            except HTTPError as e:code=e.code
+            base[u]=code
+            print('CROWN_PROTECTED_BEFORE='+u+' '+str(code))
+          for p in ['/','/games/','/studio/','/store/','/about/','/farnaz/']:
+            if base[root+p]!=200:raise SystemExit('PROTECTED_BASELINE_BROKEN '+p)
+          u=root+'/games/crown-defender/'
+          try:
+            with urlopen(Request(u,headers={'Cache-Control':'no-cache'}),timeout=20) as r:code=r.status
+          except HTTPError as e:code=e.code
+          print('CROWN_GAME_ROUTE_BEFORE='+str(code))
+          if code!=200:raise SystemExit('EXISTING_GAME_ROUTE_MISSING')
+          print('CROWN_V2_EXISTING_ROUTE_CONFIRMED=YES')
+          with open(os.environ['RUNNER_TEMP']+'/crown-baseline.json','w') as f:json.dump(base,f)
+          PY
+      - name: Create host-key-pinned SSH relay from GitHub via VPS to cPanel
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-crown-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04'
+          mv "$d/host.candidate" "$d/host.known"
+          echo 'CROWN_PINNED_SSH_RELAY_READY'
+      - name: Stage one verified game HTML exclusively outside public document root
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-crown-ssh"
+          scp -q -F "$d/config" games/crown-defender/index.html \
+            "saeit-cpanel:/home/zomorod2/.mpw-crown-game-stage-$GITHUB_RUN_ID.html"
+      - name: Replace only existing game HTML with guarded backup
+        id: install
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-crown-ssh"
+          digest=$(sha256sum games/crown-defender/index.html | awk '{print $1}')
+          timeout 85s ssh -T -F "$d/config" saeit-cpanel \
+            "python3 - install '$GITHUB_RUN_ID' '$digest'" \
+            < scripts/mpw_crown_v2_exact_publish_20261019.py
+      - name: Verify V2 game bytes, unchanged studio link and protected routes
+        id: smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib,json,os,time
+          from urllib.request import Request,urlopen
+          from urllib.error import HTTPError
+          root='https://mojplaywin.com'
+          link=root+'/games/crown-defender/'
+          expected=hashlib.sha256(open('games/crown-defender/index.html','rb').read()).hexdigest()
+          ok=False
+          for attempt in range(1,6):
+            try:
+              req=Request(link+'?verify_crown='+os.environ['GITHUB_RUN_ID']+'-'+str(attempt),
+                          headers={'User-Agent':'MojPlayWinCrownDefenderQA/1.0','Cache-Control':'no-cache'})
+              with urlopen(req,timeout=25) as r:
+                code=r.status;raw=r.read(150000);typ=r.headers.get('Content-Type','')
+              got=hashlib.sha256(raw).hexdigest()
+              ok=(code==200 and got==expected and 'text/html' in typ and
+                  b'Crown Defender V2' in raw and b'Royal Nebula' in raw and b'upgradeShop' in raw and b'requestAnimationFrame' in raw and
+                  b'id="start"' in raw and b'id="pause"' in raw)
+              print('CROWN_PUBLIC_GAME_ATTEMPT='+str(attempt)+' ok='+str(ok)+' bytes='+str(len(raw))+' sha='+got)
+              if ok:break
+            except Exception as e:print('CROWN_GAME_VERIFY_RETRY='+type(e).__name__)
+            time.sleep(3)
+          if not ok:raise SystemExit('CROWN_PUBLIC_GAME_MISSING_OR_WRONG_BYTES')
+          req=Request(root+'/studio/?crown='+os.environ['GITHUB_RUN_ID'],headers={'User-Agent':'MojPlayWinCrownDefenderQA/1.0','Cache-Control':'no-cache'})
+          with urlopen(req,timeout=24) as r:studio=r.read(1400000).decode('utf-8','replace');code=r.status
+          if (code!=200 or studio.count('id="mpw-crown-defender-featured-20261019"')!=1 or
+              studio.count('href="/games/crown-defender/"')!=1 or studio.count('class="mpw-ten-card"')!=10 or
+              'mpw-research30-' not in studio):
+             raise SystemExit('CROWN_STUDIO_LINK_MISSING_OR_CONTENT_NOT_PRESERVED')
+          print('CROWN_GAME_STUDIO_LINK_VERIFIED=YES')
+          baseline=json.load(open(os.environ['RUNNER_TEMP']+'/crown-baseline.json'))
+          for uri,expected_code in baseline.items():
+            req=Request(uri,headers={'User-Agent':'MojPlayWinCrownDefenderQA/1.0','Cache-Control':'no-cache'})
+            try:
+              with urlopen(req,timeout=22) as r:current=r.status
+            except HTTPError as e:current=e.code
+            if current!=expected_code:raise SystemExit('CROWN_PROTECTED_ROUTE_CHANGED '+uri)
+            print('CROWN_PROTECTED_UNCHANGED '+uri+' '+str(current))
+          print('MPW_CROWN_V2_LIVE_VERIFIED=YES')
+          PY
+          d="$RUNNER_TEMP/mpw-crown-ssh"
+          timeout 25s ssh -T -F "$d/config" saeit-cpanel \
+            "python3 - status '$GITHUB_RUN_ID'" \
+            < scripts/mpw_crown_v2_exact_publish_20261019.py
+      - name: Roll back only V2 game bytes if verification fails
+        if: failure() && steps.install.outcome != 'skipped'
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-crown-ssh"
+          timeout 60s ssh -T -F "$d/config" saeit-cpanel \
+            "python3 - rollback '$GITHUB_RUN_ID'" \
+            < scripts/mpw_crown_v2_exact_publish_20261019.py
+      - name: Remove only private staging file and temporary SSH material
+        if: always()
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/mpw-crown-ssh"
+          if test -f "$d/config"; then
+            ssh -T -F "$d/config" -o ConnectTimeout=10 saeit-cpanel \
+              "test ! -L /home/zomorod2/.mpw-crown-game-stage-$GITHUB_RUN_ID.html && rm -f -- /home/zomorod2/.mpw-crown-game-stage-$GITHUB_RUN_ID.html" || true
+          fi
