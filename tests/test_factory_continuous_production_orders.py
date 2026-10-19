@@ -112,4 +112,51 @@ class ProductionOrderGeneratorTests(unittest.TestCase):
         self.assertFalse(rec["warehouse_goods_created"])
         self.assertIn("testable prototype",rec["subject"])
 
+    def test_300_blocked_research_tasks_never_starve_real_specification(self):
+        self.seed([base_entry(1,["FIVE_DISTINCT_PUBLIC_SOURCES_WITH_LINKED_EVIDENCE_REQUIRED"])])
+        source=self.root/"production-order-inputs"
+        source.mkdir()
+        (source/"factory-invention-snapshot.json").write_text(json.dumps({
+            "schema":orders.SCHEMA,"items":[{
+                "id":"factory_lab_20261019","title":"Verified offline blueprint request",
+                "specification":"Create a mathematical prototype with deterministic functional tests and source provenance."
+            }]}))
+        queue=self.root/"production-instructions"/"orders"
+        queue.mkdir(parents=True)
+        old_hashes={}
+        for n in range(1,301):
+            ident="WO-"+str(n).zfill(8)
+            item={"schema":orders.SCHEMA,"id":ident,"status":"issued",
+                  "fingerprint":"%064x"%n,"public_distribution_allowed":False,
+                  "origin":"local-factory-research","phase":"research_rework",
+                  "blocker":"FIVE_DISTINCT_PUBLIC_SOURCES_WITH_LINKED_EVIDENCE_REQUIRED"}
+            orders.atomic_json(queue/(ident+".json"),item)
+            old_hashes[ident]=orders.checksum(item)
+        status=orders.generate(self.root)
+        self.assertEqual(status["action"],"issued")
+        self.assertEqual(status["id"],"WO-00000301")
+        report,entries=self.get()
+        self.assertEqual(len(entries),301)
+        self.assertEqual(report["pending_research_instructions"],300)
+        self.assertEqual(report["pending_manufacturing_instructions"],1)
+        self.assertEqual(report["research_capacity_available"],0)
+        self.assertEqual(report["manufacturing_capacity_available"],299)
+        self.assertEqual(entries[-1]["phase"],"engineering_specification")
+        self.assertFalse(entries[-1]["publication_approved"])
+        for order_id,digest in old_hashes.items():
+            self.assertEqual(orders.checksum(json.loads((queue/(order_id+".json")).read_text())),digest)
+        self.assertEqual(orders.generate(self.root)["action"],"capacity_hold")
+        self.assertEqual(len(self.get()[1]),301)
+
+    def test_research_cap_alone_does_not_bypass_qa(self):
+        self.seed([base_entry(1,["FIVE_DISTINCT_PUBLIC_SOURCES_WITH_LINKED_EVIDENCE_REQUIRED"])])
+        orders.generate(self.root,max_backlog=2)
+        orders.generate(self.root,max_backlog=2)
+        stat=orders.generate(self.root,max_backlog=2)
+        self.assertEqual(stat["action"],"capacity_hold")
+        report,_=self.get()
+        self.assertEqual(report["pending_research_instructions"],2)
+        self.assertEqual(report["pending_manufacturing_instructions"],0)
+        self.assertFalse(report["distribution_enabled"])
+
 if __name__=="__main__":unittest.main()

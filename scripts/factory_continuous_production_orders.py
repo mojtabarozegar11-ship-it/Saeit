@@ -173,6 +173,18 @@ def validate_old(p):
         raise RuntimeError("ORDERS_BAD_RECORD_FINGERPRINT")
     return record
 
+def consumes_research_capacity(item):
+    """Only independently blocked research uses the research quota.
+
+    Unknown or partially described work still consumes manufacturing capacity.
+    Preserve all existing work orders and their original status.
+    """
+    return (item.get("phase")=="research_rework"
+            and item.get("origin")=="local-factory-research"
+            and isinstance(item.get("blocker"),str)
+            and bool(item["blocker"].strip())
+            and item.get("requesting_site") is None)
+
 def generate(root,max_backlog=MAX_BACKLOG):
     root=Path(root).expanduser().resolve()
     if not root.is_dir() or root.is_symlink():raise RuntimeError("ORDERS_FACTORY_ROOT_MISSING")
@@ -190,21 +202,33 @@ def generate(root,max_backlog=MAX_BACKLOG):
                 raise RuntimeError("ORDERS_UNEXPECTED_FILE")
             old.append(validate_old(file))
             if len(old)>MAX_ORDERS:raise RuntimeError("ORDERS_TOO_MANY_RECORDS")
-        active=sum(x["status"]!="completed_verified" for x in old)
-        candidates=local_research_tasks(root)+local_input_tasks(root)
+        # Do not let 300 blocked research tasks starve genuinely distinct
+        # product specifications. Each lane has its own bounded quota.
+        # Unknown and unsourced work counts against the manufacturing lane.
+        pending=[x for x in old if x["status"]!="completed_verified"]
+        research_pending=sum(consumes_research_capacity(x) for x in pending)
+        manufacturing_pending=len(pending)-research_pending
+        active=len(pending)
+        # Source-originated engineering briefs take priority over speculative
+        # backlog tasks. Fingerprints still enforce exactly-once issuance.
+        candidates=local_input_tasks(root)+local_research_tasks(root)
         seen={x["fingerprint"] for x in old}
         selected=None
-        if active<max_backlog:
-            for task in candidates:
-                key=fingerprint(task)
-                if key not in seen:
-                    selected=(task,key)
-                    break
-        action="no_new_meaningful_input" if not selected else "issued"
-        if active>=max_backlog:action="capacity_hold"
+        blocked_by_capacity=False
+        for task in candidates:
+            key=fingerprint(task)
+            if key in seen:continue
+            research=consumes_research_capacity(task)
+            if (research_pending if research else manufacturing_pending)>=max_backlog:
+                blocked_by_capacity=True
+                continue
+            selected=(task,key,research)
+            break
+        action="issued" if selected else ("capacity_hold" if blocked_by_capacity
+                                          else "no_new_meaningful_input")
         order_id=None
         if selected:
-            task,key=selected
+            task,key,is_research=selected
             serial=max((int(x["id"].split("-")[1]) for x in old),default=0)+1
             order_id="WO-"+str(serial).zfill(8)
             record=dict(task,
@@ -218,9 +242,16 @@ def generate(root,max_backlog=MAX_BACKLOG):
             if dest.exists() or dest.is_symlink():raise RuntimeError("ORDERS_NUMBER_COLLISION")
             atomic_json(dest,record)
             active+=1
+            if is_research:research_pending+=1
+            else:manufacturing_pending+=1
         report={"schema":SCHEMA,"last_scan_utc":stamp(),"last_action":action,
                 "last_order":order_id,"instructions_issued_total":len(old)+int(bool(selected)),
-                "pending_instructions":active,"candidate_instructions":len(candidates),
+                "pending_instructions":active,
+                "pending_research_instructions":research_pending,
+                "pending_manufacturing_instructions":manufacturing_pending,
+                "research_capacity_available":max(0,max_backlog-research_pending),
+                "manufacturing_capacity_available":max(0,max_backlog-manufacturing_pending),
+                "candidate_instructions":len(candidates),
                 "site_connection_required":False,"customer_order_required":False,
                 "distribution_enabled":False,"production_warehouse_unmodified":True}
         atomic_json(area/"order-status.json",report)

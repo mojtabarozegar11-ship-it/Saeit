@@ -212,7 +212,7 @@ def _verify_site_intake(doc,cycle):
 
 
 def reconcile_site_intake(root,engine,profiles,*,max_admit_cycles=1,max_active=300):
-    """Promote oldest staged cycle only when native backlog has free capacity."""
+    """Promote staged site orders with manufacturing-only capacity accounting."""
     area=Path(root)/"production-instructions"
     intake=area/"zomorod-site-intake"
     if intake.is_symlink() or not intake.is_dir():
