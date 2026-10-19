@@ -10,6 +10,8 @@ on:
       - "tests/test_factory_measured_qa.py"
       - "scripts/factory_product_maker.py"
       - "scripts/factory_vps_product_cycle.py"
+      - "scripts/factory_specialist_pilots.py"
+      - "tests/test_factory_specialist_pilots.py"
       - "product_recipes/**"
       - "deploy/install_autonomous_factory_products.sh"
       - "tests/test_factory_product_maker.py"
@@ -54,6 +56,7 @@ jobs:
           python -B -m unittest discover -s tests -p 'test_factory_product_maker.py' -v
           python -B -m unittest discover -s tests -p 'test_factory_production_warehouse.py' -v
           python -B -m unittest discover -s tests -p 'test_factory_vps_product_cycle.py' -v
+          python -B -m unittest discover -s tests -p 'test_factory_specialist_pilots.py' -v
   deploy:
     needs: measured-qa
     if: github.event_name == 'workflow_dispatch' || (github.repository == 'mojtabarozegar11-ship-it/Saeit' && contains(github.event.head_commit.message, '[approved-factory-unlimited-builds-20261019]'))
@@ -71,6 +74,7 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_factory_production_warehouse.py' -v
           python3 -m unittest discover -s tests -p 'test_factory_quality_module_upgrade.py' -v
           python3 -m unittest discover -s tests -p 'test_factory_vps_product_cycle.py' -v
+          python3 -m unittest discover -s tests -p 'test_factory_specialist_pilots.py' -v
           python3 -m unittest discover -s tests -p 'test_factory_evidence_quality.py' -v
           python3 -m unittest discover -s tests -p 'test_factory_vps_installer_syntax.py' -v
       - name: Install private VPS factory product cycle
@@ -89,12 +93,13 @@ jobs:
           ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
           test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
           SSH=(ssh -i "$d/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o BatchMode=yes githubops@178.239.147.150)
-          tar -cf - tests/test_factory_vps_product_cycle.py scripts/factory_recipe_designer.py factory_config/design_opportunities.json scripts/factory_first_product_pilot.py scripts/factory_autonomous_portfolio.py scripts/factory_evidence_quality.py scripts/factory_product_maker.py scripts/factory_product_rework.py scripts/factory_vps_product_cycle.py scripts/factory_production_warehouse.py product_recipes/ deploy/install_production_warehouse.sh deploy/install_autonomous_factory_products.sh | "${SSH[@]}" 'mkdir -p "$HOME/factory-runtime/operations/product-deploy-${{ github.sha }}"; tar -xf - -C "$HOME/factory-runtime/operations/product-deploy-${{ github.sha }}"'
+          tar -cf - tests/test_factory_vps_product_cycle.py tests/test_factory_specialist_pilots.py scripts/factory_specialist_pilots.py scripts/factory_recipe_designer.py factory_config/design_opportunities.json scripts/factory_first_product_pilot.py scripts/factory_autonomous_portfolio.py scripts/factory_evidence_quality.py scripts/factory_product_maker.py scripts/factory_product_rework.py scripts/factory_vps_product_cycle.py scripts/factory_production_warehouse.py product_recipes/ deploy/install_production_warehouse.sh deploy/install_autonomous_factory_products.sh | "${SSH[@]}" 'mkdir -p "$HOME/factory-runtime/operations/product-deploy-${{ github.sha }}"; tar -xf - -C "$HOME/factory-runtime/operations/product-deploy-${{ github.sha }}"'
           "${SSH[@]}" '"$HOME/factory-runtime/.venv/bin/python" -B -m unittest discover -s "$HOME/factory-runtime/operations/product-deploy-${{ github.sha }}/tests" -p test_factory_vps_product_cycle.py -v'
           echo VPS_FACTORY_ISOLATED_FAULT_INJECTION=PASS
           "${SSH[@]}" 'bash "$HOME/factory-runtime/operations/product-deploy-${{ github.sha }}/deploy/install_autonomous_factory_products.sh"'
           "${SSH[@]}" 'bash "$HOME/factory-runtime/operations/product-deploy-${{ github.sha }}/deploy/install_production_warehouse.sh"'
           "${SSH[@]}" 'bash "$HOME/factory-runtime/operations/autonomous-product-runtime/run-local-cycle.sh" && bash "$HOME/factory-runtime/operations/production-warehouse/run-warehouse.sh"'
+          "${SSH[@]}" 'python3 -c "import json,pathlib; p=pathlib.Path.home()/\"factory-runtime/private/autonomous-product-cycle/family-pilots/status.json\"; print(\"FACTORY_SPECIALIST_PILOT_PROOF=\"+json.dumps(json.loads(p.read_text()),sort_keys=True))"'
           "${SSH[@]}" '"$HOME/factory-runtime/.venv/bin/python" -' <<'PY'
           import json
           from pathlib import Path
