@@ -275,7 +275,7 @@ jobs:
               subprocess.run([str(py),str(runtime/"scripts/factory_vps_product_cycle.py"),
                   "--db",str(base/"private/factory-fresh-isolated.sqlite3"),
                   "--out",str(root),"--recipes",str(runtime/"product_recipes"),
-                  "--enable-designer","--enable-design-intake"],check=True,timeout=90,
+                  "--enable-designer","--enable-design-intake","--enable-invention-supply"],check=True,timeout=90,
                   stdout=subprocess.DEVNULL)
           status=json.loads((root/"engineering-intake/production-results.json").read_text())
           records=[]
@@ -291,6 +291,19 @@ jobs:
           assert any(r["family_id"]=="F27" for r in records)
           before=set(json.loads((root/"engineering-before-${{ github.sha }}.json").read_text()))
           novel={r["functional_sha256"] for r in records}-before
+          # VPS integration proof: two distinct internally invented, actually
+          # manufactured ZIPs; design tickets or orders alone never count.
+          auto=[r for r in records if str(r.get("source_id","")).startswith("auto_need_")]
+          auto_ids={r["functional_sha256"] for r in auto}
+          assert len(auto_ids)>=2, "FACTORY_AUTONOMOUS_INVENTION_NO_REAL_PRODUCTS"
+          for row in auto:
+              proposal=root/"engineering-briefs"/(row["source_id"]+".json")
+              assert proposal.is_file() and not proposal.is_symlink()
+              data=json.loads(proposal.read_text())
+              assert data["origin"]=="factory_invention"
+              assert data["commercial_release"] is False
+          print("FACTORY_AUTONOMOUS_NEW_TECHNICAL_FUNCTIONS="+str(len(auto_ids)))
+          print("FACTORY_AUTONOMOUS_SALE_READY_PRODUCTS=0")
           print("FACTORY_ENGINEERING_FUNCTIONAL_PRODUCTS="+str(status["functional_products"]))
           print("FACTORY_ENGINEERING_REAL_FORMAT_PROTOTYPES="+str(status["technical_prototypes"]))
           print("FACTORY_ENGINEERING_NOVEL_FUNCTIONS_SINCE_DEPLOY="+str(len(novel)))
