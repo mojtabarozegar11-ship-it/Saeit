@@ -46,7 +46,8 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None):
         dossier = portfolio.build(database, str(root / "research-dossiers"), max_products)
         repair = load("saeit_factory_rework_cycle",
                       SCRIPTS / "factory_product_rework.py")
-        selected = sorted(maker.RECIPES)
+        recipe_catalog = maker.discover_recipes(recipes)
+        selected = sorted(recipe_catalog)
         if max_recipes is not None:
             selected = selected[:max_recipes]
         if not Path(recipes).is_dir():
@@ -89,7 +90,7 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None):
             "api_usage": "none",
             "token_usage": 0,
             "build_policy": "all_registered_recipes_sequentially",
-            "registered_recipe_count": len(maker.RECIPES),
+            "registered_recipe_count": len(recipe_catalog),
             "product_candidates_processed": dossier["processed_count"],
             "research_dossiers_updated": dossier["updated_count"],
             "built_product_count": len(produced),
@@ -152,7 +153,7 @@ def main(argv=None):
     print("VPS_FACTORY_PRIVATE_PRODUCT_PACKAGES=" + str(result["manufactured"]))
     print("VPS_FACTORY_ACTUALLY_NEW_PACKAGES=" + str(result.get("new_artifacts", 0)))
     print("VPS_FACTORY_REGISTERED_BUILD_RECIPES=" + str(len(load(
-        "saeit_factory_status_maker", SCRIPTS / "factory_product_maker.py").RECIPES)))
+        "saeit_factory_status_maker", SCRIPTS / "factory_product_maker.py").discover_recipes(options.recipes))))
     print("VPS_FACTORY_API_AND_TOKEN_USAGE=0")
     print("VPS_FACTORY_PRODUCT_CANDIDATES_SCANNED=" + str(result["processed"]))
     print("VPS_FACTORY_QA_REWORK_NEW_OR_OPEN=" + str(result.get("failed", 0)))
