@@ -24,7 +24,7 @@ def test_legacy_js_null_guard_without_disabling_functional_menu():
     assert m.js_guard(fixed)==fixed
 
 def test_static_content_products_and_footer_remain_byte_for_byte():
-    header=m.canonical('<header class="mw-site-nav" data-design="atelier-v4"><nav aria-label="Primary MojPlayWin navigation">'+''.join('<a href="/games/">Games</a>' for _ in range(11))+'<details id="mw-all-pages-menu"></details></nav></header>')
+    header=m.canonical('<header class="mw-site-nav" data-design="atelier-v4"><nav aria-label="Primary MojPlayWin navigation">'+''.join('<a href="/games/">Games</a>' for _ in range(11))+'<details id="mw-all-pages-menu"><summary>Explore all</summary></details></nav></header>')
     orig='<html><body class="mpw-design-unified-v1"><header class="mpw-header">Old navbar</header><main><h1>Games</h1><form action="/pay"><input name="total"></form><article>Unique content</article></main><footer><div class="mpw-legal-one-line">☆ All Rights Reserved. ☆ 2022. ☆ Mojtaba roozegar ☆</div></footer></body></html>'
     new=m.static_patch(orig,header)
     assert '<form action="/pay"><input name="total"></form>' in new
