@@ -287,7 +287,7 @@ def main():
     print("FACTORY_40_VERIFIED_ACTIVE_LINES="+str(r.get("fully_verified_active_producer_families",0)))
     print("FACTORY_40_JOBS_EXECUTED_BY_MASTER=0")
     print("FACTORY_40_SITE_TRANSFERS=0")
-    print("FACTORY_40_MASTER_STATUS="+r.get("master_mode",r["status"]))
+    print("FACTORY_40_MASTER_STATUS="+r.get("master_mode",r.get("status","unknown")))
 if __name__=="__main__":
     try:main()
     except Exception as e:
