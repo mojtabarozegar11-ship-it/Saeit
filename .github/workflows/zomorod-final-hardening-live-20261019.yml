@@ -1,4 +1,4 @@
-name: Zomorod final WCAG secure release inner navigation semantics
+name: Zomorod final WCAG secure release verified navigation fixture
 on:
   push:
     branches: [main]
