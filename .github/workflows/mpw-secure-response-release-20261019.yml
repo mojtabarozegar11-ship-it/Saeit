@@ -66,3 +66,5 @@ jobs:
           set -euo pipefail
           d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
           timeout 160s ssh -T -F "$d/config" saeit-cpanel '/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python /home/zomorod2/.mpw-commerce-two-books/header_patch.py'
+
+# Validated 2026-10-19: route lookup uses actual resolver and no guessed named kwarg
