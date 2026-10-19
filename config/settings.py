@@ -59,7 +59,6 @@ TEMPLATES = [
         "OPTIONS": {
             "context_processors": [
                 "django.template.context_processors.request",
-                "command_center.mpw_public.public_context",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
             ]
@@ -125,6 +124,3 @@ CSRF_COOKIE_SECURE = env("CSRF_COOKIE_SECURE", default=False)
 SECURE_HSTS_SECONDS = env("SECURE_HSTS_SECONDS", default=0)
 SECURE_HSTS_INCLUDE_SUBDOMAINS = env("SECURE_HSTS_INCLUDE_SUBDOMAINS", default=False)
 SECURE_HSTS_PRELOAD = env("SECURE_HSTS_PRELOAD", default=False)
-# Disabled by default until the isolated main-site migration and live release gates pass.
-MPW_CONTROL_ENABLED = env.bool("MPW_CONTROL_ENABLED", default=False)
-MPW_ENABLE_CHECKOUT = env.bool("MPW_ENABLE_CHECKOUT", default=False)

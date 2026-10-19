@@ -1,10 +1,16 @@
 """Additive public view data; strict domain and feature flag prevent affecting sibling sites."""
 import re
+import os
 from django.conf import settings
 from .models import MpwRecord, TENANT, local_path
 
 HOSTS = frozenset(("mojplaywin.com", "www.mojplaywin.com"))
 SAFE_IMAGE = re.compile(r"^site/[a-zA-Z0-9_./-]+\.(?:webp|png|jpg|jpeg)$")
+
+
+def feature_enabled(name):
+    # Dedicated MojPlayWin switch: never modify shared Django settings to enable it.
+    return bool(getattr(settings, name, False)) or os.environ.get(name, "").strip().lower() in ("1", "yes", "on", "true")
 
 
 def is_main(request):
@@ -43,7 +49,7 @@ def safe_payload(kind, payload):
         approved = bool(payload.get("rights_verified"))
         if not approved:
             return None
-        payable = (bool(getattr(settings, "MPW_ENABLE_CHECKOUT", False))
+        payable = (feature_enabled("MPW_ENABLE_CHECKOUT")
                    and bool(payload.get("payment_verified"))
                    and bool(payload.get("delivery_verified"))
                    and bool(payload.get("payment_evidence"))
@@ -57,7 +63,7 @@ def safe_payload(kind, payload):
 
 
 def public_context(request):
-    if not is_main(request) or not getattr(settings, "MPW_CONTROL_ENABLED", False):
+    if not is_main(request) or not feature_enabled("MPW_CONTROL_ENABLED"):
         return {"mpw_managed_blocks": [], "mpw_managed_offers": []}
     path = request.path
     blocks, offers = [], []

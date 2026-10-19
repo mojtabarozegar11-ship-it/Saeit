@@ -1,7 +1,7 @@
 {% load static %}
 <section class="mw-section mw-shell" id="mpw-approved-managed-content" aria-label="Approved MojPlayWin content">
 <div class="mw-grid">
-{% for block in mpw_managed_blocks %}
+{% for block in mpw_data.mpw_managed_blocks %}
 <article class="mw-card" data-mpw-block="{{ block.key }}" data-slot="{{ block.slot }}" data-group="{{ block.group }}">
 {% if block.image %}<img loading="lazy" decoding="async" src="{% static block.image %}" alt="{{ block.title }}">{% endif %}
 <div class="mw-card-copy"><span class="mw-kicker">{{ block.group }}</span><h3>{{ block.title }}</h3>
