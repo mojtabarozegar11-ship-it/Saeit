@@ -4,8 +4,10 @@ on:
     branches: [main]
     paths:
       - "scripts/factory_product_maker.py"
+      - "scripts/factory_recipe_catalog_sync.py"
       - "product_recipes/**"
       - "tests/test_factory_product_maker.py"
+      - "tests/test_factory_recipe_catalog_sync.py"
       - ".github/workflows/factory-recipe-qa.yml"
   pull_request:
     branches: [main]
@@ -31,4 +33,5 @@ jobs:
       - name: Enforce nonzero test count and run product suites
         run: |
           python -m unittest discover -s tests -p 'test_factory_product_maker.py' -v
+          python -m unittest discover -s tests -p 'test_factory_recipe_catalog_sync.py' -v
           python scripts/factory_product_maker.py --recipes product_recipes --verify-only
