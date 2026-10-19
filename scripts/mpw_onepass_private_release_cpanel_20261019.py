@@ -79,8 +79,11 @@ def preflight():
             "ACTUAL_MOJPLAYWIN_DOCROOT_DRIFT")
     for target in FILES.values():
         require(not target.is_symlink(), "TARGET_SYMLINK_BLOCKED")
-        require(target.parent.is_dir() and not target.parent.is_symlink(),
-                "TARGET_DIRECTORY_NOT_PRESENT")
+        if target == RUNNER:
+            require(not OWN.is_symlink(), "RUNNER_PARENT_SYMLINK")
+        else:
+            require(target.parent.is_dir() and not target.parent.is_symlink(),
+                    "TARGET_DIRECTORY_NOT_PRESENT")
 
 
 def read_package(raw):
@@ -168,7 +171,8 @@ def restore(release, *, require_installed_hashes=False):
     existing = current_cron()
     current_marker = [line for line in existing.splitlines() if MARK in line]
     # Do not discard any other tenant's new jobs installed in the meantime.
-    if current_marker == [CRON]:
+    old_markers = [line for line in before.splitlines() if MARK in line]
+    if current_marker == [CRON] and not old_markers:
         filtered = "\n".join(line for line in existing.splitlines() if MARK not in line)
         set_cron(filtered.rstrip("\n") + "\n")
     elif current_marker:
