@@ -252,28 +252,47 @@ jobs:
               print("ZM_BRIDGE_PUBLIC_PURCHASE_ACTIVATIONS=0")
           PY
           REMOTE
-      - name: Verify three native work order receipts on VPS
+      - name: Verify three site requests and distinguish capacity-staged versus native orders
         shell: bash
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/zm-site-factory-bridge"
           ssh -T -F "$d/config" zm-vps python3 - "$GITHUB_RUN_ID" <<'PY'
           from pathlib import Path
-          import datetime,json,sys
+          import datetime,json,sys,re
           root=Path.home()/"factory-runtime/private/autonomous-product-cycle"
+          area=root/"production-instructions"
           cycle=datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")+"-r"+sys.argv[1]
-          receipt=root/"production-instructions/zomorod-site-order-receipts"/(cycle+".json")
-          assert receipt.is_file() and not receipt.is_symlink()
-          obj=json.loads(receipt.read_text(encoding="utf8"))
-          assert obj["schema"]=="saeit.zomorod.site-factory-bridge.v1" and obj["site"]=="zomorodmelal.ir"
-          ids=obj["orders"]
-          assert len(ids)==3 and len(set(ids))==3
-          for oid in ids:
-              item=json.loads((root/"production-instructions/orders"/(oid+".json")).read_text(encoding="utf8"))
-              assert item["requesting_site"]=="zomorodmelal.ir"
-              assert item["public_distribution_allowed"] is False
-          print("ZM_BRIDGE_THREE_NATIVE_FACTORY_ORDERS_VERIFIED=yes")
-          print("ZM_BRIDGE_FACTORY_ORDER_IDS="+json.dumps(ids))
+          path=area/"zomorod-site-intake"/(cycle+".json")
+          assert path.is_file() and not path.is_symlink(),"Intake receipt not found"
+          data=json.loads(path.read_text(encoding="utf8"))
+          assert data["schema"]=="saeit.zomorod.site-factory-intake.v1"
+          assert data["site"]=="zomorodmelal.ir" and data["cycle"]==cycle
+          assert data["public_distribution"] is False and data["is_native_order"] is False
+          requests=data["requests"]
+          assert len(requests)==3 and {r["slot"] for r in requests}=={1,2,3}
+          ids=[r["request_id"] for r in requests]
+          assert len(set(ids))==3 and all(re.fullmatch(r"ZMREQ-[0-9a-f]{20}",i) for i in ids)
+          states={r["state"] for r in requests}
+          assert states in ({"awaiting_native_capacity"},{"admitted"})
+          print("ZM_BRIDGE_SITE_REQUESTS_VERIFIED=3")
+          print("ZM_BRIDGE_SITE_REQUEST_IDS="+json.dumps(ids))
+          if states=={"admitted"}:
+              native=[r["native_work_order"] for r in requests]
+              assert len(set(native))==3 and all(re.fullmatch(r"WO-[0-9]{8}",x) for x in native)
+              for oid in native:
+                  orderfile=area/"orders"/(oid+".json")
+                  assert orderfile.is_file() and not orderfile.is_symlink()
+                  order=json.loads(orderfile.read_text(encoding="utf8"))
+                  assert order["requesting_site"]=="zomorodmelal.ir"
+                  assert order["bridge_cycle"]==cycle
+                  assert order["public_distribution_allowed"] is False
+              print("ZM_BRIDGE_NATIVE_FACTORY_ORDERS_VERIFIED=3")
+              print("ZM_BRIDGE_NATIVE_ORDER_IDS="+json.dumps(native))
+          else:
+              assert all(r["native_work_order"] is None for r in requests)
+              print("ZM_BRIDGE_NATIVE_FACTORY_ORDERS_VERIFIED=0")
+              print("ZM_BRIDGE_NATIVE_CAPACITY_WAITING=yes")
           PY
       - name: Remove only ephemeral GitHub runner SSH keys
         if: always()

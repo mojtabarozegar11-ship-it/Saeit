@@ -44,7 +44,7 @@ def registry(path):
     return profiles
 
 
-def orders_once(root,engine,profiles,cycle,*,dry_run=False,max_active=297):
+def orders_once(root,engine,profiles,cycle,*,dry_run=False,max_active=300):
     root=Path(root)
     found=CYCLE.fullmatch(cycle)
     if not found:raise ValueError("CYCLE_ID_INVALID")
@@ -136,6 +136,113 @@ def orders_once(root,engine,profiles,cycle,*,dry_run=False,max_active=297):
                 "orders":confirmed,"new":len(to_write) if not dry_run else 0}
 
 
+def stage_three_requests(root,engine,profiles,cycle,*,max_cycles=120):
+    """Durable intake, not a native WO order. Three distinct requests per cycle."""
+    match=CYCLE.fullmatch(cycle)
+    if not match:raise ValueError("CYCLE_ID_INVALID")
+    dt.date.fromisoformat(match.group("day"))
+    root=Path(root)
+    area=root/"production-instructions"
+    if root.is_symlink() or not area.is_dir() or area.is_symlink():
+        raise RuntimeError("FACTORY_NATIVE_ORDER_QUEUE_NOT_READY")
+    intake=area/"zomorod-site-intake"
+    engine.ensure_private(intake)
+    path=intake/(cycle+".json")
+    if path.is_symlink():raise RuntimeError("SITE_INTAKE_UNSAFE_ENTRY")
+    # Serialized site-only intake and reconciliation across concurrent bridge runs.
+    with (intake/".intake.lock").open("a+b") as lock:
+        fcntl.flock(lock.fileno(),fcntl.LOCK_EX)
+        valid_files=[]
+        for entry in sorted(intake.iterdir()):
+            if entry.name==".intake.lock":continue
+            if entry.is_symlink() or not entry.is_file() or not entry.name.endswith(".json") or not CYCLE.fullmatch(entry.stem):
+                raise RuntimeError("SITE_INTAKE_UNSAFE_ENTRY")
+            valid_files.append(entry)
+        if path.is_file():
+            doc=json.loads(path.read_text(encoding="utf8"))
+            _verify_site_intake(doc,path.stem)
+            return doc,False
+        if len(valid_files)>=max_cycles:raise RuntimeError("SITE_INTAKE_BACKLOG_LIMIT")
+        day=dt.date.fromisoformat(match.group("day")).toordinal()+(int(match.group("run") or 0)%40)
+        chosen=[profiles[((day*3)+(i-1))%40] for i in (1,2,3)]
+        requests=[]
+        for index,profile in enumerate(chosen,1):
+            if not FAMILY.fullmatch(str(profile.get("id",""))):
+                raise ValueError("FACTORY_FAMILY_ENTRY_INVALID")
+            ident="ZMREQ-"+hashlib.sha256((cycle+"|"+str(index)+"|"+profile["id"]).encode()).hexdigest()[:20]
+            requests.append({"request_id":ident,"slot":index,"family_id":profile["id"],
+                "family_name":str(profile["name_fa"])[:150],
+                "state":"awaiting_native_capacity","native_work_order":None})
+        doc={"schema":"saeit.zomorod.site-factory-intake.v1","site":"zomorodmelal.ir",
+            "cycle":cycle,"created_utc":engine.stamp(),"requests":requests,
+            "is_native_order":False,"is_manufactured":False,"public_distribution":False}
+        _verify_site_intake(doc,cycle)
+        engine.atomic_json(path,doc)
+        return doc,True
+
+
+def _verify_site_intake(doc,cycle):
+    if doc.get("schema")!="saeit.zomorod.site-factory-intake.v1" or doc.get("site")!="zomorodmelal.ir" or doc.get("cycle")!=cycle:
+        raise RuntimeError("SITE_INTAKE_SCHEMA_INVALID")
+    requests=doc.get("requests")
+    if not isinstance(requests,list) or len(requests)!=3 or {v.get("slot") for v in requests}!={1,2,3}:
+        raise RuntimeError("SITE_INTAKE_THREE_REQUESTS_INVALID")
+    for v in requests:
+        if not isinstance(v,dict) or not re.fullmatch(r"ZMREQ-[0-9a-f]{20}",str(v.get("request_id",""))) or not FAMILY.fullmatch(str(v.get("family_id",""))):
+            raise RuntimeError("SITE_INTAKE_REQUEST_INVALID")
+        if v.get("state") not in ("awaiting_native_capacity","admitted") or (
+          v.get("state")=="admitted" and (not isinstance(v.get("native_work_order"),str) or not re.fullmatch(r"WO-[0-9]{8}",v["native_work_order"]))):
+            raise RuntimeError("SITE_INTAKE_REQUEST_STATE_INVALID")
+    if doc.get("is_native_order") is not False or doc.get("public_distribution") is not False:
+        raise RuntimeError("SITE_INTAKE_PRIVACY_INVALID")
+
+
+def reconcile_site_intake(root,engine,profiles,*,max_admit_cycles=1,max_active=300):
+    """Promote oldest staged cycle only when native backlog has free capacity."""
+    area=Path(root)/"production-instructions"
+    intake=area/"zomorod-site-intake"
+    if intake.is_symlink() or not intake.is_dir():
+        raise RuntimeError("SITE_INTAKE_NOT_READY")
+    lock_path=intake/".intake.lock"
+    result={"admitted_cycles":0,"orders":[],"capacity_blocked":False,
+        "waiting_cycles":0}
+    with lock_path.open("a+b") as lock:
+        fcntl.flock(lock.fileno(),fcntl.LOCK_EX)
+        files=[]
+        for p in sorted(intake.iterdir(),key=lambda x:x.name):
+            if p.name==".intake.lock":continue
+            if p.is_symlink() or not p.is_file() or not p.name.endswith(".json") or not CYCLE.fullmatch(p.stem):
+                raise RuntimeError("SITE_INTAKE_UNSAFE_ENTRY")
+            files.append(p)
+        for p in files:
+            doc=json.loads(p.read_text(encoding="utf8"))
+            _verify_site_intake(doc,p.stem)
+            if all(v["state"]=="admitted" for v in doc["requests"]):
+                continue
+            if result["admitted_cycles"]>=max_admit_cycles:
+                result["waiting_cycles"]+=1
+                continue
+            try:
+                admitted=orders_once(root,engine,profiles,p.stem,max_active=max_active)
+            except RuntimeError as e:
+                if str(e)!="FACTORY_PENDING_CAPACITY_REACHED":raise
+                result["capacity_blocked"]=True
+                result["waiting_cycles"]+=1
+                continue
+            ids=admitted["orders"]
+            if len(ids)!=3:raise RuntimeError("SITE_INTAKE_ADMISSION_INCOMPLETE")
+            by_slot={i+1:value for i,value in enumerate(ids)}
+            for row in doc["requests"]:
+                row["state"]="admitted"
+                row["native_work_order"]=by_slot[row["slot"]]
+            doc["admitted_utc"]=engine.stamp()
+            doc["is_native_order"]=False
+            engine.atomic_json(p,doc)
+            result["admitted_cycles"]+=1
+            result["orders"].extend(ids)
+    return result
+
+
 def deliver_stock(factory_root,ware,warehouse_module,sender,ssh_key,ssh_hosts,max_products=3,*,dry_run=False):
     root=Path(factory_root)
     warehouse=Path(ware)
@@ -189,13 +296,30 @@ def main():
     ware=read_module(a.warehouse_module,"zm_existing_warehouse")
     sender=read_module(a.sender_module,"zm_existing_sender")
     family=registry(a.families)
-    order=orders_once(base,engine,family,a.cycle,dry_run=a.dry_run)
+    if a.dry_run:
+        # No mutation of native queue or intake in read-only dry runs.
+        try:
+            order=orders_once(base,engine,family,a.cycle,dry_run=True)
+        except RuntimeError as err:
+            if str(err)!="FACTORY_PENDING_CAPACITY_REACHED":raise
+            order={"status":"capacity_blocked","orders":[],"new":0}
+        staged={"status":"dry_run_no_intake_write","requests":[]}
+        admission={"admitted_cycles":0,"orders":[],"capacity_blocked":order["status"]=="capacity_blocked","waiting_cycles":0}
+    else:
+        doc,created=stage_three_requests(base,engine,family,a.cycle)
+        staged={"status":"staged" if created else "already_staged",
+                "requests":[v["request_id"] for v in doc["requests"]],
+                "cycle":a.cycle}
+        admission=reconcile_site_intake(base,engine,family)
+    # Store delivery must not be blocked by the independent native order backlog.
     results=deliver_stock(base,base/"production-warehouse",ware,sender,a.ssh_key,
                           a.known_hosts,a.max_ship,dry_run=a.dry_run)
-    print("ZM_BRIDGE_ORDER_RECEIPT="+json.dumps(order,ensure_ascii=False,sort_keys=True))
+    print("ZM_BRIDGE_SITE_REQUEST_RECEIPT="+json.dumps(staged,ensure_ascii=False,sort_keys=True))
+    print("ZM_BRIDGE_NATIVE_ADMISSION="+json.dumps(admission,ensure_ascii=False,sort_keys=True))
     print("ZM_BRIDGE_DELIVERED_PRIVATE="+json.dumps(results,ensure_ascii=False,sort_keys=True))
-    print("ZM_BRIDGE_ORDERS_THIS_CYCLE="+str(len(order["orders"])))
-    print("ZM_BRIDGE_ORDERS_NEW="+str(order["new"]))
+    print("ZM_BRIDGE_REQUESTS_THIS_CYCLE="+str(len(staged["requests"])))
+    print("ZM_BRIDGE_NATIVE_ORDERS_ADMITTED="+str(len(admission["orders"])))
+    print("ZM_BRIDGE_NATIVE_CAPACITY_BLOCKED="+str(admission["capacity_blocked"]).lower())
     print("ZM_BRIDGE_PUBLIC_SALES_ENABLED=false")
 
 
@@ -216,6 +340,11 @@ if __name__=="__main__":
             "ORDERS_EXISTING_RECORD_INVALID","ORDERS_EXISTING_RECORD_UNSAFE",
             "ORDERS_BAD_WORK_STATE","ORDERS_BAD_RECORD_FINGERPRINT",
             "ORDERS_UNSAFE_DIRECTORY","ORDERS_SYMLINK_PARENT",
+            "SITE_INTAKE_BACKLOG_LIMIT","SITE_INTAKE_UNSAFE_ENTRY",
+            "SITE_INTAKE_SCHEMA_INVALID","SITE_INTAKE_THREE_REQUESTS_INVALID",
+            "SITE_INTAKE_REQUEST_INVALID","SITE_INTAKE_REQUEST_STATE_INVALID",
+            "SITE_INTAKE_PRIVACY_INVALID","SITE_INTAKE_NOT_READY",
+            "SITE_INTAKE_ADMISSION_INCOMPLETE",
         }
         code=str(err)
         label=code if code in safe_codes else type(err).__name__
