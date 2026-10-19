@@ -93,7 +93,7 @@ def independent_quality(root, product, version, manifest):
         if not check["passed"]:
             missing.append(issue)
     return {"approved": not missing, "issues": missing,
-            "review_state": "independent_qa_passed" if not missing else "reviewed_with_findings"}
+            "review_state": "independent_qa_passed_awaiting_owner_release" if not missing else "reviewed_with_findings"}
 
 def require(ok, message):
     if not ok:
@@ -327,7 +327,7 @@ def import_site(batch, root=DEST):
             approved += 1
         qa = {"schema": SCHEMA, "tenant": TENANT, "product_id": product,
               "version": version, "artifact_sha256": manifest["artifact_sha256"],
-              "technical_zip_verified": True, "commercial_approved": review["approved"],
+              "technical_zip_verified": True, "commercial_approved": False,
               "qa_state": review["review_state"], "issue_codes": issues,
               "public_listing": False, "payment_enabled": False,
               "preserve_original": True}
@@ -399,7 +399,9 @@ def receive_factory_returns(raw, root=VPS):
         require(isinstance(row,dict)
                 and row.get("tenant")==TENANT and row.get("schema")==RETURN_SCHEMA
                 and row.get("stage")==1 and row.get("status")=="return_for_qa_completion"
-                and row.get("issues")==list(ISSUES)
+                and isinstance(row.get("issues"), list) and bool(row["issues"])
+                    and len(row["issues"]) == len(set(row["issues"]))
+                    and all(code in ISSUES for code in row["issues"])
                 and row.get("published") is False
                 and row.get("factory_original_must_be_preserved") is True,
                 "INVALID_STAGE1_RETURN_CONTRACT")
@@ -460,7 +462,9 @@ def triage_factory_stage1(root=VPS):
                     and row.get("tenant") == TENANT
                     and row.get("status") == "return_for_qa_completion"
                     and row.get("stage") == 1
-                    and row.get("issues") == list(ISSUES)
+                    and isinstance(row.get("issues"), list) and bool(row["issues"])
+                    and len(row["issues"]) == len(set(row["issues"]))
+                    and all(code in ISSUES for code in row["issues"])
                     and row.get("factory_original_must_be_preserved") is True
                     and row.get("published") is False, "STAGE1_WRONG_SCOPE")
             product, version = row.get("product_id"), row.get("source_sha256")
@@ -489,13 +493,14 @@ def triage_factory_stage1(root=VPS):
                 "factory_entry_stage":1,
                 "repair_priority":"needs_independent_review",
                 "status":"awaiting_real_correction_evidence",
-                "unresolved_codes":list(ISSUES),
+                "unresolved_codes":list(row["issues"]),
                 "actual_tasks":[
-                    "Review original product content and scientific factual evidence; record reviewer and source links.",
-                    "Verify copyright, licenses, ownership and third-party components with actual documents.",
-                    "Obtain independently signed final commercial quality and owner publication decision.",
-                    "If defects are found: correct original recipe/source in isolated factory workspace, rebuild and rerun complete tests.",
-                ],
+                    task for code, task in (
+                        (ISSUES[0], "Verify content, scientific facts and provenance with reviewer evidence."),
+                        (ISSUES[1], "Verify copyright, ownership and third-party licenses with actual documents."),
+                        (ISSUES[2], "Obtain documented commercial review and separate owner release authorization.")
+                    ) if code in row["issues"]
+                ] + ["Correct proven source defects in isolated factory workspace, rebuild and rerun tests."],
                 "original_archive_preserved":True,
                 "automated_approval":False, "production_rebuild_executed":False,
                 "return_to_site_only_after_new_verified_source_version":True,
