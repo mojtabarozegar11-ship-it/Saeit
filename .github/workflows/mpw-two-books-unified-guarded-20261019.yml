@@ -1,0 +1,132 @@
+name: MojPlayWin unified two-book guarded activation preflight
+on:
+  push:
+    branches: [mpw-two-books-unified-release-20261019]
+    paths: [".github/workflows/mpw-two-books-unified-guarded-20261019.yml"]
+permissions: {contents: read}
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 11
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Verify actual main host commercial readiness without changing products or payments
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 150s ssh -T -F "$d/config" saeit-cpanel bash -s <<'BASH'
+          set -euo pipefail
+          /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - <<'PY'
+          import os,sys,json,pathlib,hashlib
+          from django.urls import resolve,Resolver404
+          root=pathlib.Path('/home/zomorod2/Saeit-staging')
+          wsgi=pathlib.Path('/home/zomorod2/mojplaywin.com/passenger_wsgi.py')
+          assert root.is_dir() and not root.is_symlink()
+          assert wsgi.is_file() and "APP='/home/zomorod2/Saeit-staging'" in wsgi.read_text('utf8','replace')
+          sys.path.insert(0,str(root));os.chdir(root);os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          import django;django.setup()
+          from django.conf import settings
+          from core.models import Product,Order,PaymentIntent
+          from django.contrib import admin
+          checks={}
+          flags=[
+            'MPW_COMMERCE_RELEASE_READY','MPW_COMMERCE_CUSTOMER_HTTP_ENABLED',
+            'MPW_COMMERCE_INVOICING_ENABLED','MPW_COMMERCE_BUYER_SIGNATURE_ENABLED',
+            'MPW_COMMERCE_SETTLEMENT_ENABLED','MPW_COMMERCE_REAL_RPC_ENABLED',
+            'MPW_COMMERCE_AUTORECONCILE_ENABLED','MPW_COMMERCE_DOWNLOADS_ENABLED'
+          ]
+          checks['gates']={k:(getattr(settings,k,None) is True) for k in flags}
+          checks['all_gates_enabled']=all(checks['gates'].values())
+          checks['books']=[]
+          from core.cryptopay_checkout import product_delivery_ready
+          for pk in (72,225):
+            p=Product.objects.filter(pk=pk).select_related('knowledge_article').first()
+            if not p:
+              checks['books'].append({'id':pk,'exists':False});continue
+            meta=p.metadata if isinstance(p.metadata,dict) else {}
+            sale=meta.get('mpw_commerce') if isinstance(meta.get('mpw_commerce'),dict) else {}
+            checks['books'].append({
+               'id':pk,'exists':True,'active':p.active,'owner':bool(p.owner_id),
+               'price':str(p.price),'currency':p.currency,'article_published':bool(p.knowledge_article and p.knowledge_article.published),
+               'delivery_prepared':bool(product_delivery_ready(p)),
+               'files_configured':bool(sale.get('private_file')),
+               'quality_approved':meta.get('quality_approved') is True,
+               'license_verified':meta.get('license_verified') is True,
+               'factory_publication_permission':meta.get('factory_publication_permission') is True,
+               'asset_verified':meta.get('asset_verified') is True,
+               'commerce_enabled':sale.get('enabled') is True,
+               'fulfillment_digital':sale.get('fulfillment')=='digital'
+            })
+          checks['orders_total']=Order.objects.count()
+          checks['paid_orders']=Order.objects.filter(status='paid').count()
+          checks['payment_intents']=PaymentIntent.objects.count()
+          checks['django_admin_models']={m.__name__:m in admin.site._registry for m in (Product,Order,PaymentIntent)}
+          for route in ('/store/','/store/product/72/','/store/product/72/checkout/','/store/product/225/checkout/','/store/order/72/download/','/merchant-wallet/','/staff/command-center/'):
+             try:
+               m=resolve(route)
+               checks.setdefault('routes',{})[route]={'module':m.func.__module__,'name':m.url_name}
+             except Resolver404:checks.setdefault('routes',{})[route]=None
+          for pkg in ('mpw_commerce','mpw_native_checkout'):
+            d=root/pkg
+            checks[pkg]={'exists':d.is_dir(),'modules':[f.name for f in d.glob('*.py') if any(s in f.name for s in ('settlement','invoice','download','wallet','reconcile','checkout','order'))]}
+          try:
+            from mpw_native_checkout.models import MerchantWalletProof
+            checks['merchant_proof']={'count':MerchantWalletProof.objects.count(),'verified':MerchantWalletProof.objects.filter(verified_at__isnull=False).count()}
+          except Exception as ex:checks['merchant_proof']={'error':type(ex).__name__}
+          try:
+            from mpw_native_checkout.wallet_ownership import proven_assets
+            v=proven_assets()
+            checks['proven_assets']={'is_configured':bool(v),'count':len(v) if hasattr(v,'__len__') else None}
+          except Exception as ex: checks['proven_assets']={'error':type(ex).__name__}
+          try:
+            from mpw_commerce.models import CommerceInvoice
+            checks['commerce_invoices']={'count':CommerceInvoice.objects.count(),'statuses':list(CommerceInvoice.objects.values_list('status',flat=True).distinct()[:8])}
+          except Exception as ex:checks['commerce_invoices']={'error':type(ex).__name__}
+          print('MPW_UNIFIED_LIVE_PREFLIGHT='+json.dumps(checks,sort_keys=True,default=str))
+          PY
+          BASH
