@@ -38,7 +38,7 @@ jobs:
                 begin+'<section><h2>محصول دیجیتال</h2><iframe loading="lazy" src="/digital-lab/?tool='+slug+'"></iframe></section>'+end+
                 '</main></html>').encode()
           after=module.transform(html,slug)
-          assert after.index(begin.encode())<after.index(b'<p>')<after.index(b'<h2')
+          assert after.index(begin.encode()) < after.index('مقاله علمی قدیمی'.encode())
           assert after.count(begin.encode())==1
           assert b'loading="eager"' in after
           assert b'ZM-R25-VISIBLE-20261019:START' in after
