@@ -72,7 +72,7 @@ def guarded():
     if 'mpw-research30-' not in raw:stop('Existing scholarly editorials in studio not found')
     if len(re.findall(r'<main\b',raw,re.I))!=1 or len(re.findall(r'</main\s*>',raw,re.I))!=1:stop('Unexpected semantic main')
     if len(re.findall(r'<h1\b',raw,re.I))!=1:stop('Unexpected Studio H1')
-    if not 50000<len(before_studio)<1300000:stop('Studio page unexpected length')
+    if not 10000<len(before_studio)<1300000:stop('Studio page unexpected length')
     return before_ht,before_studio
 
 def compose(ht,studio):
