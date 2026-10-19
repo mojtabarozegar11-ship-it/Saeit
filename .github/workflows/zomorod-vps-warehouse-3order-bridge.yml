@@ -159,57 +159,47 @@ jobs:
           print("ZM_BRIDGE_NATIVE_SLOTS_FOR_THREE="+("yes" if active<=294 and num<=14997 else "no"))
           print("ZM_BRIDGE_NATIVE_LAST_ID="+str(max_id))
           PY
-      - name: Guarded Zomorod native private store module and importer deployment
+      - name: Preserve changed LIVE store and update only existing private importer
         shell: bash
         run: |
           set -euo pipefail
           d="$RUNNER_TEMP/zm-site-factory-bridge"
-          git show "172b776365e6206a20a287dc7fcbee0e5699f67f:content/zomorod-v11/site_store.php" > "$d/site_store.base.php"
-          test -s "$d/site_store.base.php"
-          ! grep -Fq 'function zmFactoryDraftsPanel' "$d/site_store.base.php"
-          grep -Fq 'function zmFactoryDraftsPanel' content/zomorod-v11/site_store.php
-          original="$(sha256sum "$d/site_store.base.php"|cut -c1-64)"
-          desired="$(sha256sum content/zomorod-v11/site_store.php|cut -c1-64)"
-          scp -q -F "$d/config" scripts/zomorod_factory_store_import.py zm-cpanel:.private/zomorod-business/zomorod_factory_store_import.py
-          scp -q -F "$d/config" content/zomorod-v11/site_store.php zm-cpanel:.private/zomorod-business/.site_store.bridge-candidate.php
-          ssh -T -F "$d/config" zm-cpanel bash -se -- "$GITHUB_RUN_ID" "$original" "$desired" <<'REMOTE'
+          scp -q -F "$d/config" scripts/zomorod_factory_store_import.py \
+            zm-cpanel:".private/zomorod-business/.customer-importer-${GITHUB_RUN_ID}.py"
+          ssh -T -F "$d/config" zm-cpanel bash -se -- "$GITHUB_RUN_ID" <<'REMOTE'
           set -euo pipefail
-          run="$1";old="$2";new="$3"
+          umask 077
+          id="$1"
           test "$HOME" = /home/zomorod2
           dir="$HOME/.private/zomorod-business"
-          store="$dir/site_store.php";incoming="$dir/.site_store.bridge-candidate.php"
-          script="$dir/zomorod_factory_store_import.py"
-          test -f "$store" && test ! -L "$store" && test ! -L "$script" && test ! -L "$incoming"
-          test -f "$dir/site_store.sqlite3"
-          test -s "$HOME/.saeit-factory-inbox/bin/store_receiver.py"
-          test "$(sha256sum "$incoming"|cut -c1-64)" = "$new"
-          existing="$(sha256sum "$store"|cut -c1-64)"
-          if test "$existing" != "$old" && test "$existing" != "$new";then
-            echo ZM_BRIDGE_UNRECOGNIZED_NATIVE_STORE=blocked;exit 21
-          fi
-          bin="$(command -v php)"
-          "$bin" -l "$incoming" >/dev/null
-          python3 -B - "$script" <<'PY'
-          import ast,sys
-          ast.parse(open(sys.argv[1],encoding="utf8").read())
+          live="$dir/site_store.php"
+          db="$dir/site_store.sqlite3"
+          importer="$dir/zomorod_factory_store_import.py"
+          incoming="$dir/.customer-importer-$id.py"
+          test -f "$live" && test ! -L "$live"
+          test -f "$db" && test ! -L "$db"
+          test -f "$incoming" && test ! -L "$incoming"
+          test ! -L "$importer"
+          before="$(sha256sum "$live" | cut -c1-64)"
+          python3 -B - "$incoming" "$db" <<'PY'
+          import ast,sqlite3,sys
+          from pathlib import Path
+          ast.parse(Path(sys.argv[1]).read_text(encoding="utf8"))
+          with sqlite3.connect("file:"+sys.argv[2]+"?mode=ro",uri=True) as c:
+              tables={row[0] for row in c.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+              assert {"products","payment_state"}.issubset(tables)
           PY
-          back="$HOME/.backups/zomorod-site-factory-bridge/$run"
-          if test ! -e "$back";then
-            install -d -m 700 "$back"
-            cp -p "$store" "$back/site_store.before.php"
-            python3 - "$dir/site_store.sqlite3" "$back/site_store.backup.sqlite3" <<'PY'
-          import sqlite3,sys
-          with sqlite3.connect(sys.argv[1],timeout=10) as old:
-              with sqlite3.connect(sys.argv[2]) as new:old.backup(new)
-          PY
-            chmod 600 "$back/"*
+          back="$HOME/.backups/zomorod-site-factory-bridge/$id"
+          install -d -m 700 "$back"
+          if test -f "$importer" && test ! -e "$back/private-importer.before.py";then
+            cp -p "$importer" "$back/private-importer.before.py"
+            chmod 600 "$back/private-importer.before.py"
           fi
-          if test "$existing" = "$old";then
-            cp -p "$incoming" "$dir/.site_store.bridge-atomic-$run.php"
-            mv -f "$dir/.site_store.bridge-atomic-$run.php" "$store"
-          fi
-          test "$(sha256sum "$store"|cut -c1-64)" = "$new"
-          echo ZM_BRIDGE_ZOMOROD_STORE_PRIVATE_ADMIN=installed
+          chmod 600 "$incoming"
+          mv -f "$incoming" "$importer"
+          test "$(sha256sum "$live" | cut -c1-64)" = "$before"
+          echo ZM_BRIDGE_LIVE_STORE_UNTOUCHED=verified
+          echo ZM_BRIDGE_PRIVATE_IMPORTER_UPDATED=yes
           REMOTE
       - name: Install private consumer sidecar support into EXISTING SHA-verified site receiver
         shell: bash
