@@ -6,6 +6,7 @@ on:
       - .github/workflows/mpw-vps-warehouse-courier.yml
       - scripts/mpw_vps_warehouse_courier.py
       - scripts/mpw_three_factory_orders.py
+      - tests/test_mpw_courier_upgrade.py
       - tests/test_mpw_vps_warehouse_courier.py
   schedule:
     - cron: '48 * * * *'
@@ -28,8 +29,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_mpw_vps_warehouse_courier -v
-          python3 -m py_compile scripts/mpw_vps_warehouse_courier.py
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_mpw_vps_warehouse_courier tests.test_mpw_courier_upgrade -v
+          python3 -m py_compile scripts/mpw_vps_warehouse_courier.py scripts/mpw_three_factory_orders.py
           python3 - <<'PY'
           from pathlib import Path
           src=Path('scripts/mpw_vps_warehouse_courier.py').read_text()
