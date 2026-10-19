@@ -120,11 +120,21 @@ def inspect_source(root, recipe):
     with zipfile.ZipFile(str(artifact), "r") as archive:
         wanted = [recipe + "/" + filename for filename in sorted(expected_files)]
         got = archive.namelist()
-        if sorted(got) != wanted or archive.testzip() is not None:
+        if sorted(got) != wanted or len(got) > MAX_MEMBERS:
             raise RuntimeError("WAREHOUSE_ZIP_CONTENT_QA_FAILED")
+        total_unpacked = 0
         for info in archive.infolist():
-            if info.is_dir() or info.flag_bits & 0x1 or info.file_size > MAX_ZIP:
+            if (info.is_dir() or info.flag_bits & 0x1 or info.file_size > MAX_ZIP
+                    or info.file_size < 0 or info.compress_size <= 0
+                    or info.file_size > max(200 * info.compress_size, 1024 * 1024)
+                    or ((info.external_attr >> 16) & 0o170000) == 0o120000):
                 raise RuntimeError("WAREHOUSE_UNSAFE_ZIP_ENTRY")
+            total_unpacked += info.file_size
+            if total_unpacked > MAX_ZIP:
+                raise RuntimeError("WAREHOUSE_ZIP_UNPACKED_LIMIT_EXCEEDED")
+        # CRC verification only after bounds checks, never eagerly inflate a bomb.
+        if archive.testzip() is not None:
+            raise RuntimeError("WAREHOUSE_ZIP_CONTENT_QA_FAILED")
     return artifact, manifest
 
 
