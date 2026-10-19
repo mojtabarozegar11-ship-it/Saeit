@@ -18,6 +18,11 @@ private="$base/private/autonomous-product-cycle"
 test "$(id -u)" -ne 0 || { echo "RUN_AS_SERVICE_USER_NOT_ROOT"; exit 1; }
 test -f "$db"
 test -x "$python"
+# Match the toolchain proven by CI. Never install extra dependencies from
+# inside the cron worker; deployment must provision these before cutover.
+if ! "$python" -c 'import openpyxl; assert openpyxl.__version__ == "3.1.5"' >/dev/null 2>&1; then
+  echo "FACTORY_F27_OPENPYXL_3_1_5_REQUIRED"; exit 1
+fi
 test -d "$ops"
 test -d "$base/private"
 test -f "$repo/scripts/factory_product_maker.py"
