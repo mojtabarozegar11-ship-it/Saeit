@@ -240,13 +240,13 @@ def install(stage):
             "from django.db import connection;"
             "from django.urls import reverse;"
             "from command_center.models import MpwRecord;"
-            "assert 'command_center_mpwrecord' in connection.introspection.table_names();"
-            "assert reverse('mpw_operations').endswith('/mpw-operations/');"
-            "assert reverse('mpw_agent_monitor').endswith('/mpw-agents/');"
+            "assert 'command_center_mpwrecord' in connection.introspection.table_names(), 'MPW_DB_TABLE_MISSING';"
+            "assert reverse('mpw_operations').endswith('/mpw-operations/'), 'MPW_REVERSE_OPERATIONS_FAIL';"
+            "assert reverse('mpw_agent_monitor').endswith('/mpw-agents/'), 'MPW_REVERSE_MONITOR_FAIL';"
             "from django.test import Client;"
             "c=Client(HTTP_HOST='mojplaywin.com');"
-            "assert c.get('/store/').status_code==200;"
-            "assert c.get('/staff/command-center/mpw-operations/').status_code==302;"
+            "assert c.get('/store/',secure=True).status_code==200, 'MPW_STORE_HTTPS_SMOKE_FAILED';"
+            "assert c.get('/staff/command-center/mpw-operations/',secure=True).status_code==302, 'MPW_PRIVATE_AUTH_SMOKE_FAILED';"
             "print('MPW_DJANGO_MAIN_ONLY_TESTS=passed')"
         )
         run_checked([PYTHON,"-c",test_code],timeout=90)
@@ -255,6 +255,19 @@ def install(stage):
         atomic_write(MARKER,json.dumps({"tenant":"mojplaywin-main","enabled":True,"schema":1}).encode(),0o600)
         obj["marker_created"]=True
         atomic_write(manifest_path,json.dumps(obj,sort_keys=True).encode(),0o600)
+        # Verify marked public pages through fresh Django before reloading any service.
+        live_test=(
+            "import os; os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings');"
+            "import django; django.setup();"
+            "from django.test import Client;"
+            "from command_center.mpw_public import feature_enabled;"
+            "assert feature_enabled('MPW_CONTROL_ENABLED'), 'MPW_MAIN_MARKER_UNREADABLE';"
+            "c=Client(HTTP_HOST='mojplaywin.com');"
+            "assert c.get('/',secure=True).status_code==200, 'MPW_MAIN_RENDER_FAILED';"
+            "assert c.get('/store/',secure=True).status_code==200, 'MPW_STORE_RENDER_FAILED';"
+            "print('MPW_FIVE_MAIN_MARKED_VIEWS=200')"
+        )
+        run_checked([PYTHON,"-c",live_test],timeout=100)
         # Passenger graceful recycle; external HTTP tests MUST validate child paths.
         (ROOT/"tmp").mkdir(exist_ok=True)
         (ROOT/"tmp/restart.txt").touch()

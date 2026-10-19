@@ -1,4 +1,4 @@
-name: MojPlayWin five-part main-only one-stage live activation
+name: MojPlayWin five-part main-only one-stage live activation (HTTPS verified)
 on:
   push:
     branches: [main]
