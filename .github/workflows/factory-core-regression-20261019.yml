@@ -1,0 +1,64 @@
+name: Factory core coding stabilization regression
+on:
+  pull_request:
+    paths:
+      - "scripts/factory_vps_product_cycle.py"
+      - "scripts/factory_12_stage_governance.py"
+      - "scripts/factory_40_family_master.py"
+      - "scripts/factory_continuous_production_orders.py"
+      - "scripts/factory_production_warehouse.py"
+      - "tests/test_factory_*.py"
+      - ".github/workflows/factory-core-regression-20261019.yml"
+  push:
+    branches: [main]
+    paths:
+      - "scripts/factory_vps_product_cycle.py"
+      - "scripts/factory_12_stage_governance.py"
+      - "scripts/factory_40_family_master.py"
+      - "scripts/factory_continuous_production_orders.py"
+      - "scripts/factory_production_warehouse.py"
+      - "tests/test_factory_*.py"
+      - ".github/workflows/factory-core-regression-20261019.yml"
+permissions:
+  contents: read
+jobs:
+  test_factory_core:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.8", "3.11"]
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Verify Python source compilation and factory unit/integration tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m py_compile scripts/factory_vps_product_cycle.py scripts/factory_product_maker.py scripts/factory_production_warehouse.py scripts/factory_continuous_production_orders.py scripts/factory_12_stage_governance.py scripts/factory_40_family_master.py
+          python -m unittest discover -s tests -p 'test_factory_product_maker.py' -v
+          python -m unittest discover -s tests -p 'test_factory_production_warehouse.py' -v
+          python -m unittest discover -s tests -p 'test_factory_vps_product_cycle.py' -v
+          python -m unittest discover -s tests -p 'test_factory_continuous_production_orders.py' -v
+          python -m unittest discover -s tests -p 'test_factory_12_stage_governance.py' -v
+          python -m unittest discover -s tests -p 'test_factory_40_family_master.py' -v
+      - name: Assert site isolation and non-promotion from technical QA
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          scripts=["factory_vps_product_cycle.py","factory_production_warehouse.py",
+                   "factory_12_stage_governance.py","factory_40_family_master.py",
+                   "factory_continuous_production_orders.py"]
+          text="\n".join((Path("scripts")/f).read_text() for f in scripts)
+          for forbidden in ("requests.post(","urllib.request.urlopen(","subprocess.run(['curl'",'factory_store_sender.py'):
+              assert forbidden not in text,forbidden
+          assert '"publishable_product_count": 0' in text
+          assert '"distribution_enabled":False' in text or '"distribution_enabled": False' in text
+          print("FACTORY_SAFE_NO_SITES_NO_FAKE_RELEASE=PASS")
+          PY
