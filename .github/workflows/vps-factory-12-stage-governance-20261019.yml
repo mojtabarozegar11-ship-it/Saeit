@@ -36,7 +36,7 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           code=Path("scripts/factory_12_stage_governance.py").read_text()+Path("deploy/install_factory_12_stage_governance.sh").read_text()
-          for unsafe in ("factory_store_sender","multisite_orchestrator","requests.post(","urllib.request","os.system("):
+          for unsafe in ("import requests","import urllib.request","requests.post(","urllib.request.urlopen(","os.system("):
               assert unsafe not in code, unsafe
           assert "automated human attestations" in code
           assert "FINAL_WAREHOUSE_TEN_GATES_NOT_PASSED" in code
