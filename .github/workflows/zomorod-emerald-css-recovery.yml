@@ -1,0 +1,162 @@
+name: Restore original emerald CSS into Django static manifest
+on:
+  push:
+    branches: ["restore-zomorod-corporate-content-20261017"]
+    paths: [".github/workflows/zomorod-emerald-css-recovery.yml"]
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-main-app-startup-canary
+  cancel-in-progress: false
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - name: Prepare fingerprint-pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-readonly"; install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" > /dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" > /dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.known"
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          echo "RELAY_PINNED=verified"
+      - name: Restore preserved CSS with transaction and in-process health gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-readonly"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          export PYTHONDONTWRITEBYTECODE=1
+          python3 - "$1" <<'PY'
+          from pathlib import Path
+          import hashlib,json,os,sys,shutil,subprocess,tempfile
+          h=Path.home(); app=h/'Saeit'; web=h/'public_html'
+          original=web/'static/site/emerald-system.css'
+          target_src=app/'core/static/site/emerald-system.css'
+          target_static=app/'staticfiles/site/emerald-system.css'
+          manifest=app/'staticfiles/staticfiles.json'
+          backup=h/'.backups/zomorod-emerald-css-repair'/sys.argv[1]
+          expected='efeb49358d01f93bad576aff9db89f1400a9ea734a1240be86831f026481aeb4'
+          assert original.is_file() and original.stat().st_size==3480
+          data=original.read_bytes()
+          assert hashlib.sha256(data).hexdigest()==expected
+          assert manifest.is_file() and manifest.stat().st_size>100
+          assert not backup.exists()
+          current=json.loads(manifest.read_text())
+          entries=current.get('paths',{})
+          assert isinstance(entries,dict) and len(entries)>=180
+          assert 'site/emerald-system.css' not in entries
+          assert not target_src.exists() and not target_static.exists()
+          short=hashlib.md5(data).hexdigest()[:12]
+          hashed=app/'staticfiles/site'/('emerald-system.'+short+'.css')
+          assert not hashed.exists()
+          assert b'@import' not in data.lower() and b'url(' not in data.lower()
+          backup.mkdir(parents=True,mode=0o700)
+          shutil.copy2(manifest,backup/'staticfiles.json')
+          print('ORIGINAL_CSS_SHA256='+expected)
+          print('ORIGINAL_MANIFEST_KEYS='+str(len(entries)))
+          created=[]
+          success=False
+          try:
+              for dest in (target_src,target_static,hashed):
+                  dest.parent.mkdir(parents=True,exist_ok=True)
+                  with dest.open('xb') as fp:fp.write(data)
+                  dest.chmod(0o644);created.append(dest)
+              updated=dict(current)
+              new_entries=dict(entries)
+              new_entries['site/emerald-system.css']='site/emerald-system.'+short+'.css'
+              updated['paths']=new_entries
+              updated['hash']=hashlib.md5(json.dumps(new_entries,sort_keys=True).encode()).hexdigest()
+              tmp=manifest.with_name('staticfiles.new.'+sys.argv[1]+'.json')
+              with tmp.open('x',encoding='utf8') as fp:
+                  json.dump(updated,fp,ensure_ascii=False,separators=(',',':'))
+              tmp.chmod(manifest.stat().st_mode & 0o777)
+              os.replace(tmp,manifest)
+              code="\n".join([
+                  "import os,traceback",
+                  "os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')",
+                  "from config.wsgi import application",
+                  "from django.test import Client",
+                  "c=Client(HTTP_HOST='zomorodmelal.ir')",
+                  "for path in ('/api/health/','/admin/login/','/agents/'):",
+                  "    try:",
+                  "        response=c.get(path,secure=True)",
+                  "        print('STATIC_REPAIR_DJANGO='+path+':'+str(response.status_code))",
+                  "        assert response.status_code==200",
+                  "    except Exception as ex:",
+                  "        print('STATIC_REPAIR_FAILURE='+path+':'+type(ex).__name__)",
+                  "        raise",
+              ])
+              env=dict(os.environ,PYTHONDONTWRITEBYTECODE='1')
+              test=subprocess.run([str(h/'virtualenv/Saeit/3.10/bin/python'),'-B','-c',code],cwd=app,text=True,capture_output=True,timeout=45,env=env)
+              for line in test.stdout.splitlines():
+                  if line.startswith(('STATIC_REPAIR_DJANGO=','STATIC_REPAIR_FAILURE=')):
+                      print(line)
+              if test.returncode:
+                  import re
+                  classes=re.findall(r'(?m)^([A-Za-z_][\w.]*(?:Error|Exception)):',test.stderr)
+                  print('STATIC_REPAIR_TEST_ERROR='+(classes[-1] if classes else 'unknown'))
+                  raise RuntimeError('In-process Django test not 100 percent')
+              reread=json.loads(manifest.read_text())
+              assert len(reread['paths'])==len(entries)+1
+              assert all(reread['paths'][k]==v for k,v in entries.items())
+              assert hashlib.sha256(original.read_bytes()).hexdigest()==expected
+              success=True
+              (backup/'state').write_text('retained_verified_django_200\n')
+              print('EMERALD_CSS_REPAIR=verified_retained')
+          finally:
+              if not success:
+                  shutil.copy2(backup/'staticfiles.json',manifest)
+                  for dest in created:
+                      if dest.exists() and hashlib.sha256(dest.read_bytes()).hexdigest()==expected:
+                          dest.unlink()
+                  for p in app.glob('staticfiles/staticfiles.new.*.json'):
+                      if sys.argv[1] in p.name:p.unlink()
+                  (backup/'state').write_text('reverted_after_failed_health_gate\n')
+                  print('EMERALD_CSS_REPAIR=rolled_back')
+          PY
+          REMOTE
+      - name: Clean ephemeral SSH credentials
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/zomorod-readonly"

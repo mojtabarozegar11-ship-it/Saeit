@@ -1,0 +1,127 @@
+name: Zomorod final live acceptance gate
+on:
+  push:
+    branches: ["restore-zomorod-corporate-content-20261017"]
+    paths:
+      - ".github/workflows/zomorod-final-live-acceptance.yml"
+      - "content/zomorod-nova-pages/**"
+      - "core/static/site/emerald-system.css"
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/zomorod-final-live-acceptance.yml"
+      - "content/zomorod-nova-pages/**"
+      - "core/static/site/emerald-system.css"
+      - "tests/test_zomorod_corporate_content_restoration.py"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  editorial_uniqueness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Report homepage and six specialist page image reuse
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from html.parser import HTMLParser
+          from pathlib import Path
+          from collections import defaultdict
+          from hashlib import sha256
+
+          class Images(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.srcs=[]
+              def handle_starttag(self,tag,attrs):
+                  if tag!='img':return
+                  attributes=dict(attrs)
+                  source=attributes.get('src','').strip()
+                  if not source or 'company-logo' in source: return
+                  self.srcs.append(source)
+
+          pages=[Path('content/zomorod-new-home/index.html')]
+          pages.extend(Path('content/zomorod-nova-pages')/(slug+'.html')
+                       for slug in ('about','company','services','industry','research','knowledge'))
+          uses=defaultdict(list)
+          bytes_hashes=defaultdict(set)
+          for path in pages:
+              parser=Images()
+              parser.feed(path.read_text(encoding='utf-8'))
+              for source in parser.srcs:
+                  uses[source].append(path.as_posix())
+                  if source.startswith('/static/site/'):
+                      f=Path('core/static/site')/source.removeprefix('/static/site/')
+                      if f.is_file():bytes_hashes[sha256(f.read_bytes()).hexdigest()].add(source)
+          print('EDITORIAL_PAGES_AUDITED='+str(len(pages)))
+          print('EDITORIAL_PHOTOS_USED='+str(sum(len(v) for v in uses.values())))
+          print('UNIQUE_EDITORIAL_URLS='+str(len(uses)))
+          repeated=[(name,locations) for name,locations in sorted(uses.items()) if len(locations)>1]
+          repeated_hashes=[urls for urls in bytes_hashes.values() if len(urls)>1]
+          for name,locations in repeated:
+              print('DUPLICATE_EDITORIAL_IMAGE='+name+' uses='+str(len(locations))+' pages='+','.join(sorted(set(locations))))
+          for group in repeated_hashes:
+              print('IDENTICAL_IMAGE_BYTES_UNDER_MULTIPLE_NAMES='+','.join(sorted(group)))
+          print('DUPLICATE_EDITORIAL_URL_COUNT='+str(len(repeated)))
+          print('DUPLICATE_EDITORIAL_HASH_GROUPS='+str(len(repeated_hashes)))
+          if repeated or repeated_hashes:
+              raise SystemExit('Zomorod 100/100 blocked by repeated editorial imagery')
+          print('SITEWIDE_EDITORIAL_UNIQUENESS=PASS')
+          PY
+  release_gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify original assets and content without deletion
+        run: python -m unittest discover -s tests -p test_zomorod_corporate_content_restoration.py -v
+      - name: Check current public routes and protect independent subsites
+        shell: bash
+        run: |
+          set -euo pipefail
+          count=0
+          fail=0
+          for route in / /about/ /company/ /services/ /industry/ /research/ /knowledge/ /contact/ /economy/ /market/ /agents/ /admin/login/ /api/health/ /company/executive/ /mohammad/ /ghanadi/ /amozeshgah/; do
+            count=$((count+1))
+            code="$(curl -sS -L --retry 1 --retry-delay 1 --connect-timeout 5 --max-time 20 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir$route" || true)"
+            printf 'LIVE_RELEASE_GATE path=%s status=%s\n' "$route" "$code"
+            if [ "$code" != 200 ]; then
+              fail=$((fail+1))
+              echo "::error::Not 100/100: $route returned HTTP $code"
+            fi
+          done
+          echo "PAGES_CHECKED=$count"
+          echo "FAILING_PAGES=$fail"
+          test "$fail" -eq 0
+      - name: Confirm CSS is original and independent images remain unique
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          from html.parser import HTMLParser
+          import hashlib
+          css=Path("core/static/site/emerald-system.css")
+          assert hashlib.sha256(css.read_bytes()).hexdigest()=="efeb49358d01f93bad576aff9db89f1400a9ea734a1240be86831f026481aeb4"
+          class Media(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.sources=[]
+              def handle_starttag(self,tag,attrs):
+                  if tag=="img":
+                      data=dict(attrs)
+                      src=data.get("src","")
+                      if src and "company-logo" not in src:
+                          self.sources.append(src)
+          seen={}
+          for slug in ("about","company","services","industry","research","knowledge"):
+              path=Path("content/zomorod-nova-pages")/(slug+".html")
+              parser=Media();parser.feed(path.read_text(encoding="utf8"))
+              for image in parser.sources:
+                  assert image not in seen,(slug,seen.get(image),image)
+                  seen[image]=slug
+          print("SIX_PAGE_EDITORIAL_IMAGES_UNIQUE=true")
+          PY

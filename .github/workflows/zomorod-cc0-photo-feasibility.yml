@@ -1,0 +1,41 @@
+name: Zomorod openly licensed photo feasibility check
+on:
+  push:
+    branches: ["restore-zomorod-corporate-content-20261017"]
+    paths: [".github/workflows/zomorod-cc0-photo-feasibility.yml"]
+permissions:
+  contents: read
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Search CC0 photos with source and licensing checks (read-only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,urllib.parse,urllib.request
+          subjects=[
+            'greenhouse interior','greenhouse plants','business meeting',
+            'professional agriculture','manufacturing equipment','factory equipment',
+            'laboratory equipment','scientific laboratory','industrial production',
+            'assembly line'
+          ]
+          for subject in subjects:
+              params=urllib.parse.urlencode(dict(q=subject,license='cc0',category='photograph',page_size=12))
+              url='https://api.openverse.org/v1/images/?'+params
+              req=urllib.request.Request(url,headers={'User-Agent':'ZomorodMelalEditorialResearch/1.0 (original company website visual licensing audit)','Accept':'application/json'})
+              try:
+                  with urllib.request.urlopen(req,timeout=14) as response:data=json.load(response)
+              except Exception as exc:
+                  print('CC0_QUERY_ERROR='+subject+' '+type(exc).__name__)
+                  continue
+              valid=[]
+              for x in data.get('results',[]):
+                  if x.get('license')=='cc0' and x.get('url','').startswith('https://'):
+                      valid.append((x.get('title','')[:75],x.get('url','')[:140],x.get('width'),x.get('height')))
+              print('CC0_QUERY='+subject+' count='+str(len(valid)))
+              for title,img,width,height in valid[:6]:
+                  print('CC0_EXAMPLE='+title+' '+str(width)+'x'+str(height)+' '+img)
+          PY

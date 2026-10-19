@@ -1,0 +1,111 @@
+name: Zomorod complete backup catalog read only
+on:
+  push:
+    branches: ["restore-zomorod-corporate-content-20261017"]
+    paths: [".github/workflows/zomorod-complete-backup-catalog-readonly.yml"]
+permissions:
+  contents: read
+jobs:
+  catalog:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Prepare fingerprint-pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-readonly"; install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" > /dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" > /dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.known"
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          echo "RELAY_PINNED=verified"
+      - name: Find complete October 14 snapshot structure and content evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-readonly"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          export PYTHONDONTWRITEBYTECODE=1
+          python3 - <<'PY'
+          import pathlib,os,datetime,collections,hashlib
+          base=pathlib.Path.home()/'.backups'/'zomorodmelal-complete'
+          print('COMPLETE_BACKUP_EXISTS='+str(base.is_dir()))
+          if not base.is_dir():raise SystemExit(0)
+          for idx,folder in enumerate(sorted(p for p in base.iterdir() if p.is_dir())[:16],1):
+              stat=folder.stat()
+              print('COMPLETE_BUNDLE='+str(idx)+' name_prefix='+folder.name[:12]+' mtime_utc='+datetime.datetime.fromtimestamp(stat.st_mtime,datetime.timezone.utc).isoformat(timespec='minutes'))
+              names=sorted(p.name for p in folder.iterdir() if p.is_dir())
+              print('BUNDLE_ROOT_FOLDERS='+str(idx)+' '+','.join(x for x in names if any(y in x.lower() for y in ('live','site','source','web','root','static','db','oct','archive')) )[:500])
+              suffixes=collections.Counter()
+              near=[]
+              structures=[]
+              found_files=[]
+              files_checked=0
+              for cur,dirs,files in os.walk(folder):
+                  depth=len(pathlib.Path(cur).relative_to(folder).parts)
+                  dirs[:]=[n for n in dirs if not n.startswith('.') and n not in ('__pycache__','node_modules','venv','virtualenv') and not any(k in n.lower() for k in ('mohammad','ghanadi','amozeshgah','mojplaywin','private','secret'))] if depth<6 else []
+                  if depth>6:continue
+                  p=pathlib.Path(cur)
+                  for name in files:
+                      f=p/name
+                      if f.is_symlink():continue
+                      try:st=f.stat()
+                      except OSError:continue
+                      files_checked+=1
+                      suffixes[f.suffix.lower()]+=1
+                      if name in ('views.py','urls.py','company.html','about.html','db.sqlite3','staticfiles.json','passenger_wsgi.py','index.html'):
+                          rel=f.relative_to(folder)
+                          parts=rel.parts
+                          if not any(x in parts for x in ('mohammad','ghanadi','amozeshgah','mojplaywin','private','secret')):
+                              if len(found_files)<35:found_files.append(str(rel)[:175])
+                      if datetime.datetime(2026,10,13,20,30,tzinfo=datetime.timezone.utc).timestamp()<=st.st_mtime<=datetime.datetime(2026,10,13,22,30,tzinfo=datetime.timezone.utc).timestamp():
+                          if len(near)<35:
+                              near.append((name[:48],int(st.st_size),datetime.datetime.fromtimestamp(st.st_mtime,datetime.timezone.utc).isoformat(timespec='minutes')))
+              print('BUNDLE_TOTAL_SCANNED_FILES='+str(idx)+':'+str(files_checked))
+              print('BUNDLE_COUNTS='+str(idx)+':'+str({k:v for k,v in suffixes.items() if k in ('.html','.py','.css','.js','.webp','.png','.jpeg','.jpg','.db','.sqlite3','.json','.tar','.gz','.zip')}))
+              print('BUNDLE_KEY_FILES='+str(idx)+':'+','.join(found_files)[:1900])
+              print('BUNDLE_NEAR_1AM_COUNT='+str(idx)+':'+str(len(near)))
+              for n,z,dt in near[:20]:print('BUNDLE_NEAR_1AM='+str(idx)+' '+dt+' bytes='+str(z)+' file='+n)
+          PY
+          REMOTE
+      - name: Remove temporary credentials
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/zomorod-readonly"

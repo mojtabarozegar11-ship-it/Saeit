@@ -1,0 +1,94 @@
+name: Zomorod 17 CC0 photographic assets draft-only apply
+on:
+  push:
+    branches: ["restore-zomorod-corporate-content-20261017"]
+    paths:
+      - ".github/workflows/zomorod-cc0-photo-apply.yml"
+permissions:
+  contents: write
+concurrency:
+  group: zomorod-editorial-assets-draft-update
+  cancel-in-progress: false
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+          fetch-depth: 0
+      - name: Validate unpublished branch and install image validator
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF_NAME" = "restore-zomorod-corporate-content-20261017"
+          git diff --quiet
+          git diff --cached --quiet
+          python -m pip install --disable-pip-version-check "Pillow>=10,<13"
+      - name: Place 17 different licensed examples only into the draft branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -u scripts/zomorod_cc0_photography.py --apply
+          python -m unittest discover -s tests -p test_zomorod_corporate_content_restoration.py -v
+          python - <<'PY'
+          import json,hashlib
+          from pathlib import Path
+          from scripts.zomorod_cc0_photography import inspect_duplicates
+          content=json.loads(Path('docs/zomorod-cc0-editorial-photographs.json').read_text(encoding='utf8'))
+          records=content.get('photos',[])
+          assert len(records)==17
+          digests=set()
+          for record in records:
+              assert record['license']=='cc0'
+              assert record['is_company_project_photo'] is False
+              assert record['url'].startswith('/static/site/editorial/')
+              assert record['source_url'].startswith('https://')
+              asset=Path(record['file'])
+              assert asset.is_file() and asset.stat().st_size>15000
+              assert hashlib.sha256(asset.read_bytes()).hexdigest()==record['sha256']
+              assert record['sha256'] not in digests
+              digests.add(record['sha256'])
+          assert not inspect_duplicates(), "Repeated image URL found after replacement"
+          print('CC0_DRAFT_PHOTOS_VALIDATED=17')
+          print('REPEATED_PHOTOS_IN_DRAFT=0')
+          PY
+      - name: Commit exact additive set to unmerged PR branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add -- \
+            content/zomorod-new-home/index.html \
+            content/zomorod-nova-pages/about.html \
+            content/zomorod-nova-pages/company.html \
+            content/zomorod-nova-pages/services.html \
+            content/zomorod-nova-pages/industry.html \
+            content/zomorod-nova-pages/research.html \
+            content/zomorod-nova-pages/knowledge.html \
+            core/static/site/editorial/ \
+            docs/zomorod-cc0-editorial-photographs.json
+          python - <<'PY'
+          from subprocess import check_output
+          lines=check_output(['git','diff','--cached','--name-status'],text=True).splitlines()
+          allowed_existing={
+              'content/zomorod-new-home/index.html',
+              *('content/zomorod-nova-pages/'+x+'.html' for x in
+                ('about','company','services','industry','research','knowledge')),
+          }
+          for line in lines:
+              status,path=line.split('\t',1)
+              assert status in ('A','M'),(status,path)
+              if status=='M':
+                  assert path in allowed_existing, path
+              elif path!='docs/zomorod-cc0-editorial-photographs.json':
+                  assert path.startswith('core/static/site/editorial/') and path.endswith('.webp'),path
+          assert len(lines)==25, f"Expected 7 HTML updates + 17 new images + metadata, got {len(lines)}"
+          print('STAGED_SCOPE_25_FILES=pass')
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Replace seventeen repeated editorial image placements with reviewed CC0 examples"
+          git push origin "HEAD:$GITHUB_REF_NAME"
+          echo "EDITORIAL_DRAFT_COMMITTED=YES"
+          echo "LIVE_SITE_MODIFIED=NO"
