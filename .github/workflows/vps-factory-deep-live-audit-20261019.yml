@@ -1,0 +1,161 @@
+name: Read-only deep VPS factory audit 2026-10-19
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/vps-factory-deep-live-audit-20261019.yml
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Read current VPS processes, production QA, stage gates, family lines and stock
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/factory-deep-readonly"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          timeout 100s ssh -T -i "$d/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=12 githubops@178.239.147.150 'python3 -' <<'PY'
+          from pathlib import Path
+          from collections import Counter
+          import json,subprocess,datetime,time,os,hashlib,shutil,re,sys
+          home=Path.home()
+          root=home/"factory-runtime"
+          ops=root/"operations"
+          private=root/"private"/"autonomous-product-cycle"
+          print("AUDIT_TIME_UTC="+datetime.datetime.now(datetime.timezone.utc).isoformat())
+          print("AUDIT_USER="+str(os.getuid())+" ROOT_PRESENT="+str(root.is_dir()))
+          print("AUDIT_PYTHON="+sys.version.split()[0])
+          def read(path,lim=10000000):
+              if path.is_symlink() or not path.is_file() or path.stat().st_size>lim:
+                  return None
+              try:return json.loads(path.read_text(encoding="utf8"))
+              except (ValueError,OSError):return None
+          def age(path):
+              if not path.is_file() or path.is_symlink():return None
+              return int(max(0,time.time()-path.stat().st_mtime))
+          def emit(name,value):
+              print("AUDIT_"+name+"="+json.dumps(value,ensure_ascii=True,default=str),flush=True)
+          cron=subprocess.run(["crontab","-l"],capture_output=True,text=True,timeout=12)
+          emit("CRON_READ_OK",cron.returncode==0)
+          markers={
+             "manufacturing_minute":"SAEIT_FACTORY_EVERY_MINUTE_V1",
+             "quality_12_stage":"SAEIT_FACTORY_LIFECYCLE_12_V1",
+             "master_40_family":"SAEIT_FACTORY_FORTY_FAMILY_MASTER_V1"}
+          for key,marker in markers.items():
+              entries=[line for line in cron.stdout.splitlines() if marker in line and not line.lstrip().startswith("#")]
+              emit("CRON_"+key.upper()+"_COUNT",len(entries))
+              emit("CRON_"+key.upper()+"_SCHEDULE",[line.split(" # ")[0].split(" ")[0:5] for line in entries])
+          try:
+              ps=subprocess.check_output(["ps","-eo","pid,etime,comm,args"],text=True,timeout=10)
+              for key in ("factory_vps_product_cycle.py","factory_continuous_production_orders.py",
+                          "factory_12_stage_governance.py","factory_40_family_master.py"):
+                  emit("RUNNING_"+key.replace(".py",""),len([x for x in ps.splitlines() if key in x and "python3 -" not in x]))
+          except Exception as e:emit("PROCESS_QUERY_ERROR",type(e).__name__)
+          for label,path in [
+              ("FACTORY_MINUTE",ops/"factory-minute-cycle.log"),
+              ("LIFECYCLE_12",ops/"factory-lifecycle-stages.log"),
+              ("MASTER_40",ops/"factory-forty-family-master.log"),
+              ("PRODUCTION",ops/"autonomous-product-cycle.log"),
+              ("WAREHOUSE",ops/"production-warehouse.log")]:
+              emit("LOG_AGE_SECONDS_"+label,age(path))
+              if path.is_file() and not path.is_symlink() and path.stat().st_size<50000000:
+                  tail=path.read_text(encoding="utf8",errors="replace").splitlines()[-70:]
+                  kept=[x.strip()[:300] for x in tail if re.match(r"^(FACTORY_|VPS_FACTORY_)",x)]
+                  emit("RECENT_"+label,kept[-14:])
+          state=read(private/"production-state.json")
+          if state:
+              for field in ("status","product_candidates_processed","research_dossiers_updated","built_product_count",
+                            "built_product_recipes","artifact_qa_passed","quality_failures_this_cycle",
+                            "manufacturing_failed_recipe_count","commercial_quality_review_completed",
+                            "publishable_product_count","research_review_candidate_count"):
+                  emit("STATE_"+field.upper(),state.get(field))
+          emit("STATE_AGE_SECONDS",age(private/"production-state.json"))
+          orders=read(private/"production-instructions"/"order-status.json")
+          if orders:
+              for field in ("last_scan_utc","last_action","last_order","instructions_issued_total",
+                            "pending_instructions","candidate_instructions","distribution_enabled"):
+                  emit("ORDERS_"+field.upper(),orders.get(field))
+          emit("ORDERS_STATUS_AGE_SECONDS",age(private/"production-instructions"/"order-status.json"))
+          orderdir=private/"production-instructions"/"orders"
+          if orderdir.is_dir() and not orderdir.is_symlink():
+              files=sorted(orderdir.glob("WO-*.json"))
+              categories=Counter();origins=Counter()
+              for p in files:
+                  value=read(p,500000)
+                  if value:
+                      categories[str(value.get("status"))]+=1
+                      origins[str(value.get("origin"))]+=1
+              emit("ORDER_FILE_COUNT",len(files))
+              emit("ORDER_STATUSES",dict(categories))
+              emit("ORDER_ORIGINS",dict(origins))
+          stages=read(private/"product-lifecycle"/"dashboard.json")
+          if stages:
+              for field in ("as_of_utc","instructions_seen","newly_tracked","workorder_status",
+                            "orders_by_stage","blocked_reasons","open_defects","orders_stalled_over_24h",
+                            "old_technical_QA_stock_pending_final_review","final_commercially_verified_stock",
+                            "manufacturing_order_automation_complete","site_distribution_enabled"):
+                  emit("STAGES_"+field.upper(),stages.get(field))
+          families=read(private/"production-family-management"/"family-dashboard.json",15000000)
+          if families:
+              for field in ("updated_utc","registered_families","production_ready_families",
+                            "fully_verified_active_producer_families","unassigned_work_orders",
+                            "max_total_simultaneous_jobs_authorized","new_work_ready_to_dispatch",
+                            "master_mode","distribution_enabled"):
+                  emit("FAMILIES_"+field.upper(),families.get(field))
+              cap=families.get("measured_vps_capacity",{})
+              for f in ("cpu_cores_total","cpu_load_1m","memory_available_mb","disk_free_mb",
+                        "gpu_availability_verified","worker_slots_theoretical","production_job_slots_authorized"):
+                  emit("CAPACITY_"+f.upper(),cap.get(f))
+              ff=families.get("families",[])
+              emit("FAMILIES_STATUSES",dict(Counter(f.get("readiness") for f in ff)))
+              emit("FAMILIES_TOTAL_IN_REWORK",sum(int(f.get("in_rework",0)) for f in ff))
+              emit("FAMILIES_TOTAL_FINAL_STOCK",sum(int(f.get("approved_final_stock",0)) for f in ff))
+          emit("FAMILIES_DASHBOARD_AGE_SECONDS",age(private/"production-family-management"/"family-dashboard.json"))
+          stock=read(private/"production-warehouse"/"stock-register.json",15000000)
+          if stock:
+              for f in ("finished_goods_versions","finished_goods_product_count",
+                        "awaiting_commercial_review","sites_contacted","distribution_enabled"):
+                  emit("STOCK_"+f.upper(),stock.get(f))
+              emit("STOCK_RECENT_ACTIONS",[{"product_id":x.get("product_id"),"action":x.get("action")} for x in stock.get("last_cycle_actions",[])][:10])
+              emit("STOCK_QA_BLOCKED_COUNT",len(stock.get("needs_rework_or_review",[])))
+          emit("STOCK_REGISTER_AGE_SECONDS",age(private/"production-warehouse"/"stock-register.json"))
+          # Hash-check every existing (small bounded) stock artifact, strictly read-only.
+          checked=0;invalid=[];total_bytes=0
+          products=private/"production-warehouse"/"finished"
+          if products.is_dir() and not products.is_symlink():
+              for zipfile in sorted(products.glob("*/*/product.zip"))[:30]:
+                  if zipfile.is_symlink():invalid.append("symlink");continue
+                  receipt=read(zipfile.parent/"warehouse_manifest.json",100000)
+                  if not receipt:invalid.append("no_receipt");continue
+                  if zipfile.stat().st_size>30000000:invalid.append("oversized");continue
+                  h=hashlib.sha256()
+                  with zipfile.open("rb") as f:
+                      for block in iter(lambda:f.read(1048576),b""):h.update(block)
+                  checked+=1;total_bytes+=zipfile.stat().st_size
+                  if h.hexdigest()!=receipt.get("artifact_sha256"):invalid.append("hash_mismatch")
+          emit("STOCK_ARCHIVES_HASH_VERIFIED",checked)
+          emit("STOCK_ARCHIVES_HASH_FAILURES",invalid)
+          emit("STOCK_ARCHIVES_TOTAL_BYTES",total_bytes)
+          for name,path in [
+              ("MASTER_ENGINE",ops/"forty-family-master"/"factory_40_family_master.py"),
+              ("ORDER_ENGINE",ops/"production-instructions"/"generate-orders.py"),
+              ("QUALITY_GATE",ops/"12-stage-governance"/"factory_12_stage_governance.py"),
+              ("MINUTE_DRIVER",ops/"production-warehouse"/"run-minute-cycle.sh")]:
+              emit("DEPLOYED_FILE_"+name+"_PRESENT",path.is_file() and not path.is_symlink())
+              if path.is_file() and not path.is_symlink():
+                  emit("DEPLOYED_FILE_"+name+"_SHA256",hashlib.sha256(path.read_bytes()).hexdigest())
+          print("AUDIT_READONLY_COMPLETED=PASS",flush=True)
+          PY
