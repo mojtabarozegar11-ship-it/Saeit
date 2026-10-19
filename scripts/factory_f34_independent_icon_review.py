@@ -43,7 +43,8 @@ def review(folder,product):
             svg=(folder/(label+'.svg')).read_text('utf8')
             forbidden=('<script','<foreignobject','javascript:','onload=','onclick=',
                        'http:','https:','xlink:','data:','@import','<image','<use')
-            if any(bad in svg.lower() for bad in forbidden):no_unsafe=False
+            checked=svg.lower().replace('xmlns="http://www.w3.org/2000/svg"','',1)
+            if any(bad in checked for bad in forbidden):no_unsafe=False
             root=ET.fromstring(svg)
             tags=[elem.tag.rsplit('}',1)[-1] for elem in root.iter()]
             if set(tags)-{'svg','title','rect','polygon','polyline','circle','ellipse'}:
