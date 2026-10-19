@@ -158,11 +158,45 @@ jobs:
           source="$HOME/factory-runtime/private/autonomous-product-cycle/digital-products"
           script="$ops/factory_store_sender.py"
           test -s "$ops/factory_store_sender.py.tmp"
+          test ! -L "$ops/factory_store_sender.py.tmp"
+          test ! -L "$script"
           python3 -m py_compile "$ops/factory_store_sender.py.tmp"
           chmod 600 "$ops/factory_store_sender.py.tmp"
+          mkdir -p "$ops/backups"
+          chmod 700 "$ops/backups"
+          # The hourly cron uses this same lock. Do not swap code during a run.
+          exec 9>"$ops/factory-store-sync.lock"
+          flock -w 45 9
+          prior=0
+          backup="$ops/backups/factory-sender-before-$(date -u +%Y%m%dT%H%M%SZ)-$.py"
+          if test -e "$script"; then
+            test -f "$script"
+            cp -p "$script" "$backup"
+            chmod 600 "$backup"
+            prior=1
+          fi
+          rollback_sender() {
+            rc=$?
+            if test "$rc" -ne 0; then
+              if test "$prior" -eq 1 && test -s "$backup"; then
+                cp -p "$backup" "$script"
+                echo PRIVATE_SENDER_ROLLBACK_RESTORED
+              elif test "$prior" -eq 0; then
+                rm -f -- "$script"
+                echo PRIVATE_SENDER_NEW_INSTALL_REMOVED
+              fi
+            fi
+            return "$rc"
+          }
+          trap rollback_sender EXIT
           mv -f "$ops/factory_store_sender.py.tmp" "$script"
-          python3 "$script" --products "$source" --ssh-key "$HOME/.ssh/saeit_factory_store_ed25519" --known-hosts "$HOME/.ssh/saeit_factory_store_hosts" --max-products 3
-          echo PRIVATE_PRODUCT_TRANSFER_VERIFIED
+          output="$(python3 "$script" --products "$source" --ssh-key "$HOME/.ssh/saeit_factory_store_ed25519" --known-hosts "$HOME/.ssh/saeit_factory_store_hosts" --max-products 3)"
+          printf '%s\n' "$output"
+          verified="$(printf '%s\n' "$output" | sed -n 's/^FACTORY_STORE_RECEIPT_VERIFIED_COUNT=//p' | tail -n 1)"
+          case "$verified" in ''|*[!0-9]*) echo PRIVATE_RECEIPT_COUNT_INVALID; exit 1;; esac
+          test "$verified" -ge 1 || { echo PRIVATE_NO_RECEIPT_VERIFIED; exit 1; }
+          echo PRIVATE_PRODUCT_RECEIPT_VERIFIED
+          trap - EXIT
           REMOTE
       - name: Install idempotent VPS-only scheduled store delivery
         shell: bash
