@@ -3,11 +3,30 @@ from pathlib import Path
 import tempfile
 import unittest
 import zipfile
+import re
 ROOT=Path(__file__).resolve().parents[1]
 spec=importlib.util.spec_from_file_location('workbook50',ROOT/'scripts/factory_build50_workbook.py')
 producer=importlib.util.module_from_spec(spec);spec.loader.exec_module(producer)
 
 class Workbook50Tests(unittest.TestCase):
+    def test_restoring_frozen_headers_preserves_cached_formula_values(self):
+        try:from openpyxl import Workbook,load_workbook
+        except ImportError:self.skipTest('openpyxl required')
+        with tempfile.TemporaryDirectory() as td:
+            path=Path(td)/'book.xlsx';book=Workbook();book.active.freeze_panes='B3';book.active['B8']='=2+2';book.save(path)
+            views=producer.snapshot_views(path);temporary=Path(td)/'converted.xlsx'
+            with zipfile.ZipFile(path) as source,zipfile.ZipFile(temporary,'w') as target:
+                for info in source.infolist():
+                    data=source.read(info.filename)
+                    if info.filename=='xl/worksheets/sheet1.xml':
+                        data=producer.VIEW_PATTERN.sub(b'<sheetViews><sheetView workbookViewId="0"/></sheetViews>',data)
+                        data=data.replace(b'<v></v>',b'<v>4</v>')
+                    target.writestr(info,data)
+            self.assertIsNone(load_workbook(temporary).active.freeze_panes)
+            self.assertEqual(load_workbook(temporary,data_only=True).active['B8'].value,4)
+            producer.restore_views(temporary,views)
+            self.assertEqual(load_workbook(temporary).active.freeze_panes,'B3')
+            self.assertEqual(load_workbook(temporary,data_only=True).active['B8'].value,4)
     def test_package_members_follow_the_warehouse_order(self):
         with tempfile.TemporaryDirectory() as td:
             root=Path(td);names=['workbook.xlsx','workbook.ods','user-guide.md']

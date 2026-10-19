@@ -14,6 +14,7 @@ from pathlib import Path
 import re
 import tempfile
 import time
+import traceback
 
 SCHEMA='saeit.factory.build-50.v1'
 GATES=('requirements','correctness','negative_cases','usability','accessibility',
@@ -175,7 +176,10 @@ def _run_attempt(root,plan,worker,assembler,reviewer,now=None):
         save(attempt/'50-summary.json',final);receipts.append(final)
         status='awaiting_owner_acceptance';defects=[]
     except Exception as error:
-        status='rework_required';defects=[{'failed_stage':current,'reason':type(error).__name__+':'+str(error)[:600]}]
+        frames=traceback.extract_tb(error.__traceback__)
+        location=(Path(frames[-1].filename).name+':'+str(frames[-1].lineno)) if frames else 'unknown'
+        status='rework_required';defects=[{'failed_stage':current,'reason':type(error).__name__+':'+str(error)[:600],
+                                          'failure_location':location}]
         save(attempt/'rejection.json',{'defects':defects,'return_to_stage':1,'retain_outputs':True})
     state={'schema':SCHEMA,'product_id':product,'attempt':number,'status':status,
            'completed_stages':len(receipts),'next_stage':1 if defects else None,

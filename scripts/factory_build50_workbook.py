@@ -10,6 +10,7 @@ import io
 import json
 import math
 import os
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -39,6 +40,34 @@ ACTIONS=('Specify finite input domains and meaningful units for ',
          'Construct an executable worksheet with transparent formulas for ',
          'Independently test normal, zero and scaled reference cases for ',
          'Revise the worksheet with protected formulas, guidance and validation for ')
+
+VIEW_PATTERN=re.compile(rb'<(?:[A-Za-z0-9_]+:)?sheetViews\b[^>]*/>|<(?:[A-Za-z0-9_]+:)?sheetViews\b[^>]*>.*?</(?:[A-Za-z0-9_]+:)?sheetViews>',re.S)
+
+def snapshot_views(path):
+    with zipfile.ZipFile(path) as archive:
+        return {name:VIEW_PATTERN.search(archive.read(name)).group(0)
+                for name in archive.namelist() if re.fullmatch(r'xl/worksheets/sheet\d+\.xml',name)}
+
+def restore_views(path,views):
+    """Restore view XML only; keep LibreOffice's formula values untouched."""
+    path=Path(path);temporary=path.with_suffix('.views.tmp')
+    try:
+        with zipfile.ZipFile(path) as source,zipfile.ZipFile(temporary,'w') as target:
+            for info in source.infolist():
+                data=source.read(info.filename)
+                if info.filename in views:
+                    original=views[info.filename].replace(b'<sheetViews',b'<sheetViews xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"',1)
+                    data,count=VIEW_PATTERN.subn(lambda match:original,data,count=1)
+                    if count!=1:
+                        anchor=re.search(rb'<(?:[A-Za-z0-9_]+:)?dimension\b[^>]*/>',data)
+                        if anchor is None:anchor=re.search(rb'<(?:[A-Za-z0-9_]+:)?sheetPr\b[^>]*>.*?</(?:[A-Za-z0-9_]+:)?sheetPr>',data,re.S)
+                        if anchor is None:anchor=re.search(rb'<(?:[A-Za-z0-9_]+:)?worksheet\b[^>]*>',data)
+                        if anchor is None:raise ValueError('WORKBOOK_VIEW_RESTORE_TARGET_MISSING:'+info.filename)
+                        data=data[:anchor.end()]+original+data[anchor.end():]
+                target.writestr(info,data)
+        os.replace(temporary,path)
+    finally:
+        if temporary.exists():temporary.unlink()
 
 def package(folder,names):
     folder=Path(folder);path=folder/(PRODUCT+'-internal-qa.zip')
@@ -169,6 +198,7 @@ def build(root,tools):
             sheet['A12']='Return to Guide';sheet['A12'].hyperlink="#'Guide'!A1"
             guide.append([unit[0],unit[5]]);guide.cell(guide.max_row,1).hyperlink="#'"+sheet.title+"'!A1"
         book.save(folder/'workbook.xlsx')
+        original_views=snapshot_views(folder/'workbook.xlsx')
         office=tools['tools']['libreoffice'];env=dict(os.environ,OMP_NUM_THREADS='1',OPENBLAS_NUM_THREADS='1')
         def convert(path,kind,destination):
             response=subprocess.run([office,'-env:UserInstallation='+(folder/'lo-profile').as_uri(),
@@ -178,6 +208,7 @@ def build(root,tools):
         recalculated=folder/'recalculated';recalculated.mkdir()
         convert(folder/'workbook.ods','xlsx',recalculated)
         os.replace(recalculated/'workbook.xlsx',folder/'workbook.xlsx')
+        restore_views(folder/'workbook.xlsx',original_views)
         text=['# Capacity planning workbook','Illustrative estimates. Replace inputs with actual measurements.',
               'Edit unlocked numeric inputs. Supported range: 0 to 1,000,000; divisor minimum: 0.000000001. Values are planning estimates, not exact physical counts.',
               'Spreadsheet floating-point arithmetic is used. Sample recalculations are checked with 1e-8 relative tolerance.',
