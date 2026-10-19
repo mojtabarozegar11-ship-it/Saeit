@@ -18,6 +18,7 @@ button{cursor:pointer}button:focus-visible,select:focus-visible{outline:3px soli
 .state{font-size:12px;border-radius:6px;padding:4px 7px;background:#485266;color:#fff}
 .state.healthy{background:#135c48}.state.degraded{background:#78602a}
 .state.failed{background:#783136}.state.stale{background:#66532e}
+.state.loaded_only{background:#34526c}
 label{display:block;margin-bottom:5px}svg{display:block;width:100%;height:55px}
 .chart{margin-top:8px;min-height:66px;border-radius:8px;background:#0d1c2d;padding:7px}
 h3{font-size:15px;overflow-wrap:anywhere}
@@ -34,19 +35,20 @@ h3{font-size:15px;overflow-wrap:anywhere}
 <option value="agent">ایجنت‌ها و نقش‌ها</option><option value="robot">ربات‌ها</option>
 <option value="module">۷۷ ماژول</option></select>
 <label for="status">وضعیت:</label><select id="status">
-<option value="all">همه</option><option value="healthy">سالم</option>
+<option value="all">همه</option><option value="healthy">اجرای سالم</option>
+<option value="loaded_only">فقط بارگذاری‌شده</option>
 <option value="degraded">اختلال</option><option value="failed">خراب</option>
 <option value="stale">قدیمی</option><option value="unknown">نامشخص</option></select>
 </div>
 <section class="grid" id="cards" aria-label="گزارش هر ایجنت، ربات و ماژول"></section>
-<p class="muted">نمودارها از نمونه‌های واقعی ذخیره‌شده توسط جمع‌آور خصوصی ساخته می‌شوند؛ فقدان داده به معنی موفقیت نیست.
+<p class="muted">بارگذاری موفق ماژول به معنی اجرای وظیفه یا تولید محصول نیست. نمودارها فقط تاریخچهٔ گزارش‌های خصوصی را نشان می‌دهند؛ نبود شواهد به معنی موفقیت نیست.
 این صفحه قابلیت اجرای دستور، انتشار محتوا یا انتقال وجه ندارد. بازخوانی خودکار هر ۶۰ ثانیه انجام می‌شود.</p>
 <script>
 "use strict";
 const endpoint="{% url 'mpw_agent_monitor_api' %}";
 const $=id=>document.getElementById(id);
 let rows=[];
-const states={healthy:"سالم",degraded:"اختلال",failed:"خطا",stale:"قدیمی",unknown:"نامشخص"};
+const states={healthy:"سالم با گزارش اجرا",loaded_only:"صرفاً بارگذاری",degraded:"اختلال",failed:"خطا",stale:"قدیمی",unknown:"نامشخص"};
 const kinds={master:"مستر",agent:"ایجنت",robot:"ربات",module:"کتابخانه"};
 function txt(el,value){el.textContent=String(value===null||value===undefined?"—":value);return el}
 function element(tag,cls,text){const n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)txt(n,text);return n}
@@ -57,7 +59,7 @@ function sparkline(target,series){
  const all=series.slice(-48),w=280,h=40,step=(w-8)/Math.max(1,all.length-1);
  const svg=document.createElementNS("http://www.w3.org/2000/svg","svg");
  svg.setAttribute("viewBox","0 0 280 46");svg.setAttribute("role","img");
- svg.setAttribute("aria-label","روند نمونه‌های واقعی موفقیت اجرای این جزء");
+ svg.setAttribute("aria-label","روند شواهد گزارش سلامت؛ صرف بارگذاری ماژول امتیاز موفقیت ندارد");
  let coords=[];
  const flush=()=>{
   if(coords.length){
@@ -99,7 +101,7 @@ async function load(){
   if(!r.ok)throw new Error("HTTP "+r.status);
   const data=await r.json();rows=Array.isArray(data.items)?data.items:[];
   const s=data.summary||{},stats=$("stats");stats.replaceChildren();
-  for(const [key,title] of [["total","کل موارد ثبت‌شده"],["healthy","سالم"],["stale","قدیمی"],["unknown","نامشخص"],["failed","خطا"],["degraded","اختلال"]]){
+  for(const [key,title] of [["total","کل موارد ثبت‌شده"],["healthy","گزارش سالم"],["loaded_only","فقط بارگذاری"],["stale","قدیمی"],["unknown","نامشخص"],["failed","خطا"],["degraded","اختلال"]]){
    const box=element("article","card");box.append(element("div","count",s[key]||0),element("small","",title));stats.append(box);
   }
   const detail=data.source==="private_cpanel_unavailable"?"منبع خصوصی در این سرور در دسترس نیست؛ اتصالی تأیید نشده است.":
