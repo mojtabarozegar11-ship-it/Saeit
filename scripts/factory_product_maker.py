@@ -19,7 +19,7 @@ import zipfile
 
 RECIPE_ID = re.compile(r"^[a-z0-9]+(?:_[a-z0-9]+)*$")
 MIN_TESTS_PER_RECIPE = 1
-TEST_RUN_SUMMARY = re.compile(r"^Ran\\s+(\\d+)\\s+tests?\\b", re.MULTILINE)
+TEST_RUN_SUMMARY = re.compile(r"^Ran\s+(\d+)\s+tests?\b", re.MULTILINE)
 DEFAULT_RECIPES = Path(__file__).resolve().parents[1] / "product_recipes"
 
 
@@ -107,7 +107,7 @@ def verify_recipe(source, *, timeout=60):
         cwd=str(source), capture_output=True, text=True, timeout=timeout,
         env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"),
     )
-    output = (result.stdout or "") + "\\n" + (result.stderr or "")
+    output = (result.stdout or "") + "\n" + (result.stderr or "")
     summaries = list(TEST_RUN_SUMMARY.finditer(output))
     test_count = int(summaries[-1].group(1)) if summaries else 0
     if result.returncode != 0 or test_count < MIN_TESTS_PER_RECIPE:
@@ -165,7 +165,13 @@ def manufacture(recipe, recipes_root, private_root):
         "schema_version": 2, "recipe": recipe, "name": name,
         "source_sha256": checksum, "artifact_sha256": sha256_file(zip_path),
         "bytes": zip_path.stat().st_size, "files": list(sorted(files)),
-        "qa_status": "passed", "qa_evidence": qa_status,\n        "qa_test_count": qa_status["tests_executed"],\n        "minimum_tests_required": MIN_TESTS_PER_RECIPE,\n        "scientific_validity": "pending_independent_specialist_review",\n        "economic_value": "pending_independent_review",\n        "commercial_and_legal_review": "pending",\n        "quality_scope": "software_tests_and_zip_integrity_only",
+        "qa_status": "passed", "qa_evidence": qa_status,
+        "qa_test_count": qa_status["tests_executed"],
+        "minimum_tests_required": MIN_TESTS_PER_RECIPE,
+        "scientific_validity": "pending_independent_specialist_review",
+        "economic_value": "pending_independent_review",
+        "commercial_and_legal_review": "pending",
+        "quality_scope": "software_tests_and_zip_integrity_only",
         "commercial_status": "private_internal_qa_pass_not_published",
         "factory_trigger": "inventory_and_scheduled_manufacturing",
         "customer_order_required": False, "price": None,
@@ -180,14 +186,16 @@ def manufacture(recipe, recipes_root, private_root):
 def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--recipes", default=str(DEFAULT_RECIPES))
-    ap.add_argument("--out")\n    ap.add_argument("--verify-only", action="store_true",\n                    help="Run all discovered product suites without writing packages.")
+    ap.add_argument("--out")\n    ap.add_argument("--verify-only", action="store_true",
+                    help="Run all discovered product suites without writing packages.")
     ap.add_argument("--recipe", default="all", help="Recipe slug or all (discovered automatically).")
     ap.add_argument("--max-builds", type=int, default=None,
                     help="Optional positive limit; by default build every discovered recipe.")
     args = ap.parse_args(argv)
     if args.max_builds is not None and args.max_builds < 1:
         raise ValueError("max-builds must be positive")
-    if not args.verify_only and not args.out:\n        ap.error("--out is required unless --verify-only is used")\n    recipes = discover_recipes(args.recipes)
+    if not args.verify_only and not args.out:
+        ap.error("--out is required unless --verify-only is used")\n    recipes = discover_recipes(args.recipes)
     if args.recipe != "all" and args.recipe not in recipes:
         raise ValueError("UNSUPPORTED_RECIPE:" + args.recipe)
     selected = sorted(recipes) if args.recipe == "all" else [args.recipe]
