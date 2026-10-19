@@ -43,6 +43,58 @@ ISSUES = (
 )
 
 
+
+
+def independent_quality(root, product, version, manifest):
+    """Verify real, separately recorded and authenticated per-product QA.
+
+    An absent review is a pending evidence request, not a claim that the
+    product content or copyright was actually examined and found defective.
+    """
+    import hmac
+    reviews = Path(root) / "independent_qa"
+    file = reviews / product / (version + ".json")
+    if not file.exists():
+        return {"approved": False, "issues": list(ISSUES),
+                "review_state": "awaiting_independent_product_review"}
+    require(file.is_file() and not file.is_symlink(), "QA_REVIEW_UNSAFE")
+    report = json_file(file, 100_000)
+    secret = reviews / "reviewer_hmac.key"
+    require(secret.is_file() and not secret.is_symlink()
+            and secret.stat().st_mode & 0o077 == 0
+            and 32 <= secret.stat().st_size <= 1024, "INDEPENDENT_REVIEW_KEY_MISSING")
+    signature = report.get("signature")
+    unsigned = {k: v for k, v in report.items() if k != "signature"}
+    canonical = json.dumps(unsigned, sort_keys=True, ensure_ascii=False,
+                           separators=(",", ":")).encode("utf8")
+    signed = hmac.new(secret.read_bytes(), canonical, hashlib.sha256).hexdigest()
+    require(isinstance(signature, str) and hmac.compare_digest(signature, signed),
+            "INDEPENDENT_REVIEW_SIGNATURE_INVALID")
+    require(report.get("schema") == "mpw.factory.independent-qa.v1"
+            and report.get("tenant") == TENANT
+            and report.get("product_id") == product
+            and report.get("source_sha256") == version
+            and report.get("artifact_sha256") == manifest["artifact_sha256"]
+            and isinstance(report.get("reviewer"), str)
+            and len(report["reviewer"].strip()) >= 3,
+            "INDEPENDENT_REVIEW_IDENTITY_INVALID")
+    checks = report.get("checks")
+    require(isinstance(checks, dict), "INDEPENDENT_REVIEW_CHECKS_MISSING")
+    fields = (("content", ISSUES[0]), ("rights", ISSUES[1]),
+              ("commercial_release", ISSUES[2]))
+    missing = []
+    for field, issue in fields:
+        check = checks.get(field)
+        require(isinstance(check, dict)
+                and type(check.get("passed")) is bool
+                and isinstance(check.get("evidence"), str)
+                and len(check["evidence"].strip()) >= 24,
+                "INDEPENDENT_REVIEW_EVIDENCE_INCOMPLETE:" + field)
+        if not check["passed"]:
+            missing.append(issue)
+    return {"approved": not missing, "issues": missing,
+            "review_state": "independent_qa_passed" if not missing else "reviewed_with_findings"}
+
 def require(ok, message):
     if not ok:
         raise RuntimeError(message)
@@ -251,7 +303,7 @@ def import_site(batch, root=DEST):
     root = target_root(root)
     private_new(root / "received")
     private_new(root / "returns")
-    added, previous = 0, 0
+    added, previous, approved = 0, 0, 0
     rows = []
     for product, version, manifest, content in products:
         parent = root/"received"/product
@@ -269,35 +321,42 @@ def import_site(batch, root=DEST):
             atomic(version_dir/"product.zip",content)
             atomic(version_dir/"warehouse_manifest.json",json_blob(manifest))
             added += 1
-        # This independent QA does NOT invent a content, licensing or owner
-        # approval. Missing commercial verification returns to stage one.
-        issues = list(ISSUES)
-        qa = {"schema": SCHEMA,"tenant":TENANT,"product_id":product,
-              "version":version,"artifact_sha256":manifest["artifact_sha256"],
-              "technical_zip_verified":True,"commercial_approved":False,
-              "qa_state":"requires_factory_stage1_rework","issue_codes":issues,
-              "public_listing":False,"payment_enabled":False,
-              "preserve_original":True}
+        review = independent_quality(root, product, version, manifest)
+        issues = review["issues"]
+        if review["approved"]:
+            approved += 1
+        qa = {"schema": SCHEMA, "tenant": TENANT, "product_id": product,
+              "version": version, "artifact_sha256": manifest["artifact_sha256"],
+              "technical_zip_verified": True, "commercial_approved": review["approved"],
+              "qa_state": review["review_state"], "issue_codes": issues,
+              "public_listing": False, "payment_enabled": False,
+              "preserve_original": True}
         atomic(version_dir/"site_qa.json",json_blob(qa))
-        folder = root/"returns"/product
-        private_new(folder)
-        ret = {"schema":RETURN_SCHEMA,"tenant":TENANT,"product_id":product,
-               "source_sha256":version,"artifact_sha256":manifest["artifact_sha256"],
-               "stage":1,"status":"return_for_qa_completion",
-               "issues":issues,"correction_required":
-                 "Re-enter first factory design and review stage; obtain actual independent content, rights and owner release evidence. Repeat QA before website publication.",
-               "published":False,"factory_original_must_be_preserved":True}
-        # Preserve the same return identity across hourly rechecks.
-        original = folder/(version+".json")
-        if original.exists():
-            require(json_file(original)==ret,"RETURN_VERSION_CONFLICT")
-        else:
-            atomic(original,json_blob(ret))
+        if issues:
+            folder = root/"returns"/product
+            private_new(folder)
+            ret = {"schema": RETURN_SCHEMA, "tenant": TENANT, "product_id": product,
+                   "source_sha256": version, "artifact_sha256": manifest["artifact_sha256"],
+                   "stage": 1, "status": "return_for_qa_completion",
+                   "issues": issues, "correction_required":
+                   "Review the product-specific outstanding checks; repair real defects and create a new version only when justified by evidence.",
+                   "published": False, "factory_original_must_be_preserved": True}
+            original = folder/(version+".json")
+            if original.exists():
+                previous_return = json_file(original)
+                require(previous_return.get("product_id") == product and
+                        previous_return.get("source_sha256") == version and
+                        previous_return.get("artifact_sha256") == manifest["artifact_sha256"],
+                        "RETURN_VERSION_CONFLICT")
+                # Preserve previous immutable original; new signed evidence is
+                # tracked by QA state, not by falsifying historical receipts.
+            else:
+                atomic(original,json_blob(ret))
         rows.append({"product_id":product,"version":version,"qa_state":qa["qa_state"]})
     report = {"schema":SCHEMA,"tenant":TENANT,"last_checked_utc":stamp(),
               "factory_versions_observed":len(products),"new_private_imports":added,
-              "duplicate_versions_skipped":previous,"quality_approved":0,
-              "pending_stage1_return":len(rows),"publicly_published":0,
+              "duplicate_versions_skipped":previous,"quality_approved":approved,
+              "pending_stage1_return":len(rows)-approved,"publicly_published":0,
               "store_product_created":0,"warehouse_bot_connected":True}
     atomic(root/"status.json",json_blob(report))
     return report
