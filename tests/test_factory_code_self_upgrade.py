@@ -26,7 +26,17 @@ class CodeSelfUpgradeTests(unittest.TestCase):
             p.parent.mkdir(parents=True,exist_ok=True)
             shutil.copyfile(str(ROOT/name), str(p))
 
+    def inject_two_known_faults_into_disposable_fixture(self):
+        # Reproduce real former source vulnerabilities WITHOUT regressing main.
+        for path in ("scripts/factory_first_product_pilot.py",
+                     "scripts/factory_public_library_adapter.py"):
+            source=self.src/path
+            original=source.read_text(encoding="utf8")
+            self.assertIn(upgrader.PRELUDE,original)
+            source.write_text(original.replace(upgrader.PRELUDE,"",1),encoding="utf8")
+
     def test_edits_source_with_measured_security_regression_improvement(self):
+        self.inject_two_known_faults_into_disposable_fixture()
         state=upgrader.generate(self.src,self.output)
         self.assertEqual(state["candidate_count"],2)
         self.assertEqual(state["preexisting_verified_repairs"],2)
@@ -56,11 +66,12 @@ class CodeSelfUpgradeTests(unittest.TestCase):
 
     def test_existing_patched_source_is_not_double_counted(self):
         state=upgrader.generate(self.src,self.output)
-        self.assertEqual(state["preexisting_verified_repairs"],2)
+        self.assertEqual(state["preexisting_verified_repairs"],4)
+        self.assertEqual(state["candidate_count"],0)
+        self.assertEqual(state["validated_repair_rule_coverage"],4)
         self.assertTrue(all(not rec["new_code_edit_performed"] for rec in state["already_protected_source_modules"]))
         self.assertEqual(set(x["path"] for x in state["already_protected_source_modules"]),
-                         {"scripts/factory_research_triage.py",
-                          "scripts/factory_specialist_pilots.py"})
+                         {rule[0] for rule in upgrader.SAFE_FIXES})
 
     def test_missing_source_fails_closed(self):
         (self.src/"scripts/factory_research_triage.py").unlink()
@@ -72,12 +83,14 @@ class CodeSelfUpgradeTests(unittest.TestCase):
             upgrader.generate(self.src,self.src/"generated")
 
     def test_idempotent_candidate_contents_with_stable_sha(self):
+        self.inject_two_known_faults_into_disposable_fixture()
         first=upgrader.generate(self.src,self.output)
         second=upgrader.generate(self.src,self.output)
         self.assertEqual([a["candidate_sha256"] for a in first["candidates"]],
                          [a["candidate_sha256"] for a in second["candidates"]])
 
     def test_candidate_is_real_modified_code_and_original_unchanged(self):
+        self.inject_two_known_faults_into_disposable_fixture()
         original=(self.src/"scripts/factory_research_triage.py")
         before=original.read_bytes()
         state=upgrader.generate(self.src,self.output)
