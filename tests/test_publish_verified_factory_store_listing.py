@@ -19,6 +19,39 @@ def script(name):
     return instance
 
 
+def simulate_shared_release_gate(monkeypatch, *, count=1, complete=True):
+    """A narrow fake for the production-only gate model absent in local CI.
+
+    This simulates schema presence; it is NOT a QA approval or a manifest.
+    The actual production ApprovalRequest.save enforces the signed manifest.
+    """
+    from django.apps import apps
+    from types import SimpleNamespace
+
+    real_get_model = apps.get_model
+
+    class Query:
+        def count(self):
+            return count
+
+        def first(self):
+            return SimpleNamespace(
+                run_id=1, artifact_id=1,
+                manifest_id=1 if complete else None
+            )
+
+    simulated_model = SimpleNamespace(
+        objects=SimpleNamespace(filter=lambda **kwargs: Query())
+    )
+
+    def overridden_get_model(app_label, model_name=None, **kwargs):
+        if app_label == "core" and model_name == "FactoryReleaseGate":
+            return simulated_model
+        return real_get_model(app_label, model_name, **kwargs)
+
+    monkeypatch.setattr(apps, "get_model", overridden_get_model)
+
+
 @pytest.fixture
 def prepared_store(django_user_model, tmp_path):
     receiver = script("store_receiver")
@@ -71,7 +104,8 @@ def prepared_store(django_user_model, tmp_path):
 
 @pytest.mark.django_db
 @override_settings(DEBUG=False)
-def test_authorized_release_via_approval_service_is_public_and_idempotent(prepared_store):
+def test_authorized_release_via_approval_service_is_public_and_idempotent(prepared_store, monkeypatch):
+    simulate_shared_release_gate(monkeypatch)
     inbox, app, webroot, digest, product, owner = prepared_store
     publish = script("publish_verified_factory_store_listing")
     assert publish.publish(inbox, app, webroot)["status"] == "verified_dry_run"
@@ -139,3 +173,90 @@ def test_public_artifact_corruption_prevents_activation(prepared_store):
                           delegated_owner_instruction=True)
     product.refresh_from_db()
     assert not product.active
+
+@pytest.mark.django_db
+@override_settings(DEBUG=False)
+def test_runtime_shared_release_gate_blocks_even_dry_run_without_db_writes(
+    prepared_store, monkeypatch
+):
+    """Production may require a gate absent from the simpler local Product class.
+
+    The preflight must discover that requirement before creating an article,
+    an ApprovalRequest, or mutating the product in the live database.
+    """
+    from django.core.exceptions import ValidationError
+
+    inbox, app, webroot, digest, product, owner = prepared_store
+    original_clean = Product.clean
+
+    def deployed_clean(self):
+        original_clean(self)
+        if self.active and self.metadata.get("factory_status") == "published_free":
+            raise ValidationError(
+                "Factory Product approval requires its shared Release Gate."
+            )
+
+    simulate_shared_release_gate(monkeypatch)
+    monkeypatch.setattr(Product, "clean", deployed_clean)
+    publisher = script("publish_verified_factory_store_listing")
+    for apply in (False, True):
+        with pytest.raises(ValueError, match="RUNTIME_RELEASE_GATE_NOT_READY"):
+            publisher.publish(
+                inbox, app, webroot, apply=apply,
+                delegated_owner_instruction=True,
+            )
+        product.refresh_from_db()
+        assert product.active is False
+        assert product.knowledge_article_id is None
+        assert product.metadata["factory_status"] == "needs_editorial_pricing_and_owner_approval"
+        assert KnowledgeArticle.objects.count() == 0
+        assert ApprovalRequest.objects.count() == 0
+
+
+@pytest.mark.django_db
+@override_settings(DEBUG=False)
+def test_dry_run_on_an_unsaved_candidate_cannot_change_product_state(prepared_store, monkeypatch):
+    simulate_shared_release_gate(monkeypatch)
+    inbox, app, webroot, digest, product, owner = prepared_store
+    publisher = script("publish_verified_factory_store_listing")
+    assert publisher.publish(inbox, app, webroot)["status"] == "verified_dry_run"
+    product.refresh_from_db()
+    assert product.active is False
+    assert product.metadata["factory_status"] == "needs_editorial_pricing_and_owner_approval"
+    assert product.metadata.get("factory_publication_permission") is None
+    assert Product.objects.count() == 1
+    assert KnowledgeArticle.objects.count() == 0
+    assert ApprovalRequest.objects.count() == 0
+
+
+@pytest.mark.django_db
+@override_settings(DEBUG=False)
+def test_missing_deployed_release_gate_model_fails_closed(prepared_store):
+    inbox, app, webroot, digest, product, owner = prepared_store
+    publisher = script("publish_verified_factory_store_listing")
+    with pytest.raises(ValueError, match="FACTORY_SHARED_RELEASE_GATE_MODEL_MISSING"):
+        publisher.publish(inbox, app, webroot, apply=True,
+                          delegated_owner_instruction=True)
+    product.refresh_from_db()
+    assert not product.active
+    assert ApprovalRequest.objects.count() == 0
+    assert KnowledgeArticle.objects.count() == 0
+
+
+@pytest.mark.django_db
+@override_settings(DEBUG=False)
+def test_no_gate_row_or_missing_manifest_blocks_publish(prepared_store, monkeypatch):
+    inbox, app, webroot, digest, product, owner = prepared_store
+    publisher = script("publish_verified_factory_store_listing")
+    simulate_shared_release_gate(monkeypatch, count=0)
+    with pytest.raises(ValueError, match="FACTORY_SHARED_RELEASE_GATE_MISSING_OR_AMBIGUOUS"):
+        publisher.publish(inbox, app, webroot, apply=True,
+                          delegated_owner_instruction=True)
+    simulate_shared_release_gate(monkeypatch, count=1, complete=False)
+    with pytest.raises(ValueError, match="FACTORY_RELEASE_EVIDENCE_CHAIN_INCOMPLETE"):
+        publisher.publish(inbox, app, webroot, apply=True,
+                          delegated_owner_instruction=True)
+    product.refresh_from_db()
+    assert product.active is False
+    assert KnowledgeArticle.objects.count() == 0
+    assert ApprovalRequest.objects.count() == 0
