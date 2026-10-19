@@ -97,6 +97,33 @@ class FactoryPrivateQAFailureIsolation(unittest.TestCase):
         self.assertIn("FACTORY_STORE_DRY_RUN_VERIFIED_COUNT=1", buf.getvalue())
         self.assertIn("FACTORY_STORE_PUBLIC_LISTING_ENABLED=false", buf.getvalue())
 
+    def test_existing_receipt_is_not_a_new_transfer(self):
+        result = [
+            {"recipe": "alpha", "status": "already_received"},
+            {"recipe": "bravo", "status": "received_private"},
+        ]
+        buf = io.StringIO()
+        with mock.patch.object(sender, "sync", return_value=result), \
+             contextlib.redirect_stdout(buf):
+            sender.main(["--products", str(self.root),
+                         "--ssh-key", "unused", "--known-hosts", "unused"])
+        self.assertIn("FACTORY_STORE_TRANSFER_COUNT=1", buf.getvalue())
+        self.assertIn("FACTORY_STORE_RECEIPT_VERIFIED_COUNT=2", buf.getvalue())
+        self.assertIn("FACTORY_STORE_ALREADY_RECEIVED_COUNT=1", buf.getvalue())
+
+    def test_install_workflow_retains_vps_sender_rollback(self):
+        workflow = (SOURCE.parents[1] / ".github/workflows/vps-store-bridge-install.yml"
+                    ).read_text(encoding="utf-8")
+        for required in (
+            'flock -w 45 9',
+            'cp -p "$script" "$backup"',
+            'trap rollback_sender EXIT',
+            'PRIVATE_SENDER_ROLLBACK_RESTORED',
+            'FACTORY_STORE_RECEIPT_VERIFIED_COUNT=',
+            'PRIVATE_NO_RECEIPT_VERIFIED',
+        ):
+            self.assertIn(required, workflow)
+
 
 if __name__ == "__main__":
     unittest.main()
