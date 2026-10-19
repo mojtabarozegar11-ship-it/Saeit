@@ -1,0 +1,106 @@
+name: MojPlayWin two-book secure original-PDF content gate
+on:
+  push:
+    branches: [mpw-two-books-unified-release-20261019]
+    paths: [".github/workflows/mpw-two-books-pdf-content-gate-20261019.yml"]
+permissions: {contents: read}
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 11
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Validate private final editions in temporary runner without publishing files
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          python3 -m pip install --disable-pip-version-check -q pypdf==6.2.0
+          for id in 72 225; do
+            timeout 100s ssh -T -F "$d/config" saeit-cpanel \
+              "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - $id" \
+              > "$RUNNER_TEMP/mpw-book-$id.pdf" <<'PY'
+          import sys,os,pathlib
+          id_=int(sys.argv[1])
+          root=pathlib.Path('/home/zomorod2/Saeit-staging')
+          os.chdir(root);sys.path.insert(0,str(root))
+          os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          import django;django.setup()
+          from core.models import Product
+          from core.cryptopay_checkout import product_delivery_ready
+          from mpw_commerce.downloads import _private_file
+          from types import SimpleNamespace
+          p=Product.objects.get(pk=id_)
+          if id_ not in (72,225) or not product_delivery_ready(p):
+            raise RuntimeError('Hash-verified private sale asset required')
+          f=_private_file(SimpleNamespace(product=p))
+          with f.open('rb') as src:
+            while True:
+              chunk=src.read(256*1024)
+              if not chunk:break
+              sys.stdout.buffer.write(chunk)
+          PY
+          done
+          python3 - <<'PY'
+          from pypdf import PdfReader
+          import json,os,pathlib,hashlib
+          root=pathlib.Path(os.environ['RUNNER_TEMP'])
+          result=[]
+          for pk,expected in ((72,415),(225,40)):
+            f=root/f'mpw-book-{pk}.pdf'
+            r=PdfReader(str(f),strict=False)
+            pages=len(r.pages)
+            has_attachment=('/EmbeddedFiles' in str(r.trailer.get('/Root',{})))
+            result.append({'id':pk,'page_count':pages,'expected':expected,'matches_expected':pages==expected,
+              'encrypted':r.is_encrypted,'bytes':f.stat().st_size,'embedded_file_marker':has_attachment,
+              'text_sample_pages':sum(bool((r.pages[i].extract_text() or '').strip()) for i in sorted({0,pages//2,pages-1}))})
+            if pages!=expected or r.is_encrypted:raise RuntimeError('Original PDF edition validation failed')
+          print('MPW_TWO_BOOK_EDITION_QA='+json.dumps(result,sort_keys=True))
+          PY
+          rm -f "$RUNNER_TEMP/mpw-book-72.pdf" "$RUNNER_TEMP/mpw-book-225.pdf"
