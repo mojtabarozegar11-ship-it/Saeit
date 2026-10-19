@@ -120,7 +120,7 @@ def sync_catalog(source_root, active_root, retired_root, manifest_path):
             archived.append((slug, destination))
         _atomic_manifest(manifest, installed, removed)
         if moved_old:
-            shutil.rmtree(old)
+            shutil.rmtree(old, ignore_errors=True)
         return {"active_count": len(installed), "active_recipes": sorted(installed),
                 "retired_count": len(removed), "retired_recipes": removed}
     except Exception:
