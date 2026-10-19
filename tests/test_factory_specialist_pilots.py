@@ -106,7 +106,7 @@ class SpecialistPilotTests(unittest.TestCase):
                                             "stdout": ""})()
             return self._write_generated(args, **kwargs)
         with mock.patch.object(pilots.subprocess, "run", side_effect=selective):
-            for i in range(len(pilots.FAMILIES)):
+            for i in range(len(pilots.FAMILIES) + 1):
                 result = pilots.cycle(self.output, self.manifest)
         self.assertEqual(result["status"], "needs_rework")
         root = self.output / "family-pilots"
