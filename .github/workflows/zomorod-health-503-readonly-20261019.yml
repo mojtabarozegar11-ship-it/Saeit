@@ -187,6 +187,41 @@ jobs:
             done
           done
           REMOTE
+      - name: Fingerprint current web server and Passenger integration read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          python3 - <<'PY'
+          import os,subprocess
+          from pathlib import Path
+          checks={
+             "LITESPEED_DIRECTORY":Path("/usr/local/lsws").is_dir(),
+             "LITESPEED_SELECTOR_SCRIPT":Path("/usr/local/lsws/admin/misc/enable_ruby_python_selector.sh").is_file(),
+             "PASSENGER_APACHE_MODULE":any(Path(p).exists() for p in (
+                "/etc/apache2/modules/mod_passenger.so",
+                "/opt/cpanel/ea-ruby27/root/usr/lib64/httpd/modules/mod_passenger.so",
+                "/usr/lib64/httpd/modules/mod_passenger.so")),
+             "CLOUDLINUX_SELECTOR":any(Path(p).exists() for p in ("/usr/bin/cloudlinux-selector","/usr/sbin/cloudlinux-selector"))
+          }
+          for key,val in checks.items():print("WEB_SERVER_"+key+"="+("present" if val else "not_visible"))
+          cmd=subprocess.run(["ps","-eo","comm="],capture_output=True,text=True,timeout=8)
+          if cmd.returncode==0:
+              names=[p.strip().lower() for p in cmd.stdout.splitlines()]
+              for keyword in ("lshttpd","litespeed","httpd","nginx","lswsgi"):
+                  print("WEB_SERVER_PROCESS_"+keyword.upper()+"="+str(sum(keyword in p for p in names)))
+          else:print("WEB_SERVER_PROCESS_LIST=unavailable")
+          PY
+          for path in / /api/health/; do
+            tmp="$(mktemp)"
+            code="$(curl -sS --max-time 15 -D "$tmp" -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir$path" || true)"
+            echo "WEB_SERVER_HTTP_PATH=$path code=$code"
+            awk 'BEGIN{IGNORECASE=1} /^Server:/ {v=tolower($0);if(index(v,"litespeed"))print "WEB_SERVER_HEADER=LITESPEED";else if(index(v,"nginx"))print "WEB_SERVER_HEADER=NGINX";else if(index(v,"apache"))print "WEB_SERVER_HEADER=APACHE";else print "WEB_SERVER_HEADER=UNIDENTIFIED"} /^X-LiteSpeed/ {print "WEB_SERVER_LITESPEED_HEADER=present"}' "$tmp"
+            rm -f "$tmp"
+          done
+          REMOTE
       - name: Probe exact public Django health route with sanitized response fields
         shell: bash
         run: |
