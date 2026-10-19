@@ -1,0 +1,205 @@
+name: Zomorod site-only agents and master protected v12 release
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/zomorod-site-agent-100-stage-release.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-private-agent-runtime-release
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_sqlite,sqlite3,curl
+      - name: Check source and 100 scenario gates before live deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          php -l content/zomorod-v11/site_agents.php
+          php content/zomorod-v11/tests/site_agents_generation_harness.php > "$RUNNER_TEMP/100-gates.log"
+          test "$(grep -c '^SITE_AGENT_GENERATION_GATE=' "$RUNNER_TEMP/100-gates.log")" -eq 100
+          echo SITE_AGENT_100_SCENARIO_GATES=passed
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zm-agent100-release"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - name: Check exact Zomorod-only previous PHP source; stage backup outside web root
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-agent100-release"
+          # A fresh merge commit always retains its first parent source.
+          git show "$GITHUB_SHA^1:content/zomorod-v11/site_agents.php" > "$RUNNER_TEMP/site_agents.prior.php"
+          before="$(sha256sum "$RUNNER_TEMP/site_agents.prior.php" | cut -c1-64)"
+          after="$(sha256sum content/zomorod-v11/site_agents.php | cut -c1-64)"
+          test "$before" != "$after"
+          cat "$RUNNER_TEMP/site_agents.prior.php" | ssh -T -F "$d/config" saeit-cpanel \
+            "cat > '/home/zomorod2/.zm-previous-agent-$GITHUB_RUN_ID.php'"
+          cat content/zomorod-v11/site_agents.php | ssh -T -F "$d/config" saeit-cpanel \
+            "cat > '/home/zomorod2/.zm-next-agent-$GITHUB_RUN_ID.php'"
+          timeout 40s ssh -T -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_RUN_ID" "$before" "$after" <<'REMOTE'
+          set -euo pipefail
+          run="$1";sha_before="$2";sha_after="$3"
+          test "$HOME" = "/home/zomorod2"
+          private="$HOME/.private/zomorod-business"
+          current="$private/site_agents.php"
+          test -f "$current" && test ! -L "$current" && test -f "$private/site_agents.sqlite3"
+          test "$(sha256sum "$current"|cut -c1-64)" = "$sha_before"
+          test "$(sha256sum "$HOME/.zm-next-agent-$run.php"|cut -c1-64)" = "$sha_after"
+          test "$(sha256sum "$HOME/.zm-previous-agent-$run.php"|cut -c1-64)" = "$sha_before"
+          bin="$(command -v php || true)";test -n "$bin"
+          "$bin" -l "$current" >/dev/null
+          "$bin" -l "$HOME/.zm-next-agent-$run.php" >/dev/null
+          "$bin" -r 'exit(extension_loaded("pdo_sqlite")?0:1);'
+          backup="$HOME/.backups/zomorod-site-agent-v12/$run"
+          test ! -e "$backup"
+          mkdir -p "$backup";chmod 700 "$backup"
+          cp -p "$current" "$backup/site_agents.prior.php"
+          cp -p "$private/site_agents.sqlite3" "$backup/site_agents.snapshot.sqlite3"
+          chmod 600 "$backup/"*
+          cmp -s "$current" "$backup/site_agents.prior.php"
+          echo "SITE_AGENT_SOURCE_EXACT_PREVIOUS_MATCH=yes"
+          echo "SITE_AGENT_PRIVATE_BACKUP_OK=yes"
+          REMOTE
+      - name: Deploy ONLY site agent PHP with automatic rollback
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-agent100-release"
+          timeout 160s ssh -T -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_RUN_ID" <<'REMOTE'
+          set -euo pipefail
+          run="$1"
+          private="$HOME/.private/zomorod-business"
+          current="$private/site_agents.php"
+          backup="$HOME/.backups/zomorod-site-agent-v12/$run"
+          candidate="$HOME/.zm-next-agent-$run.php"
+          before="$backup/site_agents.prior.php"
+          test -f "$before" && test -f "$candidate"
+          expected="$(sha256sum "$before" |cut -c1-64)"
+          test "$(sha256sum "$current"|cut -c1-64)" = "$expected"
+          bin="$(command -v php || true)";test -n "$bin"
+          "$bin" -l "$candidate" >/dev/null
+          chmod 600 "$candidate"
+          installed=0
+          rollback(){
+            rc="$?"
+            trap - EXIT
+            if [ "$rc" -ne 0 ] && [ "$installed" -eq 1 ]; then
+              test "$(sha256sum "$current"|cut -c1-64)" = "$new_sha" &&
+                cp -p "$before" "$private/.site_agents.rollback-$run.php" &&
+                mv -f "$private/.site_agents.rollback-$run.php" "$current" || true
+              echo "SITE_AGENT_RELEASE_ROLLBACK_ATTEMPTED=yes"
+            fi
+            exit "$rc"
+          }
+          trap rollback EXIT
+          new_sha="$(sha256sum "$candidate"|cut -c1-64)"
+          cp -p "$candidate" "$private/.site_agents.v12-$run.php"
+          mv -f "$private/.site_agents.v12-$run.php" "$current"
+          installed=1
+          "$bin" -l "$current" >/dev/null
+          test "$(sha256sum "$current"|cut -c1-64)" = "$new_sha"
+          "$bin" -d display_errors=0 -r '
+            require $argv[1];
+            $d=dirname($argv[1]);
+            $db=zmAgentDb($d);
+            $rows=$db->query("SELECT code FROM agents ORDER BY code")->fetchAll(PDO::FETCH_COLUMN);
+            if(count($rows)!==11||!in_array("master",$rows,true))exit(8);
+            $check=zmAgentProbe("/health/",fn($u)=>["http"=>200,"bytes"=>250,"content_type"=>"text/html"]);
+            if($check[0]!=="ok")exit(9);
+            $failed=zmAgentProbe("/health/",fn($u)=>["http"=>200,"bytes"=>0,"content_type"=>"text/html"]);
+            if($failed[0]==="ok")exit(10);
+            echo "SITE_AGENT_DEPLOYED_COMPAT_AND_FAILURE_GATE=passed\n";
+          ' "$current"
+          trap - EXIT
+          installed=0
+          echo "SITE_AGENT_ONLY_PRIVATE_PHP_UPGRADED=yes"
+          echo "NO_DJANGO_DB_MIGRATION_OR_FACTORY_CHANGE=yes"
+          REMOTE
+      - name: Live inspect website paths and private module, without inventing activity
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-agent100-release"
+          timeout 45s ssh -T -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_RUN_ID" <<'REMOTE'
+          set -euo pipefail
+          run="$1"
+          file="$HOME/.private/zomorod-business/site_agents.php"
+          backup="$HOME/.backups/zomorod-site-agent-v12/$run/site_agents.prior.php"
+          test -f "$file" && test -f "$backup"
+          test "$(sha256sum "$file"|cut -c1-64)" != "$(sha256sum "$backup"|cut -c1-64)"
+          bin="$(command -v php)"
+          "$bin" -l "$file" >/dev/null
+          echo "SITE_AGENT_LIVE_PRIVATE_RUNTIME=verified"
+          REMOTE
+          for route in /business/ /agents/ /api/health/; do
+            code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 25 "https://zomorodmelal.ir$route" || true)"
+            echo "SITE_AGENT_PRESERVED_ROUTE=$route status=$code"
+            test "$code" = "200"
+          done
+      - name: Delete only temporary delivery files
+        if: always()
+        shell: bash
+        run: |
+          d="$RUNNER_TEMP/zm-agent100-release"
+          if test -f "$d/config"; then
+            ssh -T -F "$d/config" saeit-cpanel "rm -f '/home/zomorod2/.zm-next-agent-$GITHUB_RUN_ID.php' '/home/zomorod2/.zm-previous-agent-$GITHUB_RUN_ID.php'" || true
+          fi
+          rm -rf -- "$d"
