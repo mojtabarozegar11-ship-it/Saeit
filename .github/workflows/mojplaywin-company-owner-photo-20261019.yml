@@ -1,0 +1,153 @@
+name: MojPlayWin Company owner and verified-photo isolated polish
+on:
+  pull_request:
+    paths:
+      - "scripts/mpw_about_company_polish_atomic_20261019.py"
+      - "tests/test_mpw_about_company_polish_20261019.py"
+      - ".github/workflows/mojplaywin-company-owner-photo-20261019.yml"
+  push:
+    branches: [main]
+    paths:
+      - "scripts/mpw_about_company_polish_atomic_20261019.py"
+      - ".github/workflows/mojplaywin-company-owner-photo-20261019.yml"
+permissions:
+  contents: read
+concurrency:
+  group: mojplaywin-about-exact-static-prod
+  cancel-in-progress: false
+jobs:
+  preflight-only:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Test reversible company + founder photo patch
+        run: |
+          python3 -m py_compile scripts/mpw_about_company_polish_atomic_20261019.py
+          python3 -m pip install -q pytest
+          python3 -m pytest -q --noconftest tests/test_mpw_about_company_polish_20261019.py
+  publish-company-and-about-photo:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.ref == 'refs/heads/main' &&
+      github.event_name == 'push' &&
+      contains(github.event.head_commit.message, '[approved-mpw-company-photo-20261019]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Source tests and public photo and static route baseline
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_about_company_polish_atomic_20261019.py
+          python3 -m pip install -q pytest
+          python3 -m pytest -q --noconftest tests/test_mpw_about_company_polish_20261019.py
+          python3 - <<'PY'
+          import urllib.request,hashlib,json,os
+          root='https://mojplaywin.com'
+          company=root+'/company/'
+          direct=root+'/design-preview-20261017/mpw-ten-editorials-20261018/pages/company.html'
+          image=root+'/mojtaba.roozegar/assets/personal_site/official_profile_20261016/portrait.2935ce8cb70d.webp'
+          def req(url):
+              with urllib.request.urlopen(urllib.request.Request(url,headers={'Cache-Control':'no-cache','User-Agent':'MPWCompanyOwnerSafePatch/1.0'}),timeout=20) as r:
+                  return r.status,r.headers.get('Content-Type',''),r.read(1500000)
+          a=req(company);b=req(direct);pic=req(image)
+          if a[0]!=200 or b[0]!=200 or hashlib.sha256(a[2]).digest()!=hashlib.sha256(b[2]).digest():
+              raise SystemExit('COMPANY_ROUTE_NOT_EXACT_STATIC_ASSET: no publication')
+          if pic[0]!=200 or not pic[1].lower().startswith('image/'):
+              raise SystemExit('OWNER_OFFICIAL_PHOTO_UNAVAILABLE: no publication')
+          before={}
+          for path in ('/','/about/','/company/','/store/','/about/mojtaba-rozegar/','/mojtaba.roozegar/','/farnaz/','/saman/','/picm/','/taniya/','/zahra/'):
+              code=req(root+path)[0] if path!='/zahra/' else 404
+              before[path]=code
+          if any(before[p]!=200 for p in ('/','/about/','/company/','/store/','/farnaz/')):
+              raise SystemExit('Critical route unhealthy')
+          with open(os.environ['RUNNER_TEMP']+'/mpw-polish-baseline.json','w') as f:json.dump(before,f)
+          print('COMPANY_EXACT_ROUTE_AND_OWNER_IMAGE=VERIFIED')
+          PY
+      - name: Establish verified relay to private cPanel
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-owner-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Atomic About founder photo and Company banner publication
+        id: publish
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-owner-ssh"
+          timeout 70s ssh -T -F "$d/config" saeit-cpanel \
+            "python3 - install '$GITHUB_RUN_ID'" < scripts/mpw_about_company_polish_atomic_20261019.py
+      - name: Independently verify real live endpoints and protected paths
+        run: |
+          python3 - <<'PY'
+          import json,os,urllib.request,urllib.error
+          root='https://mojplaywin.com'
+          rid=os.environ['GITHUB_RUN_ID']
+          def get(path):
+              with urllib.request.urlopen(urllib.request.Request(root+path,headers={'Cache-Control':'no-cache'}),timeout=20) as r:
+                  return r.status,r.read(1800000).decode('utf-8','replace')
+          a=get('/about/?_mpw_owner='+rid)[1]
+          c=get('/company/?_mpw_owner='+rid)[1]
+          if 'official_profile_20261016/portrait.2935ce8cb70d.webp' not in a or 'Stylized MojPlayWin founder portrait' in a:
+              raise SystemExit('Owner official portrait not live')
+          if 'id="mpw-company-owner-crosslink-20261019"' not in c or 'limited liability company' not in c:
+              raise SystemExit('Company owner banner not live')
+          if c.count('class="mpw-ten-card"')!=10:
+              raise SystemExit('Existing company articles missing')
+          baseline=json.load(open(os.environ['RUNNER_TEMP']+'/mpw-polish-baseline.json'))
+          for path,status in baseline.items():
+              if path=='/zahra/':continue
+              try:actual=get(path)[0]
+              except urllib.error.HTTPError as e:actual=e.code
+              if actual!=status:raise SystemExit('Protected route changed: '+path)
+              print('ROUTE_UNCHANGED',path,status)
+          print('OWNER_PHOTO_AND_COMPANY_BANNER_LIVE=YES')
+          PY
+      - name: Roll back both exact HTML files if live smoke failed
+        if: failure() && steps.publish.outcome == 'success'
+        run: |
+          d="$RUNNER_TEMP/mpw-owner-ssh"
+          timeout 60s ssh -T -F "$d/config" saeit-cpanel \
+            "python3 - rollback '$GITHUB_RUN_ID'" < scripts/mpw_about_company_polish_atomic_20261019.py
