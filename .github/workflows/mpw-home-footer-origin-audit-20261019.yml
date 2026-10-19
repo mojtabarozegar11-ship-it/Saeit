@@ -97,4 +97,30 @@ jobs:
                 "home_2022_bar":"© 2022 MojPlayWin. All rights reserved." in text,
                 "home_footer_phrase":"Built for research, creativity and responsible commerce." in text}
               print("FILE_STATUS",p.name,str(p.parent.name),len(raw),hashlib.sha256(raw).hexdigest()[:12],flags)
+          import os
+          needles=(b"Built for research, creativity and responsible commerce.",
+                   b"MojPlayWin discover",
+                   b"mpx-bottom-bar")
+          for label,base in (("ROOT",root),("APP",app)):
+              matches=[]
+              scanned=0
+              for d,dirs,files in os.walk(base):
+                  depth=len(Path(d).relative_to(base).parts)
+                  dirs[:]=[x for x in dirs if depth<6 and x not in (
+                      ".git","node_modules","venv",".venv","__pycache__",
+                      "tmp","media","logs","backup","backups","staticfiles",
+                      ".next","migrations","site-packages")]
+                  for f in files:
+                      p=Path(d)/f
+                      if p.suffix.lower() not in (".html",".htm",".php",".py",".js",".txt"):continue
+                      try:
+                          if p.stat().st_size>2200000 or p.is_symlink():continue
+                          data=p.read_bytes()
+                      except (OSError,PermissionError):continue
+                      scanned+=1
+                      hits=[i for i,n in enumerate(needles) if n in data]
+                      if hits:matches.append((str(p.relative_to(base)),hits))
+                      if scanned>=16000:break
+                  if scanned>=16000:break
+              print("SOURCE_SCAN",label,"files",scanned,"matches",matches[:45])
           '"'"''
