@@ -1,4 +1,4 @@
-name: MojPlayWin two book logged-in buying gate and payment audit read only
+name: MojPlayWin two book customer checkout render and payment audit read only
 on:
   push:
     branches: [main]
