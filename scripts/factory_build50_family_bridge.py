@@ -67,7 +67,7 @@ def one(root,name,proto,registered):
     if state.get('status')!='awaiting_owner_acceptance' or stages!=50:
         return {'status':'rework_required' if state.get('status')=='rework_required' else 'incomplete',
                 'verified':False,'completed_stages':stages}
-    attempt=folder/'attempt-%08d'%state.get('attempt',-1) if type(state.get('attempt')) is int else folder/'INVALID'
+    attempt=folder/('attempt-%08d'%state['attempt']) if type(state.get('attempt')) is int else folder/'INVALID'
     if not safe_parent(root,attempt) or not attempt.is_dir():
         return {'status':'invalid_attempt_directory','verified':False}
     try:
