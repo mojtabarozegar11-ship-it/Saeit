@@ -1,0 +1,113 @@
+name: MojPlayWin private settlement 60-second heartbeat deploy
+on:
+  push:
+    branches: [mpw-two-books-unified-release-20261019]
+    paths: [".github/workflows/mpw-settlement-heartbeat-release-20261019.yml"]
+permissions: {contents: read}
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 11
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Stage only the improved private 60-second worker
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_two_books_private_reconcile_worker_20261019.py
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 35s scp -q -F "$d/config" scripts/mpw_two_books_private_reconcile_worker_20261019.py saeit-cpanel:/home/zomorod2/.mpw-commerce-two-books/worker.heartbeat.staged.py
+      - name: Atomically install private worker with rollback and no payment changes
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 115s ssh -T -F "$d/config" saeit-cpanel bash -s <<'BASH'
+          /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - <<'PY'
+          import pathlib,hashlib,os,tempfile,subprocess,sys
+          p=pathlib.Path('/home/zomorod2/.mpw-commerce-two-books')
+          target=p/'reconcile_worker.py'
+          staged=p/'worker.heartbeat.staged.py'
+          assert p.is_dir() and not p.is_symlink()
+          assert target.is_file() and not target.is_symlink()
+          assert staged.is_file() and not staged.is_symlink()
+          old=target.read_bytes(); new=staged.read_bytes()
+          expected='2fbacd70536b18bb576322e1c5b829d843a5af2d83bf54e071bfb43c2463a0ae'
+          if hashlib.sha256(old).hexdigest()!=expected:
+              raise RuntimeError('Unexpected live worker, refused safely')
+          assert b'worker-heartbeat.json' in new and b'issubset({72, 225})' in new
+          assert len(new)<14000
+          import ast
+          ast.parse(new.decode('utf8'))
+          backup=p/('reconcile-worker-'+expected[:18]+'.bak')
+          if backup.exists():
+              assert backup.read_bytes()==old
+          else:
+              fd=os.open(str(backup),os.O_CREAT|os.O_EXCL|os.O_WRONLY,0o600)
+              with os.fdopen(fd,'wb') as file:
+                  file.write(old);file.flush();os.fsync(file.fileno())
+          def write(data):
+              fd,name=tempfile.mkstemp(dir=str(p),prefix='.worker-atomic-')
+              try:
+                  with os.fdopen(fd,'wb') as file:
+                      file.write(data);file.flush();os.fsync(file.fileno())
+                  os.chmod(name,0o700)
+                  os.replace(name,target)
+              finally:
+                  if os.path.exists(name):os.unlink(name)
+          try:
+              write(new)
+              job=subprocess.run([sys.executable,str(target),'--self-check'],capture_output=True,text=True,timeout=25)
+              assert job.returncode==0 and '"state": "idle"' in job.stdout
+              cr=subprocess.run(['crontab','-l'],capture_output=True,text=True,timeout=8)
+              assert cr.returncode==0 and cr.stdout.count('MPW_TWO_BOOKS_RECONCILE_MINUTE_V1')==1
+              print('MPW_HEARTBEAT_WORKER_INSTALL=PASS;cron_unchanged=true;payment_flags_unchanged=true',flush=True)
+          except Exception:
+              if target.read_bytes()==new:write(old)
+              print('MPW_HEARTBEAT_WORKER_ROLLBACK=PASS',flush=True)
+              raise
+          PY
+          BASH
