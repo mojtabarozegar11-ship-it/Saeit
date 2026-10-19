@@ -137,3 +137,5 @@ jobs:
           except Exception as e:emit('ECOSYSTEM_MPW_DB',{'error':type(e).__name__})
           print('ECOSYSTEM_CPANEL_AGENTS_READONLY=PASS')
           PY
+
+# Read-only owner-requested execution probe 2026-10-20: no mutations to storefronts, factory, or sub-sites.
