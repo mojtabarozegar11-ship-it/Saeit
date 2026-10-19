@@ -57,6 +57,33 @@ class FortyLineMasterTests(unittest.TestCase):
         self.assertEqual(doc["sites_contacted"],0)
         self.assertFalse(doc["distribution_enabled"])
         self.assertEqual(doc["measured_vps_capacity"]["production_job_slots_authorized"],0)
+    def test_research_only_evidence_orders_do_not_consume_family_product_capacity(self):
+        self.add_order(1)
+        wid=self.add_order(2)
+        path=self.source/(wid+".json")
+        order=json.loads(path.read_text())
+        order.update({
+            "phase":"research_rework","origin":"local-factory-research",
+            "blocker":"FIVE_DISTINCT_PUBLIC_SOURCES_WITH_LINKED_EVIDENCE_REQUIRED",
+            "source_product_id":1
+        })
+        path.write_text(json.dumps(order))
+        doc=self.run_master()
+        self.assertEqual(doc["unassigned_work_orders"]["awaiting_family_profile_and_passport"],1)
+        self.assertEqual(doc["unassigned_work_orders"]["research_evidence_only_not_manufacturing"],1)
+        self.assertEqual(doc["fully_verified_active_producer_families"],0)
+        self.assertEqual(doc["new_work_ready_to_dispatch"],0)
+        self.assertFalse(doc["distribution_enabled"])
+
+    def test_bad_research_source_cannot_be_hidden_as_normal_research_queue(self):
+        wid=self.add_order(1)
+        path=self.source/(wid+".json")
+        record=json.loads(path.read_text())
+        record.update({"phase":"research_rework","origin":"market_demand","blocker":"opaque"})
+        path.write_text(json.dumps(record))
+        with self.assertRaisesRegex(RuntimeError,"MASTER_RESEARCH_ORDER_PROVENANCE_INVALID"):
+            self.run_master()
+
     def test_actual_hashed_pilot_counts_without_authorizing_production(self):
         family = "F27"
         version = "a" * 20

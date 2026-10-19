@@ -159,6 +159,16 @@ def find_records(root,by_id,by_slug):
         order=read_obj(filename,200000)
         if order.get("id")!=filename.stem:raise RuntimeError("MASTER_CORRUPT_ORDER_ID")
         wid=filename.stem
+        # A scientific evidence-repair instruction is not yet a manufacturable
+        # product order. Preserve it in the research queue instead of claiming
+        # missing product adapters, production slots or commercial stock.
+        if order.get("phase")=="research_rework":
+            if (order.get("origin")!="local-factory-research"
+                    or not isinstance(order.get("blocker"),str)
+                    or not order["blocker"]):
+                raise RuntimeError("MASTER_RESEARCH_ORDER_PROVENANCE_INVALID")
+            unassigned["research_evidence_only_not_manufacturing"]+=1
+            continue
         pf=pproot/(wid+".json")
         doc=read_obj(pf,200000) if pf.exists() else {}
         fid=classify(order,doc,by_id,by_slug)
