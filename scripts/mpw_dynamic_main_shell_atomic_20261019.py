@@ -23,8 +23,8 @@ RULES=f'''
 {START}
 # GET-only MojPlayWin root paths; never matches any child site route.
 RewriteCond %{{REQUEST_METHOD}} ^GET$
-RewriteCond %{{REQUEST_URI}} ^/({"|".join(ROUTES)})/$
 RewriteCond %{{QUERY_STRING}} !(^|&)__mpw_template_passthru=1(&|$)
+RewriteCond %{{REQUEST_URI}} ^/({"|".join(ROUTES)})/$
 RewriteRule ^.*$ /design-preview-20261017/_mpw_dynamic_main_shell_20261019.php?__mpw_template_route=%1 [END,QSA]
 {END}
 '''
