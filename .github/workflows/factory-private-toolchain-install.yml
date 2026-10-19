@@ -55,7 +55,7 @@ jobs:
           cp "$source/build/bin/llama-cli" "$source/build/bin/llama-server" "$bundle/runtime/llama/bin/"
           : > "$RUNNER_TEMP/empty-dpkg-status"
           apt-get -y -qq --download-only -o Dir::State::status="$RUNNER_TEMP/empty-dpkg-status" \
-            --no-install-recommends install ffmpeg blender libreoffice-writer libreoffice-impress \
+            --no-install-recommends install ffmpeg blender libreoffice-writer libreoffice-impress libreoffice-calc \
             fonts-dejavu-core poppler-utils python3.8 python3.8-minimal libpython3.8-stdlib \
             > "$RUNNER_TEMP/runtime-packages.log" 2>&1 || { tail -60 "$RUNNER_TEMP/runtime-packages.log"; exit 1; }
           for package in /var/cache/apt/archives/*.deb; do
@@ -98,7 +98,7 @@ jobs:
           test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs
           options=(-i "$d/key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=3)
           remote=(ssh "${options[@]}" githubops@178.239.147.150)
-          stage="/home/githubops/factory-runtime/operations/toolchain-source-$GITHUB_RUN_ID"
+          stage="/home/githubops/factory-runtime/operations/toolchain-source-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
           "${remote[@]}" "umask 077; mkdir -m 700 '$stage'; df -Pm '$stage'; python3 --version; test -x \"\$HOME/factory-runtime/.venv/bin/python\"; \"\$HOME/factory-runtime/.venv/bin/python\" --version"
           bundle="$RUNNER_TEMP/toolchain-bundle"
           for file in SHA256SUMS runtime.tar.xz qwen2.5-coder-0.5b-instruct-q4_k_m.gguf install.sh prove.py; do

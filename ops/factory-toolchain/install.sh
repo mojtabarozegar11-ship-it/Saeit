@@ -19,8 +19,11 @@ free_mb="$(df -Pm "$root" | awk 'NR==2 {print $4}')"
 target="$root/versions/$revision"
 test ! -L "$target"
 if [[ ! -d "$target" ]]; then
-  mkdir -m 700 "$target"
-  tar -xf "$bundle/runtime.tar.xz" -C "$target" --no-same-owner
+  extraction="$(mktemp -d "$root/versions/.extract-$revision-XXXXXX")"
+  trap 'rm -rf -- "$extraction"' EXIT
+  tar -xf "$bundle/runtime.tar.xz" -C "$extraction" --no-same-owner
+  mv -- "$extraction" "$target"
+  trap - EXIT
 fi
 mkdir -p "$target/bin" "$target/work" "$target/models" "$target/font-cache"
 if [[ ! -x "$target/venv/bin/python" ]]; then
