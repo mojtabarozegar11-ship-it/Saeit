@@ -85,4 +85,30 @@ class BridgeTests(unittest.TestCase):
   (pack_dir/(digest+".json")).write_text(json.dumps(data))
   with self.assertRaises(ValueError):imp.import_catalog(inbox,dbpath)
 
+ def test_delivery_does_not_count_previous_receipts_as_new_goods(self):
+  import types
+  root=self.root
+  stock=[]
+  for i in range(5):
+   recipe=f"product_{i}"
+   directory=root/"digital-products"/recipe
+   directory.mkdir(parents=True)
+   version=hashlib.sha256((recipe+"-source").encode()).hexdigest()
+   artifact=hashlib.sha256((recipe+"-archive").encode()).hexdigest()
+   (directory/"manufacturing_manifest.json").write_text(json.dumps({
+      "source_sha256":version,"artifact_sha256":artifact}))
+   stock.append({"product_id":recipe,"version":version,"artifact_sha256":artifact,
+      "manufacturing_qc":"passed","commercial_release":False})
+  warehouse=types.SimpleNamespace(stock_summary=lambda _:stock)
+  sender=types.SimpleNamespace(
+    host_ssh_options=lambda *a:[],
+    deliver=lambda recipe,*a,**kw:{"recipe":recipe,
+       "status":"already_received" if recipe in ("product_0","product_1","product_2")
+                else "received_private"})
+  results=bridge.deliver_stock(root,root/"production-warehouse",warehouse,sender,
+       root/"unused.key",root/"unused.known",max_products=2)
+  self.assertTrue(results)
+  self.assertTrue(all(r["status"]=="received_private" for r in results))
+  self.assertEqual(len(results),2)
+
 if __name__=="__main__":unittest.main()

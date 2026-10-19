@@ -145,8 +145,14 @@ def deliver_stock(factory_root,ware,warehouse_module,sender,ssh_key,ssh_hosts,ma
     # transports private, SHA-checked packages to cPanel receiver.
     options=sender.host_ssh_options(Path(ssh_key),Path(ssh_hosts))
     results=[]
-    for row in inventory:
-        if len(results)>=max_products:break
+    if max_products==0 or not inventory:return results
+    # Rotate stock position across UTC days so older receipts cannot forever
+    # starve new warehouse versions; already_received does not use ship quota.
+    offset=(dt.datetime.now(dt.timezone.utc).date().toordinal()*3)%len(inventory)
+    rotated=inventory[offset:]+inventory[:offset]
+    checked=0
+    for row in rotated:
+        if len(results)>=max_products or checked>=min(len(inventory),max_products*8):break
         recipe=row["product_id"]
         if row["manufacturing_qc"]!="passed" or row["commercial_release"] is not False:continue
         source=root/"digital-products"/recipe/"manufacturing_manifest.json"
@@ -154,9 +160,11 @@ def deliver_stock(factory_root,ware,warehouse_module,sender,ssh_key,ssh_hosts,ma
         doc=json.loads(source.read_text(encoding="utf8"))
         if doc.get("source_sha256")!=row["version"] or doc.get("artifact_sha256")!=row["artifact_sha256"]:
             continue
+        checked+=1
         try:
             result=sender.deliver(recipe,root/"digital-products",options,dry_run=dry_run)
-            results.append(result)
+            if result.get("status")!="already_received":
+                results.append(result)
         except (OSError,ValueError,RuntimeError) as e:
             results.append({"recipe":recipe,"status":"blocked_"+type(e).__name__})
     return results
