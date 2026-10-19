@@ -100,7 +100,7 @@ def install(run,hashsum):
         did_install=True
         if sha(HT.read_bytes())!=info['new']:raise RuntimeError('Rewrite commit checksum mismatch')
     except Exception:
-        if did_install and sha(HT.read_bytes())==info['new']:
+        if sha(HT.read_bytes())==info['new']:
             atomic(HT,old,mode)
         if TARGET.is_file() and not TARGET.is_symlink() and sha(TARGET.read_bytes())==info['php']:
             TARGET.unlink()
