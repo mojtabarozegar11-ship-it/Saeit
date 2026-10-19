@@ -1,0 +1,185 @@
+name: MojPlayWin controlled main Passenger panel activation
+on:
+  push:
+    branches: [fix/mpw-onepass-private-agent-evolution-20261019]
+    paths: [.github/workflows/mpw-main-panel-passenger-safe-restart.yml]
+permissions:
+  contents: read
+concurrency:
+  group: mpw-main-passenger-guarded-reload
+  cancel-in-progress: false
+jobs:
+  reload:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/fix/mpw-onepass-private-agent-evolution-20261019'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Snapshot protected main and child HTTP routes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os,json,urllib.request,urllib.error
+          paths=('/','/store/','/accounts/login/','/staff/command-center/mpw-agents/',
+                 '/farnaz/','/taniya/','/saman/','/picm/','/zahra/','/mojtaba.roozegar/')
+          class StopRedirect(urllib.request.HTTPRedirectHandler):
+              def redirect_request(self,req,fp,code,msg,headers,newurl):return None
+          opener=urllib.request.build_opener(StopRedirect)
+          result={}
+          for path in paths:
+              req=urllib.request.Request('https://mojplaywin.com'+path,headers={
+                 'User-Agent':'MPW-Scoped-Reload-Before','Cache-Control':'no-cache'})
+              try:
+                  with opener.open(req,timeout=20) as resp:result[path]=resp.status
+              except urllib.error.HTTPError as exc:result[path]=exc.code
+          assert result['/']==200 and result['/store/']==200
+          assert result['/staff/command-center/mpw-agents/'] in (301,302,303,401,403)
+          with open(os.environ['RUNNER_TEMP']+'/mpw-main-before.json','w') as f:json.dump(result,f,sort_keys=True)
+          print('MPW_RESTART_BASELINE='+json.dumps(result,sort_keys=True))
+          PY
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Verify only MojPlayWin main Passenger app group and tested panel source
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected_panel="$(sha256sum command_center/templates/command_center/mpw_agent_monitor.html|cut -d' ' -f1)"
+          expected_api="$(sha256sum command_center/mpw_private_telemetry.py|cut -d' ' -f1)"
+          timeout 90s ssh -T -F "$RUNNER_TEMP/mojplaywin-inventory-ssh/config" saeit-cpanel \
+            "python3 -B - '$expected_panel' '$expected_api'" <<'PY'
+          from pathlib import Path
+          import os,sys,hashlib,json
+          root=Path('/home/zomorod2/mojplaywin.com')
+          app=Path('/home/zomorod2/Saeit-staging')
+          private=Path('/home/zomorod2/.private_mojplaywin_main_agents')
+          assert root.is_dir() and not root.is_symlink() and private.is_dir()
+          wsgi=root/'passenger_wsgi.py'
+          conf=(root/'.htaccess').read_text('utf8','replace')
+          assert 'PassengerAppRoot /home/zomorod2/mojplaywin.com' in conf
+          assert 'PassengerBaseURI /' in conf
+          assert "APP='/home/zomorod2/Saeit-staging'" in wsgi.read_text('utf8','replace')
+          assert root.stat().st_uid==private.stat().st_uid==os.geteuid()
+          panel=app/'command_center/templates/command_center/mpw_agent_monitor.html'
+          api=app/'command_center/mpw_private_telemetry.py'
+          assert hashlib.sha256(panel.read_bytes()).hexdigest()==sys.argv[1], 'PANEL_SOURCE_CHANGED'
+          assert hashlib.sha256(api.read_bytes()).hexdigest()==sys.argv[2], 'API_SOURCE_CHANGED'
+          assert 'id="quality"' in panel.read_text('utf8','replace')
+          assert 'worker_execution_receipts_verified' in api.read_text('utf8','replace')
+          report=private/'evolution_runtime_20261018/onepass_agent_quality/onepass_status.json'
+          obj=json.loads(report.read_text('utf8','replace'))
+          assert obj['tenant']=='mojplaywin-main'
+          assert obj['summary']['total']==103
+          assert obj['summary']['healthy']>=26
+          assert obj['open_rework_items']==0
+          mark=root/'tmp/restart.txt'
+          assert mark.is_file() and not mark.is_symlink()
+          assert mark.parent.is_dir() and not mark.parent.is_symlink()
+          print('MPW_MAIN_RESTART_PREFLIGHT=passed')
+          PY
+      - name: Request graceful reload of exact MojPlayWin main Passenger app only
+        id: touched
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 40s ssh -T -F "$RUNNER_TEMP/mojplaywin-inventory-ssh/config" saeit-cpanel 'python3 -B -' <<'PY'
+          from pathlib import Path
+          import os,json,time
+          p=Path('/home/zomorod2/mojplaywin.com/tmp/restart.txt')
+          assert p.is_file() and not p.is_symlink() and p.stat().st_uid==os.geteuid()
+          before=p.stat().st_mtime_ns
+          os.utime(p,None,follow_symlinks=False)
+          after=p.stat().st_mtime_ns
+          assert after>=before
+          print('MPW_MAIN_PASSENGER_RELOAD='+json.dumps({
+            'app_root':'mojplaywin.com','marker_touched':True,
+            'shared_staging_files_modified':False,'private_worker_crons_modified':False,
+            'all_other_document_roots_untouched':True}))
+          PY
+      - name: Ensure main and all protected routes recover to exact baseline
+        id: smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os,json,time,urllib.request,urllib.error
+          before=json.load(open(os.environ['RUNNER_TEMP']+'/mpw-main-before.json'))
+          class StopRedirect(urllib.request.HTTPRedirectHandler):
+              def redirect_request(self,req,fp,code,msg,headers,newurl):return None
+          opener=urllib.request.build_opener(StopRedirect)
+          success=False
+          for attempt in range(12):
+              results={}
+              for path in before:
+                  req=urllib.request.Request('https://mojplaywin.com'+path,headers={
+                    'User-Agent':'MPW-Scoped-Reload-After','Cache-Control':'no-cache'})
+                  try:
+                      with opener.open(req,timeout=15) as h:results[path]=h.status
+                  except urllib.error.HTTPError as exc:results[path]=exc.code
+                  except Exception:results[path]='NETWORK_ERROR'
+              if results==before:
+                  success=True
+                  break
+              time.sleep(3)
+          print('MPW_POST_RESTART_HTTP='+json.dumps(results,sort_keys=True))
+          assert success, 'MPW_MAIN_OR_PROTECTED_ROUTE_REGRESSION'
+          print('MPW_MAIN_PASSENGER_SCOPED_RELOAD_ACCEPTED=true')
+          PY
+      - name: Restore prior allowlisted MojPlayWin code if scoped restart fails
+        if: failure() && steps.touched.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          controller="$(base64 -w0 scripts/mpw_onepass_private_release_cpanel_20261019.py)"
+          timeout 110s ssh -T -F "$RUNNER_TEMP/mojplaywin-inventory-ssh/config" saeit-cpanel \
+            "python3 -c 'import base64;exec(base64.b64decode(\"$controller\"))' rollback '39227291764'" || true
+          timeout 35s ssh -T -F "$RUNNER_TEMP/mojplaywin-inventory-ssh/config" saeit-cpanel \
+            'python3 -B -c "from pathlib import Path; p=Path(\x27/home/zomorod2/mojplaywin.com/tmp/restart.txt\x27); assert not p.is_symlink(); p.touch()"'
+          echo 'MPW_RELOAD_ROLLBACK_ATTEMPTED=true'
+      - name: Erase ephemeral SSH identities
+        if: always()
+        shell: bash
+        run: rm -rf -- "$RUNNER_TEMP/mojplaywin-inventory-ssh"
