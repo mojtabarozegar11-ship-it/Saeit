@@ -1,0 +1,55 @@
+{
+  "schema": "saeit.factory.sites.v1",
+  "note": "Known candidate site entrypoints only. Every entry remains pending until confirmed from authoritative hosting inventory, site owner and adapter checks; this list is not a complete inventory.",
+  "sites": [
+    {
+      "id": "zomorodmelal-main",
+      "url": "https://zomorodmelal.ir/",
+      "topics": [
+        "research",
+        "agriculture",
+        "industry"
+      ],
+      "status": "pending",
+      "owner_verified": false,
+      "adapter_verified": false
+    },
+    {
+      "id": "mojplaywin-main",
+      "url": "https://mojplaywin.com/",
+      "topics": [
+        "game",
+        "education",
+        "technology",
+        "commerce"
+      ],
+      "status": "pending",
+      "owner_verified": false,
+      "adapter_verified": false
+    },
+    {
+      "id": "zomorodmelal-tala",
+      "url": "https://zomorodmelal.ir/tala/",
+      "topics": [
+        "jewelry",
+        "finance",
+        "education"
+      ],
+      "status": "pending",
+      "owner_verified": false,
+      "adapter_verified": false
+    },
+    {
+      "id": "mojplaywin-farnaz",
+      "url": "https://mojplaywin.com/farnaz/",
+      "topics": [
+        "engineering",
+        "design",
+        "education"
+      ],
+      "status": "pending",
+      "owner_verified": false,
+      "adapter_verified": false
+    }
+  ]
+}
