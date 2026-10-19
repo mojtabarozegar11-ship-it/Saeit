@@ -15,7 +15,7 @@ for label,fn in [("ETH",discover_eth),("TRX",discover_trx)]:
  sig=str(inspect.signature(fn))
  started=time.monotonic()
  try:
-  res=fn(now_ms=int(time.time()*1000),lookback_s=60)
+  res=fn(now_ms=int(time.time()*1000),lookback_s=600)
   emit("MPW_CHAIN_PROVIDER",{"asset":label,"status":"success","object_type":type(res).__name__,"events":len(res) if hasattr(res,"__len__") else None,"runtime_seconds":round(time.monotonic()-started,2),"signature":sig})
  except Exception as exc:
   emit("MPW_CHAIN_PROVIDER",{"asset":label,"status":"unavailable","error_type":type(exc).__name__,"runtime_seconds":round(time.monotonic()-started,2),"signature":sig})
@@ -67,7 +67,7 @@ for asset,key in (("ETH","ETH_URL"),("TRX","TRX_URL")):
       "has_address_segment":bool(u and len(u.path.split("/"))>3),
       "no_secrets_disclosed":True})
 for asset,fn in (("ETH",discover_eth),("TRX",discover_trx)):
-    try:fn(now_ms=int(time.time()*1000),lookback_s=60)
+    try:fn(now_ms=int(time.time()*1000),lookback_s=600)
     except Exception as exc:
         cause=getattr(exc,"__cause__",None)
         emit("MPW_INDEXER_FAILURE_CAUSE",{"asset":asset,"error_type":type(exc).__name__,
