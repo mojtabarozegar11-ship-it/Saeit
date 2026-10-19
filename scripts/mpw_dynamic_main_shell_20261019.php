@@ -290,7 +290,10 @@ if (PHP_SAPI==='cli' && ($argv[1]??'')==='selftest') {
         throw new RuntimeException('Games test failed');
     }
 
-    $contactHtml=$prefix.'<header class="site-header">Legacy</header>'.$h.
+    $contactPrefix=str_replace('</head>',
+        '<link rel="icon" href="/old-company-icon.png">'.
+        '<meta property="og:description" content="Old generic text"></head>',$prefix);
+    $contactHtml=$contactPrefix.'<header class="site-header">Legacy</header>'.$h.
         '<main id="main"><h1>Talk to MojPlayWin.</h1>'.
         '<article class="mpw-page-card"><small>Coming soon</small><h2>Business</h2><p>Business contact will be published only after the mailbox is operational.</p></article>'.
         '<article class="mpw-page-card"><small>Coming soon</small><h2>Press</h2><p>Press resources will be added with verified public releases.</p></article>'.
