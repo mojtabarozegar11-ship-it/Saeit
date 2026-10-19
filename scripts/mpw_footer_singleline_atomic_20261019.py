@@ -63,6 +63,8 @@ def before_guard():
         if ref not in rewrite:fail("Required static route no longer isolated: "+slug)
     if "/design-preview-20261017/production-home-20261017.html" not in rewrite:
         fail("Actual homepage static rewrite has changed")
+    if "_mpw_dynamic_main_shell_20261019.php" not in rewrite:
+        fail("Exact 19-route PHP shell owner changed")
     wsgi=ROOT/"passenger_wsgi.py"
     if not wsgi.is_file() or wsgi.is_symlink() or "Saeit-staging" not in wsgi.read_text("utf-8",errors="replace"):
         fail("Wrong MojPlayWin app template origin")
