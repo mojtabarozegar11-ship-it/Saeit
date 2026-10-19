@@ -8,8 +8,15 @@ printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.repl
 chmod 600 "$d/"*
 ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
 ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
-ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
-test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+# Pinned key scan is read-only; retry transient VPS MaxStartups resets safely.
+for attempt in 1 2 3 4; do
+  if ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null &&
+     test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"; then
+    break
+  fi
+  if test "$attempt" = 4; then echo 'Verified VPS host key temporarily unreachable' >&2; exit 1; fi
+  sleep $((attempt*3))
+done
 cat > "$d/config" <<EOF
 Host vps
   HostName 178.239.147.150
@@ -38,8 +45,14 @@ Host *
   RequestTTY no
 EOF
 chmod 600 "$d/config"
-timeout 30s ssh -F "$d/config" vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null
-test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+for attempt in 1 2 3 4; do
+  if timeout 30s ssh -F "$d/config" vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.known" 2>/dev/null &&
+     test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"; then
+    break
+  fi
+  if test "$attempt" = 4; then echo 'Verified hosting key temporarily unreachable' >&2; exit 1; fi
+  sleep $((attempt*3))
+done
 # Keep one authenticated, host-key-pinned connection open for all subsequent
 # page/site actions. Prevents VPS SSH MaxStartups rate-limit on rapid workflows.
 for i in 1 2 3 4; do
