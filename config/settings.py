@@ -119,8 +119,12 @@ REST_FRAMEWORK = {
 # cPanel/Passenger deployments commonly terminate TLS at the web server.
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 SECURE_SSL_REDIRECT = env("SECURE_SSL_REDIRECT", default=False)
-SESSION_COOKIE_SECURE = env("SESSION_COOKIE_SECURE", default=False)
-CSRF_COOKIE_SECURE = env("CSRF_COOKIE_SECURE", default=False)
+SESSION_COOKIE_SECURE = env("SESSION_COOKIE_SECURE", default=not DEBUG)
+CSRF_COOKIE_SECURE = env("CSRF_COOKIE_SECURE", default=not DEBUG)
 SECURE_HSTS_SECONDS = env("SECURE_HSTS_SECONDS", default=0)
 SECURE_HSTS_INCLUDE_SUBDOMAINS = env("SECURE_HSTS_INCLUDE_SUBDOMAINS", default=False)
 SECURE_HSTS_PRELOAD = env("SECURE_HSTS_PRELOAD", default=False)
+# Production-safe defaults. HSTS and HTTPS redirects are only enforced at
+# the separately verified cPanel TLS termination layer.
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"

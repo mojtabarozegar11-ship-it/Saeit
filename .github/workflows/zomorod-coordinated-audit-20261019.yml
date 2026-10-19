@@ -1,0 +1,60 @@
+name: Zomorod coordinated P0-P3 truthful readiness
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/zomorod-coordinated-audit-20261019.yml'
+      - 'scripts/zomorod_public_readiness_20261019.py'
+      - 'command_center/adapters.py'
+      - 'command_center/views.py'
+      - 'passenger_wsgi.py'
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/zomorod-coordinated-audit-20261019.yml'
+      - 'scripts/zomorod_public_readiness_20261019.py'
+      - 'command_center/**'
+      - 'passenger_wsgi.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-coordinated-readonly
+  cancel-in-progress: false
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Run read-only probe regression tests
+        run: python -m unittest discover -s tests -p 'test_zomorod_readiness_20261019.py' -v
+      - name: Compile Python source
+        run: python -m py_compile passenger_wsgi.py command_center/adapters.py command_center/views.py scripts/zomorod_public_readiness_20261019.py
+  public-http:
+    if: github.event_name != 'pull_request'
+    needs: contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check nine public routes without writing to any site
+        shell: bash
+        run: |
+          set -o pipefail
+          python scripts/zomorod_public_readiness_20261019.py | tee "$RUNNER_TEMP/zomorod-readiness.json"
+      - name: Save all results including HTTP failures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zomorod-readonly-p0p3-readiness
+          path: ${{ runner.temp }}/zomorod-readiness.json
+          if-no-files-found: warn
+          retention-days: 14

@@ -4,6 +4,7 @@ from django.http import JsonResponse
 from django.shortcuts import render
 from django.views.decorators.http import require_GET
 from .overview import build_overview
+from .adapters import snapshot
 from .catalog import MODULES, AGENT_SETTINGS, localized
 from core.models import Agent, ApprovalRequest, NewsletterStory
 from django.contrib.auth import get_user_model
@@ -33,9 +34,25 @@ def dashboard(request):
 @staff_member_required
 @require_GET
 def overview_api(request):
-    # No adapter connected: empty observations and workstreams are intentionally unknown.
-    data = build_overview([], {})
-    data["expected_components"] = [{"id": name, "state": "unknown", "reason": "adapter_not_connected"} for name in COMPONENTS]
+    db = snapshot()
+    tasks = db["tasks"]
+    data = build_overview([], {
+        "django_agent_tasks": {
+            "total": tasks["total"],
+            "completed": tasks["completed"],
+            "verified": 0,  # Database completion alone is not independently verified.
+        },
+    })
+    data["database_snapshot"] = {
+        "captured_at": db["captured_at"], "source": db["source"],
+        "scope": db["scope"], "agents": db["agents"],
+        "tasks": tasks, "approvals": db["approvals"],
+    }
+    data["expected_components"] = [
+        {"id": name, "state": "unknown", "reason": "runtime_heartbeat_not_verified"
+         if name == "agents" else "adapter_not_connected"}
+        for name in COMPONENTS
+    ]
     response = JsonResponse(data)
     response["Cache-Control"] = "no-store"
     return response
