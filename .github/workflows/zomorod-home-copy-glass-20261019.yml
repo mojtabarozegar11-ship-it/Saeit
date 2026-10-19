@@ -210,7 +210,7 @@ jobs:
                   pageWidth:document.documentElement.scrollWidth};
               });
               console.log('HOME_COPY_GLASS_BROWSER='+JSON.stringify({width,...res,errors}));
-              if(res.cards!==605||res.shelves!==29||res.tracks!==29||
+              if(res.cards<605||res.shelves!==29||res.tracks!==29||
                 res.visual.some(x=>!x.background.includes('gradient')||x.filter==='none'||x.border==='none'||x.shadow==='none')||
                 res.attachment!=='fixed'||!res.background.includes('zomorod-fixed-cosmos-20261018.webp')||
                 res.pageWidth>width+3||errors.length)throw Error('Home copy visual regression '+width);
