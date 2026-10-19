@@ -140,9 +140,123 @@ def finalize(root, recipe, digest):
     return True
 
 
+
+def consumer_paths(root, recipe, version):
+    if not SLUG.fullmatch(recipe) or not DIGEST.fullmatch(version):
+        raise ValueError("CONSUMER_ID_INVALID")
+    return (root / "customer-packages" / recipe / version,
+            root / "customer-receipts" / recipe / (version + ".json"))
+
+
+def verify_consumer(root, recipe, version, zipfile_path, manifest_path):
+    """Proof of usable PRIVATE buyer package bound to prior technical receipt."""
+    if any(p.is_symlink() or not p.is_file() for p in (zipfile_path,manifest_path)):
+        raise ValueError("CONSUMER_UPLOAD_INCOMPLETE")
+    if not 0 < zipfile_path.stat().st_size <= MAX_ARCHIVE_BYTES:
+        raise ValueError("CONSUMER_FILE_TOO_LARGE")
+    if not 0 < manifest_path.stat().st_size <= 100000:
+        raise ValueError("CONSUMER_MANIFEST_SIZE")
+    meta=json.loads(manifest_path.read_text(encoding="utf8"))
+    if not isinstance(meta,dict) or meta.get("schema")!="saeit.factory.consumer-package.v1":
+        raise ValueError("CONSUMER_SCHEMA_INVALID")
+    source=root/"packages"/recipe
+    found=False
+    if not source.is_dir() or source.is_symlink():
+        raise ValueError("CONSUMER_ORIGINAL_MISSING")
+    for file in source.glob("*.json"):
+        if file.is_symlink() or not file.is_file() or not DIGEST.fullmatch(file.stem):
+            raise ValueError("CONSUMER_SOURCE_UNSAFE")
+        entry=json.loads(file.read_text("utf8"))
+        if (entry.get("recipe")==recipe and entry.get("source_sha256")==version
+                and entry.get("artifact_sha256")==meta.get("factory_internal_zip_sha256")
+                and status(root,recipe,file.stem)):
+            found=True
+            break
+    if not found:
+        raise ValueError("CONSUMER_FACTORY_VERSION_NOT_VERIFIED")
+    if (meta.get("product_id")!=recipe or meta.get("factory_source_sha256")!=version
+            or meta.get("technical_buyer_package_verified") is not True
+            or meta.get("consumer_cli_smoke_examples_passed")!=2
+            or meta.get("commercial_release") is not False
+            or meta.get("public_download_allowed") is not False
+            or meta.get("eligible_for_commercial_listing") is not False
+            or meta.get("rights_and_license_review_completed") is not False
+            or meta.get("independent_domain_review_completed") is not False
+            or meta.get("price") is not None
+            or meta.get("package_bytes")!=zipfile_path.stat().st_size
+            or meta.get("package_sha256")!=sha256(zipfile_path)):
+        raise ValueError("CONSUMER_SHA_OR_COMMERCE_HOLD_INVALID")
+    with zipfile.ZipFile(str(zipfile_path)) as z:
+        infos=z.infolist()
+        if not infos or len(infos)>MAX_FILES or sum(t.file_size for t in infos)>MAX_UNPACKED_BYTES:
+            raise ValueError("CONSUMER_EXPANSION_LIMIT")
+        needed={"product/calculator.py","product/example_inputs.json",
+                "guide/START_HERE.md","qa/SHA256SUMS.txt","license/REVIEW_REQUIRED.txt"}
+        names={t.filename for t in infos}
+        if not needed.issubset(names) or z.testzip() is not None:
+            raise ValueError("CONSUMER_ZIP_FILE_CONTRACT_INVALID")
+        for info in infos:
+            name=info.filename
+            if (name.startswith("/") or "\\" in name or ".." in name.split("/")
+                    or (info.external_attr >> 16) & 0o170000==0o120000):
+                raise ValueError("CONSUMER_ZIP_UNSAFE")
+        if b"NOT LICENSED FOR PUBLIC RESALE" not in z.read("license/REVIEW_REQUIRED.txt"):
+            raise ValueError("CONSUMER_LICENSE_HOLD_INVALID")
+        for line in z.read("qa/SHA256SUMS.txt").decode("utf8").splitlines():
+            sha,sep,filename=line.partition("  ")
+            if not sep or not DIGEST.fullmatch(sha) or filename not in names:
+                raise ValueError("CONSUMER_MEMBER_HASH_RECORD_INVALID")
+            if hashlib.sha256(z.read(filename)).hexdigest()!=sha:
+                raise ValueError("CONSUMER_MEMBER_HASH_MISMATCH")
+    return meta
+
+
+def consumer_status(root,recipe,version):
+    dest,receipt=consumer_paths(root,recipe,version)
+    if dest.is_symlink() or receipt.is_symlink() or not receipt.is_file():
+        return False
+    try:
+        state=json.loads(receipt.read_text("utf8"))
+        info=verify_consumer(root,recipe,version,dest/"customer-package.zip",
+                             dest/"candidate_manifest.json")
+        return (state.get("schema")=="saeit.store.consumer-private-receipt.v1"
+                and state.get("status")=="received_private_customer"
+                and state.get("product_id")==recipe
+                and state.get("version")==version
+                and state.get("package_sha256")==info["package_sha256"])
+    except (OSError,ValueError,TypeError,zipfile.BadZipFile):
+        return False
+
+
+def consumer_finalize(root,recipe,version):
+    target,receipt=consumer_paths(root,recipe,version)
+    incoming=root/"incoming"/"consumer"/recipe/version
+    bundle=incoming/"customer-package.zip.partial"
+    meta=incoming/"candidate_manifest.json.partial"
+    doc=verify_consumer(root,recipe,version,bundle,meta)
+    if consumer_status(root,recipe,version):
+        return True
+    secure_directory(target)
+    dest_zip=target/"customer-package.zip"
+    dest_manifest=target/"candidate_manifest.json"
+    if dest_zip.exists() or dest_manifest.exists() or receipt.exists():
+        raise ValueError("CONSUMER_EXISTING_VERSION_CONFLICT")
+    for src,dest in ((bundle,dest_zip),(meta,dest_manifest)):
+        os.chmod(str(src),0o600)
+        os.replace(str(src),str(dest))
+    if sha256(dest_zip)!=doc["package_sha256"]:
+        raise ValueError("CONSUMER_COPY_SHA_FAILED")
+    atomic_json(receipt,{"schema":"saeit.store.consumer-private-receipt.v1",
+        "product_id":recipe,"version":version,"package_sha256":doc["package_sha256"],
+        "status":"received_private_customer","public_listing":False,
+        "order_fulfillment_enabled":False,"independent_approval_pending":True})
+    return True
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser()
-    parser.add_argument("mode", choices=("prepare", "status", "finalize"))
+    parser.add_argument("mode", choices=("prepare", "status", "finalize",
+                                                    "consumer-prepare","consumer-status","consumer-finalize"))
     parser.add_argument("recipe")
     parser.add_argument("digest")
     parser.add_argument("--root", required=True)
@@ -150,7 +264,19 @@ def main(argv=None):
     if not SLUG.fullmatch(args.recipe) or not DIGEST.fullmatch(args.digest):
         raise ValueError("INVALID_RECIPE_OR_DIGEST")
     root = Path(args.root).expanduser().resolve()
-    if args.mode == "prepare":
+    if args.mode == "consumer-prepare":
+        secure_directory(root)
+        secure_directory(root/"incoming"/"consumer"/args.recipe/args.digest)
+        print("STORE_CONSUMER_PRIVATE_INBOX_READY")
+    elif args.mode == "consumer-finalize":
+        consumer_finalize(root,args.recipe,args.digest)
+        print("STORE_CONSUMER_PRIVATE_RECEIPT_CREATED")
+    elif args.mode == "consumer-status":
+        if not consumer_status(root,args.recipe,args.digest):
+            print("STORE_CONSUMER_NOT_RECEIVED")
+            return 1
+        print("STORE_CONSUMER_PRIVATE_RECEIPT_VERIFIED")
+    elif args.mode == "prepare":
         secure_directory(root)
         secure_directory(root / "incoming" / args.recipe)
         print("STORE_PRIVATE_INBOX_READY")
