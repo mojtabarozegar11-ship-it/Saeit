@@ -77,7 +77,8 @@ jobs:
           for line in rules:
               if "PassengerAppRoot" in line or "PassengerStartupFile" in line or "PassengerPython" in line:
                   print("PASSENGER_DIRECTIVE",line[:240])
-          for p in [app/"core/templates/mojplaywin/footer.html",
+          for p in [app/"core/templates/base.html",
+                    app/"core/templates/mojplaywin/footer.html",
                     app/"core/templates/mojplaywin/site_base.html",
                     app/"core/templates/mojplaywin/home.html",
                     root/"passenger_wsgi.py",
@@ -92,6 +93,8 @@ jobs:
                 "discover_nav":"MojPlayWin discover" in text,
                 "founder": "Mojtaba Roozegar" in text,
                 "new_line":"mpw-legal-one-line" in text,
-                "footer_include":"mojplaywin/footer.html" in text}
+                "footer_include":"mojplaywin/footer.html" in text,
+                "home_2022_bar":"© 2022 MojPlayWin. All rights reserved." in text,
+                "home_footer_phrase":"Built for research, creativity and responsible commerce." in text}
               print("FILE_STATUS",p.name,str(p.parent.name),len(raw),hashlib.sha256(raw).hexdigest()[:12],flags)
           '"'"''
