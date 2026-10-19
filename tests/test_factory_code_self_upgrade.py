@@ -21,17 +21,17 @@ class CodeSelfUpgradeTests(unittest.TestCase):
         self.src=self.root/"checkout"
         (self.src/"scripts").mkdir(parents=True)
         self.output=self.root/"private-candidates"
-        for name,_ in upgrader.SAFE_FIXES:
+        for name, *_ in upgrader.SAFE_FIXES:
             p=self.src/name
             p.parent.mkdir(parents=True,exist_ok=True)
             shutil.copyfile(str(ROOT/name), str(p))
 
     def test_edits_source_with_measured_security_regression_improvement(self):
         state=upgrader.generate(self.src,self.output)
-        self.assertEqual(state["candidate_count"],2)
-        self.assertEqual(state["factory_python_files_scanned"],2)
-        self.assertEqual(state["private_verified_code_edits"],2)
-        self.assertEqual(state["candidates_with_measured_improvement"],2)
+        self.assertEqual(state["candidate_count"],4)
+        self.assertEqual(state["factory_python_files_scanned"],4)
+        self.assertEqual(state["private_verified_code_edits"],4)
+        self.assertEqual(state["candidates_with_measured_improvement"],4)
         self.assertFalse(state["whole_code_autonomous_evolution_complete"])
         self.assertEqual(state["production_code_promotions"],0)
         self.assertEqual(state["generation_number_proven_in_production"],0)
@@ -44,7 +44,7 @@ class CodeSelfUpgradeTests(unittest.TestCase):
             original=(self.src/item["path"]).read_bytes()
             self.assertEqual(upgrader.digest_bytes(original),item["baseline_sha256"])
         self.assertEqual(json.loads((self.output/"evolution-proof.json").read_text())
-                         ["candidate_count"],2)
+                         ["candidate_count"],4)
 
     def test_vps_installer_uses_real_checked_source_argument(self):
         installer=(ROOT/"deploy/install_factory_code_self_upgrade.sh").read_text()
