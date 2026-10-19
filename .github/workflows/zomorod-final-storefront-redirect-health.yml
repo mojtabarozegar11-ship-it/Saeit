@@ -119,6 +119,7 @@ jobs:
           print("ZM_ADD_RELEASE_PRIVATE_LENGTH="+str(len(a)))
           print("ZM_ADD_RELEASE_PUBLIC_LENGTH="+str(len(b)))
           PY
+      # Release revision: ensure the regression fixture is clean before any live mutation.
       - name: Publish reviewed original free wheat tool in native Zomorod store only
         if: github.event_name == 'push' && contains(github.event.head_commit.message, '[approved-zm-free-wheat-live]')
         shell: bash
