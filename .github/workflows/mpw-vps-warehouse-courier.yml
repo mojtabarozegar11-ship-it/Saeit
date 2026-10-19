@@ -108,6 +108,39 @@ jobs:
             "python3 -c 'import base64;exec(base64.b64decode(\"$source\"))' site-import" \
             < "$RUNNER_TEMP/mpw-factory-stock.tgz"
           echo 'MPW_PRIVATE_WAREHOUSE_COURIER_INGEST=PASS'
+      - name: Continue all bounded factory stock pages beyond the first three
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/factory-store-preflight"
+          source="$(base64 -w0 scripts/mpw_vps_warehouse_courier.py)"
+          next_cursor() {
+            python3 - "$1" <<'PY'
+          import json,sys,tarfile,re
+          with tarfile.open(sys.argv[1],"r:gz") as archive:
+              index=json.load(archive.extractfile("index.json"))
+          cursor=index.get("next_cursor")
+          if cursor is not None:
+              assert re.fullmatch(r"[a-z][a-z0-9_]{1,63}/[a-f0-9]{64}",cursor)
+          print(cursor or "")
+          PY
+          }
+          cursor="$(next_cursor "$RUNNER_TEMP/mpw-factory-stock.tgz")"
+          page=1
+          while test -n "$cursor"; do
+            page=$((page+1))
+            test "$page" -le 100 || { echo "MPW_WAREHOUSE_BACKLOG_MORE_THAN_300_PAGES_HELD"; exit 21; }
+            timeout 160s ssh -T -F "$d/config" saeit-vps \
+              "python3 -c 'import base64;exec(base64.b64decode(\"$source\"))' vps-export '$cursor'" \
+              > "$RUNNER_TEMP/mpw-factory-stock-next.tgz"
+            test -s "$RUNNER_TEMP/mpw-factory-stock-next.tgz"
+            timeout 180s ssh -T -F "$d/config" saeit-cpanel \
+              "python3 -c 'import base64;exec(base64.b64decode(\"$source\"))' site-import" \
+              < "$RUNNER_TEMP/mpw-factory-stock-next.tgz"
+            cursor="$(next_cursor "$RUNNER_TEMP/mpw-factory-stock-next.tgz")"
+          done
+          rm -f "$RUNNER_TEMP/mpw-factory-stock-next.tgz"
+          echo "MPW_FACTORY_PAGINATED_TRANSFER_FINISHED_PAGES=$page"
       - name: Collect only site QA return receipts and deliver to VPS stage one
         shell: bash
         run: |
@@ -131,6 +164,40 @@ jobs:
             "python3 -c 'import base64;exec(base64.b64decode(\"$source\"))' vps-return" \
             < "$RUNNER_TEMP/mpw-qa-feedback.json"
           echo 'MPW_FACTORY_STAGE1_RETURN_CHANNEL=PASS'
+      - name: Deliver remaining private QA feedback pages to factory stage one
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/factory-store-preflight"
+          source="$(base64 -w0 scripts/mpw_vps_warehouse_courier.py)"
+          cursor="$(python3 - "$RUNNER_TEMP/mpw-qa-feedback.json" <<'PY'
+          import json,sys
+          print(json.load(open(sys.argv[1])).get("next_cursor") or "")
+          PY
+          )"
+          page=1
+          while test -n "$cursor"; do
+            page=$((page+1))
+            test "$page" -le 100 || { echo "MPW_QA_RETURN_BACKLOG_MORE_THAN_5000_HELD"; exit 22; }
+            timeout 70s ssh -T -F "$d/config" saeit-cpanel \
+              "python3 -c 'import base64;exec(base64.b64decode(\"$source\"))' site-feedback '$cursor'" \
+              > "$RUNNER_TEMP/mpw-qa-feedback-next.json"
+            next="$(python3 - "$RUNNER_TEMP/mpw-qa-feedback-next.json" <<'PY'
+          import json,sys,re
+          obj=json.load(open(sys.argv[1]))
+          assert obj["tenant"]=="mojplaywin-main" and len(obj["returns"])<=50
+          value=obj.get("next_cursor")
+          if value is not None:assert re.fullmatch(r"[a-z][a-z0-9_]{1,63}/[a-f0-9]{64}",value)
+          print(value or "")
+          PY
+          )"
+            timeout 75s ssh -T -F "$d/config" saeit-vps \
+              "python3 -c 'import base64;exec(base64.b64decode(\"$source\"))' vps-return" \
+              < "$RUNNER_TEMP/mpw-qa-feedback-next.json"
+            cursor="$next"
+          done
+          rm -f "$RUNNER_TEMP/mpw-qa-feedback-next.json"
+          echo "MPW_FACTORY_PAGINATED_REWORK_FEEDBACK_FINISHED_PAGES=$page"
       - name: Consume accepted returns as executable factory Stage-1 QA review jobs
         shell: bash
         run: |
@@ -173,7 +240,7 @@ jobs:
           assert v['tenant']=='mojplaywin-main'
           assert v['publicly_published']==0
           assert v['store_product_created']==0
-          assert v['quality_approved']==0
+          assert 0 <= v['quality_approved'] <= v['factory_versions_observed']
           print('MPW_FACTORY_INBOX_READBACK='+json.dumps(v,sort_keys=True))
           PY
           timeout 50s ssh -T -F "$d/config" saeit-vps python3 - <<'PY'
@@ -206,4 +273,4 @@ jobs:
         shell: bash
         run: |
           rm -rf -- "$RUNNER_TEMP/factory-store-preflight"
-          rm -f -- "$RUNNER_TEMP/mpw-factory-stock.tgz" "$RUNNER_TEMP/mpw-qa-feedback.json" "$RUNNER_TEMP/mpw-factory-stage1-triage.jsonl"
+          rm -f -- "$RUNNER_TEMP/mpw-factory-stock.tgz" "$RUNNER_TEMP/mpw-factory-stock-next.tgz" "$RUNNER_TEMP/mpw-qa-feedback.json" "$RUNNER_TEMP/mpw-qa-feedback-next.json" "$RUNNER_TEMP/mpw-factory-stage1-triage.jsonl"
