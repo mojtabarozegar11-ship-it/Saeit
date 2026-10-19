@@ -48,17 +48,38 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
         repair = load("saeit_factory_rework_cycle",
                       SCRIPTS / "factory_product_rework.py")
         design_state = {"enabled": False, "new_recipes": 0}
+        designer_failures = []
+        source_recoveries = []
         if enable_designer:
             designer = load("saeit_factory_recipe_designer", SCRIPTS / "factory_recipe_designer.py")
-            design_state = designer.cycle(root, seed_file=SCRIPTS.parent / "factory_config" / "design_opportunities.json",
-                                          database=database)
+            try:
+                design_state = designer.cycle(root, seed_file=SCRIPTS.parent / "factory_config" / "design_opportunities.json",
+                                              database=database)
+            except (ValueError, OSError, ArithmeticError) as error:
+                designer_failures.append({"type": type(error).__name__, "reason": str(error)[:400]})
+                design_state["status"] = "needs_rework"
             design_state["enabled"] = True
         admission_failures = []
         recipe_catalog = maker.discover_recipes(recipes, errors=admission_failures)
         recipe_roots = {key: Path(recipes) for key in recipe_catalog}
         generated_root = root / "generated-product-recipes"
         if enable_designer and generated_root.is_dir():
-            generated = maker.discover_recipes(generated_root, errors=admission_failures)
+            generated_failures = []
+            generated = maker.discover_recipes(generated_root, errors=generated_failures)
+            # Admission defects (e.g. missing tests) used to bypass source repair.
+            # Repair only compiler-owned sources with intact, verified provenance.
+            for item in generated_failures:
+                recipe = item["recipe"]
+                try:
+                    recovered = designer.recover_recipe(recipe, generated_root)
+                except (RuntimeError, ValueError, OSError, ArithmeticError) as error:
+                    item["recovery_error"] = str(error)[:400]
+                    admission_failures.append(item)
+                else:
+                    repair.record_failure(root, recipe, RuntimeError(item["reason"]),
+                                          str(generated_root / recipe))
+                    source_recoveries.append(recovered)
+                    generated[recipe] = maker.inspect_recipe(generated_root / recipe)
             if set(generated) & set(recipe_catalog):
                 raise RuntimeError("GENERATED_RECIPE_COLLIDES_WITH_STATIC_SOURCE")
             recipe_catalog.update(generated)
@@ -78,7 +99,6 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
             raise RuntimeError("PRODUCT_RECIPE_DIRECTORY_MISSING")
         produced = []
         failures = []
-        source_recoveries = []
         for recipe in selected:
             source = recipe_roots[recipe] / recipe
             # When an individual product fails, don't lose the prior verified
@@ -86,12 +106,8 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
             try:
                 result = maker.manufacture(recipe, recipe_roots[recipe], root / "digital-products")
             except RuntimeError as failure:
-                # Unexpected runtime failures are not considered successful,
-                # and are not swallowed: only known QA/recipe failures enter
-                # documented rework.
-                code = repair.classify_error(failure)
-                if code == "OTHER_PRODUCTION_ERROR":
-                    raise
+                # Every product runtime failure enters durable rework; healthy
+                # recipes continue. Infrastructure/import errors still propagate.
                 recorded = repair.record_failure(
                     root, recipe, failure,
                     str(source) if source.is_dir() else "recipe_missing")
@@ -100,7 +116,7 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
                         recovered = designer.recover_recipe(recipe, generated_root)
                         result = maker.manufacture(recipe, generated_root, root / "digital-products")
                         source_recoveries.append(recovered)
-                    except (RuntimeError, ValueError, OSError) as recovery_error:
+                    except (RuntimeError, ValueError, OSError, ArithmeticError) as recovery_error:
                         recorded["recovery_error"] = str(recovery_error)[:200]
                         failures.append(recorded)
                         continue
@@ -122,6 +138,7 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
         # It deliberately does not carry a publish=true flag.
         state = {
             "schema_version": 1,
+            "cycle_status": "needs_rework" if failures or admission_failures or designer_failures else "ok",
             "mode": "autonomous_supply_led",
             "depends_on_orders": False,
             "api_usage": "none",
@@ -129,6 +146,7 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
             "build_policy": "all_registered_recipes_sequentially",
             "registered_recipe_count": len(recipe_catalog),
             "recipe_designer": design_state,
+            "designer_failures": designer_failures,
             "source_recoveries": source_recoveries,
             "recipe_admission_failures": admission_failures,
             "product_candidates_processed": dossier["processed_count"],
@@ -161,7 +179,7 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
         maker.atomic_text(root / "production-state.json",
                           json.dumps(state, ensure_ascii=False, sort_keys=True, indent=2) + "\n")
         fcntl.flock(file.fileno(), fcntl.LOCK_UN)
-        return {"status": "needs_rework" if failures or admission_failures else "ok",
+        return {"status": "needs_rework" if failures or admission_failures or designer_failures else "ok",
                 "processed": dossier["processed_count"],
                 "manufactured": len(produced),
                 "new_artifacts": sum(bool(p.get("changed")) for p in produced),
@@ -191,6 +209,8 @@ def main(argv=None):
                        max_products=options.max_products,
                        max_recipes=options.max_recipes, enable_designer=options.enable_designer)
     print("VPS_FACTORY_CYCLE_STATUS=" + result["status"])
+    if result["status"] == "already_running":
+        return 0
     print("VPS_FACTORY_ORDERS_REQUIRED=false")
     print("VPS_FACTORY_PRIVATE_PRODUCT_PACKAGES=" + str(result["manufactured"]))
     print("VPS_FACTORY_ACTUALLY_NEW_PACKAGES=" + str(result.get("new_artifacts", 0)))
