@@ -651,8 +651,8 @@ function updateUI(){
 function buildActions(){
  const order=['wheat','corn','pumpkin','harvest','orchard','barn','mill','market','tower','train','attack','repair','flow-grow','flow-guard','flow-siege','gene-cycle','contract'];
  ui.actions.innerHTML=order.map(name=>{
-  const d=itemDefs[name],cost=name.startsWith('flow-')?'۲۵ 💧':name==='gene-cycle'?'۳ بذر':name==='contract'?'کاروان':Object.entries(d.cost||{}).map(([k,v])=>v+({gold:'🪙',wood:'🪵',food:'🌾',army:'🛡'}[k])).join(' ');
-  return '<button class="tool '+(name==='attack'?'war':name==='harvest'?'special':'')+'" data-action="'+name+'" type="button"><span class="ico">'+d.icon+'</span><span class="title">'+d.label+'</span><span class="cost">'+(cost||'آماده')+'</span></button>';
+  const d=itemDefs[name],cost=name.startsWith('flow-')?'۲۵ 💧':name==='gene-cycle'?'گزینش ژن':name==='contract'?'کاروان':Object.entries(d.cost||{}).map(([k,v])=>v+({gold:'🪙',wood:'🪵',food:'🌾',army:'🛡'}[k])).join(' ');
+  return '<button class="tool '+(name==='attack'?'war':name==='harvest'?'special':name.startsWith('flow-')?'river':name==='gene-cycle'?'gene':name==='contract'?'caravan':'')+'" data-action="'+name+'" type="button" aria-label="'+d.label+'"><span class="ico">'+d.icon+'</span><span class="title">'+d.label+'</span><span class="cost">'+(cost||'آماده')+'</span></button>';
  }).join('');
  ui.actions.addEventListener('click',e=>{const b=e.target.closest('button[data-action]');if(b)action(b.dataset.action);});
  ui.enemies.addEventListener('click',e=>{
