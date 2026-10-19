@@ -1,4 +1,4 @@
-name: MojPlayWin validated chain indexer observation
+name: MojPlayWin resolve actual customer payment request endpoints
 on:
   push:
     branches: [main]
