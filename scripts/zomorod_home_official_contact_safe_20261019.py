@@ -14,8 +14,8 @@ HOME=Path("/home/zomorod2/public_html/index.html")
 BACKUPS=Path("/home/zomorod2/.backups/zomorod-official-contacts-20261019")
 STYLE_ID="zm-official-contacts-glass-css-20261019"
 PANEL_ID="zm-official-contacts-20261019"
-SHELVES='<div class="orbit-shelves wrap" id="orbit-shelves"></div>'
-FOOTER='<footer aria-label="پایان صفحه و اطلاعات شرکت" class="footer" id="site-footer">'
+SHELVES='id="orbit-shelves"'
+FOOTER='id="site-footer"'
 STYLE='''<style id="zm-official-contacts-glass-css-20261019">
 /* Contact-only glass after the final shelf. No existing controls or cards touched. */
 body #zm-official-contacts-20261019{
@@ -164,13 +164,16 @@ def transform(original:bytes)->bytes:
       'id="orbital-cards"', 'id="solar-stage"', 'ZOMOROD_ORBIT_DATA'
     ):
         if required not in html:raise RuntimeError("Protected live marker missing: "+required)
-    if html.count(SHELVES)!=1 or html.count(FOOTER)!=1:
-        raise RuntimeError("Non-unique homepage/final footer insertion anchor")
-    shelf_index=html.index(SHELVES)
-    foot_index=html.index(FOOTER)
-    if shelf_index>=foot_index or foot_index-shelf_index>30000:
-        raise RuntimeError("Last shelf and footer no longer adjacent; manual review required")
-    after=html.replace("</head>",STYLE+"</head>",1).replace(FOOTER,PANEL+FOOTER,1).encode("utf-8")
+    shelves=list(re.finditer(r'<div\b[^>]*\bid="orbit-shelves"[^>]*>',html))
+    footers=list(re.finditer(r'<footer\b[^>]*\bid="site-footer"[^>]*>',html))
+    if len(shelves)!=1 or len(footers)!=1:
+        raise RuntimeError("Non-unique homepage last-shelf or footer tag")
+    shelf_index=shelves[0].start()
+    foot_index=footers[0].start()
+    if shelf_index>=foot_index:
+        raise RuntimeError("Footer precedes last shelf; refusing deployment")
+    footer_open=footers[0].group(0)
+    after=html.replace("</head>",STYLE+"</head>",1).replace(footer_open,PANEL+footer_open,1).encode("utf-8")
     if after.replace(STYLE.encode(),b"",1).replace(PANEL.encode(),b"",1)!=original:
         raise RuntimeError("Existing content was modified")
     return after
@@ -196,7 +199,8 @@ def atomic(path:Path,data:bytes,mode:int):
 def selftest():
     sample=('<html><head></head><body><div id="main-view">'
       '<div id="orbital-cards"></div><div id="solar-stage"></div>'
-      +SHELVES+'</div>'+FOOTER+'</footer>'
+      +'<div class="orbit-shelves wrap" id="orbit-shelves"></div></div>'
+      +'<footer class="footer" id="site-footer"></footer>'
       '<style id="zm-home-copy-cinematic-glass-20261019"></style>'
       '<style id="zm-home-header-footer-glass-20261019"></style>'
       '<style id="zm-glass-row-headers-20261018"></style>'
@@ -207,7 +211,7 @@ def selftest():
     result=transform(sample)
     assert result.replace(STYLE.encode(),b"",1).replace(PANEL.encode(),b"",1)==sample
     assert result.count(('id="'+PANEL_ID+'"').encode())==1
-    assert result.index(SHELVES.encode())<result.index(PANEL_ID.encode())<result.index(FOOTER.encode())
+    assert result.index(SHELVES.encode())<result.index(('id="'+PANEL_ID+'"').encode())<result.index(FOOTER.encode())
     assert all(x in PANEL for x in ("tel:+989022048691", "https://zomorodmelal.ir/contact/", "راه‌های ارتباطی رسمی"))
     assert all(x in STYLE for x in ("backdrop-filter", "box-shadow", "prefers-reduced-motion", ".zm-contact-grid"))
     print("OFFICIAL_CONTACT_PANEL_SELFTEST=passed",flush=True)
