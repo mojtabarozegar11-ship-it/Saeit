@@ -197,9 +197,27 @@ jobs:
           count="$(find "$root/receipts/farm_enterprise_economics" -maxdepth 1 -type f -name '*.json' | wc -l)"
           test "$count" -ge 1
           echo CPANEL_PRIVATE_PRODUCT_RECEIPT_COUNT="$count"
+          total="$(find "$root/receipts" -mindepth 2 -maxdepth 2 -type f -name '*.json' | wc -l)"
+          test "$total" -ge 1
+          echo CPANEL_PRIVATE_ALL_PRODUCT_RECEIPTS="$total"
           echo CPANEL_PRIVATE_STORE_BRIDGE_OK
           echo CPANEL_PUBLIC_LISTING_UNMODIFIED
           REMOTE
+      - name: Verify durable VPS three-product round-robin checkpoint
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -F "$RUNNER_TEMP/saeit-store/config" saeit-vps 'python3 -' <<'PY'
+          import json
+          from pathlib import Path
+          path=Path.home()/"factory-runtime/private/autonomous-product-cycle/store-send-cursor.json"
+          assert path.is_file() and not path.is_symlink()
+          record=json.loads(path.read_text(encoding="utf-8"))
+          assert record.get("schema")=="saeit.factory.store-private-delivery-cursor.v1"
+          assert isinstance(record.get("last_recipe"),str) and record["last_recipe"]
+          print("VPS_STORE_SENDER_ROTATION_CURSOR="+record["last_recipe"])
+          print("VPS_STORE_DELIVERY_NOT_PUBLICLY_APPROVED=TRUE")
+          PY
       - name: Remove runner SSH material
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/saeit-store"
