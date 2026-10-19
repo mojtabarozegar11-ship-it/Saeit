@@ -31,10 +31,12 @@ SCRIPTS = Path(__file__).resolve().parent
 
 
 def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
-              enable_designer=False, enable_design_intake=False):
+              enable_designer=False, enable_design_intake=False, design_capacity=1):
     if (type(max_products) is not int or not 1<=max_products<=100
             or max_recipes is not None and (type(max_recipes) is not int or max_recipes<1)):
         raise ValueError('BOUNDED_LIMIT_REQUIRED')
+    if type(design_capacity) is not int or not 1 <= design_capacity <= 20:
+        raise ValueError('DESIGN_CAPACITY_INVALID')
     started=time.time()
     root = Path(output).expanduser().resolve()
     root.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -77,7 +79,7 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
                     designer_failures.append({'type':'engineering_intake','reason':str(error)[:400]})
             try:
                 design_state = designer.cycle(root, seed_file=SCRIPTS.parent / "factory_config" / "design_opportunities.json",
-                                              database=database)
+                                              database=database, max_designs=design_capacity)
             except (ValueError, OSError, ArithmeticError, sqlite3.Error) as error:
                 designer_failures.append({"type": type(error).__name__, "reason": str(error)[:400]})
                 design_state["status"] = "needs_rework"
@@ -129,9 +131,14 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
         if not Path(recipes).is_dir():
             raise RuntimeError("PRODUCT_RECIPE_DIRECTORY_MISSING")
         produced = []
+        new_product_ids = []
+        updated_product_ids = []
         failures = []
         for recipe in selected:
             source = recipe_roots[recipe] / recipe
+            previous_product = root / 'digital-products' / recipe
+            already_manufactured = ((previous_product / (recipe + '-internal-qa.zip')).is_file()
+                                    or (previous_product / 'manufacturing_manifest.json').is_file())
             # When an individual product fails, don't lose the prior verified
             # ZIP or prevent another unrelated recipe from being built.
             try:
@@ -155,6 +162,8 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
                     failures.append(recorded)
                     continue
             produced.append(result)
+            if result.get('changed'):
+                (updated_product_ids if already_manufactured else new_product_ids).append(recipe)
             manifest = root / "digital-products" / recipe / "manufacturing_manifest.json"
             if manifest.is_file():
                 repair.record_technical_recovery(
@@ -190,6 +199,12 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
             "research_dossiers_updated": dossier["updated_count"],
             "built_product_count": len(produced),
             "new_or_updated_product_count": sum(bool(p.get("changed")) for p in produced),
+            "truly_new_product_count": len(new_product_ids),
+            "updated_existing_product_count": len(updated_product_ids),
+            "truly_new_product_ids": new_product_ids,
+            "updated_existing_product_ids": updated_product_ids,
+            "functional_prototype_only": True,
+            "designs_processed_per_cycle_limit": design_capacity,
             "unchanged_product_rechecks": sum(not bool(p.get("changed")) for p in produced),
             "built_product_recipes": [p["recipe"] for p in produced],
             "artifact_qa_passed": bool(produced) and not failures and not admission_failures and all(
@@ -237,6 +252,10 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
                   'consecutive_degraded_cycles':0 if healthy else counter('consecutive_degraded_cycles')+1,
                   'new_or_updated_artifacts_total':counter('new_or_updated_artifacts_total')+state['new_or_updated_product_count'],
                   'new_or_updated_artifacts_this_cycle':state['new_or_updated_product_count'],
+                  'new_distinct_product_ids_total':counter('new_distinct_product_ids_total')+len(new_product_ids),
+                  'updated_existing_product_versions_total':counter('updated_existing_product_versions_total')+len(updated_product_ids),
+                  'new_distinct_product_ids_this_cycle':len(new_product_ids),
+                  'updated_existing_product_versions_this_cycle':len(updated_product_ids),
                   'last_new_artifact_at_utc':state['cycle_finished_at_utc'] if fresh else health.get('last_new_artifact_at_utc'),
                   'consecutive_zero_new_cycles':0 if fresh else counter('consecutive_zero_new_cycles')+1,
                   'zero_new_products_reason_code':reason,
@@ -251,6 +270,8 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
                 "manufactured": len(produced),
                 "new_artifacts": sum(bool(p.get("changed")) for p in produced),
                 "updated": dossier["updated_count"],
+                "new_distinct_products": len(new_product_ids),
+                "updated_existing_versions": len(updated_product_ids),
                 "failed": len(failures), "rework_queue": rework_counts,
                 "registered_recipes": len(recipe_catalog), "new_recipe_count": design_state["new_recipes"],
                 "research_rework_queue": research_rework_counts}
@@ -264,6 +285,8 @@ def main(argv=None):
     p.add_argument("--max-products", type=int, default=25)
     p.add_argument("--enable-designer", action="store_true")
     p.add_argument("--enable-design-intake", action="store_true")
+    p.add_argument("--design-capacity", type=int, default=6,
+                   help="Maximum validated synthesis requests per VPS tick (1-20).")
     p.add_argument(
         "--max-recipes", type=int, default=None,
         help="Optional positive limit; by default build every registered recipe.",
@@ -276,13 +299,16 @@ def main(argv=None):
     result = run_cycle(options.db, options.out, options.recipes,
                        max_products=options.max_products,
                        max_recipes=options.max_recipes, enable_designer=options.enable_designer,
-                       enable_design_intake=options.enable_design_intake)
+                       enable_design_intake=options.enable_design_intake,
+                       design_capacity=options.design_capacity)
     print("VPS_FACTORY_CYCLE_STATUS=" + result["status"])
     if result["status"] == "already_running":
         return 0
     print("VPS_FACTORY_ORDERS_REQUIRED=false")
     print("VPS_FACTORY_PRIVATE_PRODUCT_PACKAGES=" + str(result["manufactured"]))
     print("VPS_FACTORY_ACTUALLY_NEW_PACKAGES=" + str(result.get("new_artifacts", 0)))
+    print("VPS_FACTORY_FIRST_TIME_PRODUCT_IDS=" + str(result.get("new_distinct_products", 0)))
+    print("VPS_FACTORY_UPDATED_EXISTING_PRODUCT_IDS=" + str(result.get("updated_existing_versions", 0)))
     print("VPS_FACTORY_REGISTERED_BUILD_RECIPES=" + str(result.get("registered_recipes", 0)))
     print("VPS_FACTORY_NEW_SYNTHESIZED_RECIPES=" + str(result.get("new_recipe_count", 0)))
     print("VPS_FACTORY_API_AND_TOKEN_USAGE=0")

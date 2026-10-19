@@ -36,6 +36,103 @@
       "schema": "saeit.factory.engineering-brief.v1",
       "family_id": "F27",
       "blueprint": "unit_margin"
+    },
+    {
+      "schema": "saeit.factory.engineering-brief.v1",
+      "family_id": "F27",
+      "blueprint": "inventory_coverage"
+    },
+    {
+      "schema": "saeit.factory.engineering-brief.v1",
+      "family_id": "F27",
+      "blueprint": "water_volume"
+    },
+    {
+      "schema": "saeit.factory.engineering-brief.v1",
+      "family_id": "F27",
+      "blueprint": "net_margin"
+    },
+    {
+      "schema": "saeit.factory.engineering-brief.v1",
+      "family_id": "F27",
+      "blueprint": "labour_capacity"
+    },
+    {
+      "schema": "saeit.factory.engineering-brief.v1",
+      "family_id": "F27",
+      "blueprint": "repair_duration"
+    },
+    {
+      "schema": "saeit.factory.engineering-brief.v1",
+      "family_id": "F28",
+      "mathematical_definition": {
+        "title": "Measured irrigation water gap",
+        "problem": "Calculate the difference between required and available irrigation water, including negative surplus.",
+        "expression": "required_water - available_water",
+        "inputs": [
+          {
+            "name": "required_water",
+            "unit": "litres",
+            "minimum": 0,
+            "maximum": 1000
+          },
+          {
+            "name": "available_water",
+            "unit": "litres",
+            "minimum": 0,
+            "maximum": 1000
+          }
+        ],
+        "output_unit": "litres"
+      }
+    },
+    {
+      "schema": "saeit.factory.engineering-brief.v1",
+      "family_id": "F28",
+      "mathematical_definition": {
+        "title": "Harvest packaging capacity",
+        "problem": "Calculate theoretical package count from weighed harvest and measured kilograms per package.",
+        "expression": "harvest_kg / kg_per_package",
+        "inputs": [
+          {
+            "name": "harvest_kg",
+            "unit": "kg",
+            "minimum": 1,
+            "maximum": 1000
+          },
+          {
+            "name": "kg_per_package",
+            "unit": "kg/package",
+            "minimum": 1,
+            "maximum": 100
+          }
+        ],
+        "output_unit": "packages"
+      }
+    },
+    {
+      "schema": "saeit.factory.engineering-brief.v1",
+      "family_id": "F28",
+      "mathematical_definition": {
+        "title": "Field labour coverage",
+        "problem": "Compare required work hours with measured available work hours; this is a simple scenario.",
+        "expression": "required_hours / available_hours",
+        "inputs": [
+          {
+            "name": "required_hours",
+            "unit": "hours",
+            "minimum": 1,
+            "maximum": 1000
+          },
+          {
+            "name": "available_hours",
+            "unit": "hours",
+            "minimum": 1,
+            "maximum": 1000
+          }
+        ],
+        "output_unit": "ratio"
+      }
     }
   ]
 }

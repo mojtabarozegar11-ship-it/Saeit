@@ -239,10 +239,23 @@ def candidates(root,supply):
     if supply is not None and Path(supply).is_file():
         config=read(Path(supply))
         if config.get('schema')!='saeit.factory.internal-design-supply.v1':raise ValueError('SUPPLY_SCHEMA_INVALID')
-        for brief in config.get('briefs',[]):
+        briefs=config.get('briefs')
+        if not isinstance(briefs,list) or len(briefs)>100:
+            raise ValueError('SUPPLY_BRIEFS_BOUNDED_LIST_REQUIRED')
+        for brief in briefs:
+            # Content-addressed identities prevent novel owner-authored mathematical
+            # definitions (without a blueprint key) from all being named "None".
+            if not isinstance(brief,dict):
+                yield 'factory_invention','internal-invalid',{'_input_error':'SUPPLY_BRIEF_INVALID'},str(Path(supply))
+                continue
+            family=str(brief.get('family_id','invalid'))
+            base=brief.get('blueprint')
+            if base is None:
+                base='math-'+digest(brief)[:24]
+            ident='internal-'+family+'-'+str(base)
             # Only mathematical internal prototypes; never relabel these as demand.
-            yield 'factory_invention','internal-'+str(brief.get('family_id'))+'-'+str(brief.get('blueprint')),{
-                'id':'internal-'+str(brief.get('family_id'))+'-'+str(brief.get('blueprint')),'design_brief':brief,'internal_math_prototype':True},str(Path(supply))
+            yield 'factory_invention',ident,{
+                'id':ident,'design_brief':brief,'internal_math_prototype':True},str(Path(supply))
 
 
 def cycle(root,*,supply=None,limit=10,now=None):
