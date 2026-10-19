@@ -1,4 +1,4 @@
-name: Zomorod final WCAG and security release verified health endpoint
+name: Zomorod final WCAG secure release inner navigation semantics
 on:
   push:
     branches: [main]
@@ -164,7 +164,7 @@ jobs:
              p.on('pageerror',x=>errors.push(x.message));
              const r=await p.goto('https://zomorodmelal.ir'+path+'?__hardening_browser='+width,{waitUntil:'domcontentloaded',timeout:55000});
              await p.waitForTimeout(250);
-             const data=await p.evaluate(()=>({overflow:Math.max(document.body.scrollWidth,document.documentElement.scrollWidth)-innerWidth,headerRole:document.querySelector('.zm-v7-header')?.getAttribute('role'),cards:document.querySelectorAll('.topic-card').length,rows:document.querySelectorAll('.orbit-shelf').length,companyCards:document.querySelectorAll('.zm-history-card').length}));
+             const data=await p.evaluate(()=>({overflow:Math.max(document.body.scrollWidth,document.documentElement.scrollWidth)-innerWidth,headerRole:document.querySelector('.zm-v7-top')?.getAttribute('role'),cards:document.querySelectorAll('.topic-card').length,rows:document.querySelectorAll('.orbit-shelf').length,companyCards:document.querySelectorAll('.zm-history-card').length}));
              let issues=[];
              if(['/research/','/agriculture/','/about/','/business/','/store/'].includes(path)){
                const axe=await new Axe({page:p}).withTags(['wcag2a','wcag2aa','wcag21a','wcag21aa','best-practice']).analyze();
