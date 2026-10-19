@@ -6,10 +6,12 @@ on:
       - "scripts/factory_12_stage_governance.py"
       - "scripts/factory_40_family_master.py"
       - "scripts/factory_agent_gene_audit.py"
+      - "scripts/factory_evolution_50.py"
       - "tests/test_factory_vps_product_cycle.py"
       - "tests/test_factory_12_stage_governance.py"
       - "tests/test_factory_40_family_master.py"
       - "tests/test_factory_agent_gene_audit.py"
+      - "tests/test_factory_evolution_50.py"
       - ".github/workflows/factory-agent-code-hardening-20261019.yml"
   push:
     branches: [main]
@@ -18,10 +20,12 @@ on:
       - "scripts/factory_12_stage_governance.py"
       - "scripts/factory_40_family_master.py"
       - "scripts/factory_agent_gene_audit.py"
+      - "scripts/factory_evolution_50.py"
       - "tests/test_factory_vps_product_cycle.py"
       - "tests/test_factory_12_stage_governance.py"
       - "tests/test_factory_40_family_master.py"
       - "tests/test_factory_agent_gene_audit.py"
+      - "tests/test_factory_evolution_50.py"
       - ".github/workflows/factory-agent-code-hardening-20261019.yml"
 permissions:
   contents: read
@@ -48,6 +52,7 @@ jobs:
           set -euo pipefail
           python -B scripts/factory_agent_gene_audit.py --repo .
           python -B -m unittest discover -s tests -p "test_factory_agent_gene_audit.py" -v
+          python -B -m unittest discover -s tests -p "test_factory_evolution_50.py" -v
           python -B -m unittest discover -s tests -p "test_factory_12_stage_governance.py" -v
           python -B -m unittest discover -s tests -p "test_factory_40_family_master.py" -v
           python -B -m unittest discover -s tests -p "test_factory_vps_product_cycle.py" -v
