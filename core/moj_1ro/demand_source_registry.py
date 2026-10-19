@@ -1,0 +1,31 @@
+from __future__ import annotations
+DEMAND_SOURCES=(
+ ('World Bank Procurement','https://projects.worldbank.org/en/projects-operations/procurement'),
+ ('UNGM','https://www.ungm.org/Public/Notice'),
+ ('SAM.gov Opportunities','https://sam.gov/content/opportunities'),
+ ('EU Funding & Tenders','https://ec.europa.eu/info/funding-tenders/opportunities/portal/screen/opportunities/topic-search'),
+ ('EU Public Procurement','https://op.europa.eu/en/web/public-procurement'),
+ ('CanadaBuys','https://canadabuys.canada.ca/en/tender-opportunities'),
+ ('AIIB Procurement','https://www.aiib.org/en/opportunities/business/project-procurement/list.html'),
+ ('African Development Bank Procurement','https://www.afdb.org/en/projects-and-operations/procurement'),
+ ('AGRA Procurement Notices','https://agra.org/opportunities/procurement-notices/'),
+ ('USAC Procurement','https://www.usac.org/about/procurement/'),
+)
+DOMAIN_TERMS={
+ 'ai_automation':('automation','artificial intelligence','workflow','AI agent'),
+ 'digital_agriculture':('agriculture','farm','agricultural','irrigation','agritech'),
+ 'licensing_ip':('licensing','intellectual property','patent','technology transfer'),
+ 'software_saas':('software','saas','platform','application','developer'),
+ 'b2b_services':('consulting','services','implementation','research','business'),
+ 'digital_products':('digital','dataset','template','report','content'),
+ 'online_education':('training','education','learning','course','skills'),
+ 'research_data':('research','data','analytics','survey','intelligence'),
+ 'marketing_sales':('marketing','sales','crm','lead','campaign'),
+ 'content_media':('content','media','video','communication','newsletter'),
+ 'ecommerce':('commerce','marketplace','retail','procurement','supply'),
+ 'games':('game','gaming','simulation','interactive','entertainment'),
+ 'design_studio':('design','creative','animation','visual','3d'),
+ 'subscriptions':('subscription','membership','community','platform','service'),
+ 'affiliate':('affiliate','referral','partnership','promotion','marketing'),
+ 'enterprise_services':('operations','compliance','documentation','enterprise','procurement'),
+}
