@@ -105,10 +105,30 @@ class DesignIntakeTests(unittest.TestCase):
         self.assertEqual(result['family_id'],'F27')
     def test_supply_is_internal_and_does_not_invent_customer_or_market_demand(self):
         result=intake.cycle(self.root,supply=ROOT/'factory_config/internal_design_supply.json')
-        self.assertEqual(result['enqueued'],7)
+        self.assertEqual(result['enqueued'],15)
         self.assertEqual(result['channels']['customer_request']['accepted'],0)
         self.assertEqual(result['channels']['market_demand']['accepted'],0)
         self.assertEqual(intake.cycle(self.root,supply=ROOT/'factory_config/internal_design_supply.json')['enqueued'],0)
+    def test_mathematical_owner_briefs_have_collision_free_source_ids(self):
+        config={'schema':'saeit.factory.internal-design-supply.v1','briefs':[
+            {'schema':intake.SCHEMA,'family_id':'F28','mathematical_definition':{
+                'title':'Measured inventory gap','expression':'needed - held',
+                'inputs':[{'name':'needed','unit':'units','minimum':0,'maximum':100},
+                          {'name':'held','unit':'units','minimum':0,'maximum':100}],
+                'output_unit':'units'}},
+            {'schema':intake.SCHEMA,'family_id':'F28','mathematical_definition':{
+                'title':'Measured liquidity gap','expression':'required - cash',
+                'inputs':[{'name':'required','unit':'currency','minimum':0,'maximum':100},
+                          {'name':'cash','unit':'currency','minimum':0,'maximum':100}],
+                'output_unit':'currency'}}]}
+        source=self.root/'internal.json'
+        designer.save(source,config)
+        result=intake.cycle(self.root,supply=source)
+        self.assertEqual(result['enqueued'],2)
+        ids=[row['source_id'] for row in result['latest_results']]
+        self.assertEqual(len(set(ids)),2)
+        self.assertEqual(intake.cycle(self.root,supply=source)['enqueued'],0)
+
     def test_record_cannot_spoof_internal_exemption(self):
         r=self.record('site_need');r['internal_math_prototype']=True
         self.snapshot('site-topic-snapshot',[r])
