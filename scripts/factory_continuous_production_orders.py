@@ -224,6 +224,11 @@ def generate(root,max_backlog=MAX_BACKLOG):
                 continue
             selected=(task,key,research)
             break
+        # A full historical journal must hold safely instead of issuing record
+        # MAX_ORDERS+1 and crashing every subsequent production cycle.
+        if len(old)>=MAX_ORDERS:
+            selected=None
+            blocked_by_capacity=True
         action="issued" if selected else ("capacity_hold" if blocked_by_capacity
                                           else "no_new_meaningful_input")
         order_id=None
