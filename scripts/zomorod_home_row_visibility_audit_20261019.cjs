@@ -5,7 +5,7 @@ const fs = require('fs');
  const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
  const report={timestamp:new Date().toISOString(),url:'https://zomorodmelal.ir/',viewports:[]};
  for(const width of [1440,390,320]){
-  const page=await browser.newPage({viewport:{width,height:900},deviceScaleFactor:1});
+  const page=await browser.newPage({viewport:{width,height:900},deviceScaleFactor:1,isMobile:width<500,hasTouch:width<500});
   const errors=[],responseErrors=[];
   page.on('pageerror',x=>errors.push(String(x.message).slice(0,180)));
   page.on('console',x=>{if(x.type()==='error')errors.push('console: '+x.text().slice(0,180))});
@@ -30,6 +30,21 @@ const fs = require('fs');
    };
   });
   console.log('ROW_AUDIT_INITIAL='+JSON.stringify({width,...start}));
+  // Reproduce a real fast finger-swipe scenario: jump immediately to the
+  // last shelf before normal sequential sweep, then inspect lazy activation.
+  await page.evaluate(()=>document.querySelector('#orbit-17')?.scrollIntoView({behavior:'instant',block:'center'}));
+  await page.waitForTimeout(450);
+  const fastScroll=await page.evaluate(()=>{
+    const last=document.querySelector('#orbit-17');
+    const r=last?.getBoundingClientRect(),c=last&&getComputedStyle(last);
+    return {present:!!last,visible:!!last&&r.height>0&&r.bottom>0&&r.top<innerHeight&&
+       c.display!=='none'&&c.visibility!=='hidden'&&Number(c.opacity)>.05,
+       className:last?.className,opacity:c?.opacity,box:r&&[r.y,r.height],
+       scrollY,viewport:innerWidth};
+  });
+  console.log('ROW_AUDIT_FAST_SCROLL='+JSON.stringify({width,...fastScroll}));
+  await page.evaluate(()=>window.scrollTo(0,0));
+  await page.waitForTimeout(150);
   const perRow=[];
   for(let i=0;i<start.rows;i++){
    await page.evaluate(i=>{const s=document.querySelectorAll('.orbit-shelf')[i];
@@ -93,7 +108,7 @@ const fs = require('fs');
   });
   const ids=perRow.map(r=>r.id),expected=Array.from({length:29},(_,i)=>'orbit-'+String(i+1).padStart(2,'0'));
   const result={
-   width,httpStatus:response.status(),initial:start,
+   width,httpStatus:response.status(),initial:start,fastScroll,
    summary:{
     rows:perRow.length,visibleRows:perRow.filter(x=>x.visible).length,
     invisibleRows:perRow.filter(x=>!x.visible).map(x=>({id:x.id,title:x.heading,reason:x.classes,height:x.shelfBox[3],opacity:x.shelfOpacity})),
@@ -108,7 +123,7 @@ const fs = require('fs');
    perRow,last,errors,responseErrors
   };
   report.viewports.push(result);
-  console.log('ROW_AUDIT_SUMMARY='+JSON.stringify({width,status:result.httpStatus,...result.summary,last,jsErrors:errors.slice(0,5),httpErrors:responseErrors.slice(0,5)}));
+  console.log('ROW_AUDIT_SUMMARY='+JSON.stringify({width,status:result.httpStatus,...result.summary,fastScroll,last,jsErrors:errors.slice(0,5),httpErrors:responseErrors.slice(0,5)}));
   console.log('ROW_AUDIT_EACH='+JSON.stringify({width,rows:perRow.map(r=>({id:r.id,title:r.heading,cards:r.cardCount,shown:r.visible,track:r.visibleTrack,opacity:r.shelfOpacity,height:r.shelfBox[3],classes:r.classes}))}));
   try{
    await page.locator('#zm-official-contacts-20261019').scrollIntoViewIfNeeded({timeout:5000});
