@@ -56,7 +56,7 @@ class TestWheatAdditive(unittest.TestCase):
     def test_php_additive_candidate_syntax(self):
         original="""<?php
         function storeEsc(string $x):string{return htmlspecialchars($x,ENT_QUOTES,'UTF-8');}
-        $db=new PDO('sqlite::memory:');$db->exec("create table free_digital_products(id integer, enabled integer, title text, description text,sku text, download_path text,artifact_sha256 text,license_text text)");
+        $db=new PDO('sqlite::memory:');
         $items=[];
         if(!$items) echo '<section>empty</section>';
         foreach($items as $p){echo '<div>paid</div>';}
