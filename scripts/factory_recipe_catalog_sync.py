@@ -91,7 +91,7 @@ def sync_catalog(source_root, active_root, retired_root, manifest_path):
     stage = Path(tempfile.mkdtemp(prefix=".recipe-catalog-stage-", dir=str(active.parent)))
     old = active.parent / (".recipe-catalog-old-" + stamp)
     archived = []
-    moved_old = False
+    moved_old = False\n    installed_new = False
     try:
         staged_root = stage / "catalog"
         staged_root.mkdir(mode=0o700)
@@ -106,6 +106,7 @@ def sync_catalog(source_root, active_root, retired_root, manifest_path):
             os.replace(str(active), str(old))
             moved_old = True
         os.replace(str(staged_root), str(active))
+        installed_new = True
         installed = set(maker.discover_recipes(active))
         if installed != names:
             raise RuntimeError("INSTALLED_CATALOG_MISMATCH")
@@ -130,7 +131,7 @@ def sync_catalog(source_root, active_root, retired_root, manifest_path):
         for slug, destination in reversed(archived):
             if destination.exists() and old.exists():
                 os.replace(str(destination), str(old / slug))
-        if active.exists():
+        if installed_new and active.exists():
             failed = active.parent / (".recipe-catalog-failed-" + stamp)
             os.replace(str(active), str(failed))
         if moved_old and old.exists():
