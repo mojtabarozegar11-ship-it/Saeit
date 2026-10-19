@@ -1,4 +1,4 @@
-name: Zomorod P0-P3 final targeted contrast corrections
+name: Zomorod P0-P3 final targeted contrast corrections v2
 on:
   push:
     branches: [main]
