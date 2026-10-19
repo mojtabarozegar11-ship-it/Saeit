@@ -1,5 +1,6 @@
 """Master allocator policy: 40 families, strict nonactivation, offline resources."""
 import importlib.util
+import hashlib
 import json
 from pathlib import Path
 import tempfile
@@ -105,11 +106,33 @@ class FortyLineMasterTests(unittest.TestCase):
         self.assertEqual(signature,same)
         self.assertNotEqual(signature,different)
         self.assertIsNone(mod.product_signature("F28","greenhouse","manager","","advanced","en"))
+    def test_fake_receipt_can_never_inflate_final_stock(self):
+        wid=self.add_order(1,"F27",passport={"family_id":"F27"})
+        final=self.root/"product-lifecycle"/"approved-finished-goods"/wid
+        final.mkdir(parents=True)
+        (final/"receipt.json").write_text(json.dumps({
+            "order":wid,"distributed":False,"stage_gates_passed":10}))
+        with self.assertRaisesRegex(RuntimeError,"UNVERIFIED_FINAL_RECEIPT"):
+            self.run_master()
+
     def test_final_goods_counted_only_with_real_receipt_and_family(self):
         wid=self.add_order(1,"F27",passport={"family_id":"F27"})
         target=self.root/"product-lifecycle"/"approved-finished-goods"/wid
         target.mkdir(parents=True)
-        (target/"receipt.json").write_text(json.dumps({"order":wid,"distributed":False}))
+        product=target/"product.zip"
+        product.write_bytes(b"real test archive content")
+        passport=self.root/"product-lifecycle"/"passports"/(wid+".json")
+        state=self.root/"product-lifecycle"/"records"
+        state.mkdir(parents=True)
+        (state/(wid+".json")).write_text(json.dumps({
+            "status":"in_finished_goods_warehouse_not_distributed",
+            "stage_status":{"11":"passed"}}))
+        (target/"receipt.json").write_text(json.dumps({
+            "schema":"saeit.factory.lifecycle.v1",
+            "order":wid,"distributed":False,"stage_gates_passed":10,
+            "artifact_sha256":hashlib.sha256(product.read_bytes()).hexdigest(),
+            "passport_sha256":hashlib.sha256(passport.read_bytes()).hexdigest(),
+            "bytes":product.stat().st_size}))
         c=self.run_master()
         self.assertEqual(c["families"][26]["approved_final_stock"],1)
         self.assertEqual(c["families"][0]["approved_final_stock"],0)
