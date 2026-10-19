@@ -124,7 +124,7 @@ jobs:
               const page=await browser.newPage({viewport:dims,deviceScaleFactor:1});
               for(const path of ['/about/','/company/','/about/mojtaba-rozegar/','/contact/']){
                 const errors=[];
-                page.on('pageerror',e=>errors.push(String(e).slice(0,180)));
+                page.on('pageerror',e=>errors.push((e.stack||String(e)).slice(0,1800)));
                 let response=await page.goto('https://mojplaywin.com'+path,{waitUntil:'domcontentloaded',timeout:30000});
                 await page.waitForTimeout(900);
                 const metrics=await page.evaluate(()=>{
