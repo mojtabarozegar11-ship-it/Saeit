@@ -407,7 +407,11 @@ def review(root,order,evidence_input):
     input_file=Path(evidence_input)
     receipt=json_read(input_file)
     stage=valid_approval(root,wid,receipt,state)
-    evidence_hash=sha(input_file)
+    # Hash the exact canonical bytes persisted by atomic() rather than the
+    # differently formatted external input receipt: otherwise final verification
+    # always reports false tampering even for legitimately approved stages.
+    canonical=(json.dumps(receipt,ensure_ascii=False,sort_keys=True,indent=2)+"\n").encode("utf8")
+    evidence_hash=hash_bytes(canonical)
     receipt_dir=area(root)/"review-receipts"/wid
     dirs(receipt_dir)
     dest=receipt_dir/("stage-"+str(stage)+"-"+evidence_hash+".json")
