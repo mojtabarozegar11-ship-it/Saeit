@@ -60,7 +60,7 @@ class VPSWarehouseCourierTests(unittest.TestCase):
         self.assertEqual(result["publicly_published"],0)
         record=self.site/"received"/self.product/self.version/"site_qa.json"
         self.assertTrue(record.is_file())
-        self.assertEqual(json.loads(record.read_text())["qa_state"],"requires_factory_stage1_rework")
+        self.assertEqual(json.loads(record.read_text())["qa_state"],"awaiting_independent_product_review")
         out=receive_factory_returns(feedback_site(self.site),self.factory)
         self.assertEqual(out["accepted_stage1_qa_returns"],1)
         self.assertFalse(out["factory_repair_executed"])
