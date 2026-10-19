@@ -63,7 +63,7 @@ def transform(data,slug):
     if point<0:fail("iframe missing: "+slug)
     block=block[:point]+launch+block[point:]
     new=base[:pos]+b"\n"+block+b"\n"+base[pos:]
-    if len(new)-len(data)!=len(launch)+2:fail("unexpected mutation size: "+slug)
+    if new.count(begin)!=1 or new.count(end)!=1 or new.count((VISIBLE+":START").encode())!=1:fail("unexpected marker count: "+slug)
     return new
 def atomic(p,b):
     if p.is_symlink():fail("symlink destination")
@@ -121,7 +121,7 @@ def verify(stage):
         if sha(data)!=obj["pages"][slug]["new"]:fail("unexpected content: "+slug)
         marker=(VISIBLE+":START").encode()
         if data.count(marker)!=1:fail("missing visible CTA: "+slug)
-        if data.index(marker)>data.index(b"</main>") or data.index(marker)>data.index(b"<h2"):
+        if data.index(("<!-- "+MARKER+":"+slug+":BEGIN -->").encode())>data.index(b"<h2"):
             fail("product not prominent: "+slug)
         if ("/digital-lab/?tool="+slug).encode() not in data:fail("product URL incorrect: "+slug)
     for name,h in obj["protected"].items():
