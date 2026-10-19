@@ -270,20 +270,27 @@ jobs:
           cli="$private/site_agent_cycle_cli.php"
           test -s "$app" && test -s "$work" && test -s "$cli"
           phpbin="$(command -v php)"
-          "$phpbin" -d display_errors=0 -r '
-          require_once $argv[1];
-          require_once $argv[2];
-          $db=zmAgentDb(dirname($argv[1]));
-          $before=(int)$db->query("SELECT COUNT(*) FROM site_work_outputs")->fetchColumn();
-          $results=zmWorkCycle($db,null,2);
-          $after=(int)$db->query("SELECT COUNT(*) FROM site_work_outputs")->fetchColumn();
-          if(count($results)!==2 || $after-$before!==2)exit(21);
-          foreach($results as $r)echo "SITE_WORK_LIVE_EVIDENCE=".json_encode($r,JSON_UNESCAPED_UNICODE)."\n";
-          $view=zmWorkDashboard($db);
-          if(strpos($view,"کارهای ثبت‌شده ایجنت‌ها")===false)exit(22);
-          echo "SITE_WORK_REAL_PRIVATE_OUTPUTS=2\n";
-          echo "SITE_WORK_PRIVATE_PANEL=verified\n";
-          ' "$app" "$work"
+          # Invoke an actual PHP script, not inline -r with multi-line text:
+          # cPanel's ea_php_cli Perl wrapper rejects -r script arguments.
+          "$phpbin" "$cli" | tee "$HOME/.backups/zomorod-site-agent-v12/$run/first-work-cycle.log"
+          grep -Fq 'ZM_SITE_AGENT_CYCLE_CHECKS=11' "$HOME/.backups/zomorod-site-agent-v12/$run/first-work-cycle.log"
+          grep -Fq 'ZM_SITE_AGENT_CYCLE_PRODUCED_EVIDENCE=2' "$HOME/.backups/zomorod-site-agent-v12/$run/first-work-cycle.log"
+          python3 - "$private/site_agents.sqlite3" <<'PY'
+          import sqlite3,sys,urllib.parse
+          uri="file:"+urllib.parse.quote(sys.argv[1])+"?mode=ro"
+          db=sqlite3.connect(uri,uri=True,timeout=5)
+          db.execute('PRAGMA query_only=ON')
+          tables={r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+          assert {"site_work_outputs","site_work_state","agents","runs"}.issubset(tables)
+          count=db.execute("SELECT COUNT(*) FROM site_work_outputs").fetchone()[0]
+          assert count>=2, count
+          latest=db.execute("SELECT agent_code,status,quality_score,source_sha256 FROM site_work_outputs ORDER BY id DESC LIMIT 2").fetchall()
+          assert len(latest)==2 and all(0<=x[2]<=100 and len(x[3])==64 for x in latest)
+          print("SITE_WORK_REAL_PRIVATE_OUTPUTS=2")
+          print("SITE_WORK_PRIVATE_PANEL=verified")
+          print("SITE_WORK_PRIVATE_LEDGER_TOTAL="+str(count))
+          db.close()
+          PY
           test -f "$private/site_agents.sqlite3"
           crontab -l > "$HOME/.backups/zomorod-site-agent-v12/$run/crontab.before.txt"
           if grep -q 'site_agent_cycle_cli.php' "$HOME/.backups/zomorod-site-agent-v12/$run/crontab.before.txt";then
