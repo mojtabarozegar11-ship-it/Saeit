@@ -7,6 +7,7 @@ human review, code self-upgrade, ownership, or commercial approval.
 """
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -19,7 +20,14 @@ import time
 import xml.etree.ElementTree as ET
 
 FAMILIES = {"F27": ("budget.xlsx",), "F29": ("project_brief.docx",),
-            "F30": ("kickoff.pptx",), "F34": ("icon.png", "icon.svg")}
+            "F30": ("kickoff.pptx",), "F34": ("icon.png", "icon.svg"),
+            "F10": ("assessment.pdf", "assessment.json"),
+            "F14": ("mini_game.html", "game.js", "browser_game.zip"),
+            "F19": ("landing.html", "landing.css", "website_template.zip"),
+            "F31": ("weekly_planner.pdf", "weekly_planner.svg"),
+            "F33": ("landscape.png", "landscape.svg"),
+            "F37": ("motion.gif", "motion.mp4"),
+            "F39": ("sound_effect.wav", "sound_effect.mp3")}
 REQUIRED = {"images", "documents", "video", "office_render_and_recalculation",
             "blender_cpu_render", "local_language_model"}
 
@@ -59,7 +67,15 @@ def toolchain(manifest):
 
 def render(family, folder):
     folder = Path(folder)
-    if family == "F27":
+    if family in ("F10","F14","F19","F31","F33","F37","F39"):
+        source = Path(__file__).resolve().parent / "factory_specialist_formats.py"
+        spec = importlib.util.spec_from_file_location("factory_specialist_formats", str(source))
+        if spec is None or spec.loader is None:
+            raise RuntimeError("SPECIALIST_RENDERER_SOURCE_MISSING")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        module.render(family, folder)
+    elif family == "F27":
         from openpyxl import Workbook, load_workbook
         from openpyxl.styles import Font, PatternFill
         w = Workbook()
@@ -188,7 +204,11 @@ def cycle(output, manifest):
                   "commercial_release": False, "fully_verified_families": 0}
         atomic(root / "status.json", status)
         return status
-    source_key = hashlib.sha256((sha(__file__) + toolroot.name + "v1").encode()).hexdigest()[:20]
+    source = Path(__file__).resolve().parent / "factory_specialist_formats.py"
+    if not source.is_file() or source.is_symlink():
+        raise RuntimeError("PILOT_SPECIALIST_FORMAT_MODULE_MISSING")
+    source_key = hashlib.sha256((sha(__file__) + sha(source) + toolroot.name + "v2").encode()).hexdigest()[:20]
+    failures = []
     for family in FAMILIES:
         version = root / family / source_key
         if verified_receipt(version, family, source_key):
@@ -207,7 +227,8 @@ def cycle(output, manifest):
                 [str(executable), "-B", str(Path(__file__).resolve()), "--render", family,
                  "--destination", str(stage)],
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True,
-                timeout=50, env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"))
+                timeout=50, env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1",
+                    FACTORY_TOOLCHAIN_BIN=str(toolroot / "bin")))
             if process.returncode:
                 raise RuntimeError("PILOT_RENDER_FAILURE:" + process.stderr[-350:])
             outputs = json.loads(process.stdout.strip())
@@ -230,17 +251,36 @@ def cycle(output, manifest):
             return result
         except (OSError, ValueError, RuntimeError, subprocess.TimeoutExpired) as error:
             # Preserve the defect indefinitely, retry on a later minute.
+            ticket_path = family_dir / "rework.json"
+            try:
+                previous = json.loads(ticket_path.read_text(encoding="utf-8"))
+            except (OSError, ValueError, TypeError):
+                previous = {}
+            prior = previous.get("attempts", 0)
+            if isinstance(prior, bool) or not isinstance(prior, int) or prior < 0:
+                prior = 0
             ticket = {"family": family, "status": "needs_rework",
                       "last_failure": str(error)[:400], "source_key": source_key,
-                      "retry_on_next_tick": True, "commercial_release": False}
-            atomic(family_dir / "rework.json", ticket)
-            result = {"status": "needs_rework", "family": family,
-                      "fully_verified_families": 0, "reason": ticket["last_failure"]}
-            atomic(root / "status.json", result)
-            return result
+                      "attempts": prior + 1, "retry_on_next_tick": True,
+                      "last_attempt_epoch_ns": time.time_ns(),
+                      "commercial_release": False,
+                      "history_tail": (previous.get("history_tail", [])
+                          if isinstance(previous.get("history_tail"), list) else [])[-30:]}
+            ticket["history_tail"].append({"attempt": prior + 1,
+                                           "reason": str(error)[:200]})
+            atomic(ticket_path, ticket)
+            # Do not let one broken family starve every other independent line.
+            failures.append({"family": family, "reason": ticket["last_failure"]})
+            continue
         finally:
             if stage.exists():
                 shutil.rmtree(str(stage))
+    if failures:
+        status = {"status": "needs_rework", "failed_families": failures,
+                  "retry_on_next_tick": True, "fully_verified_families": 0,
+                  "commercial_release": False, "distribution_enabled": False}
+        atomic(root / "status.json", status)
+        return status
     status = {"status": "technical_pilots_verified", "families": list(FAMILIES),
               "fully_verified_families": 0, "commercial_release": False,
               "distribution_enabled": False}
