@@ -1,0 +1,81 @@
+name: Factory agents safe live patch and 50-generation shadow
+on:
+  pull_request:
+    paths:
+      - "deploy/install_factory_agent_hardening_50.sh"
+      - ".github/workflows/factory-agent-live-release-20261019.yml"
+  push:
+    branches: [main]
+    paths:
+      - "deploy/install_factory_agent_hardening_50.sh"
+      - ".github/workflows/factory-agent-live-release-20261019.yml"
+      - "scripts/factory_vps_product_cycle.py"
+      - "scripts/factory_12_stage_governance.py"
+      - "scripts/factory_40_family_master.py"
+      - "scripts/factory_evolution_50.py"
+permissions:
+  contents: read
+concurrency:
+  group: saeit-vps-factory-agent-security-release
+  cancel-in-progress: false
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Validate installer and source-level safety contract
+        run: |
+          set -euo pipefail
+          bash -n deploy/install_factory_agent_hardening_50.sh
+          python3 -m unittest discover -s tests -p "test_factory_evolution_50.py" -v
+          python3 -m unittest discover -s tests -p "test_factory_12_stage_governance.py" -v
+          python3 -m unittest discover -s tests -p "test_factory_40_family_master.py" -v
+          python3 -m unittest discover -s tests -p "test_factory_vps_product_cycle.py" -v
+  install:
+    needs: check
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.event_name == 'push' && contains(github.event.head_commit.message, '[approved-factory-agent-hardening-20261019]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0, persist-credentials: false}
+      - name: Deploy only three exact frozen factory scripts and isolated evolution shadow
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/factory-agent-patch"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          ssh_vps(){
+            ssh -i "$d/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=10 -o ServerAliveCountMax=2 githubops@178.239.147.150 "$@"
+          }
+          baseline="2de930a7673a9b4f07f3a330bec6e850684aedfb"
+          git cat-file -e "$baseline"
+          for name in factory_vps_product_cycle.py factory_12_stage_governance.py factory_40_family_master.py; do
+            git show "$baseline:scripts/$name" > "$d/old-$name"
+            cp "scripts/$name" "$d/new-$name"
+          done
+          cp scripts/factory_evolution_50.py "$d/new-factory_evolution_50.py"
+          cp deploy/install_factory_agent_hardening_50.sh "$d/install.sh"
+          stage="/home/githubops/factory-runtime/operations/.agent-security-$GITHUB_RUN_ID"
+          ssh_vps "umask 077; test ! -e '$stage'; mkdir -m 700 '$stage'"
+          for f in "$d"/old-*.py "$d"/new-*.py "$d/install.sh"; do
+            name="$(basename "$f")"
+            hash="$(sha256sum "$f" | awk '{print $1}')"
+            cat "$f" | ssh_vps "umask 077; cat > '$stage/$name'; chmod 600 '$stage/$name'"
+            ssh_vps "test \"\$(sha256sum '$stage/$name' | awk '{print \$1}')\" = '$hash'"
+          done
+          ssh_vps "bash -n '$stage/install.sh' && bash '$stage/install.sh' '$stage'"
+          echo FACTORY_AGENT_PATCH_REMOTE_SUCCESS=PASS
+          echo FACTORY_SITES_AND_STOCK_UNMODIFIED=PASS
