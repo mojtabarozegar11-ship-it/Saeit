@@ -4,6 +4,7 @@ from django.http import JsonResponse
 from django.shortcuts import render
 from django.views.decorators.http import require_GET
 from .overview import build_overview
+from .zomorod_status import read_zomorod_health
 from .adapters import snapshot
 from .catalog import MODULES, AGENT_SETTINGS, localized
 from core.models import Agent, ApprovalRequest, NewsletterStory
@@ -43,6 +44,11 @@ def overview_api(request):
             "verified": 0,  # Database completion alone is not independently verified.
         },
     })
+    observations, runtime_history = read_zomorod_health() if request.get_host().split(":")[0].lower() in ("zomorodmelal.ir", "www.zomorodmelal.ir") else ([], [])
+    if observations:
+        data["health"] = {"overall": "failed" if any(x["state"] == "failed" for x in observations) else "stale" if any(x["state"] == "stale" for x in observations) else "degraded" if any(x["state"] == "degraded" for x in observations) else "healthy" if all(x["state"] == "healthy" for x in observations) else "unknown", "components": observations, "total": len(observations)}
+        data["live_connected"] = True
+    data["runtime_history"] = runtime_history
     data["database_snapshot"] = {
         "captured_at": db["captured_at"], "source": db["source"],
         "scope": db["scope"], "agents": db["agents"],

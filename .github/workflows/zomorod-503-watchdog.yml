@@ -1,0 +1,211 @@
+name: Zomorod 503 watchdog and private uptime evidence
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/zomorod-503-watchdog.yml'
+      - 'ops/zomorod_uptime.py'
+  pull_request:
+    paths:
+      - '.github/workflows/zomorod-503-watchdog.yml'
+      - 'ops/zomorod_uptime.py'
+      - 'tests/test_zomorod_uptime.py'
+      - 'command_center/zomorod_status.py'
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+  issues: write
+concurrency:
+  group: zomorod-root-503-watchdog
+  cancel-in-progress: false
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify monitor regression tests
+        run: python -m unittest discover -s tests -p test_zomorod_uptime.py -v
+      - name: Check root and subsite endpoints twice on confirmed failure
+        id: public
+        shell: bash
+        run: |
+          if python3 ops/zomorod_uptime.py --output "$RUNNER_TEMP/zomorod-health.json"; then
+            echo "failed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "failed=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Record private evidence and perform guarded Passenger recovery only if needed
+        if: github.event_name != 'pull_request'
+        continue-on-error: true
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-watch-ssh"
+          install -d -m 700 "$d"
+          trap 'rm -f "$d/vps.key" "$d/host.key" "$d/config" "$d/vps.known" "$d/host.known" "$d/host.candidate"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/vps.key" "$d/host.key"
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          report="$(base64 -w0 "$RUNNER_TEMP/zomorod-health.json")"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$report" <<'REMOTE'
+          set -euo pipefail
+          test "$HOME" = /home/zomorod2
+          python3 - "$1" <<'PY'
+          import base64,json,os,re,subprocess,sys,tempfile,time
+          from pathlib import Path
+          home=Path.home()
+          app=home/"Saeit"
+          store=home/".zomorod_watch"
+          report=json.loads(base64.b64decode(sys.argv[1],validate=True))
+          if not (app/"manage.py").is_file() or not (home/"public_html"/".htaccess").is_file():
+              raise SystemExit("ROOT_APP_NOT_VERIFIED")
+          store.mkdir(mode=0o700,exist_ok=True)
+          os.chmod(store,0o700)
+          previous=store/"health.json"
+          history=[]
+          if previous.is_file() and not previous.is_symlink():
+              try:
+                  old=json.loads(previous.read_text(encoding="utf-8"))
+                  history=old.get("history",[])
+                  if not isinstance(history,list):history=[]
+              except (OSError,ValueError):pass
+          passenger={"mapping":"unverified","processes":None,"recovery":"not_required"}
+          result=subprocess.run(["uapi","--output=json","PassengerApps","list_applications"],
+                                capture_output=True,text=True,timeout=15)
+          if result.returncode==0:
+              payload=json.loads(result.stdout)
+              stack=[payload];found=[]
+              while stack:
+                  current=stack.pop()
+                  if isinstance(current,dict):
+                      if (current.get("domain")=="zomorodmelal.ir"
+                          and current.get("base_uri")=="/"
+                          and current.get("path")==str(app)): found.append(current)
+                      stack.extend(current.values())
+                  elif isinstance(current,list):stack.extend(current)
+              ht=(home/"public_html"/".htaccess").read_text(errors="replace")
+              if (len(found)==1 and 'PassengerAppRoot "/home/zomorod2/Saeit"' in ht
+                  and 'PassengerPython "/opt/alt/python310/bin/lswsgi"' in ht):
+                  passenger["mapping"]="verified"
+          ps=subprocess.run(["ps","-u","zomorod2","-o","comm="],
+                             capture_output=True,text=True,timeout=8)
+          if ps.returncode==0:
+              passenger["processes"]=sum("lswsgi" in x.lower() for x in ps.stdout.splitlines())
+          log=app/"stderr.log"
+          if log.is_file() and not log.is_symlink():
+              with log.open("rb") as f:
+                  f.seek(max(0,log.stat().st_size-65536))
+                  tail=f.read().decode("utf-8","replace")
+              passenger["recent_error_markers"]=sum(len(re.findall(pattern,tail,re.I))
+                for pattern in (r"Traceback",r"SpawnException",r"ModuleNotFoundError"))
+          failing=bool(report.get("confirmed_root_failure"))
+          code_by_path={x.get("path"):x.get("code") for x in report.get("public",[])}
+          confirmed_503=(failing and (code_by_path.get("/") == 503 or
+                                      code_by_path.get("/api/health/") == 503))
+          lock=store/"last_restart"
+          age=time.time()-lock.stat().st_mtime if lock.exists() else 999999
+          python_bin=home/"virtualenv"/"Saeit"/"3.10"/"bin"/"python"
+          restart=app/"tmp"/"restart.txt"
+          if (confirmed_503 and passenger["mapping"]=="verified" and age>=1800
+              and python_bin.is_file() and restart.parent.is_dir()
+              and not restart.is_symlink()):
+              check=subprocess.run([str(python_bin),"-B","-c",
+                "import os;os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings');"
+                "import django;django.setup();from django.test import Client;"
+                "r=Client(HTTP_HOST='zomorodmelal.ir').get('/api/health/',secure=True);"
+                "print(r.status_code)"],
+                cwd=str(app),capture_output=True,text=True,timeout=20)
+              passenger["django_internal_status"]=200 if check.returncode==0 and check.stdout.strip().endswith("200") else 0
+              if passenger["django_internal_status"]==200:
+                  # Passenger's documented graceful restart signal. Never modify .htaccess or kill processes.
+                  restart.touch()
+                  lock.touch(mode=0o600,exist_ok=True)
+                  passenger["recovery"]="restart_requested"
+          elif failing:
+              passenger["recovery"]="diagnostic_only"
+          report["passenger"]=passenger
+          history.append({"time":report["captured_at"],"status":report["status"],
+                          "recovery":passenger["recovery"]})
+          report["history"]=history[-96:]
+          fd,tmp=tempfile.mkstemp(prefix=".health-",suffix=".json",dir=store)
+          try:
+              with os.fdopen(fd,"w",encoding="utf-8") as stream:
+                  json.dump(report,stream,sort_keys=True,separators=(",",":"))
+                  stream.flush()
+                  os.fsync(stream.fileno())
+              os.chmod(tmp,0o600)
+              os.replace(tmp,previous)
+          finally:
+              if os.path.exists(tmp):os.unlink(tmp)
+          print("PASSENGER_MAPPING="+passenger["mapping"])
+          print("PASSENGER_RESTART="+passenger["recovery"])
+          print("PRIVATE_HISTORY_SAMPLES="+str(len(report["history"])))
+          PY
+          REMOTE
+      - name: Open or resolve deduplicated GitHub incident
+        if: github.event_name != 'pull_request'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FAILED: ${{ steps.public.outputs.failed }}
+        run: |
+          set -euo pipefail
+          existing="$(gh issue list --repo "$GITHUB_REPOSITORY" --state open \
+            --search '"Zomorod 503 watchdog incident" in:title' \
+            --json number --jq '.[0].number // empty')"
+          if test "$FAILED" = true; then
+            if test -z "$existing"; then
+              gh issue create --repo "$GITHUB_REPOSITORY" \
+                --title "Zomorod 503 watchdog incident" \
+                --body "Two consecutive HTTPS checks confirmed a failed root route. Check GitHub Actions run $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID. Passenger recovery is strictly guarded, may be skipped, and never modifies the Django database."
+            else
+              echo "OPEN_INCIDENT=$existing"
+            fi
+            exit 1
+          fi
+          if test -n "$existing"; then
+            gh issue comment "$existing" --repo "$GITHUB_REPOSITORY" --body "Root HTTP and Django health checks recovered in $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID."
+            gh issue close "$existing" --repo "$GITHUB_REPOSITORY" --reason completed
+          fi
+          echo "ZOMOROD_INCIDENT_STATUS=clear"
