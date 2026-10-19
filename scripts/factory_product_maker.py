@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Offline, QA-first product manufacturer with an extensible recipe directory.
+"""Offline builder for authored recipes; it does not invent product source from scratch.
 
 Any new product folder with a README heading and one or more test_*.py files
 is discovered automatically. Tests pass before a private reproducible ZIP is
-written. No orders, network calls, AI API, publication, or token use. Python 3.8+.
+written. No orders, network calls, AI API, publication, or token use. CI-tested on Python 3.8, 3.11 and 3.13.
 """
 import argparse
 import hashlib
@@ -18,6 +18,8 @@ import zipfile
 
 
 RECIPE_ID = re.compile(r"^[a-z0-9]+(?:_[a-z0-9]+)*$")
+MIN_TESTS_PER_RECIPE = 1
+TEST_RUN_SUMMARY = re.compile(r"^Ran\s+(\d+)\s+tests?\b", re.MULTILINE)
 DEFAULT_RECIPES = Path(__file__).resolve().parents[1] / "product_recipes"
 
 
@@ -55,8 +57,12 @@ def discover_recipes(recipes_root):
     return recipes
 
 
-# Compatibility/status view. Runtime cycles always rediscover from their supplied root.
-RECIPES = discover_recipes(DEFAULT_RECIPES)
+# Compatibility/status view. Empty catalogs are valid during first installation;
+# runtime cycles always rediscover from their supplied root and fail closed if empty.
+try:
+    RECIPES = discover_recipes(DEFAULT_RECIPES)
+except RuntimeError:
+    RECIPES = {}
 
 
 def sha256_file(path):
@@ -99,15 +105,22 @@ def source_digest(source, files):
 
 
 def verify_recipe(source, *, timeout=60):
-    """Run the product's complete local test suite; failure stops manufacturing."""
+    """Require a successful suite and an explicit, non-zero unittest count."""
     result = subprocess.run(
         [sys.executable, "-m", "unittest", "discover", "-s", ".", "-p", "test_*.py", "-v"],
         cwd=str(source), capture_output=True, text=True, timeout=timeout,
         env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"),
     )
-    if result.returncode != 0 or "OK" not in result.stderr:
-        raise RuntimeError("PRODUCT_QA_FAILED:" + (result.stderr or result.stdout)[-1200:])
-    return "unit_tests_passed"
+    output = (result.stdout or "") + "\n" + (result.stderr or "")
+    summaries = list(TEST_RUN_SUMMARY.finditer(output))
+    test_count = int(summaries[-1].group(1)) if summaries else 0
+    if result.returncode != 0 or test_count < MIN_TESTS_PER_RECIPE:
+        raise RuntimeError(
+            "PRODUCT_QA_FAILED:executed_tests=" + str(test_count)
+            + ";minimum=" + str(MIN_TESTS_PER_RECIPE) + ";" + output[-1000:]
+        )
+    return {"status": "unit_tests_passed", "tests_executed": test_count,
+            "minimum_tests_required": MIN_TESTS_PER_RECIPE}
 
 
 def make_zip(path, source, recipe, files):
@@ -146,17 +159,29 @@ def manufacture(recipe, recipes_root, private_root):
         prior = json.loads(manifest_path.read_text(encoding="utf-8"))
     except (OSError, ValueError, TypeError):
         prior = {}
-    if (prior.get("source_sha256") == checksum and prior.get("qa_status") == "passed"
+    if (prior.get("schema_version") == 3 and prior.get("source_sha256") == checksum
+            and prior.get("qa_status") == "passed"
+            and prior.get("qa_test_count", 0) >= MIN_TESTS_PER_RECIPE
+            and prior.get("minimum_tests_required") == MIN_TESTS_PER_RECIPE
+            and prior.get("scientific_validity") == "pending_independent_specialist_review"
             and zip_path.is_file() and prior.get("artifact_sha256") == sha256_file(zip_path)):
         return {"recipe": recipe, "changed": False, "qa_status": "passed",
                 "private_artifact": str(zip_path)}
     qa_status = verify_recipe(source)
     make_zip(zip_path, source, recipe, files)
     metadata = {
-        "schema_version": 2, "recipe": recipe, "name": name,
+        "schema_version": 3, "recipe": recipe, "name": name,
         "source_sha256": checksum, "artifact_sha256": sha256_file(zip_path),
         "bytes": zip_path.stat().st_size, "files": list(sorted(files)),
         "qa_status": "passed", "qa_evidence": qa_status,
+        "qa_test_count": qa_status["tests_executed"],
+        "minimum_tests_required": MIN_TESTS_PER_RECIPE,
+        "scientific_validity": "pending_independent_specialist_review",
+        "economic_value": "pending_independent_review",
+        "commercial_and_legal_review": "pending",
+        "quality_scope": "software_tests_and_zip_integrity_only",
+        "automatic_product_invention": "not_implemented",
+        "new_recipe_authoring_required": True,
         "commercial_status": "private_internal_qa_pass_not_published",
         "factory_trigger": "inventory_and_scheduled_manufacturing",
         "customer_order_required": False, "price": None,
@@ -171,19 +196,30 @@ def manufacture(recipe, recipes_root, private_root):
 def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--recipes", default=str(DEFAULT_RECIPES))
-    ap.add_argument("--out", required=True)
+    ap.add_argument("--out")
+    ap.add_argument("--verify-only", action="store_true",
+                    help="Run all discovered product suites without writing packages.")
     ap.add_argument("--recipe", default="all", help="Recipe slug or all (discovered automatically).")
     ap.add_argument("--max-builds", type=int, default=None,
                     help="Optional positive limit; by default build every discovered recipe.")
     args = ap.parse_args(argv)
     if args.max_builds is not None and args.max_builds < 1:
         raise ValueError("max-builds must be positive")
+    if not args.verify_only and not args.out:
+        ap.error("--out is required unless --verify-only is used")
     recipes = discover_recipes(args.recipes)
     if args.recipe != "all" and args.recipe not in recipes:
         raise ValueError("UNSUPPORTED_RECIPE:" + args.recipe)
     selected = sorted(recipes) if args.recipe == "all" else [args.recipe]
     if args.max_builds is not None:
         selected = selected[:args.max_builds]
+    if args.verify_only:
+        for recipe in selected:
+            evidence = verify_recipe(Path(args.recipes).expanduser().resolve() / recipe)
+            print("FACTORY_RECIPE_TESTS=" + recipe + ":" + str(evidence["tests_executed"]))
+        print("FACTORY_MIN_TESTS_REQUIRED=" + str(MIN_TESTS_PER_RECIPE))
+        print("FACTORY_VERIFIED_RECIPE_COUNT=" + str(len(selected)))
+        return 0
     results = [manufacture(recipe, args.recipes, args.out) for recipe in selected]
     for item in results:
         print("FACTORY_DIGITAL_PRODUCT_RECIPE=" + item["recipe"])

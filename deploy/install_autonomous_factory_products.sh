@@ -40,45 +40,38 @@ fi
 
 mkdir -p "$ops/backups" "$scripts" "$recipes" "$private"
 chmod 700 "$stage" "$scripts" "$recipes" "$private"
+# Serialize catalog replacement against the scheduled VPS cycle.
+exec 9>"$ops/autonomous-product-cycle.lock"
+flock 9
 
-# Back up existing code if present; source control remains the source of truth.
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
 tar -czf "$ops/backups/autonomous-product-runtime-before-$stamp.tar.gz" \
-  -C "$ops" autonomous-product-runtime || true
-chmod 600 "$ops/backups/autonomous-product-runtime-before-$stamp.tar.gz" 2>/dev/null || true
+  -C "$ops" autonomous-product-runtime
+tar -tzf "$ops/backups/autonomous-product-runtime-before-$stamp.tar.gz" >/dev/null
+chmod 600 "$ops/backups/autonomous-product-runtime-before-$stamp.tar.gz"
 
 for f in factory_product_maker.py factory_autonomous_portfolio.py \
          factory_evidence_quality.py factory_first_product_pilot.py factory_vps_product_cycle.py \
-         factory_product_rework.py; do
+         factory_product_rework.py factory_recipe_catalog_sync.py; do
   install -m 600 "$repo/scripts/$f" "$scripts/$f"
 done
-# Every valid recipe folder is deployed automatically; new products need no installer edit.
-shopt -s nullglob
-recipe_sources=("$repo"/product_recipes/*)
-(("${#recipe_sources[@]}" > 0)) || { echo "NO_PRODUCT_RECIPE_DIRECTORIES"; exit 1; }
-for recipe_source in "${recipe_sources[@]}"; do
-  [[ -d "$recipe_source" && ! -L "$recipe_source" ]] || { echo "UNSAFE_PRODUCT_RECIPE_DIRECTORY"; exit 1; }
-  recipe="$(basename "$recipe_source")"
-  mkdir -p "$recipes/$recipe"
-  chmod 700 "$recipes/$recipe"
-  while IFS= read -r -d '' file; do
-    relative="${file#"$recipe_source"/}"
-    mkdir -p "$recipes/$recipe/$(dirname "$relative")"
-    install -m 600 "$file" "$recipes/$recipe/$relative"
-  done < <(find "$recipe_source" -type f -print0)
-done
+# Reconcile the full catalog from a verified private staging copy. Removed recipes
+# are quarantined out of the active runtime; product packages and research ledgers remain.
+"$python" "$scripts/factory_recipe_catalog_sync.py" \
+  --source "$repo/product_recipes" --active "$recipes" \
+  --retired "$private/retired-recipes" --manifest "$stage/installed-recipes.json"
 
 # Quality gate must exist and compile BEFORE any production cycle or cron change.
 "$python" -B -c 'import ast, pathlib, sys; [ast.parse(pathlib.Path(x).read_text(encoding="utf-8")) for x in sys.argv[1:]]' \
-  "$scripts/factory_evidence_quality.py" "$scripts/factory_autonomous_portfolio.py" "$scripts/factory_vps_product_cycle.py" "$scripts/factory_product_rework.py"
+  "$scripts/factory_evidence_quality.py" "$scripts/factory_autonomous_portfolio.py" "$scripts/factory_vps_product_cycle.py" "$scripts/factory_product_rework.py" "$scripts/factory_recipe_catalog_sync.py"
 
-# Product QA is mandatory BEFORE changes to the local scheduler.
-# The cycle discovers the complete catalog and runs each recipe's test_*.py suite.
+# Recipe QA already passed in the catalog sync; run the current full cycle.
 "$python" "$scripts/factory_vps_product_cycle.py" \
-  --db "$db" --out "$private" --recipes "$recipes" \
-  --max-products 25
+  --db "$db" --out "$private" --recipes "$recipes" --max-products 25
 test -s "$private/production-state.json"
 test "$(find "$private/digital-products" -type f -name "*-internal-qa.zip" -print -quit | wc -l)" -ge 1
+
+
 
 cat > "$stage/run-local-cycle.sh" <<EOF
 #!/usr/bin/env bash

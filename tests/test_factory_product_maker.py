@@ -6,6 +6,7 @@ from pathlib import Path
 import shutil
 import tempfile
 import unittest
+from unittest.mock import patch
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -39,10 +40,26 @@ class ManufacturerTests(unittest.TestCase):
             self.assertIn("farm_enterprise_economics/README.md", names)
             self.assertIsNone(archive.testzip())
         manifest = json.loads((path.parent / "manufacturing_manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual(manifest["schema_version"], 3)
         self.assertEqual(manifest["qa_status"], "passed")
+        self.assertGreaterEqual(manifest["qa_test_count"], maker.MIN_TESTS_PER_RECIPE)
+        self.assertEqual(manifest["minimum_tests_required"], 1)
+        self.assertEqual(manifest["quality_scope"], "software_tests_and_zip_integrity_only")
+        self.assertEqual(manifest["scientific_validity"], "pending_independent_specialist_review")
+        self.assertEqual(manifest["economic_value"], "pending_independent_review")
+        self.assertEqual(manifest["automatic_product_invention"], "not_implemented")
+        self.assertTrue(manifest["new_recipe_authoring_required"])
         self.assertFalse(manifest["customer_order_required"])
         self.assertFalse(manifest["public_listing_enabled"])
         self.assertIsNone(manifest["price"])
+
+    def test_zero_discovered_tests_fails_even_when_unittest_reports_ok(self):
+        completed = maker.subprocess.CompletedProcess(
+            args=["python", "-m", "unittest"], returncode=0,
+            stdout="", stderr="Ran 0 tests in 0.000s\\n\\nOK\\n")
+        with patch.object(maker.subprocess, "run", return_value=completed):
+            with self.assertRaisesRegex(RuntimeError, "executed_tests=0;minimum=1"):
+                maker.verify_recipe(self.product)
 
     def test_same_source_skips_repeat_generation(self):
         a = maker.manufacture("farm_enterprise_economics", self.recipes, self.output)

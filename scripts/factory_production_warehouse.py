@@ -85,6 +85,25 @@ def active_rework(root, recipe):
     return None
 
 
+def valid_manufacturing_evidence(manifest):
+    """Accept legacy evidence and schema-v3 evidence with a real test count."""
+    evidence = manifest.get("qa_evidence")
+    if evidence == "unit_tests_passed":
+        return True
+    if not isinstance(evidence, dict) or manifest.get("schema_version") != 3:
+        return False
+    count = evidence.get("tests_executed")
+    minimum = evidence.get("minimum_tests_required")
+    return (
+        evidence.get("status") == "unit_tests_passed"
+        and isinstance(count, int) and not isinstance(count, bool)
+        and isinstance(minimum, int) and not isinstance(minimum, bool)
+        and minimum >= 1 and count >= minimum
+        and manifest.get("qa_test_count") == count
+        and manifest.get("minimum_tests_required") == minimum
+    )
+
+
 def inspect_source(root, recipe):
     if not RECIPE.fullmatch(recipe):
         raise RuntimeError("WAREHOUSE_INVALID_PRODUCT_ID")
@@ -100,7 +119,7 @@ def inspect_source(root, recipe):
     expected_files = manifest.get("files")
     if (
         manifest.get("recipe") != recipe or manifest.get("qa_status") != "passed"
-        or manifest.get("qa_evidence") != "unit_tests_passed"
+        or not valid_manufacturing_evidence(manifest)
         or manifest.get("commercial_status") != "private_internal_qa_pass_not_published"
         or manifest.get("public_listing_enabled") is not False
         or manifest.get("customer_order_required") is not False
@@ -171,6 +190,8 @@ def stock_one(root, recipe, warehouse):
         "bytes": artifact.stat().st_size,
         "manufacturing_qc": "passed",
         "qa_evidence": "unit_tests_and_zip_integrity",
+        "qa_test_count": manifest.get("qa_test_count", 1),
+        "minimum_tests_required": manifest.get("minimum_tests_required", 1),
         "production_state": "finished_goods_in_factory",
         "commercial_release": False,
         "content_rights_market_review": "pending",
