@@ -76,18 +76,66 @@ def issue_three(root, native_engine, cycle, *, dry_run=False, max_active=297):
             if receipt_path.is_symlink():
                 raise RuntimeError("MPW_RECEIPT_SYMLINK")
             receipt = engine.read_json(receipt_path, max_bytes=100_000)
-            expected = [x["id"] for x in sorted(ours, key=lambda x:x["bridge_slot"])]
             if (receipt.get("schema") != RECEIPT_SCHEMA or
                     receipt.get("requesting_site") != SITE or
-                    receipt.get("cycle") != cycle or
-                    receipt.get("orders") != expected or len(expected) != 3):
+                    receipt.get("cycle") != cycle):
+                raise RuntimeError("MPW_RECEIPT_MISMATCH")
+            if receipt.get("status") == "waiting_for_native_capacity":
+                requests = receipt.get("requests")
+                if not isinstance(requests,list) or len(requests)!=3 or len(set(requests))!=3:
+                    raise RuntimeError("MPW_DEFERRED_ORDER_RECEIPT_INVALID")
+                inbox = area / "mojplaywin-pending-instructions"
+                for request in requests:
+                    candidate = inbox / (request + ".json")
+                    if not candidate.is_file() or candidate.is_symlink():
+                        raise RuntimeError("MPW_DEFERRED_ORDER_NOT_DURABLE")
+                    entry=engine.read_json(candidate,max_bytes=100_000)
+                    if entry.get("site")!=SITE or entry.get("cycle")!=cycle:
+                        raise RuntimeError("MPW_DEFERRED_ORDER_SCOPE_MISMATCH")
+                return {"status":"waiting_for_native_capacity", "orders":[],
+                        "requests":requests, "new":0, "requested":3,
+                        "native_accepted":0, "publications":0, "manufacturing_claimed":False}
+            expected = [x["id"] for x in sorted(ours, key=lambda x:x["bridge_slot"])]
+            if receipt.get("orders") != expected or len(expected) != 3:
                 raise RuntimeError("MPW_RECEIPT_MISMATCH")
             return {"status":"already_issued", "orders":expected, "new":0,
+                    "requested":3, "native_accepted":3,
                     "publications":0, "manufacturing_claimed":False}
         missing = 3 - len(ours)
         active = sum(x["status"] != "completed_verified" for x in old)
         if active + missing > max_active or len(old) + missing > engine.MAX_ORDERS:
-            raise RuntimeError("MPW_NATIVE_FACTORY_BACKLOG_CAPACITY_REACHED")
+            # The factory currently holds a full native queue. Accept exactly
+            # three site requests into a separate bounded PRIVATE inbox instead
+            # of inventing native acceptance or overflowing its production limit.
+            inbox=area/"mojplaywin-pending-instructions"
+            engine.ensure_private(inbox)
+            existing_requests=list(inbox.glob("*.json"))
+            if len(existing_requests)+3>1000:
+                raise RuntimeError("MPW_DEFERRED_SITE_INBOX_CAPACITY_REACHED")
+            seed=int(cycle.split("-")[1])%len(FAMILIES)
+            requests=[]
+            for slot in (1,2,3):
+                family,slug,instruction=FAMILIES[(seed+slot-1)%len(FAMILIES)]
+                identity="MPW-"+cycle+"-S"+str(slot)
+                file=inbox/(identity+".json")
+                if file.exists() or file.is_symlink():
+                    raise RuntimeError("MPW_DUPLICATE_DEFERRED_INSTRUCTION")
+                engine.atomic_json(file,{"schema":RECEIPT_SCHEMA,
+                    "request_id":identity,"site":SITE,"tenant":TENANT,
+                    "cycle":cycle,"slot":slot,"family_id":family,"family_slug":slug,
+                    "instruction":instruction,"status":"waiting_for_native_capacity",
+                    "created_utc":engine.stamp(),"native_order_id":None,
+                    "commercial_approval":False,"manufactured":False})
+                requests.append(identity)
+            engine.atomic_json(receipt_path,{"schema":RECEIPT_SCHEMA,
+                "requesting_site":SITE,"tenant":TENANT,"cycle":cycle,
+                "status":"waiting_for_native_capacity","requests":requests,
+                "orders":[],"native_accepted":0,"requested":3,
+                "capacity_reason":"NATIVE_FACTORY_300_PENDING_BACKLOG"})
+            return {"status":"waiting_for_native_capacity","orders":[],
+                    "requests":requests,"requested":3,"new":3,
+                    "native_accepted":0,"publications":0,
+                    "manufacturing_claimed":False}
         next_id = max((int(x["id"][3:]) for x in old), default=0) + 1
         # Rotate by run ID; same rerun always has same exact three family slots.
         seed = int(cycle.split("-")[1]) % len(FAMILIES)
@@ -133,10 +181,11 @@ def issue_three(root, native_engine, cycle, *, dry_run=False, max_active=297):
                 engine.atomic_json(dest, item)
             engine.atomic_json(receipt_path, {
                 "schema":RECEIPT_SCHEMA, "tenant":TENANT, "requesting_site":SITE,
-                "cycle":cycle, "orders":ids, "issued_new":len(to_write),
+                "cycle":cycle, "orders":ids, "issued_new":len(to_write), "requested":3, "native_accepted":3,
                 "manufactured_products_verified":0, "store_publication":False})
         return {"status":"dry_run" if dry_run else "issued",
                 "orders":ids, "new":0 if dry_run else len(to_write),
+                "requested":3, "native_accepted":0 if dry_run else 3,
                 "publications":0, "manufacturing_claimed":False}
 
 def main():
