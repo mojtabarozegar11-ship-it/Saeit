@@ -68,6 +68,14 @@ class FactoryVPSCycleTests(unittest.TestCase):
         subsequent = cycle.run_cycle(self.db, self.output, self.recipes)
         self.assertEqual(subsequent["status"], "ok")
         self.assertEqual(subsequent["updated"], 0)
+        self.assertEqual(subsequent["manufactured"], 0)
+        self.assertEqual(subsequent["packages_checked"], 2)
+        self.assertEqual(subsequent["unchanged_verified"], 2)
+        report=json.loads((self.output/"production-state.json").read_text("utf-8"))
+        self.assertEqual(report["built_product_count"], 0)
+        self.assertEqual(report["newly_built_product_count"], 0)
+        self.assertEqual(report["technical_packages_checked"], 2)
+        self.assertEqual(report["unchanged_packages_verified"], 2)
 
     def test_missing_recipe_stops_without_claiming_production(self):
         with self.assertRaises(RuntimeError):
