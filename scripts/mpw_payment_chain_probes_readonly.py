@@ -55,3 +55,22 @@ for fn in (discover_eth,discover_trx):
         else:
             clean.append(line[:210])
     emit("MPW_INDEXER_DISCOVERY_SOURCE",{"asset":fn.__name__,"source":clean[:130],"module":fn.__module__})
+
+from urllib.parse import urlsplit
+import scripts.mojplaywin_direct_wallet_discovery as discovery
+for asset,key in (("ETH","ETH_URL"),("TRX","TRX_URL")):
+    value=getattr(discovery,key,None)
+    u=urlsplit(value) if isinstance(value,str) else None
+    emit("MPW_INDEXER_ENDPOINT",{"asset":asset,"present":isinstance(value,str) and bool(value),
+      "scheme":u.scheme if u else None,"hostname":u.hostname if u else None,
+      "valid_https":bool(u and u.scheme=="https" and u.hostname),
+      "has_address_segment":bool(u and len(u.path.split("/"))>3),
+      "no_secrets_disclosed":True})
+for asset,fn in (("ETH",discover_eth),("TRX",discover_trx)):
+    try:fn(now_ms=int(time.time()*1000),lookback_s=60)
+    except Exception as exc:
+        cause=getattr(exc,"__cause__",None)
+        emit("MPW_INDEXER_FAILURE_CAUSE",{"asset":asset,"error_type":type(exc).__name__,
+           "root_cause_type":type(cause).__name__ if cause else None,
+           "http_status":getattr(cause,"code",None),
+           "no_urls_or_wallets_disclosed":True})
