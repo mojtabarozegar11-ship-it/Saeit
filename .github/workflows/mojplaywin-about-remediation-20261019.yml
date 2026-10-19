@@ -1,0 +1,175 @@
+name: MojPlayWin About isolated owner-and-gallery remediation
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/mojplaywin-about-remediation-20261019.yml"
+      - "scripts/mpw_about_remediation_atomic_20261019.py"
+      - "content/mojplaywin_about_team_section_20261018.html"
+      - "content/mpw_international_team_section_20261018.html"
+      - "content/mpw_senior_advisory_board_20261018.html"
+      - "content/mpw_seven_team_gallery_20261019.html"
+      - "content/mpw_founder_spotlight_20261019.html"
+permissions:
+  contents: read
+concurrency:
+  group: mojplaywin-about-exact-static-prod
+  cancel-in-progress: false
+jobs:
+  publish-about-only:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.ref == 'refs/heads/main' &&
+      github.event_name == 'push' &&
+      contains(github.event.head_commit.message, '[approved-mpw-about-remediation-20261019]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Source unit tests and prepare pinned before/after HTML fragments
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_about_remediation_atomic_20261019.py
+          python3 -m pip install -q pytest
+          python3 -m pytest -q tests/test_mojplaywin_about_profile_disclosures_20261019.py tests/test_mojplaywin_about_atomic_remediation_20261019.py
+          base=e7633275bfe57752b44e68327df448def3ff432b
+          git cat-file -e "$base^{commit}"
+          mkdir -p "$RUNNER_TEMP/mpw-fragments/old" "$RUNNER_TEMP/mpw-fragments/new"
+          for file in mojplaywin_about_team_section_20261018.html mpw_international_team_section_20261018.html mpw_senior_advisory_board_20261018.html mpw_seven_team_gallery_20261019.html mpw_founder_spotlight_20261019.html; do
+            git show "$base:content/$file" > "$RUNNER_TEMP/mpw-fragments/old/$file"
+            cp "content/$file" "$RUNNER_TEMP/mpw-fragments/new/$file"
+            test -s "$RUNNER_TEMP/mpw-fragments/old/$file"
+            test -s "$RUNNER_TEMP/mpw-fragments/new/$file"
+            ! cmp -s "$RUNNER_TEMP/mpw-fragments/old/$file" "$RUNNER_TEMP/mpw-fragments/new/$file"
+          done
+      - name: Record baseline of protected URLs before any write
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json,os,urllib.request,urllib.error
+          paths=['/','/about/','/company/','/store/','/about/mojtaba-rozegar/','/mojtaba.roozegar/','/farnaz/','/saman/','/picm/','/taniya/','/zahra/']
+          result={}
+          for path in paths:
+              url='https://mojplaywin.com'+path
+              try:
+                  with urllib.request.urlopen(urllib.request.Request(url,headers={'Cache-Control':'no-cache','User-Agent':'MPWAboutSafety/1.0'}),timeout=15) as res:
+                      code=res.status
+              except urllib.error.HTTPError as e:code=e.code
+              result[path]=code
+              print('BASELINE',path,code)
+          for path in ['/','/about/','/store/','/farnaz/']:
+              if result[path]!=200:raise SystemExit('Unhealthy critical route '+path)
+          with open(os.environ['RUNNER_TEMP']+'/mpw-route-baseline.json','w') as f:json.dump(result,f)
+          PY
+      - name: Verify pinned GitHub Actions to VPS to cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-about-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Upload new and pinned old snippets to private staging only
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-about-ssh"
+          stage="/home/zomorod2/.mpw-about-remediation-$GITHUB_RUN_ID"
+          timeout 35s ssh -T -F "$d/config" saeit-cpanel "test ! -e '$stage' && test ! -L '$stage' && umask 077 && mkdir -p '$stage/old' '$stage/new'"
+          scp -q -F "$d/config" "$RUNNER_TEMP/mpw-fragments/old/"* "saeit-cpanel:$stage/old/"
+          scp -q -F "$d/config" "$RUNNER_TEMP/mpw-fragments/new/"* "saeit-cpanel:$stage/new/"
+      - name: Atomically update only live static About HTML
+        id: publish
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-about-ssh"
+          timeout 90s ssh -T -F "$d/config" saeit-cpanel \
+            "python3 - install '$GITHUB_RUN_ID'" < scripts/mpw_about_remediation_atomic_20261019.py
+      - name: Live smoke and unchanged child-site URLs
+        id: smoke
+        run: |
+          python3 - <<'PY'
+          import json,os,time,re,urllib.request,urllib.error
+          baseline=json.load(open(os.environ['RUNNER_TEMP']+'/mpw-route-baseline.json'))
+          ok=False
+          for attempt in range(1,6):
+              url='https://mojplaywin.com/about/?_mpw_fix='+os.environ['GITHUB_RUN_ID']+'-'+str(attempt)
+              try:
+                  with urllib.request.urlopen(urllib.request.Request(url,headers={'Cache-Control':'no-cache'}),timeout=20) as res:
+                      text=res.read(1800000).decode('utf-8','replace')
+                      ok=(res.status==200 and
+                          all(x in text for x in ('MPW_ABOUT_REMEDIATION_20261019_V1',
+                              'limited liability company','Owner · Founder · Chief Executive Officer',
+                              'mpw-advanced-research','mpw-complementary-details',
+                              'SPECIALISM 28','COMPLEMENTARY SPECIALISM 30')) and
+                          text.count('class="mpw-profile-indicator"')==30 and
+                          text.count('class="mpw-seven-item"')==6 and
+                          'data-gallery-image="06"' not in text and
+                          len(re.findall(r'<h1\b',text,re.I))==1)
+              except Exception as e:print('LIVE_RETRY',type(e).__name__)
+              if ok:break
+              time.sleep(3)
+          if not ok:raise SystemExit('Live About page failed smoke')
+          print('ABOUT_LIVE_PUBLICATION_VERIFIED=true')
+          for path,expected in baseline.items():
+              url='https://mojplaywin.com'+path
+              try:
+                  with urllib.request.urlopen(urllib.request.Request(url,headers={'Cache-Control':'no-cache'}),timeout=15) as res:
+                      status=res.status
+              except urllib.error.HTTPError as e:status=e.code
+              if status!=expected:raise SystemExit('Protected site changed '+path)
+              print('PROTECTED_UNCHANGED',path,status)
+          PY
+      - name: Safe rollback on post-publication failure
+        if: failure() && steps.publish.outcome == 'success'
+        run: |
+          d="$RUNNER_TEMP/mpw-about-ssh"
+          timeout 60s ssh -T -F "$d/config" saeit-cpanel \
+            "python3 - rollback '$GITHUB_RUN_ID'" < scripts/mpw_about_remediation_atomic_20261019.py
+      - name: Clean only temporary staged fragments
+        if: always()
+        run: |
+          d="$RUNNER_TEMP/mpw-about-ssh"
+          if test -f "$d/config"; then
+            timeout 30s ssh -T -F "$d/config" saeit-cpanel \
+              "test ! -L /home/zomorod2/.mpw-about-remediation-$GITHUB_RUN_ID && rm -rf -- /home/zomorod2/.mpw-about-remediation-$GITHUB_RUN_ID" || true
+          fi
