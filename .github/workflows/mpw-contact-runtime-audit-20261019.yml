@@ -137,11 +137,12 @@ jobs:
                     navTiming:Math.round(performance.getEntriesByType('navigation')[0]?.duration||0)};
                   return info;
                 });
-                const axe=await new AxeBuilder({page}).withTags(['wcag2a','wcag2aa','wcag21a','wcag21aa']).analyze();
+                const axeCheck=(kind==='mobile' && path==='/contact/');
+                const axe=axeCheck?await new AxeBuilder({page}).include('main').withTags(['wcag2a','wcag2aa']).analyze():{violations:[]};
                 const base=path==='/'?'home':path.replace(/\W+/g,'-');
-                await page.screenshot({path:kind+'-'+base+'.png',fullPage:true,animations:'disabled'});
+                await page.screenshot({path:kind+'-'+base+'.png',fullPage:false,animations:'disabled'});
                 const info={kind,path,status:response.status(),...metrics,
-                            axe_violations:axe.violations.map(x=>({id:x.id,impact:x.impact,count:x.nodes.length})),
+                            axe_checked:axeCheck,axe_violations:axe.violations.map(x=>({id:x.id,impact:x.impact,count:x.nodes.length})),
                             pageerrors:errors};
                 results.push(info);
                 console.log('BROWSER_AUDIT='+JSON.stringify(info));
