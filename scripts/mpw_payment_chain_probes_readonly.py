@@ -24,3 +24,24 @@ try:
  emit("MPW_SETTLEMENT_IDLE_EXECUTION",result)
 except Exception as exc:
  emit("MPW_SETTLEMENT_IDLE_EXECUTION",{"error_type":type(exc).__name__})
+
+import inspect,ast
+for fn in (discover_eth, discover_trx):
+    fn_loader=inspect.signature(fn).parameters.get("load")
+    loader=fn_loader.default if fn_loader is not None else None
+    if not callable(loader):
+        continue
+    source=inspect.getsource(loader)
+    clean=[]
+    for line in source.splitlines():
+        if any(t in line.lower() for t in ("secret","token","password","api_key","authorization","mnemonic","private_key")):
+            clean.append("[sensitive line withheld]")
+        else:
+            clean.append(line[:180])
+    emit("MPW_INDEXER_LOADER_SOURCE",{
+        "loader":loader.__name__,
+        "module":loader.__module__,
+        "source":clean[:130],
+        "origin":str(Path(inspect.getsourcefile(loader)).name)
+    })
+    break
