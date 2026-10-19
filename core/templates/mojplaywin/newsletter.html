@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}MojPlayWin Newsroom | Research, AI, Games & Digital Business{% endblock %}
+{% block meta_description %}Original, source-traceable MojPlayWin reports on AI, gaming, research, learning and digital technology, reviewed before publication.{% endblock %}
+{% block body_class %}mojplaywin-section{% endblock %}
+{% block content %}
+{% include "mojplaywin/theme.html" %}
+<div class="mw-shell" id="mpw-newsroom">
+  <section class="mw-page-hero">
+    <span class="mw-kicker">MOJPLAYWIN · VERIFIED NEWSROOM</span>
+    <h1>MojPlayWin News & Insights</h1>
+    <p>Research, practical technology, games, digital products and business. Every published article goes through independent editorial quality checks, attribution and explicit approval.</p>
+  </section>
+  <section class="mw-section">
+    <h2>Browse by topic</h2>
+    <nav class="mw-links" aria-label="Newsletter categories">
+      <a href="/newsletter/" {% if not category %}aria-current="page"{% endif %}>All news</a>
+      {% for item in categories %}
+      <a href="/newsletter/?category={{ item|urlencode }}" {% if category == item %}aria-current="page"{% endif %}>{{ item|title }}</a>
+      {% endfor %}
+    </nav>
+  </section>
+  <section class="mw-section" aria-labelledby="mpw-latest-title">
+    <span class="mw-kicker">EDITORIAL ARCHIVE · INDEPENDENT FROM ZOMOROD MELAL</span>
+    <h2 id="mpw-latest-title">Latest approved articles</h2>
+    <div class="mw-grid">
+      {% for item in articles %}
+      <article class="mw-card"><div class="mw-card-copy">
+        <small>{{ item.category|upper }} · {{ item.event_date|default:item.published_at|slice:":10" }}</small>
+        <h3><a href="/newsletter/{{ item.slug }}/">{{ item.title }}</a></h3>
+        <p>{{ item.summary|truncatechars:260 }}</p>
+        <a href="/newsletter/{{ item.slug }}/">Read verified report ↗</a>
+      </div></article>
+      {% empty %}
+      <article class="mw-card"><div class="mw-card-copy"><h3>Editorial review in progress</h3><p>No approved MojPlayWin articles have been published yet. Unverified or incomplete drafts never appear here.</p></div></article>
+      {% endfor %}
+    </div>
+  </section>
+</div>
+{% endblock %}
