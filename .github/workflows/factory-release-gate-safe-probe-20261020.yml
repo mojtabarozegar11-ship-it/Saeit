@@ -1,0 +1,125 @@
+name: Safe native release gate and lifecycle schema diagnostics
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/factory-release-gate-safe-probe-20261020.yml"]
+permissions: {contents: read}
+jobs:
+  snapshot:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Diagnose exact live release gate without database mutation
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 85s ssh -T -F "$d/config" saeit-cpanel "/home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python -" <<'PY'
+          import os,inspect,json
+          from pathlib import Path
+          home=Path('/home/zomorod2')
+          os.chdir(home/'Saeit-staging')
+          import sys;sys.path.insert(0,str(home/'Saeit-staging'))
+          os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings')
+          import django;django.setup()
+          from django.apps import apps
+          from core.models import Product,ApprovalRequest
+          product=Product.objects.filter(pk=131).first()
+          print('RELEASE_PRODUCT_PRESENT='+str(bool(product)))
+          if product:
+              m=product.metadata if isinstance(product.metadata,dict) else {}
+              print('RELEASE_PRODUCT_SAFE_STATE='+json.dumps({'id':product.pk,'active':product.active,'price':str(product.price),'currency':product.currency,'has_article':bool(product.knowledge_article_id),'meta':{k:m.get(k) for k in ('factory_origin','factory_recipe','factory_software_qa','factory_bridge_sha256','factory_status','factory_publication_permission')}}))
+          gate=apps.get_model('core','FactoryReleaseGate')
+          print('RELEASE_GATE_MODEL='+gate.__module__+'.'+gate.__name__)
+          print('RELEASE_GATE_FIELDS='+json.dumps([{'name':f.name,'type':f.get_internal_type(),'null':getattr(f,'null',None)} for f in gate._meta.fields]))
+          qs=gate.objects.filter(product_id=131)
+          print('RELEASE_GATE_MATCHES='+str(qs.count()))
+          print('RELEASE_GATE_TOTAL='+str(gate.objects.count()))
+          for item in qs[:2]:
+              fields={}
+              for f in gate._meta.fields:
+                  if f.name in ('id','product','run','artifact','manifest','status','approved','review_status','approval_status','quality_status','sha256','created_at'):
+                      v=getattr(item,f.attname,None);fields[f.name]=str(v)[:160]
+              print('RELEASE_GATE_SAFE_RECORD='+json.dumps(fields,sort_keys=True))
+          for name in ('FactoryRun','FactoryArtifact','FactoryManifest'):
+              try:
+                  model=apps.get_model('core',name)
+                  print('RELEASE_SUPPORT_MODEL='+name+':'+','.join(f.name for f in model._meta.fields))
+              except LookupError:print('RELEASE_SUPPORT_MODEL_MISSING='+name)
+          for cls in (ApprovalRequest,Product):
+              func=cls.save
+              code=inspect.getsource(func)
+              print('RELEASE_SAVE_IMPLEMENTATION_'+cls.__name__+'='+json.dumps(code[:5000]))
+          print('RELEASE_GATE_READONLY_COMPLETE=true')
+          PY
+      - name: Verify factory original passport provenance without changing goods
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 50s ssh -T -F "$d/config" saeit-vps 'python3 -' <<'PY'
+          import json
+          from pathlib import Path
+          root=Path.home()/'factory-runtime'/'private'/'autonomous-product-cycle'
+          life=root/'product-lifecycle'
+          for label,p in [('factory',root/'production-state.json'),('life',life/'dashboard.json'),('stock',root/'production-warehouse'/'stock-register.json')]:
+              try:
+                  o=json.loads(p.read_text())
+                  keys=('built_product_count','store_distribution_state','manufacturing_order_automation_complete','blocked_reasons','workorder_status','final_commercially_verified_stock','finished_goods_versions','distribution_enabled','awaiting_commercial_review')
+                  print('RELEASE_FACTORY_'+label.upper()+'='+json.dumps({k:o.get(k) for k in keys if k in o},sort_keys=True))
+              except Exception as e:print('RELEASE_FACTORY_'+label.upper()+'_ERROR='+type(e).__name__)
+          for label,d in [('passports',life/'passports'),('review_receipts',life/'review-receipts'),('approved_finished_goods',life/'approved-finished-goods')]:
+              count=len([p for p in d.iterdir() if p.is_file() and not p.is_symlink()]) if d.is_dir() else None
+              print('RELEASE_FACTORY_'+label.upper()+'_FILES='+str(count))
+          print('RELEASE_FACTORY_READONLY_COMPLETE=true')
+          PY
+      - name: Remove temporary SSH material
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/mojplaywin-inventory-ssh"
