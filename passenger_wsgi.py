@@ -31,8 +31,9 @@ for root in (
     os.path.join(os.path.expanduser("~"), "virtualenv", "repositories", "Saeit", py_version),
     sys.prefix,
 ):
-    compiled = os.path.join(root, "lib64", "python" + py_version, "site-packages")
-    if os.path.isdir(compiled) and compiled not in sys.path:
-        sys.path.insert(1, compiled)
+    for dirname in ("lib", "lib64"):
+        compiled = os.path.join(root, dirname, "python" + py_version, "site-packages")
+        if os.path.isdir(compiled) and compiled not in sys.path:
+            sys.path.insert(1, compiled)
 
 from config.wsgi import application
