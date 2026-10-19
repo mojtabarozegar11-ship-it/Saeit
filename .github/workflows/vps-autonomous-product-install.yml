@@ -7,6 +7,9 @@ on:
       - "tests/test_factory_build50_workbook.py"
       - "scripts/factory_build_50.py"
       - "tests/test_factory_build_50.py"
+      - "scripts/factory_design_intake.py"
+      - "tests/test_factory_design_intake.py"
+      - "factory_config/internal_design_supply.json"
       - "scripts/factory_recipe_designer.py"
       - "factory_config/design_opportunities.json"
       - "tests/test_factory_recipe_designer.py"
@@ -34,6 +37,9 @@ on:
       - "tests/test_factory_build50_workbook.py"
       - "scripts/factory_build_50.py"
       - "tests/test_factory_build_50.py"
+      - "scripts/factory_design_intake.py"
+      - "tests/test_factory_design_intake.py"
+      - "factory_config/internal_design_supply.json"
       - "scripts/factory_recipe_designer.py"
       - "factory_config/design_opportunities.json"
       - "tests/test_factory_recipe_designer.py"
@@ -69,6 +75,7 @@ jobs:
       - run: |
           python -m pip install openpyxl==3.1.5
           python -B -m unittest discover -s tests -p 'test_factory_recipe_designer.py' -v
+          python -B -m unittest discover -s tests -p 'test_factory_design_intake.py' -v
           python -B -m unittest discover -s tests -p 'test_factory_measured_qa.py' -v
           python -B -m unittest discover -s tests -p 'test_factory_product_maker.py' -v
           python -B -m unittest discover -s tests -p 'test_factory_production_warehouse.py' -v
@@ -87,6 +94,7 @@ jobs:
       - name: Validate product and installer
         run: |
           set -euo pipefail
+          python3 -m pip install openpyxl==3.1.5
           bash -n deploy/install_autonomous_factory_products.sh
           python3 scripts/factory_product_maker.py --recipes product_recipes --out "$RUNNER_TEMP/factory-products"
           python3 -m unittest discover -s tests -p 'test_factory_product_maker.py' -v
@@ -116,10 +124,21 @@ jobs:
           ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
           test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
           SSH=(ssh -i "$d/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o BatchMode=yes githubops@178.239.147.150)
-          tar -cf - scripts/factory_build50_workbook.py tests/test_factory_build50_workbook.py scripts/factory_build_50.py tests/test_factory_build_50.py tests/test_factory_vps_product_cycle.py tests/test_factory_specialist_pilots.py tests/test_factory_research_triage.py scripts/factory_specialist_pilots.py scripts/factory_specialist_formats.py scripts/factory_research_triage.py scripts/factory_recipe_designer.py factory_config/design_opportunities.json scripts/factory_first_product_pilot.py scripts/factory_autonomous_portfolio.py scripts/factory_evidence_quality.py scripts/factory_product_maker.py scripts/factory_product_rework.py scripts/factory_vps_product_cycle.py scripts/factory_production_warehouse.py product_recipes/ deploy/install_production_warehouse.sh deploy/install_autonomous_factory_products.sh | "${SSH[@]}" 'mkdir -p "$HOME/factory-runtime/operations/product-deploy-${{ github.sha }}"; tar -xf - -C "$HOME/factory-runtime/operations/product-deploy-${{ github.sha }}"'
+          tar -cf - scripts/factory_design_intake.py tests/test_factory_design_intake.py factory_config/internal_design_supply.json scripts/factory_build50_workbook.py tests/test_factory_build50_workbook.py scripts/factory_build_50.py tests/test_factory_build_50.py tests/test_factory_vps_product_cycle.py tests/test_factory_specialist_pilots.py tests/test_factory_research_triage.py scripts/factory_specialist_pilots.py scripts/factory_specialist_formats.py scripts/factory_research_triage.py scripts/factory_recipe_designer.py factory_config/design_opportunities.json scripts/factory_first_product_pilot.py scripts/factory_autonomous_portfolio.py scripts/factory_evidence_quality.py scripts/factory_product_maker.py scripts/factory_product_rework.py scripts/factory_vps_product_cycle.py scripts/factory_production_warehouse.py product_recipes/ deploy/install_production_warehouse.sh deploy/install_autonomous_factory_products.sh | "${SSH[@]}" 'mkdir -p "$HOME/factory-runtime/operations/product-deploy-${{ github.sha }}"; tar -xf - -C "$HOME/factory-runtime/operations/product-deploy-${{ github.sha }}"'
           "${SSH[@]}" '"$HOME/factory-runtime/.venv/bin/python" -B -m unittest discover -s "$HOME/factory-runtime/operations/product-deploy-${{ github.sha }}/tests" -p test_factory_vps_product_cycle.py -v'
           "${SSH[@]}" '"$HOME/factory-runtime/.venv/bin/python" -B -m unittest discover -s "$HOME/factory-runtime/operations/product-deploy-${{ github.sha }}/tests" -p test_factory_build_50.py -v'
+          "${SSH[@]}" '"$HOME/factory-runtime/.venv/bin/python" -B -m unittest discover -s "$HOME/factory-runtime/operations/product-deploy-${{ github.sha }}/tests" -p test_factory_design_intake.py -v'
           echo VPS_FACTORY_ISOLATED_FAULT_INJECTION=PASS
+          "${SSH[@]}" 'python3 -' <<'PYBEFORE'
+          import json
+          from pathlib import Path
+          root=Path.home()/"factory-runtime/private/autonomous-product-cycle"
+          before=[]
+          for path in (root/"generated-product-recipes").glob("*/design_receipt.json"):
+              data=json.loads(path.read_text())
+              before.append(data.get("functional_sha256"))
+          (root/"engineering-before-${{ github.sha }}.json").write_text(json.dumps(before))
+          PYBEFORE
           "${SSH[@]}" 'bash "$HOME/factory-runtime/operations/product-deploy-${{ github.sha }}/deploy/install_autonomous_factory_products.sh"'
           "${SSH[@]}" 'bash "$HOME/factory-runtime/operations/product-deploy-${{ github.sha }}/deploy/install_production_warehouse.sh"'
           "${SSH[@]}" 'bash "$HOME/factory-runtime/operations/autonomous-product-runtime/run-local-cycle.sh" && bash "$HOME/factory-runtime/operations/production-warehouse/run-warehouse.sh"'
@@ -139,7 +158,7 @@ jobs:
               assert receipt["commercial_release"] is False
           print("VPS_FACTORY_SYNTHESIZED_RECIPE_COUNT="+str(len(recipes)))
           print("VPS_FACTORY_TOTAL_RECIPE_COUNT="+str(state["registered_recipe_count"]))
-          print("VPS_FACTORY_GENERATIVE_ADAPTER_FAMILIES=F28")
+          print("VPS_FACTORY_GENERATIVE_ADAPTER_FAMILIES=F27,F28")
           print("VPS_FACTORY_GENERAL_AI_INVENTION=false")
           print("VPS_FACTORY_DESIGNER_TECHNICAL_PILOT=PASS")
           import importlib.util, shutil, os
@@ -231,3 +250,38 @@ jobs:
           print("FACTORY_RESEARCH_FAILURES="+json.dumps(state.get("research_failures",[])))
           print("FACTORY_PRODUCTION_ACTIVITY_MEASURED=PASS")
           PYHEALTH
+
+          "${SSH[@]}" '"$HOME/factory-runtime/.venv/bin/python" -' <<'PYENGINEERING'
+          import hashlib,importlib.util,json,subprocess
+          from pathlib import Path
+          base=Path.home()/"factory-runtime"
+          root=base/"private/autonomous-product-cycle"
+          runtime=base/"operations/autonomous-product-runtime"
+          py=base/".venv/bin/python"
+          # Actual runtime ticks; cache hits never count as novel products.
+          for _ in range(10):
+              subprocess.run([str(py),str(runtime/"scripts/factory_vps_product_cycle.py"),
+                  "--db",str(base/"private/factory-fresh-isolated.sqlite3"),
+                  "--out",str(root),"--recipes",str(runtime/"product_recipes"),
+                  "--enable-designer","--enable-design-intake"],check=True,timeout=90,
+                  stdout=subprocess.DEVNULL)
+          status=json.loads((root/"engineering-intake/production-results.json").read_text())
+          records=[]
+          for path in (root/"engineering-intake").glob("*.json"):
+              row=json.loads(path.read_text())
+              if row.get("schema")=="saeit.factory.engineering-intake.v1" and row.get("status")=="technical_prototype_built":
+                  artifact=root/"digital-products"/row["recipe"]/(row["recipe"]+"-internal-qa.zip")
+                  assert hashlib.sha256(artifact.read_bytes()).hexdigest()==row["artifact_sha256"]
+                  assert row["measured_successful_tests"]>=3
+                  assert row["build50_verified"] is False and row["commercial_release"] is False
+                  records.append(row)
+          assert len({r["functional_sha256"] for r in records})>=6, records
+          assert any(r["family_id"]=="F27" for r in records)
+          before=set(json.loads((root/"engineering-before-${{ github.sha }}.json").read_text()))
+          novel={r["functional_sha256"] for r in records}-before
+          print("FACTORY_ENGINEERING_FUNCTIONAL_PRODUCTS="+str(status["functional_products"]))
+          print("FACTORY_ENGINEERING_REAL_FORMAT_PROTOTYPES="+str(status["technical_prototypes"]))
+          print("FACTORY_ENGINEERING_NOVEL_FUNCTIONS_SINCE_DEPLOY="+str(len(novel)))
+          print("FACTORY_ENGINEERING_50_STAGE_NEW_PROTOTYPES_VERIFIED=0")
+          print("FACTORY_NEW_DESIGN_TO_REAL_PROTOTYPE=PASS")
+          PYENGINEERING

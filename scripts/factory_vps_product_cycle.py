@@ -31,7 +31,7 @@ SCRIPTS = Path(__file__).resolve().parent
 
 
 def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
-              enable_designer=False):
+              enable_designer=False, enable_design_intake=False):
     if (type(max_products) is not int or not 1<=max_products<=100
             or max_recipes is not None and (type(max_recipes) is not int or max_recipes<1)):
         raise ValueError('BOUNDED_LIMIT_REQUIRED')
@@ -60,11 +60,21 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
 
         repair = load("saeit_factory_rework_cycle",
                       SCRIPTS / "factory_product_rework.py")
+        engineering_state={"enabled":False,"enqueued":0}
         design_state = {"enabled": False, "new_recipes": 0}
         designer_failures = []
         source_recoveries = []
         if enable_designer:
             designer = load("saeit_factory_recipe_designer", SCRIPTS / "factory_recipe_designer.py")
+            if enable_design_intake:
+                try:
+                    intake=load('saeit_factory_design_intake',SCRIPTS/'factory_design_intake.py')
+                    engineering_state=intake.cycle(root,supply=SCRIPTS.parent/'factory_config/internal_design_supply.json')
+                    engineering_state['enabled']=True
+                    blocked=sum(x['blocked']+x['deferred'] for x in engineering_state.get('channels',{}).values())
+                    if blocked:designer_failures.append({'type':'engineering_rework','source_revisions':blocked})
+                except (ValueError,OSError,RuntimeError) as error:
+                    designer_failures.append({'type':'engineering_intake','reason':str(error)[:400]})
             try:
                 design_state = designer.cycle(root, seed_file=SCRIPTS.parent / "factory_config" / "design_opportunities.json",
                                               database=database)
@@ -149,6 +159,10 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
             if manifest.is_file():
                 repair.record_technical_recovery(
                     root, recipe, json.loads(manifest.read_text(encoding="utf-8")))
+        if enable_design_intake and engineering_state.get('enabled'):
+            try:engineering_state['production_results']=intake.reconcile(root)
+            except (ValueError,OSError) as error:
+                designer_failures.append({'type':'engineering_reconciliation','reason':str(error)[:400]})
         if selected:
             maker.atomic_text(cursor_file, json.dumps({"last_recipe": selected[-1]}))
         rework_counts = repair.summarize(root)
@@ -167,6 +181,7 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
             "build_policy": "all_registered_recipes_sequentially",
             "registered_recipe_count": len(recipe_catalog),
             "recipe_designer": design_state,
+            "engineering_intake":engineering_state,
             "designer_failures": designer_failures,
             "research_failures": research_failures,
             "source_recoveries": source_recoveries,
@@ -208,6 +223,9 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
             value=health.get(key,0)
             return value if type(value) is int and value>=0 else 0
         healthy=state['cycle_status']=='ok'
+        fresh=state['new_or_updated_product_count']>0
+        reason=None if fresh else 'blocked_design_or_research' if not healthy else 'waiting_for_new_validated_need_or_design'
+        state['zero_new_products_reason_code']=reason
         finished=time.time()
         state['cycle_started_at_utc']=datetime.fromtimestamp(started,timezone.utc).isoformat()
         state['cycle_finished_at_utc']=datetime.fromtimestamp(finished,timezone.utc).isoformat()
@@ -219,6 +237,9 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
                   'consecutive_degraded_cycles':0 if healthy else counter('consecutive_degraded_cycles')+1,
                   'new_or_updated_artifacts_total':counter('new_or_updated_artifacts_total')+state['new_or_updated_product_count'],
                   'new_or_updated_artifacts_this_cycle':state['new_or_updated_product_count'],
+                  'last_new_artifact_at_utc':state['cycle_finished_at_utc'] if fresh else health.get('last_new_artifact_at_utc'),
+                  'consecutive_zero_new_cycles':0 if fresh else counter('consecutive_zero_new_cycles')+1,
+                  'zero_new_products_reason_code':reason,
                   'unfinished_rework_requires_attention':bool(failures or admission_failures or designer_failures or research_failures),
                   'commercial_quality_certified':False}
         maker.atomic_text(health_path,json.dumps(activity,sort_keys=True,indent=2)+'\n')
@@ -242,6 +263,7 @@ def main(argv=None):
     p.add_argument("--recipes", required=True)
     p.add_argument("--max-products", type=int, default=25)
     p.add_argument("--enable-designer", action="store_true")
+    p.add_argument("--enable-design-intake", action="store_true")
     p.add_argument(
         "--max-recipes", type=int, default=None,
         help="Optional positive limit; by default build every registered recipe.",
@@ -253,7 +275,8 @@ def main(argv=None):
         raise ValueError("BOUNDED_LIMIT_REQUIRED")
     result = run_cycle(options.db, options.out, options.recipes,
                        max_products=options.max_products,
-                       max_recipes=options.max_recipes, enable_designer=options.enable_designer)
+                       max_recipes=options.max_recipes, enable_designer=options.enable_designer,
+                       enable_design_intake=options.enable_design_intake)
     print("VPS_FACTORY_CYCLE_STATUS=" + result["status"])
     if result["status"] == "already_running":
         return 0

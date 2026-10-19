@@ -91,6 +91,8 @@ def prepare(conn, forced_product_id=None):
     return {
         "schema_version": 1,
         "product_id": product["id"],
+        "engineering_brief": metadata.get("engineering_brief"),
+        "engineering_origin": metadata.get("engineering_origin", "factory_invention"),
         "title": product.get("title"),
         "validation_outcome": validation.get("outcome"),
         "factory_state": metadata.get("factory_state"),

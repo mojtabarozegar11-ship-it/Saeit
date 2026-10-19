@@ -106,7 +106,7 @@ def source_digest(source, files):
     return checksum.hexdigest()
 
 
-QA_POLICY_VERSION = 3
+QA_POLICY_VERSION = 4
 
 
 def verify_recipe(source, *, timeout=60, minimum_tests=1, evidence=None):
@@ -202,6 +202,24 @@ def manufacture(recipe, recipes_root, private_root):
     qa_status = verify_recipe(source, evidence=measurements)
     if source_digest(source, files) != checksum:
         raise RuntimeError("PRODUCT_QA_FAILED:SOURCE_CHANGED_DURING_TESTS")
+    design_metadata={}
+    receipt_path=source/'design_receipt.json'
+    request_path=source/'design_request.json'
+    if re.fullmatch(r'(?:synth|sheet)_[a-f0-9]{24}',recipe) and not (receipt_path.is_file() and request_path.is_file()):
+        raise RuntimeError('PRODUCT_PACKAGE_QA_FAILED:DESIGN_PROVENANCE_MISSING')
+    if receipt_path.is_file() and request_path.is_file():
+        receipt=json.loads(receipt_path.read_text(encoding='utf8'))
+        request=json.loads(request_path.read_text(encoding='utf8'))
+        bound=hashlib.sha256(json.dumps(request,sort_keys=True,ensure_ascii=False,separators=(',',':')).encode()).hexdigest()
+        if not isinstance(receipt,dict) or not isinstance(request,dict):
+            raise RuntimeError('PRODUCT_PACKAGE_QA_FAILED:DESIGN_PROVENANCE_INVALID')
+        if (receipt.get('schema')!='saeit.factory.synthesis-receipt.v1'
+                or not re.fullmatch(r'[a-f0-9]{64}',str(receipt.get('functional_sha256','')))
+                or receipt.get('recipe')!=recipe or receipt.get('request_sha256')!=bound
+                or receipt.get('family_id') not in ('F27','F28') or request.get('family_id')!=receipt['family_id']):
+            raise RuntimeError('PRODUCT_PACKAGE_QA_FAILED:DESIGN_PROVENANCE_MISMATCH')
+        design_metadata['family_id']=receipt['family_id']
+        design_metadata['functional_sha256']=receipt['functional_sha256']
     make_zip(zip_path, source, recipe, files)
     metadata = {
         "schema_version": 2, "recipe": recipe, "name": name,
@@ -215,6 +233,7 @@ def manufacture(recipe, recipes_root, private_root):
         "public_listing_enabled": False, "owner_publication_approval": False,
         "needs_content_and_market_review": True, "needs_storefront_adapter_verification": True,
     }
+    metadata.update(design_metadata)
     atomic_text(manifest_path, json.dumps(metadata, ensure_ascii=False, sort_keys=True, indent=2) + "\n")
     return {"recipe": recipe,
             "changed": previous_artifact_sha != metadata["artifact_sha256"],

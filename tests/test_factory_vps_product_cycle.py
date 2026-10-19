@@ -278,3 +278,20 @@ class ProductionContinuityTests(unittest.TestCase):
         self.assertEqual(state['status'],'needs_rework')
         self.assertEqual(state['manufactured'],3)
         self.assertTrue(json.loads((self.output/'production-health.json').read_text())['unfinished_rework_requires_attention'])
+
+    def test_high_level_internal_needs_feed_real_new_product_builds(self):
+        novel=0
+        for _ in range(10):
+            result=cycle.run_cycle(self.db,self.output,self.recipes,enable_designer=True,enable_design_intake=True)
+            novel+=result['new_artifacts']
+        status=json.loads((self.output/'engineering-intake/production-results.json').read_text())
+        self.assertEqual(status['technical_prototypes'],7)
+        self.assertEqual(status['functional_products'],6)
+        self.assertGreaterEqual(novel,10)
+        replay=cycle.run_cycle(self.db,self.output,self.recipes,enable_designer=True,enable_design_intake=True)
+        self.assertEqual(replay['new_artifacts'],0)
+        for receipt in (self.output/'engineering-intake').glob('*.json'):
+            item=json.loads(receipt.read_text())
+            if item.get('status')=='technical_prototype_built':
+                self.assertFalse(item['build50_verified'])
+                self.assertFalse(item['commercial_release'])

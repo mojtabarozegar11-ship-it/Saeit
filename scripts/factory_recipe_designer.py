@@ -9,6 +9,7 @@ certify scientific, market or commercial quality. Python 3.8+, stdlib only.
 import ast
 from decimal import Decimal, InvalidOperation, localcontext
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -74,10 +75,12 @@ def number(value):
 def validate(spec):
     if spec.get('schema') != SCHEMA or spec.get('origin') not in ORIGINS:
         raise ValueError('DESIGN_SCHEMA_OR_ORIGIN_INVALID')
-    if spec.get('family_id') != 'F28': raise ValueError('DESIGN_FAMILY_ADAPTER_NOT_IMPLEMENTED')
+    if spec.get('family_id') not in ('F27','F28'): raise ValueError('DESIGN_FAMILY_ADAPTER_NOT_IMPLEMENTED')
+    if spec.get('family_id')=='F27' and importlib.util.find_spec('openpyxl') is None:
+        raise ValueError('DESIGN_FAMILY_TOOL_UNAVAILABLE:openpyxl')
     if spec.get('kind') != 'arithmetic_program': raise ValueError('DESIGN_KIND_NOT_IMPLEMENTED')
     for key in ('title', 'problem', 'output_unit', 'limitations'):
-        if not isinstance(spec.get(key), str) or not 3 <= len(spec[key]) <= 2000:
+        if not isinstance(spec.get(key), str) or not (1 if key=='output_unit' else 3) <= len(spec[key]) <= 2000:
             raise ValueError('DESIGN_MISSING_FIELD:' + key)
     fields = spec.get('inputs')
     if not isinstance(fields, list) or not 1 <= len(fields) <= 4:
@@ -191,12 +194,13 @@ def compile_recipe(spec, recipes):
                               'output_unit':spec['output_unit'],
                               'input_domains':[{k:f[k] for k in ('minimum','maximum','integral') if k in f}
                                                for f in spec['inputs']]})
-    recipe = 'synth_' + functional_hash[:24]
+    family=spec['family_id']
+    recipe = ('synth_' if family=='F28' else 'sheet_') + functional_hash[:24]
     private(recipes)
     destination = recipes / recipe
     provenance = {'schema':'saeit.factory.synthesis-receipt.v1',
                   'request_sha256':digest(spec),'functional_sha256':functional_hash,
-                  'family_id':'F28','recipe':recipe,'expression_tree':tree,
+                  'family_id':family,'recipe':recipe,'expression_tree':tree,
                   'design_method':'bounded_arithmetic_program_synthesis',
                   'search_states_evaluated':searched,'training_examples':len(train),
                   'heldout_examples_passed':len(holdout),'general_ai_invention':False,
@@ -278,6 +282,8 @@ class GeneratedAcceptanceTests(unittest.TestCase):
             (stage/filename).write_text(body,encoding='utf-8')
             os.chmod(str(stage/filename),0o600)
         ast.parse(code); ast.parse(tests)
+        if family=='F27':
+            create_workbook(stage,spec,tree)
         stage.rename(destination)
     finally:
         if stage.exists():
@@ -387,7 +393,7 @@ def cycle(root, *, seed_file=None, max_designs=1, database=None, now=None):
     result={'schema':'saeit.factory.designer-state.v1','new_recipes':sum(x['result']['created'] for x in actions),
             'requests_processed':attempts,'pending_requests':pending,'deferred_rework_requests':deferred,
             'database_design_requests_imported':imported,'intake_failures':intake_failures,
-            'actions':actions,'rework':blocked,'adapter_families_implemented':['F28'],
+            'actions':actions,'rework':blocked,'adapter_families_implemented':['F27','F28'],
             'catalog_lifetime_limit':None,'general_ai_invention':False,'commercial_release':False}
     save(root/'designer-state.json',result)
     return result
@@ -401,7 +407,7 @@ def recover_recipe(recipe, recipes):
     """
     import importlib.util
     recipes=Path(recipes)
-    if not re.fullmatch(r'synth_[a-f0-9]{24}',recipe):
+    if not re.fullmatch(r'(?:synth|sheet)_[a-f0-9]{24}',recipe):
         raise ValueError('DESIGN_RECOVERY_NOT_COMPILER_OWNED')
     source=recipes/recipe
     if source.is_symlink() or not source.is_dir():
@@ -435,3 +441,70 @@ def recover_recipe(recipe, recipes):
             'action':'regenerated_from_original_validated_spec',
             'retained_broken_source':str(archive),'qa_measurements':measurements,
             'commercial_release':False}
+
+
+def create_workbook(folder,spec,tree):
+    """Construct an actual protected XLSX, not a file with a changed extension.
+
+    Rational reference evaluation tests serialized Excel formulas independently
+    of the generated Decimal program. Office recalculation and usability remain
+    separate acceptance requirements before any commercial approval.
+    """
+    from openpyxl import Workbook
+    from openpyxl.styles import Protection,Font,PatternFill
+    from openpyxl.worksheet.datavalidation import DataValidation
+    def excel(node):
+        if isinstance(node,int):return 'B'+str(node+2)
+        return '('+excel(node[1])+node[0]+excel(node[2])+')'
+    book=Workbook();sheet=book.active;sheet.title='Calculator'
+    sheet.append(['Parameter','Value','Unit'])
+    for field in spec['inputs']:
+        row=sheet.max_row+1
+        sheet.append([field['name'],float(spec['training_examples'][0]['inputs'][field['name']]),field['unit']])
+        sheet.cell(row,2).protection=Protection(locked=False)
+        rule=DataValidation(type='whole' if field.get('integral') else 'decimal',operator='between',formula1=field.get('minimum',-1e12),
+                            formula2=field.get('maximum',1e12),allow_blank=False)
+        rule.showErrorMessage=True;rule.error='Use the documented finite input domain.'
+        sheet.add_data_validation(rule);rule.add(sheet.cell(row,2))
+    output=sheet.max_row+2
+    sheet.cell(output,1,'Result');sheet.cell(output,2,'='+excel(tree));sheet.cell(output,3,spec['output_unit'])
+    sheet.freeze_panes='B2';sheet.protection.sheet=True
+    for cell in sheet[1]:cell.font=Font(bold=True,color='FFFFFF');cell.fill=PatternFill('solid',fgColor='17365D')
+    for name,width in [('A',35),('B',24),('C',30)]:sheet.column_dimensions[name].width=width
+    guide=book.create_sheet('Read me');guide.append([spec['title']]);guide.append([spec['problem']]);guide.append([spec['limitations']])
+    guide.append(['Technical mathematical prototype; Office recalculation and domain review pending.'])
+    guide.column_dimensions['A'].width=100
+    book.save(folder/'calculator.xlsx')
+    acceptance = """import ast
+from fractions import Fraction
+from pathlib import Path
+import unittest
+from openpyxl import load_workbook
+ROWS=%r
+NAMES=%r
+OUTPUT_ROW=%r
+class WorkbookIndependentTests(unittest.TestCase):
+    def test_serialized_formula_against_rational_reference(self):
+        book=load_workbook(Path(__file__).with_name('calculator.xlsx'))
+        sheet=book['Calculator'];formula=sheet.cell(OUTPUT_ROW,2).value
+        expression=ast.parse(formula[1:],mode='eval')
+        def evaluate(node,values):
+            if isinstance(node,ast.Expression):return evaluate(node.body,values)
+            if isinstance(node,ast.Name):return values[node.id]
+            if not isinstance(node,ast.BinOp):raise ValueError('UNSAFE_EXCEL_FORMULA')
+            a=evaluate(node.left,values);b=evaluate(node.right,values)
+            if isinstance(node.op,ast.Add):return a+b
+            if isinstance(node.op,ast.Sub):return a-b
+            if isinstance(node.op,ast.Mult):return a*b
+            if isinstance(node.op,ast.Div):return a/b
+            raise ValueError('UNSAFE_EXCEL_OPERATOR')
+        for row in ROWS:
+            values={'B'+str(i+2):Fraction(str(row['inputs'][name])) for i,name in enumerate(NAMES)}
+            expected=Fraction(str(row['output']));actual=evaluate(expression,values)
+            self.assertLessEqual(abs(actual-expected),Fraction('1e-12')*max(1,abs(expected)))
+        self.assertTrue(sheet.protection.sheet)
+        self.assertEqual(sheet.freeze_panes,'B2')
+        self.assertTrue(sheet.cell(OUTPUT_ROW,2).protection.locked)
+        self.assertEqual(len(sheet.data_validations.dataValidation),len(NAMES))
+""" % (spec['training_examples']+spec['acceptance_examples'],[x['name'] for x in spec['inputs']],output)
+    (folder/'test_workbook.py').write_text(acceptance,encoding='utf8')

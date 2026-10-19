@@ -1,0 +1,41 @@
+{
+  "schema": "saeit.factory.internal-design-supply.v1",
+  "purpose": "Supply-led mathematical tools for operational planning. Not asserted customer or market demand.",
+  "briefs": [
+    {
+      "schema": "saeit.factory.engineering-brief.v1",
+      "family_id": "F28",
+      "blueprint": "inventory_coverage"
+    },
+    {
+      "schema": "saeit.factory.engineering-brief.v1",
+      "family_id": "F28",
+      "blueprint": "water_volume"
+    },
+    {
+      "schema": "saeit.factory.engineering-brief.v1",
+      "family_id": "F28",
+      "blueprint": "net_margin"
+    },
+    {
+      "schema": "saeit.factory.engineering-brief.v1",
+      "family_id": "F28",
+      "blueprint": "labour_capacity"
+    },
+    {
+      "schema": "saeit.factory.engineering-brief.v1",
+      "family_id": "F28",
+      "blueprint": "unit_margin"
+    },
+    {
+      "schema": "saeit.factory.engineering-brief.v1",
+      "family_id": "F28",
+      "blueprint": "repair_duration"
+    },
+    {
+      "schema": "saeit.factory.engineering-brief.v1",
+      "family_id": "F27",
+      "blueprint": "unit_margin"
+    }
+  ]
+}
