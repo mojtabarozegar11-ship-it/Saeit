@@ -237,6 +237,10 @@ def unpack(raw):
 
 def target_root(root):
     root = Path(root)
+    if not root.exists():
+        clean_dir(root.parent)
+        require(root.parent.stat().st_mode & 0o077 == 0, "MPW_RECIPIENT_PARENT_NOT_PRIVATE")
+        root.mkdir(mode=0o700)
     clean_dir(root)
     require(root.stat().st_mode & 0o077 == 0, "MPW_RECIPIENT_NOT_PRIVATE")
     return root
