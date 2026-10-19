@@ -1,0 +1,156 @@
+name: Zomorod P0-P3 same mission finish shared template accessibility
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/zomorod-p0p3-final-a11y-live-20261019.yml]
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-root-homepage
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 17
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate final scoped patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/zomorod_p0p3_final_a11y_20261019.py
+          python3 scripts/zomorod_p0p3_final_a11y_20261019.py selftest
+      - name: Prepare verified VPS to cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zm-glass-headers-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.known"
+          test "$(ssh-keygen -lf "$d/host.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          echo PINNED_HOST_AND_RELAY_VERIFIED=yes
+      - name: Stage private installer and exact before-state plan
+        id: stage
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-glass-headers-ssh"
+          stage="/home/zomorod2/.zm-p0p3-final-stage-$GITHUB_RUN_ID"
+          timeout 40s ssh -T -F "$d/config" saeit-cpanel "test ! -e '$stage' && install -d -m 700 '$stage'"
+          cat scripts/zomorod_p0p3_final_a11y_20261019.py | timeout 65s ssh -T -F "$d/config" saeit-cpanel "cat > '$stage/patch.py'"
+          timeout 45s ssh -T -F "$d/config" saeit-cpanel "python3 '$stage/patch.py' selftest"
+          timeout 80s ssh -T -F "$d/config" saeit-cpanel "python3 '$stage/patch.py' plan"
+      - name: Apply three exact-page changes with SHA verified backups
+        id: install
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-glass-headers-ssh"
+          stage="/home/zomorod2/.zm-p0p3-final-stage-$GITHUB_RUN_ID"
+          timeout 110s ssh -T -F "$d/config" saeit-cpanel "python3 '$stage/patch.py' apply '$GITHUB_RUN_ID'"
+          timeout 50s ssh -T -F "$d/config" saeit-cpanel "python3 '$stage/patch.py' verify '$GITHUB_RUN_ID'"
+      - name: Zero serious a11y violations and zero layout regressions in mobile desktop
+        shell: bash
+        run: |
+          set -euo pipefail
+          dir="$RUNNER_TEMP/p0p3-final-chrome";mkdir -p "$dir";cd "$dir"
+          npm --silent init -y >/dev/null
+          npm --silent install --no-save playwright@1.55.0 @axe-core/playwright@4.10.2
+          npx playwright install chromium
+          cat > check.cjs <<'JS'
+          const {chromium}=require('playwright');const Axe=require('@axe-core/playwright').default;
+          (async()=>{
+           const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
+           for(const width of [390,1440]){
+            const ctx=await browser.newContext({viewport:{width,height:900}});
+            for(const path of ['/about/','/research/','/agriculture/']){
+             const page=await ctx.newPage(),errors=[];
+             page.on('pageerror',e=>errors.push(e.message));
+             const r=await page.goto('https://zomorodmelal.ir'+path+'?__final_p0p3_a11y='+width,{waitUntil:'domcontentloaded',timeout:50000});
+             await page.waitForTimeout(650);
+             const stat=await page.evaluate(()=>({
+               marker:!!document.getElementById('zm-p0p3-final-a11y-20261019'),
+               overflow:Math.max(document.documentElement.scrollWidth,document.body.scrollWidth)-innerWidth,
+               h1:[...document.querySelectorAll('h1')].filter(x=>x.textContent.trim()).length,
+               headlines:[...document.querySelectorAll('h3')].filter(x=>x.textContent.includes('پژوهش و فناوری')).length
+             }));
+             const a=await new Axe({page}).withTags(['wcag2a','wcag2aa','wcag21a','wcag21aa','best-practice']).analyze();
+             const issues=a.violations.map(v=>({id:v.id,count:v.nodes.length,impact:v.impact,html:v.nodes[0]?.html.slice(0,150)}));
+             console.log('FINAL_P0P3_A11Y='+JSON.stringify({path,width,status:r.status(),...stat,issues,errors}));
+             if(r.status()!==200||!stat.marker||stat.overflow>3||errors.length||a.violations.length)throw Error('Final a11y not zero '+path+' '+width);
+             await page.close();
+            }
+            await ctx.close();
+           }
+           await browser.close();
+           console.log('ALL_3_TEMPLATES_MOBILE_DESKTOP_AXE_ZERO=yes')
+          })().catch(e=>{console.error(e.stack);process.exit(1)});
+          JS
+          node check.cjs
+      - name: Check unmodified site routes remain usable
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from urllib.request import urlopen
+          for p in ('/','/company/','/store/','/tala/','/business/','/topics/','/search/','/knowledge/','/en/market/'):
+              with urlopen('https://zomorodmelal.ir'+p,timeout=35) as r:assert r.status==200 and len(r.read(100000))>200,p
+              print('FINAL_UNCHANGED_ROUTE_OK='+p)
+          PY
+      - name: Rollback three exact files if downstream checks fail
+        if: failure() && steps.stage.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-glass-headers-ssh"
+          stage="/home/zomorod2/.zm-p0p3-final-stage-$GITHUB_RUN_ID"
+          timeout 90s ssh -T -F "$d/config" saeit-cpanel "python3 '$stage/patch.py' rollback '$GITHUB_RUN_ID'"
+      - name: Cleanup staged installer but preserve backup
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          d="$RUNNER_TEMP/zm-glass-headers-ssh"
+          stage="/home/zomorod2/.zm-p0p3-final-stage-$GITHUB_RUN_ID"
+          if test -f "$d/config";then timeout 35s ssh -T -F "$d/config" saeit-cpanel "rm -f '$stage/patch.py';rmdir '$stage'";fi
+          rm -rf "$d"
