@@ -165,24 +165,15 @@ jobs:
               print("SITE_LOCAL_FILE_PRESENT="+relative+" "+str(f.is_file()))
           PY
           if command -v crontab >/dev/null 2>&1; then
-            crontab -l 2>/dev/null | python3 -c '
-            import re,sys,json
-            rows=[s.strip() for s in sys.stdin if s.strip() and not s.lstrip().startswith("#")]
-            relevant={k:0 for k in ("factory","product","site_agents","knowledge_agent","company_activity","master_agent")}
-            for line in rows:
-                for k in relevant:
-                    if k in line:relevant[k]+=1
-            print("SITE_CRON_ACTIVE_CODE_COUNTS="+json.dumps(relevant))
-            for i,line in enumerate(rows):
-                if not re.search(r"factory|product|knowledge_agent|company_activity|site_agents|master_agent",line,re.I):continue
-                methods=[k for k in ("php","python","curl","wget","ssh","rsync","scp","manage.py") if k in line]
-                script_names=re.findall(r"[A-Za-z0-9_/-]+\.(?:php|py|sh)(?![A-Za-z0-9])",line)
-                safe_names=[s.rsplit("/",1)[-1] for s in script_names][:8]
-                flags={"VPS_OR_REMOTE_REFERENCE":bool(re.search(r"vps|ssh|rsync|scp|mojplaywin",line,re.I)),
-                  "SITE_AGENT_REFERENCE":"site_agents" in line,
-                  "LOCAL_FACTORY_REFERENCE":bool(re.search(r"factory|product",line,re.I))}
-                print("SITE_CRON_SAFE_CLASSIFICATION="+json.dumps({"index":i,"methods":methods,"script_basenames":safe_names,**flags}))
-            ' || true
+            cron="$(crontab -l 2>/dev/null || true)"
+            active="$(printf '%s\n' "$cron" | grep -Ev '^[[:space:]]*(#|$)' || true)"
+            for term in knowledge_agent company_activity site_agents autonomous_master factory product; do
+              if printf '%s\n' "$active" | grep -q "$term"; then
+                echo "SITE_CRON_ACTUAL=$term configured=yes"
+              else
+                echo "SITE_CRON_ACTUAL=$term configured=no"
+              fi
+            done
             cron="$(crontab -l 2>/dev/null || true)"
             for term in "knowledge_agent" "company_activity" "site_agents" "autonomous_master" "factory" "product"; do
               if printf '%s\n' "$cron" | grep -q "$term"; then
