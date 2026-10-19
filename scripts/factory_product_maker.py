@@ -3,7 +3,7 @@
 
 Any new product folder with a README heading and one or more test_*.py files
 is discovered automatically. Tests pass before a private reproducible ZIP is
-written. No orders, network calls, AI API, publication, or token use. Python 3.8+.
+written. No orders, network calls, AI API, publication, or token use. CI-tested on Python 3.8, 3.11 and 3.13.
 """
 import argparse
 import hashlib
@@ -57,8 +57,12 @@ def discover_recipes(recipes_root):
     return recipes
 
 
-# Compatibility/status view. Runtime cycles always rediscover from their supplied root.
-RECIPES = discover_recipes(DEFAULT_RECIPES)
+# Compatibility/status view. Empty catalogs are valid during first installation;
+# runtime cycles always rediscover from their supplied root and fail closed if empty.
+try:
+    RECIPES = discover_recipes(DEFAULT_RECIPES)
+except RuntimeError:
+    RECIPES = {}
 
 
 def sha256_file(path):
