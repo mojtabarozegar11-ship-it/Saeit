@@ -9,7 +9,7 @@ FILES=[ROOT/'research/index.html',ROOT/'agriculture/index.html',ROOT/'.htaccess'
 OLD_HEADER='<header class="zm-v7-header" role="none">'
 NEW_HEADER='<header class="zm-v7-header" role="navigation" aria-label="هویت و ناوبری زمرد ملل">'
 OLD_POLICY='Header always set Content-Security-Policy-Report-Only "base-uri \'self\'; object-src \'none\'"'
-NEW_POLICY='Header always set Content-Security-Policy "base-uri \'self\'; object-src \'none\'"'
+NEW_POLICY='Header always append Content-Security-Policy "base-uri \'self\'; object-src \'none\'"'
 OLD_HSTS='Header always set Strict-Transport-Security "max-age=300"'
 NEW_HSTS='Header always set Strict-Transport-Security "max-age=86400"'
 ADD='Header always set Referrer-Policy "strict-origin-when-cross-origin"'
@@ -47,7 +47,7 @@ def atomic(path,data,mode):
  finally:
   if temp and temp.exists():temp.unlink()
 def selftest():
- assert NEW_POLICY.startswith('Header always set Content-Security-Policy ')
+ assert NEW_POLICY.startswith('Header always append Content-Security-Policy ')
  assert "'unsafe-inline'" not in NEW_POLICY and "'unsafe-eval'" not in NEW_POLICY
  assert 'includeSubDomains' not in NEW_HSTS
  page='<html><head></head><body><header class="zm-v7-header" role="none"><nav class="zm-v7-chain"></nav></header><footer role="contentinfo"></footer><!-- zm-p0p3-final-a11y-20261019 --></body></html>'
