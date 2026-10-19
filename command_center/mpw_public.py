@@ -1,6 +1,8 @@
 """Additive public view data; strict domain and feature flag prevent affecting sibling sites."""
 import re
 import os
+import json
+from pathlib import Path
 from django.conf import settings
 from .models import MpwRecord, TENANT, local_path
 
@@ -13,8 +15,19 @@ SAFE_IMAGE = re.compile(r"^site/[a-zA-Z0-9_./-]+\.(?:webp|png|jpg|jpeg)$")
 
 
 def feature_enabled(name):
-    # Dedicated MojPlayWin switch: never modify shared Django settings to enable it.
-    return bool(getattr(settings, name, False)) or os.environ.get(name, "").strip().lower() in ("1", "yes", "on", "true")
+    # A private tenant marker enables only the main website, not sibling Django routes.
+    if name == "MPW_CONTROL_ENABLED":
+        marker = Path("/home/zomorod2/.private_mojplaywin_main_agents/evolution_runtime_20261018/mpw_five_live_enabled_20261019.json")
+        try:
+            if marker.is_symlink() or not marker.is_file() or marker.stat().st_mode & 0o077:
+                return False
+            with marker.open("r", encoding="utf-8") as stream:
+                row = json.load(stream)
+            return row == {"tenant": TENANT, "enabled": True, "schema": 1}
+        except (OSError, ValueError, TypeError):
+            return False
+    # Never silently enable real money flow from a CMS release.
+    return False
 
 
 def editable_main_path(path):
