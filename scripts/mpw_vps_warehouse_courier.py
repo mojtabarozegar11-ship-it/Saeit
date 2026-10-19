@@ -193,27 +193,38 @@ def verify_stock(manifest, recipe, version, raw):
     return True
 
 
-def stock_records(root):
+def stock_records(root, *, after="", limit=3):
+    """Bounded, deterministic cursor pagination, independent of total stock size."""
     clean_dir(root)
+    require(isinstance(after, str) and (not after or
+            re.fullmatch(r"[a-z][a-z0-9_]{1,63}/[a-f0-9]{64}", after)),
+            "WAREHOUSE_CURSOR_INVALID")
+    require(type(limit) is int and 1 <= limit <= 3, "WAREHOUSE_PAGE_LIMIT")
     finished = root / "production-warehouse/finished"
     clean_dir(finished)
-    result = []
+    result, has_more = [], False
     for product in sorted(finished.iterdir()):
         require(not product.is_symlink() and product.is_dir()
                 and RECIPE.fullmatch(product.name), "WAREHOUSE_PRODUCT_PATH_INVALID")
         for version in sorted(product.iterdir()):
             require(not version.is_symlink() and version.is_dir()
                     and SHA.fullmatch(version.name), "WAREHOUSE_VERSION_PATH_INVALID")
-            manifest_path = version / "warehouse_manifest.json"
-            artifact_path = version / "product.zip"
-            manifest = json_file(manifest_path, 100_000)
-            require(artifact_path.is_file() and not artifact_path.is_symlink()
-                    and artifact_path.stat().st_size <= MAX_ZIP, "WAREHOUSE_ZIP_INVALID")
-            raw = artifact_path.read_bytes()
+            identity = product.name + "/" + version.name
+            if identity <= after:
+                continue
+            if len(result) == limit:
+                has_more = True
+                break
+            manifest = json_file(version / "warehouse_manifest.json", 100_000)
+            file = version / "product.zip"
+            require(file.is_file() and not file.is_symlink()
+                    and 0 < file.stat().st_size <= MAX_ZIP, "WAREHOUSE_ZIP_INVALID")
+            raw = file.read_bytes()
             verify_stock(manifest, product.name, version.name, raw)
             result.append((product.name, version.name, manifest, raw))
-            require(len(result) <= MAX_ITEMS, "WAREHOUSE_BATCH_LIMIT")
-    return result
+        if has_more:
+            break
+    return result, has_more
 
 
 def add_tar(tar, name, raw):
@@ -225,12 +236,14 @@ def add_tar(tar, name, raw):
     tar.addfile(info, io.BytesIO(raw))
 
 
-def export_factory(root=VPS):
-    records = stock_records(Path(root))
+def export_factory(root=VPS, *, after=""):
+    records, has_more = stock_records(Path(root), after=after)
     stream = io.BytesIO()
     with tarfile.open(fileobj=stream, mode="w:gz") as tar:
         index = {"schema": SCHEMA, "tenant": TENANT, "created_utc": stamp(),
                  "inventory_count": len(records),
+                 "has_more": has_more,
+                 "next_cursor": (records[-1][0]+"/"+records[-1][1]) if has_more else None,
                  "items": [{"product_id":p, "version":v,
                             "artifact_sha256":m["artifact_sha256"],
                             "bytes":len(blob)} for p,v,m,blob in records]}
@@ -362,24 +375,38 @@ def import_site(batch, root=DEST):
     return report
 
 
-def feedback_site(root=DEST):
+def feedback_site(root=DEST, *, after=""):
     root = target_root(root)
     folder = root/"returns"
     private_new(folder)
+    require(isinstance(after, str) and (not after or
+            re.fullmatch(r"[a-z][a-z0-9_]{1,63}/[a-f0-9]{64}", after)),
+            "RETURN_CURSOR_INVALID")
     rows = []
+    next_cursor = None
+    more = False
     for product in sorted(folder.iterdir()):
         require(product.is_dir() and not product.is_symlink()
                 and RECIPE.fullmatch(product.name), "RETURN_DIRECTORY_INVALID")
         for item in sorted(product.iterdir()):
             require(item.is_file() and not item.is_symlink()
                     and item.suffix == ".json" and SHA.fullmatch(item.stem), "RETURN_NAME_INVALID")
+            identity = product.name + "/" + item.stem
+            if identity <= after:
+                continue
+            if len(rows) == MAX_ITEMS:
+                more = True
+                break
             value = json_file(item,100_000)
             require(value.get("tenant")==TENANT and value.get("schema")==RETURN_SCHEMA
                     and value.get("product_id")==product.name
                     and value.get("source_sha256")==item.stem, "RETURN_IDENTITY_INVALID")
             rows.append(value)
-            require(len(rows)<=MAX_ITEMS,"RETURN_COUNT_LIMIT")
-    return json_blob({"schema":RETURN_SCHEMA,"tenant":TENANT,"returns":rows})
+            next_cursor = identity
+        if more:
+            break
+    return json_blob({"schema":RETURN_SCHEMA,"tenant":TENANT,"returns":rows,
+                      "has_more":more,"next_cursor":next_cursor if more else None})
 
 
 def receive_factory_returns(raw, root=VPS):
@@ -512,7 +539,7 @@ def triage_factory_stage1(root=VPS):
             else:
                 atomic(result,json_blob(details))
             items.append(details)
-            require(len(items)<=MAX_ITEMS,"STAGE1_QUEUE_CAPACITY")
+            require(len(items)<=10000,"STAGE1_QUEUE_CAPACITY")
         state = {"schema":RETURN_SCHEMA,"tenant":TENANT,
                  "actual_site_returns_accepted":len(items),
                  "factory_stage1_work_items":len(items),
@@ -528,15 +555,16 @@ def triage_factory_stage1(root=VPS):
 
 
 def main():
-    require(len(sys.argv)==2, "COURIER_MODE_REQUIRED")
+    require(len(sys.argv) in (2,3), "COURIER_MODE_REQUIRED")
+    after = sys.argv[2] if len(sys.argv)==3 else ""
     mode=sys.argv[1]
     if mode=="vps-export":
-        sys.stdout.buffer.write(export_factory())
+        sys.stdout.buffer.write(export_factory(after=after))
     elif mode=="site-import":
         import_site(sys.stdin.buffer.read(MAX_PACKAGE+1))
         print("MPW_COURIER_SITE_INGEST=PASS", file=sys.stderr)
     elif mode=="site-feedback":
-        sys.stdout.buffer.write(feedback_site())
+        sys.stdout.buffer.write(feedback_site(after=after))
     elif mode=="vps-return":
         report=receive_factory_returns(sys.stdin.buffer.read(1_000_001))
         print("MPW_COURIER_FACTORY_STAGE1="+json.dumps(report,sort_keys=True))
