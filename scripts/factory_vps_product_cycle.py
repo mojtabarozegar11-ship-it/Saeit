@@ -66,9 +66,16 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
         design_state = {"enabled": False, "new_recipes": 0}
         designer_failures = []
         source_recoveries = []
+        invention_state={"enabled":False,"new_technical_briefs_this_tick":0}
         if enable_designer:
             designer = load("saeit_factory_recipe_designer", SCRIPTS / "factory_recipe_designer.py")
             if enable_design_intake:
+                try:
+                    inventor=load('saeit_factory_continuous_invention',SCRIPTS/'factory_continuous_invention.py')
+                    invention_state=inventor.propose(root,max_new=1,max_pending=5)
+                    invention_state['enabled']=True
+                except (ValueError,RuntimeError,OSError,ArithmeticError) as error:
+                    designer_failures.append({'type':'invention_supply','reason':str(error)[:400]})
                 try:
                     intake=load('saeit_factory_design_intake',SCRIPTS/'factory_design_intake.py')
                     engineering_state=intake.cycle(root,supply=SCRIPTS.parent/'factory_config/internal_design_supply.json')
@@ -191,6 +198,7 @@ def run_cycle(database, output, recipes, *, max_products=25, max_recipes=None,
             "registered_recipe_count": len(recipe_catalog),
             "recipe_designer": design_state,
             "engineering_intake":engineering_state,
+            "continuous_invention":invention_state,
             "designer_failures": designer_failures,
             "research_failures": research_failures,
             "source_recoveries": source_recoveries,
