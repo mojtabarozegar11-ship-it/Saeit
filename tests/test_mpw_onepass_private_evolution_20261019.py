@@ -130,7 +130,7 @@ class OnePassQualityTests(unittest.TestCase):
         self.write("quality_review_agent_20261018/last_review.log", quality)
         self.write("management_intelligence_20261018/last_run.log", manager)
         self.write("management_intelligence_20261018/latest_company_operations.json",
-                   {"observed_utc": self.now.isoformat(), "financial_account_data_consulted": False,
+                   {"observed_utc": self.now.isoformat(), "financial_account_data_consulted": 0,
                     "factory_connected": False})
         for rel in ("quality_review_agent_20261018/last_review.log",
                     "management_intelligence_20261018/last_run.log"):
