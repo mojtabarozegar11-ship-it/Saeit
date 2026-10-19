@@ -319,6 +319,16 @@ def main():
             smoke_real_web(Product)
             print("MPW_PRODUCTION_OPEN=VERIFIED_MAIN_DOMAIN_TWO_BOOKS",flush=True)
         except Exception as exc:
+            known = (
+                "Independent Django smoke test failed",
+                "Main store has not loaded final checkout links",
+                "Live route is not accepting checkout",
+                "Customer checkout page did not render",
+                "Merchant test identity is inactive",
+                "Source changed during release",
+            )
+            code = known.index(str(exc)) + 1 if str(exc) in known else 0
+            print("MPW_RELEASE_FAILURE_CODE="+str(code),flush=True)
             print("MPW_PRODUCTION_RELEASE_FAILED="+type(exc).__name__,flush=True)
             # Shut the acceptance gate before anything else.
             if SETTINGS.read_bytes()==next_settings:
