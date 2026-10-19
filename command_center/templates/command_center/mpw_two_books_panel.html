@@ -27,6 +27,14 @@ small{color:#c3d1e5}code{overflow-wrap:anywhere}.state-row{display:grid;grid-tem
 <div class="card"><h2>درآمد دارای رسید معتبر (USD)</h2><div class="value">{{ confirmed_revenue_usd|default_if_none:"نامشخص" }}</div></div>
 <div class="card"><h2>سوابق تحویل دیجیتال</h2><div class="value">{{ commerce_fulfillment_count|default_if_none:"نامشخص" }}</div></div>
 </div>
+<h2>پایش واقعی کارگر تسویه خودکار</h2>
+<section class="card" aria-label="وضعیت اجرای دقیقه‌ای">
+<p>وضعیت: {% if worker.healthy %}<strong class="ok">فعال و تازه</strong>{% else %}<strong class="pending">نیازمند بررسی / گزارش قدیمی</strong>{% endif %}</p>
+<p>آخرین اجرای گزارش‌شده: <code dir="ltr">{{ worker.last_utc }}</code> | سن گزارش: {{ worker.age_seconds|default_if_none:"نامشخص" }} ثانیه</p>
+<p>نتیجه آخرین اجرا: <code>{{ worker.state }}</code> | فاکتور معلق: {{ worker.pending }} | تطبیق تراکنش: {{ worker.matched }} | تسویه: {{ worker.paid }} | ردشده: {{ worker.rejected }}</p>
+{% if worker.error_type %}<p class="pending">خطای اجرای آخر: <code>{{ worker.error_type }}</code></p>{% endif %}
+<p><small>سلامت کارگر از فایل پایش ثبت‌شده در هر چرخه کران سنجیده می‌شود؛ این شاخص به‌تنهایی اثبات پرداخت موفق نیست.</small></p>
+</section>
 <h2>نمودار وضعیت فاکتورهای دو کتاب</h2>
 <section class="card">
 {% if commerce_invoices_count %}
