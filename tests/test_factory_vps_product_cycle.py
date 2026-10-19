@@ -313,7 +313,24 @@ class ProductionContinuityTests(unittest.TestCase):
                                    enable_design_intake=True,design_capacity=6)
             novel+=result['new_artifacts']
         status=json.loads((self.output/'engineering-intake/production-results.json').read_text())
-        self.assertEqual(status['technical_prototypes'],15)
+        source_receipts=[]
+        for path in (self.output/'engineering-intake').glob('*.json'):
+            if len(path.stem)!=64: continue
+            receipt=json.loads(path.read_text())
+            source_receipts.append({'id':receipt.get('source_id'),
+                                    'status':receipt.get('status'),
+                                    'reason':receipt.get('reason')})
+        designer_state=json.loads((self.output/'designer-state.json').read_text())
+        deferred=[]
+        for path in (self.output/'design-state').glob('*.json'):
+            item=json.loads(path.read_text())
+            if item.get('status')=='design_rework_required':
+                deferred.append({'request':item.get('request_file'),
+                                 'reason':item.get('reason')})
+        self.assertEqual(status['technical_prototypes'],15,
+                         json.dumps({'sources':source_receipts,'deferred':deferred,
+                                     'designer_pending':designer_state.get('pending_requests'),
+                                     'designer_rework':designer_state.get('rework')},sort_keys=True))
         self.assertGreaterEqual(status['functional_products'],9)
         self.assertGreaterEqual(novel,18)
         replay=cycle.run_cycle(self.db,self.output,self.recipes,enable_designer=True,
