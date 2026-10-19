@@ -1,0 +1,48 @@
+#!/usr/bin/env python3
+"""Review effective live buyer flow and safe gates without writes or addresses."""
+import os,sys,json,ast,re
+from pathlib import Path
+app=Path("/home/zomorod2/Saeit-staging")
+os.chdir(app);sys.path.insert(0,str(app));os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+import django;django.setup()
+from django.conf import settings
+from django.urls import resolve
+modules={
+"core/cryptopay_checkout.py":("checkout","private_download","product_delivery_ready"),
+"mpw_commerce/product_checkout_page.py":("approved_for_checkout","product_checkout_page"),
+"mpw_commerce/buyer_orders.py":("_eligible","create_digital_order"),
+"mpw_commerce/invoicing.py":("reserve_order_invoice",),
+"mpw_commerce/checkout_views.py":("checkout_status",),
+"mpw_commerce/settlement.py":("settle_order_invoice","_verify_evidence"),
+"mpw_commerce/downloads.py":("download_paid_item",),
+}
+blocked=("password","secret","private_key","token","wallet_address","receiver","sender_address","merchant_address","recipient_address","api_key","mnemonic")
+for fn, selected in modules.items():
+    p=app/fn
+    if not p.is_file() or p.is_symlink():
+        print("MPW_CHECKOUT_RUNTIME_MODULE="+json.dumps({"file":fn,"missing":True}));continue
+    tree=ast.parse(p.read_text("utf8","replace"))
+    entries=[]
+    for node in tree.body:
+        if not isinstance(node,(ast.FunctionDef,ast.AsyncFunctionDef)) or node.name not in selected:continue
+        selected_if=[]
+        for stmt in ast.walk(node):
+            if isinstance(stmt,ast.If):
+                condition=ast.unparse(stmt.test)
+                if any(x in condition.lower() for x in blocked):
+                    condition="[sensitive condition redacted]"
+                else:
+                    condition=condition[:210]
+                selected_if.append({"line_rel":stmt.lineno-node.lineno+1,"condition":condition})
+        entries.append({"fn":node.name,"args":[a.arg for a in node.args.args],
+            "lines":node.end_lineno-node.lineno+1,"gates":selected_if[:50]})
+    print("MPW_CHECKOUT_RUNTIME_MODULE="+json.dumps({"file":fn,"functions":entries},ensure_ascii=False))
+results={}
+for setting in ("CRYPTO_PAYMENT_ENABLED","CRYPTO_PAYMENT_LIVE","CRYPTO_PAYMENTS_ENABLED","CRYPTO_CHECKOUT_ENABLED","CRYPTO_PAYMENT_MAINNET","CRYPTO_TRON_MAINNET_ENABLED","MPW_COMMERCE_RELEASE_READY","MPW_COMMERCE_CUSTOMER_HTTP_ENABLED","MPW_COMMERCE_INVOICING_ENABLED","MPW_COMMERCE_SETTLEMENT_ENABLED","MPW_COMMERCE_REAL_RPC_ENABLED","MPW_COMMERCE_AUTORECONCILE_ENABLED","MPW_COMMERCE_DOWNLOADS_ENABLED"):
+    results[setting]={"exists":hasattr(settings,setting),"enabled":getattr(settings,setting,None) is True}
+print("MPW_CHECKOUT_SWITCH_INVENTORY="+json.dumps(results))
+for path in ("/store/product/72/checkout/","/store/product/225/checkout/"):
+    r=resolve(path)
+    func=r.func
+    print("MPW_CHECKOUT_ACTUAL_HANDLER="+json.dumps({"path":path,"module":func.__module__,
+        "function":getattr(func,"__name__","view"),"wrapped_count":int(bool(getattr(func,"__wrapped__",None)))}))
