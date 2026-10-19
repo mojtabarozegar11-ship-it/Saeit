@@ -22,6 +22,14 @@ for row in rows:
   for i,c in enumerate(row['cards']):
    print('CARD',i, json.dumps(c,ensure_ascii=False)[:500])
   print('TARGET_ROW_CHECKSUM',hashlib.sha256(json.dumps(row,ensure_ascii=False,sort_keys=True).encode()).hexdigest())
+print('CARD_12_FULL_META')
+row=next(r for r in rows if r['id']=='ZM-R25')
+for number in [11,20]:
+ c=row['cards'][number]
+ print('CARD_KEYS',number,list(c.keys()))
+ print('CARD_FIELDS',number,{k: (v[:80]+'…' if len(v)>80 else v) if isinstance(v,str) else v for k,v in c.items() if k not in ('image','imageBrief')})
+p=text.find('function buildShelf(row,i)')
+print('SHELF_JS_SNIPPET',text[p:p+5100].replace('\n',' ') if p>=0 else 'not found')
 print('BUILD_FUNCTION_SAMPLES')
 for phrase in ["function buildShelf","function buildCard","const buildShelf","row.cards.map","card.href","card.url","card.slug","card.canonicalUrl"]:
  i=text.find(phrase)
