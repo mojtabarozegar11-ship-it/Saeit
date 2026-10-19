@@ -1,0 +1,82 @@
+name: Astra V2 Integrated Private Product QA
+
+on:
+  push:
+    branches: [feature/astra-factory-v2-architecture-20261014]
+    paths:
+      - '.github/workflows/astra-v2-product-e2e.yml'
+      - 'scripts/astra_v2_private_pipeline.py'
+      - 'product_prototypes/orchard_decision_audit/**'
+      - 'tests/test_astra_v2_private_pipeline.py'
+      - 'tests/test_astra_orchard_decision_audit.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: astra-v2-private-qa-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  evidence-led-prototype:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test UI engine, localhost API and private build workflow
+        run: |
+          python -m unittest discover -s tests -p 'test_astra_orchard_decision_audit.py' -v
+          python -m unittest discover -s tests -p 'test_astra_v2_private_pipeline.py' -v
+          node --check product_prototypes/orchard_decision_audit/app.js
+      - name: Build one real, but commercially unverified, independent reference product
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          root="$RUNNER_TEMP/astra-v2-private-candidate"
+          mkdir -p "$root"
+          cat > "$RUNNER_TEMP/brief.json" <<'JSON'
+          {
+            "brief_id":"orchard_investment_audit_private_reference_v1",
+            "builder":"orchard_decision_audit_v2",
+            "development_scope":"private_reference_prototype",
+            "publication_allowed":false,
+            "market_demand_verified":false,
+            "paid_api_budget":0,
+            "problem":"Compare long-term orchard investment alternatives with transparent operator-supplied financial assumptions and reproducible stress calculations."
+          }
+          JSON
+          python scripts/astra_v2_private_pipeline.py enqueue --root "$root" --brief "$RUNNER_TEMP/brief.json"
+          python scripts/astra_v2_private_pipeline.py tick --root "$root"
+          python scripts/astra_v2_private_pipeline.py tick --root "$root"
+          python scripts/astra_v2_private_pipeline.py status --root "$root"
+          python - "$root" <<'PY'
+          import json,sys,pathlib,zipfile
+          root=pathlib.Path(sys.argv[1]); archives=list(root.glob("artifact-*.zip"))
+          qa=list(root.glob("qa-*.json"))
+          assert len(archives)==1 and len(qa)==1
+          data=json.loads(qa[0].read_text())
+          assert data['technical_regression']=='PASSED'
+          assert data['quality_score'] is None
+          assert not data['sale_ready'] and not data['owner_publication_approval']
+          assert not data['public_deployment_allowed'] and not data['real_payment_allowed']
+          assert zipfile.ZipFile(archives[0]).testzip() is None
+          print("ASTRA_V2_NEW_DISTINCT_PRIVATE_PROTOTYPE=1")
+          print("ASTRA_V2_PRODUCT_TECHNICAL_QA=PASSED")
+          print("ASTRA_V2_MARKET_DEMAND_VERIFIED=false")
+          print("ASTRA_V2_COMMERCIAL_QUALITY_SCORE=not_assessed")
+          print("ASTRA_V2_PUBLIC_RELEASE=false")
+          PY
+          mkdir -p "$RUNNER_TEMP/astra-v2-artifact"
+          cp "$root"/artifact-*.zip "$root"/qa-*.json "$RUNNER_TEMP/astra-v2-artifact/"
+      - name: Share synthetic-code-only QA artifact for owner review
+        uses: actions/upload-artifact@v4
+        with:
+          name: astra-v2-not-for-sale-reference-build
+          path: ${{ runner.temp }}/astra-v2-artifact/
+          retention-days: 7
+          if-no-files-found: error

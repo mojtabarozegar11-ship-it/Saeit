@@ -1,0 +1,141 @@
+{
+  "_synthetic_notice": "Entirely fictional numbers for software verification. NOT observed orchard costs, prices, yields or profitability.",
+  "currency": "USD",
+  "unit": "per_hectare",
+  "money_basis": "real",
+  "horizon_years": 3,
+  "discount_rate_pct": "10",
+  "reference_option": "Maintain Existing Trees",
+  "options": [
+    {
+      "name": "Maintain Existing Trees",
+      "years": [
+        {
+          "year": 0,
+          "revenue": "0",
+          "variable_cost": "0",
+          "fixed_cost": "0",
+          "capital_cost": "0",
+          "terminal_value": "0"
+        },
+        {
+          "year": 1,
+          "revenue": "100",
+          "variable_cost": "30",
+          "fixed_cost": "30",
+          "capital_cost": "0",
+          "terminal_value": "0"
+        },
+        {
+          "year": 2,
+          "revenue": "100",
+          "variable_cost": "30",
+          "fixed_cost": "30",
+          "capital_cost": "0",
+          "terminal_value": "0"
+        },
+        {
+          "year": 3,
+          "revenue": "100",
+          "variable_cost": "30",
+          "fixed_cost": "30",
+          "capital_cost": "0",
+          "terminal_value": "0"
+        }
+      ]
+    },
+    {
+      "name": "Replace Orchard Block",
+      "years": [
+        {
+          "year": 0,
+          "revenue": "0",
+          "variable_cost": "0",
+          "fixed_cost": "0",
+          "capital_cost": "100",
+          "terminal_value": "0"
+        },
+        {
+          "year": 1,
+          "revenue": "170",
+          "variable_cost": "50",
+          "fixed_cost": "30",
+          "capital_cost": "0",
+          "terminal_value": "0"
+        },
+        {
+          "year": 2,
+          "revenue": "170",
+          "variable_cost": "50",
+          "fixed_cost": "30",
+          "capital_cost": "0",
+          "terminal_value": "0"
+        },
+        {
+          "year": 3,
+          "revenue": "170",
+          "variable_cost": "50",
+          "fixed_cost": "30",
+          "capital_cost": "0",
+          "terminal_value": "0"
+        }
+      ]
+    }
+  ],
+  "stress_scenarios": {
+    "downside": {
+      "price_factor": "0.8",
+      "yield_factor": "0.9",
+      "variable_cost_factor": "1.2"
+    },
+    "upside": {
+      "price_factor": "1.1",
+      "yield_factor": "1.1",
+      "variable_cost_factor": "0.9"
+    }
+  },
+  "assumptions": [
+    {
+      "option": "Maintain Existing Trees",
+      "field": "revenue",
+      "source_reference": "SYNTHETIC illustrative engineering fixture, not real farm data",
+      "evidence_status": "operator_estimate"
+    },
+    {
+      "option": "Maintain Existing Trees",
+      "field": "variable_cost",
+      "source_reference": "SYNTHETIC illustrative engineering fixture, not real farm data",
+      "evidence_status": "operator_estimate"
+    },
+    {
+      "option": "Maintain Existing Trees",
+      "field": "fixed_cost",
+      "source_reference": "SYNTHETIC illustrative engineering fixture, not real farm data",
+      "evidence_status": "operator_estimate"
+    },
+    {
+      "option": "Replace Orchard Block",
+      "field": "revenue",
+      "source_reference": "SYNTHETIC illustrative engineering fixture, not real farm data",
+      "evidence_status": "operator_estimate"
+    },
+    {
+      "option": "Replace Orchard Block",
+      "field": "variable_cost",
+      "source_reference": "SYNTHETIC illustrative engineering fixture, not real farm data",
+      "evidence_status": "operator_estimate"
+    },
+    {
+      "option": "Replace Orchard Block",
+      "field": "fixed_cost",
+      "source_reference": "SYNTHETIC illustrative engineering fixture, not real farm data",
+      "evidence_status": "operator_estimate"
+    },
+    {
+      "option": "Replace Orchard Block",
+      "field": "capital_cost",
+      "source_reference": "SYNTHETIC illustrative engineering fixture, not real farm data",
+      "evidence_status": "operator_estimate"
+    }
+  ]
+}

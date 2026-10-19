@@ -1,0 +1,83 @@
+name: Astra Stage 4-5 Historical 0048 Disposable Database Proof
+
+on:
+  push:
+    branches: [feature/astra-factory-v2-architecture-20261014]
+    paths: [.github/workflows/astra-v2-0048-disposable-migrate.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  isolated-historical-migration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout Astra V2 without merging anything
+        uses: actions/checkout@v4
+      - name: Checkout tested historical 0048 code in independent directory
+        uses: actions/checkout@v4
+        with:
+          repository: mojtabarozegar11-ship-it/Saeit
+          ref: factory/staging-reconciliation-20261008
+          path: historical-0048
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify independent migration lineage
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p test_astra_v2_migration_parity.py -q
+          python3 scripts/astra_v2_migration_parity.py \
+            --current-dir core/migrations \
+            --reference-dir historical-0048/core/migrations > "$RUNNER_TEMP/migration-parity.json"
+          python3 - "$RUNNER_TEMP/migration-parity.json" <<'PY'
+          import json,sys,pathlib
+          d=json.loads(pathlib.Path(sys.argv[1]).read_text())
+          assert d["common_0039_sha_equal"] is True
+          assert d["reference_last_migration_number"]==48
+          assert len(d["missing_current_0040_to_0048"])==9
+          assert d["same_number_divergent_migrations"]==[]
+          assert d["automatic_merge_permitted"] is False
+          PY
+      - name: Install dependencies on temporary runner only
+        run: python3 -m pip install -r historical-0048/requirements.txt
+      - name: Migrate empty disposable CI SQLite to 0048; never connect to VPS
+        shell: bash
+        env:
+          SAEIT_ENV: ci
+          DEBUG: 'False'
+          SECRET_KEY: astra-disposable-migration-ci-only
+          ALLOWED_HOSTS: localhost,127.0.0.1
+        run: |
+          set -euo pipefail
+          test "$SAEIT_ENV" = ci
+          export DATABASE_URL="sqlite:///$RUNNER_TEMP/astra-disposable-0048.sqlite3"
+          test ! -e "$RUNNER_TEMP/astra-disposable-0048.sqlite3"
+          cd historical-0048
+          python3 manage.py check
+          python3 manage.py migrate --noinput --verbosity 1
+          python3 - "$RUNNER_TEMP/astra-disposable-0048.sqlite3" <<'PY'
+          import pathlib,sqlite3,sys
+          db=pathlib.Path(sys.argv[1])
+          assert db.exists() and db.is_file()
+          with sqlite3.connect(str(db)) as c:
+              row=c.execute(
+                "SELECT name FROM django_migrations WHERE app='core' "
+                "ORDER BY name DESC LIMIT 1").fetchone()
+              assert row and row[0]=="0048_business_market_architecture",row
+              count=c.execute("SELECT COUNT(*) FROM django_migrations "
+                              "WHERE app='core' AND name BETWEEN '0040_' AND '0048_z'").fetchone()[0]
+              assert count==9,count
+              for table in ("core_businessunit","core_marketpolicy","core_legalentity"):
+                  assert c.execute("SELECT COUNT(*) FROM sqlite_master "
+                      "WHERE type='table' AND name=?",(table,)).fetchone()[0]==1,table
+          print("ASTRA_0048_DISPOSABLE_DATABASE_MIGRATIONS=PASS")
+          print("ASTRA_0048_MIGRATION_RANGE_COUNT=9")
+          print("ASTRA_0048_ENVIRONMENT=CI_ONLY")
+          print("ASTRA_0048_PRODUCTION_SCHEMA_MUTATIONS=0")
+          print("ASTRA_0048_VPS_CONNECTIONS=0")
+          print("ASTRA_0048_AUTOMATIC_CUTOVER=false")
+          PY

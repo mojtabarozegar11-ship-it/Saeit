@@ -1,0 +1,163 @@
+name: Astra V2 Autonomous No-Order Research Production VPS
+
+on:
+  push:
+    branches: [feature/astra-factory-v2-architecture-20261014]
+    paths: [.github/workflows/astra-v2-autonomous-no-order-vps.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: astra-v2-no-order-private-install
+  cancel-in-progress: false
+
+jobs:
+  prove-and-activate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 11
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify self-directed mathematics and unchanged original specialists
+        run: |
+          python3 -m unittest discover -s tests -p test_astra_v2_self_directed_education.py -v
+          python3 -m unittest discover -s tests -p test_astra_farm_procurement_audit.py -q
+          python3 -m unittest discover -s tests -p test_astra_orchard_decision_audit.py -q
+          python3 -m unittest discover -s tests -p test_astra_v2_private_pipeline.py -q
+          python3 -m unittest discover -s tests -p test_astra_farm_water_land_margin_audit.py -q
+          python3 product_prototypes/farm_water_land_margin_audit/self_test.py
+          python3 scripts/astra_v2_self_directed_education.py --demo
+      - name: Stage, lock and switch three private specialists and educational R&D pipeline
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          tmp="$RUNNER_TEMP/astra-no-orders"
+          install -d -m 700 "$tmp"
+          trap 'rm -rf -- "$tmp"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$tmp/key"
+          chmod 600 "$tmp/key"
+          ssh-keygen -y -P '' -f "$tmp/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$tmp/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$tmp/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          SSH=(ssh -i "$tmp/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$tmp/known" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=15 githubops@178.239.147.150)
+          tar -cf - scripts/astra_v2_self_directed_education.py scripts/astra_v2_private_pipeline.py tests/test_astra_v2_self_directed_education.py tests/test_astra_v2_private_pipeline.py tests/test_astra_orchard_decision_audit.py tests/test_astra_farm_procurement_audit.py tests/test_astra_farm_water_land_margin_audit.py product_prototypes/orchard_decision_audit product_prototypes/farm_procurement_audit product_prototypes/farm_water_land_margin_audit | "${SSH[@]}" 'set -eu; umask 077; folder="$HOME/factory-runtime/operations/astra-v2-no-order-candidate"; mkdir -p "$folder"; tar -xf - -C "$folder"'
+          "${SSH[@]}" 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          test "$(id -un)" = githubops
+          stage="$HOME/factory-runtime/operations/astra-v2-no-order-candidate"
+          active="$HOME/factory-runtime/operations/astra-v2-vps-canary-source"
+          root="$HOME/factory-runtime/private/astra-v2-canary-products"
+          test -d "$stage" && test -d "$active" && test -f "$root/queue.sqlite3"
+          test ! -L "$active" && test ! -L "$root"
+          cd "$stage"
+          python3 -m unittest discover -s tests -p test_astra_v2_self_directed_education.py -q
+          python3 -m unittest discover -s tests -p test_astra_farm_procurement_audit.py -q
+          python3 -m unittest discover -s tests -p test_astra_orchard_decision_audit.py -q
+          python3 -m unittest discover -s tests -p test_astra_v2_private_pipeline.py -q
+          python3 -m unittest discover -s tests -p test_astra_farm_water_land_margin_audit.py -q
+          python3 product_prototypes/farm_water_land_margin_audit/self_test.py
+          python3 scripts/astra_v2_self_directed_education.py --demo
+          before="$(crontab -l | sha256sum | awk '{print $1}')"
+          test "$(crontab -l | grep -F -c ASTRA_V2_PRIVATE_RND_TICK)" -eq 1
+          (
+            flock -w 100 9
+            # Capture the immediately previous *private-only* source, never a stale backup.
+            save="$root/source-before-three-builder-$(date +%s%N).tar"
+            test ! -e "$save"
+            tar -cf "$save" -C "$active" scripts tests product_prototypes
+            chmod 600 "$save"
+            test -s "$save"
+            swapped=0
+            marker_added=0
+            water_present=0
+            test -d "$active/product_prototypes/farm_water_land_margin_audit" && water_present=1 || true
+            rollback_just_this_change() {
+              if test "$swapped" -eq 1; then
+                if test "$water_present" -eq 0; then
+                  rm -rf -- "$active/product_prototypes/farm_water_land_margin_audit"
+                fi
+                tar -xf "$save" -C "$active"
+                if test "$marker_added" -eq 1; then
+                  rm -f -- "$root/.enable-autonomous-specialists"
+                fi
+                echo ASTRA_PRIVATE_THREE_BUILDER_ROLLBACK=EXECUTED
+              fi
+            }
+            trap rollback_just_this_change EXIT
+            swapped=1
+            tar -cf - -C "$stage" scripts/astra_v2_self_directed_education.py scripts/astra_v2_private_pipeline.py tests product_prototypes | tar -xf - -C "$active"
+            marker="$root/.enable-autonomous-specialists"
+            if test -e "$marker" || test -L "$marker"; then
+              test ! -L "$marker" && test -f "$marker"
+              test "$(cat "$marker")" = private_only
+            else
+              printf 'private_only\n' > "$marker"
+              chmod 600 "$marker"
+              marker_added=1
+            fi
+            cd "$active"
+            python3 -m unittest discover -s tests -p test_astra_v2_self_directed_education.py -q
+            python3 product_prototypes/orchard_decision_audit/self_test.py
+            python3 product_prototypes/farm_procurement_audit/self_test.py
+            python3 product_prototypes/farm_water_land_margin_audit/self_test.py
+            python3 -m unittest discover -s tests -p test_astra_farm_water_land_margin_audit.py -q
+            python3 scripts/astra_v2_private_pipeline.py tick --root "$root"
+            python3 scripts/astra_v2_private_pipeline.py tick --root "$root"
+            python3 scripts/astra_v2_private_pipeline.py tick --root "$root"
+            python3 scripts/astra_v2_private_pipeline.py tick --root "$root"
+            python3 - "$root" <<'PY'
+          import json,pathlib,sqlite3,sys,zipfile,subprocess,tempfile
+          folder=pathlib.Path(sys.argv[1])
+          packs=list((folder/"autonomous_education").glob("case-*.zip"))
+          assert packs,packs
+          assert len(packs)==len(set(p.name for p in packs))
+          newest=max(packs,key=lambda x:x.stat().st_mtime)
+          with zipfile.ZipFile(newest) as z:
+            assert z.testzip() is None
+            doc=json.loads(z.read("astra_case/CASE.json"))
+            assert doc["customer_order_required"] is False
+            assert doc["actual_market_data"] is False
+            assert doc["publication_allowed"] is False
+            with tempfile.TemporaryDirectory() as tmp:
+              z.extractall(tmp)
+              x=subprocess.run([sys.executable,str(pathlib.Path(tmp)/"astra_case/self_test.py")],
+                               capture_output=True,text=True,timeout=10)
+              assert x.returncode==0,x.stderr
+          db=sqlite3.connect(str(folder/"queue.sqlite3"))
+          families={v[0] for v in db.execute(
+            "SELECT DISTINCT builder FROM jobs WHERE stage='PRIVATE_QA_PASSED'")}
+          assert {"orchard_decision_audit_v2","farm_procurement_audit_v1","farm_water_land_margin_audit_v1"}.issubset(families), families
+          print("ASTRA_AUTONOMOUS_NO_CUSTOMER_ORDER=true")
+          print("ASTRA_AUTONOMOUS_PRIVATE_CASE_PRODUCED=true")
+          from importlib.util import spec_from_file_location,module_from_spec
+          m_path=pathlib.Path.home()/"factory-runtime/operations/astra-v2-vps-canary-source/scripts/astra_v2_self_directed_education.py"
+          s=spec_from_file_location("astra_retention",m_path)
+          m=module_from_spec(s);s.loader.exec_module(m)
+          assert m.MAX_RETAINED_EDUCATIONAL_CASES==720
+          assert m.MIN_PROTECTED_AGE_HOURS==168
+          assert len(packs)<=720
+          print("ASTRA_AUTONOMOUS_BUILDER_FAMILIES=3")
+          print("ASTRA_AUTONOMOUS_RETENTION_MAX=720")
+          print("ASTRA_AUTONOMOUS_CASE_EDITION_FREQ=hourly_if_capacity")
+          print("ASTRA_AUTONOMOUS_API_SPEND=0")
+          print("ASTRA_AUTONOMOUS_STORE_PUBLICATION=false")
+          print("ASTRA_AUTONOMOUS_MARKET_VERIFICATION=false")
+          PY
+            swapped=0
+            marker_added=0
+            trap - EXIT
+          ) 9>"$root/.timer-lock"
+          after="$(crontab -l | sha256sum | awk '{print $1}')"
+          test "$before" = "$after"
+          echo ASTRA_AUTONOMOUS_EXISTING_CRON_UNCHANGED=true
+          echo ASTRA_AUTONOMOUS_ORIGINAL_FACTORY_UNCHANGED=true
+          REMOTE

@@ -1,0 +1,62 @@
+{
+  "currency": "USD",
+  "unit": "kg",
+  "net_units_required": "100",
+  "deadline_days": 10,
+  "offers": [
+    {
+      "supplier": "Synthetic Provider North",
+      "unit_price": "5.00",
+      "freight_flat": "45",
+      "setup_flat": "0",
+      "discount_pct": "5",
+      "tax_pct": "0",
+      "waste_pct": "5",
+      "lead_days": 4,
+      "minimum_order_units": "0",
+      "available_units": "250",
+      "source_label": "SYNTHETIC QA fixture only",
+      "quote_ref": "FICTION-A"
+    },
+    {
+      "supplier": "Synthetic Provider West",
+      "unit_price": "4.50",
+      "freight_flat": "100",
+      "setup_flat": "10",
+      "discount_pct": "0",
+      "tax_pct": "0",
+      "waste_pct": "2",
+      "lead_days": 7,
+      "minimum_order_units": "0",
+      "available_units": "200",
+      "source_label": "SYNTHETIC QA fixture only",
+      "quote_ref": "FICTION-B"
+    },
+    {
+      "supplier": "Synthetic Provider Late",
+      "unit_price": "3.00",
+      "freight_flat": "10",
+      "setup_flat": "0",
+      "discount_pct": "0",
+      "tax_pct": "0",
+      "waste_pct": "0",
+      "lead_days": 30,
+      "minimum_order_units": "0",
+      "available_units": "200",
+      "source_label": "SYNTHETIC QA fixture only",
+      "quote_ref": "FICTION-C"
+    }
+  ],
+  "stress_cases": {
+    "base": {
+      "price_multiplier": "1",
+      "freight_multiplier": "1",
+      "waste_extra_pp": "0"
+    },
+    "adverse": {
+      "price_multiplier": "1.25",
+      "freight_multiplier": "1.5",
+      "waste_extra_pp": "3"
+    }
+  }
+}

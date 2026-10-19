@@ -1,0 +1,157 @@
+name: Astra V2 Activate Private Topic Research Gate on VPS
+
+on:
+  push:
+    branches: [feature/astra-factory-v2-architecture-20261014]
+    paths: [.github/workflows/astra-v2-topic-gate-private-activate.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: astra-v2-private-scheduler-install
+  cancel-in-progress: false
+
+jobs:
+  activate-private-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Revalidate quality and private queue before attempting activation
+        run: |
+          python3 -m unittest discover -s tests -p 'test_astra_opportunity_selector.py' -q
+          python3 -m unittest discover -s tests -p 'test_astra_research_evidence_adapter.py' -q
+          python3 -m unittest discover -s tests -p 'test_astra_v2_private_pipeline.py' -q
+      - name: Stage versioned private source and atomically switch existing private tick
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          keydir="$RUNNER_TEMP/astra-topic-gate-activate"
+          install -d -m 700 "$keydir"
+          trap 'rm -rf -- "$keydir"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$keydir/key"
+          chmod 600 "$keydir/key"
+          ssh-keygen -y -P '' -f "$keydir/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$keydir/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$keydir/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          SSH=(ssh -i "$keydir/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$keydir/known" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=15 githubops@178.239.147.150)
+          tar -cf - scripts/astra_opportunity_selector.py scripts/astra_research_evidence_adapter.py scripts/astra_v2_topic_gate.py scripts/astra_v2_private_pipeline.py scripts/astra_v2_self_directed_education.py tests/test_astra_opportunity_selector.py tests/test_astra_research_evidence_adapter.py tests/test_astra_v2_private_pipeline.py tests/test_astra_v2_self_directed_education.py tests/test_astra_orchard_decision_audit.py tests/test_astra_farm_procurement_audit.py tests/test_astra_farm_water_land_margin_audit.py product_prototypes/orchard_decision_audit product_prototypes/farm_procurement_audit product_prototypes/farm_water_land_margin_audit | "${SSH[@]}" 'set -eu; umask 077; dest="$HOME/factory-runtime/operations/astra-v2-topic-gate-release"; test ! -L "$dest"; mkdir -p "$dest"; chmod 700 "$dest"; tar -xf - -C "$dest"'
+          "${SSH[@]}" 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          test "$(id -un)" = githubops
+          release="$HOME/factory-runtime/operations/astra-v2-topic-gate-release"
+          current="$HOME/factory-runtime/operations/astra-v2-vps-canary-source"
+          root="$HOME/factory-runtime/private/astra-v2-canary-products"
+          test -d "$release" && test -d "$current" && test -d "$root"
+          test ! -L "$release" && test ! -L "$root" && test ! -L "$root/queue.sqlite3"
+          test -f "$root/queue.sqlite3"
+          command -v flock >/dev/null
+          command -v crontab >/dev/null
+          cd "$release"
+          python3 -m unittest discover -s tests -p test_astra_opportunity_selector.py -q
+          python3 -m unittest discover -s tests -p test_astra_research_evidence_adapter.py -q
+          python3 -m unittest discover -s tests -p test_astra_v2_private_pipeline.py -q
+
+          # This is the EXISTING isolated five-minute Astra V2 timer lock.
+          # Never modify the main factory service or any website deployment.
+          exec 9>"$root/.timer-lock"
+          flock -w 95 9
+
+          work="$(mktemp -d "$HOME/factory-runtime/private/astra-gate-switch-XXXXXXXX")"
+          marker="$root/.enable-topic-research-gate"
+          marker_added=0
+          cron_modified=0
+          committed=0
+          rollback_and_cleanup() {
+            if test "$committed" -ne 1; then
+              if test "$cron_modified" -eq 1; then
+                crontab "$work/crontab.before" || echo ASTRA_GATE_CRON_ROLLBACK_FAILED
+              fi
+              if test "$marker_added" -eq 1; then
+                rm -f -- "$marker"
+              fi
+              echo ASTRA_GATE_ACTIVATION_ROLLBACK=ATTEMPTED
+            fi
+            rm -rf -- "$work"
+          }
+          trap rollback_and_cleanup EXIT
+
+          crontab -l > "$work/crontab.before"
+          chmod 600 "$work/crontab.before"
+          python3 - "$work/crontab.before" "$work/crontab.after" "$current" "$release" <<'PY'
+          import pathlib,sys
+          original=pathlib.Path(sys.argv[1])
+          dest=pathlib.Path(sys.argv[2])
+          old=pathlib.Path(sys.argv[3])/'scripts/astra_v2_private_pipeline.py'
+          new=pathlib.Path(sys.argv[4])/'scripts/astra_v2_private_pipeline.py'
+          lines=original.read_text().splitlines(keepends=True)
+          hits=[i for i,line in enumerate(lines) if 'ASTRA_V2_PRIVATE_RND_TICK' in line]
+          assert len(hits)==1,('unexpected_private_timer_rows',len(hits))
+          i=hits[0]
+          assert str(old) in lines[i] and str(new) not in lines[i]
+          assert '/usr/bin/flock -n' in lines[i] and '--root ' in lines[i]
+          modified=lines.copy()
+          modified[i]=lines[i].replace(str(old),str(new))
+          assert modified[i]!=lines[i]
+          dest.write_text(''.join(modified))
+          dest.chmod(0o600)
+          print('ASTRA_GATE_OTHER_CRON_LINES_PRESERVED=true')
+          PY
+
+          # Consistent scratch copy for a policy rehearsal; live DB unchanged.
+          scratch="$work/test-private"
+          install -d -m 700 "$scratch"
+          python3 - "$root/queue.sqlite3" "$scratch/queue.sqlite3" <<'PY'
+          import pathlib,sqlite3,sys
+          original=pathlib.Path(sys.argv[1])
+          source=sqlite3.connect(original.as_uri()+'?mode=ro',uri=True,timeout=20)
+          target=sqlite3.connect(sys.argv[2],timeout=20)
+          source.backup(target)
+          target.close();source.close()
+          PY
+          printf 'private_only\n' > "$scratch/.enable-topic-research-gate"
+          chmod 600 "$scratch/.enable-topic-research-gate"
+          if test -e "$root/.enable-autonomous-specialists"; then
+            test ! -L "$root/.enable-autonomous-specialists"
+            test "$(cat "$root/.enable-autonomous-specialists")" = private_only
+            install -m 600 "$root/.enable-autonomous-specialists" "$scratch/.enable-autonomous-specialists"
+          fi
+          python3 scripts/astra_v2_private_pipeline.py tick --root "$scratch"
+          python3 scripts/astra_v2_private_pipeline.py status --root "$scratch"
+
+          if test -L "$marker"; then
+            echo ASTRA_GATE_UNSAFE_MARKER; exit 1
+          fi
+          if test -e "$marker"; then
+            test -f "$marker" && test "$(cat "$marker")" = private_only
+          else
+            printf 'private_only\n' > "$marker"
+            chmod 600 "$marker"
+            marker_added=1
+          fi
+          crontab "$work/crontab.after"
+          cron_modified=1
+          crontab -l > "$work/crontab.actual"
+          cmp -s "$work/crontab.after" "$work/crontab.actual"
+          grep -Fq "$release/scripts/astra_v2_private_pipeline.py" "$work/crontab.actual"
+          test "$(grep -F -c ASTRA_V2_PRIVATE_RND_TICK "$work/crontab.actual")" -eq 1
+          test "$(cat "$marker")" = private_only
+          python3 scripts/astra_v2_private_pipeline.py status --root "$root"
+          committed=1
+          echo ASTRA_GATE_PRIVATE_VPS_ACTIVATED=true
+          echo ASTRA_GATE_WEAK_TOPIC_FILTER_ENABLED=true
+          echo ASTRA_GATE_EXISTING_FIVE_MINUTE_CADENCE_UNCHANGED=true
+          echo ASTRA_GATE_EXISTING_FACTORY_DATABASE_NOT_MUTATED_BY_DEPLOY=true
+          echo ASTRA_GATE_LIVE_SITE_CHANGES=false
+          echo ASTRA_GATE_PUBLICATION_ENABLED=false
+          REMOTE

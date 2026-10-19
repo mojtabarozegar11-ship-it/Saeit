@@ -1,0 +1,90 @@
+name: Astra V2 VPS Research Evidence Read-Only Audit
+
+on:
+  push:
+    branches: [feature/astra-factory-v2-architecture-20261014]
+    paths: [.github/workflows/astra-v2-research-source-audit.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: saeit-astra-v2-research-audit
+  cancel-in-progress: false
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Inspect isolated VPS research schema and evidence counters only
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" || { echo VPS_SSH_KEY_NOT_CONFIGURED; exit 1; }
+          tmp="$RUNNER_TEMP/astra-v2-audit"
+          install -d -m 700 "$tmp"
+          trap 'rm -rf -- "$tmp"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; print(sys.stdin.read().replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$tmp/key"
+          chmod 600 "$tmp/key"
+          ssh-keygen -y -P '' -f "$tmp/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$tmp/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$tmp/known" -E sha256 | awk '{print $2}' | sort -u)" = 'SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs'
+          ssh -i "$tmp/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$tmp/known" -o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=15 githubops@178.239.147.150 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          db="$HOME/factory-runtime/private/factory-fresh-isolated.sqlite3"
+          test -f "$db" && test ! -L "$db"
+          python3 - "$db" <<'PY'
+          import sqlite3,sys,re,pathlib,urllib.parse
+          db=pathlib.Path(sys.argv[1]).resolve()
+          assert db.is_file()
+          conn=sqlite3.connect(db.as_uri()+"?mode=ro",uri=True,timeout=10)
+          conn.execute("PRAGMA query_only=ON")
+          conn.execute("BEGIN")
+          def fields(table):
+              return {row[1] for row in conn.execute("PRAGMA table_info("+table+")")}
+          names={r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+          allow=("core_researchproject","core_researchsource","core_evidence","core_finding","core_factoryrun","core_product","core_factoryqueueitem","core_discoverysnapshot")
+          print("ASTRA_V2_AUDIT_SCOPE=ISOLATED_VPS_SQLITE")
+          print("ASTRA_V2_AUDIT_QUERY_ONLY=true")
+          for table in allow:
+              if table not in names:
+                  print("ASTRA_V2_TABLE_"+table.upper()+"=ABSENT")
+                  continue
+              print("ASTRA_V2_COUNT_"+table.upper()+"="+str(conn.execute("SELECT COUNT(*) FROM "+table).fetchone()[0]))
+          if {"core_researchsource","core_evidence"}.issubset(names) and {"url","content_hash","id","project_id"}.issubset(fields("core_researchsource")) and {"source_id","project_id"}.issubset(fields("core_evidence")):
+              query="""SELECT s.url,s.content_hash FROM core_researchsource AS s
+                      WHERE EXISTS (SELECT 1 FROM core_evidence e
+                                    WHERE e.source_id=s.id AND e.project_id=s.project_id)"""
+              rows=conn.execute(query).fetchall()
+              print("ASTRA_V2_SOURCE_LINKED_TO_EVIDENCE="+str(len(rows)))
+              count=0
+              domains=set()
+              for url,digest in rows:
+                  try:
+                      parsed=urllib.parse.urlsplit(url or "")
+                      if parsed.scheme.lower()=="https" and parsed.hostname and re.fullmatch("[0-9a-fA-F]{64}",digest or ""):
+                          count+=1
+                          domains.add(parsed.hostname.lower())
+                  except (TypeError,ValueError):pass
+              print("ASTRA_V2_SOURCE_SHA256_HTTPS_REFS="+str(count))
+              print("ASTRA_V2_SOURCE_DISTINCT_HOSTS_PRELIMINARY="+str(len(domains)))
+          else:
+              print("ASTRA_V2_SOURCE_EVIDENCE_LINKAGE_UNAVAILABLE=true")
+          if {"core_factoryqueueitem","core_discoverysnapshot"}.issubset(names):
+              try:
+                  print("ASTRA_V2_ASTRA_SNAPSHOTS="+str(conn.execute("SELECT COUNT(*) FROM core_discoverysnapshot").fetchone()[0]))
+              except sqlite3.DatabaseError:
+                  print("ASTRA_V2_SNAPSHOT_SCHEMA_NEEDS_MAPPING=true")
+          conn.execute("COMMIT")
+          conn.close()
+          print("ASTRA_V2_MARKET_CLAIMS_INDEPENDENTLY_VERIFIED=false")
+          print("ASTRA_V2_BUILD_AUTHORIZED=false")
+          print("ASTRA_V2_PRODUCTION_MUTATIONS=0")
+          print("ASTRA_V2_AUDIT_COMPLETE=true")
+          PY
+          REMOTE

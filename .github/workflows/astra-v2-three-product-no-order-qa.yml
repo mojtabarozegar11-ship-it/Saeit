@@ -1,0 +1,79 @@
+name: Astra V2 Three Independent Products No-Order QA
+
+on:
+  push:
+    branches: [feature/astra-factory-v2-architecture-20261014]
+    paths: [.github/workflows/astra-v2-three-product-no-order-qa.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  three-original-products:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate third exact-Decimal solver and autonomous source-production logic
+        run: |
+          python3 -m unittest discover -s tests -p test_astra_farm_water_land_margin_audit.py -q
+          python3 -m unittest discover -s tests -p test_astra_farm_procurement_audit.py -q
+          python3 -m unittest discover -s tests -p test_astra_orchard_decision_audit.py -q
+          python3 -m unittest discover -s tests -p test_astra_v2_private_pipeline.py -q
+          python3 -m unittest discover -s tests -p test_astra_v2_self_directed_education.py -q
+      - name: Autonomous source-revision production, no buyer request or inbox
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          private="$RUNNER_TEMP/private-factory"
+          mkdir -m 700 "$private"
+          printf 'private_only\n' > "$private/.enable-autonomous-specialists"
+          python3 scripts/astra_v2_private_pipeline.py tick --root "$private"
+          python3 scripts/astra_v2_private_pipeline.py tick --root "$private"
+          python3 scripts/astra_v2_private_pipeline.py tick --root "$private"
+          python3 scripts/astra_v2_private_pipeline.py tick --root "$private"
+          python3 scripts/astra_v2_private_pipeline.py status --root "$private"
+          python3 - "$private" <<'PY'
+          import sys,sqlite3,json,pathlib,zipfile,tempfile,subprocess
+          root=pathlib.Path(sys.argv[1])
+          con=sqlite3.connect(str(root/'queue.sqlite3'))
+          runs=list(con.execute("SELECT DISTINCT builder FROM jobs WHERE stage='PRIVATE_QA_PASSED'"))
+          names={x[0] for x in runs}
+          target={'orchard_decision_audit_v2','farm_procurement_audit_v1','farm_water_land_margin_audit_v1'}
+          assert names==target,(names,target)
+          records=list(root.glob('qa-*.json'))
+          assert len(records)==3
+          for record in records:
+              d=json.loads(record.read_text())
+              assert d['quality_score'] is None and d['sale_ready'] is False
+              assert d['public_deployment_allowed'] is False and d['real_payment_allowed'] is False
+              pkg=root/('artifact-'+d['source_digest']+'.zip')
+              with zipfile.ZipFile(pkg) as z:
+                  assert z.testzip() is None
+                  with tempfile.TemporaryDirectory() as t:
+                      z.extractall(t)
+                      name=d['product_slug']
+                      test=pathlib.Path(t)/name/'self_test.py'
+                      p=subprocess.run([sys.executable,str(test)],capture_output=True,text=True,timeout=15)
+                      assert p.returncode==0,(name,p.stderr)
+          assert len(list((root/'autonomous_education').glob('case-*.zip')))==1
+          print('ASTRA_THREE_INDEPENDENT_PRODUCT_FAMILIES=3')
+          print('ASTRA_APPROVED_SOURCE_REVISIONS_AUTOBUILT_WITHOUT_ORDERS=true')
+          print('ASTRA_SEPARATE_EDUCATIONAL_CASE_GENERATED=true')
+          print('ASTRA_PAID_APIS_CALLED=0')
+          print('ASTRA_PUBLIC_STORE_PUBLISHES=0')
+          PY
+          mkdir -p "$RUNNER_TEMP/synthetic-product-artifacts"
+          cp "$private"/artifact-*.zip "$private"/qa-*.json "$RUNNER_TEMP/synthetic-product-artifacts/"
+      - name: Attach synthetic-source-only private review packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: astra-v2-three-specialists-private-reference-only
+          path: ${{ runner.temp }}/synthetic-product-artifacts
+          retention-days: 7
+          if-no-files-found: error

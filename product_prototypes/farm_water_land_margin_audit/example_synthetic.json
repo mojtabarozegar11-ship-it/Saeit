@@ -1,0 +1,35 @@
+{
+  "currency": "USD",
+  "land_hectares": "10",
+  "water_m3_available": "100",
+  "drought_water_fraction": "0.65",
+  "crops": [
+    {
+      "name": "Illustrative Crop A",
+      "max_hectares": "8",
+      "water_m3_per_hectare": "20",
+      "revenue_per_hectare": "260",
+      "variable_cost_per_hectare": "180",
+      "source_reference": "FICTIONAL test fixture, not observed farm economics",
+      "source_status": "operator_estimate"
+    },
+    {
+      "name": "Illustrative Crop B",
+      "max_hectares": "10",
+      "water_m3_per_hectare": "5",
+      "revenue_per_hectare": "180",
+      "variable_cost_per_hectare": "140",
+      "source_reference": "FICTIONAL test fixture, not observed farm economics",
+      "source_status": "operator_estimate"
+    },
+    {
+      "name": "Illustrative Crop C",
+      "max_hectares": "4",
+      "water_m3_per_hectare": "8",
+      "revenue_per_hectare": "240",
+      "variable_cost_per_hectare": "198",
+      "source_reference": "FICTIONAL test fixture, not observed farm economics",
+      "source_status": "operator_estimate"
+    }
+  ]
+}
