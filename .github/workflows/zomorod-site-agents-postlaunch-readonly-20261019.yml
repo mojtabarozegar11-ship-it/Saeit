@@ -1,0 +1,119 @@
+name: Zomorod 11 local agents evidence and 10-minute schedule postlaunch audit
+on:
+  pull_request:
+    paths:
+      - .github/workflows/zomorod-site-agents-postlaunch-readonly-20261019.yml
+permissions:
+  contents: read
+jobs:
+  inspect:
+    if: github.repository == 'mojtabarozegar11-ship-it/Saeit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+      - name: Read exact production agent ledger and cron configuration without writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -T -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          test "$HOME" = /home/zomorod2
+          export PYTHONDONTWRITEBYTECODE=1
+          python3 - <<'PY'
+          from pathlib import Path
+          import sqlite3,urllib.parse,json
+          private=Path.home()/".private/zomorod-business"
+          for name in ("site_agents.php","site_agent_workforce.php","site_agent_cycle_cli.php"):
+              p=private/name
+              print("POSTLAUNCH_MODULE="+name+" present="+str(p.is_file() and not p.is_symlink()))
+          p=private/"site_agents.sqlite3"
+          assert p.is_file() and not p.is_symlink()
+          conn=sqlite3.connect("file:"+urllib.parse.quote(str(p))+"?mode=ro",uri=True,timeout=10)
+          conn.execute("PRAGMA query_only=ON")
+          tables={x[0] for x in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+          expected={"agents","runs","site_work_outputs","site_work_state","site_work_generation_evidence"}
+          assert expected.issubset(tables),(tables,expected)
+          for table in sorted(expected):
+              count=int(conn.execute('SELECT COUNT(*) FROM "'+table+'"').fetchone()[0])
+              print("POSTLAUNCH_TABLE="+table+" count="+str(count))
+          roles=conn.execute("SELECT agent_code,status,quality_score,COUNT(*) FROM site_work_outputs GROUP BY agent_code,status,quality_score ORDER BY agent_code,status").fetchall()
+          for code,status,quality,n in roles:
+              print("POSTLAUNCH_OUTPUT="+json.dumps({"role":code,"state":status,"score":quality,"count":n}))
+          latest=conn.execute("SELECT agent_code,status,quality_score,observed_at,http_code FROM site_work_outputs ORDER BY id DESC LIMIT 5").fetchall()
+          for code,status,score,at,http in latest:
+              print("POSTLAUNCH_LATEST="+json.dumps({"role":code,"state":status,"score":score,"at":at,"http":http}))
+          recent=conn.execute("SELECT agent_code,status,http_code,occurred_at FROM runs ORDER BY id DESC LIMIT 11").fetchall()
+          print("POSTLAUNCH_LAST_11_AGENT_RUNS="+json.dumps([{"role":x[0],"status":x[1],"http":x[2],"at":x[3]} for x in recent]))
+          conn.close()
+          PY
+          crontab -l | grep -F '# zm-site-agents-only-v100' | sed -E 's#(/[^[:space:]]+/)+([^/[:space:]]+\.php)#\2#g' | sed -E 's#(.*\*/10 \* \* \* \*).*#POSTLAUNCH_CRON_ENABLED=yes cadence=ten-minutes#'
+          py="$HOME/virtualenv/Saeit/3.10/bin/python"
+          cd "$HOME/Saeit"
+          "$py" - <<'PY'
+          import os,sqlite3,pathlib
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE","config.settings")
+          import django
+          django.setup()
+          from django.conf import settings
+          name=pathlib.Path(str(settings.DATABASES["default"]["NAME"]))
+          if name.exists() and settings.DATABASES["default"]["ENGINE"].endswith("sqlite3"):
+              uri="file:"+str(name)+"?mode=ro"
+              db=sqlite3.connect(uri,uri=True)
+              n=db.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table'").fetchone()[0]
+              print("POSTLAUNCH_DJANGO_DB_TABLES="+str(n))
+              db.close()
+          else:print("POSTLAUNCH_DJANGO_DB_STATE=not_read")
+          PY
+          REMOTE
+      - name: Erase temporary relay credentials
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
