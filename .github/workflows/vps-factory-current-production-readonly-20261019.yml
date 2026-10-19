@@ -127,4 +127,14 @@ jobs:
                   print("RESEARCH_INPUT_"+key.upper()+"="+str(summary.get(key)),flush=True)
           live_cron=[x for x in c.stdout.splitlines() if "SAEIT_FACTORY_EVERY_MINUTE_V1" in x and not x.lstrip().startswith("#")]
           print("FACTORY_EVERY_MINUTE_CRON_COUNT="+str(len(live_cron)),flush=True)
+          issued=private/"production-instructions"/"order-status.json"
+          age(issued,"PRODUCTION_INSTRUCTIONS_STATUS")
+          if issued.is_file() and not issued.is_symlink():
+              row=json.loads(issued.read_text(encoding="utf8"))
+              for k in ("last_scan_utc","last_action","last_order","instructions_issued_total",
+                        "pending_instructions","candidate_instructions","site_connection_required",
+                        "distribution_enabled"):
+                  print("PRODUCTION_INSTRUCTIONS_"+k.upper()+"="+str(row.get(k)),flush=True)
+          else:
+              print("PRODUCTION_INSTRUCTIONS_STATUS_MISSING=true",flush=True)
           PY
