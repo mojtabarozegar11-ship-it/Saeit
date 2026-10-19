@@ -1,0 +1,194 @@
+name: Zomorod Farm Dominion V4 live River Pulse and IT card
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/zomorod-farm-dominion-v4-live.yml']
+permissions:
+  contents: read
+concurrency:
+  group: zm-farm-dominion-final-release
+  cancel-in-progress: false
+jobs:
+  release:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      contains(github.event.head_commit.message, '[approved-zm-farm-dominion-v4-live]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 28
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Validate gameplay, JavaScript, isolated HTML and CC0 licensed assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          b=games/farm-wars-v3
+          node --check "$b/src/main.js"
+          node --check "$b/src/strategy.mjs"
+          node --test "$b/tests/strategy.test.mjs"
+          node --check "$b/tests/browser.cjs"
+          python3 -m py_compile "$b/scripts/safe_release_v4.py"
+          python3 -m py_compile "$b/scripts/download_models.py"
+          npm install --prefix "$b" --no-audit --no-fund --no-save three@0.181.0 esbuild@0.25.12
+          "$b/node_modules/.bin/esbuild" "$b/src/main.js" --bundle --format=iife --platform=browser --target=es2020 --minify --outfile="$b/build/game.js"
+          node --check "$b/build/game.js"
+          cp "$b/index.html" "$b/build/index.html"
+          printf 'PassengerEnabled off\nDirectoryIndex index.html\nOptions -Indexes\n' > "$b/build/.htaccess"
+          python3 "$b/scripts/download_models.py"
+          test "$(find "$b/build/assets" -name '*.glb' | wc -l)" -eq 27
+          test "$(stat -c %s "$b/build/game.js")" -gt 400000
+          grep -Fq 'hydro-info' "$b/build/index.html"
+          grep -Fq 'contract-info' "$b/build/index.html"
+          grep -Fq 'FarmDominionDebug' "$b/build/game.js"
+          echo RIVER_PULSE_TESTS_AND_BUILD=PASS
+      - name: Verify all current protected public routes before writing
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import urllib.request
+          for route in ['/','/farm-wars/','/farm-dominion-preview/','/store/','/agriculture/','/research/','/tala/']:
+           with urllib.request.urlopen('https://zomorodmelal.ir'+route,timeout=30) as r:
+            print('PROTECTED_BASELINE',route,r.status)
+            assert r.status==200,route
+          PY
+      - name: Prepare host-key-pinned relay to owner hosting
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          bash games/farm-wars-v3/scripts/ssh_relay.sh
+      - name: Create private staging and immutable backups before changing preview
+        id: stage
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh"
+          stage="/home/zomorod2/.farm-dominion-v4-$GITHUB_RUN_ID"
+          timeout 35s ssh -T -F "$d/config" host "test ! -e '$stage' && install -d -m 700 '$stage' && install -d -m 700 '$stage/build'"
+          tar -cf - -C games/farm-wars-v3/build index.html game.js .htaccess assets | timeout 110s ssh -T -F "$d/config" host "tar -xf - -C '$stage/build'"
+          timeout 35s scp -q -F "$d/config" games/farm-wars-v3/scripts/safe_release_v4.py "host:$stage/installer.py"
+          timeout 65s ssh -T -F "$d/config" host "python3 '$stage/installer.py' prepare '$GITHUB_RUN_ID'"
+      - name: Update only unlinked 3D preview first
+        id: preview
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh";stage="/home/zomorod2/.farm-dominion-v4-$GITHUB_RUN_ID"
+          timeout 65s ssh -T -F "$d/config" host "python3 '$stage/installer.py' preview '$GITHUB_RUN_ID'"
+      - name: Actual desktop and mobile browser tests on preview
+        id: preview_qa
+        shell: bash
+        env:
+          TEST_URL: https://zomorodmelal.ir/farm-dominion-preview/
+        run: |
+          set -euo pipefail
+          d="/tmp/farm-v4-browser";mkdir -p "$d";cd "$d"
+          npm init -y >/dev/null
+          npm install --silent --no-save --no-audit --no-fund playwright@1.55.0
+          npx playwright install chromium
+          cd "$GITHUB_WORKSPACE"
+          NODE_PATH="$d/node_modules" node games/farm-wars-v3/tests/browser.cjs
+      - name: Create unique real-game WebP artwork for the IT carousel card
+        id: cover
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet --user pillow
+          python3 - <<'PY'
+          from PIL import Image,ImageEnhance
+          from pathlib import Path
+          source=Path('artifacts/farm-dominion-3d/desktop-real-3d.png')
+          assert source.exists()
+          picture=Image.open(source).convert('RGB');w,h=picture.size
+          assert w>=1200 and h>=700
+          crop=picture.crop((int(w*.16),int(h*.14),int(w*.84),int(h*.79)))
+          crop=ImageEnhance.Contrast(crop).enhance(1.07)
+          crop.thumbnail((560,320),Image.Resampling.LANCZOS)
+          cover=Image.new('RGB',(560,320),(22,50,35))
+          cover.paste(crop,((560-crop.width)//2,(320-crop.height)//2))
+          dest=Path('games/farm-wars-v3/build/cover.webp')
+          cover.save(dest,'WEBP',quality=76,method=6)
+          assert 1000<dest.stat().st_size<125000
+          print('LIVE_GAME_CARD_REAL_SCREENSHOT=PASS',dest.stat().st_size)
+          PY
+          d="$RUNNER_TEMP/farm-v4-ssh";stage="/home/zomorod2/.farm-dominion-v4-$GITHUB_RUN_ID"
+          timeout 45s scp -q -F "$d/config" games/farm-wars-v3/build/cover.webp "host:$stage/build/cover.webp"
+          timeout 50s ssh -T -F "$d/config" host "python3 '$stage/installer.py' artwork '$GITHUB_RUN_ID'"
+      - name: Install game V4 atomically on original farm-wars URL
+        id: game
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh";stage="/home/zomorod2/.farm-dominion-v4-$GITHUB_RUN_ID"
+          timeout 90s ssh -T -F "$d/config" host "python3 '$stage/installer.py' game '$GITHUB_RUN_ID'"
+      - name: Browser acceptance checks against final live original URL
+        id: live_qa
+        shell: bash
+        env:
+          TEST_URL: https://zomorodmelal.ir/farm-wars/
+        run: |
+          set -euo pipefail
+          NODE_PATH=/tmp/farm-v4-browser/node_modules node games/farm-wars-v3/tests/browser.cjs
+      - name: Append exactly one authentic-game card only to the existing IT row
+        id: card
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh";stage="/home/zomorod2/.farm-dominion-v4-$GITHUB_RUN_ID"
+          timeout 65s ssh -T -F "$d/config" host "python3 '$stage/installer.py' home '$GITHUB_RUN_ID'"
+      - name: Validate public link, actual thumbnail, preserved 605 cards and original pages
+        id: final
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import urllib.request,re,json,hashlib
+          base='https://zomorodmelal.ir'
+          req=urllib.request.Request(base+'/?__farm_v4_check='+str(__import__('time').time_ns()),headers={'Cache-Control':'no-cache'})
+          with urllib.request.urlopen(req,timeout=35) as r:raw=r.read(3_500_000);code=r.status
+          assert code==200
+          html=raw.decode('utf-8')
+          match=re.search(r'window\.ZOMOROD_ORBIT_DATA=(\{.*?\});</script>',html,re.S)
+          assert match
+          data=json.loads(match.group(1))
+          rows=data['rows']
+          assert len(rows)>=26
+          it=next(row for row in rows if row.get('id')=='ZM-R25')
+          game=[c for c in it['cards'] if c.get('id')=='ZM-R25-GAME-FARM-DOMINION-20261019']
+          assert len(game)==1 and game[0]['canonicalUrl']=='/farm-wars/'
+          assert game[0]['image']=='/farm-wars/cover.webp'
+          assert any(c.get('slug')=='game-development' for c in it['cards'])
+          assert sum(len(row['cards']) for row in rows)>=606
+          print('HOMEPAGE_IT_GAME_CARD_VISIBLE_IN_MANIFEST=PASS',len(it['cards']))
+          with urllib.request.urlopen(base+'/farm-wars/cover.webp',timeout=30) as r:
+            assert r.status==200 and r.read(4)==b'RIFF'
+          for path in ['/','/farm-wars/','/agriculture/','/research/','/store/','/tala/']:
+            with urllib.request.urlopen(base+path,timeout=30) as r:
+              assert r.status==200,path
+              print('PRESERVED_SITE_ROUTE',path,r.status)
+          print('FARM_DOMINION_V4_PUBLIC_RELEASE=PASS')
+          PY
+          d="$RUNNER_TEMP/farm-v4-ssh";stage="/home/zomorod2/.farm-dominion-v4-$GITHUB_RUN_ID"
+          timeout 45s ssh -T -F "$d/config" host "python3 '$stage/installer.py' verify '$GITHUB_RUN_ID'"
+      - name: Revert only game, IT card and preview on any failure after staging
+        if: failure() && steps.stage.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/farm-v4-ssh";stage="/home/zomorod2/.farm-dominion-v4-$GITHUB_RUN_ID"
+          if test -f "$d/config"; then timeout 100s ssh -T -F "$d/config" host "python3 '$stage/installer.py' rollback '$GITHUB_RUN_ID'"; fi
+      - name: Upload genuine live desktop and phone gameplay screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: farm-dominion-v4-river-pulse-live-evidence
+          path: artifacts/farm-dominion-3d/
+          retention-days: 7
+          if-no-files-found: warn
+      - name: Delete temporary credentials
+        if: always()
+        shell: bash
+        run: rm -rf "$RUNNER_TEMP/farm-v4-ssh"
