@@ -322,7 +322,11 @@ def main(argv=None):
         print("FACTORY_STORE_PRODUCT=" + item["recipe"])
         print("FACTORY_STORE_DELIVERY=" + item["status"])
     print("FACTORY_STORE_TRANSFER_COUNT=" + str(sum(
+        item["status"] == "received_private" for item in results)))
+    print("FACTORY_STORE_RECEIPT_VERIFIED_COUNT=" + str(sum(
         item["status"] in ("received_private", "already_received") for item in results)))
+    print("FACTORY_STORE_ALREADY_RECEIVED_COUNT=" + str(sum(
+        item["status"] == "already_received" for item in results)))
     print("FACTORY_STORE_QA_BLOCKED_COUNT=" + str(sum(
         item["status"] == "blocked_private_qa" for item in results)))
     print("FACTORY_STORE_DRY_RUN_VERIFIED_COUNT=" + str(sum(
