@@ -38,35 +38,57 @@ if ! systemctl is-enabled --quiet cron 2>/dev/null &&
   echo "CRON_NOT_BOOT_ENABLED"; exit 1
 fi
 
-mkdir -p "$ops/backups" "$scripts" "$recipes" "$private"
+mkdir -p "$ops/backups"
+# Exclude the scheduled runner while replacing code and recipe inventory.
+exec 8>"$ops/autonomous-product-cycle.lock"
+flock -w 120 8 || { echo "INSTALL_LOCK_TIMEOUT"; exit 1; }
+# A failed backup stops installation before replacing runtime files.
+stamp="$(date -u +%Y%m%dT%H%M%SZ)-$$"
+if [[ -d "$stage" ]]; then
+  backup="$ops/backups/autonomous-product-runtime-before-$stamp.tar.gz"
+  tar -czf "$backup" -C "$ops" autonomous-product-runtime
+  tar -tzf "$backup" >/dev/null
+  chmod 600 "$backup"
+fi
+rollback_runtime() {
+  rc="$?"
+  if [[ "$rc" -ne 0 && -n "${backup:-}" && -s "$backup" ]]; then
+    # Quarantine the failed deployment and restore the verified runtime archive.
+    mv "$stage" "$ops/backups/failed-runtime-$stamp"
+    tar -xzf "$backup" -C "$ops"
+    echo "FACTORY_RUNTIME_ROLLED_BACK"
+  fi
+  exit "$rc"
+}
+trap rollback_runtime EXIT
+mkdir -p "$scripts" "$recipes" "$private"
 chmod 700 "$stage" "$scripts" "$recipes" "$private"
 
-# Back up existing code if present; source control remains the source of truth.
-stamp="$(date -u +%Y%m%dT%H%M%SZ)"
-tar -czf "$ops/backups/autonomous-product-runtime-before-$stamp.tar.gz" \
-  -C "$ops" autonomous-product-runtime || true
-chmod 600 "$ops/backups/autonomous-product-runtime-before-$stamp.tar.gz" 2>/dev/null || true
 
 for f in factory_product_maker.py factory_autonomous_portfolio.py \
          factory_evidence_quality.py factory_first_product_pilot.py factory_vps_product_cycle.py \
          factory_product_rework.py; do
   install -m 600 "$repo/scripts/$f" "$scripts/$f"
 done
-# Every valid recipe folder is deployed automatically; new products need no installer edit.
-shopt -s nullglob
-recipe_sources=("$repo"/product_recipes/*)
-(("${#recipe_sources[@]}" > 0)) || { echo "NO_PRODUCT_RECIPE_DIRECTORIES"; exit 1; }
-for recipe_source in "${recipe_sources[@]}"; do
-  [[ -d "$recipe_source" && ! -L "$recipe_source" ]] || { echo "UNSAFE_PRODUCT_RECIPE_DIRECTORY"; exit 1; }
-  recipe="$(basename "$recipe_source")"
-  mkdir -p "$recipes/$recipe"
-  chmod 700 "$recipes/$recipe"
-  while IFS= read -r -d '' file; do
-    relative="${file#"$recipe_source"/}"
-    mkdir -p "$recipes/$recipe/$(dirname "$relative")"
-    install -m 600 "$file" "$recipes/$recipe/$relative"
-  done < <(find "$recipe_source" -type f -print0)
-done
+# Build a complete replacement inventory. Preserve retired recipes privately;
+# never remove artifacts, defect ledgers, or locally retained previous sources.
+incoming="$(mktemp -d "$stage/.recipes-incoming.XXXXXX")"
+"$python" -B -c 'import runpy,sys; m=runpy.run_path(sys.argv[1]); m["discover_recipes"](sys.argv[2])' \
+  "$scripts/factory_product_maker.py" "$repo/product_recipes"
+# Reject symlinks even when they point to files outside the checkout.
+if [[ -n "$(find "$repo/product_recipes" -type l -print -quit)" ]]; then
+  echo "UNSAFE_PRODUCT_RECIPE_SYMLINK"; exit 1
+fi
+cp -R "$repo/product_recipes/." "$incoming/"
+find "$incoming" -type d -exec chmod 700 {} +
+find "$incoming" -type f -exec chmod 600 {} +
+retired="$ops/backups/product-recipes-before-$stamp"
+mv "$recipes" "$retired"
+if ! mv "$incoming" "$recipes"; then
+  mv "$retired" "$recipes"
+  echo "RECIPE_ACTIVATION_FAILED"; exit 1
+fi
+incoming=""
 
 # Quality gate must exist and compile BEFORE any production cycle or cron change.
 "$python" -B -c 'import ast, pathlib, sys; [ast.parse(pathlib.Path(x).read_text(encoding="utf-8")) for x in sys.argv[1:]]' \

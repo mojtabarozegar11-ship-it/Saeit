@@ -105,3 +105,22 @@ class FactoryVPSCycleTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class FactoryCycleIsolationTests(unittest.TestCase):
+    setUp = FactoryVPSCycleTests.setUp
+    def test_bounded_cycles_rotate_recipes(self):
+        seen = []
+        for _ in range(3):
+            cycle.run_cycle(self.db, self.output, self.recipes, max_recipes=1)
+            state = json.loads((self.output/'production-state.json').read_text())
+            seen.extend(state['built_product_recipes'])
+        self.assertEqual(len(set(seen)),3)
+
+    def test_invalid_recipe_is_reported_without_stopping_good_products(self):
+        (self.recipes/'broken_recipe').mkdir()
+        result = cycle.run_cycle(self.db, self.output, self.recipes)
+        self.assertEqual(result['status'],'needs_rework')
+        self.assertEqual(result['manufactured'],3)
+        state = json.loads((self.output/'production-state.json').read_text())
+        self.assertEqual(state['recipe_admission_failures'][0]['recipe'],'broken_recipe')
+        self.assertFalse(state['artifact_qa_passed'])

@@ -21,42 +21,50 @@ RECIPE_ID = re.compile(r"^[a-z0-9]+(?:_[a-z0-9]+)*$")
 DEFAULT_RECIPES = Path(__file__).resolve().parents[1] / "product_recipes"
 
 
-def discover_recipes(recipes_root):
-    """Discover every valid recipe folder; adding a folder needs no code edit."""
-    root = Path(recipes_root).expanduser().resolve()
+def inspect_recipe(source):
+    if source.is_symlink() or not source.is_dir() or not RECIPE_ID.fullmatch(source.name):
+        raise RuntimeError("RECIPE_DIRECTORY_INVALID:" + source.name)
+    files = []
+    for path in sorted(source.rglob("*")):
+        if path.is_symlink():
+            raise RuntimeError("RECIPE_FILE_MISSING_OR_UNSAFE:" + path.relative_to(source).as_posix())
+        if not path.is_file():
+            continue
+        relative = path.relative_to(source).as_posix()
+        if any(part.startswith(".") or part == "__pycache__" for part in Path(relative).parts):
+            continue
+        files.append(relative)
+    tests = [name for name in files if Path(name).name.startswith("test_") and name.endswith(".py")]
+    if "README.md" not in files or not tests:
+        raise RuntimeError("RECIPE_CONTRACT_INVALID:" + source.name)
+    readme = (source / "README.md").read_text(encoding="utf-8")
+    heading = next((line.lstrip("#").strip() for line in readme.splitlines()
+                    if line.startswith("#") and line.lstrip("#").strip()), "")
+    return (heading or source.name.replace("_", " ").title(), tuple(files))
+
+
+def discover_recipes(recipes_root, errors=None):
+    """Strict by default; cycles can collect isolated admission failures."""
+    root = Path(recipes_root).expanduser()
     if not root.is_dir() or root.is_symlink():
         raise RuntimeError("RECIPE_ROOT_MISSING_OR_UNSAFE")
     recipes = {}
     for source in sorted(root.iterdir(), key=lambda item: item.name):
         if source.name.startswith("."):
             continue
-        if source.is_symlink() or not source.is_dir() or not RECIPE_ID.fullmatch(source.name):
-            raise RuntimeError("RECIPE_DIRECTORY_INVALID:" + source.name)
-        files = []
-        for path in sorted(source.rglob("*")):
-            if path.is_symlink():
-                raise RuntimeError("RECIPE_FILE_MISSING_OR_UNSAFE:" + path.relative_to(source).as_posix())
-            if not path.is_file():
-                continue
-            relative = path.relative_to(source).as_posix()
-            if any(part.startswith(".") or part == "__pycache__" for part in Path(relative).parts):
-                continue
-            files.append(relative)
-        tests = [name for name in files if Path(name).name.startswith("test_") and name.endswith(".py")]
-        if "README.md" not in files or not tests:
-            raise RuntimeError("RECIPE_CONTRACT_INVALID:" + source.name)
-        readme = (source / "README.md").read_text(encoding="utf-8")
-        heading = next((line.lstrip("#").strip() for line in readme.splitlines()
-                        if line.startswith("#") and line.lstrip("#").strip()), "")
-        name = heading or source.name.replace("_", " ").title()
-        recipes[source.name] = (name, tuple(files))
-    if not recipes:
+        try:
+            recipes[source.name] = inspect_recipe(source)
+        except (RuntimeError, OSError, UnicodeError) as error:
+            if errors is None:
+                raise
+            errors.append({"recipe": source.name, "reason": str(error)[:400]})
+    if not recipes and errors is None:
         raise RuntimeError("NO_VALID_PRODUCT_RECIPES")
     return recipes
 
 
 # Compatibility/status view. Runtime cycles always rediscover from their supplied root.
-RECIPES = discover_recipes(DEFAULT_RECIPES)
+RECIPES = discover_recipes(DEFAULT_RECIPES, errors=[])
 
 
 def sha256_file(path):
@@ -98,15 +106,47 @@ def source_digest(source, files):
     return checksum.hexdigest()
 
 
-def verify_recipe(source, *, timeout=60):
-    """Run the product's complete local test suite; failure stops manufacturing."""
-    result = subprocess.run(
-        [sys.executable, "-m", "unittest", "discover", "-s", ".", "-p", "test_*.py", "-v"],
-        cwd=str(source), capture_output=True, text=True, timeout=timeout,
-        env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"),
-    )
-    if result.returncode != 0 or "OK" not in result.stderr:
-        raise RuntimeError("PRODUCT_QA_FAILED:" + (result.stderr or result.stdout)[-1200:])
+QA_POLICY_VERSION = 3
+
+
+def verify_recipe(source, *, timeout=60, minimum_tests=1, evidence=None):
+    """Require measured successful tests; never infer success from log text."""
+    if isinstance(minimum_tests, bool) or not isinstance(minimum_tests, int) or minimum_tests < 1:
+        raise ValueError("INVALID_MINIMUM_TEST_COUNT")
+    runner = r"""
+import json, sys, unittest
+suite = unittest.defaultTestLoader.discover('.', pattern='test_*.py')
+result = unittest.TextTestRunner(verbosity=2).run(suite)
+counts = dict(tests_run=result.testsRun, skipped=len(result.skipped),
+              failures=len(result.failures), errors=len(result.errors),
+              expected_failures=len(result.expectedFailures),
+              unexpected_successes=len(result.unexpectedSuccesses))
+counts['successful_tests'] = (counts['tests_run'] - sum(counts[k] for k in
+    ('skipped', 'failures', 'errors', 'expected_failures', 'unexpected_successes')))
+with open(sys.argv[1], 'w', encoding='utf-8') as f:
+    json.dump(counts, f)
+sys.exit(0 if result.wasSuccessful() else 1)
+"""
+    with tempfile.TemporaryDirectory(prefix="factory-qa-") as directory:
+        report = Path(directory) / "result.json"
+        try:
+            result = subprocess.run(
+                [sys.executable, "-c", runner, str(report)],
+                cwd=str(source), capture_output=True, text=True, timeout=timeout,
+                env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"),
+            )
+        except subprocess.TimeoutExpired as error:
+            raise RuntimeError("PRODUCT_QA_FAILED:TEST_TIMEOUT") from error
+        try:
+            counts = json.loads(report.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            raise RuntimeError("PRODUCT_QA_FAILED:MISSING_TEST_MEASUREMENTS")
+        if result.returncode != 0 or counts['successful_tests'] < minimum_tests:
+            raise RuntimeError("PRODUCT_QA_FAILED:" + json.dumps(counts, sort_keys=True)
+                               + ":" + (result.stderr or result.stdout)[-1200:])
+        if evidence is not None:
+            evidence.update(counts, minimum_tests=minimum_tests,
+                            python_version=sys.version.split()[0], policy_version=QA_POLICY_VERSION)
     return "unit_tests_passed"
 
 
@@ -133,11 +173,10 @@ def make_zip(path, source, recipe, files):
 
 
 def manufacture(recipe, recipes_root, private_root):
-    catalog = discover_recipes(recipes_root)
-    if recipe not in catalog:
+    if not isinstance(recipe, str) or not RECIPE_ID.fullmatch(recipe):
         raise ValueError("UNSUPPORTED_RECIPE")
-    name, files = catalog[recipe]
     source = Path(recipes_root).expanduser().resolve() / recipe
+    name, files = inspect_recipe(source)
     root = Path(private_root).expanduser().resolve() / recipe
     checksum = source_digest(source, files)
     zip_path = root / (recipe + "-internal-qa.zip")
@@ -147,16 +186,22 @@ def manufacture(recipe, recipes_root, private_root):
     except (OSError, ValueError, TypeError):
         prior = {}
     if (prior.get("source_sha256") == checksum and prior.get("qa_status") == "passed"
+            and prior.get("qa_measurements", {}).get("policy_version") == QA_POLICY_VERSION
+            and prior.get("qa_measurements", {}).get("successful_tests", 0) >= 1
             and zip_path.is_file() and prior.get("artifact_sha256") == sha256_file(zip_path)):
         return {"recipe": recipe, "changed": False, "qa_status": "passed",
                 "private_artifact": str(zip_path)}
-    qa_status = verify_recipe(source)
+    measurements = {}
+    qa_status = verify_recipe(source, evidence=measurements)
+    if source_digest(source, files) != checksum:
+        raise RuntimeError("PRODUCT_QA_FAILED:SOURCE_CHANGED_DURING_TESTS")
     make_zip(zip_path, source, recipe, files)
     metadata = {
         "schema_version": 2, "recipe": recipe, "name": name,
         "source_sha256": checksum, "artifact_sha256": sha256_file(zip_path),
         "bytes": zip_path.stat().st_size, "files": list(sorted(files)),
         "qa_status": "passed", "qa_evidence": qa_status,
+        "qa_measurements": measurements,
         "commercial_status": "private_internal_qa_pass_not_published",
         "factory_trigger": "inventory_and_scheduled_manufacturing",
         "customer_order_required": False, "price": None,
