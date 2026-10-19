@@ -61,17 +61,18 @@ jobs:
                   with urllib.request.urlopen(req,timeout=22) as r:return p,r.status,r.read(2300000)
               except urllib.error.HTTPError as e:return p,e.code,e.read(500)
           with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:result=list(pool.map(get,routes))
-          state={};mains={}
+          state={};mains={};unprotected_legacy={}
           for p,code,body in result:
               state[p]=code
               if p in static:
                   main=re.search(rb'<main\b[^>]*>[\s\S]*?</main\s*>',body,re.I)
                   if not main:raise SystemExit('Main section missing '+p)
                   mains[p]=hashlib.sha256(main.group()).hexdigest()
+                  unprotected_legacy[p]=b"if(b){b.addEventListener(" in main.group()
               if p not in children and code!=200:raise SystemExit('Main route unhealthy '+p)
               print('PRE_NAV_STATUS',p,code,flush=True)
           root=next(body for p,_,body in result if p=='/')
-          with open(os.environ['RUNNER_TEMP']+'/mpw-nav-before.json','w') as f:json.dump({'routes':state,'static':static,'dynamic':dynamic,'children':children,'mains':mains,'home_sha':hashlib.sha256(root).hexdigest()},f)
+          with open(os.environ['RUNNER_TEMP']+'/mpw-nav-before.json','w') as f:json.dump({'routes':state,'static':static,'dynamic':dynamic,'children':children,'mains':mains,'unprotected_legacy':unprotected_legacy,'home_sha':hashlib.sha256(root).hexdigest()},f)
           print('NAV_SOURCE_BASELINE=VERIFIED_44')
           PY
       - name: Install Chromium before deployment for fail-closed smoke
@@ -167,8 +168,22 @@ jobs:
                   raise SystemExit('Canonical menu or legal footer missing '+path)
               if path in original['mains']:
                   main=re.search(rb'<main\b[^>]*>[\s\S]*?</main\s*>',body,re.I)
-                  if not main or hashlib.sha256(main.group()).hexdigest()!=original['mains'][path]:
-                      raise SystemExit('Protected original main content changed '+path)
+                  if not main:raise SystemExit('Protected main content missing '+path)
+                  section=main.group()
+                  if original['unprotected_legacy'][path]:
+                      # Restore only the three exact approved JS guards in
+                      # memory before hashing; unrelated content must stay
+                      # byte-identical to the pre-release HTML.
+                      one="if(b){b.addEventListener('click',()=>{n.classList.toggle('open');b.setAttribute('aria-expanded',n.classList.contains('open'));});}"
+                      two="n.querySelectorAll('a').forEach(a=>a.addEventListener('click',()=>{n.classList.remove('open');b.setAttribute('aria-expanded','false');}));"
+                      three="window.addEventListener('keydown',e=>{if(e.key==='Escape'){n.classList.remove('open');b.setAttribute('aria-expanded','false');}});"
+                      fixes=[('if(b&&n){'+one[len('if(b){'):],one),('if(b&&n){'+two+'}',two),('if(b&&n){'+three+'}',three)]
+                      for after,before in fixes:
+                          if section.count(after.encode())!=1:
+                              raise SystemExit('Expected exact JS guard missing '+path)
+                          section=section.replace(after.encode(),before.encode(),1)
+                  if hashlib.sha256(section).hexdigest()!=original['mains'][path]:
+                      raise SystemExit('Main content changed beyond approved JS guard '+path)
               print('CANONICAL_MENU_CONFIRMED',path,status,flush=True)
               n+=1
           if n!=38:raise SystemExit('Not all 38 main routes verified')
