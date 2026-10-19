@@ -1,4 +1,5 @@
 name: MojPlayWin Crown Defender original arcade game (isolated main-site release)
+# Rerun with guarded current Studio page length; protect 10 preexisting field guides.
 on:
   push:
     branches: [main]
