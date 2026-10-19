@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths:
       - .github/workflows/zomorod-site-agent-100-stage-release.yml
+      - content/zomorod-v11/site_agents.php
   workflow_dispatch:
 permissions:
   contents: read
@@ -194,6 +195,37 @@ jobs:
             echo "SITE_AGENT_PRESERVED_ROUTE=$route status=$code"
             test "$code" = "200"
           done
+      - name: Exercise one genuine site-only 11-agent health cycle and verify master's truthful aggregate
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zm-agent100-release"
+          timeout 210s ssh -T -F "$d/config" saeit-cpanel bash -se <<'REMOTE'
+          set -euo pipefail
+          script="$HOME/.private/zomorod-business/site_agents.php"
+          test -f "$script" && test ! -L "$script"
+          phpbin="$(command -v php)"
+          "$phpbin" -d display_errors=0 -r '
+          require $argv[1];
+          $db=zmAgentDb(dirname($argv[1]));
+          $before=(int)$db->query("SELECT COUNT(*) FROM runs")->fetchColumn();
+          $result=zmAgentCycle($db);
+          $after=(int)$db->query("SELECT COUNT(*) FROM runs")->fetchColumn();
+          if(count($result)!==11||$after-$before!==11)exit(21);
+          $by=[];$fail=[];
+          foreach($result as [$code,$status,$http]){
+              $by[$code]=[$status,$http];
+              if($status!=="ok")$fail[]=$code;
+              echo "SITE_AGENT_NEW_RELEASE code=$code status=$status http=$http\n";
+          }
+          if(count($by)!==11||!isset($by["master"]))exit(22);
+          $others=array_values(array_filter($fail,fn($c)=>$c!=="master"));
+          if($others&&$by["master"][0]==="ok")exit(23);
+          echo "SITE_AGENT_POST_RELEASE_RUNS_ADDED=11\n";
+          echo "SITE_AGENT_POST_RELEASE_FAILED_COUNT=".count($fail)."\n";
+          echo "SITE_MASTER_AGGREGATE_TRUTHFUL=yes\n";
+          ' "$script"
+          REMOTE
       - name: Automatic rollback after failed acceptance gate, if this run installed new PHP
         if: failure()
         shell: bash
