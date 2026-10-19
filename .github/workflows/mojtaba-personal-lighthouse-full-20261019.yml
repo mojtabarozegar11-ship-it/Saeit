@@ -1,0 +1,54 @@
+name: Mojtaba personal full Lighthouse four categories
+on:
+  issues:
+    types: [opened]
+permissions:
+  contents: read
+jobs:
+  lighthouse:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.event.issue.user.login == 'mojtabarozegar11-ship-it' &&
+      github.event.issue.title == 'Ops: Personal Lighthouse full 4x2 audit 2026-10-19'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Capture mobile and desktop scores without shortcuts
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/personal-lh-full
+          export CHROME_PATH="$(command -v google-chrome)"
+          for profile in mobile desktop; do
+            extra=""
+            test "$profile" != desktop || extra="--preset=desktop"
+            passed=0
+            for attempt in 1 2; do
+              if timeout 170s npx --yes lighthouse@12.8.2                   "https://mojplaywin.com/mojtaba.roozegar/"                   --chrome-flags="--headless --no-sandbox --disable-dev-shm-usage"                   --only-categories=performance,accessibility,best-practices,seo                   --output=json --output-path="/tmp/personal-lh-full/$profile.json"                   --max-wait-for-load=45000 $extra --quiet; then passed=1; break; fi
+              echo "LIGHTHOUSE_ATTEMPT_FAILED=$profile:$attempt"
+            done
+            if [ "$passed" != 1 ]; then echo "LIGHTHOUSE_UNAVAILABLE=$profile"; continue; fi
+            PROFILE="$profile" python3 - <<'PY'
+          import os,json
+          profile=os.environ['PROFILE'];d=json.load(open('/tmp/personal-lh-full/'+profile+'.json'))
+          print('LIGHTHOUSE_VALID_PROFILE='+profile,flush=True)
+          for k in ('performance','accessibility','best-practices','seo'):
+              c=d.get('categories',{}).get(k,{})
+              print('LIGHTHOUSE_'+profile.upper()+'_'+k.replace('-','_').upper()+'='+str(round(c['score']*100) if isinstance(c.get('score'),float) else 'INVALID'),flush=True)
+          for k in ('first-contentful-paint','largest-contentful-paint','speed-index','total-blocking-time','cumulative-layout-shift'):
+              a=d.get('audits',{}).get(k,{})
+              print('METRIC_'+profile.upper()+'_'+k.upper().replace('-','_')+'='+str(a.get('displayValue','unknown')),flush=True)
+          for k,a in d.get('audits',{}).items():
+              if a.get('score') is not None and a['score']<.99 and k in ('color-contrast','target-size','label-content-name-mismatch','image-delivery-insight','render-blocking-insight','uses-long-cache-ttl','dom-size','network-dependency-tree-insight','uses-responsive-images'):
+                  print('IMPROVE_'+profile.upper()+'_'+k+'='+str(a.get('displayValue'))+' score='+str(a.get('score')),flush=True)
+          PY
+          done
+          test -f /tmp/personal-lh-full/mobile.json
+          test -f /tmp/personal-lh-full/desktop.json
+      - name: Preserve machine-readable evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: personal-lighthouse-full-evidence
+          path: /tmp/personal-lh-full
+          retention-days: 7
