@@ -145,6 +145,8 @@ def draft_markdown(bundle):
 
 
 def write_atomic(path, text):
+    if path.parent.is_symlink():
+        raise RuntimeError('SELF_UPGRADE_BLOCKED_SYMLINK_PARENT')
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     os.chmod(str(path.parent), 0o700)
     fd, tmp = tempfile.mkstemp(prefix=".tmp-", dir=str(path.parent))
