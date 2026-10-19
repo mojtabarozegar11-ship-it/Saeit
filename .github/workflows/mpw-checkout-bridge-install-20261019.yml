@@ -1,0 +1,106 @@
+name: MojPlayWin guarded two book checkout bridge integration
+on:
+  push:
+    branches: [mpw-two-books-unified-release-20261019]
+    paths: [".github/workflows/mpw-checkout-bridge-install-20261019.yml"]
+permissions: {contents: read}
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 11
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Establish host-pinned private relay without disclosing keys
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys; s=sys.stdin.read(); print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Install main-host two book checkout delegation safely and reversibly
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mojplaywin-inventory-ssh"
+          timeout 130s ssh -T -F "$d/config" saeit-cpanel bash -s <<'BASH'
+          set -euo pipefail
+          /home/zomorod2/virtualenv/Saeit-staging/3.11/bin/python - <<'PY'
+          import os,pathlib,tempfile,hashlib,sys,ast
+          r=pathlib.Path('/home/zomorod2/Saeit-staging')
+          f=r/'core/cryptopay_checkout.py'
+          w=pathlib.Path('/home/zomorod2/mojplaywin.com/passenger_wsgi.py')
+          assert r.is_dir() and not r.is_symlink()
+          assert w.is_file() and "APP='/home/zomorod2/Saeit-staging'" in w.read_text('utf8','replace')
+          assert f.is_file() and not f.is_symlink()
+          original=f.read_bytes()
+          needle=b'def checkout(request,pk):\n'
+          patch=(
+            b'    if request.get_host().split(":")[0].lower() in ("mojplaywin.com","www.mojplaywin.com") and pk in (72,225):\n'
+            b'        from mpw_commerce.product_checkout_page import product_checkout_page\n'
+            b'        return product_checkout_page(request, pk)\n'
+          )
+          if original.count(needle)!=1:raise RuntimeError('Unexpected checkout signature; no changes')
+          if patch in original:
+            print('MPW_CHECKOUT_BRIDGE=already_present')
+            sys.exit(0)
+          assert b'product.price!=Decimal(' in original
+          new=original.replace(needle,needle+patch,1)
+          ast.parse(new.decode('utf8'))
+          back=pathlib.Path('/home/zomorod2/.mpw-two-book-checkout-backups')
+          back.mkdir(mode=0o700,exist_ok=True)
+          backup=back/('checkout-'+hashlib.sha256(original).hexdigest()[:20]+'.py')
+          if backup.exists():
+            if backup.read_bytes()!=original:raise RuntimeError('Existing backup content conflict')
+          else:
+            fd=os.open(str(backup),os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
+            with os.fdopen(fd,'wb') as h:h.write(original);h.flush();os.fsync(h.fileno())
+          fd,tmp=tempfile.mkstemp(dir=str(f.parent),prefix='.mpw-checkout-patch-')
+          try:
+            with os.fdopen(fd,'wb') as h:h.write(new);h.flush();os.fsync(h.fileno())
+            os.chmod(tmp,f.stat().st_mode&0o777)
+            if f.read_bytes()!=original:raise RuntimeError('Concurrent source edit')
+            os.replace(tmp,f)
+          finally:
+            if os.path.exists(tmp):os.unlink(tmp)
+          if f.read_bytes()!=new:raise RuntimeError('Post-write hash failure')
+          print('MPW_CHECKOUT_BRIDGE=installed;scoped_ids=72,225;main_host_only=true;no_restart=true;payment_flags_unchanged=true')
+          PY
+          BASH
