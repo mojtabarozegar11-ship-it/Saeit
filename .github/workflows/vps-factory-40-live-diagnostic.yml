@@ -1,0 +1,45 @@
+name: Read-only VPS 40-family installation diagnostic
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/vps-factory-40-live-diagnostic.yml"]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - name: Read-only factory master startup diagnostics
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY"
+          d="$RUNNER_TEMP/factory-40-readonly"
+          install -d -m 700 "$d"
+          trap 'rm -rf -- "$d"' EXIT
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace("\r\n","\n").replace("\r","").replace("\\n","\n").rstrip()+"\n",end="")' > "$d/key"
+          chmod 600 "$d/key"
+          ssh-keygen -y -P "" -f "$d/key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          ssh -T -i "$d/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$d/known" -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=15 githubops@178.239.147.150 'python3 -' <<'PY'
+          import pathlib,subprocess
+          ops=pathlib.Path.home()/"factory-runtime"/"operations"
+          target=ops/"forty-family-master"
+          p=ops/"factory-forty-family-master.log"
+          print("FORTY_MASTER_WORKER_EXISTS="+str((target/"factory_40_family_master.py").is_file()).lower())
+          print("FORTY_MASTER_PROFILES_EXISTS="+str((target/"forty_families.json").is_file()).lower())
+          print("FORTY_MASTER_WORKER_RUNNER_EXISTS="+str((target/"run-minute-master.sh").is_file()).lower())
+          if p.is_file():
+              for line in p.read_text(errors="replace").splitlines()[-18:]:
+                  print("FORTY_MASTER_LOG="+line[:300])
+          else:print("FORTY_MASTER_LOG_NOT_CREATED")
+          cron=subprocess.check_output(["crontab","-l"],text=True)
+          for mark in ("SAEIT_FACTORY_EVERY_MINUTE_V1","SAEIT_FACTORY_LIFECYCLE_12_V1","SAEIT_FACTORY_FORTY_FAMILY_MASTER_V1"):
+              print("FORTY_MASTER_CRON_"+mark+"="+str(cron.count(mark)))
+          status=pathlib.Path.home()/"factory-runtime"/"private"/"autonomous-product-cycle"/"production-family-management"/"family-dashboard.json"
+          print("FORTY_MASTER_DASHBOARD_PRESENT="+str(status.is_file()).lower())
+          PY
