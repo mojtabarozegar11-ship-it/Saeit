@@ -150,6 +150,13 @@ jobs:
           for name in ("core/templates/mojplaywin","templates/mojplaywin","command_center/templates/command_center"):
               folder=root/name
               dirs[name]=sorted(x.name for x in folder.iterdir() if x.is_file())[:75] if folder.is_dir() else []
+          from django.test import Client
+          for secure in (False,True):
+              try:
+                  response=Client(HTTP_HOST="mojplaywin.com").get("/store/",secure=secure)
+                  print("MPW_DJANGO_STORE_SCHEME="+json.dumps({"https":secure,"status":response.status_code}))
+              except Exception as exc:
+                  print("MPW_DJANGO_STORE_SCHEME="+json.dumps({"https":secure,"error":type(exc).__name__}))
           print("MPW_DJANGO_MAP="+json.dumps({"templates":templates,"routes":routes,
               "database":database,"folders":dirs,
               "apps":{"command_center":"command_center" in settings.INSTALLED_APPS},
