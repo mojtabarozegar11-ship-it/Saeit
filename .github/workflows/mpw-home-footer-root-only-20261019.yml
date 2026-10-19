@@ -1,0 +1,204 @@
+name: MojPlayWin one-line legal footer homepage-only HTML filter
+on:
+  pull_request:
+    paths:
+      - "scripts/mpw_home_footer_root_filter_20261019.py"
+      - "tests/test_mpw_home_footer_filter_20261019.py"
+      - ".github/workflows/mpw-home-footer-root-only-20261019.yml"
+  push:
+    branches: [main]
+    paths:
+      - "scripts/mpw_home_footer_root_filter_20261019.py"
+      - ".github/workflows/mpw-home-footer-root-only-20261019.yml"
+permissions: {contents: read}
+concurrency:
+  group: mojplaywin-main-footer-home-only
+  cancel-in-progress: false
+jobs:
+  preflight:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: No routing changes or child-site modifications
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_home_footer_root_filter_20261019.py
+          python3 -m pip install -q pytest
+          python3 -m pytest -q --noconftest tests/test_mpw_home_footer_filter_20261019.py
+          python3 scripts/mpw_home_footer_root_filter_20261019.py selftest
+  publish-root-only:
+    if: >-
+      github.repository == 'mojtabarozegar11-ship-it/Saeit' &&
+      github.ref == 'refs/heads/main' &&
+      github.event_name == 'push' &&
+      contains(github.event.head_commit.message, '[approved-mpw-home-legal-footer-20261019]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 17
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Preflight owner scope and PHP-backed main site
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/mpw_home_footer_root_filter_20261019.py
+          python3 -m pip install -q pytest
+          python3 -m pytest -q --noconftest tests/test_mpw_home_footer_filter_20261019.py
+          python3 scripts/mpw_home_footer_root_filter_20261019.py selftest
+          python3 - <<'PY'
+          import urllib.request,urllib.error,os,json
+          routes=['/','/about/','/company/','/contact/','/store/','/farnaz/','/saman/','/picm/','/taniya/','/zahra/']
+          states={}
+          for p in routes:
+              try:
+                  with urllib.request.urlopen(urllib.request.Request('https://mojplaywin.com'+p,headers={'Cache-Control':'no-cache'}),timeout=20) as r:
+                      states[p]=r.status
+              except urllib.error.HTTPError as exc:
+                  states[p]=exc.code
+              print('BEFORE_HOME_ONLY',p,states[p],flush=True)
+          if any(states[p]!=200 for p in ('/','/about/','/company/','/contact/','/store/')):
+              raise SystemExit('Main baseline unhealthy')
+          with open(os.environ['RUNNER_TEMP']+'/mpw-root-baseline.json','w') as f:json.dump(states,f)
+          PY
+      - name: Prepare real Chromium verification before touching public files
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/mpw-root-browser"
+          cd "$RUNNER_TEMP/mpw-root-browser"
+          npm init -y >/dev/null
+          npm install --silent --no-audit --no-fund playwright
+          npx playwright install --with-deps chromium
+      - name: Open host-key-pinned relay through VPS to cPanel
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          d="$RUNNER_TEMP/mpw-consolidated-ssh"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*.key
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          timeout 30s ssh -F "$d/config" saeit-vps 'ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' > "$d/host.candidate" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          mv "$d/host.candidate" "$d/host.known"
+      - name: Atomic append only home root output filter and JS
+        id: publish
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-consolidated-ssh"
+          timeout 65s ssh -T -F "$d/config" saeit-cpanel \
+             "python3 - install '$GITHUB_RUN_ID'" < scripts/mpw_home_footer_root_filter_20261019.py
+      - name: Verify actual single-line footer on home in Chromium mobile and desktop
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/mpw-root-browser"
+          cat > verify.cjs <<'JS'
+          const {chromium}=require('playwright');
+          (async()=>{
+            const browser=await chromium.launch({headless:true});
+            try{
+              for(const dims of [{width:390,height:844},{width:1365,height:900}]){
+                const page=await browser.newPage({viewport:dims});
+                const errors=[];
+                page.on('pageerror',e=>errors.push(String(e)));
+                const url='https://mojplaywin.com/?_mpw_home_footer='+process.env.GITHUB_RUN_ID+'-'+dims.width;
+                const response=await page.goto(url,{waitUntil:'domcontentloaded',timeout:30000});
+                await page.waitForTimeout(800);
+                const evidence=await page.evaluate(()=>{
+                  const footers=[...document.querySelectorAll('footer')].filter(x=>x.matches('.mw-site-footer,.mpw-footer'));
+                  const footer=footers[0];
+                  const lines=footer?[...footer.querySelectorAll('.mpw-legal-one-line')]:[];
+                  const element=lines[0];
+                  return {
+                    footerCount:footers.length,
+                    lineCount:lines.length,
+                    legalText:element?.textContent?.trim()||'',
+                    whiteSpace:element?getComputedStyle(element).whiteSpace:'',
+                    inBottomBar:!!element?.closest('.mpx-bottom-bar'),
+                    oldCreditVisible:footer?.innerText?.includes('Mojtaba Roozegar')||false,
+                    navLinks:footer?.querySelectorAll('a').length||0,
+                    h1:document.querySelectorAll('main h1').length,
+                    pageWidth:document.documentElement.scrollWidth,
+                    viewportWidth:innerWidth,
+                  };
+                });
+                console.log('MPW_ROOT_FOOTER_BROWSER='+JSON.stringify({width:dims.width,status:response.status(),errors,...evidence}));
+                if(response.status()!==200||errors.length||evidence.footerCount!==1||
+                   evidence.lineCount!==1||
+                   evidence.legalText!=='☆ All Rights Reserved. ☆ 2022. ☆ Mojtaba roozegar ☆'||
+                   evidence.whiteSpace!=='nowrap'||!evidence.inBottomBar||
+                   evidence.oldCreditVisible||evidence.navLinks<7||
+                   evidence.h1!==1||evidence.pageWidth>evidence.viewportWidth+4) {
+                  throw Error('Homepage root-only footer contract failed');
+                }
+                await page.screenshot({path:'mpw-home-'+dims.width+'.png',fullPage:false});
+                await page.close();
+              }
+            }finally{await browser.close();}
+          })().catch(e=>{console.error(e);process.exitCode=1});
+          JS
+          node verify.cjs
+      - name: Check unchanged protected main and child path statuses
+        run: |
+          python3 - <<'PY'
+          import urllib.request,urllib.error,os,json
+          states=json.load(open(os.environ['RUNNER_TEMP']+'/mpw-root-baseline.json'))
+          for p,prior in states.items():
+              try:
+                  with urllib.request.urlopen('https://mojplaywin.com'+p,timeout=20) as r:current=r.status
+              except urllib.error.HTTPError as e:current=e.code
+              if current!=prior:raise SystemExit('Status changed '+p)
+              print('HOME_FILTER_PROTECTED_ROUTE',p,current,flush=True)
+          print('MPW_HOME_ONLY_FOOTER_LIVE_VERIFIED=true',flush=True)
+          PY
+      - name: Restore exact original document-root routing and remove only new JS if verification fails
+        if: failure() && steps.publish.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/mpw-consolidated-ssh"
+          timeout 60s ssh -T -F "$d/config" saeit-cpanel \
+             "python3 - rollback '$GITHUB_RUN_ID'" < scripts/mpw_home_footer_root_filter_20261019.py
+      - name: Attach mobile and desktop homepage screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mpw-home-legal-footer-visual-proof
+          path: |
+            ${{ runner.temp }}/mpw-root-browser/mpw-home-*.png
+          if-no-files-found: ignore
+          retention-days: 14
