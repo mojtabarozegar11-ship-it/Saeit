@@ -164,4 +164,55 @@ jobs:
                   print("PRODUCTION_INSTRUCTIONS_"+k.upper()+"="+str(row.get(k)),flush=True)
           else:
               print("PRODUCTION_INSTRUCTIONS_STATUS_MISSING=true",flush=True)
+          # Detailed stage counters; read-only and no factory action triggered.
+          from collections import Counter
+          docs=private/"research-dossiers"/"autonomous-portfolio.json"
+          if docs.is_file() and not docs.is_symlink():
+              dossier=json.loads(docs.read_text(encoding="utf8"))
+              entries=dossier.get("entries",[])
+              blockers=Counter()
+              phase=Counter()
+              for entry in entries:
+                  gate=entry.get("research_quality_gate") or {}
+                  phase[str(entry.get("stage","unknown"))]+=1
+                  for reason in gate.get("blockers",[]):blockers[str(reason)]+=1
+              print("STAGE_RESEARCH_SCANNED="+str(len(entries)),flush=True)
+              print("STAGE_RESEARCH_QA_PASSED="+str(sum(1 for e in entries if (e.get("research_quality_gate") or {}).get("research_gate_passed") is True)),flush=True)
+              print("STAGE_RESEARCH_PHASES="+json.dumps(phase,sort_keys=True),flush=True)
+              print("STAGE_RESEARCH_TOP_BLOCKERS="+json.dumps(blockers.most_common(10)),flush=True)
+          orders_dir=private/"production-instructions"/"orders"
+          if orders_dir.is_dir() and not orders_dir.is_symlink():
+              files=sorted(orders_dir.glob("WO-*.json"))
+              by_status=Counter();by_phase=Counter()
+              for f in files:
+                  if not f.is_file() or f.is_symlink():continue
+                  record=json.loads(f.read_text(encoding="utf8"))
+                  by_status[str(record.get("status","unknown"))]+=1
+                  by_phase[str(record.get("phase","unknown"))]+=1
+              print("STAGE_INSTRUCTIONS_TOTAL="+str(len(files)),flush=True)
+              print("STAGE_INSTRUCTIONS_STATUS_COUNTS="+json.dumps(by_status,sort_keys=True),flush=True)
+              print("STAGE_INSTRUCTIONS_PHASE_COUNTS="+json.dumps(by_phase,sort_keys=True),flush=True)
+              print("STAGE_INSTRUCTIONS_COMPLETED="+str(by_status.get("completed_verified",0)),flush=True)
+          cycle=private/"production-state.json"
+          if cycle.is_file() and not cycle.is_symlink():
+              data=json.loads(cycle.read_text(encoding="utf8"))
+              for k in ("product_candidates_processed","research_dossiers_updated","built_product_count",
+                        "built_product_recipes","artifact_qa_passed","quality_failures_this_cycle",
+                        "private_rework_queue","research_correction_queue","manufacturing_failed_recipe_count",
+                        "research_review_candidate_count","commercial_quality_review_completed",
+                        "publishable_product_count","store_distribution_state"):
+                  if k in data:
+                      v=json.dumps(data[k],ensure_ascii=True)
+                      print("STAGE_CYCLE_"+k.upper()+"="+v[:1400],flush=True)
+          reg=private/"production-warehouse"/"stock-register.json"
+          if reg.is_file() and not reg.is_symlink():
+              doc=json.loads(reg.read_text(encoding="utf8"))
+              actions=Counter(str(x.get("action")) for x in doc.get("last_cycle_actions",[]))
+              print("STAGE_STOCK_LAST_ACTIONS="+json.dumps(actions,sort_keys=True),flush=True)
+              print("STAGE_STOCK_TOTAL_VERSIONS="+str(doc.get("finished_goods_versions")),flush=True)
+              print("STAGE_STOCK_NEW_THIS_SCAN="+str(actions.get("stocked",0)),flush=True)
+              print("STAGE_STOCK_REWORK_HOLDS="+str(len(doc.get("needs_rework_or_review",[]))),flush=True)
+              print("STAGE_DISTRIBUTION_ENABLED="+str(doc.get("distribution_enabled")),flush=True)
+              print("STAGE_DISTRIBUTION_SITES_CONTACTED="+str(doc.get("sites_contacted")),flush=True)
+          print("STAGE_SNAPSHOT_READONLY=PASS",flush=True)
           PY
