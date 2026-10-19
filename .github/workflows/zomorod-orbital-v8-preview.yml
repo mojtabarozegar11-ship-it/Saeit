@@ -1,0 +1,166 @@
+name: Zomorod Orbital V8 counterrotating globe orbit preview
+on:
+  push:
+    branches: [zomorod/orbital-v5-safe-release-20261018]
+    paths: [".github/workflows/zomorod-orbital-v8-preview.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: zomorod-orbital-v8-preview
+  cancel-in-progress: false
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate all 17 galleries and 340 preserved card image references
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          d=Path("content/zomorod-orbital-v7")
+          html=Path("content/zomorod-orbital-v8/index.html").read_text()
+          manifest=json.loads((d/"data.js").read_text().removeprefix("window.ZOMOROD_ORBIT_DATA=").rstrip().rstrip(";"))
+          assert len(manifest["rows"])==17
+          assert 'id="orbit-shelves"' in html and 'src="./app.js" defer' in html
+          assert html.count('class="globe-ring ring-')==6
+          assert 'zm-orbit-precess' in html
+          assert 'fetch(filename' in (d/"app.js").read_text()
+          for i,row in enumerate(manifest["rows"],1):
+              assert len(row["cards"])==20
+              images=json.loads((d/f"images-{i:02d}.json").read_text())
+              assert len(images)==20
+              assert all(im.startswith("data:image/svg+xml;base64,") for im in images)
+          assert len(list(d.glob("images-??.json")))==17
+          print("V8_ALL_GALLERIES=17 complete; CARDS=340")
+          PY
+      - name: Prepare pinned cPanel relay
+        shell: bash
+        env:
+          VPS_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          HOST_KEY: ${{ secrets.SAEIT_HOST_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$VPS_KEY" && test -n "$HOST_KEY"
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          install -d -m 700 "$d"
+          printf '%s' "$VPS_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/vps.key"
+          printf '%s' "$HOST_KEY" | python3 -c 'import sys;s=sys.stdin.read();print(s.replace(chr(13)+chr(10),chr(10)).replace(chr(13),"").replace(chr(92)+"n",chr(10)).rstrip()+chr(10),end="")' > "$d/host.key"
+          chmod 600 "$d/"*
+          ssh-keygen -y -P "" -f "$d/vps.key" >/dev/null
+          ssh-keygen -y -P "" -f "$d/host.key" >/dev/null
+          ssh-keyscan -T 10 -t rsa 178.239.147.150 > "$d/vps.known" 2>/dev/null
+          test "$(ssh-keygen -lf "$d/vps.known" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:AYdzF3K5uSwAXElE1w/dKo04iT2BbMGwHbRA2Cu4rrs"
+          cat > "$d/config" <<EOF
+          Host saeit-vps
+            HostName 178.239.147.150
+            User githubops
+            Port 22
+            IdentityFile $d/vps.key
+            UserKnownHostsFile $d/vps.known
+          Host saeit-cpanel
+            HostName zohal.pws-dns.net
+            User zomorod2
+            Port 1396
+            IdentityFile $d/host.key
+            UserKnownHostsFile $d/host.known
+            ProxyJump saeit-vps
+          Host *
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 10
+            ConnectionAttempts 1
+            ForwardAgent no
+            RequestTTY no
+          EOF
+          chmod 600 "$d/config"
+          scan="$(ssh -F "$d/config" saeit-vps 'timeout 15s ssh-keyscan -T 8 -p 1396 -t ed25519 zohal.pws-dns.net' 2>/dev/null)"
+          test -n "$scan"
+          printf '%s\n' "$scan" > "$d/host.candidate"
+          test "$(ssh-keygen -lf "$d/host.candidate" -E sha256 | awk '{print $2}' | sort -u)" = "SHA256:7gQbDdrCVLFQRVdY6DAw8lF70jvlPfbJQslYn787E04"
+          cp "$d/host.candidate" "$d/host.known"
+          echo "PINNED_RELAY=verified"
+
+
+
+      - name: Verify protected root and snapshot exact content before any new preview files
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          umask 077
+          sha="$1"
+          web="$HOME/public_html"
+          backup="$HOME/.backups/zomorod-orbital-v8-sphere/$sha"
+          preview="$web/__zm_orbital_v8_sphere_20261018"
+          test -s "$web/index.html" && test ! -L "$web/index.html"
+          test -s "$web/.htaccess" && test ! -L "$web/.htaccess"
+          test ! -e "$preview" && test ! -L "$preview"
+          for child in mohammad ghanadi amozeshgah; do
+            test -s "$web/$child/index.html" && test ! -L "$web/$child/index.html"
+          done
+          test ! -e "$backup"
+          mkdir -p "$backup";chmod 700 "$backup"
+          cp -p "$web/index.html" "$backup/index.original.html"
+          cmp -s "$web/index.html" "$backup/index.original.html"
+          sha256sum "$web/index.html" "$web/.htaccess" "$web/mohammad/index.html" "$web/ghanadi/index.html" "$web/amozeshgah/index.html" > "$backup/protected.sha256"
+          echo "V8_PRIVATE_BACKUP=verified"
+          REMOTE
+      - name: Transfer only the 20 new separate V7 files under unique noindex path
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          src="content/zomorod-orbital-v7"
+          preview="/home/zomorod2/public_html/__zm_orbital_v8_sphere_20261018"
+          (cd "$src"; sha256sum data.js app.js images-??.json) > "$RUNNER_TEMP/v8.sha"
+          (cd content/zomorod-orbital-v8; sha256sum index.html) >> "$RUNNER_TEMP/v8.sha"
+          ssh -F "$d/config" saeit-cpanel "set -eu; test ! -e '$preview'; mkdir -m 755 '$preview'"
+          (cd "$src"; tar -cf - data.js app.js images-??.json) | ssh -F "$d/config" saeit-cpanel "tar -xf - -C '$preview'"
+          ssh -F "$d/config" saeit-cpanel "cat > '$preview/index.html'" < content/zomorod-orbital-v8/index.html
+          ssh -F "$d/config" saeit-cpanel "cat > '$preview/.htaccess'" <<'HT'
+          PassengerEnabled off
+          DirectoryIndex index.html
+          Options -Indexes
+          Header set X-Robots-Tag "noindex, nofollow"
+          HT
+          ssh -F "$d/config" saeit-cpanel "cd '$preview'; chmod 644 -- index.html data.js app.js images-??.json .htaccess; sha256sum -c --status" < "$RUNNER_TEMP/v8.sha"
+          echo "V8_TRANSFER=all_twenty_files_hash_verified"
+      - name: Verify 20 assets, HTTP preview and protected production byte hashes
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$RUNNER_TEMP/zomorod-baseline-inventory"
+          ssh -F "$d/config" saeit-cpanel bash -se -- "$GITHUB_SHA" <<'REMOTE'
+          set -euo pipefail
+          sha="$1";web="$HOME/public_html"
+          preview="$web/__zm_orbital_v8_sphere_20261018"
+          backup="$HOME/.backups/zomorod-orbital-v8-sphere/$sha"
+          cmp -s "$web/index.html" "$backup/index.original.html"
+          sha256sum -c --status "$backup/protected.sha256"
+          test "$(find "$preview" -maxdepth 1 -type f | wc -l)" -eq 21
+          for item in index.html data.js app.js images-01.json images-08.json images-17.json; do
+            code="$(curl -sS -L --max-time 26 -o "$backup/$item.http" -w '%{http_code}' "https://zomorodmelal.ir/__zm_orbital_v8_sphere_20261018/$item?audit=$sha" || true)"
+            echo "V8_HTTP_$item=$code"
+            test "$code" = 200
+          done
+          grep -Fq 'id="orbit-shelves"' "$backup/index.html.http"
+          for route in / /mohammad/ /ghanadi/ /amozeshgah/; do
+            code="$(curl -sS -L --max-time 18 -o /dev/null -w '%{http_code}' "https://zomorodmelal.ir$route" || true)"
+            echo "V8_PROTECTED_ROUTE=$route CODE=$code"
+            test "$code" = 200
+          done
+          sha256sum -c --status "$backup/protected.sha256"
+          echo "V8_PREVIEW=online_existing_root_and_subsites_unchanged"
+          REMOTE
+      - name: Clean relay keys
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/zomorod-baseline-inventory"
